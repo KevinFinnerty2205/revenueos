@@ -1,0 +1,39 @@
+{
+  "name": "@revenueos/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "format": "prettier --check .",
+    "format:write": "prettier --write ."
+  },
+  "dependencies": {
+    "@revenueos/shared": "workspace:*",
+    "next": "16.2.10",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@tailwindcss/postcss": "^4.1.13",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "eslint": "^9.22.0",
+    "eslint-config-next": "16.2.10",
+    "jsdom": "^26.0.0",
+    "prettier": "^3.5.3",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}

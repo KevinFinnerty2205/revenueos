@@ -1,0 +1,156 @@
+# RevenueOS AI
+
+RevenueOS is the AI sales teammate that remembers every customer interaction and turns conversations into action.
+
+This repository contains the Sprint 1 technical foundation only: a responsive Next.js application shell, a versioned FastAPI service, authentication adapters, the initial organisation model, tests, documentation and CI. Customer records, meetings, recordings, transcripts, AI processing, integrations and billing are not implemented.
+
+## Prerequisites
+
+- Node.js 22 or newer
+- pnpm 11.9.0
+- Python 3.12 or newer
+- [uv](https://docs.astral.sh/uv/)
+- Docker Desktop or another PostgreSQL 16 instance if persistence is required
+
+No paid-service credentials are required for local development.
+
+## First-time setup
+
+From the repository root:
+
+```bash
+cp apps/web/.env.example apps/web/.env.local
+cp apps/api/.env.example apps/api/.env
+pnpm install
+uv sync --project apps/api
+```
+
+The example files contain local-only values and empty credential placeholders. Never commit the copied environment files.
+
+## Start PostgreSQL and migrate
+
+Docker Compose provides one local PostgreSQL service because PostgreSQL behaviour and future RLS cannot be represented faithfully by a browser-side store.
+
+```bash
+docker compose -f infra/docker/compose.yml up -d
+pnpm api:migrate
+pnpm api:migration:check
+```
+
+If PostgreSQL is not configured, the API still starts in limited mode. `GET /health` remains healthy and `GET /ready` returns `503` with persistence marked unavailable.
+
+## Run locally
+
+Start the API and web application in separate terminals:
+
+```bash
+pnpm dev:api
+```
+
+```bash
+pnpm dev:web
+```
+
+Open:
+
+- Web application: [http://localhost:3000](http://localhost:3000)
+- API health: [http://localhost:8000/health](http://localhost:8000/health)
+- API readiness: [http://localhost:8000/ready](http://localhost:8000/ready)
+- OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+Local development defaults to a clearly labelled mock identity and example organisation. Mock authentication is rejected by API configuration and route policy in production.
+
+## Available routes
+
+Public web routes:
+
+- `/`
+- `/sign-in`
+- `/sign-up`
+- `/sign-out`
+
+Protected foundation routes:
+
+- `/dashboard`
+- `/companies`
+- `/meetings`
+- `/tasks`
+- `/assistant`
+- `/settings`
+
+The non-dashboard routes are honest placeholders; they do not persist or generate product data.
+
+API routes:
+
+- `GET /health` — process health
+- `GET /ready` — configured dependency readiness
+- `GET /api/v1/me` — trusted authenticated user and organisation context
+
+## Validation
+
+Run the complete mock-backed validation gate:
+
+```bash
+pnpm validate
+pnpm test:e2e
+```
+
+Individual commands:
+
+```bash
+pnpm format
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build:web
+pnpm api:lint
+pnpm api:format
+pnpm api:typecheck
+pnpm api:test
+pnpm build:api
+pnpm api:migration:check
+```
+
+CI runs the same checks, applies Alembic to PostgreSQL and performs the production builds. It does not deploy.
+
+## Authentication configuration
+
+Sprint 1 provides:
+
+- an explicit web/API authentication adapter boundary;
+- server-side protected-route checks;
+- a Clerk configuration path;
+- a clearly labelled development mock;
+- fail-closed production configuration.
+
+Clerk token/session verification is not connected yet. Supplying placeholder keys does not make Clerk live, and the readiness endpoint reports that honestly. Do not use Sprint 1 with production customer data.
+
+## Database migrations
+
+Alembic is the only owner of application schema changes.
+
+```bash
+pnpm api:migrate
+pnpm api:migration:check
+```
+
+Create future migrations from `apps/api` only after changing SQLAlchemy metadata, then review generated SQL and tenant implications before applying it.
+
+## Production build commands
+
+```bash
+pnpm build:web
+pnpm build:api
+```
+
+The web output is started with `pnpm --filter @revenueos/web start`. The API package is run with a production ASGI process using `revenueos.main:app`. Deployment-provider configuration is intentionally deferred.
+
+## Troubleshooting
+
+- **`/ready` returns `503`:** start PostgreSQL, confirm `DATABASE_URL` in `apps/api/.env`, then run the migration.
+- **Protected pages redirect to sign-in:** confirm `AUTH_MODE=mock` and `MOCK_AUTH_ENABLED=true` in `apps/web/.env.local` for local development.
+- **API rejects mock auth:** `API_ENVIRONMENT=production` cannot use the mock. Use development locally.
+- **Port already in use:** stop the existing process or change the local web/API command and update the corresponding URL/CORS variables.
+- **OpenAPI or TypeScript contract changed:** update the small `packages/shared` surface in the same pull request. Pydantic/OpenAPI remains canonical.
+
+See `docs/03-engineering/development-guide.md` for the fuller workflow and `docs/07-sprints/sprint-01-foundation.md` for scope.
