@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check web formatting
+        run: pnpm format
+      - name: Lint web
+        run: pnpm lint
+      - name: Type-check web
+        run: pnpm typecheck
+      - name: Test web
+        run: pnpm test
+      - name: Build web
+        run: pnpm build:web
+      - name: Install Playwright Chromium
+        run: pnpm --filter @revenueos/web exec playwright install --with-deps chromium
+      - name: Run browser smoke tests
+        run: pnpm test:e2e
+
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: revenueos
+          POSTGRES_USER: revenueos
+          POSTGRES_PASSWORD: local-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U revenueos -d revenueos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      API_ENVIRONMENT: test
+      API_AUTH_MODE: mock
+      API_MOCK_AUTH_ENABLED: "true"
+      API_CORS_ORIGINS: http://localhost:3000
+      DATABASE_URL: postgresql+asyncpg://revenueos:local-ci-only@localhost:5432/revenueos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install API dependencies
+        run: uv sync --directory apps/api --locked
+      - name: Lint API
+        run: uv --directory apps/api run ruff check .
+      - name: Check API formatting
+        run: uv --directory apps/api run ruff format --check .
+      - name: Type-check API
+        run: uv --directory apps/api run mypy src
+      - name: Apply database migrations
+        run: uv --directory apps/api run alembic upgrade head
+      - name: Check migration drift
+        run: uv --directory apps/api run alembic check
+      - name: Test API
+        run: uv --directory apps/api run pytest
+      - name: Build API package
+        run: uv --directory apps/api build

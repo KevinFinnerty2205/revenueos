@@ -1,0 +1,30 @@
+{
+  "name": "revenueos",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @revenueos/web dev",
+    "dev:api": "uv --directory apps/api run uvicorn revenueos.main:app --reload --port 8000",
+    "build:web": "pnpm --filter @revenueos/web build",
+    "build:api": "uv --directory apps/api build",
+    "build": "pnpm build:web && pnpm build:api",
+    "lint": "pnpm --filter @revenueos/web lint",
+    "typecheck": "pnpm --filter @revenueos/web typecheck",
+    "test": "pnpm --filter @revenueos/web test",
+    "test:e2e": "pnpm --filter @revenueos/web test:e2e",
+    "format": "pnpm --filter @revenueos/web format",
+    "format:write": "pnpm --filter @revenueos/web format:write",
+    "api:lint": "uv --directory apps/api run ruff check .",
+    "api:format": "uv --directory apps/api run ruff format --check .",
+    "api:format:write": "uv --directory apps/api run ruff format .",
+    "api:typecheck": "uv --directory apps/api run mypy src",
+    "api:test": "uv --directory apps/api run pytest",
+    "api:migrate": "uv --directory apps/api run alembic upgrade head",
+    "api:migration:check": "uv --directory apps/api run alembic check",
+    "validate": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm api:lint && pnpm api:format && pnpm api:typecheck && pnpm api:test && pnpm build"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
