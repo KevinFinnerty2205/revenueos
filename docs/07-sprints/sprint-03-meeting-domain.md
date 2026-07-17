@@ -20,6 +20,26 @@ Deliver complete non-AI, tenant-isolated support for meetings, participants, del
 - Deliberate browser-side `.txt` reading and plain-text editing; no media upload or processing.
 - API, validation, migration, PostgreSQL RLS, component and browser tests.
 
+## Release notes
+
+**Release identifier:** Sprint 3 / API `0.3.0`
+
+User-visible changes:
+
+- Users can search, filter and page through organisation-scoped meeting records.
+- Users can create and edit meeting metadata, associate an optional company and manage participants.
+- Users can deliberately paste transcript text or select a local `.txt` file for browser-side reading.
+- Users can review meeting details, correct plain-text transcripts with optimistic version protection and inspect content-minimised audit activity.
+- Desktop table and mobile card layouts preserve the same meeting actions and states.
+
+Deployment notes:
+
+- Apply Alembic revision `0003_meeting_domain` before serving API `0.3.0`.
+- The application database role must remain subject to forced RLS and receive a transaction-local organisation context.
+- Downgrade removes the four Sprint 3 tables and their data while preserving Sprint 2 tables; take an environment-appropriate backup before rollback.
+- No existing Sprint 2 endpoint is removed or renamed.
+- Do not use production customer data until production identity, consent, retention/export/erasure and operational controls are complete.
+
 ## Data and migration
 
 Migration `0003_meeting_domain` creates:
@@ -61,7 +81,15 @@ Do not use production customer data. Verified production authentication, consent
 
 ![Meetings list](assets/sprint-03-meetings-list.png)
 
-![Meeting detail overview](assets/sprint-03-meeting-detail.png)
+![Create Meeting](assets/sprint-03-create-meeting.png)
+
+![Meeting detail Overview tab](assets/sprint-03-meeting-detail.png)
+
+![Transcript tab](assets/sprint-03-transcript-tab.png)
+
+![History tab](assets/sprint-03-history-tab.png)
+
+![Meetings mobile view](assets/sprint-03-meetings-mobile.png)
 
 ## Future Meeting Intelligence extension points
 
