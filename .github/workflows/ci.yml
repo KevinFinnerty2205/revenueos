@@ -69,6 +69,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Scan committed secrets and Sprint 2 scope
+        run: python scripts/ci_audit.py
       - name: Install API dependencies
         run: uv sync --directory apps/api --locked
       - name: Lint API

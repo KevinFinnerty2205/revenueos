@@ -23,7 +23,7 @@ docker compose -f infra/docker/compose.yml up -d
 pnpm api:migrate
 ```
 
-The default identity is a clearly labelled development mock. No paid credentials are required.
+The default identity is a clearly labelled development mock. After migrations, the API idempotently provisions only that example organisation, user and membership in development. No paid credentials are required. Never use production customer data in the mock environment.
 
 ## Run
 
@@ -69,7 +69,7 @@ pnpm build:api
 
 `pnpm validate` runs the mock-backed format, lint, type, unit-test and build gate. Browser tests and database migration checks remain explicit because they require a browser or PostgreSQL.
 
-## Adding a foundation API field
+## Changing an API field
 
 1. Update the Pydantic contract.
 2. Confirm the OpenAPI JSON name and required/optional behaviour.

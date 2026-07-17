@@ -28,7 +28,7 @@ export default function SignUpPage() {
         <p className="mt-4 text-sm leading-7 text-slate-600">
           {auth.mode === "mock"
             ? "Local development uses a clearly marked example organisation. It does not create a real account."
-            : "Clerk will own account and organisation creation. That hosted flow is not connected in Sprint 1."}
+            : "Clerk will own account and organisation creation. That hosted flow is not connected in this build."}
         </p>
         {auth.authenticated ? (
           <Link

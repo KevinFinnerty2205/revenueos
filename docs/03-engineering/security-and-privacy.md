@@ -1,22 +1,25 @@
 # Security and privacy
 
-This is the Sprint 1 engineering baseline, not legal advice or a certification claim.
+This is the Sprint 2 engineering baseline, not legal advice or a certification claim.
 
 ## Authentication and authorisation
 
-Clerk is the approved future identity/organisation provider. Sprint 1 provides adapter boundaries, configuration validation and server-side protected-route checks. Development mock auth is non-production only and visibly labelled.
+Clerk is the approved production identity/organisation provider. Sprint 2 still provides only adapter boundaries, configuration validation and server-side protected-route checks. Development mock auth is non-production only, visibly labelled and backed by one deterministic example membership.
 
-Every request derives its user and organisation from the auth adapter. Client-supplied organisation identifiers do not select a tenant. Roles are `admin`, `manager` and `member`; policy denies by default.
+Every request derives its user and organisation from the auth adapter. Client-supplied organisation identifiers do not select a tenant and are forbidden from create/update contracts. Roles are `admin`, `manager` and `member`; Sprint 2 grants organisation members equal CRUD access because no narrower role policy is specified.
 
 ## Tenant isolation
 
 - Organisation-owned queries include explicit organisation predicates.
 - PostgreSQL RLS policies use transaction-local trusted organisation context.
+- Companies, contacts, opportunities and tasks have non-null organisation ownership and forced RLS.
+- Composite foreign keys prevent cross-tenant company, contact, opportunity, owner, assignee and creator references.
+- Services validate every referenced record in the trusted tenant before writing.
 - Runtime application roles must not bypass RLS.
 - Migration/admin credentials are separate from web/API runtime credentials.
 - Missing membership or tenant context fails closed.
 
-The initial schema contains only organisations, users and memberships. Cross-tenant tests expand with each tenant-owned feature.
+API tests exercise cross-tenant list, read, update, delete and relationship denial. PostgreSQL integration tests assume a restricted role and prove RLS visibility and write checks across every Sprint 2 table.
 
 ## Secrets
 
@@ -31,11 +34,13 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - Central safe JSON errors with request IDs.
 - Structured logs containing method, path, status and latency, not request bodies or exception messages.
 - Private data access through the API, never privileged browser database credentials.
+- Bounded page sizes, typed filters/sorts and Pydantic field constraints.
+- Restrictive relationship deletes return safe `409` errors.
 - Locked dependencies and automated format, lint, type, test and build checks.
 
 ## Recording consent and privacy
 
-Sprint 1 has no recording, microphone, upload, transcript or listening capability.
+Sprint 2 has no recording, microphone, upload, transcript or listening capability.
 
 Future conversation capture must:
 
@@ -51,8 +56,9 @@ Future sensitive data requires minimisation, source provenance, retention, expor
 ## Open risks before production use
 
 - Clerk session/JWT verification is not connected.
-- A separately provisioned non-bypass database role must be proven with PostgreSQL RLS tests.
+- The production non-bypass database role and grants are not provisioned by this repository; CI tests the required RLS behaviour with a temporary restricted role.
+- Role-specific CRUD permissions, audit trails, retention and customer-data deletion workflows are not yet specified.
 - Hosting, secret management, monitoring, backup and incident-response providers are not selected.
 - Recording wording, residency and deletion commitments require product/legal approval before conversation features.
 
-Do not use the Sprint 1 foundation with production customer data.
+Do not use this system with production customer data. Production identity verification, operational controls, audit trails and deletion policies are not complete.

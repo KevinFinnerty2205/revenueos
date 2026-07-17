@@ -22,7 +22,8 @@
     "api:test": "uv --directory apps/api run pytest",
     "api:migrate": "uv --directory apps/api run alembic upgrade head",
     "api:migration:check": "uv --directory apps/api run alembic check",
-    "validate": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm api:lint && pnpm api:format && pnpm api:typecheck && pnpm api:test && pnpm build"
+    "audit": "python3 scripts/ci_audit.py",
+    "validate": "pnpm audit && pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm api:lint && pnpm api:format && pnpm api:typecheck && pnpm api:test && pnpm build"
   },
   "engines": {
     "node": ">=22.0.0"

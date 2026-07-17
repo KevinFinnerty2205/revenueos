@@ -14,6 +14,14 @@ def test_health_returns_exact_process_status(client: TestClient) -> None:
     assert response.headers["X-Request-ID"] == "test-health-001"
 
 
+def test_invalid_request_id_is_replaced(client: TestClient) -> None:
+    response = client.get("/health", headers={"X-Request-ID": "unsafe request id"})
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] != "unsafe request id"
+    assert len(response.headers["X-Request-ID"]) == 36
+
+
 def test_ready_reports_configured_local_dependencies(client: TestClient) -> None:
     response = client.get("/ready")
 
@@ -102,10 +110,22 @@ def test_production_rejects_mock_authentication() -> None:
         )
 
 
-def test_openapi_contains_only_sprint_one_product_endpoints(client: TestClient) -> None:
+def test_openapi_contains_sprint_two_business_endpoints(client: TestClient) -> None:
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
     paths = set(response.json()["paths"])
-    assert paths == {"/health", "/ready", "/api/v1/me"}
-    assert not any(path.startswith(("/companies", "/meetings", "/tasks", "/ai")) for path in paths)
+    assert paths == {
+        "/health",
+        "/ready",
+        "/api/v1/me",
+        "/api/v1/companies",
+        "/api/v1/companies/{company_id}",
+        "/api/v1/contacts",
+        "/api/v1/contacts/{contact_id}",
+        "/api/v1/opportunities",
+        "/api/v1/opportunities/{opportunity_id}",
+        "/api/v1/tasks",
+        "/api/v1/tasks/{task_id}",
+    }
+    assert not any(path.startswith(("/meetings", "/ai")) for path in paths)
