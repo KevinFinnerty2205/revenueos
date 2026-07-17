@@ -4,24 +4,25 @@
 
 RevenueOS AI is a multi-tenant relationship-intelligence platform. Sales Brain will help relationship-driven revenue professionals prepare for conversations, capture useful context, reduce administration and follow through thoughtfully.
 
-## Eventual Sales Brain journey
+## Target Sales Brain journey
 
 A user will be able to sign in, work within an organisation, manage relationship records, deliberately supply a meeting recording or transcript, review source-linked intelligence, confirm useful memory, prepare follow-up and ask evidence-scoped questions.
 
-These are product goals, not Sprint 1 capabilities.
+These are target product goals, not current capabilities. The complete scope and release boundaries are in the [master product blueprint](master-product-blueprint.md) and [MVP and beta scope](../06-roadmap/mvp-and-beta-scope.md).
 
-## Sprint 1 product surface
+## Current product surface
 
-Sprint 1 provides:
+Sprints 1 and 2 provide:
 
 - an honest public landing page;
 - sign-in, sign-up and sign-out paths prepared for Clerk;
 - a protected application shell and fixed development organisation;
-- Dashboard, Companies, Meetings, Tasks, Assistant and Settings navigation;
+- Dashboard, Companies, Contacts, Opportunities, Meetings, Tasks, Assistant and Settings navigation;
 - a dashboard with polished empty sections;
-- placeholders that state their capability is not implemented.
+- tenant-isolated list/create/edit/delete workflows for companies, contacts, opportunities and tasks; and
+- Meeting and Assistant placeholders that state their capability is not implemented.
 
-Sprint 1 does not store customer records, accept conversations, call AI providers, connect external systems or process payments.
+The current product does not accept conversations, call AI providers, connect external systems, verify production Clerk sessions or process payments. Do not use it with production customer data.
 
 ## Product principles
 

@@ -4,6 +4,12 @@ RevenueOS is the AI sales teammate that remembers every customer interaction and
 
 This repository contains the Sprint 1 foundation plus Sprint 2 tenant-isolated CRUD for companies, contacts, opportunities and tasks. Meetings, recordings, transcripts, AI processing, integrations, production Clerk verification and billing are not implemented.
 
+## Product blueprint
+
+The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
+
+These target documents do not describe shipped functionality or authorise Sprint 3. The current implementation boundary remains the Sprint 1–2 foundation described below.
+
 ## Prerequisites
 
 - Node.js 22 or newer
@@ -168,4 +174,4 @@ The web output is started with `pnpm --filter @revenueos/web start`. The API pac
 - **Port already in use:** stop the existing process or change the local web/API command and update the corresponding URL/CORS variables.
 - **OpenAPI or TypeScript contract changed:** update the small `packages/shared` surface in the same pull request. Pydantic/OpenAPI remains canonical.
 
-See `docs/03-engineering/development-guide.md` for the fuller workflow, `docs/03-engineering/api.md` for the business API and `docs/07-sprints/sprint-02-core-business-entities.md` for Sprint 2 scope.
+See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [business API reference](docs/03-engineering/api.md) and [Sprint 2 record](docs/07-sprints/sprint-02-core-business-entities.md).

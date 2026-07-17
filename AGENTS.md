@@ -4,7 +4,7 @@
 
 RevenueOS AI is an AI teammate for relationship-driven professionals. Sales Brain is the first product; Recruitment Brain and Customer Success Brain will reuse the same identity, organisation, interaction and workflow foundation. RevenueOS complements CRMs and other systems of record; it is not a CRM.
 
-Implement only the active sprint specification. Sprint 2 adds tenant-isolated CRUD for companies, contacts, opportunities and tasks to the Sprint 1 foundation. It does not include meetings, recording, transcripts, AI calls, integrations, production Clerk verification, billing, analytics, workers, automation or mobile code.
+Implement only the active task or sprint specification. Sprints 1 and 2 are the current shipped baseline: foundation plus tenant-isolated CRUD for companies, contacts, opportunities and tasks. The target [master product blueprint](docs/01-product/master-product-blueprint.md) and [roadmap](docs/06-roadmap/product-roadmap-to-beta.md) guide future sprint planning but do not authorise implementation. Meetings, recording, transcripts, AI calls, integrations, production Clerk verification, billing, analytics, workers, automation and mobile code are not currently implemented.
 
 ## Repository structure
 
@@ -75,6 +75,7 @@ scripts/               # cross-platform automation only when root tasks are insu
 ## Documentation
 
 - `docs/00-company` through `docs/08-decisions` is the canonical product bible.
+- `docs/README.md` is the documentation index and `docs/01-product/master-product-blueprint.md` is the primary product contract through beta.
 - Update documentation in the same pull request as contracts, schema, security behaviour or developer workflow.
 - Record durable architecture changes under `docs/08-decisions` with context, decision, alternatives and consequences.
 - Clearly distinguish current behaviour, approved near-term work and future direction.
