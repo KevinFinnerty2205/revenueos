@@ -6,14 +6,14 @@ describe("EmptyState", () => {
   it("renders an accessible honest placeholder without a fake action", () => {
     render(
       <EmptyState
-        title="Company records are not available yet"
-        description="Sprint 1 does not store customer records."
+        title="No meeting records are available yet"
+        description="This build does not store meetings."
       />,
     );
 
     expect(
       screen.getByRole("heading", {
-        name: "Company records are not available yet",
+        name: "No meeting records are available yet",
       }),
     ).toBeVisible();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();

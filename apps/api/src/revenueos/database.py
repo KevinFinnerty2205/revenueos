@@ -4,9 +4,11 @@ from collections.abc import AsyncIterator
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import text
+from sqlalchemy import event, text
+from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import ConnectionPoolEntry
 
 from revenueos.config import Settings
 from revenueos.errors import PublicAPIError
@@ -16,12 +18,25 @@ def create_engine(settings: Settings) -> AsyncEngine | None:
     if settings.database_url is None:
         return None
     connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-    return create_async_engine(
+    engine = create_async_engine(
         settings.database_url,
         echo=False,
         pool_pre_ping=True,
         connect_args=connect_args,
     )
+    if settings.database_url.startswith("sqlite"):
+        event.listen(engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
+    return engine
+
+
+def _enable_sqlite_foreign_keys(
+    connection: DBAPIConnection,
+    connection_record: ConnectionPoolEntry,
+) -> None:
+    del connection_record
+    cursor = connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
 def create_session_factory(engine: AsyncEngine | None) -> async_sessionmaker[AsyncSession] | None:

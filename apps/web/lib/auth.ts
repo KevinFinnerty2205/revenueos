@@ -59,7 +59,7 @@ class ClerkAuthAdapter implements AuthAdapter {
       user: null,
       organisation: null,
       message: this.configured
-        ? "Clerk session handling is not connected in the Sprint 1 foundation."
+        ? "Clerk session handling is not connected in this build."
         : "Clerk authentication is not configured.",
     };
   }

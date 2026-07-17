@@ -9,7 +9,7 @@ const dashboardSections = [
   {
     title: "Upcoming Meetings",
     description:
-      "Calendar and meeting connections are not available in Sprint 1.",
+      "Calendar and meeting connections are not available in this build.",
   },
   {
     title: "Recent Activity",
@@ -18,7 +18,8 @@ const dashboardSections = [
   },
   {
     title: "Tasks",
-    description: "Task creation and tracking are planned for a later sprint.",
+    description:
+      "Task records are available in Tasks; a dashboard summary is not implemented.",
   },
   {
     title: "AI Insights",
@@ -33,7 +34,7 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow="Development workspace"
         title="A calm place for the work ahead."
-        description="The application shell is ready. Product data and connected capabilities will appear only as later sprints implement them."
+        description="Core business records are available. Connected conversation and AI capabilities will appear only when later sprints implement them."
       />
       <section aria-labelledby="dashboard-sections-title">
         <h2 id="dashboard-sections-title" className="sr-only">

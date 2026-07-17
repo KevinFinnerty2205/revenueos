@@ -7,10 +7,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import Response
 
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory
+from revenueos.development import ensure_development_identity
 from revenueos.errors import (
     PublicAPIError,
     http_error_handler,
@@ -19,9 +21,20 @@ from revenueos.errors import (
     validation_error_handler,
 )
 from revenueos.observability import configure_logging
-from revenueos.routes import health, me
+from revenueos.routes import companies, contacts, health, me, opportunities, tasks
 
 logger = logging.getLogger("revenueos.http")
+REQUEST_ID_ALLOWED_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.:")
+
+
+def safe_request_id(candidate: str | None) -> str:
+    if (
+        candidate
+        and len(candidate) <= 128
+        and all(character in REQUEST_ID_ALLOWED_CHARACTERS for character in candidate)
+    ):
+        return candidate
+    return str(uuid.uuid4())
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -32,14 +45,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if app_settings.environment == "development" and app_settings.mock_auth_enabled and session_factory is not None:
+            try:
+                await ensure_development_identity(session_factory)
+            except SQLAlchemyError:
+                logger.warning("development_identity_provisioning_failed")
         yield
         if app_engine is not None:
             await app_engine.dispose()
 
     app = FastAPI(
         title="RevenueOS AI API",
-        version="0.1.0",
-        description="Versioned Sprint 1 foundation API for RevenueOS AI.",
+        version="0.2.0",
+        description="Versioned core business entity API for RevenueOS AI.",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
@@ -52,7 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=app_settings.cors_origin_list,
         allow_credentials=True,
-        allow_methods=["GET", "OPTIONS"],
+        allow_methods=["DELETE", "GET", "OPTIONS", "PATCH", "POST"],
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
     )
@@ -68,7 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        request_id = safe_request_id(request.headers.get("X-Request-ID"))
         request.state.request_id = request_id
         started = time.perf_counter()
         response: Response | None = None
@@ -91,6 +109,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(me.router)
+    app.include_router(companies.router)
+    app.include_router(contacts.router)
+    app.include_router(opportunities.router)
+    app.include_router(tasks.router)
     return app
 
 

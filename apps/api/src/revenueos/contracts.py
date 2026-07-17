@@ -10,7 +10,12 @@ def to_camel(value: str) -> str:
 
 
 class APIModel(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+        extra="forbid",
+    )
 
 
 class HealthResponse(APIModel):

@@ -23,6 +23,8 @@ describe("application shell", () => {
     for (const label of [
       "Dashboard",
       "Companies",
+      "Contacts",
+      "Opportunities",
       "Meetings",
       "Tasks",
       "Assistant",

@@ -4,7 +4,7 @@
 
 RevenueOS AI is an AI teammate for relationship-driven professionals. Sales Brain is the first product; Recruitment Brain and Customer Success Brain will reuse the same identity, organisation, interaction and workflow foundation. RevenueOS complements CRMs and other systems of record; it is not a CRM.
 
-Implement only the active sprint specification. Sprint 1 is the project foundation: web/API shells, auth-ready protected routes, the initial organisation model, documentation, tests and CI. It does not include customer records, meetings, recording, transcripts, AI calls, integrations, billing, analytics or mobile code.
+Implement only the active sprint specification. Sprint 2 adds tenant-isolated CRUD for companies, contacts, opportunities and tasks to the Sprint 1 foundation. It does not include meetings, recording, transcripts, AI calls, integrations, production Clerk verification, billing, analytics, workers, automation or mobile code.
 
 ## Repository structure
 

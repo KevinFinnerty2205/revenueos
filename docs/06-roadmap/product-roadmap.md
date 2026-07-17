@@ -6,9 +6,13 @@ This sequence reduces trust and platform risk before product breadth. Phase comp
 
 Working web/API shells, auth-ready route protection, organisations/users/memberships, documentation, tests, CI and production build commands. Exit when the Sprint 1 acceptance criteria pass and no later feature is represented as live.
 
+**Status:** Complete.
+
 ## Phase 2 — Sales Brain MVP
 
 Verified Clerk identity, tenant-safe company/contact/opportunity records, deliberate meeting intake, private storage, durable transcription/analysis, reviewable insights, tasks and follow-up drafts. Exit requires two-organisation isolation, failure/retry tests, accessibility and deletion controls.
+
+**Status:** In progress. Sprint 2 delivers the tenant-safe company, contact, opportunity and task foundation only. Verified Clerk identity, meetings, storage, transcription, analysis and follow-up drafting remain outstanding.
 
 ## Phase 3 — Relationship Memory
 

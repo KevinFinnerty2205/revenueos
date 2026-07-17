@@ -2,7 +2,7 @@
 
 RevenueOS is the AI sales teammate that remembers every customer interaction and turns conversations into action.
 
-This repository contains the Sprint 1 technical foundation only: a responsive Next.js application shell, a versioned FastAPI service, authentication adapters, the initial organisation model, tests, documentation and CI. Customer records, meetings, recordings, transcripts, AI processing, integrations and billing are not implemented.
+This repository contains the Sprint 1 foundation plus Sprint 2 tenant-isolated CRUD for companies, contacts, opportunities and tasks. Meetings, recordings, transcripts, AI processing, integrations, production Clerk verification and billing are not implemented.
 
 ## Prerequisites
 
@@ -69,22 +69,36 @@ Public web routes:
 - `/sign-up`
 - `/sign-out`
 
-Protected foundation routes:
+Protected routes:
 
 - `/dashboard`
 - `/companies`
+- `/companies/new`
+- `/companies/{id}/edit`
+- `/contacts`
+- `/contacts/new`
+- `/contacts/{id}/edit`
+- `/opportunities`
+- `/opportunities/new`
+- `/opportunities/{id}/edit`
 - `/meetings`
 - `/tasks`
+- `/tasks/new`
+- `/tasks/{id}/edit`
 - `/assistant`
 - `/settings`
 
-The non-dashboard routes are honest placeholders; they do not persist or generate product data.
+Meeting and Assistant remain honest placeholders. Company, contact, opportunity and task pages use the versioned API and provide list/create/edit states.
 
 API routes:
 
 - `GET /health` — process health
 - `GET /ready` — configured dependency readiness
 - `GET /api/v1/me` — trusted authenticated user and organisation context
+- CRUD under `/api/v1/companies`
+- CRUD under `/api/v1/contacts`
+- CRUD under `/api/v1/opportunities`
+- CRUD under `/api/v1/tasks`
 
 ## Validation
 
@@ -98,6 +112,7 @@ pnpm test:e2e
 Individual commands:
 
 ```bash
+pnpm audit
 pnpm format
 pnpm lint
 pnpm typecheck
@@ -115,7 +130,7 @@ CI runs the same checks, applies Alembic to PostgreSQL and performs the producti
 
 ## Authentication configuration
 
-Sprint 1 provides:
+The current authentication foundation provides:
 
 - an explicit web/API authentication adapter boundary;
 - server-side protected-route checks;
@@ -123,7 +138,7 @@ Sprint 1 provides:
 - a clearly labelled development mock;
 - fail-closed production configuration.
 
-Clerk token/session verification is not connected yet. Supplying placeholder keys does not make Clerk live, and the readiness endpoint reports that honestly. Do not use Sprint 1 with production customer data.
+Clerk token/session verification is not connected yet. Supplying placeholder keys does not make Clerk live, and the readiness endpoint reports that honestly. Do not use this repository with production customer data.
 
 ## Database migrations
 
@@ -153,4 +168,4 @@ The web output is started with `pnpm --filter @revenueos/web start`. The API pac
 - **Port already in use:** stop the existing process or change the local web/API command and update the corresponding URL/CORS variables.
 - **OpenAPI or TypeScript contract changed:** update the small `packages/shared` surface in the same pull request. Pydantic/OpenAPI remains canonical.
 
-See `docs/03-engineering/development-guide.md` for the fuller workflow and `docs/07-sprints/sprint-01-foundation.md` for scope.
+See `docs/03-engineering/development-guide.md` for the fuller workflow, `docs/03-engineering/api.md` for the business API and `docs/07-sprints/sprint-02-core-business-entities.md` for Sprint 2 scope.

@@ -28,7 +28,7 @@ export default function SignInPage() {
         <p className="mt-4 text-sm leading-7 text-slate-600">
           {auth.mode === "mock"
             ? "A clearly labelled development identity is available locally. No password is stored or requested."
-            : "Clerk is the approved authentication provider. Its hosted sign-in flow is not connected in Sprint 1."}
+            : "Clerk is the approved authentication provider. Its hosted sign-in flow is not connected in this build."}
         </p>
         {auth.authenticated ? (
           <Link

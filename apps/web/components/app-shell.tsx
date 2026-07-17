@@ -5,6 +5,8 @@ import { type AuthState, getAuthState } from "@/lib/auth";
 const navigation = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/companies", label: "Companies" },
+  { href: "/contacts", label: "Contacts" },
+  { href: "/opportunities", label: "Opportunities" },
   { href: "/meetings", label: "Meetings" },
   { href: "/tasks", label: "Tasks" },
   { href: "/assistant", label: "Assistant" },
@@ -70,7 +72,7 @@ export function AppShell({ children, authState }: AppShellProps) {
               {auth.organisation?.name ?? "No active organisation"}
             </p>
             <p className="mt-1 text-xs leading-5 text-slate-400">
-              Foundation shell only. Product data is not available yet.
+              Local mock identity. Never use production customer data here.
             </p>
           </div>
         </aside>
