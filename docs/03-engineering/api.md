@@ -68,6 +68,44 @@ List parameters: `search`, `companyId`, `contactId`, `opportunityId`, `assignedU
 
 A task may be general or linked to records. If company, contact or opportunity links are present, they must resolve to one company in the current organisation. The service derives the company from a contact/opportunity when needed. Due timestamps must contain a timezone.
 
+## Meetings
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/meetings` | List active meetings |
+| `POST` | `/api/v1/meetings` | Create a meeting, optionally with initial participants and transcript |
+| `GET` | `/api/v1/meetings/{meetingId}` | Read an active meeting |
+| `PATCH` | `/api/v1/meetings/{meetingId}` | Update meeting metadata |
+| `DELETE` | `/api/v1/meetings/{meetingId}` | Soft-delete a meeting and its active children |
+| `GET` | `/api/v1/meetings/{meetingId}/history` | List content-minimised audit events |
+
+List parameters: `search`, `companyId`, `status`, `meetingType`, `dateFrom`, `dateTo`, `sortBy` (`meeting_date`, `title`, `created_at`, `updated_at`) and `sortOrder`. Dates must include a timezone. `meetingType` is `remote`, `phone`, `in_person` or `other`; status is `scheduled`, `completed` or `cancelled`.
+
+Company and owner are optional/defaulted as documented by the schema, but any supplied relationship must resolve inside the trusted organisation. Meeting create is transactional across initial meeting, participant, transcript and audit rows.
+
+## Meeting participants
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/meetings/{meetingId}/participants` | List active participants |
+| `POST` | `/api/v1/meetings/{meetingId}/participants` | Add a participant |
+| `GET` | `/api/v1/meetings/{meetingId}/participants/{participantId}` | Read a participant |
+| `PATCH` | `/api/v1/meetings/{meetingId}/participants/{participantId}` | Update a participant |
+| `DELETE` | `/api/v1/meetings/{meetingId}/participants/{participantId}` | Soft-delete a participant |
+
+A participant requires at least one of a same-tenant contact, display name or valid email. Attendance is `invited`, `attended`, `absent` or `unknown`; role is `host` or `attendee`.
+
+## Meeting transcript
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/meetings/{meetingId}/transcript` | Read the active transcript |
+| `POST` | `/api/v1/meetings/{meetingId}/transcript` | Create or restore a transcript |
+| `PATCH` | `/api/v1/meetings/{meetingId}/transcript` | Correct transcript text/language |
+| `DELETE` | `/api/v1/meetings/{meetingId}/transcript` | Soft-delete the transcript |
+
+There is at most one transcript row per meeting. Plain text is required and limited to one million characters. Source is `manual` or `upload`; `upload` means the web form read a user-selected `.txt` file, not that RevenueOS stored a file. `PATCH` requires the current positive `version`, increments it on success and returns `409 transcript_version_conflict` for stale writes. Transcript permissions are inherited from the active tenant-scoped meeting.
+
 ## Scope boundary
 
-There are no meeting, recording, transcript, AI, email, calendar, CRM, billing, worker or automation endpoints. Clerk token verification is not connected.
+There are no recording, media upload/storage, transcription, AI, email, calendar, CRM, billing, worker or automation endpoints. Clerk token verification is not connected.

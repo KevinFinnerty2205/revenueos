@@ -4,7 +4,7 @@
 
 RevenueOS AI is an AI teammate for relationship-driven professionals. Sales Brain is the first product; Recruitment Brain and Customer Success Brain will reuse the same identity, organisation, interaction and workflow foundation. RevenueOS complements CRMs and other systems of record; it is not a CRM.
 
-Implement only the active task or sprint specification. Sprints 1 and 2 are the current shipped baseline: foundation plus tenant-isolated CRUD for companies, contacts, opportunities and tasks. The target [master product blueprint](docs/01-product/master-product-blueprint.md) and [roadmap](docs/06-roadmap/product-roadmap-to-beta.md) guide future sprint planning but do not authorise implementation. Meetings, recording, transcripts, AI calls, integrations, production Clerk verification, billing, analytics, workers, automation and mobile code are not currently implemented.
+Implement only the active task or sprint specification. Sprints 1–3 are the current shipped baseline: foundation; tenant-isolated CRUD for companies, contacts, opportunities and tasks; and the tenant-isolated Meeting Domain with participants, deliberately supplied plain-text transcripts, soft deletion and audit metadata. The target [master product blueprint](docs/01-product/master-product-blueprint.md) and [roadmap](docs/06-roadmap/product-roadmap-to-beta.md) guide future sprint planning but do not authorise implementation. Recording, media storage, transcription, AI calls, integrations, production Clerk verification, billing, analytics, workers, automation and mobile code are not currently implemented.
 
 ## Repository structure
 
@@ -61,7 +61,7 @@ scripts/               # cross-platform automation only when root tasks are insu
 - Never log credentials, authorisation headers, signed URLs, recordings, transcripts, prompts, customer content or full provider payloads.
 - Errors expose a safe code, message and request ID—not stack traces or provider internals.
 - RevenueOS never records or listens implicitly. Future capture must be deliberately armed, visibly active and supported by authority/consent evidence.
-- Future sensitive data requires documented minimisation, retention, export and deletion behaviour before implementation.
+- Sprint 3 transcript text is accepted only after deliberate paste or `.txt` selection and must remain out of logs/audit content. Do not use production customer data while production identity, consent evidence, retention, export and erasure controls remain incomplete.
 
 ## Testing and accessibility
 

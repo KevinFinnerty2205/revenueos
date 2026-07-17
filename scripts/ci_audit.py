@@ -1,4 +1,4 @@
-"""Fail CI on obvious committed secrets or Sprint 2 scope violations."""
+"""Fail CI on obvious committed secrets or Sprint 3 scope violations."""
 
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ OUT_OF_SCOPE_PREFIXES = (
     "apps/api/src/revenueos/background_jobs/",
     "apps/api/src/revenueos/billing/",
     "apps/api/src/revenueos/integrations/",
-    "apps/api/src/revenueos/meetings/",
     "apps/api/src/revenueos/transcription/",
     "apps/api/src/revenueos/workers/",
     "apps/mobile/",

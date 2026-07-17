@@ -62,15 +62,17 @@ This is the canonical product and engineering documentation index. Documents dis
 
 - [Sprint 1: foundation](07-sprints/sprint-01-foundation.md)
 - [Sprint 2: core business entities](07-sprints/sprint-02-core-business-entities.md)
+- [Sprint 3: Meeting Domain Foundation](07-sprints/sprint-03-meeting-domain.md)
 
 ## 08 — Decision records
 
 - [ADR 0001: foundation architecture](08-decisions/0001-foundation-architecture.md)
 - [ADR 0002: tenant-owned business entities](08-decisions/0002-tenant-business-entities.md)
 - [ADR 0003: product blueprint and beta sequencing](08-decisions/0003-product-blueprint-and-beta-sequencing.md)
+- [ADR 0004: tenant-owned Meeting Domain](08-decisions/0004-meeting-domain.md)
 
 ## Current delivery boundary
 
-Sprint 1 and Sprint 2 are complete. The repository currently implements the web/API foundation and tenant-isolated companies, contacts, opportunities and tasks. Meetings and Assistant are placeholders. Recording, transcripts, AI, external integrations, production Clerk verification, billing and mobile are not implemented.
+Sprints 1–3 are complete. The repository implements the web/API foundation; tenant-isolated companies, contacts, opportunities and tasks; and tenant-isolated meetings, participants, deliberately supplied plain-text transcripts and content-minimised meeting audit history. Assistant remains a placeholder. Recording, media storage, transcription, AI, external integrations, production Clerk verification, billing and mobile are not implemented.
 
-The recommended next implementation sprint is [Sprint 3: Meeting Domain Foundation](06-roadmap/product-roadmap-to-beta.md). It does not begin as part of the blueprint documentation work.
+Do not use production customer data. Production identity, consent evidence, retention/export/erasure and operational controls are incomplete. Future sprints remain unauthorised until a separate work order is approved.

@@ -5,6 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Date,
     DateTime,
@@ -21,7 +22,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
-from revenueos.domain import CompanyStatus, OpportunityStage, TaskPriority, TaskStatus
+from revenueos.domain import (
+    AttendanceStatus,
+    CompanyStatus,
+    MeetingStatus,
+    MeetingType,
+    OpportunityStage,
+    ParticipantRole,
+    TaskPriority,
+    TaskStatus,
+    TranscriptSource,
+)
 
 
 class Base(DeclarativeBase):
@@ -329,3 +340,267 @@ class Task(TimestampMixin, Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class Meeting(TimestampMixin, Base):
+    __tablename__ = "meetings"
+    __table_args__ = (
+        CheckConstraint("length(trim(title)) > 0", name="ck_meetings_title"),
+        CheckConstraint(
+            "meeting_type IN ('remote', 'phone', 'in_person', 'other')",
+            name="ck_meetings_type",
+        ),
+        CheckConstraint(
+            "status IN ('scheduled', 'completed', 'cancelled')",
+            name="ck_meetings_status",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_meetings_company_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "owner_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_meetings_owner_membership",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_meetings_created_by_membership",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "updated_by"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_meetings_updated_by_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_meetings_organisation_id_id"),
+        Index("ix_meetings_organisation_date", "organisation_id", "meeting_date"),
+        Index("ix_meetings_organisation_status", "organisation_id", "status"),
+        Index("ix_meetings_organisation_type", "organisation_id", "meeting_type"),
+        Index("ix_meetings_organisation_company", "organisation_id", "company_id"),
+        Index("ix_meetings_organisation_deleted", "organisation_id", "deleted_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    meeting_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    meeting_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=MeetingType.OTHER.value,
+        server_default=MeetingType.OTHER.value,
+    )
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=MeetingStatus.SCHEDULED.value,
+        server_default=MeetingStatus.SCHEDULED.value,
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    updated_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MeetingParticipant(Base):
+    __tablename__ = "meeting_participants"
+    __table_args__ = (
+        CheckConstraint(
+            "contact_id IS NOT NULL "
+            "OR COALESCE(length(trim(display_name)), 0) > 0 "
+            "OR COALESCE(length(trim(email)), 0) > 0",
+            name="ck_meeting_participants_identity",
+        ),
+        CheckConstraint(
+            "attendance_status IN ('invited', 'attended', 'absent', 'unknown')",
+            name="ck_meeting_participants_attendance",
+        ),
+        CheckConstraint(
+            "role IN ('host', 'attendee')",
+            name="ck_meeting_participants_role",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"],
+            ["meetings.organisation_id", "meetings.id"],
+            name="fk_meeting_participants_meeting_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_meeting_participants_contact_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            name="uq_meeting_participants_organisation_id_id",
+        ),
+        Index(
+            "ix_meeting_participants_organisation_meeting",
+            "organisation_id",
+            "meeting_id",
+        ),
+        Index(
+            "ix_meeting_participants_organisation_contact",
+            "organisation_id",
+            "contact_id",
+        ),
+        Index(
+            "ix_meeting_participants_organisation_email",
+            "organisation_id",
+            "email",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    meeting_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    display_name: Mapped[str | None] = mapped_column(String(200))
+    email: Mapped[str | None] = mapped_column(String(320))
+    attendance_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=AttendanceStatus.INVITED.value,
+        server_default=AttendanceStatus.INVITED.value,
+    )
+    role: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=ParticipantRole.ATTENDEE.value,
+        server_default=ParticipantRole.ATTENDEE.value,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Transcript(TimestampMixin, Base):
+    __tablename__ = "transcripts"
+    __table_args__ = (
+        CheckConstraint("length(trim(raw_text)) > 0", name="ck_transcripts_raw_text"),
+        CheckConstraint("version > 0", name="ck_transcripts_version"),
+        CheckConstraint(
+            "source IN ('manual', 'upload')",
+            name="ck_transcripts_source",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"],
+            ["meetings.organisation_id", "meetings.id"],
+            name="fk_transcripts_meeting_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_transcripts_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "meeting_id",
+            name="uq_transcripts_organisation_meeting",
+        ),
+        Index("ix_transcripts_organisation_deleted", "organisation_id", "deleted_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    meeting_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[str] = mapped_column(String(16), nullable=False, default="en", server_default="en")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    source: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=TranscriptSource.MANUAL.value,
+        server_default=TranscriptSource.MANUAL.value,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MeetingAuditEvent(Base):
+    __tablename__ = "meeting_audit_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('created', 'updated', 'deleted', 'restored')",
+            name="ck_meeting_audit_events_action",
+        ),
+        CheckConstraint(
+            "entity_type IN ('meeting', 'participant', 'transcript')",
+            name="ck_meeting_audit_events_entity_type",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"],
+            ["meetings.organisation_id", "meetings.id"],
+            name="fk_meeting_audit_events_meeting_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "actor_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_meeting_audit_events_actor_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            name="uq_meeting_audit_events_organisation_id_id",
+        ),
+        Index(
+            "ix_meeting_audit_events_organisation_meeting_created",
+            "organisation_id",
+            "meeting_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    meeting_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    changed_fields: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    version: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )

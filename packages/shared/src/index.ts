@@ -60,6 +60,20 @@ export type TaskStatus =
   | "completed"
   | "cancelled";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
+export type MeetingType = "remote" | "phone" | "in_person" | "other";
+export type MeetingStatus = "scheduled" | "completed" | "cancelled";
+export type AttendanceStatus = "invited" | "attended" | "absent" | "unknown";
+export type ParticipantRole = "host" | "attendee";
+export type TranscriptSource = "manual" | "upload";
+export type MeetingAuditAction =
+  | "created"
+  | "updated"
+  | "deleted"
+  | "restored";
+export type MeetingAuditEntityType =
+  | "meeting"
+  | "participant"
+  | "transcript";
 
 export interface EntityPage<T> {
   items: T[];
@@ -118,4 +132,48 @@ export interface Task extends TenantEntity {
   dueAt: string | null;
   assignedUserId: string | null;
   createdByUserId: string;
+}
+
+export interface Meeting extends TenantEntity {
+  title: string;
+  description: string | null;
+  meetingDate: string;
+  meetingType: MeetingType;
+  status: MeetingStatus;
+  companyId: string | null;
+  ownerUserId: string;
+  createdBy: string;
+  updatedBy: string;
+}
+
+export interface MeetingParticipant {
+  id: string;
+  organisationId: string;
+  meetingId: string;
+  contactId: string | null;
+  displayName: string | null;
+  email: string | null;
+  attendanceStatus: AttendanceStatus;
+  role: ParticipantRole;
+  createdAt: string;
+}
+
+export interface Transcript extends TenantEntity {
+  meetingId: string;
+  rawText: string;
+  language: string;
+  version: number;
+  source: TranscriptSource;
+}
+
+export interface MeetingAuditEvent {
+  id: string;
+  meetingId: string;
+  actorUserId: string;
+  action: MeetingAuditAction;
+  entityType: MeetingAuditEntityType;
+  entityId: string;
+  changedFields: string[];
+  version: number | null;
+  createdAt: string;
 }

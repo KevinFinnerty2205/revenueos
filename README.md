@@ -2,13 +2,13 @@
 
 RevenueOS is the AI sales teammate that remembers every customer interaction and turns conversations into action.
 
-This repository contains the Sprint 1 foundation plus Sprint 2 tenant-isolated CRUD for companies, contacts, opportunities and tasks. Meetings, recordings, transcripts, AI processing, integrations, production Clerk verification and billing are not implemented.
+This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated business entities and Sprint 3 Meeting Domain. Meetings, participants, deliberately supplied plain-text transcripts and content-minimised audit history are implemented. Recording, media storage, transcription, AI processing, integrations, production Clerk verification and billing are not implemented.
 
 ## Product blueprint
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-These target documents do not describe shipped functionality or authorise Sprint 3. The current implementation boundary remains the Sprint 1–2 foundation described below.
+Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 as described below.
 
 ## Prerequisites
 
@@ -88,13 +88,16 @@ Protected routes:
 - `/opportunities/new`
 - `/opportunities/{id}/edit`
 - `/meetings`
+- `/meetings/new`
+- `/meetings/{id}`
+- `/meetings/{id}/edit`
 - `/tasks`
 - `/tasks/new`
 - `/tasks/{id}/edit`
 - `/assistant`
 - `/settings`
 
-Meeting and Assistant remain honest placeholders. Company, contact, opportunity and task pages use the versioned API and provide list/create/edit states.
+Assistant remains an honest placeholder. Company, contact, opportunity and task pages use the versioned API and provide list/create/edit states. Meeting pages provide list/search/filter/pagination, create/edit, participant management, deliberate plain-text transcript input and Overview/Transcript/History detail tabs.
 
 API routes:
 
@@ -105,6 +108,10 @@ API routes:
 - CRUD under `/api/v1/contacts`
 - CRUD under `/api/v1/opportunities`
 - CRUD under `/api/v1/tasks`
+- CRUD under `/api/v1/meetings`
+- nested participant CRUD under `/api/v1/meetings/{meetingId}/participants`
+- singular transcript CRUD under `/api/v1/meetings/{meetingId}/transcript`
+- `GET /api/v1/meetings/{meetingId}/history` — content-minimised audit activity
 
 ## Validation
 
@@ -174,4 +181,4 @@ The web output is started with `pnpm --filter @revenueos/web start`. The API pac
 - **Port already in use:** stop the existing process or change the local web/API command and update the corresponding URL/CORS variables.
 - **OpenAPI or TypeScript contract changed:** update the small `packages/shared` surface in the same pull request. Pydantic/OpenAPI remains canonical.
 
-See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [business API reference](docs/03-engineering/api.md) and [Sprint 2 record](docs/07-sprints/sprint-02-core-business-entities.md).
+See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [API reference](docs/03-engineering/api.md) and [Sprint 3 record](docs/07-sprints/sprint-03-meeting-domain.md).

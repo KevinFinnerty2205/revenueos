@@ -11,7 +11,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
-def test_postgresql_rls_isolates_every_business_table() -> None:
+def test_postgresql_rls_isolates_every_tenant_table() -> None:
     database_url = os.getenv("DATABASE_URL", "")
     if not database_url.startswith(("postgresql", "postgres")):
         pytest.skip("A PostgreSQL DATABASE_URL is required for the RLS integration test.")
@@ -28,6 +28,14 @@ def test_postgresql_rls_isolates_every_business_table() -> None:
     opportunity_b = uuid.uuid4()
     task_a = uuid.uuid4()
     task_b = uuid.uuid4()
+    meeting_a = uuid.uuid4()
+    meeting_b = uuid.uuid4()
+    participant_a = uuid.uuid4()
+    participant_b = uuid.uuid4()
+    transcript_a = uuid.uuid4()
+    transcript_b = uuid.uuid4()
+    audit_a = uuid.uuid4()
+    audit_b = uuid.uuid4()
     role_name = f"revenueos_rls_test_{uuid.uuid4().hex[:12]}"
 
     async def scenario() -> None:
@@ -36,7 +44,17 @@ def test_postgresql_rls_isolates_every_business_table() -> None:
             async with engine.begin() as connection:
                 await connection.exec_driver_sql(f'CREATE ROLE "{role_name}" NOLOGIN')
                 await connection.exec_driver_sql(f'GRANT USAGE ON SCHEMA public TO "{role_name}"')
-                for table in ("companies", "contacts", "opportunities", "tasks"):
+                tenant_tables = (
+                    "companies",
+                    "contacts",
+                    "opportunities",
+                    "tasks",
+                    "meetings",
+                    "meeting_participants",
+                    "transcripts",
+                    "meeting_audit_events",
+                )
+                for table in tenant_tables:
                     await connection.exec_driver_sql(
                         f'GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO "{role_name}"'
                     )
@@ -109,6 +127,10 @@ def test_postgresql_rls_isolates_every_business_table() -> None:
                     contact_id,
                     opportunity_id,
                     task_id,
+                    meeting_id,
+                    participant_id,
+                    transcript_id,
+                    audit_id,
                 ) in (
                     (
                         "A",
@@ -118,6 +140,10 @@ def test_postgresql_rls_isolates_every_business_table() -> None:
                         contact_a,
                         opportunity_a,
                         task_a,
+                        meeting_a,
+                        participant_a,
+                        transcript_a,
+                        audit_a,
                     ),
                     (
                         "B",
@@ -127,12 +153,20 @@ def test_postgresql_rls_isolates_every_business_table() -> None:
                         contact_b,
                         opportunity_b,
                         task_b,
+                        meeting_b,
+                        participant_b,
+                        transcript_b,
+                        audit_b,
                     ),
                 ):
                     entity_parameters = {
                         "contact_id": contact_id,
                         "opportunity_id": opportunity_id,
                         "task_id": task_id,
+                        "meeting_id": meeting_id,
+                        "participant_id": participant_id,
+                        "transcript_id": transcript_id,
+                        "audit_id": audit_id,
                         "organisation_id": organisation_id,
                         "company_id": company_id,
                         "suffix": suffix,
@@ -151,6 +185,67 @@ def test_postgresql_rls_isolates_every_business_table() -> None:
                             VALUES
                                 (:contact_id, :organisation_id, :company_id, 'RLS',
                                  :suffix, :email, :user_id)
+                            """
+                        ),
+                        entity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO meetings
+                                (id, organisation_id, title, meeting_date, meeting_type,
+                                 status, company_id, owner_user_id, created_by, updated_by)
+                            VALUES
+                                (:meeting_id, :organisation_id, :meeting_title, now(), 'remote',
+                                 'completed', :company_id, :user_id, :user_id, :user_id)
+                            """
+                        ),
+                        {
+                            **entity_parameters,
+                            "meeting_title": f"RLS Meeting {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO meeting_participants
+                                (id, organisation_id, meeting_id, contact_id, display_name,
+                                 email, attendance_status, role)
+                            VALUES
+                                (:participant_id, :organisation_id, :meeting_id, :contact_id,
+                                 :participant_name, :email, 'attended', 'attendee')
+                            """
+                        ),
+                        {
+                            **entity_parameters,
+                            "participant_name": f"RLS Participant {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO transcripts
+                                (id, organisation_id, meeting_id, raw_text, language,
+                                 version, source)
+                            VALUES
+                                (:transcript_id, :organisation_id, :meeting_id,
+                                 :raw_text, 'en', 1, 'manual')
+                            """
+                        ),
+                        {
+                            **entity_parameters,
+                            "raw_text": f"RLS transcript {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO meeting_audit_events
+                                (id, organisation_id, meeting_id, actor_user_id, action,
+                                 entity_type, entity_id, changed_fields)
+                            VALUES
+                                (:audit_id, :organisation_id, :meeting_id, :user_id, 'created',
+                                 'meeting', :meeting_id, '["title"]'::json)
                             """
                         ),
                         entity_parameters,
@@ -189,7 +284,7 @@ def test_postgresql_rls_isolates_every_business_table() -> None:
                     text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
                     {"organisation_id": str(organisation_a)},
                 )
-                for table in ("companies", "contacts", "opportunities", "tasks"):
+                for table in tenant_tables:
                     count = await connection.scalar(text(f"SELECT count(*) FROM {table}"))
                     assert count == 1
                 updated = await connection.execute(
@@ -209,9 +304,11 @@ def test_postgresql_rls_isolates_every_business_table() -> None:
                     await connection.execute(
                         text(
                             """
-                            INSERT INTO companies
-                                (id, organisation_id, name, status, owner_user_id)
-                            VALUES (:id, :organisation_id, 'Cross tenant', 'prospect', :user_id)
+                            INSERT INTO meetings
+                                (id, organisation_id, title, meeting_date, meeting_type,
+                                 status, owner_user_id, created_by, updated_by)
+                            VALUES (:id, :organisation_id, 'Cross tenant', now(), 'remote',
+                                    'scheduled', :user_id, :user_id, :user_id)
                             """
                         ),
                         {
@@ -223,7 +320,16 @@ def test_postgresql_rls_isolates_every_business_table() -> None:
                 await transaction.rollback()
         finally:
             async with engine.begin() as connection:
-                for table in ("tasks", "contacts", "opportunities", "companies"):
+                for table in (
+                    "meeting_audit_events",
+                    "transcripts",
+                    "meeting_participants",
+                    "meetings",
+                    "tasks",
+                    "contacts",
+                    "opportunities",
+                    "companies",
+                ):
                     await connection.execute(
                         text(f"DELETE FROM {table} WHERE organisation_id IN (:organisation_a, :organisation_b)"),
                         {

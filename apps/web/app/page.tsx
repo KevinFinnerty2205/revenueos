@@ -71,9 +71,10 @@ export default function LandingPage() {
               </Link>
             </div>
             <p className="mt-6 text-sm leading-6 text-slate-500">
-              The current build includes the application foundation and core
-              business records. Conversation capture, AI processing and
-              connected-system actions are not available yet.
+              The current build includes core business records and deliberate
+              meeting records with supplied plain-text transcripts. Conversation
+              recording, AI processing and connected-system actions are not
+              available yet.
             </p>
           </div>
 

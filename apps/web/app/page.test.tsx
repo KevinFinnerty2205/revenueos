@@ -13,7 +13,7 @@ describe("landing page", () => {
       }),
     ).toBeVisible();
     expect(
-      screen.getByText(/conversation capture, ai processing/i),
+      screen.getByText(/conversation recording, ai processing/i),
     ).toBeVisible();
     expect(screen.getByText("Not connected")).toBeVisible();
   });

@@ -9,12 +9,12 @@ const dashboardSections = [
   {
     title: "Upcoming Meetings",
     description:
-      "Calendar and meeting connections are not available in this build.",
+      "Deliberate meeting records are available in Meetings; calendar connections are not implemented.",
   },
   {
     title: "Recent Activity",
     description:
-      "Activity will appear after the product begins storing customer interactions.",
+      "Meeting audit history is available on each meeting; a combined activity feed is not implemented.",
   },
   {
     title: "Tasks",
@@ -34,7 +34,7 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow="Development workspace"
         title="A calm place for the work ahead."
-        description="Core business records are available. Connected conversation and AI capabilities will appear only when later sprints implement them."
+        description="Core business and deliberate meeting records are available. Recording, connected conversations and AI capabilities remain unimplemented."
       />
       <section aria-labelledby="dashboard-sections-title">
         <h2 id="dashboard-sections-title" className="sr-only">

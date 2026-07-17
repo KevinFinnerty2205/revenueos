@@ -1,6 +1,6 @@
 # ADR 0003 — product blueprint and beta sequencing
 
-- **Status:** Accepted
+- **Status:** Accepted; Sprint 3 transcript boundary amended by ADR 0004
 - **Date:** 2026-07-17
 - **Scope:** Product direction through Sales Brain private beta
 
@@ -66,6 +66,8 @@ Integration order is:
 Sprint 3 should add only the non-AI meeting/participant aggregate, tenant protections, API and truthful UI. It must not add file ingestion, recording, transcript content, AI or provider connections.
 
 This gives every later workflow a stable root without prematurely deciding transcription, object storage or integration behaviour.
+
+**Amendment:** ADR 0004 records WO-003's later decision to include deliberately supplied plain-text Transcript CRUD in Sprint 3. The recording, media ingestion, transcription, AI and provider exclusions remain unchanged.
 
 ### Mobile and ambient capture are deferred or constrained
 

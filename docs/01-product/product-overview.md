@@ -12,17 +12,18 @@ These are target product goals, not current capabilities. The complete scope and
 
 ## Current product surface
 
-Sprints 1 and 2 provide:
+Sprints 1–3 provide:
 
 - an honest public landing page;
 - sign-in, sign-up and sign-out paths prepared for Clerk;
 - a protected application shell and fixed development organisation;
 - Dashboard, Companies, Contacts, Opportunities, Meetings, Tasks, Assistant and Settings navigation;
 - a dashboard with polished empty sections;
-- tenant-isolated list/create/edit/delete workflows for companies, contacts, opportunities and tasks; and
-- Meeting and Assistant placeholders that state their capability is not implemented.
+- tenant-isolated list/create/edit/delete workflows for companies, contacts, opportunities and tasks;
+- tenant-isolated meeting, participant and deliberately supplied plain-text transcript workflows with local audit history; and
+- an Assistant placeholder that states its capability is not implemented.
 
-The current product does not accept conversations, call AI providers, connect external systems, verify production Clerk sessions or process payments. Do not use it with production customer data.
+The current product accepts only deliberately entered meeting metadata and plain-text transcripts. It does not record, store media, transcribe, call AI providers, connect external systems, verify production Clerk sessions or process payments. Do not use it with production customer data.
 
 ## Product principles
 
