@@ -50,6 +50,8 @@ pnpm api:migration:check
 
 Do not edit an applied shared migration. Create a forward migration, review generated operations and test on PostgreSQL. The local Docker credentials are development-only.
 
+Sprint 3 migration `0003_meeting_domain` creates meetings, participants, transcripts and meeting audit events with composite tenant relationships and forced PostgreSQL RLS. Its downgrade removes those four tables without changing Sprint 2 records.
+
 ## Validation
 
 ```bash

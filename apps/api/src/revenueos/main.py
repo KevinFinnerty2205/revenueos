@@ -21,7 +21,7 @@ from revenueos.errors import (
     validation_error_handler,
 )
 from revenueos.observability import configure_logging
-from revenueos.routes import companies, contacts, health, me, opportunities, tasks
+from revenueos.routes import companies, contacts, health, me, meetings, opportunities, tasks
 
 logger = logging.getLogger("revenueos.http")
 REQUEST_ID_ALLOWED_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.:")
@@ -56,8 +56,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="RevenueOS AI API",
-        version="0.2.0",
-        description="Versioned core business entity API for RevenueOS AI.",
+        version="0.3.0",
+        description="Versioned core business and Meeting Domain API for RevenueOS AI.",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
@@ -113,6 +113,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(contacts.router)
     app.include_router(opportunities.router)
     app.include_router(tasks.router)
+    app.include_router(meetings.router)
     return app
 
 

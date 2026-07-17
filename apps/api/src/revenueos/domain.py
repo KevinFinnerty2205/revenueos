@@ -28,3 +28,46 @@ class TaskPriority(StrEnum):
     MEDIUM = "medium"
     HIGH = "high"
     URGENT = "urgent"
+
+
+class MeetingType(StrEnum):
+    REMOTE = "remote"
+    PHONE = "phone"
+    IN_PERSON = "in_person"
+    OTHER = "other"
+
+
+class MeetingStatus(StrEnum):
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class AttendanceStatus(StrEnum):
+    INVITED = "invited"
+    ATTENDED = "attended"
+    ABSENT = "absent"
+    UNKNOWN = "unknown"
+
+
+class ParticipantRole(StrEnum):
+    HOST = "host"
+    ATTENDEE = "attendee"
+
+
+class TranscriptSource(StrEnum):
+    MANUAL = "manual"
+    UPLOAD = "upload"
+
+
+class MeetingAuditAction(StrEnum):
+    CREATED = "created"
+    UPDATED = "updated"
+    DELETED = "deleted"
+    RESTORED = "restored"
+
+
+class MeetingAuditEntityType(StrEnum):
+    MEETING = "meeting"
+    PARTICIPANT = "participant"
+    TRANSCRIPT = "transcript"

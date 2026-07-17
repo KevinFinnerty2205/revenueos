@@ -2,7 +2,7 @@
 
 **Status:** Conceptual model through private beta. This document creates no SQLAlchemy models, database migrations or API contracts.
 
-The current persisted model is limited to organisations, users, memberships, companies, contacts, opportunities and tasks. The target keeps the existing modular-monolith, PostgreSQL, SQLAlchemy/Alembic and tenant-isolation decisions. Candidate entities are introduced only by their named implementation sprint after a schema/API decision and migration review.
+The current persisted model includes organisations, users, memberships, companies, contacts, opportunities, tasks, meetings, meeting participants, supplied plain-text transcripts and meeting audit events. The target keeps the existing modular-monolith, PostgreSQL, SQLAlchemy/Alembic and tenant-isolation decisions. Candidate entities are introduced only by their named implementation sprint after a schema/API decision and migration review.
 
 ## Modelling rules
 
@@ -29,9 +29,10 @@ The current persisted model is limited to organisations, users, memberships, com
 
 | Entity | Purpose and key relationships | Tenant and source of truth | Lifecycle and retention | Current / expected sprint |
 | --- | --- | --- | --- | --- |
-| Meeting | Conversation aggregate linking source, participants, company/opportunity, transcript and artefacts | Tenant-owned; calendar/meeting provider supplies selected metadata, RevenueOS owns review state | Draft → ingesting → review → complete/failed/deleted; metadata may outlive raw media under policy | **Not current — Sprint 3** |
-| MeetingParticipant | A meeting-specific person/speaker/attendee and optional confirmed contact link | Tenant-owned; provider/transcript supplies candidate, user confirmation resolves identity | Unmatched/suggested/confirmed/excluded; deleted with meeting unless retained relationship link is lawful | **Not current — Sprint 3** |
-| Transcript | Versioned textual representation of a meeting and source | Tenant-owned; imported text or transcription result, with user correction authoritative over that version | Created → reviewable → corrected/superseded/deleted; follows source/deletion policy | **Not current — Sprint 6** |
+| Meeting | Conversation aggregate linking participants, optional company and supplied transcript | Tenant-owned; RevenueOS is authoritative for manually entered metadata | Scheduled/completed/cancelled; soft-deleted with active children and hidden from normal reads | **Current — Sprint 3** |
+| MeetingParticipant | A meeting-specific attendee and optional confirmed contact link | Tenant-owned; user-entered identity or same-tenant contact reference | Invited/attended/absent/unknown; active or soft-deleted with meeting | **Current — Sprint 3** |
+| Transcript | One versioned plain-text representation supplied for a meeting | Tenant-owned; pasted or browser-read `.txt`, with user correction authoritative | Created/restored → corrected by optimistic version → soft-deleted; no snapshot history yet | **Current — Sprint 3** |
+| MeetingAuditEvent | Content-minimised activity metadata for meeting, participant and transcript mutations | Tenant-owned; RevenueOS service transaction is authoritative | Append-only metadata retained with meeting; retention/export policy is not implemented | **Current — Sprint 3** |
 | TranscriptSegment | Timestamped/speaker-linked transcript evidence used for citations | Tenant-owned child of transcript | Immutable per transcript version; deleted with transcript/source | **Not current — Sprint 6** |
 | IngestionJob | Durable, leased, idempotent processing state for an explicitly supplied source | Tenant-owned; RevenueOS job system authoritative | Queued/running/retry/complete/failed/cancelled; operational metadata retained, payload minimised | **Not current — Sprint 5** |
 

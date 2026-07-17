@@ -29,3 +29,25 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+@layer components {
+  .primary-button {
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60;
+  }
+
+  .secondary-button {
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-800 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .form-control {
+    @apply min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-950 outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-100;
+  }
+
+  .form-card {
+    @apply rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8;
+  }
+
+  .form-legend {
+    @apply text-xl font-semibold text-slate-950;
+  }
+}

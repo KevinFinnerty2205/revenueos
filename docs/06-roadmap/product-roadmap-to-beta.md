@@ -2,7 +2,7 @@
 
 **Status:** Proposed sequence, subject to evidence and capacity planning. No future sprint is authorised by this document.
 
-The roadmap preserves one demonstrable outcome per sprint where practical. It takes the current Sprint 1–2 baseline to a narrow design-partner loop before broadening integrations. Sprint numbers express sequence, not committed dates; estimates require team capacity, provider access and design-partner availability.
+The roadmap preserves one demonstrable outcome per sprint where practical. It takes the current Sprint 1–3 baseline to a narrow design-partner loop before broadening integrations. Sprint numbers express sequence, not committed dates; estimates require team capacity, provider access and design-partner availability.
 
 ## Sequencing principles
 
@@ -41,16 +41,18 @@ The roadmap preserves one demonstrable outcome per sprint where practical. It ta
 
 ## Meeting intelligence foundation
 
-### Sprint 3 — Meeting Domain Foundation — Recommended next
+### Sprint 3 — Meeting Domain Foundation — Complete
 
 - **Objective:** Introduce the non-AI meeting aggregate and lifecycle needed by every later conversation workflow.
-- **User value:** Users can create and organise meeting metadata against the correct company, contacts and opportunity.
-- **Major deliverables:** Meeting and participant domain model, tenant-safe migration/RLS, CRUD/repository/service/API contracts, meeting list/detail foundation, lifecycle rules, current-source placeholder metadata, tests and ADR.
+- **User value:** Users can create and organise meeting metadata, participants and deliberately supplied plain-text transcripts against the correct company and contacts.
+- **Major deliverables:** Meeting, participant, transcript and audit-event models; tenant-safe migration/RLS; CRUD/repository/service/API contracts; responsive list/create/edit/detail UI; optimistic transcript versioning; soft deletion; tests and ADR.
 - **Dependencies:** Sprint 2 entities and this blueprint.
-- **Out of scope:** File upload, transcript content, recording, AI, provider connections and external actions.
-- **Acceptance criteria:** Create/edit/delete a meeting; link same-tenant relationships; reject cross-tenant/invalid links; represent unmatched participants; complete loading/empty/error UI.
-- **Security gates:** Organisation only from trusted context, composite tenant constraints, RLS, safe participant data, no recording/consent claim.
-- **Demonstration:** Create a planned customer meeting, link an opportunity and participants, then open its truthful “no source ingested” detail.
+- **Out of scope:** Media upload/storage, recording, transcription, AI, provider connections and external actions.
+- **Acceptance criteria:** Create/edit/soft-delete a meeting; manage participants and one plain-text transcript; reject cross-tenant/invalid links; preserve content-minimised history; complete loading/empty/error UI.
+- **Security gates:** Organisation only from trusted context, active membership check, composite tenant constraints, forced RLS, bounded transcript input and no transcript content in logs/audit.
+- **Demonstration:** Create a customer meeting, add participants and authorised transcript text, correct the transcript, then review versioned activity metadata.
+
+WO-003 expanded the earlier proposed Sprint 3 boundary to include direct plain-text transcript CRUD. It did not authorise recording, media ingestion, transcription or AI. Production customer data remains prohibited until production identity and operational privacy controls are complete.
 
 ### Sprint 4 — Production Identity and Organisation Administration
 
@@ -63,22 +65,22 @@ The roadmap preserves one demonstrable outcome per sprint where practical. It ta
 - **Security gates:** Issuer/audience/signature/expiry verification, least-privilege role matrix, recent-auth decision for high-risk actions and audit metadata.
 - **Demonstration:** Administrator invites a user, user accesses one organisation, administrator removes them and the next API request is denied.
 
-### Sprint 5 — Secure Manual Ingestion
+### Sprint 5 — Secure Manual Media Ingestion
 
-- **Objective:** Accept an explicitly supplied recording or pasted transcript through a durable, consent-aware ingestion lifecycle.
+- **Objective:** Accept explicitly supplied media through a durable, consent-aware ingestion lifecycle and formalise consent/provenance for the existing plain-text path.
 - **User value:** A user can bring one customer conversation into RevenueOS without waiting for integrations.
-- **Major deliverables:** Private storage/quarantine, file and paste flow, consent evidence, source validation, durable database-backed job/worker entrypoint, idempotency, retry/cancel/delete and progress UI.
+- **Major deliverables:** Private storage/quarantine, media flow, consent evidence, source validation, provenance for pasted text, durable database-backed job/worker entrypoint, idempotency, retry/cancel/delete and progress UI.
 - **Dependencies:** Sprint 3 meeting aggregate, Sprint 4 production identity, storage/security decisions.
 - **Out of scope:** Transcription/model calls, connected capture and meeting intelligence.
 - **Acceptance criteria:** Valid source reaches a truthful accepted state; unsafe/oversized/duplicate source is rejected safely; retry is bounded; deletion removes source; API request never performs long work inline.
 - **Security gates:** Signed upload/download authorisation, detected type/size/duration checks, quarantine, tenant-scoped jobs/storage, consent record, 30-day raw-audio default and content-free logs.
 - **Demonstration:** Upload an authorised sample, observe validated job progress, then delete it and verify it is unavailable.
 
-### Sprint 6 — Transcript Review and Relationship Matching
+### Sprint 6 — Transcript Segments and Relationship Matching
 
-- **Objective:** Provide versioned transcript/segment review and user-confirmed participant/account matching.
+- **Objective:** Extend the Sprint 3 plain-text transcript into snapshot/segment review and user-confirmed participant/account matching.
 - **User value:** Users can correct the source record before intelligence is generated.
-- **Major deliverables:** Transcript/segment lifecycle, deterministic transcript import path, editing/versioning, speaker assignment, candidate matching/external identity foundation, duplicate detection and review UI.
+- **Major deliverables:** Transcript snapshot/segment lifecycle, deterministic transcript import path, speaker assignment, candidate matching/external identity foundation, duplicate detection and review UI.
 - **Dependencies:** Sprint 5 ingestion and Sprint 2 entities.
 - **Out of scope:** Generated summaries, relationship memory, CRM connection and auto-merge.
 - **Acceptance criteria:** Review/correct transcript; resolve or leave participant unmatched; confirm same-tenant links; preserve source version/correction; reject ambiguous cross-tenant identity.
@@ -332,9 +334,9 @@ Not every listed integration is a prerequisite for the first pilot or private be
 - After Sprint 19: continue, narrow or change sequencing based on pilot evidence.
 - Before Sprint 25: does commercial policy require automated billing at private-beta entry?
 
-## Recommended next sprint
+## Next sequencing decision
 
-**Sprint 3: Meeting Domain Foundation** is confirmed as the recommended next sprint. Meetings are the root aggregate for ingestion, transcript, intelligence, memory and approved follow-up, while its bounded metadata-only scope avoids prematurely choosing AI or integration implementations.
+Sprint 3 is complete. This roadmap currently sequences Sprint 4 as Production Identity and Organisation Administration before production customer-content use. WO-003 identifies technical extension seams for future Meeting Intelligence, but does not authorise that work or resolve a different sprint sequence. A separate approved work order is required before any Sprint 4 implementation begins.
 
 ## Related documents
 

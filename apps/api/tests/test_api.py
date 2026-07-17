@@ -110,7 +110,7 @@ def test_production_rejects_mock_authentication() -> None:
         )
 
 
-def test_openapi_contains_sprint_two_business_endpoints(client: TestClient) -> None:
+def test_openapi_contains_sprint_three_domain_endpoints(client: TestClient) -> None:
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
@@ -127,5 +127,11 @@ def test_openapi_contains_sprint_two_business_endpoints(client: TestClient) -> N
         "/api/v1/opportunities/{opportunity_id}",
         "/api/v1/tasks",
         "/api/v1/tasks/{task_id}",
+        "/api/v1/meetings",
+        "/api/v1/meetings/{meeting_id}",
+        "/api/v1/meetings/{meeting_id}/history",
+        "/api/v1/meetings/{meeting_id}/participants",
+        "/api/v1/meetings/{meeting_id}/participants/{participant_id}",
+        "/api/v1/meetings/{meeting_id}/transcript",
     }
-    assert not any(path.startswith(("/meetings", "/ai")) for path in paths)
+    assert not any(path.startswith(("/ai", "/integrations")) for path in paths)

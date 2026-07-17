@@ -1,13 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { MeetingList } from "@/components/meeting-list";
 
 export default function MeetingsPage() {
-  return (
-    <PlaceholderPage
-      eyebrow="Conversations"
-      title="Meetings"
-      description="Meeting capture will be deliberate, consent-aware and clearly visible when it is implemented."
-      emptyTitle="Meeting capture is not connected"
-      emptyDescription="There is no recording, upload, transcript or background-listening capability in this build."
-    />
-  );
+  return <MeetingList />;
 }

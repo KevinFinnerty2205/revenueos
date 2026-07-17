@@ -8,7 +8,7 @@ test("landing page explains the current product honestly", async ({ page }) => {
     }),
   ).toBeVisible();
   await expect(
-    page.getByText(/conversation capture, AI processing/i),
+    page.getByText(/conversation recording, AI processing/i),
   ).toBeVisible();
 });
 
@@ -54,4 +54,157 @@ test("company creation exposes required validation and navigation", async ({
     "href",
     "/companies",
   );
+});
+
+test("meeting list and create form are responsive and deliberate", async ({
+  page,
+}) => {
+  await page.route("http://localhost:8000/api/v1/meetings**", async (route) => {
+    await route.fulfill({
+      json: {
+        items: [
+          {
+            id: "meeting-1",
+            organisationId: "organisation-1",
+            title: "Acme discovery",
+            description: "Discuss expansion.",
+            meetingDate: "2026-08-01T00:00:00Z",
+            meetingType: "remote",
+            status: "scheduled",
+            companyId: "company-1",
+            ownerUserId: "user-1",
+            createdBy: "user-1",
+            updatedBy: "user-1",
+            createdAt: "2026-07-17T00:00:00Z",
+            updatedAt: "2026-07-17T00:00:00Z",
+          },
+        ],
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        pages: 1,
+      },
+    });
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/companies**",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: [{ id: "company-1", name: "Acme Australia" }],
+          page: 1,
+          pageSize: 100,
+          total: 1,
+          pages: 1,
+        },
+      });
+    },
+  );
+  await page.route("http://localhost:8000/api/v1/contacts**", async (route) => {
+    await route.fulfill({
+      json: { items: [], page: 1, pageSize: 100, total: 0, pages: 0 },
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/meetings");
+
+  await expect(page.getByRole("heading", { name: "Meetings" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Acme discovery" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article").getByText("Acme Australia"),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Create meeting" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Create meeting" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Title")).toHaveAttribute("required", "");
+  await expect(page.getByLabel("Meeting date")).toHaveAttribute("required", "");
+  await expect(page.getByText(/does not record or transcribe/i)).toBeVisible();
+});
+
+test("meeting detail exposes overview, transcript and audit history tabs", async ({
+  page,
+}) => {
+  await page.route(
+    "http://localhost:8000/api/v1/meetings/meeting-1**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/participants")) {
+        await route.fulfill({ json: [] });
+        return;
+      }
+      if (path.endsWith("/transcript")) {
+        await route.fulfill({
+          json: {
+            id: "transcript-1",
+            meetingId: "meeting-1",
+            rawText: "Customer supplied transcript.",
+            language: "en",
+            version: 1,
+            source: "manual",
+            createdAt: "2026-07-17T00:00:00Z",
+            updatedAt: "2026-07-17T00:00:00Z",
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/history")) {
+        await route.fulfill({
+          json: [
+            {
+              id: "audit-1",
+              meetingId: "meeting-1",
+              actorUserId: "user-1",
+              action: "created",
+              entityType: "meeting",
+              entityId: "meeting-1",
+              changedFields: ["title"],
+              version: null,
+              createdAt: "2026-07-17T00:00:00Z",
+            },
+          ],
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          id: "meeting-1",
+          organisationId: "organisation-1",
+          title: "Acme discovery",
+          description: "Discuss expansion.",
+          meetingDate: "2026-08-01T00:00:00Z",
+          meetingType: "remote",
+          status: "scheduled",
+          companyId: null,
+          ownerUserId: "user-1",
+          createdBy: "user-1",
+          updatedBy: "user-1",
+          createdAt: "2026-07-17T00:00:00Z",
+          updatedAt: "2026-07-17T00:00:00Z",
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/companies**",
+    async (route) => {
+      await route.fulfill({
+        json: { items: [], page: 1, pageSize: 100, total: 0, pages: 0 },
+      });
+    },
+  );
+  await page.goto("/meetings/meeting-1");
+
+  await expect(
+    page.getByRole("heading", { name: "Acme discovery" }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Transcript" }).click();
+  await expect(page.getByLabel("Transcript text")).toHaveValue(
+    "Customer supplied transcript.",
+  );
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByText("Meeting created")).toBeVisible();
 });

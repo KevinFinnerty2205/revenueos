@@ -1,7 +1,7 @@
 [project]
 name = "revenueos-api"
-version = "0.2.0"
-description = "RevenueOS AI tenant-isolated core business API"
+version = "0.3.0"
+description = "RevenueOS AI tenant-isolated core business and Meeting Domain API"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.15.0,<2.0.0",
