@@ -14,7 +14,7 @@ RevenueOS should feel calm, capable and trustworthy.
 - **Accessible:** semantic HTML, keyboard navigation, visible focus, labelled controls, sufficient contrast and reduced-motion support are default requirements.
 - **Low cognitive load:** use familiar terms, short sentences and purposeful empty states.
 
-## Sprint 1 application rules
+## Application rules
 
 - Desktop-first layouts remain usable on narrow screens.
 - Navigation remains reachable by keyboard and does not depend on hover.
@@ -22,3 +22,5 @@ RevenueOS should feel calm, capable and trustworthy.
 - Do not invent customer names, metrics, activity or AI output.
 - Do not use fake action buttons. A visible action must work.
 - Animation is unnecessary unless it communicates loading; respect reduced-motion preferences.
+
+The target screen hierarchy and workflow states are defined in [Information architecture](information-architecture.md) and [Core workflows](core-workflows.md). Those documents clearly label current, pilot, beta and later scope.

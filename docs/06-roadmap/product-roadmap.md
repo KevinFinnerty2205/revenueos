@@ -2,6 +2,8 @@
 
 This sequence reduces trust and platform risk before product breadth. Phase completion depends on tested exit criteria, not dates.
 
+For the focused sprint sequence from the current baseline to private beta, see [Product roadmap to beta](product-roadmap-to-beta.md). For release gates and the exact first-five-company loop, see [MVP and beta scope](mvp-and-beta-scope.md).
+
 ## Phase 1 — Foundation
 
 Working web/API shells, auth-ready route protection, organisations/users/memberships, documentation, tests, CI and production build commands. Exit when the Sprint 1 acceptance criteria pass and no later feature is represented as live.
@@ -12,7 +14,7 @@ Working web/API shells, auth-ready route protection, organisations/users/members
 
 Verified Clerk identity, tenant-safe company/contact/opportunity records, deliberate meeting intake, private storage, durable transcription/analysis, reviewable insights, tasks and follow-up drafts. Exit requires two-organisation isolation, failure/retry tests, accessibility and deletion controls.
 
-**Status:** In progress. Sprint 2 delivers the tenant-safe company, contact, opportunity and task foundation only. Verified Clerk identity, meetings, storage, transcription, analysis and follow-up drafting remain outstanding.
+**Status:** In progress. Sprint 2 completed the tenant-safe company, contact, opportunity and task foundation. Verified Clerk identity, meetings, storage, transcription, analysis and follow-up drafting remain outstanding.
 
 ## Phase 3 — Relationship Memory
 
