@@ -39,6 +39,7 @@ class PromptDefinition(BaseModel):
         "executive_summary",
         "decisions",
         "action_items",
+        "risks_blockers",
     ]
     system_template: PromptTemplate
     user_template: PromptTemplate

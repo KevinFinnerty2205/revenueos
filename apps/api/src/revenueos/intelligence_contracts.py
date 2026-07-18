@@ -13,6 +13,8 @@ from revenueos.domain import (
     DecisionStatus,
     ExecutiveSummaryMeetingType,
     ExecutiveSummarySentiment,
+    RiskCategory,
+    RiskSeverity,
 )
 
 ExecutiveSummaryState = Literal[
@@ -145,3 +147,49 @@ class ActionItemsResponse(APIModel):
     generated_at: datetime | None
     safe_message: str | None
     action_items: ActionItemsContentResponse | None
+
+
+RisksBlockersState = Literal[
+    "empty",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+]
+
+
+class RiskItemResponse(APIModel):
+    risk: str
+    category: RiskCategory
+    severity: RiskSeverity
+    owner: str | None
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: str
+
+
+class RisksBlockersContentResponse(APIModel):
+    risks: list[RiskItemResponse]
+
+
+class RisksBlockersRequestResponse(APIModel):
+    job_id: UUID
+    status: Literal["queued", "running", "completed"]
+    created: bool
+    transcript_version: int = Field(ge=1)
+    requested_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class RisksBlockersResponse(APIModel):
+    state: RisksBlockersState
+    generation_available: bool
+    unavailable_reason: str | None
+    job_id: UUID | None
+    transcript_version: int | None = Field(default=None, ge=1)
+    requested_at: datetime | None
+    started_at: datetime | None
+    generated_at: datetime | None
+    safe_message: str | None
+    risks_blockers: RisksBlockersContentResponse | None

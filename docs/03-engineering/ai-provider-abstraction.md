@@ -10,11 +10,11 @@ The provider-neutral seam supports two implementations:
   SDK and Responses API.
 
 Together they support the existing `infrastructure_test`, `executive_summary`,
-`decisions` and `action_items` contracts where explicitly allowed. Executive Summary,
-Decisions and Action Items are the only customer-facing AI capabilities. There is no provider UI, tenant-managed credential, additional
+`decisions`, `action_items` and `risks_blockers` contracts where explicitly allowed. Executive Summary,
+Decisions, Action Items and Risks & Blockers are the only customer-facing AI capabilities. There is no provider UI, tenant-managed credential, additional
 vendor, tool use, streaming or automatic provider fallback.
 
-Selecting OpenAI sends the rendered Executive Summary, Decisions or Action Items prompt and bounded meeting
+Selecting OpenAI sends the rendered Executive Summary, Decisions, Action Items or Risks & Blockers prompt and bounded meeting
 transcript to OpenAI. The default mock makes no network call. See
 [OpenAI provider integration](openai-provider-integration.md) for the external
 data boundary and operating guide.
@@ -68,7 +68,10 @@ and zero latency. For Executive Summary it derives a bounded excerpt and simple
 keyword-based classifications. For Decisions it deterministically recognises
 explicit agreement/rejection/deferral markers. For Action Items it recognises
 explicit future commitments, applies the narrow meeting-date calendar and
-returns nullable owner/date fields or a valid empty list. All exclude obvious instruction-like transcript
+returns nullable owner/date fields or a valid empty list. For Risks & Blockers
+it recognises narrow transcript-grounded obstacles, normalises category and
+qualitative severity, supports nullable owners and excludes question-,
+decision- and action-only text. All exclude obvious instruction-like transcript
 sentences and never perform a network request. This is test output, not a
 quality claim or substitute for a genuine LLM evaluation.
 

@@ -3,9 +3,10 @@
 ## Current boundary
 
 WO-004A2 adds the internal tenant-scoped job/artefact application layer.
-WO-004C1 extends it with Executive Summary and WO-004C2 adds independent
-current-transcript Decisions request/state rules and typed append-only
-artefacts. Only those product-safe capabilities are exposed through the
+WO-004C1 extends it with Executive Summary; WO-004C2 adds independent
+current-transcript Decisions; WO-004C3 adds Action Items; and WO-004C4 adds
+Risks & Blockers request/state rules and typed append-only artefacts. Only those
+product-safe capabilities are exposed through the
 meeting-scoped API/UI; generic lifecycle APIs remain
 internal.
 
@@ -122,10 +123,10 @@ Every service starts with trusted `TenantContext`. Every repository read/write h
 ## Known limitations and extension points
 
 - Generic AI lifecycle work remains internal; only the Executive Summary,
-  Decisions and Action Items request/state resources are public.
+  Decisions, Action Items and Risks & Blockers request/state resources are public.
 - Worker claiming, leases, retry scheduling and cancellation execution support
-  infrastructure tests, Executive Summary, Decisions and Action Items.
-- The configured provider may be mock or OpenAI; there is no later Meeting
+  infrastructure tests, Executive Summary, Decisions, Action Items and Risks & Blockers.
+- The configured provider may be mock or OpenAI; there is no Open Questions or later Meeting
   Intelligence capability.
 - The transcript version identifies the current mutable transcript row but does not preserve a historical text snapshot.
 - Production identity, retention, export, erasure and operational controls remain incomplete; production customer data is prohibited.

@@ -23,6 +23,7 @@ import { formatMeetingDate } from "@/lib/meetings";
 import { ExecutiveSummaryPanel } from "@/components/executive-summary-panel";
 import { DecisionsPanel } from "@/components/decisions-panel";
 import { ActionItemsPanel } from "@/components/action-items-panel";
+import { RisksBlockersPanel } from "@/components/risks-blockers-panel";
 
 type MeetingTab = "overview" | "intelligence" | "transcript" | "history";
 const meetingTabs: MeetingTab[] = [
@@ -418,6 +419,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
             <ExecutiveSummaryPanel meetingId={meeting.id} />
             <DecisionsPanel meetingId={meeting.id} />
             <ActionItemsPanel meetingId={meeting.id} />
+            <RisksBlockersPanel meetingId={meeting.id} />
           </div>
         </div>
       ) : null}

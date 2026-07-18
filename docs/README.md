@@ -42,6 +42,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Executive Summary intelligence](03-engineering/executive-summary-intelligence.md)
 - [Meeting Decisions intelligence](03-engineering/meeting-decisions-intelligence.md)
 - [Meeting Action Items intelligence](03-engineering/meeting-action-items-intelligence.md)
+- [Meeting Risks & Blockers intelligence](03-engineering/meeting-risks-blockers-intelligence.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -82,6 +83,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-004C1A: Production OpenAI Provider Integration](07-sprints/wo-004c1a-openai-provider.md)
 - [WO-004C2: Meeting Decisions Intelligence](07-sprints/wo-004c2-meeting-decisions.md)
 - [WO-004C3: Meeting Action Items Intelligence](07-sprints/wo-004c3-meeting-action-items.md)
+- [WO-004C4: Meeting Risks & Blockers Intelligence](07-sprints/wo-004c4-meeting-risks-blockers.md)
 
 ## 08 — Decision records
 
@@ -98,17 +100,19 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0011: server-side OpenAI Responses provider](08-decisions/0011-server-side-openai-responses-provider.md)
 - [ADR 0012: current-transcript Decisions execution](08-decisions/0012-current-transcript-decisions.md)
 - [ADR 0013: current-transcript Action Items execution](08-decisions/0013-current-transcript-action-items.md)
+- [ADR 0014: current-transcript Risks & Blockers execution](08-decisions/0014-current-transcript-risks-blockers.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2 are complete. An authenticated
-user can independently queue and view a strict Executive Summary and structured
-Decisions list from the current transcript through the durable worker. Mock
-remains the deterministic no-network default; the optional server-side OpenAI
-Responses API provider supports both capabilities without changing the API/UI.
-OpenAI selection sends the selected transcript to OpenAI. There is no Action
-Items or later intelligence field, provider UI, recording, media storage, transcription,
-external integration, production Clerk verification, billing or mobile
-application. Assistant remains a placeholder.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4 are complete. An
+authenticated user can independently queue and view a strict Executive Summary,
+Decisions, Action Items and Risks & Blockers result from the current transcript
+through the durable worker. Mock remains the deterministic no-network default;
+the optional server-side OpenAI Responses API provider supports all four
+capabilities without changing the API/UI. OpenAI selection sends the selected
+transcript to OpenAI. There is no Open Questions or later intelligence field,
+provider UI, recording, media storage, transcription, external integration,
+production Clerk verification, billing or mobile application. Assistant remains
+a placeholder.
 
 Do not use production customer data. Production identity, consent evidence, retention/export/erasure and operational controls are incomplete. Future sprints remain unauthorised until a separate work order is approved.

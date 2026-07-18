@@ -122,6 +122,17 @@ authorise production customer data or any later intelligence output.
 The capability extracts candidates only. It does not create tasks or authorise
 production customer data or any later intelligence output.
 
+### WO-004C4 — Meeting Risks & Blockers Intelligence — Complete
+
+- **Objective:** Add the fourth end-to-end Meeting Intelligence capability using only risks and blockers supported by the current transcript.
+- **Major deliverables:** Risks & Blockers prompt/schema v1, normalised category/severity, nullable owner, deterministic populated/empty mock output, explicit OpenAI allowlist extension, transcript-pinned durable job, append-only artefact, POST/GET API, accessible panel and terminating three-second polling.
+- **Out of scope:** Open Questions, follow-up email, probability, mitigation planning, editing, task creation, CRM changes, deal scoring, memory, recording, transcription, streaming and automation.
+- **Security gates:** Trusted tenant context, forced RLS, exact transcript version, no truncation, prompt-injection-as-data, validated-content-only persistence, content-redacted telemetry/audits and explicit OpenAI external-data warning.
+- **Demonstration:** Generate Risks & Blockers from a synthetic authorised transcript, observe queued/processing then completed cards or a successful empty result, refresh and retain the result.
+
+The capability is transcript-evidence limited. It does not infer probability,
+plan mitigation or authorise production customer data or later intelligence.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.

@@ -22,6 +22,7 @@ from revenueos.ai_provider_contracts import (
     ExecutiveSummaryProviderInput,
     ProviderRequest,
     ProviderResponse,
+    RisksBlockersProviderInput,
 )
 from revenueos.ai_provider_errors import (
     InvalidProviderRequestError,
@@ -108,11 +109,15 @@ class OpenAIProvider:
     async def execute(self, request: ProviderRequest) -> ProviderResponse:
         supported_inputs: dict[
             str,
-            type[ExecutiveSummaryProviderInput] | type[DecisionsProviderInput] | type[ActionItemsProviderInput],
+            type[ExecutiveSummaryProviderInput]
+            | type[DecisionsProviderInput]
+            | type[ActionItemsProviderInput]
+            | type[RisksBlockersProviderInput],
         ] = {
             "executive_summary": ExecutiveSummaryProviderInput,
             "decisions": DecisionsProviderInput,
             "action_items": ActionItemsProviderInput,
+            "risks_blockers": RisksBlockersProviderInput,
         }
         expected_input = supported_inputs.get(request.job_type)
         if expected_input is None or not isinstance(request.input_payload, expected_input):

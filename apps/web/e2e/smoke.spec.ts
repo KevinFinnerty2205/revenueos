@@ -125,7 +125,7 @@ test("meeting list and create form are responsive and deliberate", async ({
   await expect(page.getByText(/does not record or transcribe/i)).toBeVisible();
 });
 
-test("meeting detail generates and persists Summary, Decisions and Action Items intelligence", async ({
+test("meeting detail generates and persists Summary, Decisions, Action Items and Risks intelligence", async ({
   page,
 }) => {
   let executiveSummaryRequested = false;
@@ -133,6 +133,8 @@ test("meeting detail generates and persists Summary, Decisions and Action Items 
   let decisionsStatusReads = 0;
   let actionItemsRequested = false;
   let actionItemsStatusReads = 0;
+  let risksBlockersRequested = false;
+  let risksBlockersStatusReads = 0;
   await page.route(
     "http://localhost:8000/api/v1/meetings/meeting-1**",
     async (route) => {
@@ -343,6 +345,83 @@ test("meeting detail generates and persists Summary, Decisions and Action Items 
         });
         return;
       }
+      if (path.endsWith("/intelligence/risks-blockers")) {
+        if (route.request().method() === "POST") {
+          risksBlockersRequested = true;
+          await route.fulfill({
+            status: 202,
+            json: {
+              jobId: "job-4",
+              status: "queued",
+              created: true,
+              transcriptVersion: 1,
+              requestedAt: "2026-07-18T00:00:00Z",
+              startedAt: null,
+              completedAt: null,
+            },
+          });
+          return;
+        }
+        if (!risksBlockersRequested) {
+          await route.fulfill({
+            json: {
+              state: "empty",
+              generationAvailable: true,
+              unavailableReason: null,
+              jobId: null,
+              transcriptVersion: null,
+              requestedAt: null,
+              startedAt: null,
+              generatedAt: null,
+              safeMessage: null,
+              risksBlockers: null,
+            },
+          });
+          return;
+        }
+        risksBlockersStatusReads += 1;
+        await route.fulfill({
+          json:
+            risksBlockersStatusReads === 1
+              ? {
+                  state: "queued",
+                  generationAvailable: false,
+                  unavailableReason: null,
+                  jobId: "job-4",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: null,
+                  generatedAt: null,
+                  safeMessage: null,
+                  risksBlockers: null,
+                }
+              : {
+                  state: "completed",
+                  generationAvailable: false,
+                  unavailableReason: null,
+                  jobId: "job-4",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: "2026-07-18T00:00:01Z",
+                  generatedAt: "2026-07-18T00:00:02Z",
+                  safeMessage: null,
+                  risksBlockers: {
+                    risks: [
+                      {
+                        risk: "Procurement approval may delay implementation.",
+                        category: "procurement",
+                        severity: "high",
+                        owner: "Customer Procurement",
+                        confidence: 0.93,
+                        evidence:
+                          "The customer said procurement usually takes six weeks.",
+                      },
+                    ],
+                  },
+                },
+        });
+        return;
+      }
       if (path.endsWith("/participants")) {
         await route.fulfill({ json: [] });
         return;
@@ -440,6 +519,16 @@ test("meeting detail generates and persists Summary, Decisions and Action Items 
   await expect(page.getByText("High", { exact: true })).toBeVisible();
   await expect(page.getByText("Open", { exact: true })).toBeVisible();
   await expect(page.getByText("92%")).toBeVisible();
+  await page.getByRole("button", { name: "Generate Risks & Blockers" }).click();
+  await expect(
+    page.getByText("Risks & Blockers generation is queued…"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Procurement approval may delay implementation."),
+  ).toBeVisible();
+  await expect(page.getByText("Customer Procurement")).toBeVisible();
+  await expect(page.getByText("Procurement", { exact: true })).toBeVisible();
+  await expect(page.getByText("93%", { exact: true })).toBeVisible();
 
   await page.reload();
   await page.getByRole("tab", { name: "Intelligence" }).click();
@@ -452,10 +541,16 @@ test("meeting detail generates and persists Summary, Decisions and Action Items 
   await expect(
     page.getByText("Send the revised commercial proposal."),
   ).toBeVisible();
+  await expect(
+    page.getByText("Procurement approval may delay implementation."),
+  ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
     page.getByRole("heading", { name: "Executive Summary" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Risks & Blockers" }),
   ).toBeVisible();
   await page.getByRole("tab", { name: "Transcript" }).click();
   await expect(page.getByLabel("Transcript text")).toHaveValue(

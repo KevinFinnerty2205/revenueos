@@ -14,6 +14,7 @@ from revenueos.ai_contracts import (
     ActionItemsSource,
     DecisionsSource,
     ExecutiveSummarySource,
+    RisksBlockersSource,
 )
 from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
 from revenueos.ai_output_schema_registry import (
@@ -35,6 +36,8 @@ from revenueos.ai_prompt_registry import (
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
+    RISKS_BLOCKERS_PROMPT_KEY,
+    RISKS_BLOCKERS_PROMPT_VERSION,
     PromptRegistry,
     create_default_prompt_registry,
 )
@@ -50,6 +53,7 @@ from revenueos.ai_provider_contracts import (
     ProviderOutputSchema,
     ProviderRequest,
     ProviderResponse,
+    RisksBlockersProviderInput,
 )
 from revenueos.ai_provider_errors import ProviderError
 from revenueos.ai_provider_registry import AIProviderRegistry
@@ -128,6 +132,10 @@ ActionItemsSourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[ActionItemsSource],
 ]
+RisksBlockersSourceLoader = Callable[
+    [ClaimedAIJob],
+    Awaitable[RisksBlockersSource],
+]
 ProviderInputFactory = Callable[[tuple[ProviderMessage, ...]], ProviderInput]
 
 
@@ -140,6 +148,7 @@ class AIJobExecutor(Protocol):
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
     ) -> ExecutionResult: ...
 
 
@@ -520,8 +529,14 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
     ) -> ExecutionResult:
-        del executive_summary_source_loader, decisions_source_loader, action_items_source_loader
+        del (
+            executive_summary_source_loader,
+            decisions_source_loader,
+            action_items_source_loader,
+            risks_blockers_source_loader,
+        )
         return await self._execute_structured(
             job,
             prompt_key=self._settings.ai_prompt_key,
@@ -553,8 +568,9 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
     ) -> ExecutionResult:
-        del decisions_source_loader, action_items_source_loader
+        del decisions_source_loader, action_items_source_loader, risks_blockers_source_loader
         if job.job_type != AIJobType.EXECUTIVE_SUMMARY.value:
             raise WorkerExecutionError(
                 "invalid_executive_summary_job",
@@ -622,8 +638,9 @@ class DecisionsExecutor(_StructuredOutputExecutor):
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
     ) -> ExecutionResult:
-        del executive_summary_source_loader, action_items_source_loader
+        del executive_summary_source_loader, action_items_source_loader, risks_blockers_source_loader
         if job.job_type != AIJobType.DECISIONS.value:
             raise WorkerExecutionError(
                 "invalid_decisions_job",
@@ -692,8 +709,9 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
     ) -> ExecutionResult:
-        del executive_summary_source_loader, decisions_source_loader
+        del executive_summary_source_loader, decisions_source_loader, risks_blockers_source_loader
         if job.job_type != AIJobType.ACTION_ITEMS.value:
             raise WorkerExecutionError(
                 "invalid_action_items_job",
@@ -758,6 +776,91 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
         return result
 
 
+class RisksBlockersExecutor(_StructuredOutputExecutor):
+    """Transcript-grounded Risks & Blockers execution through the provider port."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+    ) -> ExecutionResult:
+        del executive_summary_source_loader, decisions_source_loader, action_items_source_loader
+        if job.job_type != AIJobType.RISKS_BLOCKERS.value:
+            raise WorkerExecutionError(
+                "invalid_risks_blockers_job",
+                "The queued job is not a Risks & Blockers job.",
+                retryable=False,
+            )
+        if job.prompt_key != RISKS_BLOCKERS_PROMPT_KEY or job.prompt_version != RISKS_BLOCKERS_PROMPT_VERSION:
+            raise WorkerExecutionError(
+                "invalid_prompt_configuration",
+                "The Risks & Blockers prompt configuration is invalid.",
+                retryable=False,
+            )
+        if risks_blockers_source_loader is None:
+            raise WorkerExecutionError(
+                "risks_blockers_source_unavailable",
+                "The Risks & Blockers source loader is unavailable.",
+                retryable=False,
+            )
+
+        logger.info("risks_blockers_execution_started", extra=self._log_context(job))
+        source = await risks_blockers_source_loader(job)
+        logger.info(
+            "risks_blockers_transcript_loaded",
+            extra={
+                **self._log_context(job),
+                "transcript_version": job.transcript_version,
+                "transcript_character_count": len(source.transcript_text),
+                "meeting_date_available": True,
+            },
+        )
+        result = await self._execute_structured(
+            job,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            variables=PromptVariables(
+                values={
+                    "meeting_title": json.dumps(source.meeting_title, ensure_ascii=False),
+                    "meeting_date": json.dumps(source.meeting_date.isoformat(), ensure_ascii=False),
+                    "transcript_text": json.dumps(source.transcript_text, ensure_ascii=False),
+                }
+            ),
+            input_factory=lambda messages: RisksBlockersProviderInput(messages=messages),
+            cancellation_check=cancellation_check,
+        )
+        values = result.content.get("risks")
+        risks = values if isinstance(values, list) else []
+        severities = {severity: 0 for severity in ("high", "medium", "low")}
+        categories: dict[str, int] = {}
+        for item in risks:
+            if not isinstance(item, dict):
+                continue
+            severity = item.get("severity")
+            category = item.get("category")
+            if isinstance(severity, str) and severity in severities:
+                severities[severity] += 1
+            if isinstance(category, str):
+                categories[category] = categories.get(category, 0) + 1
+        logger.info(
+            "risks_blockers_output_validation_completed",
+            extra={
+                **self._log_context(job),
+                "risk_count": len(risks),
+                "empty_result": len(risks) == 0,
+                "severity_counts": severities,
+                "category_counts": categories,
+                "structured_output_attempt_count": result.structured_output_attempt_count,
+            },
+        )
+        return result
+
+
 class AIExecutorRegistry:
     def __init__(
         self,
@@ -792,6 +895,12 @@ class AIExecutorRegistry:
                 schemas,
             ),
             AIJobType.ACTION_ITEMS.value: ActionItemsExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
+            AIJobType.RISKS_BLOCKERS.value: RisksBlockersExecutor(
                 configuration,
                 providers,
                 prompts,

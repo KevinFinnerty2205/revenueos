@@ -4,23 +4,23 @@ RevenueOS is the AI sales teammate that remembers every customer interaction and
 
 This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated
 business entities, Sprint 3 Meeting Domain, WO-004A1/A2/B1/B2/B3 AI
-infrastructure and WO-004C1/C1A/C2 Meeting Intelligence/provider capability.
+infrastructure and WO-004C1/C1A/C2/C3/C4 Meeting Intelligence/provider capability.
 Meetings, deliberately supplied transcripts, audit history, AI
 persistence/domain rules and a separate durable worker are implemented. The
 Meeting Detail Intelligence tab can queue and display a transcript-grounded
-Executive Summary and Decisions through versioned prompts and strict
+Executive Summary, Decisions, Action Items and Risks & Blockers through versioned prompts and strict
 structured-output validation. The default provider is a deterministic
 no-network mock; an
 optional server-side OpenAI Responses API adapter is configuration-selectable.
-No Action Items or later intelligence capability, browser credential, recording, media
-storage, transcription, integration, production Clerk verification or billing
-is implemented.
+No Open Questions or later intelligence capability, browser credential,
+recording, media storage, transcription, integration, production Clerk
+verification or billing is implemented.
 
 ## Product blueprint
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2.
+Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4.
 
 ## Prerequisites
 
@@ -113,7 +113,7 @@ Protected routes:
 - `/assistant`
 - `/settings`
 
-Assistant remains an honest placeholder. Company, contact, opportunity and task pages use the versioned API and provide list/create/edit states. Meeting pages provide list/search/filter/pagination, create/edit, participant management, deliberate plain-text transcript input and Overview/Intelligence/Transcript/History detail tabs. Intelligence contains independent Executive Summary and Decisions panels. Both use the mock by default and need no frontend change when the worker selects OpenAI.
+Assistant remains an honest placeholder. Company, contact, opportunity and task pages use the versioned API and provide list/create/edit states. Meeting pages provide list/search/filter/pagination, create/edit, participant management, deliberate plain-text transcript input and Overview/Intelligence/Transcript/History detail tabs. Intelligence contains independent Executive Summary, Decisions, Action Items and Risks & Blockers panels. All use the mock by default and need no frontend change when the worker selects OpenAI.
 
 API routes:
 
@@ -222,6 +222,8 @@ See the [documentation index](docs/README.md),
 [API reference](docs/03-engineering/api.md),
 [Executive Summary architecture](docs/03-engineering/executive-summary-intelligence.md),
 [Meeting Decisions architecture](docs/03-engineering/meeting-decisions-intelligence.md),
+[Meeting Action Items architecture](docs/03-engineering/meeting-action-items-intelligence.md),
+[Meeting Risks & Blockers architecture](docs/03-engineering/meeting-risks-blockers-intelligence.md),
 [OpenAI provider guide](docs/03-engineering/openai-provider-integration.md),
 [prompt/output architecture](docs/03-engineering/prompt-registry-and-structured-output.md)
-and [WO-004C2 record](docs/07-sprints/wo-004c2-meeting-decisions.md).
+and [WO-004C4 record](docs/07-sprints/wo-004c4-meeting-risks-blockers.md).

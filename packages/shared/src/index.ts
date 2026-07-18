@@ -104,6 +104,29 @@ export type ActionItemsState =
   | "cancelled";
 export type ActionItemPriority = "high" | "medium" | "low";
 export type ActionItemStatus = "open";
+export type RisksBlockersState =
+  | "empty"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type RiskCategory =
+  | "budget"
+  | "procurement"
+  | "legal"
+  | "security"
+  | "technical"
+  | "integration"
+  | "timeline"
+  | "implementation"
+  | "stakeholder"
+  | "competitor"
+  | "commercial"
+  | "resourcing"
+  | "dependency"
+  | "other";
+export type RiskSeverity = "high" | "medium" | "low";
 
 export interface EntityPage<T> {
   items: T[];
@@ -301,6 +324,42 @@ export interface ActionItemsResponse {
 }
 
 export interface ActionItemsRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface RiskItem {
+  risk: string;
+  category: RiskCategory;
+  severity: RiskSeverity;
+  owner: string | null;
+  confidence: number;
+  evidence: string;
+}
+
+export interface RisksBlockersContent {
+  risks: RiskItem[];
+}
+
+export interface RisksBlockersResponse {
+  state: RisksBlockersState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  risksBlockers: RisksBlockersContent | null;
+}
+
+export interface RisksBlockersRequestResponse {
   jobId: string;
   status: "queued" | "running" | "completed";
   created: boolean;
