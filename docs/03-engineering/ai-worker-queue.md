@@ -2,9 +2,9 @@
 
 ## Current boundary
 
-WO-004B1 adds a separately runnable backend worker for the existing internal `infrastructure_test` job type. PostgreSQL remains the durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and creates the existing schema-version-1 test artefact.
+WO-004B1 adds a separately runnable backend worker for the existing internal `infrastructure_test` job type. PostgreSQL remains the durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and creates the existing schema-version-1 test artefact. WO-004B2 routes that executor through a typed provider boundary.
 
-The executor is deterministic. It does not read transcript text, make a network request or perform genuine Meeting Intelligence. There is no provider abstraction, OpenAI/Anthropic integration, prompt registry, API route, web UI or polling.
+The configured provider is the deterministic `mock` / `mock-infrastructure-v1` adapter. It does not read transcript text, make a network request or perform genuine Meeting Intelligence. There is no OpenAI/Anthropic integration, prompt registry, API route, web UI or polling.
 
 ## Process and startup
 
@@ -88,7 +88,7 @@ WO-004B1 deliberately adds no cancellation API.
 
 ## Execution and transactions
 
-`AIExecutorRegistry` maps `infrastructure_test` to `InfrastructureTestExecutor`. The executor ignores transcript content and returns the existing strict Pydantic contract:
+`AIExecutorRegistry` maps `infrastructure_test` to `InfrastructureTestExecutor`. The executor creates a strict request containing safe claim identifiers and a literal infrastructure operation, resolves the configured mock through `AIProviderRegistry`, applies a bounded timeout and validates the normalised response against the existing strict Pydantic artefact contract:
 
 ```json
 {
@@ -97,16 +97,18 @@ WO-004B1 deliberately adds no cancellation API.
 }
 ```
 
-Unknown job types produce bounded `unsupported_job_type` failure metadata and are not retried. The successful completion transaction:
+Unknown job/provider/model types and malformed provider output produce bounded non-retryable failures. Timeouts, temporary unavailability and transient provider failures use the existing durable retry policy. The successful completion transaction:
 
 - verifies current tenant, running state and worker ownership under a row lock;
 - rechecks cancellation;
 - validates and stages the exact-trace artefact through `AIArtifactService`;
-- records zero input/output tokens, zero estimated cost, `AUD` and processing duration;
+- records `mock`, `mock-infrastructure-v1`, deterministic provider request ID, zero input/output tokens, zero estimated cost, `AUD` and processing duration;
 - transitions the job to completed; and
 - commits artefact, artefact audit, job state and status audit together.
 
 If artefact validation fails, the transaction rolls back and the job fails safely without retry because identical content cannot become valid later. A database persistence failure is retryable. The job cannot become completed without its artefact.
+
+Provider execution occurs after the claim transaction commits and before completion opens a new transaction. Cancellation is rechecked under the completion lock before any artefact is staged.
 
 ## Configuration
 
@@ -118,10 +120,13 @@ If artefact validation fails, the transaction rolls back and the job fails safel
 | `API_WORKER_BASE_RETRY_DELAY_SECONDS` | `5` | 1–3,600 |
 | `API_WORKER_MAX_RETRY_DELAY_SECONDS` | `300` | At least base delay, at most 86,400 |
 | `API_WORKER_DEFAULT_MAX_ATTEMPTS` | `3` | 1–20 |
+| `API_AI_PROVIDER_NAME` | `mock` | 1–100 safe lowercase characters |
+| `API_AI_PROVIDER_MODEL_IDENTIFIER` | `mock-infrastructure-v1` | 1–200 safe identifier characters |
+| `API_AI_PROVIDER_TIMEOUT_SECONDS` | `10` | Greater than zero, at most 300 |
 
 ## Telemetry and privacy
 
-Structured logs cover worker start/stop, claim, heartbeat, completion, failure, retry, exhaustion, cancellation, recovery and duration. Allowed fields are organisation/job/type/worker identifiers, attempt, duration, safe error code and retryability. Logs never include transcript/artefact/prompt content, participants, secrets, credentials, raw exception messages or database URLs.
+Structured logs cover worker start/stop, claim, heartbeat, provider selection/start/completion/failure/timeout, job completion/failure/retry/exhaustion, cancellation, recovery and duration. Allowed fields include safe organisation/job/type/worker/provider/model/request identifiers, attempt, duration/latency, token counts, integer cost, currency, finish reason, safe error code and retryability. Logs never include provider input/output payloads, transcript/artefact/prompt content, participants, secrets, credentials, raw exception messages or database URLs.
 
 Automated audit events use the original requesting user as the actor because the existing meeting audit schema requires a tenant member. `worker_id` and transition metadata show that execution was automated. A dedicated system-actor model is a future decision, not part of this work order.
 
@@ -131,8 +136,8 @@ Automated audit events use the original requesting user as the actor because the
 - Work is processed sequentially within one worker process; scale is achieved with additional worker replicas.
 - Tenant discovery is capped at 1,000 eligible organisations per cycle; deployments approaching that many simultaneously active tenants need an approved pagination/fairness extension.
 - There is no operator dashboard, API/UI lifecycle access, cancellation endpoint or user polling.
-- There is no provider, prompt, model parsing, transcript snapshot, genuine intelligence, notification or external action.
+- There is no real provider, prompt, model-specific parsing, transcript snapshot, genuine intelligence, notification or external action.
 - The current transcript version pin does not preserve a historical transcript body.
 - Production identity, consent evidence, retention/export/erasure, deployment monitoring and incident controls remain incomplete. Production customer data is prohibited.
 
-Future provider-backed executors can implement the same small executor interface only after a separately approved provider/prompt work order. They must preserve exact trace validation, short transactions, safe errors, forced RLS and atomic artefact-before-completion semantics.
+Future real adapters can implement the provider protocol only after a separately approved work order. They must preserve exact trace validation, short transactions, safe errors, forced RLS and atomic artefact-before-completion semantics. See [AI provider abstraction](ai-provider-abstraction.md).

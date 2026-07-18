@@ -54,13 +54,13 @@ The roadmap preserves one demonstrable outcome per sprint where practical. It ta
 
 WO-003 expanded the earlier proposed Sprint 3 boundary to include direct plain-text transcript CRUD. It did not authorise recording, media ingestion, transcription or AI. Production customer data remains prohibited until production identity and operational privacy controls are complete.
 
-### WO-004A1/A2/B1 — AI Infrastructure Foundation — Complete
+### WO-004A1/A2/B1/B2 — AI Infrastructure Foundation — Complete
 
-- **Objective:** Establish tenant-safe AI persistence, internal domain rules and a durable execution path for deterministic infrastructure tests.
-- **Major deliverables:** Exact transcript-version trace, append-only artefacts, forced RLS, tenant-scoped services, idempotency/lifecycle validation, PostgreSQL claim/lease/heartbeat/retry/recovery/cancellation, strict infrastructure-test execution and metadata-only telemetry/audits.
-- **Out of scope:** Real providers, prompts, APIs, UI, polling and genuine meeting intelligence.
+- **Objective:** Establish tenant-safe AI persistence, internal domain rules and a durable provider-neutral execution path for deterministic infrastructure tests.
+- **Major deliverables:** Exact transcript-version trace, append-only artefacts, forced RLS, tenant-scoped services, idempotency/lifecycle validation, PostgreSQL claim/lease/heartbeat/retry/recovery/cancellation, typed provider contracts, a deterministic no-network mock, bounded provider timeout/error handling, strict infrastructure-test execution and metadata-only telemetry/audits.
+- **Out of scope:** External/real providers, credentials, prompts, APIs, UI, polling and genuine meeting intelligence.
 - **Security gates:** Explicit organisation predicates plus forced RLS, narrow tenant scheduling, composite tenant constraints, safe errors, atomic artefact/completion and content-free telemetry/audits.
-- **Demonstration:** Concurrent backend workers claim one deterministic infrastructure-test job once, persist its typed artefact, recover expired work and fail cross-tenant operations closed.
+- **Demonstration:** Concurrent backend workers claim one deterministic infrastructure-test job once, execute it through the mock provider, persist its typed artefact/zero usage metadata, recover expired work and fail cross-tenant operations closed.
 
 These work orders create implementation seams only and do not change the separately proposed product sprint sequence below.
 

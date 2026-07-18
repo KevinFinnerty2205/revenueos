@@ -40,6 +40,19 @@ class Settings(BaseSettings):
     worker_base_retry_delay_seconds: int = Field(default=5, ge=1, le=3600)
     worker_max_retry_delay_seconds: int = Field(default=300, ge=1, le=86400)
     worker_default_max_attempts: int = Field(default=3, ge=1, le=20)
+    ai_provider_name: str = Field(
+        default="mock",
+        min_length=1,
+        max_length=100,
+        pattern=r"^[a-z0-9][a-z0-9_-]*$",
+    )
+    ai_provider_model_identifier: str = Field(
+        default="mock-infrastructure-v1",
+        min_length=1,
+        max_length=200,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+    )
+    ai_provider_timeout_seconds: float = Field(default=10.0, gt=0, le=300)
 
     @field_validator("database_url", "clerk_jwks_url", "clerk_issuer", "clerk_audience", mode="before")
     @classmethod

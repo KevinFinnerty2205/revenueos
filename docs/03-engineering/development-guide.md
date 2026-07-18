@@ -41,7 +41,12 @@ pnpm dev:web
 pnpm dev:worker
 ```
 
-Web runs at `http://localhost:3000`, API at `http://localhost:8000`, and the worker runs as a separate backend process. The worker requires a migrated database and makes no provider/network call.
+Web runs at `http://localhost:3000`, API at `http://localhost:8000`, and the worker runs as a separate backend process. The worker requires a migrated database. Its default deterministic mock provider makes no network call and needs no API key.
+
+Provider defaults are `API_AI_PROVIDER_NAME=mock`,
+`API_AI_PROVIDER_MODEL_IDENTIFIER=mock-infrastructure-v1` and
+`API_AI_PROVIDER_TIMEOUT_SECONDS=10`. Unknown names/models fail safely; no real
+provider or credential setting is implemented.
 
 ## Database workflow
 
@@ -57,6 +62,9 @@ Do not edit an applied shared migration. Create a forward migration, review gene
 Sprint 3 migration `0003_meeting_domain` creates meetings, participants, transcripts and meeting audit events with composite tenant relationships and forced PostgreSQL RLS. Its downgrade removes those four tables without changing Sprint 2 records.
 
 Migration `0006_ai_worker_queue` adds worker ownership metadata and the narrow PostgreSQL tenant scheduler function. Upgrade, downgrade and re-upgrade preserve the existing AI trace and artefact immutability guards.
+
+WO-004B2 requires no migration: existing AI job/artefact columns represent its
+provider trace, usage and cost metadata.
 
 ## Validation
 

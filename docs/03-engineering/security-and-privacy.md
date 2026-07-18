@@ -1,6 +1,6 @@
 # Security and privacy
 
-This is the WO-004B1 engineering baseline, not legal advice or a certification claim.
+This is the WO-004B2 engineering baseline, not legal advice or a certification claim.
 
 ## Authentication and authorisation
 
@@ -24,6 +24,13 @@ API tests exercise cross-tenant list, read, update, delete and relationship deni
 WO-004A2 repositories retain an explicit organisation predicate even under RLS. Services accept only trusted `TenantContext`, validate meeting/transcript/job trace ownership and map foreign identifiers to safe not-found errors so another tenant's record existence is not disclosed. Restricted-role PostgreSQL tests execute the new repositories and services while forced RLS is active.
 
 WO-004B1 worker transactions also require an explicit organisation predicate and set transaction-local tenant context before tenant-owned reads/writes. A fixed security-definer scheduler function returns only opaque IDs for organisations with eligible work; it cannot return arbitrary rows or content. Claim, heartbeat, recovery, cancellation and completion operate under forced RLS. PostgreSQL tests cover wrong-tenant worker queries, concurrent claim/recovery and continuing forced-RLS state.
+
+WO-004B2 provider requests copy their organisation/job identifiers from the
+claimed immutable job snapshot and cannot load database records. Provider
+execution has no open database transaction. Output persistence re-enters the
+claimed organisation context, locks with the explicit organisation/job/worker
+predicate and remains protected by forced RLS and tenant composite keys. A
+mismatched organisation cannot persist provider output.
 
 ## Secrets
 
@@ -51,7 +58,14 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - Worker claims use PostgreSQL row locks, bounded leases and exact worker ownership; no in-memory queue can override persisted state.
 - Retry/cancellation/recovery and artefact completion use short atomic transactions and store only bounded safe errors.
 - Worker logs allow safe IDs, attempts, status, duration and error codes only; they exclude content, participant data, secrets, database URLs and raw exception messages.
-- The deterministic executor does not load transcript text or make network calls.
+- Provider logs allow only safe provider/model/request labels, latency, usage,
+  integer cost, currency, finish reason and bounded error classification; they
+  exclude full request/response payloads and artefact content.
+- The deterministic mock provider receives only an infrastructure-operation
+  literal plus safe claim identifiers. It does not load transcript text, make
+  network calls or require an API key.
+- Provider timeouts are bounded and retryable. Unsupported provider/model,
+  invalid request/configuration and malformed output fail without retry.
 - Locked dependencies and automated format, lint, type, test and build checks.
 
 ## Recording consent and privacy
@@ -74,7 +88,9 @@ Meeting deletion currently makes records unavailable to normal application reads
 - Clerk session/JWT verification is not connected.
 - The production non-bypass database role and grants are not provisioned by this repository; CI tests the required RLS behaviour with a temporary restricted role.
 - Role-specific CRUD permissions, organisation-wide audit export, retention and customer-data erasure workflows are not yet specified.
-- Only deterministic infrastructure-test worker execution exists; provider execution, prompt governance and user/API lifecycle access are not implemented.
+- Only deterministic mock-provider infrastructure-test execution exists; real
+  provider execution, provider privacy/retention controls, prompt governance and
+  user/API lifecycle access are not implemented.
 - The scheduler function necessarily reveals opaque eligible organisation UUIDs to the database worker role; deployment grants and role separation require production review.
 - Transcript version counters do not preserve historical transcript bodies, so version traceability is not yet source snapshot retention.
 - Hosting, secret management, monitoring, backup and incident-response providers are not selected.
