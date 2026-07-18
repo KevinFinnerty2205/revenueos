@@ -1,6 +1,6 @@
 # Security and privacy
 
-This is the WO-004C1A engineering baseline, not legal advice or a certification claim.
+This is the WO-004C2 engineering baseline, not legal advice or a certification claim.
 
 ## Authentication and authorisation
 
@@ -48,6 +48,12 @@ tenant-bound transaction. The API returns safe not-found for cross-tenant
 meeting access. Existing forced RLS and composite keys continue to cover
 meeting, transcript, job and artefact rows.
 
+WO-004C2 Decisions requests use the same membership, current-transcript and
+tenant-bound worker source checks. Decisions and Executive Summary are separate
+job/artefact types, so neither can satisfy the other's idempotency or artefact
+lookup. Only validated Decisions content is persisted; decision, owner and
+evidence text is excluded from logs and audit metadata.
+
 WO-004C1A changes only provider execution after the tenant-bound source
 transaction closes. OpenAI selection does not receive a client-supplied tenant
 identifier and does not change repository predicates, worker ownership,
@@ -84,7 +90,7 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - AI artefact content is validated-data storage for future use, protected from overwrite by a database trigger and separated from the supplied transcript.
 - AI job, lifecycle and artefact writes commit atomically with metadata-only audit events.
 - AI audits may identify job/artefact/type/status/version, prompt/schema/provider/model labels and structured-output attempt count, but exclude transcript/artefact bodies, prompt templates/rendered messages, raw/invalid output, provider secrets, participant-sensitive values and raw exceptions.
-- Infrastructure-test and Executive Summary JSON are strict, versioned and rejected before persistence when malformed or extended unexpectedly.
+- Infrastructure-test, Executive Summary and Decisions JSON are strict, versioned and rejected before persistence when malformed or extended unexpectedly.
 - Worker claims use PostgreSQL row locks, bounded leases and exact worker ownership; no in-memory queue can override persisted state.
 - Retry/cancellation/recovery and artefact completion use short atomic transactions and store only bounded safe errors.
 - Worker logs allow safe IDs, attempts, status, duration and error codes only; they exclude content, participant data, secrets, database URLs and raw exception messages.
@@ -109,7 +115,7 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - Provider output must be one complete JSON object that validates through the
   registered strict Pydantic schema; markdown extraction, `eval` and broad
   repair are prohibited.
-- Executive Summary input is limited to 50,000 trimmed characters, is never
+- Executive Summary and Decisions input is limited to 50,000 trimmed characters, is never
   silently truncated, and is excluded from logs, audits, safe errors and
   product-status responses. Prompt-injection instructions in transcript data
   have no tool or write authority.

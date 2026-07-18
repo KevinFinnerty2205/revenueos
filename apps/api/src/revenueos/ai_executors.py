@@ -11,6 +11,7 @@ from uuid import UUID
 from revenueos.ai_contracts import (
     SAFE_ERROR_CODE_MAX_LENGTH,
     SAFE_ERROR_MESSAGE_MAX_LENGTH,
+    DecisionsSource,
     ExecutiveSummarySource,
 )
 from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
@@ -27,6 +28,8 @@ from revenueos.ai_prompt_errors import (
     StructuredOutputAttemptsExhaustedError,
 )
 from revenueos.ai_prompt_registry import (
+    DECISIONS_PROMPT_KEY,
+    DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
     PromptRegistry,
@@ -35,6 +38,7 @@ from revenueos.ai_prompt_registry import (
 from revenueos.ai_prompt_renderer import render_prompt
 from revenueos.ai_provider import AIProvider, execute_provider_request
 from revenueos.ai_provider_contracts import (
+    DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     InfrastructureTestProviderInput,
     ProviderInput,
@@ -112,6 +116,10 @@ ExecutiveSummarySourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[ExecutiveSummarySource],
 ]
+DecisionsSourceLoader = Callable[
+    [ClaimedAIJob],
+    Awaitable[DecisionsSource],
+]
 ProviderInputFactory = Callable[[tuple[ProviderMessage, ...]], ProviderInput]
 
 
@@ -122,6 +130,7 @@ class AIJobExecutor(Protocol):
         *,
         cancellation_check: CancellationCheck | None = None,
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
     ) -> ExecutionResult: ...
 
 
@@ -500,8 +509,9 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
         *,
         cancellation_check: CancellationCheck | None = None,
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
     ) -> ExecutionResult:
-        del executive_summary_source_loader
+        del executive_summary_source_loader, decisions_source_loader
         return await self._execute_structured(
             job,
             prompt_key=self._settings.ai_prompt_key,
@@ -531,7 +541,9 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
         *,
         cancellation_check: CancellationCheck | None = None,
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
     ) -> ExecutionResult:
+        del decisions_source_loader
         if job.job_type != AIJobType.EXECUTIVE_SUMMARY.value:
             raise WorkerExecutionError(
                 "invalid_executive_summary_job",
@@ -588,6 +600,75 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
         )
 
 
+class DecisionsExecutor(_StructuredOutputExecutor):
+    """Transcript-grounded Decisions execution through the provider port."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
+    ) -> ExecutionResult:
+        del executive_summary_source_loader
+        if job.job_type != AIJobType.DECISIONS.value:
+            raise WorkerExecutionError(
+                "invalid_decisions_job",
+                "The queued job is not a Decisions job.",
+                retryable=False,
+            )
+        if job.prompt_key != DECISIONS_PROMPT_KEY or job.prompt_version != DECISIONS_PROMPT_VERSION:
+            raise WorkerExecutionError(
+                "invalid_prompt_configuration",
+                "The Decisions prompt configuration is invalid.",
+                retryable=False,
+            )
+        if decisions_source_loader is None:
+            raise WorkerExecutionError(
+                "decisions_source_unavailable",
+                "The Decisions source loader is unavailable.",
+                retryable=False,
+            )
+
+        logger.info("decisions_execution_started", extra=self._log_context(job))
+        source = await decisions_source_loader(job)
+        logger.info(
+            "decisions_transcript_loaded",
+            extra={
+                **self._log_context(job),
+                "transcript_version": job.transcript_version,
+                "transcript_character_count": len(source.transcript_text),
+            },
+        )
+        result = await self._execute_structured(
+            job,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            variables=PromptVariables(
+                values={
+                    "meeting_title": json.dumps(source.meeting_title, ensure_ascii=False),
+                    "meeting_date": json.dumps(source.meeting_date.isoformat(), ensure_ascii=False),
+                    "transcript_text": json.dumps(source.transcript_text, ensure_ascii=False),
+                }
+            ),
+            input_factory=lambda messages: DecisionsProviderInput(messages=messages),
+            cancellation_check=cancellation_check,
+        )
+        decisions = result.content.get("decisions")
+        decision_count = len(decisions) if isinstance(decisions, list) else 0
+        logger.info(
+            "decisions_output_validation_completed",
+            extra={
+                **self._log_context(job),
+                "decision_count": decision_count,
+                "empty_result": decision_count == 0,
+                "structured_output_attempt_count": result.structured_output_attempt_count,
+            },
+        )
+        return result
+
+
 class AIExecutorRegistry:
     def __init__(
         self,
@@ -610,6 +691,12 @@ class AIExecutorRegistry:
                 schemas,
             ),
             AIJobType.EXECUTIVE_SUMMARY.value: ExecutiveSummaryExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
+            AIJobType.DECISIONS.value: DecisionsExecutor(
                 configuration,
                 providers,
                 prompts,

@@ -2,12 +2,12 @@
 
 ## Current boundary
 
-WO-004B1 adds a separately runnable backend worker with PostgreSQL as its durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and persists validated artefacts. WO-004B2/B3 add the provider, prompt and schema execution boundary. WO-004C1 registers `executive_summary` alongside `infrastructure_test`.
+WO-004B1 adds a separately runnable backend worker with PostgreSQL as its durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and persists validated artefacts. WO-004B2/B3 add the provider, prompt and schema execution boundary. WO-004C1 registers `executive_summary`; WO-004C2 adds independent `decisions` execution through the same queue.
 
 The worker resolves exactly the configured provider. `mock` /
 `mock-infrastructure-v1` remains the deterministic no-network default.
 `openai` uses the server-side Responses API adapter and sends the rendered
-Executive Summary prompt/transcript outside the application. The meeting-scoped
+Executive Summary or Decisions prompt/transcript outside the application. The meeting-scoped
 API/UI polls the same durable lifecycle in both modes.
 
 ## Process and startup
@@ -108,6 +108,12 @@ input, and renders JSON-delimited meeting title/date/transcript as untrusted
 data. A changed/deleted transcript fails safely because historical bodies are
 not retained.
 
+`decisions` maps to `DecisionsExecutor`. It applies the same tenant-bound
+50,000-character transcript loading and prompt-injection data boundary, resolves
+Decisions prompt/schema v1 and validates a required list of at most 25 strict
+items. A valid empty list completes successfully. Decision count and empty
+result are content-free telemetry; decision/owner/evidence text is not logged.
+
 Malformed JSON, non-object JSON and schema-invalid output retry within the current execution up to `API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS`; exhaustion produces bounded non-retryable failure. Prompt/schema/configuration and non-retryable provider errors do not retry. Timeouts, temporary unavailability and transient provider failures exit immediately and use the existing durable retry policy. Before an output retry, the executor probes cancellation in a separate short tenant transaction. The successful completion transaction:
 
 - verifies current tenant, running state and worker ownership under a row lock;
@@ -149,11 +155,11 @@ Automated audit events use the original requesting user as the actor because the
 
 ## Known limitations and extension points
 
-- Only the infrastructure test and Executive Summary execute; OpenAI adds no
-  new intelligence capability.
+- Only infrastructure test, Executive Summary and Decisions execute; no Action
+  Items or later intelligence capability exists.
 - Work is processed sequentially within one worker process; scale is achieved with additional worker replicas.
 - Tenant discovery is capped at 1,000 eligible organisations per cycle; deployments approaching that many simultaneously active tenants need an approved pagination/fairness extension.
-- There is no operator dashboard or cancellation endpoint; user polling is limited to the meeting-scoped Executive Summary state.
+- There is no operator dashboard or cancellation endpoint; user polling is limited to the meeting-scoped Executive Summary and Decisions states.
 - There is no immutable transcript snapshot, accurate cost estimate,
   notification or external action.
 - The current transcript version pin does not preserve a historical transcript body.
@@ -164,5 +170,6 @@ retry authority. Production OpenAI use requires a separate privacy/identity/
 consent/retention operations gate. See
 [OpenAI provider integration](openai-provider-integration.md),
 [Executive Summary intelligence](executive-summary-intelligence.md),
+[Meeting Decisions intelligence](meeting-decisions-intelligence.md),
 [AI provider abstraction](ai-provider-abstraction.md) and
 [prompt registry and structured output](prompt-registry-and-structured-output.md).

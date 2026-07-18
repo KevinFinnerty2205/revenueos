@@ -11,6 +11,14 @@ EXECUTIVE_SUMMARY_SCHEMA_VERSION = 1
 EXECUTIVE_SUMMARY_MIN_LENGTH = 20
 EXECUTIVE_SUMMARY_MAX_LENGTH = 2_000
 EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH = 50_000
+DECISIONS_SCHEMA_VERSION = 1
+DECISIONS_MAX_COUNT = 25
+DECISION_MIN_LENGTH = 5
+DECISION_MAX_LENGTH = 500
+DECISION_OWNER_MAX_LENGTH = 200
+DECISION_EVIDENCE_MIN_LENGTH = 5
+DECISION_EVIDENCE_MAX_LENGTH = 500
+DECISIONS_TRANSCRIPT_MAX_LENGTH = 50_000
 IDEMPOTENCY_KEY_MAX_LENGTH = 200
 SAFE_ERROR_CODE_MAX_LENGTH = 100
 SAFE_ERROR_MESSAGE_MAX_LENGTH = 1000
@@ -94,4 +102,96 @@ class ExecutiveSummarySource(BaseModel):
             raise ValueError("Transcript text must not be empty.")
         if len(normalised) > EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH:
             raise ValueError("Transcript text exceeds the Executive Summary limit.")
+        return normalised
+
+
+class DecisionItem(BaseModel):
+    """One immutable, transcript-supported decision in schema version 1."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    decision: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=DECISION_MIN_LENGTH,
+            max_length=DECISION_MAX_LENGTH,
+        ),
+    ]
+    owner: (
+        Annotated[
+            str,
+            StringConstraints(
+                strip_whitespace=True,
+                min_length=1,
+                max_length=DECISION_OWNER_MAX_LENGTH,
+            ),
+        ]
+        | None
+    )
+    status: Literal["confirmed", "tentative", "rejected", "deferred"]
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=DECISION_EVIDENCE_MIN_LENGTH,
+            max_length=DECISION_EVIDENCE_MAX_LENGTH,
+        ),
+    ]
+
+
+class DecisionsArtifactContent(BaseModel):
+    """Strict, immutable Decisions structured-output schema version 1."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    decisions: tuple[DecisionItem, ...] = Field(max_length=DECISIONS_MAX_COUNT)
+
+    @field_validator("decisions", mode="before")
+    @classmethod
+    def normalise_json_array(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    def as_json(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+
+class DecisionsSource(BaseModel):
+    """Pinned meeting/transcript input for Decisions execution."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    meeting_title: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+    ]
+    meeting_date: datetime
+    transcript_text: str
+
+    @field_validator("transcript_text")
+    @classmethod
+    def validate_transcript_text(cls, value: str) -> str:
+        normalised = value.strip()
+        if not normalised:
+            raise ValueError("Transcript text must not be empty.")
+        if len(normalised) > DECISIONS_TRANSCRIPT_MAX_LENGTH:
+            raise ValueError("Transcript text exceeds the Decisions limit.")
         return normalised

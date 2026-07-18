@@ -125,10 +125,12 @@ test("meeting list and create form are responsive and deliberate", async ({
   await expect(page.getByText(/does not record or transcribe/i)).toBeVisible();
 });
 
-test("meeting detail generates and presents Executive Summary intelligence", async ({
+test("meeting detail generates and persists Summary and Decisions intelligence", async ({
   page,
 }) => {
   let executiveSummaryRequested = false;
+  let decisionsRequested = false;
+  let decisionsStatusReads = 0;
   await page.route(
     "http://localhost:8000/api/v1/meetings/meeting-1**",
     async (route) => {
@@ -182,6 +184,82 @@ test("meeting detail generates and presents Executive Summary intelligence", asy
                   confidence: 0.82,
                 },
               },
+        });
+        return;
+      }
+      if (path.endsWith("/intelligence/decisions")) {
+        if (route.request().method() === "POST") {
+          decisionsRequested = true;
+          await route.fulfill({
+            status: 202,
+            json: {
+              jobId: "job-2",
+              status: "queued",
+              created: true,
+              transcriptVersion: 1,
+              requestedAt: "2026-07-18T00:00:00Z",
+              startedAt: null,
+              completedAt: null,
+            },
+          });
+          return;
+        }
+        if (!decisionsRequested) {
+          await route.fulfill({
+            json: {
+              state: "empty",
+              generationAvailable: true,
+              unavailableReason: null,
+              jobId: null,
+              transcriptVersion: null,
+              requestedAt: null,
+              startedAt: null,
+              generatedAt: null,
+              safeMessage: null,
+              decisions: null,
+            },
+          });
+          return;
+        }
+        decisionsStatusReads += 1;
+        await route.fulfill({
+          json:
+            decisionsStatusReads === 1
+              ? {
+                  state: "queued",
+                  generationAvailable: false,
+                  unavailableReason: null,
+                  jobId: "job-2",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: null,
+                  generatedAt: null,
+                  safeMessage: null,
+                  decisions: null,
+                }
+              : {
+                  state: "completed",
+                  generationAvailable: false,
+                  unavailableReason: null,
+                  jobId: "job-2",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: "2026-07-18T00:00:01Z",
+                  generatedAt: "2026-07-18T00:00:02Z",
+                  safeMessage: null,
+                  decisions: {
+                    decisions: [
+                      {
+                        decision: "Proceed with the September pilot.",
+                        owner: "Jane Smith",
+                        status: "confirmed",
+                        confidence: 0.94,
+                        evidence:
+                          "The transcript records agreement to begin the pilot in September.",
+                      },
+                    ],
+                  },
+                },
         });
         return;
       }
@@ -263,11 +341,22 @@ test("meeting detail generates and presents Executive Summary intelligence", asy
   ).toBeVisible();
   await expect(page.getByText("Sales Discovery")).toBeVisible();
   await expect(page.getByText("82%")).toBeVisible();
+  await page.getByRole("button", { name: "Generate Decisions" }).click();
+  await expect(page.getByText("Decisions generation is queued…")).toBeVisible();
+  await expect(
+    page.getByText("Proceed with the September pilot."),
+  ).toBeVisible();
+  await expect(page.getByText("Jane Smith")).toBeVisible();
+  await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
+  await expect(page.getByText("94%")).toBeVisible();
 
   await page.reload();
   await page.getByRole("tab", { name: "Intelligence" }).click();
   await expect(
     page.getByText(/customer discussed expansion plans/i),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Proceed with the September pilot."),
   ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });

@@ -33,7 +33,7 @@ Only the worker performs the provider call, but configuration validation must
 remain consistent across server processes built from the release.
 
 > Enabling OpenAI transmits the selected meeting transcript and rendered
-> Executive Summary instructions to OpenAI. Production customer-content use is
+> Executive Summary or Decisions instructions to OpenAI. Production customer-content use is
 > blocked operationally until the privacy and production-readiness gates are
 > approved.
 
@@ -51,8 +51,9 @@ variables, data flow, smoke test and rollback.
 7. Start/update the web application and exercise a synthetic smoke journey.
 8. Monitor safe failure, lease, retry, rate-limit and latency signals.
 
-WO-004C1A requires no schema migration; the current trace fields already hold
-provider/model/request/token metadata.
+WO-004C1A requires no schema migration; WO-004C2 requires only
+`0008_decisions`, which widens existing AI type checks. The current trace fields
+already hold provider/model/request/token metadata.
 
 ## Rollback
 
@@ -60,4 +61,5 @@ Roll back API, worker and web to the same previously validated release. For an
 OpenAI-specific operational issue, select `AI_PROVIDER=mock`, restart the
 worker, verify new work uses the mock, and revoke/remove the unused OpenAI key.
 Do not rewrite completed artefact trace. Database downgrade is unnecessary for
-WO-004C1A.
+an OpenAI rollback. Downgrading `0008_decisions` is destructive to Decisions
+jobs/artefacts and requires an explicit data/rollback decision.

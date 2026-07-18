@@ -3,15 +3,20 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import JsonValue
 
 from revenueos.ai_contracts import (
+    DECISION_EVIDENCE_MAX_LENGTH,
+    DECISION_MAX_LENGTH,
+    DECISIONS_MAX_COUNT,
+    DECISIONS_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
 )
 from revenueos.ai_provider_contracts import (
+    DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     ProviderRequest,
     ProviderResponse,
@@ -94,6 +99,10 @@ class DeterministicMockAIProvider:
             return request.expected_schema_version == EXECUTIVE_SUMMARY_SCHEMA_VERSION and isinstance(
                 request.input_payload, ExecutiveSummaryProviderInput
             )
+        if request.job_type == AIJobType.DECISIONS.value:
+            return request.expected_schema_version == DECISIONS_SCHEMA_VERSION and isinstance(
+                request.input_payload, DecisionsProviderInput
+            )
         return False
 
     @classmethod
@@ -103,19 +112,24 @@ class DeterministicMockAIProvider:
                 "status": "ok",
                 "message": "AI processing infrastructure is operational.",
             }
-        if not isinstance(request.input_payload, ExecutiveSummaryProviderInput):
-            raise InvalidProviderRequestError
-        transcript = cls._extract_transcript(request.input_payload)
-        meeting_context = request.input_payload.messages[1].content.lower()
-        return {
-            "executive_summary": cls._summarise_transcript(transcript),
-            "meeting_type": cls._meeting_type(meeting_context, transcript),
-            "sentiment": cls._sentiment(transcript),
-            "confidence": 0.82 if len(transcript) >= 100 else 0.72,
-        }
+        if isinstance(request.input_payload, ExecutiveSummaryProviderInput):
+            transcript = cls._extract_transcript(request.input_payload)
+            meeting_context = request.input_payload.messages[1].content.lower()
+            return {
+                "executive_summary": cls._summarise_transcript(transcript),
+                "meeting_type": cls._meeting_type(meeting_context, transcript),
+                "sentiment": cls._sentiment(transcript),
+                "confidence": 0.82 if len(transcript) >= 100 else 0.72,
+            }
+        if isinstance(request.input_payload, DecisionsProviderInput):
+            transcript = cls._extract_transcript(request.input_payload)
+            return {"decisions": cast(JsonValue, cls._extract_decisions(transcript))}
+        raise InvalidProviderRequestError
 
     @staticmethod
-    def _extract_transcript(input_payload: ExecutiveSummaryProviderInput) -> str:
+    def _extract_transcript(
+        input_payload: ExecutiveSummaryProviderInput | DecisionsProviderInput,
+    ) -> str:
         marker = "Untrusted transcript as a JSON string:\n"
         user_content = input_payload.messages[1].content
         marker_index = user_content.find(marker)
@@ -183,6 +197,84 @@ class DeterministicMockAIProvider:
             return "negative"
         return "neutral"
 
+    @classmethod
+    def _extract_decisions(cls, transcript: str) -> list[dict[str, JsonValue]]:
+        normalised = " ".join(transcript.split())
+        sentences = re.split(r"(?<=[.!?])\s+", normalised)
+        injection_markers = (
+            "ignore previous",
+            "ignore all previous",
+            "system prompt",
+            "developer message",
+            "reveal secrets",
+        )
+        decision_markers = (
+            " decided ",
+            " agreed ",
+            " approved ",
+            " committed ",
+            " rejected ",
+            " declined ",
+            " deferred ",
+            " postponed ",
+            " will proceed ",
+            " go ahead ",
+        )
+        decisions: list[dict[str, JsonValue]] = []
+        for sentence in sentences:
+            stripped = sentence.strip(" \t\r\n-•")
+            lowered = f" {stripped.lower()} "
+            if not stripped or any(marker in lowered for marker in injection_markers):
+                continue
+            if not any(marker in lowered for marker in decision_markers):
+                continue
+            status = cls._decision_status(lowered)
+            owner = cls._decision_owner(stripped)
+            decision = cls._bounded_plain_text(stripped, DECISION_MAX_LENGTH)
+            evidence = cls._bounded_plain_text(
+                f"The transcript records this as a {status} decision: {stripped}",
+                DECISION_EVIDENCE_MAX_LENGTH,
+            )
+            decisions.append(
+                {
+                    "decision": decision,
+                    "owner": owner,
+                    "status": status,
+                    "confidence": 0.9 if status in {"confirmed", "rejected"} else 0.78,
+                    "evidence": evidence,
+                }
+            )
+            if len(decisions) == DECISIONS_MAX_COUNT:
+                break
+        return decisions
+
+    @staticmethod
+    def _decision_status(content: str) -> str:
+        if any(term in content for term in (" rejected ", " declined ")):
+            return "rejected"
+        if any(term in content for term in (" deferred ", " postponed ")):
+            return "deferred"
+        if any(term in content for term in (" tentatively ", " subject to ")):
+            return "tentative"
+        return "confirmed"
+
+    @staticmethod
+    def _decision_owner(sentence: str) -> str | None:
+        match = re.match(
+            r"^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s+"
+            r"(?:decided|agreed|approved|committed|rejected|declined|deferred|postponed)\b",
+            sentence,
+        )
+        return match.group(1) if match is not None else None
+
+    @staticmethod
+    def _bounded_plain_text(value: str, maximum_length: int) -> str:
+        normalised = " ".join(value.split()).strip()
+        if len(normalised) <= maximum_length:
+            return normalised
+        shortened = normalised[: maximum_length - 1].rsplit(" ", 1)[0].rstrip(" ,;:")
+        return f"{shortened}…"
+
     @staticmethod
     def _schema_invalid_output(request: ProviderRequest) -> dict[str, JsonValue]:
         if request.job_type == AIJobType.INFRASTRUCTURE_TEST.value:
@@ -190,9 +282,21 @@ class DeterministicMockAIProvider:
                 "status": "invalid",
                 "message": "This output is deterministically schema-invalid.",
             }
+        if request.job_type == AIJobType.EXECUTIVE_SUMMARY.value:
+            return {
+                "executive_summary": "Too short.",
+                "meeting_type": "unsupported",
+                "sentiment": "neutral",
+                "confidence": 2,
+            }
         return {
-            "executive_summary": "Too short.",
-            "meeting_type": "unsupported",
-            "sentiment": "neutral",
-            "confidence": 2,
+            "decisions": [
+                {
+                    "decision": "",
+                    "owner": None,
+                    "status": "unsupported",
+                    "confidence": 2,
+                    "evidence": "",
+                }
+            ]
         }

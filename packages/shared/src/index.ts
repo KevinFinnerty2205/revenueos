@@ -83,6 +83,18 @@ export type ExecutiveSummaryMeetingType =
   | "other";
 export type ExecutiveSummarySentiment =
   "positive" | "neutral" | "negative" | "mixed";
+export type DecisionsState =
+  | "empty"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type DecisionStatus =
+  | "confirmed"
+  | "tentative"
+  | "rejected"
+  | "deferred";
 
 export interface EntityPage<T> {
   items: T[];
@@ -208,6 +220,41 @@ export interface ExecutiveSummaryResponse {
 }
 
 export interface ExecutiveSummaryRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface DecisionItem {
+  decision: string;
+  owner: string | null;
+  status: DecisionStatus;
+  confidence: number;
+  evidence: string;
+}
+
+export interface DecisionsContent {
+  decisions: DecisionItem[];
+}
+
+export interface DecisionsResponse {
+  state: DecisionsState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  decisions: DecisionsContent | null;
+}
+
+export interface DecisionsRequestResponse {
   jobId: string;
   status: "queued" | "running" | "completed";
   created: boolean;

@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from revenueos.ai_provider_contracts import (
     PROVIDER_REQUEST_ID_MAX_LENGTH,
+    DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     ProviderRequest,
     ProviderResponse,
@@ -104,9 +105,12 @@ class OpenAIProvider:
             )
 
     async def execute(self, request: ProviderRequest) -> ProviderResponse:
-        if request.job_type != "executive_summary" or not isinstance(
-            request.input_payload, ExecutiveSummaryProviderInput
-        ):
+        supported_inputs: dict[str, type[ExecutiveSummaryProviderInput] | type[DecisionsProviderInput]] = {
+            "executive_summary": ExecutiveSummaryProviderInput,
+            "decisions": DecisionsProviderInput,
+        }
+        expected_input = supported_inputs.get(request.job_type)
+        if expected_input is None or not isinstance(request.input_payload, expected_input):
             raise InvalidProviderRequestError
         if request.model_identifier != self.model_identifier:
             raise UnsupportedModelError

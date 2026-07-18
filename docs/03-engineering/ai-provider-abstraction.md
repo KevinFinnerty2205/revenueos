@@ -9,12 +9,12 @@ The provider-neutral seam supports two implementations:
 - `OpenAIProvider`, a server-only adapter using the official asynchronous Python
   SDK and Responses API.
 
-Both execute the existing `infrastructure_test` and `executive_summary`
-contracts where supported. Executive Summary remains the only customer-facing
-AI capability. There is no provider UI, tenant-managed credential, additional
+Together they support the existing `infrastructure_test`, `executive_summary`
+and `decisions` contracts where explicitly allowed. Executive Summary and
+Decisions are the only customer-facing AI capabilities. There is no provider UI, tenant-managed credential, additional
 vendor, tool use, streaming or automatic provider fallback.
 
-Selecting OpenAI sends the rendered Executive Summary prompt and bounded meeting
+Selecting OpenAI sends the rendered Executive Summary or Decisions prompt and bounded meeting
 transcript to OpenAI. The default mock makes no network call. See
 [OpenAI provider integration](openai-provider-integration.md) for the external
 data boundary and operating guide.
@@ -65,9 +65,11 @@ external-transmission flag. It never returns the key.
 
 The mock produces repeatable validated output with zero token usage, zero cost
 and zero latency. For Executive Summary it derives a bounded excerpt and simple
-keyword-based classifications, excludes obvious instruction-like transcript
-sentences and never performs a network request. It is test output, not a quality
-claim or substitute for a genuine LLM evaluation.
+keyword-based classifications. For Decisions it deterministically recognises
+explicit agreement/rejection/deferral markers and returns either strict items
+or a valid empty list. Both exclude obvious instruction-like transcript
+sentences and never perform a network request. This is test output, not a
+quality claim or substitute for a genuine LLM evaluation.
 
 ## OpenAI adapter
 
@@ -139,8 +141,10 @@ exceptions.
 ## Tests and limitations
 
 All automated provider tests use dependency-injected SDK-shaped fakes and make
-no real OpenAI call. Coverage includes configuration, lazy registry selection,
-strict request mapping, response/usage mapping, safe errors, durable worker
+no real OpenAI call. Coverage includes the explicit Executive Summary/Decisions
+allowlist, rejection of infrastructure/unknown work before SDK invocation,
+configuration, lazy registry selection, strict request mapping,
+response/usage mapping, safe errors, durable worker
 retry behaviour, trace persistence and content/secret redaction. Mock
 regressions, tenant/API/RLS, migration, UI and browser gates remain unchanged.
 

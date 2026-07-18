@@ -4,12 +4,13 @@
 
 WO-004B3 adds application-owned prompt versioning, schema registration, safe
 rendering, strict provider-output parsing and bounded invalid-output retries.
-WO-004C1 registers the second pair, `executive_summary` version 1.
+WO-004C1 registers `executive_summary` version 1 and WO-004C2 registers
+`decisions` version 1.
 
 The default remains deterministic and mock-backed. OpenAI selection sends the
 current bounded transcript and rendered instructions to the server-side
 Responses API using the same registry-derived strict schema. There is no prompt
-administration or additional intelligence schema.
+administration or Action Items/later intelligence schema.
 
 ## Prompt definitions and versioning
 
@@ -24,12 +25,16 @@ reproducibility; active resolution deterministically selects the highest
 registered active version. Registries are ordinary injected instances, so tests
 and worker processes do not share mutable global state.
 
-Default definitions are `infrastructure_test` version 1 and
-`executive_summary` version 1. Executive Summary references schema version 1
+Default definitions are `infrastructure_test`, `executive_summary` and
+`decisions`, all at version 1. Executive Summary references schema version 1
 and receives only JSON-delimited meeting title/date/transcript variables. It
 requires a transcript-grounded summary, normalized meeting type, sentiment and
 confidence, explicitly ignores instructions in transcript data and excludes
-decision, action, risk, question, email and CRM outputs.
+decision, action, risk, question, email and CRM outputs. Decisions receives the
+same three JSON-delimited source variables, extracts only resolved commitments,
+distinguishes them from discussion/questions/Action Items, permits an empty
+list and requires optional supported owner, normalised status, confidence and
+brief paraphrased evidence.
 
 ## Safe rendering and provider messages
 
@@ -44,7 +49,7 @@ simple `{variable_name}` placeholders:
 - empty rendered messages are rejected.
 
 The infrastructure prompt receives only safe job/request UUIDs. Executive
-Summary receives only the minimum source fields and encodes each value as a JSON
+Summary and Decisions receive only the minimum source fields and encode each value as a JSON
 string before substitution, preventing transcript text from escaping its data
 boundary. Rendered output becomes an ordered immutable tuple of provider-neutral
 `system` then `user` messages. Full templates and rendered content never enter
@@ -57,9 +62,11 @@ Pydantic validation model by normalized key, positive version and job type.
 The schema registry provides exact/active resolution, sorted version listing and
 duplicate rejection using instance-owned state.
 
-The default registry reuses strict domain contracts for `infrastructure_test`
-version 1 and `executive_summary` version 1; it does not duplicate domain
+The default registry reuses strict domain contracts for `infrastructure_test`,
+`executive_summary` and `decisions` version 1; it does not duplicate domain
 models. Prompt registration must resolve its referenced schema immediately.
+Decisions limits output to 25 immutable items and rejects unknown fields at the
+top-level and item level.
 
 Provider output may be an already structured JSON mapping or a JSON string.
 Parsing trims surrounding whitespace and accepts only a complete JSON object.
@@ -133,8 +140,9 @@ output attempt count and normalized finish reason. Structured logs report retry
 attempts and exhaustion. Total tokens remain derived, and raw prompts/output are
 never trace metadata.
 
-Migration `0007_executive_summary` is required only to widen the existing
-database job/artefact type checks. It adds no prompt/schema storage.
+Migration `0007_executive_summary` widened the earlier type checks;
+`0008_decisions` widens them again for Decisions. Neither adds prompt/schema
+storage.
 
 ## Security and telemetry
 

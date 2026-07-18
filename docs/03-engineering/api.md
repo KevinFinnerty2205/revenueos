@@ -125,10 +125,33 @@ generation availability, safe timestamps/message and completed schema content
 when available. It never exposes worker identity, leases, prompt text, provider
 payload, raw errors or transcript text.
 
+## Decisions intelligence
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/decisions` | Queue or return equivalent Decisions generation |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence/decisions` | Read current safe state/result |
+
+POST authenticates, derives the active organisation and requires the current
+same-tenant transcript to be non-empty and at most 50,000 trimmed characters.
+A new asynchronous job returns `202`; an equivalent pending, running or
+completed Decisions job returns `200`. Equivalence includes transcript version,
+job type, prompt v1 and schema v1. Failed/cancelled work can create an ordinal
+retry; a corrected transcript permits a new job. Executive Summary remains
+independent.
+
+GET returns `empty`, `queued`, `running`, `completed`, `failed` or `cancelled`,
+generation availability, product-safe reason/message, safe timestamps and the
+latest completed `decisions` object. An empty decisions list is a successful
+completed result. Responses exclude worker/lease fields, internal error codes,
+prompt/transcript content, provider configuration and raw responses. See
+[Meeting Decisions intelligence](meeting-decisions-intelligence.md) for schema
+v1, polling, idempotency and privacy details.
+
 ## Scope boundary
 
 There are no generic AI job/artefact, provider configuration/model listing,
-cancellation, recording, media upload/storage, transcription, additional
-intelligence, email, calendar, CRM, billing, worker-control or automation
+cancellation, recording, media upload/storage, transcription, Action Items or
+later intelligence, email, calendar, CRM, billing, worker-control or automation
 endpoints. Mock/OpenAI selection is server-side worker configuration and does not
 change this API contract. Clerk token verification is not connected.

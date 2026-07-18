@@ -100,6 +100,17 @@ The adapter is production-shaped but does not authorise production customer
 data. Identity, consent, provider privacy/retention, deletion and operational
 readiness gates remain outstanding.
 
+### WO-004C2 — Meeting Decisions Intelligence — Complete
+
+- **Objective:** Add the second end-to-end Meeting Intelligence capability using only decisions supported by the current transcript.
+- **Major deliverables:** Decisions prompt/schema v1, deterministic populated/empty mock output, explicit OpenAI allowlist extension, transcript-pinned durable job, append-only artefact, POST/GET API, accessible Decisions panel and terminating three-second polling.
+- **Out of scope:** Action Items, due dates, Risks, Open Questions, follow-up, CRM changes, memory, recording, transcription, streaming and automation.
+- **Security gates:** Trusted tenant context, forced RLS, exact transcript version, no truncation, prompt-injection-as-data, validated-content-only persistence, content-redacted telemetry/audits and explicit OpenAI external-data warning.
+- **Demonstration:** Generate Decisions from a synthetic authorised transcript, observe queued/processing then completed cards or a successful empty result, refresh and retain the result.
+
+The capability reuses the existing provider and worker stack and does not
+authorise production customer data or any later intelligence output.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.

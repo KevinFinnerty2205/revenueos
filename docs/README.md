@@ -40,6 +40,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [OpenAI provider integration](03-engineering/openai-provider-integration.md)
 - [Prompt registry and structured output](03-engineering/prompt-registry-and-structured-output.md)
 - [Executive Summary intelligence](03-engineering/executive-summary-intelligence.md)
+- [Meeting Decisions intelligence](03-engineering/meeting-decisions-intelligence.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -78,6 +79,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-004B3: Prompt Registry and Structured Output Validation](07-sprints/wo-004b3-prompt-registry.md)
 - [WO-004C1: Executive Summary Intelligence Capability](07-sprints/wo-004c1-executive-summary.md)
 - [WO-004C1A: Production OpenAI Provider Integration](07-sprints/wo-004c1a-openai-provider.md)
+- [WO-004C2: Meeting Decisions Intelligence](07-sprints/wo-004c2-meeting-decisions.md)
 
 ## 08 — Decision records
 
@@ -92,16 +94,17 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0009: versioned prompts and strict structured output](08-decisions/0009-versioned-prompts-and-strict-output.md)
 - [ADR 0010: current-transcript Executive Summary execution](08-decisions/0010-current-transcript-executive-summary.md)
 - [ADR 0011: server-side OpenAI Responses provider](08-decisions/0011-server-side-openai-responses-provider.md)
+- [ADR 0012: current-transcript Decisions execution](08-decisions/0012-current-transcript-decisions.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A are complete. C1 is
-the first Meeting Intelligence product flow: an authenticated user can queue
-and view a strict Executive Summary from the current transcript through the
-durable worker. Mock remains the deterministic no-network default; C1A adds an
-optional server-side OpenAI Responses API provider without changing the API/UI.
-OpenAI selection sends the selected transcript to OpenAI. There is no additional
-intelligence field, provider UI, recording, media storage, transcription,
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2 are complete. An authenticated
+user can independently queue and view a strict Executive Summary and structured
+Decisions list from the current transcript through the durable worker. Mock
+remains the deterministic no-network default; the optional server-side OpenAI
+Responses API provider supports both capabilities without changing the API/UI.
+OpenAI selection sends the selected transcript to OpenAI. There is no Action
+Items or later intelligence field, provider UI, recording, media storage, transcription,
 external integration, production Clerk verification, billing or mobile
 application. Assistant remains a placeholder.
 

@@ -27,7 +27,7 @@ The default identity is a clearly labelled development mock. After migrations, t
 
 ## Run
 
-Use three terminals when exercising the worker or Executive Summary:
+Use three terminals when exercising the worker or Meeting Intelligence:
 
 ```bash
 pnpm dev:api
@@ -56,9 +56,9 @@ claimed job attempt and accepts values from 1 to 5.
 
 To exercise the product flow, create a meeting with an authorised plain-text
 transcript no longer than 50,000 characters, open its **Intelligence** tab and
-generate the Executive Summary. The UI checks state every three seconds while
+generate the Executive Summary or Decisions. Each UI panel checks state every three seconds while
 the worker processes the mock job. No API key or external network access is
-required. Enabling OpenAI sends the rendered Executive Summary instructions and
+required. Enabling OpenAI sends the rendered capability instructions and
 selected transcript to OpenAI. Use only synthetic non-sensitive data and follow
 the [manual smoke procedure](openai-provider-integration.md#manual-non-production-smoke-test);
 never put an actual key value in shell history, screenshots or repository files.
@@ -89,6 +89,10 @@ Migration `0007_executive_summary` widens only the existing AI job and artefact
 type check constraints. It adds no table, column, RLS policy or prompt storage;
 upgrade/downgrade tests preserve the worker trace and artefact immutability
 triggers.
+
+Migration `0008_decisions` widens the same two type checks for Decisions and
+adds no table, column, RLS policy or prompt storage. Its downgrade deletes
+Decisions rows before restoring the Executive Summary-era checks.
 
 WO-004C1A requires no migration because the existing trace fields already
 represent provider, model, request ID, usage and cost/currency metadata.
