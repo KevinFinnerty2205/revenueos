@@ -216,10 +216,12 @@ No production customer content until all applicable gates pass:
 
 - Production Clerk session verification is not implemented.
 - Current persistence can run without the full production Supabase role/RLS deployment.
-- Storage, ingestion, genuine external AI/provider, connector, approval,
-  complete audit, deletion/export and production worker-operations controls are
-  not implemented. The worker supports only its deterministic infrastructure
-  test and mock Executive Summary; no customer content leaves the application.
+- Storage, ingestion, connector, approval, complete audit, deletion/export and
+  production worker-operations controls are not implemented. A server-side
+  OpenAI adapter exists for Executive Summary, but production provider
+  privacy/retention/residency, consent, evaluation, budget and operational
+  enablement gates are incomplete. Selecting it sends the chosen transcript to
+  OpenAI; production customer data remains prohibited.
 - Sprint 2 core-entity permissions are coarse.
 
 These are expected current limitations, not defects hidden by this target document.

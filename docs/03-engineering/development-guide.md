@@ -43,10 +43,12 @@ pnpm dev:worker
 
 Web runs at `http://localhost:3000`, API at `http://localhost:8000`, and the worker runs as a separate backend process. The worker requires a migrated database. Its default deterministic mock provider makes no network call and needs no API key.
 
-Provider defaults are `API_AI_PROVIDER_NAME=mock`,
+Provider selection defaults to `AI_PROVIDER=mock`, with
 `API_AI_PROVIDER_MODEL_IDENTIFIER=mock-infrastructure-v1` and
-`API_AI_PROVIDER_TIMEOUT_SECONDS=10`. Unknown names/models fail safely; no real
-provider or credential setting is implemented. Prompt/output defaults are
+`API_AI_PROVIDER_TIMEOUT_SECONDS=10` for the mock. OpenAI selection requires
+server-only `OPENAI_API_KEY` and `OPENAI_MODEL`; timeout and output ceilings use
+`OPENAI_TIMEOUT_SECONDS` and `OPENAI_MAX_OUTPUT_TOKENS`. Unknown names/models
+fail safely and never fall back. Prompt/output defaults are
 `API_AI_PROMPT_KEY=infrastructure_test` and
 `API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS=3`. The latter is the total number of
 provider calls allowed for malformed or schema-invalid output within one
@@ -56,7 +58,10 @@ To exercise the product flow, create a meeting with an authorised plain-text
 transcript no longer than 50,000 characters, open its **Intelligence** tab and
 generate the Executive Summary. The UI checks state every three seconds while
 the worker processes the mock job. No API key or external network access is
-required.
+required. Enabling OpenAI sends the rendered Executive Summary instructions and
+selected transcript to OpenAI. Use only synthetic non-sensitive data and follow
+the [manual smoke procedure](openai-provider-integration.md#manual-non-production-smoke-test);
+never put an actual key value in shell history, screenshots or repository files.
 
 ## Database workflow
 
@@ -84,6 +89,9 @@ Migration `0007_executive_summary` widens only the existing AI job and artefact
 type check constraints. It adds no table, column, RLS policy or prompt storage;
 upgrade/downgrade tests preserve the worker trace and artefact immutability
 triggers.
+
+WO-004C1A requires no migration because the existing trace fields already
+represent provider, model, request ID, usage and cost/currency metadata.
 
 ## Validation
 

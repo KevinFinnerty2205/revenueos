@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import socket
 import uuid
 from datetime import UTC, datetime
 
+import httpx
+import openai
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -19,24 +22,40 @@ from revenueos.ai_contracts import (
     ExecutiveSummaryArtifactContent,
     ExecutiveSummarySource,
 )
-from revenueos.ai_executors import ClaimedAIJob, ExecutiveSummaryExecutor
+from revenueos.ai_executors import (
+    AIExecutorRegistry,
+    ClaimedAIJob,
+    ExecutiveSummaryExecutor,
+)
 from revenueos.ai_mock_provider import (
     MOCK_MODEL_IDENTIFIER,
     MOCK_PROVIDER_NAME,
     DeterministicMockAIProvider,
 )
+from revenueos.ai_openai_provider import OpenAIProvider
 from revenueos.ai_provider_contracts import ExecutiveSummaryProviderInput
 from revenueos.ai_provider_registry import AIProviderRegistry
 from revenueos.ai_worker_services import AIWorkerService
 from revenueos.auth import get_current_user
 from revenueos.config import Settings
-from revenueos.domain import AIJobType
+from revenueos.domain import AIJobStatus, AIJobType
 from revenueos.models import AIArtifact, AIJob, MeetingAuditEvent
 
 from .conftest import (
     PRIMARY_ORGANISATION_ID,
     PRIMARY_USER_ID,
     TEST_DB_URL,
+)
+from .test_ai_openai_provider import (
+    MODEL as OPENAI_TEST_MODEL,
+)
+from .test_ai_openai_provider import (
+    TEST_KEY as OPENAI_TEST_KEY,
+)
+from .test_ai_openai_provider import (
+    _response,
+    _ResponseCreate,
+    _status_error,
 )
 from .test_meeting_api import (
     cast_auth_dependency,
@@ -58,11 +77,19 @@ def _settings() -> Settings:
     )
 
 
-def _run_worker_once() -> None:
+def _run_worker_once(
+    *,
+    settings: Settings | None = None,
+    executors: AIExecutorRegistry | None = None,
+) -> None:
     async def execute() -> None:
         engine = create_async_engine(TEST_DB_URL)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
-        service = AIWorkerService(session_factory, _settings())
+        service = AIWorkerService(
+            session_factory,
+            settings or _settings(),
+            executors=executors,
+        )
         claim = await service.claim_next_job(
             PRIMARY_ORGANISATION_ID,
             "executive-summary-test-worker",
@@ -72,6 +99,22 @@ def _run_worker_once() -> None:
         await engine.dispose()
 
     asyncio.run(execute())
+
+
+def _openai_settings() -> Settings:
+    return Settings(
+        environment="test",
+        auth_mode="mock",
+        mock_auth_enabled=True,
+        database_url=TEST_DB_URL,
+        ai_provider_name="openai",
+        openai_api_key=OPENAI_TEST_KEY,
+        openai_model=OPENAI_TEST_MODEL,
+        openai_timeout_seconds=30,
+        openai_max_output_tokens=4_096,
+        worker_heartbeat_interval_seconds=1,
+        worker_lease_duration_seconds=10,
+    )
 
 
 def test_executive_summary_schema_is_strict_bounded_and_finite() -> None:
@@ -250,6 +293,179 @@ def test_api_queues_idempotently_and_returns_completed_safe_result(
         await engine.dispose()
 
     asyncio.run(verify_persistence())
+
+
+def test_mocked_openai_response_completes_with_traceability_and_no_contract_change(
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    transcript_text = (
+        "The customer confirmed expansion requirements and budget for Australia. "
+        "The conversation was positive and remained focused on discovery."
+    )
+    output = {
+        "executive_summary": ("The customer confirmed Australian expansion requirements and budget."),
+        "meeting_type": "sales_discovery",
+        "sentiment": "positive",
+        "confidence": 0.91,
+    }
+    meeting = create_meeting(
+        client,
+        title="Australian expansion discovery",
+        transcript={
+            "rawText": transcript_text,
+            "language": "en-AU",
+            "source": "manual",
+        },
+    )
+    endpoint = f"/api/v1/meetings/{meeting['id']}/intelligence/executive-summary"
+    queued = client.post(endpoint)
+    assert queued.status_code == 202
+
+    response_create = _ResponseCreate(response=_response(output_text=json.dumps(output)))
+    settings = _openai_settings()
+    provider = OpenAIProvider(
+        api_key=OPENAI_TEST_KEY,
+        model_identifier=OPENAI_TEST_MODEL,
+        timeout_seconds=30,
+        max_output_tokens=4_096,
+        response_create=response_create,
+    )
+    executors = AIExecutorRegistry(
+        {
+            AIJobType.EXECUTIVE_SUMMARY.value: ExecutiveSummaryExecutor(
+                settings,
+                AIProviderRegistry({"openai": provider}),
+            )
+        }
+    )
+    caplog.set_level(logging.INFO)
+
+    _run_worker_once(settings=settings, executors=executors)
+    completed = client.get(endpoint)
+
+    assert completed.status_code == 200
+    assert completed.json()["state"] == "completed"
+    assert completed.json()["executiveSummary"] == {
+        "executiveSummary": output["executive_summary"],
+        "meetingType": "sales_discovery",
+        "sentiment": "positive",
+        "confidence": 0.91,
+    }
+    assert "providerRequestId" not in completed.text
+    assert OPENAI_TEST_KEY not in completed.text
+    assert len(response_create.calls) == 1
+
+    async def verify_persistence() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_factory() as session:
+            job = await session.scalar(select(AIJob))
+            artifact = await session.scalar(select(AIArtifact))
+            events = list(await session.scalars(select(MeetingAuditEvent)))
+            assert job is not None
+            assert artifact is not None
+            assert job.provider_key == "openai"
+            assert job.model_name == OPENAI_TEST_MODEL
+            assert job.provider_request_id == "req_test_123"
+            assert job.input_token_count == 123
+            assert job.output_token_count == 45
+            assert job.estimated_cost_minor_units == 0
+            assert artifact.provider_key == "openai"
+            assert artifact.model_name == OPENAI_TEST_MODEL
+            assert artifact.content_json == output
+            persisted_metadata = repr([event.metadata_json for event in events])
+            assert OPENAI_TEST_KEY not in persisted_metadata
+            assert transcript_text not in persisted_metadata
+        await engine.dispose()
+
+    asyncio.run(verify_persistence())
+    assert transcript_text not in caplog.text
+    assert OPENAI_TEST_KEY not in caplog.text
+    assert json.dumps(output) not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status", "expected_code", "retry_scheduled"),
+    (
+        (
+            openai.APITimeoutError(
+                httpx.Request(
+                    "POST",
+                    "https://api.openai.com/v1/responses",
+                )
+            ),
+            AIJobStatus.PENDING.value,
+            "provider_timeout",
+            True,
+        ),
+        (
+            _status_error(openai.RateLimitError, 429),
+            AIJobStatus.PENDING.value,
+            "provider_rate_limited",
+            True,
+        ),
+        (
+            _status_error(openai.AuthenticationError, 401),
+            AIJobStatus.FAILED.value,
+            "provider_authentication_failed",
+            False,
+        ),
+    ),
+)
+def test_openai_failures_follow_durable_retry_classification(
+    client: TestClient,
+    error: Exception,
+    expected_status: str,
+    expected_code: str,
+    retry_scheduled: bool,
+) -> None:
+    meeting = create_meeting(
+        client,
+        transcript={
+            "rawText": ("Non-sensitive provider failure fixture transcript with enough detail."),
+            "language": "en-AU",
+            "source": "manual",
+        },
+    )
+    endpoint = f"/api/v1/meetings/{meeting['id']}/intelligence/executive-summary"
+    queued = client.post(endpoint)
+    assert queued.status_code == 202
+
+    settings = _openai_settings()
+    provider = OpenAIProvider(
+        api_key=OPENAI_TEST_KEY,
+        model_identifier=OPENAI_TEST_MODEL,
+        timeout_seconds=30,
+        max_output_tokens=4_096,
+        response_create=_ResponseCreate(error=error),
+    )
+    executors = AIExecutorRegistry(
+        {
+            AIJobType.EXECUTIVE_SUMMARY.value: ExecutiveSummaryExecutor(
+                settings,
+                AIProviderRegistry({"openai": provider}),
+            )
+        }
+    )
+
+    _run_worker_once(settings=settings, executors=executors)
+
+    async def verify_failure() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_factory() as session:
+            job = await session.get(AIJob, uuid.UUID(queued.json()["jobId"]))
+            artifact_count = await session.scalar(select(func.count()).select_from(AIArtifact))
+            assert job is not None
+            assert job.status == expected_status
+            assert job.last_error_code == expected_code
+            assert (job.next_attempt_at is not None) is retry_scheduled
+            assert artifact_count == 0
+            assert OPENAI_TEST_KEY not in (job.last_error_message_safe or "")
+        await engine.dispose()
+
+    asyncio.run(verify_failure())
 
 
 def test_api_rejects_missing_or_oversized_transcript(client: TestClient) -> None:

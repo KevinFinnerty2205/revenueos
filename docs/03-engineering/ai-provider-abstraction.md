@@ -2,159 +2,148 @@
 
 ## Current boundary
 
-WO-004B2 added a provider-neutral execution seam and WO-004C1 now uses it for
-both `infrastructure_test` and `executive_summary`. The only registered
-implementation is `DeterministicMockAIProvider`. It requires no credentials and
-performs no network calls. Executive Summary supplies the current bounded
-transcript to this in-process mock, so customer content is processed locally
-but never leaves the application.
+The provider-neutral seam supports two implementations:
 
-There is no OpenAI, Anthropic, Gemini or other external provider adapter. There
-is no provider configuration UI. The only AI product surface is the
-meeting-scoped Executive Summary POST/GET API and Intelligence panel; see
-[Executive Summary intelligence](executive-summary-intelligence.md).
+- `DeterministicMockAIProvider`, the default offline provider for local
+  development, tests and demos; and
+- `OpenAIProvider`, a server-only adapter using the official asynchronous Python
+  SDK and Responses API.
+
+Both execute the existing `infrastructure_test` and `executive_summary`
+contracts where supported. Executive Summary remains the only customer-facing
+AI capability. There is no provider UI, tenant-managed credential, additional
+vendor, tool use, streaming or automatic provider fallback.
+
+Selecting OpenAI sends the rendered Executive Summary prompt and bounded meeting
+transcript to OpenAI. The default mock makes no network call. See
+[OpenAI provider integration](openai-provider-integration.md) for the external
+data boundary and operating guide.
 
 ## Contracts and interface
 
 `AIProvider` exposes one asynchronous structured execution operation plus a
-provider name and model identifier. Vendor SDK types cannot cross this
-boundary.
+provider name and model identifier. Vendor SDK types cannot cross this boundary.
 
-`ProviderRequest` is a frozen Pydantic contract with:
+`ProviderRequest` is a frozen Pydantic contract containing:
 
 - request, organisation and job identifiers;
-- job type and model identifier;
-- a strict job-specific input with exactly one ordered `system` then `user`
-  provider-neutral message;
-- expected artefact schema version; and
+- job type and configured model identifier;
+- a job-specific input with exactly one ordered `system` then `user` message;
+- expected artefact schema version;
+- the registry-derived strict JSON Schema and matching schema identity; and
 - a validated positive timeout.
 
-Unknown fields are rejected. Infrastructure messages contain only fixed
-instructions and safe identifiers. Executive Summary messages contain only its
-registered instructions and JSON-delimited meeting title/date/transcript. They
-never contain unrelated customer records, secrets or vendor objects.
+The output schema must be a closed top-level object with explicit required
+properties. The schema version must match the expected application schema.
 
-`ProviderResponse` is also frozen and rejects unknown fields. It normalises the
-provider/model/request identifiers, a JSON mapping or JSON string output,
-non-negative input/output/
-total token counts, non-negative integer minor-unit cost, three-letter currency,
-non-negative provider latency and finish reason. Total tokens must equal input
-plus output. The raw provider response is never persisted.
+`ProviderResponse` normalises provider/model/request identifiers, output payload,
+input/output/total tokens, non-negative integer cost and currency, latency and
+finish status. Unknown fields are rejected and total tokens must equal input
+plus output. Raw provider responses never leave an adapter or enter persistence.
 
 ## Registry and configuration
 
-`AIProviderRegistry` resolves a configured name and validates the configured
-model against the selected provider. It owns no global mutable state. Unknown
-providers and models fail closed with bounded, non-retryable errors.
+`AIProviderRegistry` is instance-owned and dependency-injection friendly. With
+ordinary settings it creates only the selected provider. Mock selection never
+constructs an SDK client and requires no OpenAI key. Unknown providers and
+models fail closed; there is no model fallback.
 
 | Environment variable | Default | Constraint |
 | --- | --- | --- |
-| `API_AI_PROVIDER_NAME` | `mock` | 1–100 lowercase name characters |
-| `API_AI_PROVIDER_MODEL_IDENTIFIER` | `mock-infrastructure-v1` | 1–200 safe identifier characters |
-| `API_AI_PROVIDER_TIMEOUT_SECONDS` | `10` | Greater than zero, at most 300 |
+| `AI_PROVIDER` | `mock` | `mock` or `openai` |
+| `API_AI_PROVIDER_MODEL_IDENTIFIER` | `mock-infrastructure-v1` | Mock model; 1–200 safe identifier characters |
+| `API_AI_PROVIDER_TIMEOUT_SECONDS` | `10` | Mock timeout; greater than zero, at most 300 |
+| `OPENAI_API_KEY` | empty | Server-only; required only for `openai` |
+| `OPENAI_MODEL` | empty | Required for `openai`; 1–200 safe identifier characters |
+| `OPENAI_TIMEOUT_SECONDS` | `30` | Greater than zero, at most 300 |
+| `OPENAI_MAX_OUTPUT_TOKENS` | `4096` | 256–32,768 |
 
-No API-key or provider-secret setting exists. Prompt and output-attempt settings
-are documented separately because they belong to the executor, not provider
-selection.
+`Settings.safe_ai_configuration()` contains only provider/model/bounds and an
+external-transmission flag. It never returns the key.
 
 ## Deterministic mock
 
-The mock validates the job type, model and schema version and returns:
+The mock produces repeatable validated output with zero token usage, zero cost
+and zero latency. For Executive Summary it derives a bounded excerpt and simple
+keyword-based classifications, excludes obvious instruction-like transcript
+sentences and never performs a network request. It is test output, not a quality
+claim or substitute for a genuine LLM evaluation.
 
-```json
-{
-  "status": "ok",
-  "message": "AI processing infrastructure is operational."
-}
-```
+## OpenAI adapter
 
-Usage and cost are zero, currency is `AUD`, latency is deterministically zero
-and the provider request identifier is a UUIDv5 derived only from safe request
-and job identifiers. Repeating the same valid request returns the same response.
-For `executive_summary`, the mock extracts the delimited transcript, excludes
-obvious instruction-like injection sentences from its deterministic excerpt,
-classifies small keyword-based meeting-type/sentiment enums and returns a fixed
-confidence rule. The result is repeatable test output, not a quality claim or
-fake external-provider implementation. Transcript and output bodies are never
-logged. Usage, cost and network latency remain zero.
+`OpenAIProvider` maps provider-neutral messages to `responses.create`, supplies
+the registered schema through strict `json_schema` text format and sets
+`store=false`. It uses no tools, streaming or reasoning configuration. The
+adapter captures the public request ID, available usage counts, latency and a
+safe completed status. The application parser validates the returned JSON again
+against the registered Pydantic schema.
 
-## Timeout and error model
+The model is configured by `OPENAI_MODEL`; documentation uses `gpt-5.6` only as
+an example where the OpenAI project has access. The adapter never silently
+selects another model.
 
-Provider execution is wrapped by `asyncio.wait_for`. A timeout cancels the
-provider coroutine and becomes retryable `provider_timeout`. Provider execution
-occurs after the claim transaction commits and before the completion transaction
-opens, so no database transaction waits on a provider.
+## Timeout, retry and error model
 
-Normalised retryable failures are timeout, temporary unavailability, transient
-execution failure and an unexpected internal provider exception. Normalised
-non-retryable failures are invalid request, unsupported provider, unsupported
-model, invalid configuration and malformed provider output. Only bounded codes
-and safe messages reach worker persistence or audits. Raw exception text can be
-chained in memory but is not logged, stored or audited.
+Provider execution occurs after the claim transaction commits and before the
+completion transaction opens. Cancellation is checked before each provider call
+and again under the completion lock. The executor retains its bounded
+structured-output retry for malformed/schema-invalid output.
+
+The OpenAI SDK transport retry count is zero. Durable worker attempts own retry
+and backoff:
+
+- retryable: timeout, rate limit, connection/transient failure and
+  server/service unavailability;
+- non-retryable: authentication, permission, unavailable configured model,
+  invalid request/configuration, refusal, incomplete or malformed response.
+
+Only stable safe error codes/messages reach persistence or audit metadata. Raw
+SDK exception text, provider bodies and credentials are neither logged nor
+stored.
 
 ## Worker flow and persistence
 
-1. The worker claims a tenant-owned job and commits the short claim transaction.
-2. The job-specific executor resolves and safely renders the selected
-   prompt/schema pair; Executive Summary first loads its exact current tenant
-   transcript through a short worker transaction.
-3. It creates a validated provider request with ordered messages.
-4. The registry resolves `mock` / `mock-infrastructure-v1`.
-5. The timeout wrapper executes and validates the provider response.
-6. The executor strictly parses and validates `output_payload`, retrying only
-   bounded output invalidity within this execution.
-7. The worker opens a new tenant-bound transaction, locks the owned running job
-   and rechecks cancellation.
-8. Existing `AIJob` fields receive prompt/schema/provider/model/request trace,
-   zero
-   token usage, zero cost and `AUD`.
-9. `AIArtifactService` creates the exact-trace artefact and copies the prompt,
-   schema, provider and model labels.
-10. Artefact, audit events and completed job state commit atomically.
+1. Claim and commit a tenant-owned job.
+2. Resolve the job prompt/schema and load the exact pinned transcript in a short
+   tenant transaction where applicable.
+3. Build the validated provider request with the registry-derived schema.
+4. Resolve exactly the configured provider/model.
+5. Execute without an open database transaction.
+6. Strictly parse and validate output.
+7. Re-enter the claimed tenant context, lock the owned job and recheck
+   cancellation.
+8. Atomically persist the validated artefact, safe trace/audits and completed
+   job state.
 
-`processing_duration_ms` remains the existing total worker execution duration.
-Provider latency and derived total tokens are emitted as safe structured
-telemetry; no duplicate columns were needed. Migration
-`0007_executive_summary` widens only database job/artefact type checks.
+Existing job/artefact columns store provider, model, request ID, token counts,
+integer cost/currency and prompt/schema trace. No WO-004C1A migration is needed.
+Provider latency and finish status remain metadata-only telemetry.
+
+Estimated OpenAI cost is stored as `0 AUD` under the existing convention because
+there is no approved versioned pricing source. It means not calculated, not
+free.
 
 ## Tenant isolation and telemetry
 
-The request carries identifiers copied from the claimed job; it cannot query the
-database. Persistence still uses the claimed organisation, explicit repository
-predicates, transaction-local tenant context, forced RLS and composite tenant
-keys. A mismatched organisation cannot lock the owned job or persist an
-artefact.
+Provider requests copy tenant/job identifiers from the claimed job and cannot
+query persistence. Every worker database transaction resets the trusted tenant
+context and retains explicit organisation predicates, composite tenant keys and
+forced RLS. Provider selection does not change these boundaries.
 
-Logs contain only safe identifiers, provider/model labels, request identifier,
-latency, token counts, integer cost, currency, finish reason, bounded error code
-and retryability. Logs never contain input/output payloads, artefact content,
-transcripts, prompts, participants, secrets, credentials or raw exceptions.
+Logs may contain opaque organisation/job IDs, provider/model/schema labels,
+provider request ID, latency, tokens, finish status and safe error
+classification. They exclude API keys, headers, prompt/transcript/participant
+content, rendered input, raw/validated output, artefact content and raw
+exceptions.
 
-## Local development and tests
+## Tests and limitations
 
-The defaults run without paid services or credentials:
+All automated provider tests use dependency-injected SDK-shaped fakes and make
+no real OpenAI call. Coverage includes configuration, lazy registry selection,
+strict request mapping, response/usage mapping, safe errors, durable worker
+retry behaviour, trace persistence and content/secret redaction. Mock
+regressions, tenant/API/RLS, migration, UI and browser gates remain unchanged.
 
-```bash
-pnpm dev:worker
-```
-
-Provider tests cover strict contracts, deterministic/no-network behaviour,
-registry selection, safe configuration, timeout cancellation and provider
-retry classification. Prompt/output tests cover safe rendering, strict JSON
-and schema validation, bounded output retry/exhaustion and cancellation. Worker
-integration tests cover atomic
-artefact completion, metadata persistence, retries, timeout, terminal provider
-failure, cancellation, leases/recovery, tenant isolation and safe audits.
-PostgreSQL RLS tests remain authoritative for the forced-RLS boundary.
-
-Do not use production customer data. Production identity, provider privacy
-terms, consent evidence, retention/erasure and operational controls are not
-complete.
-
-## Future extension points
-
-A separately approved work order may register a real adapter that implements
-`AIProvider`. That work must add provider-specific secret management, privacy/
-retention review, network controls and deterministic contract tests without
-leaking SDK types into executors. Additional schemas, model-specific JSON modes
-and genuine external-model output remain separate decisions.
+Production customer data is prohibited. Production identity, consent,
+retention/deletion, provider privacy/residency, cost controls and operational
+readiness remain incomplete.

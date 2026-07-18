@@ -4,7 +4,11 @@
 
 WO-004B1 adds a separately runnable backend worker with PostgreSQL as its durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and persists validated artefacts. WO-004B2/B3 add the provider, prompt and schema execution boundary. WO-004C1 registers `executive_summary` alongside `infrastructure_test`.
 
-The configured provider is the deterministic `mock` / `mock-infrastructure-v1` adapter. Executive Summary loads the exact current tenant transcript in a short transaction, processes it locally and makes no network request. The meeting-scoped API/UI polls this durable lifecycle; there is no OpenAI/Anthropic integration or genuine LLM output.
+The worker resolves exactly the configured provider. `mock` /
+`mock-infrastructure-v1` remains the deterministic no-network default.
+`openai` uses the server-side Responses API adapter and sends the rendered
+Executive Summary prompt/transcript outside the application. The meeting-scoped
+API/UI polls the same durable lifecycle in both modes.
 
 ## Process and startup
 
@@ -22,7 +26,7 @@ pnpm dev:web
 pnpm dev:worker
 ```
 
-`API_DATABASE_URL` or `DATABASE_URL` must point to a migrated PostgreSQL database. `SIGINT` and `SIGTERM` stop new polling; the deterministic in-progress execution is allowed to finish while its heartbeat continues. A process crash is handled by lease expiry and recovery.
+`API_DATABASE_URL` or `DATABASE_URL` must point to a migrated PostgreSQL database. `SIGINT` and `SIGTERM` stop new polling; in-progress execution is allowed to finish while its heartbeat continues. A process crash is handled by lease expiry and recovery.
 
 Production must deploy the API and worker independently from the same immutable release, use a non-RLS-bypass runtime role, apply migrations before starting either process, and supervise/restart the worker. Horizontal worker replicas are supported by database row locking.
 
@@ -109,7 +113,7 @@ Malformed JSON, non-object JSON and schema-invalid output retry within the curre
 - verifies current tenant, running state and worker ownership under a row lock;
 - rechecks cancellation;
 - validates and stages the exact-trace artefact through `AIArtifactService`;
-- records exact prompt/schema versions, `mock`, `mock-infrastructure-v1`, deterministic provider request ID, accumulated zero input/output tokens, zero estimated cost, `AUD`, output-attempt count and processing duration;
+- records exact prompt/schema/provider/model/request trace, available accumulated input/output tokens, integer cost/currency, output-attempt count and processing duration;
 - transitions the job to completed; and
 - commits artefact, artefact audit, job state and status audit together.
 
@@ -127,9 +131,13 @@ Prompt resolution/rendering, provider execution, parsing and validation occur af
 | `API_WORKER_BASE_RETRY_DELAY_SECONDS` | `5` | 1–3,600 |
 | `API_WORKER_MAX_RETRY_DELAY_SECONDS` | `300` | At least base delay, at most 86,400 |
 | `API_WORKER_DEFAULT_MAX_ATTEMPTS` | `3` | 1–20 |
-| `API_AI_PROVIDER_NAME` | `mock` | 1–100 safe lowercase characters |
+| `AI_PROVIDER` | `mock` | `mock` or `openai` |
 | `API_AI_PROVIDER_MODEL_IDENTIFIER` | `mock-infrastructure-v1` | 1–200 safe identifier characters |
 | `API_AI_PROVIDER_TIMEOUT_SECONDS` | `10` | Greater than zero, at most 300 |
+| `OPENAI_API_KEY` | empty | Server-only; required only for `openai` |
+| `OPENAI_MODEL` | empty | Required for `openai`; no fallback |
+| `OPENAI_TIMEOUT_SECONDS` | `30` | Greater than zero, at most 300 |
+| `OPENAI_MAX_OUTPUT_TOKENS` | `4096` | 256–32,768 |
 | `API_AI_PROMPT_KEY` | `infrastructure_test` | 1–100 normalized key characters |
 | `API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS` | `3` | 1–5 total provider calls per claimed attempt |
 
@@ -141,12 +149,20 @@ Automated audit events use the original requesting user as the actor because the
 
 ## Known limitations and extension points
 
-- Only the deterministic infrastructure test and mock Executive Summary execute.
+- Only the infrastructure test and Executive Summary execute; OpenAI adds no
+  new intelligence capability.
 - Work is processed sequentially within one worker process; scale is achieved with additional worker replicas.
 - Tenant discovery is capped at 1,000 eligible organisations per cycle; deployments approaching that many simultaneously active tenants need an approved pagination/fairness extension.
 - There is no operator dashboard or cancellation endpoint; user polling is limited to the meeting-scoped Executive Summary state.
-- There is no real provider, model-specific JSON mode, transcript snapshot, genuine LLM output, notification or external action.
+- There is no immutable transcript snapshot, accurate cost estimate,
+  notification or external action.
 - The current transcript version pin does not preserve a historical transcript body.
 - Production identity, consent evidence, retention/export/erasure, deployment monitoring and incident controls remain incomplete. Production customer data is prohibited.
 
-Future real adapters can implement the provider protocol only after a separately approved work order. They must preserve exact trace validation, short transactions, safe errors, forced RLS and atomic artefact-before-completion semantics. See [Executive Summary intelligence](executive-summary-intelligence.md), [AI provider abstraction](ai-provider-abstraction.md) and [prompt registry and structured output](prompt-registry-and-structured-output.md).
+OpenAI transport retries are disabled so this durable queue remains the only
+retry authority. Production OpenAI use requires a separate privacy/identity/
+consent/retention operations gate. See
+[OpenAI provider integration](openai-provider-integration.md),
+[Executive Summary intelligence](executive-summary-intelligence.md),
+[AI provider abstraction](ai-provider-abstraction.md) and
+[prompt registry and structured output](prompt-registry-and-structured-output.md).
