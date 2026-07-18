@@ -243,6 +243,8 @@ def test_valid_versioned_artifacts_and_relationships(tmp_path: Path) -> None:
         {"schema_version": 0},
         {"last_error_message_safe": "x" * 1001},
         {"idempotency_key": "x" * 201},
+        {"worker_id": "   "},
+        {"worker_id": "x" * 201},
         {"currency": "aud"},
     ],
 )

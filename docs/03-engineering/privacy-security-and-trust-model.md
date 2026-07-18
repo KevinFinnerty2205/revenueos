@@ -216,7 +216,7 @@ No production customer content until all applicable gates pass:
 
 - Production Clerk session verification is not implemented.
 - Current persistence can run without the full production Supabase role/RLS deployment.
-- Storage, ingestion, AI, connector, approval, audit, deletion/export and worker controls are not implemented.
+- Storage, ingestion, genuine AI/provider, connector, approval, complete audit, deletion/export and production worker-operations controls are not implemented. Only the deterministic internal infrastructure-test worker exists.
 - Sprint 2 core-entity permissions are coarse.
 
 These are expected current limitations, not defects hidden by this target document.

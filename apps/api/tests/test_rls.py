@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from revenueos.ai_repositories import AIJobRepository
 from revenueos.ai_services import AIArtifactService, AIJobService
+from revenueos.ai_worker_repositories import AIWorkerRepository
 from revenueos.domain import AIJobStatus
 from revenueos.errors import PublicAPIError
 from revenueos.tenant import TenantContext
@@ -385,6 +387,20 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     expire_on_commit=False,
                 ) as session:
                     repository = AIJobRepository(session)
+                    worker_repository = AIWorkerRepository(session)
+                    assert (
+                        await worker_repository.claim_next(
+                            tenant_b["organisation_id"],
+                            eligible_at=datetime.now(UTC),
+                        )
+                        is None
+                    )
+                    own_queue_job = await worker_repository.claim_next(
+                        tenant_a["organisation_id"],
+                        eligible_at=datetime.now(UTC),
+                    )
+                    assert own_queue_job is not None
+                    assert own_queue_job.organisation_id == tenant_a["organisation_id"]
                     assert (
                         await repository.get_job(
                             tenant_a["organisation_id"],

@@ -27,7 +27,7 @@ The default identity is a clearly labelled development mock. After migrations, t
 
 ## Run
 
-Use two terminals:
+Use three terminals when exercising the internal infrastructure-test queue:
 
 ```bash
 pnpm dev:api
@@ -37,7 +37,11 @@ pnpm dev:api
 pnpm dev:web
 ```
 
-Web runs at `http://localhost:3000` and API at `http://localhost:8000`.
+```bash
+pnpm dev:worker
+```
+
+Web runs at `http://localhost:3000`, API at `http://localhost:8000`, and the worker runs as a separate backend process. The worker requires a migrated database and makes no provider/network call.
 
 ## Database workflow
 
@@ -51,6 +55,8 @@ pnpm api:migration:check
 Do not edit an applied shared migration. Create a forward migration, review generated operations and test on PostgreSQL. The local Docker credentials are development-only.
 
 Sprint 3 migration `0003_meeting_domain` creates meetings, participants, transcripts and meeting audit events with composite tenant relationships and forced PostgreSQL RLS. Its downgrade removes those four tables without changing Sprint 2 records.
+
+Migration `0006_ai_worker_queue` adds worker ownership metadata and the narrow PostgreSQL tenant scheduler function. Upgrade, downgrade and re-upgrade preserve the existing AI trace and artefact immutability guards.
 
 ## Validation
 

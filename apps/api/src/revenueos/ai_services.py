@@ -12,13 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.ai_contracts import (
     IDEMPOTENCY_KEY_MAX_LENGTH,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
-    SAFE_ERROR_CODE_MAX_LENGTH,
-    SAFE_ERROR_MESSAGE_MAX_LENGTH,
     InfrastructureTestArtifactContent,
 )
+from revenueos.ai_lifecycle import prepare_lifecycle_transition
 from revenueos.ai_repositories import (
     AIArtifactRepository,
-    AIJobLifecycleMetadata,
     AIJobRepository,
 )
 from revenueos.business_repositories import PageResult
@@ -32,25 +30,6 @@ from revenueos.domain import (
 from revenueos.errors import PublicAPIError
 from revenueos.models import AIArtifact, AIJob, MeetingAuditEvent, Transcript
 from revenueos.tenant import TenantContext
-
-_VALID_TRANSITIONS: dict[AIJobStatus, frozenset[AIJobStatus]] = {
-    AIJobStatus.PENDING: frozenset(
-        {
-            AIJobStatus.RUNNING,
-            AIJobStatus.CANCELLED,
-        }
-    ),
-    AIJobStatus.RUNNING: frozenset(
-        {
-            AIJobStatus.COMPLETED,
-            AIJobStatus.FAILED,
-            AIJobStatus.CANCELLED,
-        }
-    ),
-    AIJobStatus.FAILED: frozenset({AIJobStatus.PENDING}),
-    AIJobStatus.COMPLETED: frozenset(),
-    AIJobStatus.CANCELLED: frozenset(),
-}
 
 
 class _AIDomainService:
@@ -278,32 +257,12 @@ class AIJobService(_AIDomainService):
     ) -> AIJob:
         job = await self._get_job(job_id)
         old_status = AIJobStatus(job.status)
-        if new_status not in _VALID_TRANSITIONS[old_status]:
-            raise PublicAPIError(
-                "invalid_lifecycle_transition",
-                f"AI jobs cannot transition from {old_status.value} to {new_status.value}.",
-                409,
-            )
-
-        error_code, error_message = self._validate_failure_metadata(
-            new_status,
-            safe_error_code,
-            safe_error_message,
-        )
-        if new_status is AIJobStatus.RUNNING and job.attempt_count >= job.max_attempts:
-            raise PublicAPIError(
-                "invalid_lifecycle_transition",
-                "The AI job has exhausted its permitted attempts.",
-                409,
-            )
-
-        timestamp = occurred_at or datetime.now(UTC)
-        metadata = self._transition_metadata(
+        metadata = prepare_lifecycle_transition(
             job,
             new_status,
-            timestamp,
-            safe_error_code=error_code,
-            safe_error_message=error_message,
+            occurred_at or datetime.now(UTC),
+            safe_error_code=safe_error_code,
+            safe_error_message=safe_error_message,
         )
         self.repository.update_lifecycle_metadata(job, metadata)
         self.repository.add_audit_event(
@@ -369,141 +328,6 @@ class AIJobService(_AIDomainService):
             )
         return normalised
 
-    @staticmethod
-    def _validate_failure_metadata(
-        new_status: AIJobStatus,
-        safe_error_code: str | None,
-        safe_error_message: str | None,
-    ) -> tuple[str | None, str | None]:
-        if new_status is not AIJobStatus.FAILED:
-            if safe_error_code is not None or safe_error_message is not None:
-                raise PublicAPIError(
-                    "invalid_lifecycle_metadata",
-                    "Safe error metadata is accepted only for a failed transition.",
-                    422,
-                )
-            return None, None
-
-        code = safe_error_code.strip() if safe_error_code is not None else ""
-        message = safe_error_message.strip() if safe_error_message is not None else ""
-        if (
-            not code
-            or not message
-            or len(code) > SAFE_ERROR_CODE_MAX_LENGTH
-            or len(message) > SAFE_ERROR_MESSAGE_MAX_LENGTH
-        ):
-            raise PublicAPIError(
-                "invalid_lifecycle_metadata",
-                "A bounded safe error code and message are required when a job fails.",
-                422,
-            )
-        return code, message
-
-    @staticmethod
-    def _transition_metadata(
-        job: AIJob,
-        new_status: AIJobStatus,
-        timestamp: datetime,
-        *,
-        safe_error_code: str | None,
-        safe_error_message: str | None,
-    ) -> AIJobLifecycleMetadata:
-        if new_status is AIJobStatus.RUNNING:
-            return AIJobLifecycleMetadata(
-                status=new_status.value,
-                attempt_count=job.attempt_count + 1,
-                started_at=timestamp,
-                completed_at=None,
-                cancelled_at=None,
-                cancellation_requested_at=None,
-                next_attempt_at=None,
-                lease_expires_at=job.lease_expires_at,
-                last_error_code=None,
-                last_error_message_safe=None,
-                provider_request_id=None,
-                input_token_count=None,
-                output_token_count=None,
-                estimated_cost_minor_units=None,
-                currency=None,
-                processing_duration_ms=None,
-            )
-        if new_status is AIJobStatus.COMPLETED:
-            return AIJobLifecycleMetadata(
-                status=new_status.value,
-                attempt_count=job.attempt_count,
-                started_at=job.started_at,
-                completed_at=timestamp,
-                cancelled_at=None,
-                cancellation_requested_at=None,
-                next_attempt_at=None,
-                lease_expires_at=None,
-                last_error_code=None,
-                last_error_message_safe=None,
-                provider_request_id=job.provider_request_id,
-                input_token_count=job.input_token_count,
-                output_token_count=job.output_token_count,
-                estimated_cost_minor_units=job.estimated_cost_minor_units,
-                currency=job.currency,
-                processing_duration_ms=job.processing_duration_ms,
-            )
-        if new_status is AIJobStatus.FAILED:
-            return AIJobLifecycleMetadata(
-                status=new_status.value,
-                attempt_count=job.attempt_count,
-                started_at=job.started_at,
-                completed_at=None,
-                cancelled_at=None,
-                cancellation_requested_at=None,
-                next_attempt_at=None,
-                lease_expires_at=None,
-                last_error_code=safe_error_code,
-                last_error_message_safe=safe_error_message,
-                provider_request_id=job.provider_request_id,
-                input_token_count=job.input_token_count,
-                output_token_count=job.output_token_count,
-                estimated_cost_minor_units=job.estimated_cost_minor_units,
-                currency=job.currency,
-                processing_duration_ms=job.processing_duration_ms,
-            )
-        if new_status is AIJobStatus.CANCELLED:
-            return AIJobLifecycleMetadata(
-                status=new_status.value,
-                attempt_count=job.attempt_count,
-                started_at=job.started_at,
-                completed_at=None,
-                cancelled_at=timestamp,
-                cancellation_requested_at=timestamp,
-                next_attempt_at=None,
-                lease_expires_at=None,
-                last_error_code=None,
-                last_error_message_safe=None,
-                provider_request_id=job.provider_request_id,
-                input_token_count=job.input_token_count,
-                output_token_count=job.output_token_count,
-                estimated_cost_minor_units=job.estimated_cost_minor_units,
-                currency=job.currency,
-                processing_duration_ms=job.processing_duration_ms,
-            )
-
-        return AIJobLifecycleMetadata(
-            status=AIJobStatus.PENDING.value,
-            attempt_count=job.attempt_count,
-            started_at=None,
-            completed_at=None,
-            cancelled_at=None,
-            cancellation_requested_at=None,
-            next_attempt_at=None,
-            lease_expires_at=None,
-            last_error_code=None,
-            last_error_message_safe=None,
-            provider_request_id=None,
-            input_token_count=None,
-            output_token_count=None,
-            estimated_cost_minor_units=None,
-            currency=None,
-            processing_duration_ms=None,
-        )
-
 
 class AIArtifactService(_AIDomainService):
     """Tenant-scoped validated, append-only infrastructure-test artefacts."""
@@ -533,72 +357,14 @@ class AIArtifactService(_AIDomainService):
         schema_version: int,
         content: Mapping[str, object],
     ) -> AIArtifact:
-        if schema_version != INFRASTRUCTURE_TEST_SCHEMA_VERSION:
-            raise PublicAPIError(
-                "invalid_artifact_content",
-                "The infrastructure-test artefact schema version is not supported.",
-                422,
-            )
-        validated_content = self._validate_content(content)
-
         for conflict_attempt in range(2):
-            job = await self._get_job(job_id)
-            await self._validate_trace(
-                meeting_id=meeting_id,
-                transcript_id=transcript_id,
-                transcript_version=transcript_version,
-            )
-            self._validate_artifact_trace(
-                job,
+            artifact = await self.prepare_infrastructure_test_artifact(
+                job_id=job_id,
                 meeting_id=meeting_id,
                 transcript_id=transcript_id,
                 transcript_version=transcript_version,
                 schema_version=schema_version,
-            )
-            artifact_version = await self.artifacts.next_artifact_version(
-                self.tenant.organisation_id,
-                meeting_id,
-                transcript_id,
-                transcript_version,
-                AIArtifactType.INFRASTRUCTURE_TEST.value,
-            )
-            artifact = AIArtifact(
-                id=uuid.uuid4(),
-                organisation_id=self.tenant.organisation_id,
-                meeting_id=meeting_id,
-                transcript_id=transcript_id,
-                transcript_version=transcript_version,
-                job_id=job.id,
-                artifact_type=AIArtifactType.INFRASTRUCTURE_TEST.value,
-                artifact_version=artifact_version,
-                schema_version=schema_version,
-                prompt_key=job.prompt_key,
-                prompt_version=job.prompt_version,
-                provider_key=job.provider_key,
-                model_name=job.model_name,
-                content_json=validated_content,
-            )
-            self.artifacts.create_artifact(artifact)
-            self.repository.add_audit_event(
-                self._audit(
-                    meeting_id=meeting_id,
-                    entity_id=artifact.id,
-                    action=MeetingAuditAction.AI_ARTIFACT_CREATED,
-                    entity_type=MeetingAuditEntityType.AI_ARTIFACT,
-                    transcript_version=transcript_version,
-                    metadata={
-                        "job_id": job.id,
-                        "artifact_id": artifact.id,
-                        "job_type": job.job_type,
-                        "transcript_version": transcript_version,
-                        "artifact_type": artifact.artifact_type,
-                        "artifact_version": artifact.artifact_version,
-                        "schema_version": artifact.schema_version,
-                        "prompt_version": artifact.prompt_version,
-                        "provider_key": artifact.provider_key,
-                        "model_name": artifact.model_name,
-                    },
-                )
+                content=content,
             )
             try:
                 await self.repository.flush()
@@ -626,6 +392,85 @@ class AIArtifactService(_AIDomainService):
             "The AI artefact conflicts with an existing logical version.",
             409,
         )
+
+    async def prepare_infrastructure_test_artifact(
+        self,
+        *,
+        job_id: UUID,
+        meeting_id: UUID,
+        transcript_id: UUID,
+        transcript_version: int,
+        schema_version: int,
+        content: Mapping[str, object],
+    ) -> AIArtifact:
+        """Add a validated artefact and audit event without committing."""
+
+        if schema_version != INFRASTRUCTURE_TEST_SCHEMA_VERSION:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The infrastructure-test artefact schema version is not supported.",
+                422,
+            )
+        validated_content = self._validate_content(content)
+        job = await self._get_job(job_id)
+        await self._validate_trace(
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+        )
+        self._validate_artifact_trace(
+            job,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            schema_version=schema_version,
+        )
+        artifact_version = await self.artifacts.next_artifact_version(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_id,
+            transcript_version,
+            AIArtifactType.INFRASTRUCTURE_TEST.value,
+        )
+        artifact = AIArtifact(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            job_id=job.id,
+            artifact_type=AIArtifactType.INFRASTRUCTURE_TEST.value,
+            artifact_version=artifact_version,
+            schema_version=schema_version,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            provider_key=job.provider_key,
+            model_name=job.model_name,
+            content_json=validated_content,
+        )
+        self.artifacts.create_artifact(artifact)
+        self.repository.add_audit_event(
+            self._audit(
+                meeting_id=meeting_id,
+                entity_id=artifact.id,
+                action=MeetingAuditAction.AI_ARTIFACT_CREATED,
+                entity_type=MeetingAuditEntityType.AI_ARTIFACT,
+                transcript_version=transcript_version,
+                metadata={
+                    "job_id": job.id,
+                    "artifact_id": artifact.id,
+                    "job_type": job.job_type,
+                    "transcript_version": transcript_version,
+                    "artifact_type": artifact.artifact_type,
+                    "artifact_version": artifact.artifact_version,
+                    "schema_version": artifact.schema_version,
+                    "prompt_version": artifact.prompt_version,
+                    "provider_key": artifact.provider_key,
+                    "model_name": artifact.model_name,
+                },
+            )
+        )
+        return artifact
 
     async def get_artifact(self, artifact_id: UUID) -> AIArtifact:
         artifact = await self.artifacts.get_artifact(

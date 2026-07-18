@@ -1,12 +1,16 @@
+import asyncio
+import os
 from pathlib import Path
 from sqlite3 import IntegrityError, connect
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
-def test_migrations_upgrade_downgrade_and_reupgrade_ai_domain_services(
+def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     tmp_path: Path,
     monkeypatch: object,
 ) -> None:
@@ -33,7 +37,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_domain_services(
             "ai_jobs",
             "ai_artifacts",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0005_ai_domain_services",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0006_ai_worker_queue",)
         task_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
         assert task_columns["organisation_id"] == 1
         assert task_columns["title"] == 1
@@ -57,6 +61,8 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_domain_services(
         assert job_columns["transcript_id"] == 1
         assert job_columns["transcript_version"] == 1
         assert job_columns["requested_by_user_id"] == 1
+        assert job_columns["worker_id"] == 0
+        assert job_columns["heartbeat_at"] == 0
         artifact_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(ai_artifacts)").fetchall()}
         assert artifact_columns["organisation_id"] == 1
         assert artifact_columns["job_id"] == 1
@@ -184,6 +190,23 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_domain_services(
                 """
             )
 
+    command.downgrade(configuration, "0005_ai_domain_services")
+    with connect(database_path) as connection:
+        job_columns_after_worker_downgrade = {
+            row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
+        }
+        assert "worker_id" not in job_columns_after_worker_downgrade
+        assert "heartbeat_at" not in job_columns_after_worker_downgrade
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0005_ai_domain_services",)
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        job_columns_after_worker_reupgrade = {
+            row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
+        }
+        assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0006_ai_worker_queue",)
+
     command.downgrade(configuration, "0004_ai_database_foundation")
     with connect(database_path) as connection:
         audit_columns_after_domain_downgrade = {
@@ -196,7 +219,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_domain_services(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0005_ai_domain_services",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0006_ai_worker_queue",)
 
     command.downgrade(configuration, "0003_meeting_domain")
     with connect(database_path) as connection:
@@ -218,7 +241,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_domain_services(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert {"ai_jobs", "ai_artifacts"}.issubset(tables_after_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0005_ai_domain_services",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0006_ai_worker_queue",)
 
     command.downgrade(configuration, "0002_core_business_entities")
     with connect(database_path) as connection:
@@ -250,3 +273,60 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_domain_services(
         }
         & tables_after_business_downgrade
     )
+
+
+def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith(("postgresql", "postgres")):
+        pytest.skip("A PostgreSQL DATABASE_URL is required for migration integration tests.")
+
+    configuration = Config("alembic.ini")
+
+    async def inspect_worker_schema(expected_present: bool) -> None:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                columns = set(
+                    await connection.scalars(
+                        text(
+                            """
+                            SELECT column_name
+                            FROM information_schema.columns
+                            WHERE table_schema = 'public'
+                                AND table_name = 'ai_jobs'
+                            """
+                        )
+                    )
+                )
+                function_present = bool(
+                    await connection.scalar(
+                        text(
+                            """
+                            SELECT count(*)
+                            FROM pg_proc
+                            WHERE proname =
+                                'revenueos_ai_worker_eligible_organisations'
+                            """
+                        )
+                    )
+                )
+                version = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+                if expected_present:
+                    assert {"worker_id", "heartbeat_at"}.issubset(columns)
+                    assert function_present is True
+                    assert version == "0006_ai_worker_queue"
+                else:
+                    assert not {"worker_id", "heartbeat_at"} & columns
+                    assert function_present is False
+                    assert version == "0005_ai_domain_services"
+        finally:
+            await engine.dispose()
+
+    try:
+        command.downgrade(configuration, "0005_ai_domain_services")
+        asyncio.run(inspect_worker_schema(False))
+    finally:
+        command.upgrade(configuration, "head")
+
+    asyncio.run(inspect_worker_schema(True))
+    command.check(configuration)
