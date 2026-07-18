@@ -2,7 +2,7 @@
 
 ## Current scope
 
-WO-004B1 keeps the Sprint 3 modular monolith and adds a separately runnable backend worker to the WO-004A1/A2 AI persistence/domain baseline. PostgreSQL-backed claiming, leases, heartbeats, retries, recovery, cancellation and deterministic infrastructure-test execution now exist. It does not add a real AI provider, provider abstraction, prompt, API route, UI, recording/media pipeline, connector, billing service or mobile application.
+WO-004B2 keeps the Sprint 3 modular monolith and the WO-004A1/A2/B1 AI persistence, domain and durable-worker baseline. PostgreSQL-backed claiming, leases, heartbeats, retries, recovery and cancellation now route deterministic infrastructure-test execution through a typed provider boundary. Only a no-network mock provider exists. There is no real AI provider, prompt, genuine intelligence, AI API/UI, recording/media pipeline, connector, billing service or mobile application.
 
 ```text
 Browser
@@ -19,7 +19,9 @@ Browser
               │
       separate AI worker process
       claim · lease · retry · recover · cancel
-      deterministic infrastructure_test only
+              │
+      typed provider contract/registry
+      deterministic mock only · no network/content
               │
               ▼
        PostgreSQL / Supabase later
@@ -56,7 +58,7 @@ FastAPI exposes:
 
 Routes use Pydantic request/response models, camel-case JSON, bounded pagination, explicit filters/sorts, request IDs, structured content-redacted logs, explicit CORS and central safe error handlers. Route handlers delegate business rules to services and all SQL to repositories. Meeting, participant and transcript services share one tenant-aware repository without introducing a new persistence pattern.
 
-WO-004A2/B1 do not expose AI jobs or artefacts through the API. The worker starts only through its separate process entry point; HTTP requests never execute or poll long-running work.
+WO-004A2/B1/B2 do not expose AI jobs or artefacts through the API. The worker starts only through its separate process entry point; HTTP requests never execute or poll long-running work.
 
 ## Persistence and tenancy
 
@@ -78,6 +80,8 @@ Each AI job captures the exact current transcript version requested; it cannot s
 
 `AIWorkerService` discovers only opaque organisation IDs through a fixed PostgreSQL scheduler function, then sets one transaction-local tenant context for every queue transaction. Claims and recovery use `FOR UPDATE SKIP LOCKED`; heartbeat updates require exact worker ownership. Execution occurs without an open database transaction. The completion transaction locks the owned running job, rechecks cancellation, stages the validated artefact and commits artefact/audits/completed state atomically. Retries use persisted attempts, bounded exponential backoff and `next_attempt_at`.
 
+`InfrastructureTestExecutor` now creates a strict minimal provider request, resolves the configured `mock` / `mock-infrastructure-v1` adapter and validates its normalised response before applying the existing artefact schema. The mock receives no transcript/customer content and makes no network call. Existing AI job fields persist provider/model/request identifiers, zero token usage, zero integer cost and `AUD`; artefacts copy provider/model labels. Total tokens are derived and provider latency is safe structured telemetry, so no migration `0007` was required.
+
 The API starts without a database so developers can inspect health and the shell, but `/ready` returns `503` and marks persistence unavailable. CRUD routes return a safe service-unavailable response.
 
 ## Contracts
@@ -92,6 +96,6 @@ Supabase PostgreSQL, Clerk, Supabase Storage, OpenAI and Stripe are planned mana
 
 ## Future extension boundaries
 
-Future, separately authorised Meeting Intelligence work can add provider/prompt abstractions, additional validated structured-output schemas and API/UI lifecycle visibility on top of the durable worker. It must keep generated content separate from supplied source text and preserve exact trace, RLS, short-transaction and append-only artefact rules. Conversation recording/capture, storage and external systems will use narrow adapters. A React Native client may later consume the same versioned API; no mobile code is included now.
+Future, separately authorised Meeting Intelligence work can add real provider adapters, prompt governance, additional validated structured-output schemas and API/UI lifecycle visibility on top of the durable worker. It must keep vendor SDK types behind the provider port, generated content separate from supplied source text, and preserve exact trace, RLS, short-transaction and append-only artefact rules. Conversation recording/capture, storage and external systems will use narrow adapters. A React Native client may later consume the same versioned API; no mobile code is included now.
 
-See [AI database foundation](ai-database-foundation.md), [AI domain services](ai-domain-services.md) and [AI worker and durable job queue](ai-worker-queue.md).
+See [AI database foundation](ai-database-foundation.md), [AI domain services](ai-domain-services.md), [AI worker and durable job queue](ai-worker-queue.md) and [AI provider abstraction](ai-provider-abstraction.md).

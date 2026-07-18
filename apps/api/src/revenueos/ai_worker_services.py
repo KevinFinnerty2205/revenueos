@@ -63,7 +63,7 @@ class AIWorkerService:
     ) -> None:
         self._session_factory = session_factory
         self._settings = settings
-        self._executors = executors or AIExecutorRegistry()
+        self._executors = executors or AIExecutorRegistry(settings=settings)
         self._clock = clock or (lambda: datetime.now(UTC))
 
     async def discover_eligible_organisations(self) -> list[UUID]:
@@ -208,6 +208,16 @@ class AIWorkerService:
                     extra={
                         **self._log_context_from_claim(job),
                         "processing_duration_ms": duration_ms,
+                        "provider_name": result.provider_name,
+                        "model_identifier": result.model_identifier,
+                        "provider_request_id": result.provider_request_id,
+                        "provider_latency_ms": result.provider_latency_ms,
+                        "input_token_count": result.input_token_count,
+                        "output_token_count": result.output_token_count,
+                        "total_token_count": result.total_token_count,
+                        "estimated_cost_minor_units": result.estimated_cost_minor_units,
+                        "currency": result.currency,
+                        "finish_reason": result.finish_reason,
                     },
                 )
         except WorkerExecutionError as exc:
@@ -304,10 +314,13 @@ class AIWorkerService:
                 )
                 return False
 
-            job.input_token_count = 0
-            job.output_token_count = 0
-            job.estimated_cost_minor_units = 0
-            job.currency = "AUD"
+            job.provider_key = result.provider_name
+            job.model_name = result.model_identifier
+            job.provider_request_id = result.provider_request_id
+            job.input_token_count = result.input_token_count
+            job.output_token_count = result.output_token_count
+            job.estimated_cost_minor_units = result.estimated_cost_minor_units
+            job.currency = result.currency
             job.processing_duration_ms = processing_duration_ms
             tenant = TenantContext(
                 organisation_id=job.organisation_id,

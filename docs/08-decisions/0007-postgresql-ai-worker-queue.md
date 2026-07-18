@@ -56,9 +56,13 @@ Trade-offs:
 
 Create or update an ADR before adding provider-backed execution, prompts, more job types, transcript snapshots, per-process parallelism, a broker, a system audit actor, public lifecycle/cancellation APIs or operator controls.
 
+ADR 0008 records the subsequently approved mock-only provider abstraction. Real
+provider execution and prompts remain follow-up triggers.
+
 ## Related documents
 
 - [AI worker and durable job queue](../03-engineering/ai-worker-queue.md)
 - [AI domain services](../03-engineering/ai-domain-services.md)
 - [WO-004B1 sprint record](../07-sprints/wo-004b1-ai-worker-queue.md)
+- [ADR 0008: provider-neutral AI execution](0008-provider-neutral-ai-execution.md)
 - [Security and privacy](../03-engineering/security-and-privacy.md)

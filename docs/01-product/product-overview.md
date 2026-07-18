@@ -23,7 +23,7 @@ Sprints 1–3 provide:
 - tenant-isolated meeting, participant and deliberately supplied plain-text transcript workflows with local audit history; and
 - an Assistant placeholder that states its capability is not implemented.
 
-The current product accepts only deliberately entered meeting metadata and plain-text transcripts. It does not record, store media, transcribe, call AI providers, connect external systems, verify production Clerk sessions or process payments. Do not use it with production customer data.
+The current product accepts only deliberately entered meeting metadata and plain-text transcripts. Its internal worker has a no-network mock-provider infrastructure test, but it does not record, store media, transcribe, call an external AI provider, generate genuine intelligence, connect external systems, verify production Clerk sessions or process payments. Do not use it with production customer data.
 
 ## Product principles
 

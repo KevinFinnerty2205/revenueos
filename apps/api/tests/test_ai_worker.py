@@ -17,8 +17,14 @@ from revenueos.ai_executors import (
     AIExecutorRegistry,
     ClaimedAIJob,
     ExecutionResult,
+    InfrastructureTestExecutor,
     WorkerExecutionError,
 )
+from revenueos.ai_mock_provider import MOCK_MODEL_IDENTIFIER, MOCK_PROVIDER_NAME
+from revenueos.ai_provider import AIProvider
+from revenueos.ai_provider_contracts import ProviderRequest, ProviderResponse
+from revenueos.ai_provider_errors import ProviderUnavailableError
+from revenueos.ai_provider_registry import AIProviderRegistry
 from revenueos.ai_worker_services import AIWorkerService, calculate_retry_delay_seconds
 from revenueos.config import Settings
 from revenueos.domain import AIJobStatus, AIJobType
@@ -148,7 +154,65 @@ class _RawErrorExecutor:
 class _InvalidArtifactExecutor:
     async def execute(self, job: ClaimedAIJob) -> ExecutionResult:
         del job
-        return ExecutionResult(content={"status": "not-valid"})
+        return _execution_result({"status": "not-valid"})
+
+
+def _execution_result(content: dict[str, object]) -> ExecutionResult:
+    return ExecutionResult(
+        content=content,
+        provider_name=MOCK_PROVIDER_NAME,
+        model_identifier=MOCK_MODEL_IDENTIFIER,
+        provider_request_id="mock-test-request",
+        input_token_count=0,
+        output_token_count=0,
+        total_token_count=0,
+        estimated_cost_minor_units=0,
+        currency="AUD",
+        provider_latency_ms=0,
+        finish_reason="completed",
+    )
+
+
+class _UnavailableProvider:
+    provider_name = MOCK_PROVIDER_NAME
+    model_identifier = MOCK_MODEL_IDENTIFIER
+
+    async def execute(self, request: ProviderRequest) -> ProviderResponse:
+        del request
+        raise ProviderUnavailableError
+
+
+class _SlowProvider:
+    provider_name = MOCK_PROVIDER_NAME
+    model_identifier = MOCK_MODEL_IDENTIFIER
+
+    async def execute(self, request: ProviderRequest) -> ProviderResponse:
+        del request
+        await asyncio.sleep(1)
+        raise AssertionError("The configured provider timeout should cancel execution.")
+
+
+class _ExplodingProvider:
+    provider_name = MOCK_PROVIDER_NAME
+    model_identifier = MOCK_MODEL_IDENTIFIER
+
+    async def execute(self, request: ProviderRequest) -> ProviderResponse:
+        del request
+        raise RuntimeError("secret transcript fragment and api-key-value")
+
+
+def _provider_executors(
+    settings: Settings,
+    provider: AIProvider,
+) -> AIExecutorRegistry:
+    return AIExecutorRegistry(
+        {
+            AIJobType.INFRASTRUCTURE_TEST.value: InfrastructureTestExecutor(
+                settings,
+                AIProviderRegistry({MOCK_PROVIDER_NAME: provider}),
+            )
+        }
+    )
 
 
 def test_claiming_respects_eligibility_terminal_state_and_records_ownership() -> None:
@@ -245,6 +309,10 @@ def test_infrastructure_executor_atomically_creates_artifact_then_completes() ->
         assert stored.output_token_count == 0
         assert stored.estimated_cost_minor_units == 0
         assert stored.currency == "AUD"
+        assert stored.provider_key == MOCK_PROVIDER_NAME
+        assert stored.model_name == MOCK_MODEL_IDENTIFIER
+        assert stored.provider_request_id is not None
+        assert stored.provider_request_id.startswith("mock-")
         assert stored.worker_id is None
         assert stored.heartbeat_at is None
         assert stored.lease_expires_at is None
@@ -257,11 +325,162 @@ def test_infrastructure_executor_atomically_creates_artifact_then_completes() ->
             "status": "ok",
             "message": "AI processing infrastructure is operational.",
         }
+        assert artifacts[0].provider_key == MOCK_PROVIDER_NAME
+        assert artifacts[0].model_name == MOCK_MODEL_IDENTIFIER
         assert {audit.action for audit in audits} == {
             "ai_job_status_changed",
             "ai_artifact_created",
         }
         assert all(audit.organisation_id == PRIMARY_ORGANISATION_ID for audit in audits)
+
+    _run(scenario)
+
+
+def test_retryable_provider_failure_uses_durable_retry_and_safe_error() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        (job,) = await _seed_jobs(session_factory)
+        settings = _settings()
+        service = AIWorkerService(
+            session_factory,
+            settings,
+            executors=_provider_executors(settings, _UnavailableProvider()),
+            clock=lambda: NOW,
+        )
+        claim = await service.claim_next_job(
+            PRIMARY_ORGANISATION_ID,
+            "provider-retry-worker",
+        )
+        assert claim is not None
+
+        await service.execute_claimed_job(claim)
+
+        stored = await _stored_job(session_factory, job.id)
+        async with session_factory() as session:
+            artifact_count = await session.scalar(select(func.count()).select_from(AIArtifact))
+        assert stored.status == AIJobStatus.PENDING.value
+        assert stored.last_error_code == "provider_unavailable"
+        assert stored.last_error_message_safe == ("The configured AI provider is temporarily unavailable.")
+        assert stored.next_attempt_at == (NOW + timedelta(seconds=5)).replace(tzinfo=None)
+        assert artifact_count == 0
+
+    _run(scenario)
+
+
+def test_provider_timeout_schedules_retry_without_creating_artifact() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        (job,) = await _seed_jobs(session_factory)
+        settings = _settings(ai_provider_timeout_seconds=0.01)
+        service = AIWorkerService(
+            session_factory,
+            settings,
+            executors=_provider_executors(settings, _SlowProvider()),
+            clock=lambda: NOW,
+        )
+        claim = await service.claim_next_job(
+            PRIMARY_ORGANISATION_ID,
+            "provider-timeout-worker",
+        )
+        assert claim is not None
+
+        await service.execute_claimed_job(claim)
+
+        stored = await _stored_job(session_factory, job.id)
+        async with session_factory() as session:
+            artifact_count = await session.scalar(select(func.count()).select_from(AIArtifact))
+        assert stored.status == AIJobStatus.PENDING.value
+        assert stored.last_error_code == "provider_timeout"
+        assert stored.next_attempt_at == (NOW + timedelta(seconds=5)).replace(tzinfo=None)
+        assert artifact_count == 0
+
+    _run(scenario)
+
+
+def test_unsupported_provider_model_is_terminal() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        (job,) = await _seed_jobs(session_factory)
+        settings = _settings(
+            ai_provider_model_identifier="unsupported-model",
+        )
+        service = AIWorkerService(
+            session_factory,
+            settings,
+            clock=lambda: NOW,
+        )
+        claim = await service.claim_next_job(
+            PRIMARY_ORGANISATION_ID,
+            "unsupported-model-worker",
+        )
+        assert claim is not None
+
+        await service.execute_claimed_job(claim)
+
+        stored = await _stored_job(session_factory, job.id)
+        assert stored.status == AIJobStatus.FAILED.value
+        assert stored.last_error_code == "unsupported_provider_model"
+        assert stored.next_attempt_at is None
+
+    _run(scenario)
+
+
+def test_unknown_provider_exception_is_not_persisted_or_audited() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        (job,) = await _seed_jobs(session_factory)
+        settings = _settings()
+        service = AIWorkerService(
+            session_factory,
+            settings,
+            executors=_provider_executors(settings, _ExplodingProvider()),
+            clock=lambda: NOW,
+        )
+        claim = await service.claim_next_job(
+            PRIMARY_ORGANISATION_ID,
+            "provider-error-worker",
+        )
+        assert claim is not None
+
+        await service.execute_claimed_job(claim)
+
+        stored = await _stored_job(session_factory, job.id)
+        async with session_factory() as session:
+            audit_metadata = [
+                audit.metadata_json
+                for audit in await session.scalars(
+                    select(MeetingAuditEvent).where(MeetingAuditEvent.entity_id == job.id)
+                )
+            ]
+        serialized = json.dumps(audit_metadata)
+        assert stored.status == AIJobStatus.PENDING.value
+        assert stored.last_error_code == "provider_transient_failure"
+        assert "secret" not in (stored.last_error_message_safe or "")
+        assert "api-key-value" not in (stored.last_error_message_safe or "")
+        assert "secret" not in serialized
+        assert "api-key-value" not in serialized
+
+    _run(scenario)
+
+
+def test_provider_output_cannot_persist_under_wrong_tenant_context() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        (job,) = await _seed_jobs(session_factory)
+        service = AIWorkerService(
+            session_factory,
+            _settings(),
+            clock=lambda: NOW,
+        )
+        claim = await service.claim_next_job(
+            PRIMARY_ORGANISATION_ID,
+            "tenant-bound-worker",
+        )
+        assert claim is not None
+
+        await service.execute_claimed_job(replace(claim, organisation_id=SECONDARY_ORGANISATION_ID))
+
+        stored = await _stored_job(session_factory, job.id)
+        async with session_factory() as session:
+            artifact_count = await session.scalar(select(func.count()).select_from(AIArtifact))
+        assert stored.status == AIJobStatus.RUNNING.value
+        assert stored.provider_key is None
+        assert artifact_count == 0
 
     _run(scenario)
 
@@ -520,11 +739,15 @@ def test_worker_logs_allow_only_metadata_fields() -> None:
     )
     record.job_id = "safe-job-id"  # type: ignore[attr-defined]
     record.processing_duration_ms = 12  # type: ignore[attr-defined]
+    record.provider_name = "mock"  # type: ignore[attr-defined]
+    record.total_token_count = 0  # type: ignore[attr-defined]
     record.transcript_text = "must not be logged"  # type: ignore[attr-defined]
     payload = json.loads(JSONFormatter().format(record))
 
     assert payload["job_id"] == "safe-job-id"
     assert payload["processing_duration_ms"] == 12
+    assert payload["provider_name"] == "mock"
+    assert payload["total_token_count"] == 0
     assert "transcript_text" not in payload
     assert "must not be logged" not in JSONFormatter().format(record)
 

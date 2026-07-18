@@ -1,0 +1,142 @@
+# AI provider abstraction
+
+## Current boundary
+
+WO-004B2 adds a provider-neutral execution seam for the existing internal
+`infrastructure_test` job. The only registered implementation is
+`DeterministicMockAIProvider`. It requires no credentials, performs no network
+calls, receives no transcript or customer content and produces no genuine
+Meeting Intelligence.
+
+There is no OpenAI, Anthropic, Gemini or other external provider adapter. There
+are no prompts, prompt registry, provider configuration UI, AI API routes or AI
+web UI.
+
+## Contracts and interface
+
+`AIProvider` exposes one asynchronous structured execution operation plus a
+provider name and model identifier. Vendor SDK types cannot cross this
+boundary.
+
+`ProviderRequest` is a frozen Pydantic contract with:
+
+- request, organisation and job identifiers;
+- job type and model identifier;
+- a strict minimal `infrastructure_test` input;
+- expected artefact schema version; and
+- a validated positive timeout.
+
+Unknown fields are rejected. The current input contains only
+`{"operation": "infrastructure_test"}`. It never contains a transcript,
+database model, prompt, secret or vendor object.
+
+`ProviderResponse` is also frozen and rejects unknown fields. It normalises the
+provider/model/request identifiers, output payload, non-negative input/output/
+total token counts, non-negative integer minor-unit cost, three-letter currency,
+non-negative provider latency and finish reason. Total tokens must equal input
+plus output. The raw provider response is never persisted.
+
+## Registry and configuration
+
+`AIProviderRegistry` resolves a configured name and validates the configured
+model against the selected provider. It owns no global mutable state. Unknown
+providers and models fail closed with bounded, non-retryable errors.
+
+| Environment variable | Default | Constraint |
+| --- | --- | --- |
+| `API_AI_PROVIDER_NAME` | `mock` | 1–100 lowercase name characters |
+| `API_AI_PROVIDER_MODEL_IDENTIFIER` | `mock-infrastructure-v1` | 1–200 safe identifier characters |
+| `API_AI_PROVIDER_TIMEOUT_SECONDS` | `10` | Greater than zero, at most 300 |
+
+No API-key or provider-secret setting exists in WO-004B2.
+
+## Deterministic mock
+
+The mock validates the job type, model and schema version and returns:
+
+```json
+{
+  "status": "ok",
+  "message": "AI processing infrastructure is operational."
+}
+```
+
+Usage and cost are zero, currency is `AUD`, latency is deterministically zero
+and the provider request identifier is a UUIDv5 derived only from safe request
+and job identifiers. Repeating the same valid request returns the same response.
+No transcript content is read, hashed, logged or sent anywhere.
+
+## Timeout and error model
+
+Provider execution is wrapped by `asyncio.wait_for`. A timeout cancels the
+provider coroutine and becomes retryable `provider_timeout`. Provider execution
+occurs after the claim transaction commits and before the completion transaction
+opens, so no database transaction waits on a provider.
+
+Normalised retryable failures are timeout, temporary unavailability, transient
+execution failure and an unexpected internal provider exception. Normalised
+non-retryable failures are invalid request, unsupported provider, unsupported
+model, invalid configuration and malformed provider output. Only bounded codes
+and safe messages reach worker persistence or audits. Raw exception text can be
+chained in memory but is not logged, stored or audited.
+
+## Worker flow and persistence
+
+1. The worker claims a tenant-owned job and commits the short claim transaction.
+2. `InfrastructureTestExecutor` creates a validated minimal provider request.
+3. The registry resolves `mock` / `mock-infrastructure-v1`.
+4. The timeout wrapper executes and validates the provider response.
+5. The executor validates `output_payload` against the existing
+   `InfrastructureTestArtifactContent` schema.
+6. The worker opens a new tenant-bound transaction, locks the owned running job
+   and rechecks cancellation.
+7. Existing `AIJob` fields receive provider/model/request identifiers, zero
+   token usage, zero cost and `AUD`.
+8. `AIArtifactService` creates the exact-trace artefact and copies the provider
+   and model labels.
+9. Artefact, audit events and completed job state commit atomically.
+
+`processing_duration_ms` remains the existing total worker execution duration.
+Provider latency and derived total tokens are emitted as safe structured
+telemetry; no duplicate columns were needed. Existing provider trace fields made
+migration `0007` unnecessary.
+
+## Tenant isolation and telemetry
+
+The request carries identifiers copied from the claimed job; it cannot query the
+database. Persistence still uses the claimed organisation, explicit repository
+predicates, transaction-local tenant context, forced RLS and composite tenant
+keys. A mismatched organisation cannot lock the owned job or persist an
+artefact.
+
+Logs contain only safe identifiers, provider/model labels, request identifier,
+latency, token counts, integer cost, currency, finish reason, bounded error code
+and retryability. Logs never contain input/output payloads, artefact content,
+transcripts, prompts, participants, secrets, credentials or raw exceptions.
+
+## Local development and tests
+
+The defaults run without paid services or credentials:
+
+```bash
+pnpm dev:worker
+```
+
+Provider tests cover strict contracts, deterministic/no-network behaviour,
+registry selection, safe configuration, timeout cancellation, retry
+classification and malformed output. Worker integration tests cover atomic
+artefact completion, metadata persistence, retries, timeout, terminal provider
+failure, cancellation, leases/recovery, tenant isolation and safe audits.
+PostgreSQL RLS tests remain authoritative for the forced-RLS boundary.
+
+Do not use production customer data. Production identity, provider privacy
+terms, consent evidence, retention/erasure and operational controls are not
+complete.
+
+## Future extension points
+
+A separately approved work order may register a real adapter that implements
+`AIProvider`. That work must add provider-specific secret management, privacy/
+retention review, network controls and deterministic contract tests without
+leaking SDK types into executors. Prompt governance, structured-output retry
+policy and genuine intelligence remain separate decisions.

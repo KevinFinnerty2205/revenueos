@@ -14,7 +14,7 @@ Working web/API shells, auth-ready route protection, organisations/users/members
 
 Verified Clerk identity, tenant-safe company/contact/opportunity records, deliberate meeting intake, private storage, durable transcription/analysis, reviewable insights, tasks and follow-up drafts. Exit requires two-organisation isolation, failure/retry tests, accessibility and deletion controls.
 
-**Status:** In progress. Sprint 2 completed tenant-safe company, contact, opportunity and task records. Sprint 3 completed tenant-safe meetings, participants, deliberately supplied plain-text transcripts and meeting audit history. WO-004A1/A2/B1 completed AI persistence, internal domain rules and a durable deterministic infrastructure-test worker. Verified Clerk identity, provider execution, media ingestion/storage, transcription, genuine analysis and follow-up drafting remain outstanding.
+**Status:** In progress. Sprint 2 completed tenant-safe company, contact, opportunity and task records. Sprint 3 completed tenant-safe meetings, participants, deliberately supplied plain-text transcripts and meeting audit history. WO-004A1/A2/B1/B2 completed AI persistence, internal domain rules, a durable worker and a deterministic no-network provider seam for infrastructure tests. Verified Clerk identity, real provider execution, media ingestion/storage, transcription, genuine analysis and follow-up drafting remain outstanding.
 
 ## Phase 3 — Relationship Memory
 

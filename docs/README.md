@@ -36,6 +36,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [AI database foundation](03-engineering/ai-database-foundation.md)
 - [AI domain services](03-engineering/ai-domain-services.md)
 - [AI worker and durable job queue](03-engineering/ai-worker-queue.md)
+- [AI provider abstraction](03-engineering/ai-provider-abstraction.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -69,6 +70,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-004A1: AI Database Foundation](07-sprints/wo-004a1-ai-database-foundation.md)
 - [WO-004A2: AI Repository, Service, Lifecycle and Audit Foundation](07-sprints/wo-004a2-ai-domain-services.md)
 - [WO-004B1: AI Worker and Durable Job Queue](07-sprints/wo-004b1-ai-worker-queue.md)
+- [WO-004B2: AI Provider Abstraction and Deterministic Mock Provider](07-sprints/wo-004b2-ai-provider-abstraction.md)
 
 ## 08 — Decision records
 
@@ -79,9 +81,10 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0005: tenant-owned AI database foundation](08-decisions/0005-ai-database-foundation.md)
 - [ADR 0006: AI domain service boundaries](08-decisions/0006-ai-domain-service-boundaries.md)
 - [ADR 0007: PostgreSQL-backed AI worker queue](08-decisions/0007-postgresql-ai-worker-queue.md)
+- [ADR 0008: provider-neutral AI execution](08-decisions/0008-provider-neutral-ai-execution.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 are complete. WO-004A1/A2 add tenant-isolated AI persistence and internal domain rules. WO-004B1 adds a separate durable PostgreSQL worker that executes only a deterministic infrastructure test with leases, heartbeats, retries, cancellation and recovery. There is no real AI provider, prompt, AI API, AI UI or Meeting Intelligence. Assistant remains a placeholder. Recording, media storage, transcription, external integrations, production Clerk verification, billing and mobile are not implemented.
+Sprints 1–3 are complete. WO-004A1/A2 add tenant-isolated AI persistence and internal domain rules. WO-004B1 adds a separate durable PostgreSQL worker; WO-004B2 routes only its deterministic infrastructure test through a typed, no-network mock provider with bounded timeout/error handling and safe usage telemetry. There is no real/external AI provider, credential, prompt, AI API, AI UI or Meeting Intelligence. Assistant remains a placeholder. Recording, media storage, transcription, external integrations, production Clerk verification, billing and mobile are not implemented.
 
 Do not use production customer data. Production identity, consent evidence, retention/export/erasure and operational controls are incomplete. Future sprints remain unauthorised until a separate work order is approved.
