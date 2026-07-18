@@ -51,5 +51,13 @@ task creation/editing/completion, reminder, calendar/email integration,
 memory, recording, transcription, embedding, notification, billing, streaming,
 WebSocket, provider settings UI or autonomous agent was introduced.
 
+## UI evidence
+
+The screenshot below uses synthetic test data from the mock-only Playwright
+journey. It shows the completed Action Items card with task, owner, supported
+date, priority, fixed status, confidence and brief evidence.
+
+![Synthetic completed Action Items panel](assets/wo-004c3-action-items-panel.png)
+
 See [Meeting Action Items intelligence](../03-engineering/meeting-action-items-intelligence.md)
 and [ADR 0013](../08-decisions/0013-current-transcript-action-items.md).
