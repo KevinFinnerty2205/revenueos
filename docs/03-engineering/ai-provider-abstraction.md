@@ -2,15 +2,16 @@
 
 ## Current boundary
 
-WO-004B2 adds a provider-neutral execution seam for the existing internal
+WO-004B2 added a provider-neutral execution seam for the existing internal
 `infrastructure_test` job. The only registered implementation is
 `DeterministicMockAIProvider`. It requires no credentials, performs no network
 calls, receives no transcript or customer content and produces no genuine
 Meeting Intelligence.
 
 There is no OpenAI, Anthropic, Gemini or other external provider adapter. There
-are no prompts, prompt registry, provider configuration UI, AI API routes or AI
-web UI.
+is no provider configuration UI, AI API route or AI web UI. WO-004B3 now builds
+application-owned versioned prompts and strict structured-output validation on
+this seam; see [Prompt registry and structured output](prompt-registry-and-structured-output.md).
 
 ## Contracts and interface
 
@@ -22,16 +23,18 @@ boundary.
 
 - request, organisation and job identifiers;
 - job type and model identifier;
-- a strict minimal `infrastructure_test` input;
+- a strict minimal `infrastructure_test` input with exactly one ordered
+  `system` then `user` provider-neutral message;
 - expected artefact schema version; and
 - a validated positive timeout.
 
-Unknown fields are rejected. The current input contains only
-`{"operation": "infrastructure_test"}`. It never contains a transcript,
-database model, prompt, secret or vendor object.
+Unknown fields are rejected. The current messages contain only fixed
+infrastructure instructions plus safe job/request identifiers. They never
+contain a transcript, customer record, database model, secret or vendor object.
 
 `ProviderResponse` is also frozen and rejects unknown fields. It normalises the
-provider/model/request identifiers, output payload, non-negative input/output/
+provider/model/request identifiers, a JSON mapping or JSON string output,
+non-negative input/output/
 total token counts, non-negative integer minor-unit cost, three-letter currency,
 non-negative provider latency and finish reason. Total tokens must equal input
 plus output. The raw provider response is never persisted.
@@ -48,7 +51,9 @@ providers and models fail closed with bounded, non-retryable errors.
 | `API_AI_PROVIDER_MODEL_IDENTIFIER` | `mock-infrastructure-v1` | 1–200 safe identifier characters |
 | `API_AI_PROVIDER_TIMEOUT_SECONDS` | `10` | Greater than zero, at most 300 |
 
-No API-key or provider-secret setting exists in WO-004B2.
+No API-key or provider-secret setting exists. Prompt and output-attempt settings
+are documented separately because they belong to the executor, not provider
+selection.
 
 ## Deterministic mock
 
@@ -83,18 +88,21 @@ chained in memory but is not logged, stored or audited.
 ## Worker flow and persistence
 
 1. The worker claims a tenant-owned job and commits the short claim transaction.
-2. `InfrastructureTestExecutor` creates a validated minimal provider request.
-3. The registry resolves `mock` / `mock-infrastructure-v1`.
-4. The timeout wrapper executes and validates the provider response.
-5. The executor validates `output_payload` against the existing
-   `InfrastructureTestArtifactContent` schema.
-6. The worker opens a new tenant-bound transaction, locks the owned running job
+2. `InfrastructureTestExecutor` resolves and safely renders the selected
+   prompt/schema pair.
+3. It creates a validated provider request with ordered messages.
+4. The registry resolves `mock` / `mock-infrastructure-v1`.
+5. The timeout wrapper executes and validates the provider response.
+6. The executor strictly parses and validates `output_payload`, retrying only
+   bounded output invalidity within this execution.
+7. The worker opens a new tenant-bound transaction, locks the owned running job
    and rechecks cancellation.
-7. Existing `AIJob` fields receive provider/model/request identifiers, zero
+8. Existing `AIJob` fields receive prompt/schema/provider/model/request trace,
+   zero
    token usage, zero cost and `AUD`.
-8. `AIArtifactService` creates the exact-trace artefact and copies the provider
-   and model labels.
-9. Artefact, audit events and completed job state commit atomically.
+9. `AIArtifactService` creates the exact-trace artefact and copies the prompt,
+   schema, provider and model labels.
+10. Artefact, audit events and completed job state commit atomically.
 
 `processing_duration_ms` remains the existing total worker execution duration.
 Provider latency and derived total tokens are emitted as safe structured
@@ -123,8 +131,10 @@ pnpm dev:worker
 ```
 
 Provider tests cover strict contracts, deterministic/no-network behaviour,
-registry selection, safe configuration, timeout cancellation, retry
-classification and malformed output. Worker integration tests cover atomic
+registry selection, safe configuration, timeout cancellation and provider
+retry classification. Prompt/output tests cover safe rendering, strict JSON
+and schema validation, bounded output retry/exhaustion and cancellation. Worker
+integration tests cover atomic
 artefact completion, metadata persistence, retries, timeout, terminal provider
 failure, cancellation, leases/recovery, tenant isolation and safe audits.
 PostgreSQL RLS tests remain authoritative for the forced-RLS boundary.
@@ -138,5 +148,5 @@ complete.
 A separately approved work order may register a real adapter that implements
 `AIProvider`. That work must add provider-specific secret management, privacy/
 retention review, network controls and deterministic contract tests without
-leaking SDK types into executors. Prompt governance, structured-output retry
-policy and genuine intelligence remain separate decisions.
+leaking SDK types into executors. Customer-content prompts, additional schemas,
+model-specific JSON modes and genuine intelligence remain separate decisions.

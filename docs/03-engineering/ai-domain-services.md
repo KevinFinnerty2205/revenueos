@@ -110,13 +110,14 @@ Every service starts with trusted `TenantContext`. Every repository read/write h
 
 - No API route or UI can request, inspect or transition AI work.
 - Worker claiming, leases, retry scheduling and cancellation execution now exist only for the deterministic infrastructure test.
-- A later WO-004B2 layer now routes this existing infrastructure-test contract
-  through a deterministic mock provider. No real provider, prompt registry,
-  model call or genuine meeting intelligence exists.
+- WO-004B2 routes this existing infrastructure-test contract through a
+  deterministic mock provider, and WO-004B3 adds one immutable versioned
+  prompt/schema pair plus strict output validation. No real provider,
+  customer-content prompt, model call or genuine meeting intelligence exists.
 - Lifecycle transitions do not use row locks; future worker work must define concurrency/claim semantics before execution.
 - The transcript version identifies the current mutable transcript row but does not preserve a historical text snapshot.
 - Production identity, retention, export, erasure and operational controls remain incomplete; production customer data is prohibited.
 
-A later, separately approved real provider/prompt layer can use the WO-004B2
-provider port, attach explicit prompt metadata and produce further typed schemas
-without changing the tenant trace, transaction, safe-error or append-only rules.
+A later, separately approved real provider/intelligence layer can use the
+provider port and register further immutable prompt/schema pairs without
+changing the tenant trace, transaction, safe-error or append-only rules.

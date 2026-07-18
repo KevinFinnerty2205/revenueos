@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import cast
+
+from pydantic import ValidationError
+
+from revenueos.ai_contracts import (
+    INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    InfrastructureTestArtifactContent,
+)
+from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
+from revenueos.ai_prompt_errors import (
+    DuplicateSchemaRegistrationError,
+    SchemaNotFoundError,
+    SchemaVersionNotFoundError,
+    StructuredOutputValidationError,
+)
+from revenueos.domain import AIJobType
+
+INFRASTRUCTURE_TEST_SCHEMA_KEY = "infrastructure_test"
+
+
+class OutputSchemaRegistry:
+    """Instance-owned registry for immutable application output schemas."""
+
+    def __init__(
+        self,
+        definitions: tuple[OutputSchemaDefinition, ...] = (),
+    ) -> None:
+        self._definitions: dict[tuple[str, int], OutputSchemaDefinition] = {}
+        for definition in definitions:
+            self.register(definition)
+
+    def register(self, definition: OutputSchemaDefinition) -> None:
+        identity = (definition.schema_key, definition.schema_version)
+        if identity in self._definitions:
+            raise DuplicateSchemaRegistrationError
+        self._definitions[identity] = definition
+
+    def resolve(
+        self,
+        schema_key: str,
+        schema_version: int,
+    ) -> OutputSchemaDefinition:
+        definition = self._definitions.get((schema_key, schema_version))
+        if definition is not None:
+            return definition
+        if any(key == schema_key for key, _ in self._definitions):
+            raise SchemaVersionNotFoundError
+        raise SchemaNotFoundError
+
+    def resolve_active(self, schema_key: str) -> OutputSchemaDefinition:
+        active = [
+            definition for (key, _), definition in self._definitions.items() if key == schema_key and definition.active
+        ]
+        if not active:
+            if any(key == schema_key for key, _ in self._definitions):
+                raise SchemaVersionNotFoundError
+            raise SchemaNotFoundError
+        return max(active, key=lambda definition: definition.schema_version)
+
+    def list_versions(self, schema_key: str) -> tuple[int, ...]:
+        versions = sorted(version for key, version in self._definitions if key == schema_key)
+        if not versions:
+            raise SchemaNotFoundError
+        return tuple(versions)
+
+    def validate(
+        self,
+        definition: OutputSchemaDefinition,
+        payload: Mapping[str, object],
+    ) -> dict[str, object]:
+        try:
+            validated = definition.validation_model.model_validate(payload)
+        except ValidationError as exc:
+            raise StructuredOutputValidationError from exc
+        return cast(dict[str, object], validated.model_dump(mode="json"))
+
+
+def create_default_output_schema_registry() -> OutputSchemaRegistry:
+    definition = OutputSchemaDefinition(
+        schema_key=INFRASTRUCTURE_TEST_SCHEMA_KEY,
+        schema_version=INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+        job_type=AIJobType.INFRASTRUCTURE_TEST.value,
+        validation_model=InfrastructureTestArtifactContent,
+        description="Strict schema for deterministic infrastructure validation.",
+        active=True,
+    )
+    return OutputSchemaRegistry((definition,))

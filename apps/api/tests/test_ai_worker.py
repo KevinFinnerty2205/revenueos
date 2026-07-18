@@ -15,12 +15,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from revenueos.ai_executors import (
     AIExecutorRegistry,
+    CancellationCheck,
     ClaimedAIJob,
     ExecutionResult,
     InfrastructureTestExecutor,
     WorkerExecutionError,
 )
-from revenueos.ai_mock_provider import MOCK_MODEL_IDENTIFIER, MOCK_PROVIDER_NAME
+from revenueos.ai_mock_provider import (
+    MOCK_MODEL_IDENTIFIER,
+    MOCK_PROVIDER_NAME,
+    DeterministicMockAIProvider,
+)
 from revenueos.ai_provider import AIProvider
 from revenueos.ai_provider_contracts import ProviderRequest, ProviderResponse
 from revenueos.ai_provider_errors import ProviderUnavailableError
@@ -140,26 +145,46 @@ class _ErrorExecutor:
     ) -> None:
         self.error = WorkerExecutionError(code, message, retryable=retryable)
 
-    async def execute(self, job: ClaimedAIJob) -> ExecutionResult:
-        del job
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+    ) -> ExecutionResult:
+        del job, cancellation_check
         raise self.error
 
 
 class _RawErrorExecutor:
-    async def execute(self, job: ClaimedAIJob) -> ExecutionResult:
-        del job
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+    ) -> ExecutionResult:
+        del job, cancellation_check
         raise RuntimeError("secret transcript text and credential")
 
 
 class _InvalidArtifactExecutor:
-    async def execute(self, job: ClaimedAIJob) -> ExecutionResult:
-        del job
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+    ) -> ExecutionResult:
+        del job, cancellation_check
         return _execution_result({"status": "not-valid"})
 
 
 def _execution_result(content: dict[str, object]) -> ExecutionResult:
     return ExecutionResult(
         content=content,
+        prompt_key="infrastructure_test",
+        prompt_version=1,
+        schema_key="infrastructure_test",
+        schema_version=1,
+        structured_output_attempt_count=1,
         provider_name=MOCK_PROVIDER_NAME,
         model_identifier=MOCK_MODEL_IDENTIFIER,
         provider_request_id="mock-test-request",
@@ -309,6 +334,9 @@ def test_infrastructure_executor_atomically_creates_artifact_then_completes() ->
         assert stored.output_token_count == 0
         assert stored.estimated_cost_minor_units == 0
         assert stored.currency == "AUD"
+        assert stored.prompt_key == "infrastructure_test"
+        assert stored.prompt_version == 1
+        assert stored.schema_version == 1
         assert stored.provider_key == MOCK_PROVIDER_NAME
         assert stored.model_name == MOCK_MODEL_IDENTIFIER
         assert stored.provider_request_id is not None
@@ -327,11 +355,100 @@ def test_infrastructure_executor_atomically_creates_artifact_then_completes() ->
         }
         assert artifacts[0].provider_key == MOCK_PROVIDER_NAME
         assert artifacts[0].model_name == MOCK_MODEL_IDENTIFIER
+        assert artifacts[0].prompt_key == "infrastructure_test"
+        assert artifacts[0].prompt_version == 1
+        assert artifacts[0].schema_version == 1
         assert {audit.action for audit in audits} == {
             "ai_job_status_changed",
             "ai_artifact_created",
         }
         assert all(audit.organisation_id == PRIMARY_ORGANISATION_ID for audit in audits)
+        completion_audit = next(audit for audit in audits if audit.metadata_json.get("new_status") == "completed")
+        assert completion_audit.metadata_json["prompt_key"] == "infrastructure_test"
+        assert completion_audit.metadata_json["prompt_version"] == 1
+        assert completion_audit.metadata_json["schema_key"] == "infrastructure_test"
+        assert completion_audit.metadata_json["schema_version"] == 1
+        assert completion_audit.metadata_json["structured_output_attempt_count"] == 1
+
+    _run(scenario)
+
+
+def test_invalid_output_retries_before_atomic_artifact_completion() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        (job,) = await _seed_jobs(session_factory)
+        settings = _settings(ai_structured_output_max_attempts=3)
+        provider = DeterministicMockAIProvider(("schema_invalid", "valid_mapping"))
+        service = AIWorkerService(
+            session_factory,
+            settings,
+            executors=_provider_executors(settings, provider),
+            clock=lambda: NOW,
+        )
+        claim = await service.claim_next_job(
+            PRIMARY_ORGANISATION_ID,
+            "structured-retry-worker",
+        )
+        assert claim is not None
+
+        await service.execute_claimed_job(claim)
+
+        stored = await _stored_job(session_factory, job.id)
+        async with session_factory() as session:
+            artifacts = list(await session.scalars(select(AIArtifact)))
+            audits = list(
+                await session.scalars(
+                    select(MeetingAuditEvent).where(
+                        MeetingAuditEvent.entity_id == job.id,
+                    )
+                )
+            )
+        completion_audit = next(event for event in audits if event.metadata_json.get("new_status") == "completed")
+        assert stored.status == AIJobStatus.COMPLETED.value
+        assert len(artifacts) == 1
+        assert artifacts[0].content_json == {
+            "status": "ok",
+            "message": "AI processing infrastructure is operational.",
+        }
+        assert completion_audit is not None
+        assert completion_audit.metadata_json["structured_output_attempt_count"] == 2
+
+    _run(scenario)
+
+
+def test_exhausted_invalid_output_fails_without_artifact_or_raw_output() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        (job,) = await _seed_jobs(session_factory)
+        settings = _settings(ai_structured_output_max_attempts=2)
+        provider = DeterministicMockAIProvider(("malformed_json",))
+        service = AIWorkerService(
+            session_factory,
+            settings,
+            executors=_provider_executors(settings, provider),
+            clock=lambda: NOW,
+        )
+        claim = await service.claim_next_job(
+            PRIMARY_ORGANISATION_ID,
+            "structured-exhausted-worker",
+        )
+        assert claim is not None
+
+        await service.execute_claimed_job(claim)
+
+        stored = await _stored_job(session_factory, job.id)
+        async with session_factory() as session:
+            artifact_count = await session.scalar(select(func.count()).select_from(AIArtifact))
+            audit_metadata = [
+                event.metadata_json
+                for event in await session.scalars(
+                    select(MeetingAuditEvent).where(MeetingAuditEvent.entity_id == job.id)
+                )
+            ]
+        assert stored.status == AIJobStatus.FAILED.value
+        assert stored.last_error_code == "structured_output_attempts_exhausted"
+        assert stored.next_attempt_at is None
+        assert '{"status"' not in (stored.last_error_message_safe or "")
+        assert artifact_count == 0
+        assert '{"status"' not in json.dumps(audit_metadata)
 
     _run(scenario)
 

@@ -21,6 +21,7 @@ from revenueos.ai_mock_provider import (
 from revenueos.ai_provider import execute_provider_request
 from revenueos.ai_provider_contracts import (
     InfrastructureTestProviderInput,
+    ProviderMessage,
     ProviderRequest,
     ProviderResponse,
 )
@@ -53,7 +54,12 @@ def _provider_request(*, timeout_seconds: float = 1.0) -> ProviderRequest:
         job_id=JOB_ID,
         job_type=AIJobType.INFRASTRUCTURE_TEST.value,
         model_identifier=MOCK_MODEL_IDENTIFIER,
-        input_payload=InfrastructureTestProviderInput(),
+        input_payload=InfrastructureTestProviderInput(
+            messages=(
+                ProviderMessage(role="system", content="Return strict JSON."),
+                ProviderMessage(role="user", content="Run the infrastructure test."),
+            )
+        ),
         expected_schema_version=1,
         timeout_seconds=timeout_seconds,
     )
@@ -169,7 +175,11 @@ def test_provider_contracts_are_strict_immutable_and_normalised() -> None:
     request = _provider_request()
     response = asyncio.run(DeterministicMockAIProvider().execute(request))
 
-    assert request.input_payload.model_dump() == {"operation": "infrastructure_test"}
+    assert request.input_payload.operation == "infrastructure_test"
+    assert tuple(message.role for message in request.input_payload.messages) == (
+        "system",
+        "user",
+    )
     assert response.total_token_count == (response.input_token_count + response.output_token_count)
     with pytest.raises(ValidationError):
         request.timeout_seconds = 2  # type: ignore[misc]
@@ -341,7 +351,11 @@ def test_executor_uses_provider_boundary_without_customer_content() -> None:
     request = provider.requests[0]
     assert request.organisation_id == ORGANISATION_ID
     assert request.job_id == JOB_ID
-    assert request.input_payload.model_dump() == {"operation": "infrastructure_test"}
+    assert request.input_payload.operation == "infrastructure_test"
+    assert tuple(message.role for message in request.input_payload.messages) == (
+        "system",
+        "user",
+    )
     assert "transcript" not in request.model_dump_json()
     assert result.provider_name == MOCK_PROVIDER_NAME
     assert result.model_identifier == MOCK_MODEL_IDENTIFIER
@@ -361,7 +375,7 @@ def test_executor_rejects_invalid_artifact_output_as_non_retryable() -> None:
     with pytest.raises(WorkerExecutionError) as caught:
         asyncio.run(executor.execute(_claim()))
 
-    assert caught.value.code == "malformed_provider_output"
+    assert caught.value.code == "structured_output_attempts_exhausted"
     assert caught.value.retryable is False
 
 
@@ -372,6 +386,8 @@ def test_configuration_contains_provider_selection_but_no_credentials() -> None:
     assert settings.ai_provider_name == MOCK_PROVIDER_NAME
     assert settings.ai_provider_model_identifier == MOCK_MODEL_IDENTIFIER
     assert settings.ai_provider_timeout_seconds == 1.0
+    assert settings.ai_prompt_key == "infrastructure_test"
+    assert settings.ai_structured_output_max_attempts == 3
     assert not any("api_key" in key or "secret" in key or "credential" in key for key in dumped)
     with pytest.raises(ValidationError):
         _settings(ai_provider_timeout_seconds=0)

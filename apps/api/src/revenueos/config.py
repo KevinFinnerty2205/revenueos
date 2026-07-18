@@ -53,6 +53,13 @@ class Settings(BaseSettings):
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
     )
     ai_provider_timeout_seconds: float = Field(default=10.0, gt=0, le=300)
+    ai_prompt_key: str = Field(
+        default="infrastructure_test",
+        min_length=1,
+        max_length=100,
+        pattern=r"^[a-z0-9][a-z0-9_]*$",
+    )
+    ai_structured_output_max_attempts: int = Field(default=3, ge=1, le=5)
 
     @field_validator("database_url", "clerk_jwks_url", "clerk_issuer", "clerk_audience", mode="before")
     @classmethod

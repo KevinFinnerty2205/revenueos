@@ -2,13 +2,13 @@
 
 RevenueOS is the AI sales teammate that remembers every customer interaction and turns conversations into action.
 
-This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated business entities, Sprint 3 Meeting Domain and WO-004A1/A2/B1/B2 AI infrastructure. Meetings, deliberately supplied transcripts, audit history, AI persistence/domain rules and a separate durable worker are implemented. Its infrastructure test now uses typed provider contracts and a deterministic no-network mock. No API/UI exposes AI lifecycle data, and no real/external AI provider, credential, prompt, recording, media storage, transcription, genuine AI execution, integration, production Clerk verification or billing is implemented.
+This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated business entities, Sprint 3 Meeting Domain and WO-004A1/A2/B1/B2/B3 AI infrastructure. Meetings, deliberately supplied transcripts, audit history, AI persistence/domain rules and a separate durable worker are implemented. Its infrastructure test uses versioned application prompts, strict structured-output validation and a deterministic no-network mock. No API/UI exposes AI lifecycle data, and no real/external AI provider, credential, customer-content prompt, recording, media storage, transcription, genuine AI execution, integration, production Clerk verification or billing is implemented.
 
 ## Product blueprint
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 plus WO-004A1/A2/B1/B2.
+Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 plus WO-004A1/A2/B1/B2/B3.
 
 ## Prerequisites
 
@@ -185,4 +185,4 @@ The web output is started with `pnpm --filter @revenueos/web start`. The API pac
 - **Port already in use:** stop the existing process or change the local web/API command and update the corresponding URL/CORS variables.
 - **OpenAPI or TypeScript contract changed:** update the small `packages/shared` surface in the same pull request. Pydantic/OpenAPI remains canonical.
 
-See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [API reference](docs/03-engineering/api.md), [provider architecture](docs/03-engineering/ai-provider-abstraction.md) and [WO-004B2 record](docs/07-sprints/wo-004b2-ai-provider-abstraction.md).
+See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [API reference](docs/03-engineering/api.md), [provider architecture](docs/03-engineering/ai-provider-abstraction.md), [prompt/output architecture](docs/03-engineering/prompt-registry-and-structured-output.md) and [WO-004B3 record](docs/07-sprints/wo-004b3-prompt-registry.md).
