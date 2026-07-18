@@ -1,6 +1,6 @@
 # Security and privacy
 
-This is the WO-004A1 engineering baseline, not legal advice or a certification claim.
+This is the WO-004A2 engineering baseline, not legal advice or a certification claim.
 
 ## Authentication and authorisation
 
@@ -20,6 +20,8 @@ Every request derives its user and organisation from the auth adapter. Client-su
 - Missing membership or tenant context fails closed.
 
 API tests exercise cross-tenant list, read, update, delete and relationship denial, including nested participants and inherited transcript permissions. PostgreSQL 16 integration tests assume a restricted role and prove RLS visibility and write checks across every tenant table, including AI jobs and artefacts. Database tests separately prove cross-tenant and mismatched AI trace relationships fail.
+
+WO-004A2 repositories retain an explicit organisation predicate even under RLS. Services accept only trusted `TenantContext`, validate meeting/transcript/job trace ownership and map foreign identifiers to safe not-found errors so another tenant's record existence is not disclosed. Restricted-role PostgreSQL tests execute the new repositories and services while forced RLS is active.
 
 ## Secrets
 
@@ -41,6 +43,9 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - Meeting audit events contain changed field names and identifiers only, not transcript or participant content.
 - AI jobs contain bounded safe failure metadata, usage counts and integer minor-unit cost estimates; they contain no raw transcript, prompt, secret or full provider response.
 - AI artefact content is validated-data storage for future use, protected from overwrite by a database trigger and separated from the supplied transcript.
+- AI job, lifecycle and artefact writes commit atomically with metadata-only audit events.
+- AI audits may identify job/artefact/type/status/version and optional provider/model labels, but exclude transcript/artefact bodies, prompts, provider secrets, participant-sensitive values and raw exceptions.
+- Infrastructure-test JSON is strict, versioned and rejected before persistence when malformed or extended unexpectedly.
 - Locked dependencies and automated format, lint, type, test and build checks.
 
 ## Recording consent and privacy
@@ -63,7 +68,8 @@ Meeting deletion currently makes records unavailable to normal application reads
 - Clerk session/JWT verification is not connected.
 - The production non-bypass database role and grants are not provisioned by this repository; CI tests the required RLS behaviour with a temporary restricted role.
 - Role-specific CRUD permissions, organisation-wide audit export, retention and customer-data erasure workflows are not yet specified.
-- AI repositories, services, lifecycle policy, provider execution, structured-output validation and user access are not implemented; the new tables must not be exposed directly.
+- Worker claiming, retry scheduling, provider execution, prompt governance and user/API access are not implemented; the AI tables and internal services must not be exposed directly.
+- Lifecycle updates are not worker claims and do not yet use row locks; future execution needs an explicit concurrency design.
 - Transcript version counters do not preserve historical transcript bodies, so version traceability is not yet source snapshot retention.
 - Hosting, secret management, monitoring, backup and incident-response providers are not selected.
 - Recording wording, residency and deletion commitments require product/legal approval before conversation features.

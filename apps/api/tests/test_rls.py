@@ -8,7 +8,13 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+from revenueos.ai_repositories import AIJobRepository
+from revenueos.ai_services import AIArtifactService, AIJobService
+from revenueos.domain import AIJobStatus
+from revenueos.errors import PublicAPIError
+from revenueos.tenant import TenantContext
 
 
 def test_postgresql_rls_isolates_every_tenant_table() -> None:
@@ -368,6 +374,60 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["ai_artifact_id"]},
                 )
                 assert artifact_update.rowcount == 0
+
+                tenant_context = TenantContext(
+                    organisation_id=tenant_a["organisation_id"],
+                    user_id=tenant_a["user_id"],
+                    role="admin",
+                )
+                async with AsyncSession(
+                    bind=connection,
+                    expire_on_commit=False,
+                ) as session:
+                    repository = AIJobRepository(session)
+                    assert (
+                        await repository.get_job(
+                            tenant_a["organisation_id"],
+                            tenant_b["ai_job_id"],
+                        )
+                        is None
+                    )
+                    job_service = AIJobService(
+                        session,
+                        tenant_context,
+                        job_repository=repository,
+                    )
+                    with pytest.raises(PublicAPIError) as cross_tenant_job:
+                        await job_service.transition_job(
+                            tenant_b["ai_job_id"],
+                            AIJobStatus.RUNNING,
+                        )
+                    assert cross_tenant_job.value.code == "ai_job_not_found"
+
+                    service_job = await job_service.create_infrastructure_test_job(
+                        meeting_id=tenant_a["meeting_id"],
+                        transcript_id=tenant_a["transcript_id"],
+                        transcript_version=1,
+                        idempotency_key="rls-service-job-a",
+                    )
+                    service_artifact = await AIArtifactService(
+                        session,
+                        tenant_context,
+                        job_repository=repository,
+                    ).create_infrastructure_test_artifact(
+                        job_id=service_job.id,
+                        meeting_id=tenant_a["meeting_id"],
+                        transcript_id=tenant_a["transcript_id"],
+                        transcript_version=1,
+                        schema_version=1,
+                        content={
+                            "status": "ok",
+                            "message": "AI processing infrastructure is operational.",
+                        },
+                    )
+                    assert service_job.organisation_id == tenant_a["organisation_id"]
+                    assert service_artifact.organisation_id == tenant_a["organisation_id"]
+                    assert service_artifact.artifact_version == 2
                 await transaction.commit()
 
                 cross_tenant_inserts = (

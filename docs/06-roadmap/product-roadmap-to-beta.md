@@ -54,6 +54,16 @@ The roadmap preserves one demonstrable outcome per sprint where practical. It ta
 
 WO-003 expanded the earlier proposed Sprint 3 boundary to include direct plain-text transcript CRUD. It did not authorise recording, media ingestion, transcription or AI. Production customer data remains prohibited until production identity and operational privacy controls are complete.
 
+### WO-004A1/A2 — AI Infrastructure Foundation — Complete
+
+- **Objective:** Establish tenant-safe AI persistence and the internal rules needed to prepare infrastructure-test work without executing it.
+- **Major deliverables:** Exact transcript-version job/artefact trace, append-only artefacts, forced RLS, tenant-scoped repositories, required idempotency, lifecycle transition validation, strict infrastructure-test schema and metadata-only audit events.
+- **Out of scope:** Worker/claiming, providers, prompts, APIs, UI, polling and genuine meeting intelligence.
+- **Security gates:** Explicit organisation predicates plus forced RLS, composite tenant constraints, safe errors, atomic audit/state writes and content-free audit metadata.
+- **Demonstration:** Backend tests create an idempotent pending infrastructure-test job, apply valid lifecycle preparation and persist a typed versioned artefact while cross-tenant operations fail closed.
+
+These work orders create implementation seams only and do not change the separately proposed product sprint sequence below.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.

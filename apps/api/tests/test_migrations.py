@@ -6,7 +6,7 @@ from alembic import command
 from alembic.config import Config
 
 
-def test_migrations_upgrade_downgrade_and_reupgrade_ai_database_foundation(
+def test_migrations_upgrade_downgrade_and_reupgrade_ai_domain_services(
     tmp_path: Path,
     monkeypatch: object,
 ) -> None:
@@ -33,9 +33,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_database_foundation(
             "ai_jobs",
             "ai_artifacts",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0004_ai_database_foundation",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0005_ai_domain_services",)
         task_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
         assert task_columns["organisation_id"] == 1
         assert task_columns["title"] == 1
@@ -64,6 +62,11 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_database_foundation(
         assert artifact_columns["job_id"] == 1
         assert artifact_columns["artifact_version"] == 1
         assert artifact_columns["content_json"] == 1
+        audit_columns = {
+            row[1]: (row[2], row[3]) for row in connection.execute("PRAGMA table_info(meeting_audit_events)").fetchall()
+        }
+        assert audit_columns["action"] == ("VARCHAR(40)", 1)
+        assert audit_columns["metadata_json"][1] == 1
         job_indexes = {row[1] for row in connection.execute("PRAGMA index_list(ai_jobs)").fetchall()}
         assert {
             "ix_ai_jobs_organisation_meeting",
@@ -181,6 +184,20 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_database_foundation(
                 """
             )
 
+    command.downgrade(configuration, "0004_ai_database_foundation")
+    with connect(database_path) as connection:
+        audit_columns_after_domain_downgrade = {
+            row[1] for row in connection.execute("PRAGMA table_info(meeting_audit_events)").fetchall()
+        }
+        assert "metadata_json" not in audit_columns_after_domain_downgrade
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0004_ai_database_foundation",
+        )
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0005_ai_domain_services",)
+
     command.downgrade(configuration, "0003_meeting_domain")
     with connect(database_path) as connection:
         tables_after_downgrade = {
@@ -201,9 +218,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_database_foundation(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert {"ai_jobs", "ai_artifacts"}.issubset(tables_after_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0004_ai_database_foundation",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0005_ai_domain_services",)
 
     command.downgrade(configuration, "0002_core_business_entities")
     with connect(database_path) as connection:

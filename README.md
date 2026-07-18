@@ -2,7 +2,7 @@
 
 RevenueOS is the AI sales teammate that remembers every customer interaction and turns conversations into action.
 
-This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated business entities, Sprint 3 Meeting Domain and the WO-004A1 dormant AI database foundation. Meetings, participants, deliberately supplied plain-text transcripts, content-minimised audit history, AI job persistence and versioned artefact persistence are implemented. No repository/service/API/UI exposes the AI tables, and recording, media storage, transcription, AI execution, integrations, production Clerk verification and billing are not implemented.
+This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated business entities, Sprint 3 Meeting Domain, the WO-004A1 AI database foundation and WO-004A2 internal AI domain services. Meetings, participants, deliberately supplied plain-text transcripts, content-minimised audit history, AI job persistence, tenant-scoped repositories, idempotent infrastructure-test job creation, lifecycle validation and strict versioned artefact persistence are implemented. No API/UI exposes the AI tables, and no worker, provider, prompt, recording, media storage, transcription, genuine AI execution, integration, production Clerk verification or billing is implemented.
 
 ## Product blueprint
 
@@ -181,4 +181,4 @@ The web output is started with `pnpm --filter @revenueos/web start`. The API pac
 - **Port already in use:** stop the existing process or change the local web/API command and update the corresponding URL/CORS variables.
 - **OpenAPI or TypeScript contract changed:** update the small `packages/shared` surface in the same pull request. Pydantic/OpenAPI remains canonical.
 
-See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [API reference](docs/03-engineering/api.md) and [WO-004A1 record](docs/07-sprints/wo-004a1-ai-database-foundation.md).
+See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [API reference](docs/03-engineering/api.md) and [WO-004A2 record](docs/07-sprints/wo-004a2-ai-domain-services.md).

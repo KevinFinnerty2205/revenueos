@@ -1,4 +1,4 @@
-"""Fail CI on obvious committed secrets or Sprint 3 scope violations."""
+"""Fail CI on obvious committed secrets or prohibited implementation paths."""
 
 from __future__ import annotations
 
