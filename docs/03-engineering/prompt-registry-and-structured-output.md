@@ -6,10 +6,10 @@ WO-004B3 adds application-owned prompt versioning, schema registration, safe
 rendering, strict provider-output parsing and bounded invalid-output retries.
 WO-004C1 registers the second pair, `executive_summary` version 1.
 
-The implementation remains deterministic and mock-only. Executive Summary
-processes a current transcript locally but sends no customer content externally
-and makes no network call. There is no prompt administration or genuine LLM
-execution.
+The default remains deterministic and mock-backed. OpenAI selection sends the
+current bounded transcript and rendered instructions to the server-side
+Responses API using the same registry-derived strict schema. There is no prompt
+administration or additional intelligence schema.
 
 ## Prompt definitions and versioning
 
@@ -105,7 +105,8 @@ network.
 1. The worker claims and commits the tenant-owned job.
 2. The executor resolves prompt and schema definitions.
 3. It validates safe variables and renders provider-neutral messages.
-4. It resolves the configured mock and invokes it under the existing timeout.
+4. It resolves the exactly configured mock or OpenAI provider and invokes it
+   under the existing timeout.
 5. It strictly parses and validates output, retrying only output invalidity.
 6. Between retries, it checks cancellation in a short tenant-bound transaction.
 7. Once valid, the worker opens the existing completion transaction, locks
@@ -158,19 +159,18 @@ API_AI_PROMPT_KEY=infrastructure_test
 API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS=3
 ```
 
-No API key is required. Tests cover contracts, registries, renderer safety,
+No API key is required for the default mock. Tests cover contracts, registries, renderer safety,
 strict parsing, schema validation, output retry/exhaustion, cancellation,
 provider error separation, transcript injection boundaries, trace persistence,
 atomic completion and tenant/RLS behavior.
 
-Do not use production customer data. Production identity, real-provider privacy
-terms, consent evidence, retention/erasure and operational controls remain
-incomplete.
+Do not use production customer data. Production identity, OpenAI privacy terms,
+consent evidence, retention/erasure and operational controls remain incomplete.
 
 ## Future extension points
 
 A separately approved work order may register another immutable prompt/schema
-pair or a real provider adapter. That work must define its source evidence,
+pair or provider adapter. That work must define its source evidence,
 prompt-injection controls, evaluation thresholds, version lifecycle, privacy
 terms and human review without weakening this strict parsing, trace, transaction
 or tenant boundary.

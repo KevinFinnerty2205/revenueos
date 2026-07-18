@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 from pydantic import ValidationError
 
+from revenueos.ai_contracts import InfrastructureTestArtifactContent
 from revenueos.ai_executors import (
     ClaimedAIJob,
     InfrastructureTestExecutor,
@@ -22,6 +23,7 @@ from revenueos.ai_provider import execute_provider_request
 from revenueos.ai_provider_contracts import (
     InfrastructureTestProviderInput,
     ProviderMessage,
+    ProviderOutputSchema,
     ProviderRequest,
     ProviderResponse,
 )
@@ -61,6 +63,13 @@ def _provider_request(*, timeout_seconds: float = 1.0) -> ProviderRequest:
             )
         ),
         expected_schema_version=1,
+        output_schema=ProviderOutputSchema(
+            schema_key="infrastructure_test",
+            schema_version=1,
+            json_schema=InfrastructureTestArtifactContent.model_json_schema(
+                mode="validation",
+            ),
+        ),
         timeout_seconds=timeout_seconds,
     )
 
@@ -325,10 +334,15 @@ def test_provider_errors_are_normalised_without_raw_exception_content() -> None:
 
 
 def test_invalid_provider_request_and_configuration_are_non_retryable() -> None:
+    valid = _provider_request().model_dump()
     invalid_request = ProviderRequest(
         **{
-            **_provider_request().model_dump(),
+            **valid,
             "expected_schema_version": 2,
+            "output_schema": {
+                **valid["output_schema"],
+                "schema_version": 2,
+            },
         }
     )
 
@@ -381,13 +395,20 @@ def test_executor_rejects_invalid_artifact_output_as_non_retryable() -> None:
 
 def test_configuration_contains_provider_selection_but_no_credentials() -> None:
     settings = _settings()
-    dumped = settings.model_dump()
+    safe_configuration = settings.safe_ai_configuration()
 
     assert settings.ai_provider_name == MOCK_PROVIDER_NAME
     assert settings.ai_provider_model_identifier == MOCK_MODEL_IDENTIFIER
     assert settings.ai_provider_timeout_seconds == 1.0
     assert settings.ai_prompt_key == "infrastructure_test"
     assert settings.ai_structured_output_max_attempts == 3
-    assert not any("api_key" in key or "secret" in key or "credential" in key for key in dumped)
+    assert safe_configuration == {
+        "provider": "mock",
+        "model": MOCK_MODEL_IDENTIFIER,
+        "timeout_seconds": 1.0,
+        "max_output_tokens": None,
+        "external_content_transmission": False,
+    }
+    assert not any("api_key" in key or "secret" in key or "credential" in key for key in safe_configuration)
     with pytest.raises(ValidationError):
         _settings(ai_provider_timeout_seconds=0)

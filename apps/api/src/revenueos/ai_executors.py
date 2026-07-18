@@ -39,6 +39,7 @@ from revenueos.ai_provider_contracts import (
     InfrastructureTestProviderInput,
     ProviderInput,
     ProviderMessage,
+    ProviderOutputSchema,
     ProviderRequest,
     ProviderResponse,
 )
@@ -133,7 +134,7 @@ class _StructuredOutputExecutor:
         schema_registry: OutputSchemaRegistry | None = None,
     ) -> None:
         self._settings = settings
-        self._providers = provider_registry if provider_registry is not None else AIProviderRegistry()
+        self._providers = provider_registry if provider_registry is not None else AIProviderRegistry(settings=settings)
         self._schemas = schema_registry if schema_registry is not None else create_default_output_schema_registry()
         self._prompts = (
             prompt_registry if prompt_registry is not None else create_default_prompt_registry(self._schemas)
@@ -164,7 +165,7 @@ class _StructuredOutputExecutor:
             self._log_configuration(job, rendered, schema)
             provider = self._providers.resolve(
                 self._settings.ai_provider_name,
-                self._settings.ai_provider_model_identifier,
+                self._settings.selected_ai_model_identifier,
             )
             logger.info(
                 "provider_selected",
@@ -219,11 +220,26 @@ class _StructuredOutputExecutor:
         response: ProviderResponse | None = None
         content: dict[str, object] | None = None
         output_attempt = 0
+        output_schema = ProviderOutputSchema.model_validate(
+            {
+                "schema_key": schema.schema_key,
+                "schema_version": schema.schema_version,
+                "json_schema": schema.validation_model.model_json_schema(
+                    mode="validation",
+                ),
+            }
+        )
 
         for output_attempt in range(
             1,
             self._settings.ai_structured_output_max_attempts + 1,
         ):
+            if cancellation_check is not None and await cancellation_check(job):
+                raise WorkerExecutionError(
+                    "execution_cancelled",
+                    "The AI job was cancelled.",
+                    retryable=False,
+                )
             request = ProviderRequest(
                 request_id=uuid.uuid5(
                     uuid.NAMESPACE_URL,
@@ -232,10 +248,11 @@ class _StructuredOutputExecutor:
                 organisation_id=job.organisation_id,
                 job_id=job.job_id,
                 job_type=job.job_type,
-                model_identifier=self._settings.ai_provider_model_identifier,
+                model_identifier=self._settings.selected_ai_model_identifier,
                 input_payload=input_factory(rendered.messages),
                 expected_schema_version=schema.schema_version,
-                timeout_seconds=self._settings.ai_provider_timeout_seconds,
+                output_schema=output_schema,
+                timeout_seconds=self._settings.selected_ai_timeout_seconds,
             )
             logger.info(
                 "provider_attempt_started",
@@ -506,7 +523,7 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
 
 
 class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
-    """Transcript-grounded Executive Summary execution through the mock port."""
+    """Transcript-grounded Executive Summary execution through the provider port."""
 
     async def execute(
         self,
@@ -584,7 +601,7 @@ class AIExecutorRegistry:
         configuration = settings or Settings()
         schemas = create_default_output_schema_registry()
         prompts = create_default_prompt_registry(schemas)
-        providers = AIProviderRegistry()
+        providers = AIProviderRegistry(settings=configuration)
         self._executors = {
             AIJobType.INFRASTRUCTURE_TEST.value: InfrastructureTestExecutor(
                 configuration,

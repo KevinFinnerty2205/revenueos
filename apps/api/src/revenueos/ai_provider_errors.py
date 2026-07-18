@@ -41,6 +41,15 @@ class ProviderUnavailableError(ProviderError):
         )
 
 
+class ProviderRateLimitError(ProviderError):
+    def __init__(self) -> None:
+        super().__init__(
+            "provider_rate_limited",
+            "The configured AI provider is temporarily rate limited.",
+            retryable=True,
+        )
+
+
 class ProviderTransientError(ProviderError):
     def __init__(self) -> None:
         super().__init__(
@@ -50,11 +59,47 @@ class ProviderTransientError(ProviderError):
         )
 
 
+class ProviderAuthenticationError(ProviderError):
+    def __init__(self) -> None:
+        super().__init__(
+            "provider_authentication_failed",
+            "The configured AI provider could not authenticate.",
+            retryable=False,
+        )
+
+
+class ProviderPermissionError(ProviderError):
+    def __init__(self) -> None:
+        super().__init__(
+            "provider_permission_denied",
+            "The configured AI provider does not permit this request.",
+            retryable=False,
+        )
+
+
 class InvalidProviderRequestError(ProviderError):
     def __init__(self) -> None:
         super().__init__(
             "invalid_provider_request",
             "The AI provider request did not satisfy the required contract.",
+            retryable=False,
+        )
+
+
+class ProviderRefusalError(ProviderError):
+    def __init__(self) -> None:
+        super().__init__(
+            "provider_refusal",
+            "The configured AI provider declined to generate this result.",
+            retryable=False,
+        )
+
+
+class ProviderIncompleteResponseError(ProviderError):
+    def __init__(self) -> None:
+        super().__init__(
+            "provider_incomplete_response",
+            "The configured AI provider returned an incomplete result.",
             retryable=False,
         )
 

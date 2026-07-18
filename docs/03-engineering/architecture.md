@@ -2,7 +2,14 @@
 
 ## Current scope
 
-WO-004C1 keeps the Sprint 3 modular monolith and WO-004A1/A2/B1/B2/B3 AI baseline. The durable worker now runs both its infrastructure test and one current-transcript Executive Summary through immutable prompts/schemas, bounded validation and the no-network mock. A meeting-scoped API and Intelligence tab expose only that capability. There is no real AI provider, additional intelligence schema, recording/media pipeline, connector, billing service or mobile application.
+WO-004C1A keeps the Sprint 3 modular monolith and
+WO-004A1/A2/B1/B2/B3/C1 AI baseline. The durable worker runs its infrastructure
+test and one current-transcript Executive Summary through immutable
+prompts/schemas and bounded validation. The selected provider is either the
+default no-network mock or a server-only OpenAI Responses API adapter. A
+meeting-scoped API and Intelligence tab expose only that capability. There is no
+additional intelligence schema, recording/media pipeline, connector, billing
+service or mobile application.
 
 ```text
 Browser
@@ -24,7 +31,7 @@ Browser
       safe render · strict parse/validate
               │
       typed provider contract/registry
-      deterministic mock only · no network
+      mock (default) or server-side OpenAI
               │
               ▼
        PostgreSQL / Supabase later
@@ -84,9 +91,30 @@ Each AI job captures the exact current transcript version requested; it cannot s
 
 `AIWorkerService` discovers only opaque organisation IDs through a fixed PostgreSQL scheduler function, then sets one transaction-local tenant context for every queue transaction. Claims and recovery use `FOR UPDATE SKIP LOCKED`; heartbeat updates require exact worker ownership. Execution occurs without an open database transaction. The completion transaction locks the owned running job, rechecks cancellation, stages the validated artefact and commits artefact/audits/completed state atomically. Retries use persisted attempts, bounded exponential backoff and `next_attempt_at`.
 
-`InfrastructureTestExecutor` and `ExecutiveSummaryExecutor` resolve their prompt/schema pairs and invoke the configured `mock` / `mock-infrastructure-v1` adapter. Executive Summary loads only the exact current tenant transcript pinned by the job, enforces 50,000 characters without truncation and renders transcript/title as JSON-delimited untrusted data. Only complete JSON objects that pass the registered strict Pydantic schema can reach artefact persistence. Malformed, non-object and schema-invalid output may retry within one execution up to a small configured limit; exhaustion is non-retryable, while transient provider errors continue through the durable worker retry path. The mock can process the transcript deterministically but makes no network call, so customer content does not leave the application.
+`InfrastructureTestExecutor` and `ExecutiveSummaryExecutor` resolve their
+prompt/schema pairs and invoke exactly the configured provider. Executive
+Summary loads only the exact current tenant transcript pinned by the job,
+enforces 50,000 characters without truncation and renders transcript/title as
+JSON-delimited untrusted data. The provider request carries the registry-derived
+strict JSON Schema. Only complete JSON objects that pass the registered strict
+Pydantic schema can reach artefact persistence. Malformed, non-object and
+schema-invalid output may retry within one execution up to a small configured
+limit; exhaustion is non-retryable, while transient provider errors continue
+through the durable worker retry path.
 
-Existing AI job fields persist prompt/schema/provider/model/request trace, zero mock token usage, zero integer cost and `AUD`; artefacts copy exact labels. Migration `0007_executive_summary` changes only the existing job/artefact type checks to accept `executive_summary`; table shape, forced RLS, composite keys and immutability guards remain unchanged.
+The mock processes the transcript deterministically with no network call. The
+OpenAI adapter uses the official asynchronous Responses API with strict
+`json_schema`, `store=false`, no tools and no streaming. Enabling it sends the
+rendered instructions and selected transcript to OpenAI. SDK types remain inside
+the adapter and SDK retries are disabled so the durable worker remains the retry
+authority.
+
+Existing AI job fields persist prompt/schema/provider/model/request trace,
+available token usage, integer cost and `AUD`; artefacts copy exact labels.
+OpenAI estimated cost remains zero/not calculated because no approved pricing
+source exists. Migration `0007_executive_summary` remains the head migration;
+WO-004C1A requires no schema change. Table shape, forced RLS, composite keys and
+immutability guards remain unchanged.
 
 The API starts without a database so developers can inspect health and the shell, but `/ready` returns `503` and marks persistence unavailable. CRUD routes return a safe service-unavailable response.
 
@@ -98,10 +126,26 @@ FastAPI Pydantic models and OpenAPI are canonical. `packages/shared` mirrors the
 
 Vercel is planned for the web application. The API requires a managed Python host that supports a long-running ASGI process, and the worker requires an independently supervised long-running process from the same release. Both need private database connectivity, secrets and rolling rollback. Select hosting in a later ADR; the current system has no production deployment.
 
-Supabase PostgreSQL, Clerk, Supabase Storage, OpenAI and Stripe are planned managed services. Only PostgreSQL-compatible persistence and auth adapter paths exist now.
+Supabase PostgreSQL, Clerk, Supabase Storage, OpenAI and Stripe are planned
+managed services. PostgreSQL-compatible persistence, auth adapter paths and the
+server-side OpenAI provider exist now. Production hosting and customer-content
+enablement are not approved.
 
 ## Future extension boundaries
 
-Future, separately authorised Meeting Intelligence work can add a real provider adapter or additional immutable prompt/schema pairs on top of the durable worker. It must define source evidence, prompt-injection controls, evaluation thresholds and privacy terms; keep vendor SDK types behind the provider port and generated content separate from supplied source text; and preserve exact trace, RLS, short-transaction and append-only artefact rules. Conversation recording/capture, storage and external systems will use narrow adapters. A React Native client may later consume the same versioned API; no mobile code is included now.
+Future, separately authorised Meeting Intelligence work can add additional
+immutable prompt/schema pairs or providers on top of the durable worker. It must
+define source evidence, prompt-injection controls, evaluation thresholds and
+privacy terms; keep vendor SDK types behind the provider port and generated
+content separate from supplied source text; and preserve exact trace, RLS,
+short-transaction and append-only artefact rules. Conversation
+recording/capture, storage and external systems will use narrow adapters. A
+React Native client may later consume the same versioned API; no mobile code is
+included now.
 
-See [AI database foundation](ai-database-foundation.md), [AI worker and durable job queue](ai-worker-queue.md), [AI provider abstraction](ai-provider-abstraction.md), [prompt registry and structured output](prompt-registry-and-structured-output.md) and [Executive Summary intelligence](executive-summary-intelligence.md).
+See [AI database foundation](ai-database-foundation.md),
+[AI worker and durable job queue](ai-worker-queue.md),
+[AI provider abstraction](ai-provider-abstraction.md),
+[OpenAI provider integration](openai-provider-integration.md),
+[prompt registry and structured output](prompt-registry-and-structured-output.md)
+and [Executive Summary intelligence](executive-summary-intelligence.md).

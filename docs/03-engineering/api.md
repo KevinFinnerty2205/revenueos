@@ -127,4 +127,8 @@ payload, raw errors or transcript text.
 
 ## Scope boundary
 
-There are no generic AI job/artefact, cancellation, recording, media upload/storage, transcription, real/external AI, additional intelligence, email, calendar, CRM, billing, worker-control or automation endpoints. Clerk token verification is not connected.
+There are no generic AI job/artefact, provider configuration/model listing,
+cancellation, recording, media upload/storage, transcription, additional
+intelligence, email, calendar, CRM, billing, worker-control or automation
+endpoints. Mock/OpenAI selection is server-side worker configuration and does not
+change this API contract. Clerk token verification is not connected.

@@ -246,10 +246,13 @@ def test_repeated_invalid_output_exhausts_configured_attempts(
 
 def test_cancellation_between_output_attempts_stops_execution() -> None:
     provider = _RecordingMockProvider(("malformed_json", "valid_mapping"))
+    check_count = 0
 
     async def cancellation_check(job: ClaimedAIJob) -> bool:
+        nonlocal check_count
         assert job.job_id == JOB_ID
-        return True
+        check_count += 1
+        return check_count > 1
 
     with pytest.raises(WorkerExecutionError) as caught:
         asyncio.run(
@@ -291,13 +294,8 @@ def test_prompt_schema_and_configuration_errors_do_not_invoke_provider() -> None
     assert schema_error.value.code == "output_schema_not_found"
     assert provider.requests == []
 
-    with pytest.raises(WorkerExecutionError) as provider_configuration:
-        asyncio.run(
-            InfrastructureTestExecutor(
-                _settings(ai_provider_name="unknown_provider"),
-            ).execute(_claim())
-        )
-    assert provider_configuration.value.code == "unsupported_provider"
+    with pytest.raises(ValidationError):
+        _settings(ai_provider_name="unknown_provider")
 
 
 def test_non_retryable_provider_error_is_not_output_retried() -> None:

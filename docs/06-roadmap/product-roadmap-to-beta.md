@@ -72,7 +72,33 @@ These work orders create implementation seams only and do not change the separat
 - **Security gates:** Trusted tenant context, forced RLS, exact transcript version, 50,000-character no-truncation limit, prompt-injection-as-data, content-redacted logs/audits and zero external content transfer.
 - **Demonstration:** Generate a mock Executive Summary from an authorised transcript, observe queued/running state and retain the completed result on refresh.
 
-This capability validates orchestration and product states, not AI quality. The later proposed source-backed intelligence sprint still owns a real provider, citations, human review and evaluation gates. Production customer data remains prohibited.
+This capability validates orchestration and product states, not AI quality. The
+following C1A work order adds a real provider adapter only; the later proposed
+source-backed intelligence sprint still owns citations, human review and
+evaluation gates. Production customer data remains prohibited.
+
+### WO-004C1A — Production OpenAI Provider Integration — Complete
+
+- **Objective:** Add a real server-side provider option to the existing
+  Executive Summary flow without changing its API/UI or adding intelligence
+  fields.
+- **Major deliverables:** Official OpenAI Responses API adapter, strict
+  registry-derived JSON Schema, server-only configuration/secrets, safe
+  response/error/usage normalisation, configurable mock/OpenAI selection and
+  deterministic SDK-fake coverage.
+- **Out of scope:** Another intelligence capability, citations/review, provider
+  settings UI, tenant credentials, other vendors, recording, transcription,
+  integration, billing or agents.
+- **Security gates:** Mock remains default; no browser key; content-redacted
+  telemetry; durable retry/RLS boundaries preserved; explicit external
+  transcript-transmission warning.
+- **Demonstration:** With synthetic content and an operator-supplied restricted
+  key, run the unchanged Executive Summary journey through an available OpenAI
+  model, then roll back to mock.
+
+The adapter is production-shaped but does not authorise production customer
+data. Identity, consent, provider privacy/retention, deletion and operational
+readiness gates remain outstanding.
 
 ### Sprint 4 — Production Identity and Organisation Administration
 
@@ -111,7 +137,7 @@ This capability validates orchestration and product states, not AI quality. The 
 
 - **Objective:** Generate structured, cited meeting summary and next-step candidates behind a provider abstraction.
 - **User value:** Users review accurate draft intelligence instead of writing notes from scratch.
-- **Major deliverables:** Transcription provider if required, real structured AI adapter, meeting-intelligence prompt/schema definitions, AI artefacts, citations/confidence, summary/next-step review UI, deterministic mocks, evaluation and cost/latency instrumentation.
+- **Major deliverables:** Transcription provider if required, production-gated use of the existing structured AI adapter, meeting-intelligence prompt/schema definitions, AI artefacts, citations/confidence, summary/next-step review UI, deterministic mocks, evaluation and cost/latency instrumentation.
 - **Dependencies:** Reviewed transcript from Sprint 6 and approved AI/provider privacy posture.
 - **Out of scope:** Relationship memory, external actions, assistant and autonomous execution.
 - **Acceptance criteria:** Supported source produces schema-valid cited output; unsupported claims fail review gates; user edits/rejects; low-confidence/partial/provider failure is explicit; eval thresholds pass.

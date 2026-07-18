@@ -17,6 +17,7 @@ PROVIDER_NAME_MAX_LENGTH = 100
 MODEL_IDENTIFIER_MAX_LENGTH = 200
 PROVIDER_REQUEST_ID_MAX_LENGTH = 255
 PROVIDER_FINISH_REASON_MAX_LENGTH = 100
+PROVIDER_SCHEMA_KEY_MAX_LENGTH = 64
 
 BoundedProviderName = Annotated[
     str,
@@ -109,6 +110,37 @@ class ExecutiveSummaryProviderInput(BaseModel):
 ProviderInput = InfrastructureTestProviderInput | ExecutiveSummaryProviderInput
 
 
+class ProviderOutputSchema(BaseModel):
+    """Provider-neutral strict JSON schema resolved from the application registry."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    schema_key: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=PROVIDER_SCHEMA_KEY_MAX_LENGTH,
+            pattern=r"^[A-Za-z0-9_-]+$",
+        ),
+    ]
+    schema_version: int = Field(ge=1)
+    json_schema: dict[str, JsonValue] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_strict_object_schema(self) -> ProviderOutputSchema:
+        if (
+            self.json_schema.get("type") != "object"
+            or self.json_schema.get("additionalProperties") is not False
+            or not isinstance(self.json_schema.get("properties"), dict)
+            or not isinstance(self.json_schema.get("required"), list)
+        ):
+            raise ValueError(
+                "Provider output schema must be a strict object schema.",
+            )
+        return self
+
+
 class ProviderRequest(BaseModel):
     """Provider-neutral, immutable request contract for one bounded invocation."""
 
@@ -121,6 +153,7 @@ class ProviderRequest(BaseModel):
     model_identifier: BoundedModelIdentifier
     input_payload: ProviderInput
     expected_schema_version: int = Field(ge=1)
+    output_schema: ProviderOutputSchema
     timeout_seconds: float = Field(gt=0, le=300)
 
     @field_validator("request_id", "organisation_id", "job_id")
@@ -129,6 +162,14 @@ class ProviderRequest(BaseModel):
         if value.int == 0:
             raise ValueError("Provider request identifiers must not be nil UUIDs.")
         return value
+
+    @model_validator(mode="after")
+    def validate_output_schema_version(self) -> ProviderRequest:
+        if self.output_schema.schema_version != self.expected_schema_version:
+            raise ValueError(
+                "Provider output schema version must match the expected version.",
+            )
+        return self
 
 
 class ProviderResponse(BaseModel):

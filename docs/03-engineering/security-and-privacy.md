@@ -1,6 +1,6 @@
 # Security and privacy
 
-This is the WO-004C1 engineering baseline, not legal advice or a certification claim.
+This is the WO-004C1A engineering baseline, not legal advice or a certification claim.
 
 ## Authentication and authorisation
 
@@ -48,9 +48,23 @@ tenant-bound transaction. The API returns safe not-found for cross-tenant
 meeting access. Existing forced RLS and composite keys continue to cover
 meeting, transcript, job and artefact rows.
 
+WO-004C1A changes only provider execution after the tenant-bound source
+transaction closes. OpenAI selection does not receive a client-supplied tenant
+identifier and does not change repository predicates, worker ownership,
+completion locks, composite tenant keys or forced RLS. The provider adapter has
+no database access. Cross-tenant API, worker and PostgreSQL tests remain
+authoritative.
+
 ## Secrets
 
 Environment examples contain names and local-only placeholders. Real credentials belong in environment-specific managed secret stores. Production startup rejects mock auth or incomplete Clerk verification configuration.
+
+`OPENAI_API_KEY` is accepted only by server settings, represented as a secret
+value and required only when `AI_PROVIDER=openai`. It has no browser or
+`NEXT_PUBLIC_*` variable, safe-configuration output, database column, audit
+field or API response. Enabling OpenAI must inject the key through a managed
+secret service and must never place it in build arguments or frontend
+environments.
 
 Secrets, tokens, authorisation headers, database URLs, signed URLs and provider payloads must not enter responses, logs or traces.
 
@@ -76,11 +90,16 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - Worker logs allow safe IDs, attempts, status, duration and error codes only; they exclude content, participant data, secrets, database URLs and raw exception messages.
 - Provider logs allow only safe provider/model/request labels, latency, usage,
   integer cost, currency, finish reason and bounded error classification; they
-  exclude full request/response payloads and artefact content.
-- The deterministic mock provider receives only job-specific ordered messages.
-  Executive Summary includes the bounded current transcript as JSON-delimited
-  untrusted data; the mock processes it in-process, makes no network call and
-  requires no API key. No customer content leaves the application.
+  exclude full request/response payloads, raw SDK exceptions and artefact
+  content.
+- The selected provider receives only job-specific ordered messages and the
+  registry-derived output schema. The mock processes the bounded
+  JSON-delimited transcript in-process and makes no network call. OpenAI
+  selection sends the rendered instructions and selected transcript to OpenAI
+  through the server-side Responses API.
+- OpenAI requests use strict structured output, `store=false`, no tools, no
+  streaming and zero SDK retries. The application Pydantic validator remains
+  authoritative.
 - Provider timeouts are bounded and retryable. Unsupported provider/model,
   invalid request and configuration fail without inline retry.
 - Only malformed JSON, non-object JSON and schema-invalid output receive a
@@ -116,12 +135,16 @@ Meeting deletion currently makes records unavailable to normal application reads
 - Clerk session/JWT verification is not connected.
 - The production non-bypass database role and grants are not provisioned by this repository; CI tests the required RLS behaviour with a temporary restricted role.
 - Role-specific CRUD permissions, organisation-wide audit export, retention and customer-data erasure workflows are not yet specified.
-- Executive Summary is deterministic mock-generated output, not a real LLM
-  result. Real-provider privacy/retention, network, rate/cost and quality
-  controls are not implemented.
+- OpenAI output is available when explicitly configured, but provider
+  privacy/retention/residency approval, network policy, quality evaluation,
+  accurate cost/budget controls and production enablement are incomplete.
 - The scheduler function necessarily reveals opaque eligible organisation UUIDs to the database worker role; deployment grants and role separation require production review.
 - Transcript version counters do not preserve historical transcript bodies, so version traceability is not yet source snapshot retention.
 - Hosting, secret management, monitoring, backup and incident-response providers are not selected.
 - Recording wording, residency and deletion commitments require product/legal approval before conversation features.
 
-Do not use this system with production customer data. Production identity verification, operational controls, consent evidence, retention/export/erasure and production audit policy are not complete.
+Do not use this system with production customer data. Enabling OpenAI changes
+the data-flow boundary and externally transmits selected transcript content.
+Production identity verification, provider/privacy approval, operational
+controls, consent evidence, retention/export/erasure and production audit policy
+are not complete.
