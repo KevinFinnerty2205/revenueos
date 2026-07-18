@@ -71,3 +71,19 @@ class MeetingAuditEntityType(StrEnum):
     MEETING = "meeting"
     PARTICIPANT = "participant"
     TRANSCRIPT = "transcript"
+
+
+class AIJobStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class AIJobType(StrEnum):
+    INFRASTRUCTURE_TEST = "infrastructure_test"
+
+
+class AIArtifactType(StrEnum):
+    INFRASTRUCTURE_TEST = "infrastructure_test"

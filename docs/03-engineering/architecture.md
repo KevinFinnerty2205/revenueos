@@ -2,7 +2,7 @@
 
 ## Current scope
 
-Sprint 3 remains a modular monolith with a web application, a versioned API and PostgreSQL-compatible persistence. It adds the Meeting Domain—meetings, participants, supplied plain-text transcripts and content-minimised audit history—to the Sprint 2 business modules. There is still no AI runtime, recording/media pipeline, worker, connector, billing service or mobile application.
+WO-004A1 keeps the Sprint 3 modular monolith and adds only a dormant database/ORM foundation for future AI processing: tenant-owned processing jobs and append-oriented, versioned artefacts pinned to a meeting, transcript and transcript version. It does not add an AI runtime, repository, service, worker, provider, prompt, API route, UI, recording/media pipeline, connector, billing service or mobile application.
 
 ```text
 Browser
@@ -17,7 +17,8 @@ Browser
               │
               ▼
        PostgreSQL / Supabase later
-       identity · business records · meetings · RLS
+       identity · business records · meetings
+       dormant AI jobs/artefacts · RLS
 ```
 
 ## Repository boundaries
@@ -48,17 +49,21 @@ FastAPI exposes:
 
 Routes use Pydantic request/response models, camel-case JSON, bounded pagination, explicit filters/sorts, request IDs, structured content-redacted logs, explicit CORS and central safe error handlers. Route handlers delegate business rules to services and all SQL to repositories. Meeting, participant and transcript services share one tenant-aware repository without introducing a new persistence pattern.
 
+WO-004A1 does not expose AI jobs or artefacts through the API. Their tables and ORM models are persistence seams only.
+
 ## Persistence and tenancy
 
-SQLAlchemy 2 models Organisation, User, OrganisationMembership, Company, Contact, Opportunity, Task, Meeting, MeetingParticipant, Transcript and MeetingAuditEvent. UUIDs, UTC timestamps, allowed enum values, bounded numeric values, unique organisation slugs, unique external auth IDs and membership uniqueness are enforced in schema and migrations.
+SQLAlchemy 2 models Organisation, User, OrganisationMembership, Company, Contact, Opportunity, Task, Meeting, MeetingParticipant, Transcript, MeetingAuditEvent, AIJob and AIArtifact. UUIDs, UTC timestamps, allowed enum values, bounded numeric values, unique organisation slugs, unique external auth IDs and membership uniqueness are enforced in schema and migrations.
 
 Every tenant-owned row, including meeting children and audit events, has a non-null `organisation_id`. Composite foreign keys include the organisation for company/contact/meeting/participant relationships and membership-owned user fields, so the database cannot attach a record to another tenant even if application validation regresses. Business parent deletes remain restrictive. Meetings, participants and transcripts use `deleted_at`; deleting a meeting soft-deletes its active children in one transaction.
 
-The active organisation originates in the trusted auth adapter, never a body, path or query tenant identifier. Each request sets PostgreSQL's transaction-local `app.organisation_id`; repositories also apply an explicit organisation predicate. Companies, contacts, opportunities, tasks and all four Meeting Domain tables enable and force RLS. Composite tenant foreign keys and service validation reject cross-tenant company/contact/member references. Runtime deployment must use a non-bypass application role; migration credentials remain separate.
+The active organisation originates in the trusted auth adapter, never a body, path or query tenant identifier. Each request sets PostgreSQL's transaction-local `app.organisation_id`; repositories also apply an explicit organisation predicate. Companies, contacts, opportunities, tasks, all four Meeting Domain tables, AI jobs and AI artefacts enable and force RLS. Composite tenant foreign keys reject cross-tenant meeting, transcript, requester, job and artefact references. Runtime deployment must use a non-bypass application role; migration credentials remain separate.
 
 All authenticated organisation members currently have the same entity and meeting CRUD access. Every Meeting Domain request also verifies an active local membership. This is the safest simple interpretation because no entity-level role matrix is specified. A future authorisation change requires an explicit product decision and policy tests.
 
 One active or soft-deleted transcript row is retained per meeting. Mutations lock the meeting aggregate root; transcript corrections also lock the transcript row, compare an optimistic integer `version` and fail stale updates with `409`. Audit events record actor, action, entity identity, changed field names and transcript version, never raw transcript or participant content. The version counter is an extension seam, not transcript snapshot history.
+
+Each AI job captures the exact current transcript version requested; it cannot silently point to a different meeting or transcript. Each AI artefact must match its job's organisation, meeting, transcript and transcript version. Logical artefact versions are unique and earlier content cannot be updated at the database layer; only a one-way `superseded_at` marker may change. The current transcript table still mutates one body in place, so a pinned version number does not yet provide historical source-text reconstruction.
 
 The API starts without a database so developers can inspect health and the shell, but `/ready` returns `503` and marks persistence unavailable. CRUD routes return a safe service-unavailable response.
 
@@ -74,4 +79,6 @@ Supabase PostgreSQL, Clerk, Supabase Storage, OpenAI and Stripe are planned mana
 
 ## Future extension boundaries
 
-Future Meeting Intelligence can attach versioned artefacts to `Meeting.id` and the exact `Transcript.version` without changing the current aggregate. It must use the existing provider-abstraction and background-work boundaries, keep generated content separate from supplied source text, and require its own authorised work order, migration and security review. Conversation recording/capture, storage and external systems will use narrow adapters; long-running work will run outside HTTP requests. A React Native client may later consume the same versioned API; no mobile code is included now.
+Future, separately authorised Meeting Intelligence work can add tenant-scoped repositories and services, durable job claiming, provider and prompt abstractions, validated structured output and API/UI lifecycle visibility on top of these tables. It must keep generated content separate from supplied source text and preserve the exact trace and append-only artefact rules. Conversation recording/capture, storage and external systems will use narrow adapters; long-running work will run outside HTTP requests. A React Native client may later consume the same versioned API; no mobile code is included now.
+
+See [AI database foundation](ai-database-foundation.md) for the schema contract and limitations.

@@ -2,13 +2,13 @@
 
 RevenueOS is the AI sales teammate that remembers every customer interaction and turns conversations into action.
 
-This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated business entities and Sprint 3 Meeting Domain. Meetings, participants, deliberately supplied plain-text transcripts and content-minimised audit history are implemented. Recording, media storage, transcription, AI processing, integrations, production Clerk verification and billing are not implemented.
+This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated business entities, Sprint 3 Meeting Domain and the WO-004A1 dormant AI database foundation. Meetings, participants, deliberately supplied plain-text transcripts, content-minimised audit history, AI job persistence and versioned artefact persistence are implemented. No repository/service/API/UI exposes the AI tables, and recording, media storage, transcription, AI execution, integrations, production Clerk verification and billing are not implemented.
 
 ## Product blueprint
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 as described below.
+Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 plus WO-004A1 as described below.
 
 ## Prerequisites
 
@@ -181,4 +181,4 @@ The web output is started with `pnpm --filter @revenueos/web start`. The API pac
 - **Port already in use:** stop the existing process or change the local web/API command and update the corresponding URL/CORS variables.
 - **OpenAPI or TypeScript contract changed:** update the small `packages/shared` surface in the same pull request. Pydantic/OpenAPI remains canonical.
 
-See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [API reference](docs/03-engineering/api.md) and [Sprint 3 record](docs/07-sprints/sprint-03-meeting-domain.md).
+See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [API reference](docs/03-engineering/api.md) and [WO-004A1 record](docs/07-sprints/wo-004a1-ai-database-foundation.md).

@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     CheckConstraint,
     Date,
     DateTime,
@@ -23,6 +24,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
 from revenueos.domain import (
+    AIArtifactType,
+    AIJobStatus,
+    AIJobType,
     AttendanceStatus,
     CompanyStatus,
     MeetingStatus,
@@ -65,6 +69,16 @@ class Organisation(TimestampMixin, Base):
         back_populates="organisation",
         cascade="all, delete-orphan",
     )
+    ai_jobs: Mapped[list[AIJob]] = relationship(
+        back_populates="organisation",
+        cascade="all, delete-orphan",
+        foreign_keys="AIJob.organisation_id",
+    )
+    ai_artifacts: Mapped[list[AIArtifact]] = relationship(
+        back_populates="organisation",
+        foreign_keys="AIArtifact.organisation_id",
+        viewonly=True,
+    )
 
 
 class User(TimestampMixin, Base):
@@ -79,6 +93,10 @@ class User(TimestampMixin, Base):
     memberships: Mapped[list[OrganisationMembership]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    requested_ai_jobs: Mapped[list[AIJob]] = relationship(
+        back_populates="requested_by_user",
+        foreign_keys="AIJob.requested_by_user_id",
     )
 
 
@@ -422,6 +440,17 @@ class Meeting(TimestampMixin, Base):
     updated_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    ai_jobs: Mapped[list[AIJob]] = relationship(
+        back_populates="meeting",
+        foreign_keys="[AIJob.organisation_id, AIJob.meeting_id]",
+        viewonly=True,
+    )
+    ai_artifacts: Mapped[list[AIArtifact]] = relationship(
+        back_populates="meeting",
+        foreign_keys="[AIArtifact.organisation_id, AIArtifact.meeting_id]",
+        viewonly=True,
+    )
+
 
 class MeetingParticipant(Base):
     __tablename__ = "meeting_participants"
@@ -522,6 +551,12 @@ class Transcript(TimestampMixin, Base):
         UniqueConstraint("organisation_id", "id", name="uq_transcripts_organisation_id_id"),
         UniqueConstraint(
             "organisation_id",
+            "id",
+            "meeting_id",
+            name="uq_transcripts_organisation_id_meeting",
+        ),
+        UniqueConstraint(
+            "organisation_id",
             "meeting_id",
             name="uq_transcripts_organisation_meeting",
         ),
@@ -545,6 +580,17 @@ class Transcript(TimestampMixin, Base):
         server_default=TranscriptSource.MANUAL.value,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    ai_jobs: Mapped[list[AIJob]] = relationship(
+        back_populates="transcript",
+        foreign_keys="[AIJob.organisation_id, AIJob.transcript_id, AIJob.meeting_id]",
+        viewonly=True,
+    )
+    ai_artifacts: Mapped[list[AIArtifact]] = relationship(
+        back_populates="transcript",
+        foreign_keys="[AIArtifact.organisation_id, AIArtifact.transcript_id, AIArtifact.meeting_id]",
+        viewonly=True,
+    )
 
 
 class MeetingAuditEvent(Base):
@@ -603,4 +649,337 @@ class MeetingAuditEvent(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+
+
+class AIJob(TimestampMixin, Base):
+    __tablename__ = "ai_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "job_type IN ('infrastructure_test')",
+            name="ck_ai_jobs_type",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'running', 'completed', 'failed', 'cancelled')",
+            name="ck_ai_jobs_status",
+        ),
+        CheckConstraint("transcript_version > 0", name="ck_ai_jobs_transcript_version"),
+        CheckConstraint(
+            "prompt_version IS NULL OR prompt_version > 0",
+            name="ck_ai_jobs_prompt_version",
+        ),
+        CheckConstraint("schema_version > 0", name="ck_ai_jobs_schema_version"),
+        CheckConstraint("attempt_count >= 0", name="ck_ai_jobs_attempt_count"),
+        CheckConstraint("max_attempts >= 1", name="ck_ai_jobs_max_attempts"),
+        CheckConstraint(
+            "input_token_count IS NULL OR input_token_count >= 0",
+            name="ck_ai_jobs_input_tokens",
+        ),
+        CheckConstraint(
+            "output_token_count IS NULL OR output_token_count >= 0",
+            name="ck_ai_jobs_output_tokens",
+        ),
+        CheckConstraint(
+            "estimated_cost_minor_units IS NULL OR estimated_cost_minor_units >= 0",
+            name="ck_ai_jobs_estimated_cost",
+        ),
+        CheckConstraint(
+            "processing_duration_ms IS NULL OR processing_duration_ms >= 0",
+            name="ck_ai_jobs_processing_duration",
+        ),
+        CheckConstraint(
+            "last_error_message_safe IS NULL OR length(last_error_message_safe) <= 1000",
+            name="ck_ai_jobs_safe_error_length",
+        ),
+        CheckConstraint(
+            "idempotency_key IS NULL OR length(idempotency_key) <= 200",
+            name="ck_ai_jobs_idempotency_length",
+        ),
+        CheckConstraint(
+            "currency IS NULL OR (length(currency) = 3 AND currency = upper(currency))",
+            name="ck_ai_jobs_currency",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"],
+            ["meetings.organisation_id", "meetings.id"],
+            name="fk_ai_jobs_meeting_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_id", "meeting_id"],
+            [
+                "transcripts.organisation_id",
+                "transcripts.id",
+                "transcripts.meeting_id",
+            ],
+            name="fk_ai_jobs_transcript_meeting_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "requested_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_ai_jobs_requester_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_ai_jobs_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            "meeting_id",
+            "transcript_id",
+            "transcript_version",
+            name="uq_ai_jobs_artifact_trace",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "meeting_id",
+            "transcript_version",
+            "job_type",
+            "idempotency_key",
+            name="uq_ai_jobs_idempotency",
+        ),
+        Index("ix_ai_jobs_organisation_meeting", "organisation_id", "meeting_id"),
+        Index("ix_ai_jobs_organisation_status", "organisation_id", "status"),
+        Index("ix_ai_jobs_status_next_attempt", "status", "next_attempt_at"),
+        Index("ix_ai_jobs_status_lease_expires", "status", "lease_expires_at"),
+        Index(
+            "ix_ai_jobs_transcript_version",
+            "organisation_id",
+            "transcript_id",
+            "transcript_version",
+        ),
+        Index("ix_ai_jobs_organisation_created", "organisation_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    meeting_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    job_type: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default=AIJobType.INFRASTRUCTURE_TEST.value,
+        server_default=AIJobType.INFRASTRUCTURE_TEST.value,
+    )
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default=AIJobStatus.PENDING.value,
+        server_default=AIJobStatus.PENDING.value,
+    )
+    provider_key: Mapped[str | None] = mapped_column(String(100))
+    model_name: Mapped[str | None] = mapped_column(String(200))
+    prompt_key: Mapped[str | None] = mapped_column(String(100))
+    prompt_version: Mapped[int | None] = mapped_column(Integer)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    idempotency_key: Mapped[str | None] = mapped_column(String(200))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancellation_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(100))
+    last_error_message_safe: Mapped[str | None] = mapped_column(String(1000))
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    input_token_count: Mapped[int | None] = mapped_column(Integer)
+    output_token_count: Mapped[int | None] = mapped_column(Integer)
+    estimated_cost_minor_units: Mapped[int | None] = mapped_column(BigInteger)
+    currency: Mapped[str | None] = mapped_column(String(3))
+    processing_duration_ms: Mapped[int | None] = mapped_column(BigInteger)
+
+    organisation: Mapped[Organisation] = relationship(
+        back_populates="ai_jobs",
+        foreign_keys=[organisation_id],
+    )
+    meeting: Mapped[Meeting] = relationship(
+        back_populates="ai_jobs",
+        foreign_keys=[organisation_id, meeting_id],
+        viewonly=True,
+    )
+    transcript: Mapped[Transcript] = relationship(
+        back_populates="ai_jobs",
+        foreign_keys=[organisation_id, transcript_id, meeting_id],
+        viewonly=True,
+    )
+    requested_by_user: Mapped[User] = relationship(
+        back_populates="requested_ai_jobs",
+        foreign_keys=[requested_by_user_id],
+    )
+    artifacts: Mapped[list[AIArtifact]] = relationship(
+        back_populates="job",
+        foreign_keys=(
+            "[AIArtifact.organisation_id, AIArtifact.job_id, AIArtifact.meeting_id, "
+            "AIArtifact.transcript_id, AIArtifact.transcript_version]"
+        ),
+    )
+
+
+class AIArtifact(Base):
+    __tablename__ = "ai_artifacts"
+    __table_args__ = (
+        CheckConstraint(
+            "artifact_type IN ('infrastructure_test')",
+            name="ck_ai_artifacts_type",
+        ),
+        CheckConstraint("artifact_version > 0", name="ck_ai_artifacts_version"),
+        CheckConstraint("schema_version > 0", name="ck_ai_artifacts_schema_version"),
+        CheckConstraint("transcript_version > 0", name="ck_ai_artifacts_transcript_version"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="ck_ai_artifacts_confidence",
+        ),
+        CheckConstraint(
+            "prompt_version IS NULL OR prompt_version > 0",
+            name="ck_ai_artifacts_prompt_version",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"],
+            ["meetings.organisation_id", "meetings.id"],
+            name="fk_ai_artifacts_meeting_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_id", "meeting_id"],
+            [
+                "transcripts.organisation_id",
+                "transcripts.id",
+                "transcripts.meeting_id",
+            ],
+            name="fk_ai_artifacts_transcript_meeting_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "organisation_id",
+                "job_id",
+                "meeting_id",
+                "transcript_id",
+                "transcript_version",
+            ],
+            [
+                "ai_jobs.organisation_id",
+                "ai_jobs.id",
+                "ai_jobs.meeting_id",
+                "ai_jobs.transcript_id",
+                "ai_jobs.transcript_version",
+            ],
+            name="fk_ai_artifacts_job_trace",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            name="uq_ai_artifacts_organisation_id_id",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "meeting_id",
+            "transcript_id",
+            "transcript_version",
+            "artifact_type",
+            "artifact_version",
+            name="uq_ai_artifacts_logical_version",
+        ),
+        Index(
+            "ix_ai_artifacts_organisation_meeting",
+            "organisation_id",
+            "meeting_id",
+        ),
+        Index(
+            "ix_ai_artifacts_organisation_meeting_type",
+            "organisation_id",
+            "meeting_id",
+            "artifact_type",
+        ),
+        Index(
+            "ix_ai_artifacts_transcript_version",
+            "organisation_id",
+            "transcript_id",
+            "transcript_version",
+        ),
+        Index("ix_ai_artifacts_job", "organisation_id", "job_id"),
+        Index(
+            "ix_ai_artifacts_latest_version",
+            "organisation_id",
+            "meeting_id",
+            "transcript_version",
+            "artifact_type",
+            "artifact_version",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    meeting_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    job_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    artifact_type: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default=AIArtifactType.INFRASTRUCTURE_TEST.value,
+        server_default=AIArtifactType.INFRASTRUCTURE_TEST.value,
+    )
+    artifact_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt_key: Mapped[str | None] = mapped_column(String(100))
+    prompt_version: Mapped[int | None] = mapped_column(Integer)
+    provider_key: Mapped[str | None] = mapped_column(String(100))
+    model_name: Mapped[str | None] = mapped_column(String(200))
+    content_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True),
+        nullable=False,
+    )
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    organisation: Mapped[Organisation] = relationship(
+        back_populates="ai_artifacts",
+        foreign_keys=[organisation_id],
+        viewonly=True,
+    )
+    meeting: Mapped[Meeting] = relationship(
+        back_populates="ai_artifacts",
+        foreign_keys=[organisation_id, meeting_id],
+        viewonly=True,
+    )
+    transcript: Mapped[Transcript] = relationship(
+        back_populates="ai_artifacts",
+        foreign_keys=[organisation_id, transcript_id, meeting_id],
+        viewonly=True,
+    )
+    job: Mapped[AIJob] = relationship(
+        back_populates="artifacts",
+        foreign_keys=[
+            organisation_id,
+            job_id,
+            meeting_id,
+            transcript_id,
+            transcript_version,
+        ],
     )

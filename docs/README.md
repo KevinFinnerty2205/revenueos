@@ -33,6 +33,7 @@ This is the canonical product and engineering documentation index. Documents dis
 ### Current implementation
 
 - [Application architecture](03-engineering/architecture.md)
+- [AI database foundation](03-engineering/ai-database-foundation.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -63,6 +64,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Sprint 1: foundation](07-sprints/sprint-01-foundation.md)
 - [Sprint 2: core business entities](07-sprints/sprint-02-core-business-entities.md)
 - [Sprint 3: Meeting Domain Foundation](07-sprints/sprint-03-meeting-domain.md)
+- [WO-004A1: AI Database Foundation](07-sprints/wo-004a1-ai-database-foundation.md)
 
 ## 08 — Decision records
 
@@ -70,9 +72,10 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0002: tenant-owned business entities](08-decisions/0002-tenant-business-entities.md)
 - [ADR 0003: product blueprint and beta sequencing](08-decisions/0003-product-blueprint-and-beta-sequencing.md)
 - [ADR 0004: tenant-owned Meeting Domain](08-decisions/0004-meeting-domain.md)
+- [ADR 0005: tenant-owned AI database foundation](08-decisions/0005-ai-database-foundation.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 are complete. The repository implements the web/API foundation; tenant-isolated companies, contacts, opportunities and tasks; and tenant-isolated meetings, participants, deliberately supplied plain-text transcripts and content-minimised meeting audit history. Assistant remains a placeholder. Recording, media storage, transcription, AI, external integrations, production Clerk verification, billing and mobile are not implemented.
+Sprints 1–3 are complete. WO-004A1 adds only dormant, tenant-isolated AI job and versioned artefact persistence pinned to meeting/transcript versions. There is no AI execution, repository/service surface, worker, provider, prompt, AI API, AI UI or real intelligence feature. Assistant remains a placeholder. Recording, media storage, transcription, external integrations, production Clerk verification, billing and mobile are not implemented.
 
 Do not use production customer data. Production identity, consent evidence, retention/export/erasure and operational controls are incomplete. Future sprints remain unauthorised until a separate work order is approved.
