@@ -16,27 +16,49 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
     if not database_url.startswith(("postgresql", "postgres")):
         pytest.skip("A PostgreSQL DATABASE_URL is required for the RLS integration test.")
 
-    organisation_a = uuid.uuid4()
-    organisation_b = uuid.uuid4()
-    user_a = uuid.uuid4()
-    user_b = uuid.uuid4()
-    company_a = uuid.uuid4()
-    company_b = uuid.uuid4()
-    contact_a = uuid.uuid4()
-    contact_b = uuid.uuid4()
-    opportunity_a = uuid.uuid4()
-    opportunity_b = uuid.uuid4()
-    task_a = uuid.uuid4()
-    task_b = uuid.uuid4()
-    meeting_a = uuid.uuid4()
-    meeting_b = uuid.uuid4()
-    participant_a = uuid.uuid4()
-    participant_b = uuid.uuid4()
-    transcript_a = uuid.uuid4()
-    transcript_b = uuid.uuid4()
-    audit_a = uuid.uuid4()
-    audit_b = uuid.uuid4()
     role_name = f"revenueos_rls_test_{uuid.uuid4().hex[:12]}"
+    tenant_tables = (
+        "companies",
+        "contacts",
+        "opportunities",
+        "tasks",
+        "meetings",
+        "meeting_participants",
+        "transcripts",
+        "meeting_audit_events",
+        "ai_jobs",
+        "ai_artifacts",
+    )
+    tenant_a = {
+        "suffix": "A",
+        "organisation_id": uuid.uuid4(),
+        "user_id": uuid.uuid4(),
+        "company_id": uuid.uuid4(),
+        "contact_id": uuid.uuid4(),
+        "opportunity_id": uuid.uuid4(),
+        "task_id": uuid.uuid4(),
+        "meeting_id": uuid.uuid4(),
+        "participant_id": uuid.uuid4(),
+        "transcript_id": uuid.uuid4(),
+        "audit_id": uuid.uuid4(),
+        "ai_job_id": uuid.uuid4(),
+        "ai_artifact_id": uuid.uuid4(),
+    }
+    tenant_b = {
+        "suffix": "B",
+        "organisation_id": uuid.uuid4(),
+        "user_id": uuid.uuid4(),
+        "company_id": uuid.uuid4(),
+        "contact_id": uuid.uuid4(),
+        "opportunity_id": uuid.uuid4(),
+        "task_id": uuid.uuid4(),
+        "meeting_id": uuid.uuid4(),
+        "participant_id": uuid.uuid4(),
+        "transcript_id": uuid.uuid4(),
+        "audit_id": uuid.uuid4(),
+        "ai_job_id": uuid.uuid4(),
+        "ai_artifact_id": uuid.uuid4(),
+    }
 
     async def scenario() -> None:
         engine = create_async_engine(database_url)
@@ -44,138 +66,70 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
             async with engine.begin() as connection:
                 await connection.exec_driver_sql(f'CREATE ROLE "{role_name}" NOLOGIN')
                 await connection.exec_driver_sql(f'GRANT USAGE ON SCHEMA public TO "{role_name}"')
-                tenant_tables = (
-                    "companies",
-                    "contacts",
-                    "opportunities",
-                    "tasks",
-                    "meetings",
-                    "meeting_participants",
-                    "transcripts",
-                    "meeting_audit_events",
-                )
                 for table in tenant_tables:
                     await connection.exec_driver_sql(
                         f'GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO "{role_name}"'
                     )
-                identity_parameters = {
-                    "organisation_a": organisation_a,
-                    "organisation_b": organisation_b,
-                    "slug_a": f"rls-a-{organisation_a.hex}",
-                    "slug_b": f"rls-b-{organisation_b.hex}",
-                    "user_a": user_a,
-                    "user_b": user_b,
-                    "external_a": f"rls_a_{user_a.hex}",
-                    "external_b": f"rls_b_{user_b.hex}",
-                    "email_a": f"rls-a-{user_a.hex}@example.com",
-                    "email_b": f"rls-b-{user_b.hex}@example.com",
-                }
-                await connection.execute(
-                    text(
-                        """
-                        INSERT INTO organisations (id, name, slug)
-                        VALUES (:organisation_a, 'RLS A', :slug_a),
-                               (:organisation_b, 'RLS B', :slug_b)
-                        """
-                    ),
-                    identity_parameters,
-                )
-                await connection.execute(
-                    text(
-                        """
-                        INSERT INTO users (id, external_auth_id, email, display_name)
-                        VALUES (:user_a, :external_a, :email_a, 'RLS User A'),
-                               (:user_b, :external_b, :email_b, 'RLS User B')
-                        """
-                    ),
-                    identity_parameters,
-                )
-                await connection.execute(
-                    text(
-                        """
-                        INSERT INTO organisation_memberships (organisation_id, user_id, role)
-                        VALUES (:organisation_a, :user_a, 'admin'),
-                               (:organisation_b, :user_b, 'admin')
-                        """
-                    ),
-                    identity_parameters,
-                )
-                for suffix, organisation_id, user_id, company_id in (
-                    ("A", organisation_a, user_a, company_a),
-                    ("B", organisation_b, user_b, company_b),
-                ):
+
+                for tenant in (tenant_a, tenant_b):
+                    suffix = str(tenant["suffix"])
+                    identity_parameters = {
+                        **tenant,
+                        "slug": f"rls-{suffix.lower()}-{tenant['organisation_id']}",
+                        "external_auth_id": f"rls_{suffix.lower()}_{tenant['user_id']}",
+                        "email": f"rls-{suffix.lower()}-{tenant['user_id']}@example.test",
+                    }
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO organisations (id, name, slug)
+                            VALUES (:organisation_id, :name, :slug)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "name": f"RLS Organisation {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO users
+                                (id, external_auth_id, email, display_name)
+                            VALUES
+                                (:user_id, :external_auth_id, :email, :display_name)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "display_name": f"RLS User {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO organisation_memberships
+                                (organisation_id, user_id, role)
+                            VALUES (:organisation_id, :user_id, 'admin')
+                            """
+                        ),
+                        identity_parameters,
+                    )
                     await connection.execute(
                         text(
                             """
                             INSERT INTO companies
                                 (id, organisation_id, name, status, owner_user_id)
-                            VALUES (:id, :organisation_id, :name, 'prospect', :user_id)
+                            VALUES
+                                (:company_id, :organisation_id, :company_name,
+                                 'prospect', :user_id)
                             """
                         ),
                         {
-                            "id": company_id,
-                            "organisation_id": organisation_id,
-                            "name": f"RLS Company {suffix}",
-                            "user_id": user_id,
+                            **identity_parameters,
+                            "company_name": f"RLS Company {suffix}",
                         },
                     )
-                for (
-                    suffix,
-                    organisation_id,
-                    user_id,
-                    company_id,
-                    contact_id,
-                    opportunity_id,
-                    task_id,
-                    meeting_id,
-                    participant_id,
-                    transcript_id,
-                    audit_id,
-                ) in (
-                    (
-                        "A",
-                        organisation_a,
-                        user_a,
-                        company_a,
-                        contact_a,
-                        opportunity_a,
-                        task_a,
-                        meeting_a,
-                        participant_a,
-                        transcript_a,
-                        audit_a,
-                    ),
-                    (
-                        "B",
-                        organisation_b,
-                        user_b,
-                        company_b,
-                        contact_b,
-                        opportunity_b,
-                        task_b,
-                        meeting_b,
-                        participant_b,
-                        transcript_b,
-                        audit_b,
-                    ),
-                ):
-                    entity_parameters = {
-                        "contact_id": contact_id,
-                        "opportunity_id": opportunity_id,
-                        "task_id": task_id,
-                        "meeting_id": meeting_id,
-                        "participant_id": participant_id,
-                        "transcript_id": transcript_id,
-                        "audit_id": audit_id,
-                        "organisation_id": organisation_id,
-                        "company_id": company_id,
-                        "suffix": suffix,
-                        "email": f"rls-{suffix.lower()}-{contact_id.hex}@example.com",
-                        "user_id": user_id,
-                        "name": f"RLS Opportunity {suffix}",
-                        "value": Decimal("1000.00"),
-                        "task_title": f"RLS Task {suffix}",
-                    }
                     await connection.execute(
                         text(
                             """
@@ -184,10 +138,47 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  email, owner_user_id)
                             VALUES
                                 (:contact_id, :organisation_id, :company_id, 'RLS',
-                                 :suffix, :email, :user_id)
+                                 :suffix, :contact_email, :user_id)
                             """
                         ),
-                        entity_parameters,
+                        {
+                            **identity_parameters,
+                            "contact_email": f"rls-contact-{suffix.lower()}-{tenant['contact_id']}@example.test",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO opportunities
+                                (id, organisation_id, company_id, name, stage, value,
+                                 currency, probability, owner_user_id)
+                            VALUES
+                                (:opportunity_id, :organisation_id, :company_id,
+                                 :opportunity_name, 'discovery', :value, 'AUD', 20, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "opportunity_name": f"RLS Opportunity {suffix}",
+                            "value": Decimal("1000.00"),
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO tasks
+                                (id, organisation_id, company_id, contact_id, opportunity_id,
+                                 title, status, priority, assigned_user_id, created_by_user_id)
+                            VALUES
+                                (:task_id, :organisation_id, :company_id, :contact_id,
+                                 :opportunity_id, :task_title, 'open', 'medium',
+                                 :user_id, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "task_title": f"RLS Task {suffix}",
+                        },
                     )
                     await connection.execute(
                         text(
@@ -196,12 +187,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                 (id, organisation_id, title, meeting_date, meeting_type,
                                  status, company_id, owner_user_id, created_by, updated_by)
                             VALUES
-                                (:meeting_id, :organisation_id, :meeting_title, now(), 'remote',
-                                 'completed', :company_id, :user_id, :user_id, :user_id)
+                                (:meeting_id, :organisation_id, :meeting_title, now(),
+                                 'remote', 'completed', :company_id, :user_id,
+                                 :user_id, :user_id)
                             """
                         ),
                         {
-                            **entity_parameters,
+                            **identity_parameters,
                             "meeting_title": f"RLS Meeting {suffix}",
                         },
                     )
@@ -213,12 +205,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  email, attendance_status, role)
                             VALUES
                                 (:participant_id, :organisation_id, :meeting_id, :contact_id,
-                                 :participant_name, :email, 'attended', 'attendee')
+                                 :participant_name, :contact_email, 'attended', 'attendee')
                             """
                         ),
                         {
-                            **entity_parameters,
+                            **identity_parameters,
                             "participant_name": f"RLS Participant {suffix}",
+                            "contact_email": f"rls-participant-{suffix.lower()}-{tenant['participant_id']}@example.test",
                         },
                     )
                     await connection.execute(
@@ -233,7 +226,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         {
-                            **entity_parameters,
+                            **identity_parameters,
                             "raw_text": f"RLS transcript {suffix}",
                         },
                     )
@@ -244,83 +237,206 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                 (id, organisation_id, meeting_id, actor_user_id, action,
                                  entity_type, entity_id, changed_fields)
                             VALUES
-                                (:audit_id, :organisation_id, :meeting_id, :user_id, 'created',
-                                 'meeting', :meeting_id, '["title"]'::json)
+                                (:audit_id, :organisation_id, :meeting_id, :user_id,
+                                 'created', 'meeting', :meeting_id, '["title"]'::json)
                             """
                         ),
-                        entity_parameters,
+                        identity_parameters,
                     )
                     await connection.execute(
                         text(
                             """
-                            INSERT INTO opportunities
-                                (id, organisation_id, company_id, name, stage, value,
-                                 currency, probability, owner_user_id)
+                            INSERT INTO ai_jobs
+                                (id, organisation_id, meeting_id, transcript_id,
+                                 transcript_version, job_type, status, schema_version,
+                                 idempotency_key, requested_by_user_id)
                             VALUES
-                                (:opportunity_id, :organisation_id, :company_id, :name,
-                                 'discovery', :value, 'AUD', 20, :user_id)
+                                (:ai_job_id, :organisation_id, :meeting_id, :transcript_id,
+                                 1, 'infrastructure_test', 'pending', 1,
+                                 :idempotency_key, :user_id)
                             """
                         ),
-                        entity_parameters,
+                        {
+                            **identity_parameters,
+                            "idempotency_key": f"rls-job-{suffix.lower()}",
+                        },
                     )
                     await connection.execute(
                         text(
                             """
-                            INSERT INTO tasks
-                                (id, organisation_id, company_id, contact_id, opportunity_id,
-                                 title, status, priority, assigned_user_id, created_by_user_id)
+                            INSERT INTO ai_artifacts
+                                (id, organisation_id, meeting_id, transcript_id,
+                                 transcript_version, job_id, artifact_type,
+                                 artifact_version, schema_version, content_json)
                             VALUES
-                                (:task_id, :organisation_id, :company_id, :contact_id,
-                                 :opportunity_id, :task_title, 'open', 'medium', :user_id, :user_id)
+                                (:ai_artifact_id, :organisation_id, :meeting_id,
+                                 :transcript_id, 1, :ai_job_id, 'infrastructure_test',
+                                 1, 1, '{"status":"ok"}'::json)
                             """
                         ),
-                        entity_parameters,
+                        identity_parameters,
                     )
+
+                savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO ai_jobs
+                                (id, organisation_id, meeting_id, transcript_id,
+                                 transcript_version, requested_by_user_id)
+                            VALUES
+                                (:id, :organisation_id, :meeting_id, :transcript_id,
+                                 1, :requested_by_user_id)
+                            """
+                        ),
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_a["organisation_id"],
+                            "meeting_id": tenant_b["meeting_id"],
+                            "transcript_id": tenant_b["transcript_id"],
+                            "requested_by_user_id": tenant_a["user_id"],
+                        },
+                    )
+                await savepoint.rollback()
+
+                savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO ai_artifacts
+                                (id, organisation_id, meeting_id, transcript_id,
+                                 transcript_version, job_id, artifact_version,
+                                 schema_version, content_json)
+                            VALUES
+                                (:id, :organisation_id, :meeting_id, :transcript_id,
+                                 1, :job_id, 99, 1, '{"status":"ok"}'::json)
+                            """
+                        ),
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_a["organisation_id"],
+                            "meeting_id": tenant_a["meeting_id"],
+                            "transcript_id": tenant_a["transcript_id"],
+                            "job_id": tenant_b["ai_job_id"],
+                        },
+                    )
+                await savepoint.rollback()
+
+                rls_state = {
+                    row.relname: (row.relrowsecurity, row.relforcerowsecurity)
+                    for row in (
+                        await connection.execute(
+                            text(
+                                """
+                                SELECT relname, relrowsecurity, relforcerowsecurity
+                                FROM pg_class
+                                WHERE relname IN ('ai_jobs', 'ai_artifacts')
+                                """
+                            )
+                        )
+                    )
+                }
+                assert rls_state == {
+                    "ai_jobs": (True, True),
+                    "ai_artifacts": (True, True),
+                }
 
             async with engine.connect() as connection:
                 transaction = await connection.begin()
                 await connection.exec_driver_sql(f'SET LOCAL ROLE "{role_name}"')
                 await connection.execute(
                     text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
-                    {"organisation_id": str(organisation_a)},
+                    {"organisation_id": str(tenant_a["organisation_id"])},
                 )
                 for table in tenant_tables:
                     count = await connection.scalar(text(f"SELECT count(*) FROM {table}"))
                     assert count == 1
-                updated = await connection.execute(
+                company_update = await connection.execute(
                     text("UPDATE companies SET name = 'Blocked' WHERE id = :id"),
-                    {"id": company_b},
+                    {"id": tenant_b["company_id"]},
                 )
-                assert updated.rowcount == 0
+                assert company_update.rowcount == 0
+                job_update = await connection.execute(
+                    text("UPDATE ai_jobs SET status = 'cancelled' WHERE id = :id"),
+                    {"id": tenant_b["ai_job_id"]},
+                )
+                assert job_update.rowcount == 0
+                artifact_update = await connection.execute(
+                    text("UPDATE ai_artifacts SET superseded_at = now() WHERE id = :id"),
+                    {"id": tenant_b["ai_artifact_id"]},
+                )
+                assert artifact_update.rowcount == 0
                 await transaction.commit()
 
-                transaction = await connection.begin()
-                await connection.exec_driver_sql(f'SET LOCAL ROLE "{role_name}"')
-                await connection.execute(
-                    text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
-                    {"organisation_id": str(organisation_a)},
-                )
-                with pytest.raises(DBAPIError):
-                    await connection.execute(
-                        text(
-                            """
-                            INSERT INTO meetings
-                                (id, organisation_id, title, meeting_date, meeting_type,
-                                 status, owner_user_id, created_by, updated_by)
-                            VALUES (:id, :organisation_id, 'Cross tenant', now(), 'remote',
-                                    'scheduled', :user_id, :user_id, :user_id)
-                            """
-                        ),
+                cross_tenant_inserts = (
+                    (
+                        """
+                        INSERT INTO meetings
+                            (id, organisation_id, title, meeting_date, meeting_type,
+                             status, owner_user_id, created_by, updated_by)
+                        VALUES
+                            (:id, :organisation_id, 'Cross tenant', now(), 'remote',
+                             'scheduled', :user_id, :user_id, :user_id)
+                        """,
                         {
                             "id": uuid.uuid4(),
-                            "organisation_id": organisation_b,
-                            "user_id": user_b,
+                            "organisation_id": tenant_b["organisation_id"],
+                            "user_id": tenant_b["user_id"],
                         },
+                    ),
+                    (
+                        """
+                        INSERT INTO ai_jobs
+                            (id, organisation_id, meeting_id, transcript_id,
+                             transcript_version, requested_by_user_id)
+                        VALUES
+                            (:id, :organisation_id, :meeting_id, :transcript_id,
+                             1, :requested_by_user_id)
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "meeting_id": tenant_b["meeting_id"],
+                            "transcript_id": tenant_b["transcript_id"],
+                            "requested_by_user_id": tenant_b["user_id"],
+                        },
+                    ),
+                    (
+                        """
+                        INSERT INTO ai_artifacts
+                            (id, organisation_id, meeting_id, transcript_id,
+                             transcript_version, job_id, artifact_version,
+                             schema_version, content_json)
+                        VALUES
+                            (:id, :organisation_id, :meeting_id, :transcript_id,
+                             1, :job_id, 2, 1, '{"status":"ok"}'::json)
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "meeting_id": tenant_b["meeting_id"],
+                            "transcript_id": tenant_b["transcript_id"],
+                            "job_id": tenant_b["ai_job_id"],
+                        },
+                    ),
+                )
+                for statement, parameters in cross_tenant_inserts:
+                    transaction = await connection.begin()
+                    await connection.exec_driver_sql(f'SET LOCAL ROLE "{role_name}"')
+                    await connection.execute(
+                        text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
+                        {"organisation_id": str(tenant_a["organisation_id"])},
                     )
-                await transaction.rollback()
+                    with pytest.raises(DBAPIError):
+                        await connection.execute(text(statement), parameters)
+                    await transaction.rollback()
         finally:
             async with engine.begin() as connection:
                 for table in (
+                    "ai_artifacts",
+                    "ai_jobs",
                     "meeting_audit_events",
                     "transcripts",
                     "meeting_participants",
@@ -333,15 +449,15 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await connection.execute(
                         text(f"DELETE FROM {table} WHERE organisation_id IN (:organisation_a, :organisation_b)"),
                         {
-                            "organisation_a": organisation_a,
-                            "organisation_b": organisation_b,
+                            "organisation_a": tenant_a["organisation_id"],
+                            "organisation_b": tenant_b["organisation_id"],
                         },
                     )
                 cleanup_parameters = {
-                    "organisation_a": organisation_a,
-                    "organisation_b": organisation_b,
-                    "user_a": user_a,
-                    "user_b": user_b,
+                    "organisation_a": tenant_a["organisation_id"],
+                    "organisation_b": tenant_b["organisation_id"],
+                    "user_a": tenant_a["user_id"],
+                    "user_b": tenant_b["user_id"],
                 }
                 await connection.execute(
                     text(

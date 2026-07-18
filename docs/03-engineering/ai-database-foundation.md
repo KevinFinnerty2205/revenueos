@@ -1,0 +1,83 @@
+# AI database foundation
+
+WO-004A1 adds persistence only. Nothing in this document represents a working AI provider, processing worker, public API or user-facing intelligence feature.
+
+## AI jobs
+
+`ai_jobs` stores one requested future processing run. Every row owns an `organisation_id` and pins:
+
+- the meeting;
+- the meeting's singular transcript row;
+- the exact positive transcript version observed when the future request is created;
+- the `infrastructure_test` job type and lifecycle state;
+- optional provider, model and prompt metadata;
+- attempts, scheduling and lease timestamps needed by later worker work;
+- bounded safe error metadata;
+- token counts, integer minor-unit estimated cost, currency and processing duration; and
+- the requesting organisation member.
+
+Allowed states are `pending`, `running`, `completed`, `failed` and `cancelled`. `cancellation_requested_at` provides a non-destructive future cancellation seam without claiming that cancellation logic exists.
+
+Attempts, versions, tokens, cost and duration have database bounds. Provider keys, prompts, transcript bodies, secrets and full model responses do not belong in job or audit metadata.
+
+## Idempotency
+
+The database uniqueness key is:
+
+`(organisation_id, meeting_id, transcript_version, job_type, idempotency_key)`
+
+The same non-null key cannot create a second logical run for that tenant, meeting, transcript version and job type. A different key permits an intentional new run. PostgreSQL and SQLite treat `NULL` values as distinct for this unique constraint, so multiple rows with a null key are possible. A future service must require a bounded, non-null idempotency key before exposing job creation.
+
+## AI artefacts
+
+`ai_artifacts` stores typed JSON produced elsewhere only after validation. WO-004A1 supports only `infrastructure_test`. It intentionally adds no summary-, action-, decision-, risk-, question-, email- or CRM-specific columns.
+
+Every artefact repeats and database-validates its job's organisation, meeting, transcript and transcript version. Logical versions are unique by:
+
+`(organisation_id, meeting_id, transcript_id, transcript_version, artifact_type, artifact_version)`
+
+New results require a new positive `artifact_version`; earlier rows are never overwritten. A database trigger rejects changes to identity, trace, type, schema/prompt/provider metadata, content, confidence and creation time. `superseded_at` may move once from null to a timestamp and cannot then change, providing a one-way lifecycle marker without mutating artefact content. Large JSON content uses SQLAlchemy's normal lazy relationship loading and is not eagerly loaded by default.
+
+## Transcript-version traceability
+
+Sprint 3 stores one transcript row per meeting and increments its positive `version` on correction or restoration. On job insertion, a database trigger verifies the pinned version equals the current version of the same-tenant transcript for that meeting. The job's organisation, meeting, transcript, transcript version and job type cannot later change. Artefacts must match the job's value. Composite foreign keys also prove that the transcript belongs to the referenced meeting and organisation.
+
+The transcript body itself is currently updated in place. Therefore version `2` can be identified after a later correction, but the version-2 body cannot be reconstructed once the row advances. Immutable transcript snapshots remain a future product and schema decision.
+
+## Tenant isolation and RLS
+
+Both tables have non-null organisation ownership. Composite foreign keys prevent:
+
+- a job from using another organisation's meeting, transcript or requester;
+- a job from pairing a transcript with the wrong meeting; and
+- an artefact from changing any organisation, meeting, transcript or version pinned by its job.
+
+PostgreSQL enables and forces RLS on both tables using the existing transaction-local trusted `app.organisation_id`. A future application repository must still include explicit organisation predicates and use a non-bypass runtime role. Migration/admin credentials remain separate.
+
+PostgreSQL 16 tests prove tenant A cannot read or write tenant B jobs or artefacts, forced RLS remains enabled, and cross-tenant relationships fail.
+
+## Migration and rollback
+
+Alembic revision `0004_ai_database_foundation`:
+
+1. adds the transcript composite uniqueness needed by tenant-safe trace foreign keys;
+2. creates `ai_jobs` and its constraints/indexes;
+3. creates `ai_artifacts`, its constraints/indexes and overwrite guard; and
+4. enables and forces RLS on both tables.
+
+Downgrade removes both AI tables and their data, then removes the added transcript uniqueness while retaining all Sprint 3 tables. Back up any environment-appropriate data before rollback. Upgrade, downgrade, re-upgrade and drift are automated validation gates.
+
+## Known limitations
+
+- No repository, service, transition policy, job claim, retry execution or cancellation behaviour exists.
+- No provider, prompt registry, structured-output parser, API route, frontend or polling exists.
+- No AI call or real meeting intelligence is performed.
+- Historical transcript bodies are not preserved.
+- `content_json` is a storage field; future services must validate a typed schema before insert.
+- No retention, export, hard deletion, integrity seal or customer-data production controls are complete.
+
+Do not use production customer data.
+
+## Future extension points
+
+A separately authorised work order may add tenant-scoped repositories/services, durable worker claiming, provider and prompt abstractions, validated `infrastructure_test` execution, safe lifecycle APIs and UI visibility. Those additions must preserve exact traceability, idempotency, append-only artefact versions, forced RLS and content-redacted observability.
