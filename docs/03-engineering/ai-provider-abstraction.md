@@ -2,16 +2,17 @@
 
 ## Current boundary
 
-WO-004B2 added a provider-neutral execution seam for the existing internal
-`infrastructure_test` job. The only registered implementation is
-`DeterministicMockAIProvider`. It requires no credentials, performs no network
-calls, receives no transcript or customer content and produces no genuine
-Meeting Intelligence.
+WO-004B2 added a provider-neutral execution seam and WO-004C1 now uses it for
+both `infrastructure_test` and `executive_summary`. The only registered
+implementation is `DeterministicMockAIProvider`. It requires no credentials and
+performs no network calls. Executive Summary supplies the current bounded
+transcript to this in-process mock, so customer content is processed locally
+but never leaves the application.
 
 There is no OpenAI, Anthropic, Gemini or other external provider adapter. There
-is no provider configuration UI, AI API route or AI web UI. WO-004B3 now builds
-application-owned versioned prompts and strict structured-output validation on
-this seam; see [Prompt registry and structured output](prompt-registry-and-structured-output.md).
+is no provider configuration UI. The only AI product surface is the
+meeting-scoped Executive Summary POST/GET API and Intelligence panel; see
+[Executive Summary intelligence](executive-summary-intelligence.md).
 
 ## Contracts and interface
 
@@ -23,14 +24,15 @@ boundary.
 
 - request, organisation and job identifiers;
 - job type and model identifier;
-- a strict minimal `infrastructure_test` input with exactly one ordered
-  `system` then `user` provider-neutral message;
+- a strict job-specific input with exactly one ordered `system` then `user`
+  provider-neutral message;
 - expected artefact schema version; and
 - a validated positive timeout.
 
-Unknown fields are rejected. The current messages contain only fixed
-infrastructure instructions plus safe job/request identifiers. They never
-contain a transcript, customer record, database model, secret or vendor object.
+Unknown fields are rejected. Infrastructure messages contain only fixed
+instructions and safe identifiers. Executive Summary messages contain only its
+registered instructions and JSON-delimited meeting title/date/transcript. They
+never contain unrelated customer records, secrets or vendor objects.
 
 `ProviderResponse` is also frozen and rejects unknown fields. It normalises the
 provider/model/request identifiers, a JSON mapping or JSON string output,
@@ -69,7 +71,12 @@ The mock validates the job type, model and schema version and returns:
 Usage and cost are zero, currency is `AUD`, latency is deterministically zero
 and the provider request identifier is a UUIDv5 derived only from safe request
 and job identifiers. Repeating the same valid request returns the same response.
-No transcript content is read, hashed, logged or sent anywhere.
+For `executive_summary`, the mock extracts the delimited transcript, excludes
+obvious instruction-like injection sentences from its deterministic excerpt,
+classifies small keyword-based meeting-type/sentiment enums and returns a fixed
+confidence rule. The result is repeatable test output, not a quality claim or
+fake external-provider implementation. Transcript and output bodies are never
+logged. Usage, cost and network latency remain zero.
 
 ## Timeout and error model
 
@@ -88,8 +95,9 @@ chained in memory but is not logged, stored or audited.
 ## Worker flow and persistence
 
 1. The worker claims a tenant-owned job and commits the short claim transaction.
-2. `InfrastructureTestExecutor` resolves and safely renders the selected
-   prompt/schema pair.
+2. The job-specific executor resolves and safely renders the selected
+   prompt/schema pair; Executive Summary first loads its exact current tenant
+   transcript through a short worker transaction.
 3. It creates a validated provider request with ordered messages.
 4. The registry resolves `mock` / `mock-infrastructure-v1`.
 5. The timeout wrapper executes and validates the provider response.
@@ -106,8 +114,8 @@ chained in memory but is not logged, stored or audited.
 
 `processing_duration_ms` remains the existing total worker execution duration.
 Provider latency and derived total tokens are emitted as safe structured
-telemetry; no duplicate columns were needed. Existing provider trace fields made
-migration `0007` unnecessary.
+telemetry; no duplicate columns were needed. Migration
+`0007_executive_summary` widens only database job/artefact type checks.
 
 ## Tenant isolation and telemetry
 
@@ -148,5 +156,5 @@ complete.
 A separately approved work order may register a real adapter that implements
 `AIProvider`. That work must add provider-specific secret management, privacy/
 retention review, network controls and deterministic contract tests without
-leaking SDK types into executors. Customer-content prompts, additional schemas,
-model-specific JSON modes and genuine intelligence remain separate decisions.
+leaking SDK types into executors. Additional schemas, model-specific JSON modes
+and genuine external-model output remain separate decisions.

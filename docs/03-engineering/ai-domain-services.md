@@ -2,7 +2,11 @@
 
 ## Current boundary
 
-WO-004A2 adds an internal application layer for the `infrastructure_test` AI job and artefact types introduced by migration `0004`. It can create and inspect tenant-scoped jobs, validate lifecycle transitions, and persist typed, append-only infrastructure-test artefacts. The service layer has no API or UI surface. WO-004B1 now consumes it from a separate deterministic worker described in [AI worker and durable job queue](ai-worker-queue.md).
+WO-004A2 adds the internal tenant-scoped job/artefact application layer.
+WO-004C1 extends it with current-transcript Executive Summary request/state
+rules and typed append-only artefacts. Only that product-safe capability is
+exposed through the meeting-scoped API/UI; generic lifecycle APIs remain
+internal.
 
 Migration `0005_ai_domain_services` extends the existing meeting audit event with a metadata-only JSON object, expands its action/entity checks and widens the action column for the new event names.
 
@@ -43,7 +47,7 @@ Repositories always require an organisation ID and add an explicit organisation 
 `AIArtifactService`:
 
 - requires a same-tenant job and matching meeting/transcript/version trace;
-- accepts only `infrastructure_test`, schema version 1;
+- accepts only registered `infrastructure_test` or `executive_summary`, schema version 1;
 - persists only the Pydantic-validated JSON representation;
 - assigns the next logical version without overwriting prior artefacts;
 - retries one concurrent logical-version conflict before returning a safe conflict; and
@@ -87,6 +91,10 @@ Schema version 1 is:
 
 `status` is the literal `ok`. `message` is trimmed, non-empty and limited to 500 characters. Unexpected fields are rejected. This is a deterministic infrastructure contract, not provider output parsing or meeting intelligence.
 
+Executive Summary schema version 1 is documented in
+[Executive Summary intelligence](executive-summary-intelligence.md). It
+contains only the summary, meeting type, sentiment and finite confidence.
+
 ## Artefact version assignment
 
 Logical versions are scoped by organisation, meeting, transcript, transcript version and artefact type. The repository reads the current maximum and assigns the next positive integer. The database unique constraint prevents two writers from keeping the same version. On one concurrent conflict the service rolls back the full artefact/audit unit, recalculates and retries once; persistent contention returns `persistence_conflict`.
@@ -108,13 +116,11 @@ Every service starts with trusted `TenantContext`. Every repository read/write h
 
 ## Known limitations and extension points
 
-- No API route or UI can request, inspect or transition AI work.
-- Worker claiming, leases, retry scheduling and cancellation execution now exist only for the deterministic infrastructure test.
-- WO-004B2 routes this existing infrastructure-test contract through a
-  deterministic mock provider, and WO-004B3 adds one immutable versioned
-  prompt/schema pair plus strict output validation. No real provider,
-  customer-content prompt, model call or genuine meeting intelligence exists.
-- Lifecycle transitions do not use row locks; future worker work must define concurrency/claim semantics before execution.
+- Generic AI lifecycle work remains internal; only the Executive Summary
+  request/state resource is public.
+- Worker claiming, leases, retry scheduling and cancellation execution support
+  infrastructure tests and Executive Summary.
+- There is no real provider/model call or additional Meeting Intelligence.
 - The transcript version identifies the current mutable transcript row but does not preserve a historical text snapshot.
 - Production identity, retention, export, erasure and operational controls remain incomplete; production customer data is prohibited.
 

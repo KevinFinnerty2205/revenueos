@@ -54,11 +54,7 @@ export type OpportunityStage =
   | "negotiation"
   | "closed_won"
   | "closed_lost";
-export type TaskStatus =
-  | "open"
-  | "in_progress"
-  | "completed"
-  | "cancelled";
+export type TaskStatus = "open" | "in_progress" | "completed" | "cancelled";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type MeetingType = "remote" | "phone" | "in_person" | "other";
 export type MeetingStatus = "scheduled" | "completed" | "cancelled";
@@ -69,11 +65,24 @@ export type MeetingAuditAction =
   | "created"
   | "updated"
   | "deleted"
-  | "restored";
+  | "restored"
+  | "intelligence_requested"
+  | "ai_job_created"
+  | "ai_job_status_changed"
+  | "ai_artifact_created";
 export type MeetingAuditEntityType =
-  | "meeting"
-  | "participant"
-  | "transcript";
+  "meeting" | "participant" | "transcript" | "ai_job" | "ai_artifact";
+export type ExecutiveSummaryState =
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
+export type ExecutiveSummaryMeetingType =
+  | "sales_discovery"
+  | "sales_demo"
+  | "customer_success"
+  | "recruitment"
+  | "internal"
+  | "other";
+export type ExecutiveSummarySentiment =
+  "positive" | "neutral" | "negative" | "mixed";
 
 export interface EntityPage<T> {
   items: T[];
@@ -176,4 +185,34 @@ export interface MeetingAuditEvent {
   changedFields: string[];
   version: number | null;
   createdAt: string;
+}
+
+export interface ExecutiveSummaryContent {
+  executiveSummary: string;
+  meetingType: ExecutiveSummaryMeetingType;
+  sentiment: ExecutiveSummarySentiment;
+  confidence: number;
+}
+
+export interface ExecutiveSummaryResponse {
+  state: ExecutiveSummaryState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  executiveSummary: ExecutiveSummaryContent | null;
+}
+
+export interface ExecutiveSummaryRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
 }

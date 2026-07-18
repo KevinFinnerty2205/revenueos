@@ -58,6 +58,22 @@ class AIJobRepository:
         )
         return result.scalar_one_or_none()
 
+    async def lock_meeting(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+    ) -> Meeting | None:
+        result = await self.session.execute(
+            select(Meeting)
+            .where(
+                Meeting.organisation_id == organisation_id,
+                Meeting.id == meeting_id,
+                Meeting.deleted_at.is_(None),
+            )
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def get_transcript(
         self,
         organisation_id: UUID,
@@ -67,6 +83,20 @@ class AIJobRepository:
             select(Transcript).where(
                 Transcript.organisation_id == organisation_id,
                 Transcript.id == transcript_id,
+                Transcript.deleted_at.is_(None),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_transcript_for_meeting(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+    ) -> Transcript | None:
+        result = await self.session.execute(
+            select(Transcript).where(
+                Transcript.organisation_id == organisation_id,
+                Transcript.meeting_id == meeting_id,
                 Transcript.deleted_at.is_(None),
             )
         )
@@ -144,6 +174,59 @@ class AIJobRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def get_latest_equivalent_job(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+        transcript_version: int,
+        *,
+        job_type: str,
+        prompt_key: str,
+        prompt_version: int,
+        schema_version: int,
+    ) -> AIJob | None:
+        result = await self.session.execute(
+            select(AIJob)
+            .where(
+                AIJob.organisation_id == organisation_id,
+                AIJob.meeting_id == meeting_id,
+                AIJob.transcript_version == transcript_version,
+                AIJob.job_type == job_type,
+                AIJob.prompt_key == prompt_key,
+                AIJob.prompt_version == prompt_version,
+                AIJob.schema_version == schema_version,
+            )
+            .order_by(AIJob.created_at.desc(), AIJob.id.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def count_equivalent_jobs(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+        transcript_version: int,
+        *,
+        job_type: str,
+        prompt_key: str,
+        prompt_version: int,
+        schema_version: int,
+    ) -> int:
+        count = await self.session.scalar(
+            select(func.count())
+            .select_from(AIJob)
+            .where(
+                AIJob.organisation_id == organisation_id,
+                AIJob.meeting_id == meeting_id,
+                AIJob.transcript_version == transcript_version,
+                AIJob.job_type == job_type,
+                AIJob.prompt_key == prompt_key,
+                AIJob.prompt_version == prompt_version,
+                AIJob.schema_version == schema_version,
+            )
+        )
+        return int(count or 0)
 
     @staticmethod
     def update_lifecycle_metadata(
@@ -313,6 +396,27 @@ class AIArtifactRepository:
             )
         )
         return list(result.all())
+
+    async def get_latest_artifact_for_job(
+        self,
+        organisation_id: UUID,
+        job_id: UUID,
+        artifact_type: str,
+    ) -> AIArtifact | None:
+        result = await self.session.execute(
+            select(AIArtifact)
+            .where(
+                AIArtifact.organisation_id == organisation_id,
+                AIArtifact.job_id == job_id,
+                AIArtifact.artifact_type == artifact_type,
+            )
+            .order_by(
+                AIArtifact.artifact_version.desc(),
+                AIArtifact.id.desc(),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     async def next_artifact_version(
         self,

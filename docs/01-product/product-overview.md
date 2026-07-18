@@ -21,9 +21,10 @@ Sprints 1–3 provide:
 - a dashboard with polished empty sections;
 - tenant-isolated list/create/edit/delete workflows for companies, contacts, opportunities and tasks;
 - tenant-isolated meeting, participant and deliberately supplied plain-text transcript workflows with local audit history; and
+- a Meeting Detail Intelligence tab that queues and displays one deterministic mock-generated, transcript-grounded Executive Summary with type, sentiment and confidence; and
 - an Assistant placeholder that states its capability is not implemented.
 
-The current product accepts only deliberately entered meeting metadata and plain-text transcripts. Its internal worker has a no-network mock-provider infrastructure test, but it does not record, store media, transcribe, call an external AI provider, generate genuine intelligence, connect external systems, verify production Clerk sessions or process payments. Do not use it with production customer data.
+The current product accepts only deliberately entered meeting metadata and plain-text transcripts. Executive Summary validates the end-to-end AI product flow but remains deterministic mock output, not genuine LLM intelligence. The application does not record, store media, transcribe, call an external AI provider, connect external systems, verify production Clerk sessions or process payments. No customer content leaves the application, and production customer data must not be used.
 
 ## Product principles
 

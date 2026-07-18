@@ -62,7 +62,8 @@ Positive:
 
 Trade-offs:
 
-- the current interface has been proven only by the infrastructure mock;
+- the current interface is proven by infrastructure-test and Executive Summary
+  mock execution, but not by a real provider;
 - provider latency is logged rather than stored separately;
 - model selection is process configuration, not tenant/user configuration; and
 - real-provider privacy, secret, residency, rate-limit and cost policies remain
@@ -70,15 +71,16 @@ Trade-offs:
 
 ## Follow-up triggers
 
-Create or update an ADR before adding a real provider, provider credentials,
-tenant/model routing, prompt registry/versioning, structured-output retries,
-customer-content transmission, provider-specific retention settings or an
-AI-facing API/UI.
+ADR 0010 governs the first local transcript-bearing Executive Summary and its
+meeting-scoped API/UI. Create or update an ADR before adding a real provider,
+provider credentials, tenant/model routing, customer-content transmission to an
+external service, provider-specific retention settings or another AI surface.
 
 ## Related documents
 
 - [AI provider abstraction](../03-engineering/ai-provider-abstraction.md)
 - [ADR 0009: versioned prompts and strict structured output](0009-versioned-prompts-and-strict-output.md)
+- [ADR 0010: current-transcript Executive Summary](0010-current-transcript-executive-summary.md)
 - [AI worker and durable job queue](../03-engineering/ai-worker-queue.md)
 - [WO-004B2 sprint record](../07-sprints/wo-004b2-ai-provider-abstraction.md)
 - [Security and privacy](../03-engineering/security-and-privacy.md)

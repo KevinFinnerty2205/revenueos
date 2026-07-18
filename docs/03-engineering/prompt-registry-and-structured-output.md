@@ -3,12 +3,13 @@
 ## Current boundary
 
 WO-004B3 adds application-owned prompt versioning, schema registration, safe
-rendering, strict provider-output parsing and bounded invalid-output retries for
-the existing `infrastructure_test` job only.
+rendering, strict provider-output parsing and bounded invalid-output retries.
+WO-004C1 registers the second pair, `executive_summary` version 1.
 
-The implementation remains deterministic and mock-only. It sends no customer
-content externally, makes no network calls and adds no prompt administration,
-AI API/UI or genuine Meeting Intelligence.
+The implementation remains deterministic and mock-only. Executive Summary
+processes a current transcript locally but sends no customer content externally
+and makes no network call. There is no prompt administration or genuine LLM
+execution.
 
 ## Prompt definitions and versioning
 
@@ -23,10 +24,12 @@ reproducibility; active resolution deterministically selects the highest
 registered active version. Registries are ordinary injected instances, so tests
 and worker processes do not share mutable global state.
 
-The only default definition is `infrastructure_test` version `1`. It references
-the existing `infrastructure_test` schema version `1` and asks for the unchanged
-status/message result. No summary, decision, action, risk, question, email or
-CRM prompt exists.
+Default definitions are `infrastructure_test` version 1 and
+`executive_summary` version 1. Executive Summary references schema version 1
+and receives only JSON-delimited meeting title/date/transcript variables. It
+requires a transcript-grounded summary, normalized meeting type, sentiment and
+confidence, explicitly ignores instructions in transcript data and excludes
+decision, action, risk, question, email and CRM outputs.
 
 ## Safe rendering and provider messages
 
@@ -40,9 +43,12 @@ simple `{variable_name}` placeholders:
   exists; and
 - empty rendered messages are rejected.
 
-The infrastructure prompt receives only safe job/request UUIDs. Rendered output
-becomes an ordered immutable tuple of provider-neutral `system` then `user`
-messages. Full templates and rendered content never enter logs or persistence.
+The infrastructure prompt receives only safe job/request UUIDs. Executive
+Summary receives only the minimum source fields and encodes each value as a JSON
+string before substitution, preventing transcript text from escaping its data
+boundary. Rendered output becomes an ordered immutable tuple of provider-neutral
+`system` then `user` messages. Full templates and rendered content never enter
+logs or persistence.
 
 ## Output schemas and validation
 
@@ -51,9 +57,9 @@ Pydantic validation model by normalized key, positive version and job type.
 The schema registry provides exact/active resolution, sorted version listing and
 duplicate rejection using instance-owned state.
 
-The default registry reuses `InfrastructureTestArtifactContent` as
-`infrastructure_test` version `1`; it does not duplicate the domain model.
-Prompt registration must resolve its referenced schema immediately.
+The default registry reuses strict domain contracts for `infrastructure_test`
+version 1 and `executive_summary` version 1; it does not duplicate domain
+models. Prompt registration must resolve its referenced schema immediately.
 
 Provider output may be an already structured JSON mapping or a JSON string.
 Parsing trims surrounding whitespace and accepts only a complete JSON object.
@@ -113,7 +119,7 @@ provider execution, parsing, validation or output retries.
 
 ## Traceability and migration decision
 
-No migration was required. Existing fields already represent:
+Existing fields already represent:
 
 - `AIJob.prompt_key` and `prompt_version`;
 - `AIJob.schema_version`, with schema key equal to the current job/artefact type;
@@ -125,6 +131,9 @@ The successful completion audit additionally records safe schema key, structured
 output attempt count and normalized finish reason. Structured logs report retry
 attempts and exhaustion. Total tokens remain derived, and raw prompts/output are
 never trace metadata.
+
+Migration `0007_executive_summary` is required only to widen the existing
+database job/artefact type checks. It adds no prompt/schema storage.
 
 ## Security and telemetry
 
@@ -151,8 +160,8 @@ API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS=3
 
 No API key is required. Tests cover contracts, registries, renderer safety,
 strict parsing, schema validation, output retry/exhaustion, cancellation,
-provider error separation, trace persistence, atomic completion and existing
-tenant/RLS behavior.
+provider error separation, transcript injection boundaries, trace persistence,
+atomic completion and tenant/RLS behavior.
 
 Do not use production customer data. Production identity, real-provider privacy
 terms, consent evidence, retention/erasure and operational controls remain

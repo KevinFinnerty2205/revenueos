@@ -10,6 +10,10 @@ from uuid import UUID
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from revenueos.ai_contracts import (
+    EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
+    ExecutiveSummarySource,
+)
 from revenueos.ai_executors import (
     AIExecutorRegistry,
     ClaimedAIJob,
@@ -22,7 +26,12 @@ from revenueos.ai_services import AIArtifactService
 from revenueos.ai_worker_repositories import AIWorkerRepository
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
-from revenueos.domain import AIJobStatus, MeetingAuditAction, MeetingAuditEntityType
+from revenueos.domain import (
+    AIJobStatus,
+    AIJobType,
+    MeetingAuditAction,
+    MeetingAuditEntityType,
+)
 from revenueos.errors import PublicAPIError
 from revenueos.models import AIJob, MeetingAuditEvent
 from revenueos.tenant import TenantContext
@@ -206,10 +215,17 @@ class AIWorkerService:
         )
         started = time.perf_counter()
         try:
-            result = await executor.execute(
-                job,
-                cancellation_check=self.is_cancellation_requested,
-            )
+            if job.job_type == AIJobType.EXECUTIVE_SUMMARY.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    executive_summary_source_loader=self.load_executive_summary_source,
+                )
+            else:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                )
             duration_ms = max(0, int((time.perf_counter() - started) * 1000))
             if ownership_lost.is_set():
                 return
@@ -237,6 +253,19 @@ class AIWorkerService:
                         "finish_reason": result.finish_reason,
                     },
                 )
+                if job.job_type == AIJobType.EXECUTIVE_SUMMARY.value:
+                    logger.info(
+                        "executive_summary_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                        },
+                    )
         except WorkerExecutionError as exc:
             duration_ms = max(0, int((time.perf_counter() - started) * 1000))
             if not ownership_lost.is_set():
@@ -272,7 +301,7 @@ class AIWorkerService:
                     job,
                     WorkerExecutionError(
                         "worker_execution_failed",
-                        "The AI infrastructure job could not be completed.",
+                        "The AI job could not be completed.",
                         retryable=True,
                     ),
                     processing_duration_ms=duration_ms,
@@ -280,6 +309,46 @@ class AIWorkerService:
         finally:
             stop_heartbeat.set()
             await heartbeat_task
+
+    async def load_executive_summary_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> ExecutiveSummarySource:
+        """Load the exact current tenant transcript pinned by the claimed job."""
+
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            source = await AIWorkerRepository(session).get_executive_summary_source(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_id,
+                job.transcript_version,
+            )
+        if source is None:
+            raise WorkerExecutionError(
+                "executive_summary_source_unavailable",
+                "The current transcript for this Executive Summary is unavailable.",
+                retryable=False,
+            )
+        meeting_title, meeting_date, transcript_text = source
+        normalised_transcript = transcript_text.strip()
+        if not normalised_transcript:
+            raise WorkerExecutionError(
+                "executive_summary_transcript_required",
+                "A usable transcript is required to generate an Executive Summary.",
+                retryable=False,
+            )
+        if len(normalised_transcript) > EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH:
+            raise WorkerExecutionError(
+                "executive_summary_transcript_too_large",
+                "The transcript exceeds the Executive Summary processing limit.",
+                retryable=False,
+            )
+        return ExecutiveSummarySource(
+            meeting_title=meeting_title,
+            meeting_date=meeting_date,
+            transcript_text=normalised_transcript,
+        )
 
     async def _heartbeat_loop(
         self,
@@ -347,14 +416,31 @@ class AIWorkerService:
                 user_id=job.requested_by_user_id,
                 role="admin",
             )
-            await AIArtifactService(session, tenant).prepare_infrastructure_test_artifact(
-                job_id=job.id,
-                meeting_id=job.meeting_id,
-                transcript_id=job.transcript_id,
-                transcript_version=job.transcript_version,
-                schema_version=job.schema_version,
-                content=result.content,
-            )
+            artifact_service = AIArtifactService(session, tenant)
+            if job.job_type == AIJobType.INFRASTRUCTURE_TEST.value:
+                await artifact_service.prepare_infrastructure_test_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
+            elif job.job_type == AIJobType.EXECUTIVE_SUMMARY.value:
+                await artifact_service.prepare_executive_summary_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
+            else:
+                raise WorkerExecutionError(
+                    "unsupported_job_type",
+                    "The queued AI job type is not supported.",
+                    retryable=False,
+                )
             old_status = job.status
             metadata = prepare_lifecycle_transition(
                 job,
@@ -431,6 +517,17 @@ class AIWorkerService:
                 "retryable": error.retryable,
             },
         )
+        if claim.job_type == AIJobType.EXECUTIVE_SUMMARY.value:
+            logger.warning(
+                "executive_summary_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
         if retry_scheduled:
             logger.info(
                 "retry_scheduled",
@@ -543,6 +640,8 @@ class AIWorkerService:
             transcript_version=job.transcript_version,
             requested_by_user_id=job.requested_by_user_id,
             job_type=job.job_type,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
             schema_version=job.schema_version,
             attempt_count=job.attempt_count,
             max_attempts=job.max_attempts,

@@ -20,9 +20,15 @@ import {
 import { ApiClientError, apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatMeetingDate } from "@/lib/meetings";
+import { ExecutiveSummaryPanel } from "@/components/executive-summary-panel";
 
-type MeetingTab = "overview" | "transcript" | "history";
-const meetingTabs: MeetingTab[] = ["overview", "transcript", "history"];
+type MeetingTab = "overview" | "intelligence" | "transcript" | "history";
+const meetingTabs: MeetingTab[] = [
+  "overview",
+  "intelligence",
+  "transcript",
+  "history",
+];
 
 export function MeetingDetail({ meetingId }: { meetingId: string }) {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
@@ -397,6 +403,16 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
               {saving ? "Saving…" : "Save transcript"}
             </button>
           </div>
+        </div>
+      ) : null}
+
+      {activeTab === "intelligence" ? (
+        <div
+          id="meeting-panel-intelligence"
+          role="tabpanel"
+          aria-labelledby="meeting-tab-intelligence"
+        >
+          <ExecutiveSummaryPanel meetingId={meeting.id} />
         </div>
       ) : null}
 

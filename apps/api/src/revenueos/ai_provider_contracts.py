@@ -63,7 +63,7 @@ CurrencyCode = Annotated[
 ]
 MessageContent = Annotated[
     str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000),
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=60_000),
 ]
 
 
@@ -91,6 +91,24 @@ class InfrastructureTestProviderInput(BaseModel):
         return self
 
 
+class ExecutiveSummaryProviderInput(BaseModel):
+    """Provider-neutral Executive Summary input containing rendered messages."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["executive_summary"] = "executive_summary"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> ExecutiveSummaryProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("Executive Summary messages must be ordered system then user.")
+        return self
+
+
+ProviderInput = InfrastructureTestProviderInput | ExecutiveSummaryProviderInput
+
+
 class ProviderRequest(BaseModel):
     """Provider-neutral, immutable request contract for one bounded invocation."""
 
@@ -101,7 +119,7 @@ class ProviderRequest(BaseModel):
     job_id: UUID
     job_type: str = Field(min_length=1, max_length=100, pattern=r"^[a-z0-9_]+$")
     model_identifier: BoundedModelIdentifier
-    input_payload: InfrastructureTestProviderInput
+    input_payload: ProviderInput
     expected_schema_version: int = Field(ge=1)
     timeout_seconds: float = Field(gt=0, le=300)
 

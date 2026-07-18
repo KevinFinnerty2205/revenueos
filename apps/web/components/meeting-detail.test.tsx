@@ -104,11 +104,12 @@ describe("MeetingDetail", () => {
     const overviewTab = screen.getByRole("tab", { name: "Overview" });
     overviewTab.focus();
     fireEvent.keyDown(overviewTab, { key: "ArrowRight" });
-    expect(screen.getByRole("tab", { name: "Transcript" })).toHaveFocus();
-    expect(screen.getByRole("tab", { name: "Transcript" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Intelligence" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Intelligence" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
+    fireEvent.click(screen.getByRole("tab", { name: "Transcript" }));
     fireEvent.change(screen.getByLabelText("Transcript text"), {
       target: { value: "Corrected text." },
     });

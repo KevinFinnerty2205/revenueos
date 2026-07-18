@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from revenueos.models import AIJob, Organisation
+from revenueos.models import AIJob, Meeting, Organisation, Transcript
 
 
 class AIWorkerRepository:
@@ -205,3 +205,37 @@ class AIWorkerRepository:
             )
         )
         return result is not None
+
+    async def get_executive_summary_source(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+        transcript_id: UUID,
+        transcript_version: int,
+    ) -> tuple[str, datetime, str] | None:
+        """Return only the source trace currently pinned by the claimed job."""
+
+        result = await self.session.execute(
+            select(
+                Meeting.title,
+                Meeting.meeting_date,
+                Transcript.raw_text,
+            )
+            .join(
+                Transcript,
+                (Transcript.meeting_id == Meeting.id) & (Transcript.organisation_id == Meeting.organisation_id),
+            )
+            .where(
+                Meeting.organisation_id == organisation_id,
+                Meeting.id == meeting_id,
+                Meeting.deleted_at.is_(None),
+                Transcript.organisation_id == organisation_id,
+                Transcript.id == transcript_id,
+                Transcript.version == transcript_version,
+                Transcript.deleted_at.is_(None),
+            )
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return row.title, row.meeting_date, row.raw_text

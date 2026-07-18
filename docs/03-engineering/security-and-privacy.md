@@ -1,6 +1,6 @@
 # Security and privacy
 
-This is the WO-004B3 engineering baseline, not legal advice or a certification claim.
+This is the WO-004C1 engineering baseline, not legal advice or a certification claim.
 
 ## Authentication and authorisation
 
@@ -40,6 +40,14 @@ tenant-bound transaction between bounded output retries. Completion preserves
 the existing tenant context, ownership lock, cancellation recheck and atomic
 artefact/job commit.
 
+WO-004C1 Executive Summary requests inherit the meeting membership dependency
+and trusted tenant context. Service/repository reads require the tenant's active
+meeting and current transcript; worker source loading additionally requires the
+claimed organisation, meeting, transcript ID and version to match in one
+tenant-bound transaction. The API returns safe not-found for cross-tenant
+meeting access. Existing forced RLS and composite keys continue to cover
+meeting, transcript, job and artefact rows.
+
 ## Secrets
 
 Environment examples contain names and local-only placeholders. Real credentials belong in environment-specific managed secret stores. Production startup rejects mock auth or incomplete Clerk verification configuration.
@@ -62,16 +70,17 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - AI artefact content is validated-data storage for future use, protected from overwrite by a database trigger and separated from the supplied transcript.
 - AI job, lifecycle and artefact writes commit atomically with metadata-only audit events.
 - AI audits may identify job/artefact/type/status/version, prompt/schema/provider/model labels and structured-output attempt count, but exclude transcript/artefact bodies, prompt templates/rendered messages, raw/invalid output, provider secrets, participant-sensitive values and raw exceptions.
-- Infrastructure-test JSON is strict, versioned and rejected before persistence when malformed or extended unexpectedly.
+- Infrastructure-test and Executive Summary JSON are strict, versioned and rejected before persistence when malformed or extended unexpectedly.
 - Worker claims use PostgreSQL row locks, bounded leases and exact worker ownership; no in-memory queue can override persisted state.
 - Retry/cancellation/recovery and artefact completion use short atomic transactions and store only bounded safe errors.
 - Worker logs allow safe IDs, attempts, status, duration and error codes only; they exclude content, participant data, secrets, database URLs and raw exception messages.
 - Provider logs allow only safe provider/model/request labels, latency, usage,
   integer cost, currency, finish reason and bounded error classification; they
   exclude full request/response payloads and artefact content.
-- The deterministic mock provider receives only an infrastructure-operation
-  literal plus safe claim identifiers. It does not load transcript text, make
-  network calls or require an API key.
+- The deterministic mock provider receives only job-specific ordered messages.
+  Executive Summary includes the bounded current transcript as JSON-delimited
+  untrusted data; the mock processes it in-process, makes no network call and
+  requires no API key. No customer content leaves the application.
 - Provider timeouts are bounded and retryable. Unsupported provider/model,
   invalid request and configuration fail without inline retry.
 - Only malformed JSON, non-object JSON and schema-invalid output receive a
@@ -81,6 +90,10 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - Provider output must be one complete JSON object that validates through the
   registered strict Pydantic schema; markdown extraction, `eval` and broad
   repair are prohibited.
+- Executive Summary input is limited to 50,000 trimmed characters, is never
+  silently truncated, and is excluded from logs, audits, safe errors and
+  product-status responses. Prompt-injection instructions in transcript data
+  have no tool or write authority.
 - Locked dependencies and automated format, lint, type, test and build checks.
 
 ## Recording consent and privacy
@@ -103,9 +116,9 @@ Meeting deletion currently makes records unavailable to normal application reads
 - Clerk session/JWT verification is not connected.
 - The production non-bypass database role and grants are not provisioned by this repository; CI tests the required RLS behaviour with a temporary restricted role.
 - Role-specific CRUD permissions, organisation-wide audit export, retention and customer-data erasure workflows are not yet specified.
-- Only deterministic mock-provider infrastructure-test execution exists; real
-  provider execution, provider privacy/retention controls, customer-content
-  prompt evaluation and user/API lifecycle access are not implemented.
+- Executive Summary is deterministic mock-generated output, not a real LLM
+  result. Real-provider privacy/retention, network, rate/cost and quality
+  controls are not implemented.
 - The scheduler function necessarily reveals opaque eligible organisation UUIDs to the database worker role; deployment grants and role separation require production review.
 - Transcript version counters do not preserve historical transcript bodies, so version traceability is not yet source snapshot retention.
 - Hosting, secret management, monitoring, backup and incident-response providers are not selected.

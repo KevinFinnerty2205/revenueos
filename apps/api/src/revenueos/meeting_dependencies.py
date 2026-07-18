@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.ai_services import AIJobService
 from revenueos.database import get_db, set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.meeting_repositories import MeetingRepository
@@ -48,3 +49,11 @@ async def get_transcript_service(
 ) -> AsyncIterator[TranscriptService]:
     await _authorise_meeting_context(session, tenant)
     yield TranscriptService(session, tenant)
+
+
+async def get_ai_job_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+) -> AsyncIterator[AIJobService]:
+    await _authorise_meeting_context(session, tenant)
+    yield AIJobService(session, tenant)

@@ -6,7 +6,9 @@ from typing import cast
 from pydantic import ValidationError
 
 from revenueos.ai_contracts import (
+    EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    ExecutiveSummaryArtifactContent,
     InfrastructureTestArtifactContent,
 )
 from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
@@ -19,6 +21,7 @@ from revenueos.ai_prompt_errors import (
 from revenueos.domain import AIJobType
 
 INFRASTRUCTURE_TEST_SCHEMA_KEY = "infrastructure_test"
+EXECUTIVE_SUMMARY_SCHEMA_KEY = "executive_summary"
 
 
 class OutputSchemaRegistry:
@@ -79,12 +82,23 @@ class OutputSchemaRegistry:
 
 
 def create_default_output_schema_registry() -> OutputSchemaRegistry:
-    definition = OutputSchemaDefinition(
-        schema_key=INFRASTRUCTURE_TEST_SCHEMA_KEY,
-        schema_version=INFRASTRUCTURE_TEST_SCHEMA_VERSION,
-        job_type=AIJobType.INFRASTRUCTURE_TEST.value,
-        validation_model=InfrastructureTestArtifactContent,
-        description="Strict schema for deterministic infrastructure validation.",
-        active=True,
+    return OutputSchemaRegistry(
+        (
+            OutputSchemaDefinition(
+                schema_key=INFRASTRUCTURE_TEST_SCHEMA_KEY,
+                schema_version=INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+                job_type=AIJobType.INFRASTRUCTURE_TEST.value,
+                validation_model=InfrastructureTestArtifactContent,
+                description="Strict schema for deterministic infrastructure validation.",
+                active=True,
+            ),
+            OutputSchemaDefinition(
+                schema_key=EXECUTIVE_SUMMARY_SCHEMA_KEY,
+                schema_version=EXECUTIVE_SUMMARY_SCHEMA_VERSION,
+                job_type=AIJobType.EXECUTIVE_SUMMARY.value,
+                validation_model=ExecutiveSummaryArtifactContent,
+                description="Strict schema for transcript-grounded Executive Summaries.",
+                active=True,
+            ),
+        )
     )
-    return OutputSchemaRegistry((definition,))
