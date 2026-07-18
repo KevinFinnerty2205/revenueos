@@ -23,6 +23,7 @@ from revenueos.ai_openai_provider import (
 )
 from revenueos.ai_provider_contracts import (
     ExecutiveSummaryProviderInput,
+    InfrastructureTestProviderInput,
     ProviderMessage,
     ProviderOutputSchema,
     ProviderRequest,
@@ -530,6 +531,35 @@ def test_direct_provider_construction_rejects_malformed_configuration() -> None:
                 _request(model="gpt-unavailable")
             )
         )
+
+
+def test_openai_provider_rejects_non_executive_summary_requests() -> None:
+    response_create = _ResponseCreate(
+        response=_response(output_text=json.dumps(_output())),
+    )
+    request = _request().model_copy(
+        update={
+            "job_type": "infrastructure_test",
+            "input_payload": InfrastructureTestProviderInput(
+                messages=(
+                    ProviderMessage(
+                        role="system",
+                        content="Return the infrastructure test fields.",
+                    ),
+                    ProviderMessage(
+                        role="user",
+                        content="Use deterministic test values.",
+                    ),
+                )
+            ),
+        },
+    )
+
+    with pytest.raises(InvalidProviderRequestError) as caught:
+        asyncio.run(_provider(response_create).execute(request))
+
+    assert caught.value.retryable is False
+    assert response_create.calls == []
 
 
 def test_openai_key_has_no_frontend_environment_surface() -> None:
