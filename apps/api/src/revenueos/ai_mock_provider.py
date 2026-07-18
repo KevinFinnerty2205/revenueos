@@ -20,6 +20,10 @@ from revenueos.ai_contracts import (
     DECISIONS_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    RISK_EVIDENCE_MAX_LENGTH,
+    RISK_MAX_LENGTH,
+    RISKS_BLOCKERS_MAX_COUNT,
+    RISKS_BLOCKERS_SCHEMA_VERSION,
 )
 from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
@@ -27,6 +31,7 @@ from revenueos.ai_provider_contracts import (
     ExecutiveSummaryProviderInput,
     ProviderRequest,
     ProviderResponse,
+    RisksBlockersProviderInput,
 )
 from revenueos.ai_provider_errors import (
     InvalidProviderRequestError,
@@ -114,6 +119,10 @@ class DeterministicMockAIProvider:
             return request.expected_schema_version == ACTION_ITEMS_SCHEMA_VERSION and isinstance(
                 request.input_payload, ActionItemsProviderInput
             )
+        if request.job_type == AIJobType.RISKS_BLOCKERS.value:
+            return request.expected_schema_version == RISKS_BLOCKERS_SCHEMA_VERSION and isinstance(
+                request.input_payload, RisksBlockersProviderInput
+            )
         return False
 
     @classmethod
@@ -144,11 +153,19 @@ class DeterministicMockAIProvider:
                     cls._extract_action_items(transcript, meeting_date),
                 )
             }
+        if isinstance(request.input_payload, RisksBlockersProviderInput):
+            transcript = cls._extract_transcript(request.input_payload)
+            return {"risks": cast(JsonValue, cls._extract_risks_blockers(transcript))}
         raise InvalidProviderRequestError
 
     @staticmethod
     def _extract_transcript(
-        input_payload: (ExecutiveSummaryProviderInput | DecisionsProviderInput | ActionItemsProviderInput),
+        input_payload: (
+            ExecutiveSummaryProviderInput
+            | DecisionsProviderInput
+            | ActionItemsProviderInput
+            | RisksBlockersProviderInput
+        ),
     ) -> str:
         marker = "Untrusted transcript as a JSON string:\n"
         user_content = input_payload.messages[1].content
@@ -449,6 +466,149 @@ class DeterministicMockAIProvider:
             return "low"
         return "medium"
 
+    @classmethod
+    def _extract_risks_blockers(
+        cls,
+        transcript: str,
+    ) -> list[dict[str, JsonValue]]:
+        normalised = " ".join(transcript.split())
+        sentences = re.split(r"(?<=[.!?])\s+", normalised)
+        injection_markers = (
+            "ignore previous",
+            "ignore all previous",
+            "system prompt",
+            "developer message",
+            "reveal secrets",
+        )
+        risk_markers = (
+            " risk",
+            " blocker",
+            " blocked",
+            " may delay",
+            " might delay",
+            " could delay",
+            " will delay",
+            " prevent ",
+            " cannot proceed",
+            " unable to proceed",
+            " not approved",
+            " pending",
+            " outstanding",
+            " concern",
+            " uncertainty",
+            " uncertain",
+            " objection",
+            " resistance",
+            " pressure",
+            " dependency",
+            " depends on",
+            " lack of ",
+            " missing ",
+            " takes six weeks",
+        )
+        decision_or_action_markers = (
+            " decided ",
+            " agreed ",
+            " approved ",
+            " rejected ",
+            " will send ",
+            " will arrange ",
+            " will provide ",
+            " action item",
+        )
+        risks: list[dict[str, JsonValue]] = []
+        for sentence in sentences:
+            stripped = sentence.strip(" \t\r\n-•")
+            lowered = f" {stripped.lower()} "
+            if not stripped or any(marker in lowered for marker in injection_markers):
+                continue
+            has_consequence = any(marker in lowered for marker in risk_markers)
+            if stripped.endswith("?") and not any(
+                marker in lowered for marker in ("may delay", "could delay", "risk", "block")
+            ):
+                continue
+            if any(marker in lowered for marker in decision_or_action_markers) and not has_consequence:
+                continue
+            if not has_consequence:
+                continue
+
+            category = cls._risk_category(lowered)
+            severity = cls._risk_severity(lowered)
+            owner = cls._risk_owner(stripped)
+            risk = cls._bounded_plain_text(stripped, RISK_MAX_LENGTH)
+            evidence = cls._bounded_plain_text(
+                f"The transcript indicates this {category} concern could affect progress: {stripped}",
+                RISK_EVIDENCE_MAX_LENGTH,
+            )
+            risks.append(
+                {
+                    "risk": risk,
+                    "category": category,
+                    "severity": severity,
+                    "owner": owner,
+                    "confidence": 0.92 if "block" in lowered or "will delay" in lowered else 0.84,
+                    "evidence": evidence,
+                }
+            )
+            if len(risks) == RISKS_BLOCKERS_MAX_COUNT:
+                break
+        return risks
+
+    @staticmethod
+    def _risk_category(content: str) -> str:
+        categories = (
+            ("budget", ("budget", "funding")),
+            ("procurement", ("procurement", "purchasing")),
+            ("legal", ("legal", "contract", "counsel")),
+            ("security", ("security", "infosec", "privacy review")),
+            ("integration", ("integration", "api", "connector")),
+            ("technical", ("technical", "feasibility", "architecture")),
+            ("timeline", ("timeline", "deadline", "delay", "six weeks")),
+            ("implementation", ("implementation", "deployment", "rollout")),
+            ("stakeholder", ("stakeholder", "decision maker", "resistance")),
+            ("competitor", ("competitor", "competitive")),
+            ("commercial", ("commercial", "pricing", "price", "terms")),
+            ("resourcing", ("resource", "capacity", "staff")),
+            ("dependency", ("dependency", "depends on")),
+        )
+        for category, markers in categories:
+            if any(marker in content for marker in markers):
+                return category
+        return "other"
+
+    @staticmethod
+    def _risk_severity(content: str) -> str:
+        if any(
+            marker in content
+            for marker in (
+                " blocker",
+                " blocked",
+                " cannot proceed",
+                " unable to proceed",
+                " will delay",
+                " materially delay",
+                "critical",
+                "six weeks",
+            )
+        ):
+            return "high"
+        if any(marker in content for marker in ("early warning", "limited concern", "minor risk", "low risk")):
+            return "low"
+        return "medium"
+
+    @staticmethod
+    def _risk_owner(sentence: str) -> str | None:
+        patterns = (
+            r"\bowner(?: is|:)?\s+(?P<owner>[A-Z][A-Za-z&' -]{1,80})(?:[.,;]|$)",
+            r"\bowned by\s+(?P<owner>[A-Z][A-Za-z&' -]{1,80})(?:[.,;]|$)",
+            r"\b(?P<owner>[A-Z][A-Za-z&' -]{1,80})\s+is responsible for resolving\b",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, sentence)
+            if match is not None:
+                return " ".join(match.group("owner").split())
+        return None
+
     @staticmethod
     def _bounded_plain_text(value: str, maximum_length: int) -> str:
         normalised = " ".join(value.split()).strip()
@@ -482,6 +642,20 @@ class DeterministicMockAIProvider:
                         "status": "completed",
                         "confidence": 2,
                         "evidence": "",
+                    }
+                ]
+            }
+        if request.job_type == AIJobType.RISKS_BLOCKERS.value:
+            return {
+                "risks": [
+                    {
+                        "risk": "",
+                        "category": "unsupported",
+                        "severity": "critical",
+                        "owner": "",
+                        "confidence": 2,
+                        "evidence": "",
+                        "probability": 90,
                     }
                 ]
             }

@@ -20,6 +20,7 @@ from revenueos.ai_contracts import (
     ActionItemsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
+    RisksBlockersArtifactContent,
 )
 from revenueos.ai_openai_provider import (
     OPENAI_PROVIDER_NAME,
@@ -34,6 +35,7 @@ from revenueos.ai_provider_contracts import (
     ProviderOutputSchema,
     ProviderRequest,
     ProviderResponse,
+    RisksBlockersProviderInput,
 )
 from revenueos.ai_provider_errors import (
     InvalidProviderRequestError,
@@ -365,6 +367,53 @@ def test_openai_accepts_action_items_with_registry_derived_strict_schema() -> No
     assert output_format["name"] == "action_items"
     assert output_format["strict"] is True
     assert output_format["schema"] == ActionItemsArtifactContent.model_json_schema(mode="validation")
+
+
+def test_openai_accepts_risks_blockers_with_registry_derived_strict_schema() -> None:
+    output = {
+        "risks": [
+            {
+                "risk": "Procurement approval may delay implementation.",
+                "category": "procurement",
+                "severity": "high",
+                "owner": "Customer Procurement",
+                "confidence": 0.93,
+                "evidence": "The customer said procurement usually takes six weeks.",
+            }
+        ]
+    }
+    response_create = _ResponseCreate(response=_response(output_text=json.dumps(output)))
+    request = ProviderRequest(
+        request_id=uuid.uuid4(),
+        organisation_id=uuid.uuid4(),
+        job_id=uuid.uuid4(),
+        job_type="risks_blockers",
+        model_identifier=MODEL,
+        input_payload=RisksBlockersProviderInput(
+            messages=(
+                ProviderMessage(role="system", content="Return only Risks & Blockers fields."),
+                ProviderMessage(role="user", content="Use the supplied untrusted transcript."),
+            )
+        ),
+        expected_schema_version=1,
+        output_schema=ProviderOutputSchema(
+            schema_key="risks_blockers",
+            schema_version=1,
+            json_schema=RisksBlockersArtifactContent.model_json_schema(mode="validation"),
+        ),
+        timeout_seconds=30,
+    )
+
+    response = asyncio.run(_provider(response_create).execute(request))
+
+    assert response.output_payload == json.dumps(output)
+    assert len(response_create.calls) == 1
+    text = response_create.calls[0]["text"]
+    assert isinstance(text, dict)
+    output_format = text["format"]
+    assert output_format["name"] == "risks_blockers"
+    assert output_format["strict"] is True
+    assert output_format["schema"] == RisksBlockersArtifactContent.model_json_schema(mode="validation")
 
 
 @pytest.mark.parametrize(

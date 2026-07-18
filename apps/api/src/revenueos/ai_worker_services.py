@@ -14,9 +14,11 @@ from revenueos.ai_contracts import (
     ACTION_ITEMS_TRANSCRIPT_MAX_LENGTH,
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
+    RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
     ActionItemsSource,
     DecisionsSource,
     ExecutiveSummarySource,
+    RisksBlockersSource,
 )
 from revenueos.ai_executors import (
     AIExecutorRegistry,
@@ -237,6 +239,12 @@ class AIWorkerService:
                     cancellation_check=self.is_cancellation_requested,
                     action_items_source_loader=self.load_action_items_source,
                 )
+            elif job.job_type == AIJobType.RISKS_BLOCKERS.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    risks_blockers_source_loader=self.load_risks_blockers_source,
+                )
             else:
                 result = await executor.execute(
                     job,
@@ -322,6 +330,36 @@ class AIWorkerService:
                                 for item in action_items
                                 if isinstance(item, dict) and item.get("due_date") is not None
                             ),
+                        },
+                    )
+                elif job.job_type == AIJobType.RISKS_BLOCKERS.value:
+                    values = result.content.get("risks")
+                    risks = values if isinstance(values, list) else []
+                    severity_counts = {severity: 0 for severity in ("high", "medium", "low")}
+                    category_counts: dict[str, int] = {}
+                    for item in risks:
+                        if not isinstance(item, dict):
+                            continue
+                        severity = item.get("severity")
+                        category = item.get("category")
+                        if isinstance(severity, str) and severity in severity_counts:
+                            severity_counts[severity] += 1
+                        if isinstance(category, str):
+                            category_counts[category] = category_counts.get(category, 0) + 1
+                    logger.info(
+                        "risks_blockers_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                            "risk_count": len(risks),
+                            "empty_result": len(risks) == 0,
+                            "severity_counts": severity_counts,
+                            "category_counts": category_counts,
                         },
                     )
         except WorkerExecutionError as exc:
@@ -488,6 +526,46 @@ class AIWorkerService:
             transcript_text=normalised_transcript,
         )
 
+    async def load_risks_blockers_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> RisksBlockersSource:
+        """Load the exact tenant transcript version pinned by a Risks & Blockers job."""
+
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            source = await AIWorkerRepository(session).get_executive_summary_source(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_id,
+                job.transcript_version,
+            )
+        if source is None:
+            raise WorkerExecutionError(
+                "risks_blockers_source_unavailable",
+                "The current transcript for Risks & Blockers is unavailable.",
+                retryable=False,
+            )
+        meeting_title, meeting_date, transcript_text = source
+        normalised_transcript = transcript_text.strip()
+        if not normalised_transcript:
+            raise WorkerExecutionError(
+                "risks_blockers_transcript_required",
+                "A usable transcript is required to generate Risks & Blockers.",
+                retryable=False,
+            )
+        if len(normalised_transcript) > RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH:
+            raise WorkerExecutionError(
+                "risks_blockers_transcript_too_large",
+                "The transcript exceeds the Risks & Blockers processing limit.",
+                retryable=False,
+            )
+        return RisksBlockersSource(
+            meeting_title=meeting_title,
+            meeting_date=meeting_date,
+            transcript_text=normalised_transcript,
+        )
+
     async def _heartbeat_loop(
         self,
         job: ClaimedAIJob,
@@ -584,6 +662,15 @@ class AIWorkerService:
                 )
             elif job.job_type == AIJobType.ACTION_ITEMS.value:
                 await artifact_service.prepare_action_items_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
+            elif job.job_type == AIJobType.RISKS_BLOCKERS.value:
+                await artifact_service.prepare_risks_blockers_artifact(
                     job_id=job.id,
                     meeting_id=job.meeting_id,
                     transcript_id=job.transcript_id,
@@ -698,6 +785,17 @@ class AIWorkerService:
         elif claim.job_type == AIJobType.ACTION_ITEMS.value:
             logger.warning(
                 "action_items_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
+        elif claim.job_type == AIJobType.RISKS_BLOCKERS.value:
+            logger.warning(
+                "risks_blockers_generation_failed",
                 extra={
                     **self._log_context_from_claim(claim),
                     "meeting_id": str(claim.meeting_id),

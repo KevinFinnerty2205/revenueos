@@ -5,7 +5,8 @@
 WO-004B3 adds application-owned prompt versioning, schema registration, safe
 rendering, strict provider-output parsing and bounded invalid-output retries.
 WO-004C1 registers `executive_summary` version 1, WO-004C2 registers
-`decisions` version 1 and WO-004C3 registers `action_items` version 1.
+`decisions` version 1, WO-004C3 registers `action_items` version 1 and WO-004C4
+registers `risks_blockers` version 1.
 
 The default remains deterministic and mock-backed. OpenAI selection sends the
 current bounded transcript and rendered instructions to the server-side
@@ -26,7 +27,7 @@ registered active version. Registries are ordinary injected instances, so tests
 and worker processes do not share mutable global state.
 
 Default definitions are `infrastructure_test`, `executive_summary`,
-`decisions` and `action_items`, all at version 1. Executive Summary references schema version 1
+`decisions`, `action_items` and `risks_blockers`, all at version 1. Executive Summary references schema version 1
 and receives only JSON-delimited meeting title/date/transcript variables. It
 requires a transcript-grounded summary, normalized meeting type, sentiment and
 confidence, explicitly ignores instructions in transcript data and excludes
@@ -37,7 +38,11 @@ list and requires optional supported owner, normalised status, confidence and
 brief paraphrased evidence. Action Items uses the same minimum source values,
 requires real committed work rather than Decisions/vague suggestions, permits
 an empty list, constrains owner/date/priority/status/confidence/evidence and
-documents the meeting-date-relative calendar.
+documents the meeting-date-relative calendar. Risks & Blockers uses the same
+minimum source values, requires genuine threatening conditions rather than
+questions/decisions/actions, normalises category and qualitative severity,
+permits nullable supported owners and explicitly excludes probability and
+mitigation.
 
 ## Safe rendering and provider messages
 
@@ -52,7 +57,7 @@ simple `{variable_name}` placeholders:
 - empty rendered messages are rejected.
 
 The infrastructure prompt receives only safe job/request UUIDs. Executive
-Summary, Decisions and Action Items receive only the minimum source fields and encode each value as a JSON
+Summary, Decisions, Action Items and Risks & Blockers receive only the minimum source fields and encode each value as a JSON
 string before substitution, preventing transcript text from escaping its data
 boundary. Rendered output becomes an ordered immutable tuple of provider-neutral
 `system` then `user` messages. Full templates and rendered content never enter
@@ -66,9 +71,9 @@ The schema registry provides exact/active resolution, sorted version listing and
 duplicate rejection using instance-owned state.
 
 The default registry reuses strict domain contracts for `infrastructure_test`,
-`executive_summary`, `decisions` and `action_items` version 1; it does not duplicate domain
+`executive_summary`, `decisions`, `action_items` and `risks_blockers` version 1; it does not duplicate domain
 models. Prompt registration must resolve its referenced schema immediately.
-Decisions and Action Items each limit output to 25 immutable items and reject
+Decisions, Action Items and Risks & Blockers each limit output to 25 immutable items and reject
 unknown fields at the top-level and item level.
 
 Provider output may be an already structured JSON mapping or a JSON string.
@@ -144,8 +149,9 @@ attempts and exhaustion. Total tokens remain derived, and raw prompts/output are
 never trace metadata.
 
 Migration `0007_executive_summary` widened the earlier type checks;
-`0008_decisions` widens them again for Decisions, and `0009_action_items`
-widens them for Action Items. None adds prompt/schema
+`0008_decisions` widens them again for Decisions, `0009_action_items` widens
+them for Action Items and `0010_risks_blockers` widens them for Risks &
+Blockers. None adds prompt/schema
 storage.
 
 ## Security and telemetry

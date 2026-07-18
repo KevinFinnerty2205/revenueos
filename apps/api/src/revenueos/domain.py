@@ -92,6 +92,7 @@ class AIJobType(StrEnum):
     EXECUTIVE_SUMMARY = "executive_summary"
     DECISIONS = "decisions"
     ACTION_ITEMS = "action_items"
+    RISKS_BLOCKERS = "risks_blockers"
 
 
 class AIArtifactType(StrEnum):
@@ -99,6 +100,30 @@ class AIArtifactType(StrEnum):
     EXECUTIVE_SUMMARY = "executive_summary"
     DECISIONS = "decisions"
     ACTION_ITEMS = "action_items"
+    RISKS_BLOCKERS = "risks_blockers"
+
+
+class RiskCategory(StrEnum):
+    BUDGET = "budget"
+    PROCUREMENT = "procurement"
+    LEGAL = "legal"
+    SECURITY = "security"
+    TECHNICAL = "technical"
+    INTEGRATION = "integration"
+    TIMELINE = "timeline"
+    IMPLEMENTATION = "implementation"
+    STAKEHOLDER = "stakeholder"
+    COMPETITOR = "competitor"
+    COMMERCIAL = "commercial"
+    RESOURCING = "resourcing"
+    DEPENDENCY = "dependency"
+    OTHER = "other"
+
+
+class RiskSeverity(StrEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
 
 class ActionItemPriority(StrEnum):

@@ -8,6 +8,7 @@ from revenueos.ai_contracts import (
     ActionItemsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
+    RisksBlockersArtifactContent,
 )
 from revenueos.ai_services import (
     ActionItemsStateResult,
@@ -15,6 +16,7 @@ from revenueos.ai_services import (
     AIJobService,
     DecisionsStateResult,
     ExecutiveSummaryStateResult,
+    RisksBlockersStateResult,
 )
 from revenueos.business_contracts import Page
 from revenueos.domain import AIJobStatus, MeetingStatus, MeetingType
@@ -32,6 +34,10 @@ from revenueos.intelligence_contracts import (
     ExecutiveSummaryRequestResponse,
     ExecutiveSummaryResponse,
     ExecutiveSummaryState,
+    RisksBlockersContentResponse,
+    RisksBlockersRequestResponse,
+    RisksBlockersResponse,
+    RisksBlockersState,
 )
 from revenueos.meeting_contracts import (
     MeetingAuditEventResponse,
@@ -192,6 +198,33 @@ async def get_action_items(
     service: Intelligence,
 ) -> ActionItemsResponse:
     return _action_items_response(await service.get_action_items_state(meeting_id))
+
+
+@router.post(
+    "/{meeting_id}/intelligence/risks-blockers",
+    response_model=RisksBlockersRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_risks_blockers(
+    meeting_id: UUID,
+    response: Response,
+    service: Intelligence,
+) -> RisksBlockersRequestResponse:
+    result = await service.request_risks_blockers(meeting_id)
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return _risks_blockers_request_response(result)
+
+
+@router.get(
+    "/{meeting_id}/intelligence/risks-blockers",
+    response_model=RisksBlockersResponse,
+)
+async def get_risks_blockers(
+    meeting_id: UUID,
+    service: Intelligence,
+) -> RisksBlockersResponse:
+    return _risks_blockers_response(await service.get_risks_blockers_state(meeting_id))
 
 
 @router.patch("/{meeting_id}", response_model=MeetingResponse)
@@ -505,4 +538,64 @@ def _action_items_response(result: ActionItemsStateResult) -> ActionItemsRespons
         ),
         safe_message=safe_message,
         action_items=content,
+    )
+
+
+def _risks_blockers_request_response(
+    result: AIJobRequestResult,
+) -> RisksBlockersRequestResponse:
+    job = result.job
+    job_status = cast(
+        Literal["queued", "running", "completed"] | None,
+        {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+        }.get(job.status),
+    )
+    if job_status is None:
+        raise PublicAPIError(
+            "invalid_intelligence_state",
+            "The Risks & Blockers request could not be represented safely.",
+            500,
+        )
+    return RisksBlockersRequestResponse(
+        job_id=job.id,
+        status=job_status,
+        created=result.created,
+        transcript_version=job.transcript_version,
+        requested_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+def _risks_blockers_response(result: RisksBlockersStateResult) -> RisksBlockersResponse:
+    job = result.job
+    content = None
+    if result.artifact is not None:
+        validated = RisksBlockersArtifactContent.model_validate(result.artifact.content_json)
+        content = RisksBlockersContentResponse.model_validate(validated)
+    safe_message = job.last_error_message_safe if job is not None and result.state in {"failed", "cancelled"} else None
+    if result.state == "cancelled" and safe_message is None:
+        safe_message = "Risks & Blockers generation was cancelled."
+    if result.state == "failed" and safe_message is None:
+        safe_message = "Risks & Blockers generation could not be completed."
+    return RisksBlockersResponse(
+        state=cast(RisksBlockersState, result.state),
+        generation_available=result.generation_available,
+        unavailable_reason=result.unavailable_reason,
+        job_id=job.id if job is not None else None,
+        transcript_version=job.transcript_version if job is not None else None,
+        requested_at=job.created_at if job is not None else None,
+        started_at=job.started_at if job is not None else None,
+        generated_at=(
+            result.artifact.created_at
+            if result.artifact is not None
+            else job.completed_at
+            if job is not None and result.state == "completed"
+            else None
+        ),
+        safe_message=safe_message,
+        risks_blockers=content,
     )

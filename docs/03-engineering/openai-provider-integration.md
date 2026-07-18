@@ -4,7 +4,7 @@
 
 WO-004C1A adds the first external AI adapter behind the existing
 provider-neutral boundary. The separately deployed worker can run the existing
-Executive Summary, Decisions and Action Items through either the deterministic `mock`
+Executive Summary, Decisions, Action Items and Risks & Blockers through either the deterministic `mock`
 provider or the server-only `openai` provider. Selection is process
 configuration; there is no
 browser setting, tenant credential, model selector or fallback provider.
@@ -13,7 +13,7 @@ The default remains `mock`. Automated tests and ordinary local development need
 no OpenAI credential and make no external call.
 
 > **External data-flow warning:** setting `AI_PROVIDER=openai` sends the
-> rendered Executive Summary, Decisions or Action Items instructions and selected meeting transcript to
+> rendered Executive Summary, Decisions, Action Items or Risks & Blockers instructions and selected meeting transcript to
 > OpenAI. Do not enable it with production customer content until production
 > identity, consent, retention, deletion, provider privacy and operational
 > controls are approved.
@@ -24,7 +24,7 @@ no OpenAI credential and make no external call.
 converts the provider-neutral ordered `system`/`user` messages to Responses API
 input and requests a strict `json_schema` text format. The JSON Schema is
 generated directly from the matching registered Pydantic Executive Summary,
-Decisions or Action Items schema v1; there is no second vendor-specific product schema.
+Decisions, Action Items or Risks & Blockers schema v1; there is no second vendor-specific product schema.
 
 The adapter disables response storage with `store=false`, requests no tools,
 does not stream and does not grant the model write authority. A completed
@@ -60,7 +60,7 @@ validation or provider construction.
 
 ## Request lifecycle
 
-1. The API queues the tenant-owned Executive Summary, Decisions or Action Items job.
+1. The API queues the tenant-owned Executive Summary, Decisions, Action Items or Risks & Blockers job.
 2. The worker claims it and loads the exact pinned transcript in a short
    tenant-bound transaction.
 3. The transaction closes and cancellation is checked before provider
@@ -146,7 +146,7 @@ retain their original provider/model trace.
 
 ## Known limitations
 
-- Only Executive Summary, Decisions and Action Items use the real adapter;
+- Only Executive Summary, Decisions, Action Items and Risks & Blockers use the real adapter;
   infrastructure test and unknown job types are rejected before SDK
   invocation.
 - There is no pricing source, budget enforcement or accurate cost estimate.

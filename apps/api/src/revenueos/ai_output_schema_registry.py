@@ -10,10 +10,12 @@ from revenueos.ai_contracts import (
     DECISIONS_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    RISKS_BLOCKERS_SCHEMA_VERSION,
     ActionItemsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     InfrastructureTestArtifactContent,
+    RisksBlockersArtifactContent,
 )
 from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
 from revenueos.ai_prompt_errors import (
@@ -28,6 +30,7 @@ INFRASTRUCTURE_TEST_SCHEMA_KEY = "infrastructure_test"
 EXECUTIVE_SUMMARY_SCHEMA_KEY = "executive_summary"
 DECISIONS_SCHEMA_KEY = "decisions"
 ACTION_ITEMS_SCHEMA_KEY = "action_items"
+RISKS_BLOCKERS_SCHEMA_KEY = "risks_blockers"
 
 
 class OutputSchemaRegistry:
@@ -120,6 +123,14 @@ def create_default_output_schema_registry() -> OutputSchemaRegistry:
                 job_type=AIJobType.ACTION_ITEMS.value,
                 validation_model=ActionItemsArtifactContent,
                 description="Strict schema for transcript-grounded meeting Action Items.",
+                active=True,
+            ),
+            OutputSchemaDefinition(
+                schema_key=RISKS_BLOCKERS_SCHEMA_KEY,
+                schema_version=RISKS_BLOCKERS_SCHEMA_VERSION,
+                job_type=AIJobType.RISKS_BLOCKERS.value,
+                validation_model=RisksBlockersArtifactContent,
+                description="Strict schema for transcript-grounded meeting Risks & Blockers.",
                 active=True,
             ),
         )
