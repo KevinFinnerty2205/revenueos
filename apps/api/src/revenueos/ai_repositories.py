@@ -197,7 +197,12 @@ class AIJobRepository:
                 AIJob.prompt_version == prompt_version,
                 AIJob.schema_version == schema_version,
             )
-            .order_by(AIJob.created_at.desc(), AIJob.id.desc())
+            .order_by(
+                AIJob.created_at.desc(),
+                func.length(AIJob.idempotency_key).desc(),
+                AIJob.idempotency_key.desc(),
+                AIJob.id.desc(),
+            )
             .limit(1)
         )
         return result.scalar_one_or_none()

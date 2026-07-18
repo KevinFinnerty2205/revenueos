@@ -111,6 +111,17 @@ readiness gates remain outstanding.
 The capability reuses the existing provider and worker stack and does not
 authorise production customer data or any later intelligence output.
 
+### WO-004C3 — Meeting Action Items Intelligence — Complete
+
+- **Objective:** Add the third end-to-end Meeting Intelligence capability using only concrete actions committed in the current transcript.
+- **Major deliverables:** Action Items prompt/schema v1, deterministic populated/empty/nullable/relative-date mock output, explicit OpenAI allowlist extension, transcript-pinned durable job, append-only artefact, POST/GET API, accessible Action Items panel and terminating three-second polling.
+- **Out of scope:** Risks, Blockers, Open Questions, follow-up email, task creation/editing/completion, reminders, calendar/email/CRM integration, memory, recording, transcription, streaming and automation.
+- **Security gates:** Trusted tenant context, forced RLS, exact transcript version, no truncation, prompt-injection-as-data, conservative meeting-date-only normalisation, validated-content-only persistence, content-redacted telemetry/audits and explicit OpenAI external-data warning.
+- **Demonstration:** Generate Action Items from a synthetic authorised transcript, observe queued/processing then completed cards or a successful empty result, and retain the result on refresh.
+
+The capability extracts candidates only. It does not create tasks or authorise
+production customer data or any later intelligence output.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.

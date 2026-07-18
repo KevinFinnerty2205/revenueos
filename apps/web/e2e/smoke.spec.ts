@@ -125,12 +125,14 @@ test("meeting list and create form are responsive and deliberate", async ({
   await expect(page.getByText(/does not record or transcribe/i)).toBeVisible();
 });
 
-test("meeting detail generates and persists Summary and Decisions intelligence", async ({
+test("meeting detail generates and persists Summary, Decisions and Action Items intelligence", async ({
   page,
 }) => {
   let executiveSummaryRequested = false;
   let decisionsRequested = false;
   let decisionsStatusReads = 0;
+  let actionItemsRequested = false;
+  let actionItemsStatusReads = 0;
   await page.route(
     "http://localhost:8000/api/v1/meetings/meeting-1**",
     async (route) => {
@@ -263,6 +265,84 @@ test("meeting detail generates and persists Summary and Decisions intelligence",
         });
         return;
       }
+      if (path.endsWith("/intelligence/action-items")) {
+        if (route.request().method() === "POST") {
+          actionItemsRequested = true;
+          await route.fulfill({
+            status: 202,
+            json: {
+              jobId: "job-3",
+              status: "queued",
+              created: true,
+              transcriptVersion: 1,
+              requestedAt: "2026-07-18T00:00:00Z",
+              startedAt: null,
+              completedAt: null,
+            },
+          });
+          return;
+        }
+        if (!actionItemsRequested) {
+          await route.fulfill({
+            json: {
+              state: "empty",
+              generationAvailable: true,
+              unavailableReason: null,
+              jobId: null,
+              transcriptVersion: null,
+              requestedAt: null,
+              startedAt: null,
+              generatedAt: null,
+              safeMessage: null,
+              actionItems: null,
+            },
+          });
+          return;
+        }
+        actionItemsStatusReads += 1;
+        await route.fulfill({
+          json:
+            actionItemsStatusReads === 1
+              ? {
+                  state: "queued",
+                  generationAvailable: false,
+                  unavailableReason: null,
+                  jobId: "job-3",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: null,
+                  generatedAt: null,
+                  safeMessage: null,
+                  actionItems: null,
+                }
+              : {
+                  state: "completed",
+                  generationAvailable: false,
+                  unavailableReason: null,
+                  jobId: "job-3",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: "2026-07-18T00:00:01Z",
+                  generatedAt: "2026-07-18T00:00:02Z",
+                  safeMessage: null,
+                  actionItems: {
+                    actionItems: [
+                      {
+                        task: "Send the revised commercial proposal.",
+                        owner: "Kevin",
+                        dueDate: "2026-08-01",
+                        priority: "high",
+                        status: "open",
+                        confidence: 0.92,
+                        evidence:
+                          "Kevin committed to send the revised proposal by 2026-08-01.",
+                      },
+                    ],
+                  },
+                },
+        });
+        return;
+      }
       if (path.endsWith("/participants")) {
         await route.fulfill({ json: [] });
         return;
@@ -349,6 +429,17 @@ test("meeting detail generates and persists Summary and Decisions intelligence",
   await expect(page.getByText("Jane Smith")).toBeVisible();
   await expect(page.getByText("Confirmed", { exact: true })).toBeVisible();
   await expect(page.getByText("94%")).toBeVisible();
+  await page.getByRole("button", { name: "Generate Action Items" }).click();
+  await expect(
+    page.getByText("Action Items generation is queued…"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Send the revised commercial proposal."),
+  ).toBeVisible();
+  await expect(page.getByText("Kevin", { exact: true })).toBeVisible();
+  await expect(page.getByText("High", { exact: true })).toBeVisible();
+  await expect(page.getByText("Open", { exact: true })).toBeVisible();
+  await expect(page.getByText("92%")).toBeVisible();
 
   await page.reload();
   await page.getByRole("tab", { name: "Intelligence" }).click();
@@ -357,6 +448,9 @@ test("meeting detail generates and persists Summary and Decisions intelligence",
   ).toBeVisible();
   await expect(
     page.getByText("Proceed with the September pilot."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Send the revised commercial proposal."),
   ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });

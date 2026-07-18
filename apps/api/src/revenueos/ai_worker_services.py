@@ -11,8 +11,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.ai_contracts import (
+    ACTION_ITEMS_TRANSCRIPT_MAX_LENGTH,
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
+    ActionItemsSource,
     DecisionsSource,
     ExecutiveSummarySource,
 )
@@ -229,6 +231,12 @@ class AIWorkerService:
                     cancellation_check=self.is_cancellation_requested,
                     decisions_source_loader=self.load_decisions_source,
                 )
+            elif job.job_type == AIJobType.ACTION_ITEMS.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    action_items_source_loader=self.load_action_items_source,
+                )
             else:
                 result = await executor.execute(
                     job,
@@ -289,6 +297,31 @@ class AIWorkerService:
                             "schema_version": result.schema_version,
                             "decision_count": decision_count,
                             "empty_result": decision_count == 0,
+                        },
+                    )
+                elif job.job_type == AIJobType.ACTION_ITEMS.value:
+                    values = result.content.get("action_items")
+                    action_items = values if isinstance(values, list) else []
+                    logger.info(
+                        "action_items_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                            "action_item_count": len(action_items),
+                            "empty_result": len(action_items) == 0,
+                            "owner_count": sum(
+                                1 for item in action_items if isinstance(item, dict) and item.get("owner") is not None
+                            ),
+                            "due_date_count": sum(
+                                1
+                                for item in action_items
+                                if isinstance(item, dict) and item.get("due_date") is not None
+                            ),
                         },
                     )
         except WorkerExecutionError as exc:
@@ -415,6 +448,46 @@ class AIWorkerService:
             transcript_text=normalised_transcript,
         )
 
+    async def load_action_items_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> ActionItemsSource:
+        """Load the exact tenant transcript version pinned by an Action Items job."""
+
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            source = await AIWorkerRepository(session).get_executive_summary_source(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_id,
+                job.transcript_version,
+            )
+        if source is None:
+            raise WorkerExecutionError(
+                "action_items_source_unavailable",
+                "The current transcript for Action Items is unavailable.",
+                retryable=False,
+            )
+        meeting_title, meeting_date, transcript_text = source
+        normalised_transcript = transcript_text.strip()
+        if not normalised_transcript:
+            raise WorkerExecutionError(
+                "action_items_transcript_required",
+                "A usable transcript is required to generate Action Items.",
+                retryable=False,
+            )
+        if len(normalised_transcript) > ACTION_ITEMS_TRANSCRIPT_MAX_LENGTH:
+            raise WorkerExecutionError(
+                "action_items_transcript_too_large",
+                "The transcript exceeds the Action Items processing limit.",
+                retryable=False,
+            )
+        return ActionItemsSource(
+            meeting_title=meeting_title,
+            meeting_date=meeting_date,
+            transcript_text=normalised_transcript,
+        )
+
     async def _heartbeat_loop(
         self,
         job: ClaimedAIJob,
@@ -502,6 +575,15 @@ class AIWorkerService:
                 )
             elif job.job_type == AIJobType.DECISIONS.value:
                 await artifact_service.prepare_decisions_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
+            elif job.job_type == AIJobType.ACTION_ITEMS.value:
+                await artifact_service.prepare_action_items_artifact(
                     job_id=job.id,
                     meeting_id=job.meeting_id,
                     transcript_id=job.transcript_id,
@@ -605,6 +687,17 @@ class AIWorkerService:
         elif claim.job_type == AIJobType.DECISIONS.value:
             logger.warning(
                 "decisions_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
+        elif claim.job_type == AIJobType.ACTION_ITEMS.value:
+            logger.warning(
+                "action_items_generation_failed",
                 extra={
                     **self._log_context_from_claim(claim),
                     "meeting_id": str(claim.meeting_id),

@@ -122,7 +122,24 @@ class DecisionsProviderInput(BaseModel):
         return self
 
 
-ProviderInput = InfrastructureTestProviderInput | ExecutiveSummaryProviderInput | DecisionsProviderInput
+class ActionItemsProviderInput(BaseModel):
+    """Provider-neutral Action Items input containing rendered messages."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["action_items"] = "action_items"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> ActionItemsProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("Action Items messages must be ordered system then user.")
+        return self
+
+
+ProviderInput = (
+    InfrastructureTestProviderInput | ExecutiveSummaryProviderInput | DecisionsProviderInput | ActionItemsProviderInput
+)
 
 
 class ProviderOutputSchema(BaseModel):

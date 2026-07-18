@@ -56,7 +56,7 @@ claimed job attempt and accepts values from 1 to 5.
 
 To exercise the product flow, create a meeting with an authorised plain-text
 transcript no longer than 50,000 characters, open its **Intelligence** tab and
-generate the Executive Summary or Decisions. Each UI panel checks state every three seconds while
+generate the Executive Summary, Decisions or Action Items. Each UI panel checks state every three seconds while
 the worker processes the mock job. No API key or external network access is
 required. Enabling OpenAI sends the rendered capability instructions and
 selected transcript to OpenAI. Use only synthetic non-sensitive data and follow
@@ -93,6 +93,10 @@ triggers.
 Migration `0008_decisions` widens the same two type checks for Decisions and
 adds no table, column, RLS policy or prompt storage. Its downgrade deletes
 Decisions rows before restoring the Executive Summary-era checks.
+
+Migration `0009_action_items` widens the same checks for Action Items without
+adding a table, column, RLS policy or prompt storage. Its downgrade deletes
+Action Items rows before restoring the Decisions-era checks.
 
 WO-004C1A requires no migration because the existing trace fields already
 represent provider, model, request ID, usage and cost/currency metadata.

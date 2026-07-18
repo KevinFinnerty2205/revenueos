@@ -41,6 +41,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Prompt registry and structured output](03-engineering/prompt-registry-and-structured-output.md)
 - [Executive Summary intelligence](03-engineering/executive-summary-intelligence.md)
 - [Meeting Decisions intelligence](03-engineering/meeting-decisions-intelligence.md)
+- [Meeting Action Items intelligence](03-engineering/meeting-action-items-intelligence.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -80,6 +81,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-004C1: Executive Summary Intelligence Capability](07-sprints/wo-004c1-executive-summary.md)
 - [WO-004C1A: Production OpenAI Provider Integration](07-sprints/wo-004c1a-openai-provider.md)
 - [WO-004C2: Meeting Decisions Intelligence](07-sprints/wo-004c2-meeting-decisions.md)
+- [WO-004C3: Meeting Action Items Intelligence](07-sprints/wo-004c3-meeting-action-items.md)
 
 ## 08 — Decision records
 
@@ -95,6 +97,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0010: current-transcript Executive Summary execution](08-decisions/0010-current-transcript-executive-summary.md)
 - [ADR 0011: server-side OpenAI Responses provider](08-decisions/0011-server-side-openai-responses-provider.md)
 - [ADR 0012: current-transcript Decisions execution](08-decisions/0012-current-transcript-decisions.md)
+- [ADR 0013: current-transcript Action Items execution](08-decisions/0013-current-transcript-action-items.md)
 
 ## Current delivery boundary
 

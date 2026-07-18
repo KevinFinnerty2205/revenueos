@@ -11,6 +11,7 @@ from uuid import UUID
 from revenueos.ai_contracts import (
     SAFE_ERROR_CODE_MAX_LENGTH,
     SAFE_ERROR_MESSAGE_MAX_LENGTH,
+    ActionItemsSource,
     DecisionsSource,
     ExecutiveSummarySource,
 )
@@ -28,6 +29,8 @@ from revenueos.ai_prompt_errors import (
     StructuredOutputAttemptsExhaustedError,
 )
 from revenueos.ai_prompt_registry import (
+    ACTION_ITEMS_PROMPT_KEY,
+    ACTION_ITEMS_PROMPT_VERSION,
     DECISIONS_PROMPT_KEY,
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
@@ -38,6 +41,7 @@ from revenueos.ai_prompt_registry import (
 from revenueos.ai_prompt_renderer import render_prompt
 from revenueos.ai_provider import AIProvider, execute_provider_request
 from revenueos.ai_provider_contracts import (
+    ActionItemsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     InfrastructureTestProviderInput,
@@ -120,6 +124,10 @@ DecisionsSourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[DecisionsSource],
 ]
+ActionItemsSourceLoader = Callable[
+    [ClaimedAIJob],
+    Awaitable[ActionItemsSource],
+]
 ProviderInputFactory = Callable[[tuple[ProviderMessage, ...]], ProviderInput]
 
 
@@ -131,6 +139,7 @@ class AIJobExecutor(Protocol):
         cancellation_check: CancellationCheck | None = None,
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
         decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
     ) -> ExecutionResult: ...
 
 
@@ -510,8 +519,9 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
         cancellation_check: CancellationCheck | None = None,
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
         decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
     ) -> ExecutionResult:
-        del executive_summary_source_loader, decisions_source_loader
+        del executive_summary_source_loader, decisions_source_loader, action_items_source_loader
         return await self._execute_structured(
             job,
             prompt_key=self._settings.ai_prompt_key,
@@ -542,8 +552,9 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
         cancellation_check: CancellationCheck | None = None,
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
         decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
     ) -> ExecutionResult:
-        del decisions_source_loader
+        del decisions_source_loader, action_items_source_loader
         if job.job_type != AIJobType.EXECUTIVE_SUMMARY.value:
             raise WorkerExecutionError(
                 "invalid_executive_summary_job",
@@ -610,8 +621,9 @@ class DecisionsExecutor(_StructuredOutputExecutor):
         cancellation_check: CancellationCheck | None = None,
         executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
         decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
     ) -> ExecutionResult:
-        del executive_summary_source_loader
+        del executive_summary_source_loader, action_items_source_loader
         if job.job_type != AIJobType.DECISIONS.value:
             raise WorkerExecutionError(
                 "invalid_decisions_job",
@@ -669,6 +681,83 @@ class DecisionsExecutor(_StructuredOutputExecutor):
         return result
 
 
+class ActionItemsExecutor(_StructuredOutputExecutor):
+    """Transcript-grounded Action Items execution through the provider port."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
+    ) -> ExecutionResult:
+        del executive_summary_source_loader, decisions_source_loader
+        if job.job_type != AIJobType.ACTION_ITEMS.value:
+            raise WorkerExecutionError(
+                "invalid_action_items_job",
+                "The queued job is not an Action Items job.",
+                retryable=False,
+            )
+        if job.prompt_key != ACTION_ITEMS_PROMPT_KEY or job.prompt_version != ACTION_ITEMS_PROMPT_VERSION:
+            raise WorkerExecutionError(
+                "invalid_prompt_configuration",
+                "The Action Items prompt configuration is invalid.",
+                retryable=False,
+            )
+        if action_items_source_loader is None:
+            raise WorkerExecutionError(
+                "action_items_source_unavailable",
+                "The Action Items source loader is unavailable.",
+                retryable=False,
+            )
+
+        logger.info("action_items_execution_started", extra=self._log_context(job))
+        source = await action_items_source_loader(job)
+        logger.info(
+            "action_items_transcript_loaded",
+            extra={
+                **self._log_context(job),
+                "transcript_version": job.transcript_version,
+                "transcript_character_count": len(source.transcript_text),
+                "meeting_date_available": True,
+            },
+        )
+        result = await self._execute_structured(
+            job,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            variables=PromptVariables(
+                values={
+                    "meeting_title": json.dumps(source.meeting_title, ensure_ascii=False),
+                    "meeting_date": json.dumps(source.meeting_date.isoformat(), ensure_ascii=False),
+                    "transcript_text": json.dumps(source.transcript_text, ensure_ascii=False),
+                }
+            ),
+            input_factory=lambda messages: ActionItemsProviderInput(messages=messages),
+            cancellation_check=cancellation_check,
+        )
+        values = result.content.get("action_items")
+        action_items = values if isinstance(values, list) else []
+        logger.info(
+            "action_items_output_validation_completed",
+            extra={
+                **self._log_context(job),
+                "action_item_count": len(action_items),
+                "empty_result": len(action_items) == 0,
+                "owner_count": sum(
+                    1 for item in action_items if isinstance(item, dict) and item.get("owner") is not None
+                ),
+                "due_date_count": sum(
+                    1 for item in action_items if isinstance(item, dict) and item.get("due_date") is not None
+                ),
+                "structured_output_attempt_count": result.structured_output_attempt_count,
+            },
+        )
+        return result
+
+
 class AIExecutorRegistry:
     def __init__(
         self,
@@ -697,6 +786,12 @@ class AIExecutorRegistry:
                 schemas,
             ),
             AIJobType.DECISIONS.value: DecisionsExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
+            AIJobType.ACTION_ITEMS.value: ActionItemsExecutor(
                 configuration,
                 providers,
                 prompts,

@@ -260,7 +260,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  idempotency_key, requested_by_user_id)
                             VALUES
                                 (:ai_job_id, :organisation_id, :meeting_id, :transcript_id,
-                                 1, 'infrastructure_test', 'pending', 1,
+                                 1, 'action_items', 'pending', 1,
                                  :idempotency_key, :user_id)
                             """
                         ),
@@ -278,8 +278,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  artifact_version, schema_version, content_json)
                             VALUES
                                 (:ai_artifact_id, :organisation_id, :meeting_id,
-                                 :transcript_id, 1, :ai_job_id, 'infrastructure_test',
-                                 1, 1, '{"status":"ok"}'::json)
+                                 :transcript_id, 1, :ai_job_id, 'action_items',
+                                 1, 1, '{"action_items":[]}'::json)
                             """
                         ),
                         identity_parameters,
@@ -443,7 +443,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     )
                     assert service_job.organisation_id == tenant_a["organisation_id"]
                     assert service_artifact.organisation_id == tenant_a["organisation_id"]
-                    assert service_artifact.artifact_version == 2
+                    assert service_artifact.artifact_version == 1
                 await transaction.commit()
 
                 cross_tenant_inserts = (
