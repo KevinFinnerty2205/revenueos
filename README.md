@@ -2,13 +2,13 @@
 
 RevenueOS is the AI sales teammate that remembers every customer interaction and turns conversations into action.
 
-This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated business entities, Sprint 3 Meeting Domain, the WO-004A1 AI database foundation and WO-004A2 internal AI domain services. Meetings, participants, deliberately supplied plain-text transcripts, content-minimised audit history, AI job persistence, tenant-scoped repositories, idempotent infrastructure-test job creation, lifecycle validation and strict versioned artefact persistence are implemented. No API/UI exposes the AI tables, and no worker, provider, prompt, recording, media storage, transcription, genuine AI execution, integration, production Clerk verification or billing is implemented.
+This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated business entities, Sprint 3 Meeting Domain and WO-004A1/A2/B1 AI infrastructure. Meetings, deliberately supplied transcripts, audit history, AI persistence/domain rules and a separate durable worker for deterministic infrastructure tests are implemented. No API/UI exposes AI lifecycle data, and no provider, prompt, recording, media storage, transcription, genuine AI execution, integration, production Clerk verification or billing is implemented.
 
 ## Product blueprint
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 plus WO-004A1 as described below.
+Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 plus WO-004A1/A2/B1.
 
 ## Prerequisites
 
@@ -35,7 +35,7 @@ The example files contain local-only values and empty credential placeholders. N
 
 ## Start PostgreSQL and migrate
 
-Docker Compose provides one local PostgreSQL service because PostgreSQL behaviour and future RLS cannot be represented faithfully by a browser-side store.
+Docker Compose provides one local PostgreSQL service because PostgreSQL locking and forced RLS cannot be represented faithfully by a browser-side store.
 
 ```bash
 docker compose -f infra/docker/compose.yml up -d
@@ -47,7 +47,7 @@ If PostgreSQL is not configured, the API still starts in limited mode. `GET /hea
 
 ## Run locally
 
-Start the API and web application in separate terminals:
+Start the API, web application and internal worker in separate terminals:
 
 ```bash
 pnpm dev:api
@@ -55,6 +55,10 @@ pnpm dev:api
 
 ```bash
 pnpm dev:web
+```
+
+```bash
+pnpm dev:worker
 ```
 
 Open:
@@ -171,7 +175,7 @@ pnpm build:web
 pnpm build:api
 ```
 
-The web output is started with `pnpm --filter @revenueos/web start`. The API package is run with a production ASGI process using `revenueos.main:app`. Deployment-provider configuration is intentionally deferred.
+The web output is started with `pnpm --filter @revenueos/web start`. The API package is run with a production ASGI process using `revenueos.main:app`; the separately supervised worker uses `revenueos-ai-worker`. Deployment-provider configuration is intentionally deferred.
 
 ## Troubleshooting
 
@@ -181,4 +185,4 @@ The web output is started with `pnpm --filter @revenueos/web start`. The API pac
 - **Port already in use:** stop the existing process or change the local web/API command and update the corresponding URL/CORS variables.
 - **OpenAPI or TypeScript contract changed:** update the small `packages/shared` surface in the same pull request. Pydantic/OpenAPI remains canonical.
 
-See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [API reference](docs/03-engineering/api.md) and [WO-004A2 record](docs/07-sprints/wo-004a2-ai-domain-services.md).
+See the [documentation index](docs/README.md), [development guide](docs/03-engineering/development-guide.md), [API reference](docs/03-engineering/api.md) and [WO-004B1 record](docs/07-sprints/wo-004b1-ai-worker-queue.md).

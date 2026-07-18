@@ -14,7 +14,23 @@ class JSONFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        for key in ("request_id", "method", "path", "status_code", "duration_ms", "error_type"):
+        safe_metadata_keys = (
+            "request_id",
+            "method",
+            "path",
+            "status_code",
+            "duration_ms",
+            "error_type",
+            "organisation_id",
+            "job_id",
+            "job_type",
+            "worker_id",
+            "attempt_count",
+            "processing_duration_ms",
+            "error_code",
+            "retryable",
+        )
+        for key in safe_metadata_keys:
             value = getattr(record, key, None)
             if value is not None:
                 payload[key] = value

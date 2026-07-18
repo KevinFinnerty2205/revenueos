@@ -6,6 +6,7 @@
   "scripts": {
     "dev:web": "pnpm --filter @revenueos/web dev",
     "dev:api": "uv --directory apps/api run uvicorn revenueos.main:app --reload --port 8000",
+    "dev:worker": "uv --directory apps/api run revenueos-ai-worker",
     "build:web": "pnpm --filter @revenueos/web build",
     "build:api": "uv --directory apps/api build",
     "build": "pnpm build:web && pnpm build:api",

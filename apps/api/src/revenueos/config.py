@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     clerk_jwks_url: str | None = None
     clerk_issuer: str | None = None
     clerk_audience: str | None = None
+    worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
+    worker_lease_duration_seconds: int = Field(default=60, ge=10, le=3600)
+    worker_heartbeat_interval_seconds: int = Field(default=20, ge=1, le=1200)
+    worker_base_retry_delay_seconds: int = Field(default=5, ge=1, le=3600)
+    worker_max_retry_delay_seconds: int = Field(default=300, ge=1, le=86400)
+    worker_default_max_attempts: int = Field(default=3, ge=1, le=20)
 
     @field_validator("database_url", "clerk_jwks_url", "clerk_issuer", "clerk_audience", mode="before")
     @classmethod
@@ -53,6 +59,10 @@ class Settings(BaseSettings):
                 raise ValueError("Production requires complete Clerk verification configuration.")
             if "*" in self.cors_origin_list:
                 raise ValueError("Production CORS origins must be explicit.")
+        if self.worker_heartbeat_interval_seconds >= self.worker_lease_duration_seconds:
+            raise ValueError("Worker heartbeat interval must be shorter than the lease duration.")
+        if self.worker_base_retry_delay_seconds > self.worker_max_retry_delay_seconds:
+            raise ValueError("Worker base retry delay cannot exceed the maximum retry delay.")
         return self
 
     @property

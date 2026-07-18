@@ -1,6 +1,6 @@
 # Security and privacy
 
-This is the WO-004A2 engineering baseline, not legal advice or a certification claim.
+This is the WO-004B1 engineering baseline, not legal advice or a certification claim.
 
 ## Authentication and authorisation
 
@@ -22,6 +22,8 @@ Every request derives its user and organisation from the auth adapter. Client-su
 API tests exercise cross-tenant list, read, update, delete and relationship denial, including nested participants and inherited transcript permissions. PostgreSQL 16 integration tests assume a restricted role and prove RLS visibility and write checks across every tenant table, including AI jobs and artefacts. Database tests separately prove cross-tenant and mismatched AI trace relationships fail.
 
 WO-004A2 repositories retain an explicit organisation predicate even under RLS. Services accept only trusted `TenantContext`, validate meeting/transcript/job trace ownership and map foreign identifiers to safe not-found errors so another tenant's record existence is not disclosed. Restricted-role PostgreSQL tests execute the new repositories and services while forced RLS is active.
+
+WO-004B1 worker transactions also require an explicit organisation predicate and set transaction-local tenant context before tenant-owned reads/writes. A fixed security-definer scheduler function returns only opaque IDs for organisations with eligible work; it cannot return arbitrary rows or content. Claim, heartbeat, recovery, cancellation and completion operate under forced RLS. PostgreSQL tests cover wrong-tenant worker queries, concurrent claim/recovery and continuing forced-RLS state.
 
 ## Secrets
 
@@ -46,6 +48,10 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - AI job, lifecycle and artefact writes commit atomically with metadata-only audit events.
 - AI audits may identify job/artefact/type/status/version and optional provider/model labels, but exclude transcript/artefact bodies, prompts, provider secrets, participant-sensitive values and raw exceptions.
 - Infrastructure-test JSON is strict, versioned and rejected before persistence when malformed or extended unexpectedly.
+- Worker claims use PostgreSQL row locks, bounded leases and exact worker ownership; no in-memory queue can override persisted state.
+- Retry/cancellation/recovery and artefact completion use short atomic transactions and store only bounded safe errors.
+- Worker logs allow safe IDs, attempts, status, duration and error codes only; they exclude content, participant data, secrets, database URLs and raw exception messages.
+- The deterministic executor does not load transcript text or make network calls.
 - Locked dependencies and automated format, lint, type, test and build checks.
 
 ## Recording consent and privacy
@@ -68,8 +74,8 @@ Meeting deletion currently makes records unavailable to normal application reads
 - Clerk session/JWT verification is not connected.
 - The production non-bypass database role and grants are not provisioned by this repository; CI tests the required RLS behaviour with a temporary restricted role.
 - Role-specific CRUD permissions, organisation-wide audit export, retention and customer-data erasure workflows are not yet specified.
-- Worker claiming, retry scheduling, provider execution, prompt governance and user/API access are not implemented; the AI tables and internal services must not be exposed directly.
-- Lifecycle updates are not worker claims and do not yet use row locks; future execution needs an explicit concurrency design.
+- Only deterministic infrastructure-test worker execution exists; provider execution, prompt governance and user/API lifecycle access are not implemented.
+- The scheduler function necessarily reveals opaque eligible organisation UUIDs to the database worker role; deployment grants and role separation require production review.
 - Transcript version counters do not preserve historical transcript bodies, so version traceability is not yet source snapshot retention.
 - Hosting, secret management, monitoring, backup and incident-response providers are not selected.
 - Recording wording, residency and deletion commitments require product/legal approval before conversation features.

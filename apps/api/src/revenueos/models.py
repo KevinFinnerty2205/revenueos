@@ -706,6 +706,10 @@ class AIJob(TimestampMixin, Base):
             name="ck_ai_jobs_idempotency_length",
         ),
         CheckConstraint(
+            "worker_id IS NULL OR (length(trim(worker_id)) > 0 AND length(worker_id) <= 200)",
+            name="ck_ai_jobs_worker_id",
+        ),
+        CheckConstraint(
             "currency IS NULL OR (length(currency) = 3 AND currency = upper(currency))",
             name="ck_ai_jobs_currency",
         ),
@@ -804,6 +808,8 @@ class AIJob(TimestampMixin, Base):
     cancellation_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error_code: Mapped[str | None] = mapped_column(String(100))
     last_error_message_safe: Mapped[str | None] = mapped_column(String(1000))
     provider_request_id: Mapped[str | None] = mapped_column(String(255))

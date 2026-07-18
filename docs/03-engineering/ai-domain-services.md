@@ -2,7 +2,7 @@
 
 ## Current boundary
 
-WO-004A2 adds an internal application layer for the `infrastructure_test` AI job and artefact types introduced by migration `0004`. It can create and inspect tenant-scoped jobs, validate lifecycle transitions, and persist typed, append-only infrastructure-test artefacts. It performs no AI work and has no API or UI surface.
+WO-004A2 adds an internal application layer for the `infrastructure_test` AI job and artefact types introduced by migration `0004`. It can create and inspect tenant-scoped jobs, validate lifecycle transitions, and persist typed, append-only infrastructure-test artefacts. The service layer has no API or UI surface. WO-004B1 now consumes it from a separate deterministic worker described in [AI worker and durable job queue](ai-worker-queue.md).
 
 Migration `0005_ai_domain_services` extends the existing meeting audit event with a metadata-only JSON object, expands its action/entity checks and widens the action column for the new event names.
 
@@ -109,10 +109,10 @@ Every service starts with trusted `TenantContext`. Every repository read/write h
 ## Known limitations and extension points
 
 - No API route or UI can request, inspect or transition AI work.
-- No worker, row claiming, lease acquisition, backoff scheduler or cancellation executor exists.
+- Worker claiming, leases, retry scheduling and cancellation execution now exist only for the deterministic infrastructure test.
 - No provider, prompt registry, model call, parsing, genuine meeting intelligence or deterministic mock provider exists.
 - Lifecycle transitions do not use row locks; future worker work must define concurrency/claim semantics before execution.
 - The transcript version identifies the current mutable transcript row but does not preserve a historical text snapshot.
 - Production identity, retention, export, erasure and operational controls remain incomplete; production customer data is prohibited.
 
-A later, separately approved worker layer can consume the pending/stale repository queries and add claim/lease semantics. A provider layer can attach explicit prompt/provider/model metadata and produce further typed schemas without changing the tenant trace, transaction, safe-error or append-only rules.
+A later, separately approved provider layer can attach explicit prompt/provider/model metadata and produce further typed schemas without changing the tenant trace, transaction, safe-error or append-only rules.
