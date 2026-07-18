@@ -188,3 +188,20 @@ class AIWorkerRepository:
             .returning(AIJob.id)
         )
         return result.scalar_one_or_none() is not None
+
+    async def cancellation_requested(
+        self,
+        organisation_id: UUID,
+        job_id: UUID,
+        worker_id: str,
+    ) -> bool:
+        result = await self.session.scalar(
+            select(AIJob.id).where(
+                AIJob.organisation_id == organisation_id,
+                AIJob.id == job_id,
+                AIJob.status == "running",
+                AIJob.worker_id == worker_id,
+                AIJob.cancellation_requested_at.is_not(None),
+            )
+        )
+        return result is not None

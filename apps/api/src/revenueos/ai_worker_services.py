@@ -182,6 +182,15 @@ class AIWorkerService:
             logger.debug("heartbeat_refreshed", extra=self._log_context_from_claim(job))
         return refreshed
 
+    async def is_cancellation_requested(self, job: ClaimedAIJob) -> bool:
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            return await AIWorkerRepository(session).cancellation_requested(
+                job.organisation_id,
+                job.job_id,
+                job.worker_id,
+            )
+
     async def execute_claimed_job(self, job: ClaimedAIJob) -> None:
         try:
             executor = self._executors.get(job.job_type)
@@ -197,7 +206,10 @@ class AIWorkerService:
         )
         started = time.perf_counter()
         try:
-            result = await executor.execute(job)
+            result = await executor.execute(
+                job,
+                cancellation_check=self.is_cancellation_requested,
+            )
             duration_ms = max(0, int((time.perf_counter() - started) * 1000))
             if ownership_lost.is_set():
                 return
@@ -208,6 +220,11 @@ class AIWorkerService:
                     extra={
                         **self._log_context_from_claim(job),
                         "processing_duration_ms": duration_ms,
+                        "prompt_key": result.prompt_key,
+                        "prompt_version": result.prompt_version,
+                        "schema_key": result.schema_key,
+                        "schema_version": result.schema_version,
+                        "structured_output_attempt_count": (result.structured_output_attempt_count),
                         "provider_name": result.provider_name,
                         "model_identifier": result.model_identifier,
                         "provider_request_id": result.provider_request_id,
@@ -314,6 +331,9 @@ class AIWorkerService:
                 )
                 return False
 
+            job.prompt_key = result.prompt_key
+            job.prompt_version = result.prompt_version
+            job.schema_version = result.schema_version
             job.provider_key = result.provider_name
             job.model_name = result.model_identifier
             job.provider_request_id = result.provider_request_id
@@ -348,7 +368,18 @@ class AIWorkerService:
                 job,
                 old_status=old_status,
                 new_status=AIJobStatus.COMPLETED.value,
-                metadata={"worker_id": claim.worker_id},
+                metadata={
+                    "worker_id": claim.worker_id,
+                    "prompt_key": result.prompt_key,
+                    "prompt_version": result.prompt_version,
+                    "schema_key": result.schema_key,
+                    "schema_version": result.schema_version,
+                    "structured_output_attempt_count": (result.structured_output_attempt_count),
+                    "provider_key": result.provider_name,
+                    "model_name": result.model_identifier,
+                    "provider_request_id": result.provider_request_id,
+                    "finish_reason": result.finish_reason,
+                },
             )
             await session.flush()
             return True

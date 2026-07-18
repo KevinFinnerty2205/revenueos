@@ -46,7 +46,11 @@ Web runs at `http://localhost:3000`, API at `http://localhost:8000`, and the wor
 Provider defaults are `API_AI_PROVIDER_NAME=mock`,
 `API_AI_PROVIDER_MODEL_IDENTIFIER=mock-infrastructure-v1` and
 `API_AI_PROVIDER_TIMEOUT_SECONDS=10`. Unknown names/models fail safely; no real
-provider or credential setting is implemented.
+provider or credential setting is implemented. Prompt/output defaults are
+`API_AI_PROMPT_KEY=infrastructure_test` and
+`API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS=3`. The latter is the total number of
+provider calls allowed for malformed or schema-invalid output within one
+claimed job attempt and accepts values from 1 to 5.
 
 ## Database workflow
 
@@ -65,6 +69,10 @@ Migration `0006_ai_worker_queue` adds worker ownership metadata and the narrow P
 
 WO-004B2 requires no migration: existing AI job/artefact columns represent its
 provider trace, usage and cost metadata.
+
+WO-004B3 also requires no migration: existing prompt/schema trace columns plus
+content-free audit metadata represent prompt/schema identity and structured
+output attempt count.
 
 ## Validation
 

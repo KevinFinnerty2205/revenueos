@@ -54,13 +54,13 @@ The roadmap preserves one demonstrable outcome per sprint where practical. It ta
 
 WO-003 expanded the earlier proposed Sprint 3 boundary to include direct plain-text transcript CRUD. It did not authorise recording, media ingestion, transcription or AI. Production customer data remains prohibited until production identity and operational privacy controls are complete.
 
-### WO-004A1/A2/B1/B2 — AI Infrastructure Foundation — Complete
+### WO-004A1/A2/B1/B2/B3 — AI Infrastructure Foundation — Complete
 
 - **Objective:** Establish tenant-safe AI persistence, internal domain rules and a durable provider-neutral execution path for deterministic infrastructure tests.
-- **Major deliverables:** Exact transcript-version trace, append-only artefacts, forced RLS, tenant-scoped services, idempotency/lifecycle validation, PostgreSQL claim/lease/heartbeat/retry/recovery/cancellation, typed provider contracts, a deterministic no-network mock, bounded provider timeout/error handling, strict infrastructure-test execution and metadata-only telemetry/audits.
-- **Out of scope:** External/real providers, credentials, prompts, APIs, UI, polling and genuine meeting intelligence.
+- **Major deliverables:** Exact transcript-version trace, append-only artefacts, forced RLS, tenant-scoped services, idempotency/lifecycle validation, PostgreSQL claim/lease/heartbeat/retry/recovery/cancellation, typed provider contracts, a deterministic no-network mock, bounded provider timeout/error handling, immutable versioned infrastructure prompt/schema registries, safe rendering, strict output parsing/validation/retry and metadata-only telemetry/audits.
+- **Out of scope:** External/real providers, credentials, customer-content prompts, APIs, UI, polling and genuine meeting intelligence.
 - **Security gates:** Explicit organisation predicates plus forced RLS, narrow tenant scheduling, composite tenant constraints, safe errors, atomic artefact/completion and content-free telemetry/audits.
-- **Demonstration:** Concurrent backend workers claim one deterministic infrastructure-test job once, execute it through the mock provider, persist its typed artefact/zero usage metadata, recover expired work and fail cross-tenant operations closed.
+- **Demonstration:** Concurrent backend workers claim one deterministic infrastructure-test job once, safely render its registered prompt, execute it through the mock provider, reject or retry invalid structured output, persist its typed artefact/zero usage/exact prompt-schema trace, recover expired work and fail cross-tenant operations closed.
 
 These work orders create implementation seams only and do not change the separately proposed product sprint sequence below.
 
@@ -101,7 +101,7 @@ These work orders create implementation seams only and do not change the separat
 
 - **Objective:** Generate structured, cited meeting summary and next-step candidates behind a provider abstraction.
 - **User value:** Users review accurate draft intelligence instead of writing notes from scratch.
-- **Major deliverables:** Transcription provider if required, structured AI provider, versioned prompts/schemas, AI artefacts, citations/confidence, summary/next-step review UI, deterministic mocks, evaluation and cost/latency instrumentation.
+- **Major deliverables:** Transcription provider if required, real structured AI adapter, meeting-intelligence prompt/schema definitions, AI artefacts, citations/confidence, summary/next-step review UI, deterministic mocks, evaluation and cost/latency instrumentation.
 - **Dependencies:** Reviewed transcript from Sprint 6 and approved AI/provider privacy posture.
 - **Out of scope:** Relationship memory, external actions, assistant and autonomous execution.
 - **Acceptance criteria:** Supported source produces schema-valid cited output; unsupported claims fail review gates; user edits/rejects; low-confidence/partial/provider failure is explicit; eval thresholds pass.

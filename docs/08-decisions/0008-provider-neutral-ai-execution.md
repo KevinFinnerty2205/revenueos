@@ -78,6 +78,7 @@ AI-facing API/UI.
 ## Related documents
 
 - [AI provider abstraction](../03-engineering/ai-provider-abstraction.md)
+- [ADR 0009: versioned prompts and strict structured output](0009-versioned-prompts-and-strict-output.md)
 - [AI worker and durable job queue](../03-engineering/ai-worker-queue.md)
 - [WO-004B2 sprint record](../07-sprints/wo-004b2-ai-provider-abstraction.md)
 - [Security and privacy](../03-engineering/security-and-privacy.md)

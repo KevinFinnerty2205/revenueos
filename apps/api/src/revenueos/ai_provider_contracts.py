@@ -61,6 +61,19 @@ CurrencyCode = Annotated[
         pattern=r"^[A-Z]{3}$",
     ),
 ]
+MessageContent = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000),
+]
+
+
+class ProviderMessage(BaseModel):
+    """Provider-neutral ordered message with no vendor SDK type."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    role: Literal["system", "user"]
+    content: MessageContent
 
 
 class InfrastructureTestProviderInput(BaseModel):
@@ -69,6 +82,13 @@ class InfrastructureTestProviderInput(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     operation: Literal["infrastructure_test"] = "infrastructure_test"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> InfrastructureTestProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("Infrastructure provider messages must be ordered system then user.")
+        return self
 
 
 class ProviderRequest(BaseModel):
@@ -101,7 +121,7 @@ class ProviderResponse(BaseModel):
     provider_name: BoundedProviderName
     model_identifier: BoundedModelIdentifier
     provider_request_id: BoundedProviderRequestID
-    output_payload: dict[str, JsonValue]
+    output_payload: dict[str, JsonValue] | str
     input_token_count: int = Field(ge=0)
     output_token_count: int = Field(ge=0)
     total_token_count: int = Field(ge=0)

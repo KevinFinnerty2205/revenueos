@@ -464,6 +464,7 @@ class AIArtifactService(_AIDomainService):
                     "artifact_type": artifact.artifact_type,
                     "artifact_version": artifact.artifact_version,
                     "schema_version": artifact.schema_version,
+                    "prompt_key": artifact.prompt_key,
                     "prompt_version": artifact.prompt_version,
                     "provider_key": artifact.provider_key,
                     "model_name": artifact.model_name,
