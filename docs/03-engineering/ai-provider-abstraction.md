@@ -9,12 +9,12 @@ The provider-neutral seam supports two implementations:
 - `OpenAIProvider`, a server-only adapter using the official asynchronous Python
   SDK and Responses API.
 
-Together they support the existing `infrastructure_test`, `executive_summary`
-and `decisions` contracts where explicitly allowed. Executive Summary and
-Decisions are the only customer-facing AI capabilities. There is no provider UI, tenant-managed credential, additional
+Together they support the existing `infrastructure_test`, `executive_summary`,
+`decisions` and `action_items` contracts where explicitly allowed. Executive Summary,
+Decisions and Action Items are the only customer-facing AI capabilities. There is no provider UI, tenant-managed credential, additional
 vendor, tool use, streaming or automatic provider fallback.
 
-Selecting OpenAI sends the rendered Executive Summary or Decisions prompt and bounded meeting
+Selecting OpenAI sends the rendered Executive Summary, Decisions or Action Items prompt and bounded meeting
 transcript to OpenAI. The default mock makes no network call. See
 [OpenAI provider integration](openai-provider-integration.md) for the external
 data boundary and operating guide.
@@ -66,8 +66,9 @@ external-transmission flag. It never returns the key.
 The mock produces repeatable validated output with zero token usage, zero cost
 and zero latency. For Executive Summary it derives a bounded excerpt and simple
 keyword-based classifications. For Decisions it deterministically recognises
-explicit agreement/rejection/deferral markers and returns either strict items
-or a valid empty list. Both exclude obvious instruction-like transcript
+explicit agreement/rejection/deferral markers. For Action Items it recognises
+explicit future commitments, applies the narrow meeting-date calendar and
+returns nullable owner/date fields or a valid empty list. All exclude obvious instruction-like transcript
 sentences and never perform a network request. This is test output, not a
 quality claim or substitute for a genuine LLM evaluation.
 

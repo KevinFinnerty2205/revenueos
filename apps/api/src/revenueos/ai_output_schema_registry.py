@@ -6,9 +6,11 @@ from typing import cast
 from pydantic import ValidationError
 
 from revenueos.ai_contracts import (
+    ACTION_ITEMS_SCHEMA_VERSION,
     DECISIONS_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    ActionItemsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     InfrastructureTestArtifactContent,
@@ -25,6 +27,7 @@ from revenueos.domain import AIJobType
 INFRASTRUCTURE_TEST_SCHEMA_KEY = "infrastructure_test"
 EXECUTIVE_SUMMARY_SCHEMA_KEY = "executive_summary"
 DECISIONS_SCHEMA_KEY = "decisions"
+ACTION_ITEMS_SCHEMA_KEY = "action_items"
 
 
 class OutputSchemaRegistry:
@@ -109,6 +112,14 @@ def create_default_output_schema_registry() -> OutputSchemaRegistry:
                 job_type=AIJobType.DECISIONS.value,
                 validation_model=DecisionsArtifactContent,
                 description="Strict schema for transcript-grounded meeting Decisions.",
+                active=True,
+            ),
+            OutputSchemaDefinition(
+                schema_key=ACTION_ITEMS_SCHEMA_KEY,
+                schema_version=ACTION_ITEMS_SCHEMA_VERSION,
+                job_type=AIJobType.ACTION_ITEMS.value,
+                validation_model=ActionItemsArtifactContent,
+                description="Strict schema for transcript-grounded meeting Action Items.",
                 active=True,
             ),
         )

@@ -8,10 +8,11 @@ current usable transcript. The API queues work; it never calls a provider
 synchronously. The separately running worker validates and persists a versioned
 artefact, while the browser polls safe product state every three seconds.
 
-Decisions is independent from Executive Summary. A meeting may have one,
-either, or both capability jobs for the same transcript version. This work does
-not add Action Items, due dates, Risks, Open Questions, follow-up content, CRM
-suggestions, recording, transcription or automation.
+Decisions is independent from Executive Summary and the later WO-004C3 Action
+Items capability. Each capability has its own job and artefact for the same
+transcript version. WO-004C2 itself did not add Action Items, due dates, Risks,
+Open Questions, follow-up content, CRM suggestions, recording, transcription
+or automation.
 
 ## End-to-end flow
 
@@ -114,9 +115,10 @@ list, malformed JSON and schema-invalid deterministic test sequences. Its
 keyword extraction is visibly mock behaviour, not an intelligence-quality
 claim.
 
-`OpenAIProvider` explicitly allows only `executive_summary` and `decisions`
-with their matching typed inputs. `infrastructure_test` and unknown job types
-are rejected before the SDK call. The adapter uses the existing asynchronous
+`OpenAIProvider` explicitly allows `executive_summary`, `decisions` and the
+later `action_items` capability with their matching typed inputs.
+`infrastructure_test` and unknown job types are rejected before the SDK call.
+The adapter uses the existing asynchronous
 Responses API, `store=false`, disabled SDK retries and the registry-derived
 strict JSON Schema. Refusal, incomplete output and provider failures retain the
 existing safe classification. Automated tests inject SDK-shaped fakes; no test

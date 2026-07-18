@@ -34,7 +34,12 @@ class PromptDefinition(BaseModel):
 
     prompt_key: RegistryKey
     prompt_version: int = Field(ge=1)
-    job_type: Literal["infrastructure_test", "executive_summary", "decisions"]
+    job_type: Literal[
+        "infrastructure_test",
+        "executive_summary",
+        "decisions",
+        "action_items",
+    ]
     system_template: PromptTemplate
     user_template: PromptTemplate
     output_schema_key: RegistryKey

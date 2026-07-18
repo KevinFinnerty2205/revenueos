@@ -218,7 +218,7 @@ No production customer content until all applicable gates pass:
 - Current persistence can run without the full production Supabase role/RLS deployment.
 - Storage, ingestion, connector, approval, complete audit, deletion/export and
   production worker-operations controls are not implemented. A server-side
-  OpenAI adapter exists for Executive Summary and Decisions, but production provider
+  OpenAI adapter exists for Executive Summary, Decisions and Action Items, but production provider
   privacy/retention/residency, consent, evaluation, budget and operational
   enablement gates are incomplete. Selecting it sends the chosen transcript to
   OpenAI; production customer data remains prohibited.

@@ -91,12 +91,24 @@ class AIJobType(StrEnum):
     INFRASTRUCTURE_TEST = "infrastructure_test"
     EXECUTIVE_SUMMARY = "executive_summary"
     DECISIONS = "decisions"
+    ACTION_ITEMS = "action_items"
 
 
 class AIArtifactType(StrEnum):
     INFRASTRUCTURE_TEST = "infrastructure_test"
     EXECUTIVE_SUMMARY = "executive_summary"
     DECISIONS = "decisions"
+    ACTION_ITEMS = "action_items"
+
+
+class ActionItemPriority(StrEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class ActionItemStatus(StrEnum):
+    OPEN = "open"
 
 
 class DecisionStatus(StrEnum):

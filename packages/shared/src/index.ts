@@ -95,6 +95,15 @@ export type DecisionStatus =
   | "tentative"
   | "rejected"
   | "deferred";
+export type ActionItemsState =
+  | "empty"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type ActionItemPriority = "high" | "medium" | "low";
+export type ActionItemStatus = "open";
 
 export interface EntityPage<T> {
   items: T[];
@@ -255,6 +264,43 @@ export interface DecisionsResponse {
 }
 
 export interface DecisionsRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface ActionItem {
+  task: string;
+  owner: string | null;
+  dueDate: string | null;
+  priority: ActionItemPriority;
+  status: ActionItemStatus;
+  confidence: number;
+  evidence: string;
+}
+
+export interface ActionItemsContent {
+  actionItems: ActionItem[];
+}
+
+export interface ActionItemsResponse {
+  state: ActionItemsState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  actionItems: ActionItemsContent | null;
+}
+
+export interface ActionItemsRequestResponse {
   jobId: string;
   status: "queued" | "running" | "completed";
   created: boolean;

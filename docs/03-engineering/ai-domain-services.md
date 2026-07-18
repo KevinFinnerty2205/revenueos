@@ -121,12 +121,12 @@ Every service starts with trusted `TenantContext`. Every repository read/write h
 
 ## Known limitations and extension points
 
-- Generic AI lifecycle work remains internal; only the Executive Summary and
-  Decisions request/state resources are public.
+- Generic AI lifecycle work remains internal; only the Executive Summary,
+  Decisions and Action Items request/state resources are public.
 - Worker claiming, leases, retry scheduling and cancellation execution support
-  infrastructure tests, Executive Summary and Decisions.
-- The configured provider may be mock or OpenAI; there is no Action Items or
-  later Meeting Intelligence capability.
+  infrastructure tests, Executive Summary, Decisions and Action Items.
+- The configured provider may be mock or OpenAI; there is no later Meeting
+  Intelligence capability.
 - The transcript version identifies the current mutable transcript row but does not preserve a historical text snapshot.
 - Production identity, retention, export, erasure and operational controls remain incomplete; production customer data is prohibited.
 

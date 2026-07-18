@@ -22,6 +22,7 @@ import { humanise } from "@/lib/business-entities";
 import { formatMeetingDate } from "@/lib/meetings";
 import { ExecutiveSummaryPanel } from "@/components/executive-summary-panel";
 import { DecisionsPanel } from "@/components/decisions-panel";
+import { ActionItemsPanel } from "@/components/action-items-panel";
 
 type MeetingTab = "overview" | "intelligence" | "transcript" | "history";
 const meetingTabs: MeetingTab[] = [
@@ -416,6 +417,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
           <div className="grid gap-6">
             <ExecutiveSummaryPanel meetingId={meeting.id} />
             <DecisionsPanel meetingId={meeting.id} />
+            <ActionItemsPanel meetingId={meeting.id} />
           </div>
         </div>
       ) : null}

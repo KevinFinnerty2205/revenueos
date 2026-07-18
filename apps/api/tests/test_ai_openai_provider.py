@@ -16,12 +16,17 @@ from openai.types.responses import (
 )
 from pydantic import ValidationError
 
-from revenueos.ai_contracts import DecisionsArtifactContent, ExecutiveSummaryArtifactContent
+from revenueos.ai_contracts import (
+    ActionItemsArtifactContent,
+    DecisionsArtifactContent,
+    ExecutiveSummaryArtifactContent,
+)
 from revenueos.ai_openai_provider import (
     OPENAI_PROVIDER_NAME,
     OpenAIProvider,
 )
 from revenueos.ai_provider_contracts import (
+    ActionItemsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     InfrastructureTestProviderInput,
@@ -312,6 +317,54 @@ def test_openai_accepts_decisions_with_registry_derived_strict_schema() -> None:
     assert output_format["name"] == "decisions"
     assert output_format["strict"] is True
     assert output_format["schema"] == DecisionsArtifactContent.model_json_schema(mode="validation")
+
+
+def test_openai_accepts_action_items_with_registry_derived_strict_schema() -> None:
+    output = {
+        "action_items": [
+            {
+                "task": "Send the revised commercial proposal.",
+                "owner": "Kevin",
+                "due_date": "2026-08-01",
+                "priority": "high",
+                "status": "open",
+                "confidence": 0.94,
+                "evidence": "Kevin committed to send the revised proposal by 2026-08-01.",
+            }
+        ]
+    }
+    response_create = _ResponseCreate(response=_response(output_text=json.dumps(output)))
+    request = ProviderRequest(
+        request_id=uuid.uuid4(),
+        organisation_id=uuid.uuid4(),
+        job_id=uuid.uuid4(),
+        job_type="action_items",
+        model_identifier=MODEL,
+        input_payload=ActionItemsProviderInput(
+            messages=(
+                ProviderMessage(role="system", content="Return only Action Items fields."),
+                ProviderMessage(role="user", content="Use the supplied untrusted transcript."),
+            )
+        ),
+        expected_schema_version=1,
+        output_schema=ProviderOutputSchema(
+            schema_key="action_items",
+            schema_version=1,
+            json_schema=ActionItemsArtifactContent.model_json_schema(mode="validation"),
+        ),
+        timeout_seconds=30,
+    )
+
+    response = asyncio.run(_provider(response_create).execute(request))
+
+    assert response.output_payload == json.dumps(output)
+    assert len(response_create.calls) == 1
+    text = response_create.calls[0]["text"]
+    assert isinstance(text, dict)
+    output_format = text["format"]
+    assert output_format["name"] == "action_items"
+    assert output_format["strict"] is True
+    assert output_format["schema"] == ActionItemsArtifactContent.model_json_schema(mode="validation")
 
 
 @pytest.mark.parametrize(

@@ -51,8 +51,8 @@ variables, data flow, smoke test and rollback.
 7. Start/update the web application and exercise a synthetic smoke journey.
 8. Monitor safe failure, lease, retry, rate-limit and latency signals.
 
-WO-004C1A requires no schema migration; WO-004C2 requires only
-`0008_decisions`, which widens existing AI type checks. The current trace fields
+WO-004C1A requires no schema migration; WO-004C2 and WO-004C3 require only
+`0008_decisions` and `0009_action_items`, which widen existing AI type checks. The current trace fields
 already hold provider/model/request/token metadata.
 
 ## Rollback
@@ -61,5 +61,6 @@ Roll back API, worker and web to the same previously validated release. For an
 OpenAI-specific operational issue, select `AI_PROVIDER=mock`, restart the
 worker, verify new work uses the mock, and revoke/remove the unused OpenAI key.
 Do not rewrite completed artefact trace. Database downgrade is unnecessary for
-an OpenAI rollback. Downgrading `0008_decisions` is destructive to Decisions
-jobs/artefacts and requires an explicit data/rollback decision.
+an OpenAI rollback. Downgrading `0009_action_items` is destructive to Action
+Items jobs/artefacts; downgrading `0008_decisions` is destructive to Decisions
+jobs/artefacts. Either requires an explicit data/rollback decision.

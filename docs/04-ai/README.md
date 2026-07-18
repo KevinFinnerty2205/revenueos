@@ -6,9 +6,10 @@ versioned prompts and strict output validation. WO-004C1 uses those seams for
 one customer-facing Executive Summary. WO-004C1A adds an optional server-side
 OpenAI Responses API adapter while retaining the deterministic no-network mock
 as the default. WO-004C2 adds an independent, strictly structured
-transcript-grounded Decisions capability through the same stack. No Action
-Items or later intelligence capability, Anthropic/Gemini
-provider, embedding, tool use or agent is active.
+transcript-grounded Decisions capability, and WO-004C3 adds concrete committed
+Action Items with conservative due-date handling through the same stack. No
+later intelligence capability, Anthropic/Gemini provider, embedding, tool use
+or agent is active.
 
 See [AI domain services](../03-engineering/ai-domain-services.md), the
 [AI worker queue](../03-engineering/ai-worker-queue.md) and
@@ -19,8 +20,9 @@ documents configuration, strict Responses API output and the external
 transcript data flow. The
 [prompt registry and structured-output guide](../03-engineering/prompt-registry-and-structured-output.md)
 documents the WO-004B3 extension.
-The [Executive Summary guide](../03-engineering/executive-summary-intelligence.md)
-and [Meeting Decisions guide](../03-engineering/meeting-decisions-intelligence.md)
+The [Executive Summary guide](../03-engineering/executive-summary-intelligence.md),
+[Meeting Decisions guide](../03-engineering/meeting-decisions-intelligence.md)
+and [Meeting Action Items guide](../03-engineering/meeting-action-items-intelligence.md)
 document the current Meeting Intelligence capabilities.
 
 Future AI work must use the typed provider port, schema validation, authorised

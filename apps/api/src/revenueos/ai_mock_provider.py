@@ -3,11 +3,17 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from datetime import datetime
 from typing import Literal, cast
 
 from pydantic import JsonValue
 
+from revenueos.ai_action_items_dates import normalise_action_item_due_date
 from revenueos.ai_contracts import (
+    ACTION_ITEM_EVIDENCE_MAX_LENGTH,
+    ACTION_ITEM_TASK_MAX_LENGTH,
+    ACTION_ITEMS_MAX_COUNT,
+    ACTION_ITEMS_SCHEMA_VERSION,
     DECISION_EVIDENCE_MAX_LENGTH,
     DECISION_MAX_LENGTH,
     DECISIONS_MAX_COUNT,
@@ -16,6 +22,7 @@ from revenueos.ai_contracts import (
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
 )
 from revenueos.ai_provider_contracts import (
+    ActionItemsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     ProviderRequest,
@@ -103,6 +110,10 @@ class DeterministicMockAIProvider:
             return request.expected_schema_version == DECISIONS_SCHEMA_VERSION and isinstance(
                 request.input_payload, DecisionsProviderInput
             )
+        if request.job_type == AIJobType.ACTION_ITEMS.value:
+            return request.expected_schema_version == ACTION_ITEMS_SCHEMA_VERSION and isinstance(
+                request.input_payload, ActionItemsProviderInput
+            )
         return False
 
     @classmethod
@@ -124,11 +135,20 @@ class DeterministicMockAIProvider:
         if isinstance(request.input_payload, DecisionsProviderInput):
             transcript = cls._extract_transcript(request.input_payload)
             return {"decisions": cast(JsonValue, cls._extract_decisions(transcript))}
+        if isinstance(request.input_payload, ActionItemsProviderInput):
+            transcript = cls._extract_transcript(request.input_payload)
+            meeting_date = cls._extract_meeting_date(request.input_payload)
+            return {
+                "action_items": cast(
+                    JsonValue,
+                    cls._extract_action_items(transcript, meeting_date),
+                )
+            }
         raise InvalidProviderRequestError
 
     @staticmethod
     def _extract_transcript(
-        input_payload: ExecutiveSummaryProviderInput | DecisionsProviderInput,
+        input_payload: (ExecutiveSummaryProviderInput | DecisionsProviderInput | ActionItemsProviderInput),
     ) -> str:
         marker = "Untrusted transcript as a JSON string:\n"
         user_content = input_payload.messages[1].content
@@ -143,6 +163,23 @@ class DeterministicMockAIProvider:
         if not isinstance(transcript, str) or not transcript.strip():
             raise InvalidProviderRequestError
         return transcript.strip()
+
+    @staticmethod
+    def _extract_meeting_date(input_payload: ActionItemsProviderInput) -> datetime:
+        prefix = "Meeting date as an ISO-8601 JSON string: "
+        user_content = input_payload.messages[1].content
+        marker_index = user_content.find(prefix)
+        if marker_index < 0:
+            raise InvalidProviderRequestError
+        encoded = user_content[marker_index + len(prefix) :]
+        try:
+            value, _ = json.JSONDecoder().raw_decode(encoded)
+            meeting_date = datetime.fromisoformat(value)
+        except (TypeError, ValueError) as exc:
+            raise InvalidProviderRequestError from exc
+        if not isinstance(value, str):
+            raise InvalidProviderRequestError
+        return meeting_date
 
     @staticmethod
     def _summarise_transcript(transcript: str) -> str:
@@ -267,6 +304,151 @@ class DeterministicMockAIProvider:
         )
         return match.group(1) if match is not None else None
 
+    @classmethod
+    def _extract_action_items(
+        cls,
+        transcript: str,
+        meeting_date: datetime,
+    ) -> list[dict[str, JsonValue]]:
+        normalised = " ".join(transcript.split())
+        sentences = re.split(r"(?<=[.!?])\s+", normalised)
+        injection_markers = (
+            "ignore previous",
+            "ignore all previous",
+            "system prompt",
+            "developer message",
+            "reveal secrets",
+        )
+        vague_markers = (
+            "should consider",
+            "maybe ",
+            "it would be good",
+            "can someone",
+            "could someone",
+            "pricing remains a concern",
+        )
+        action_items: list[dict[str, JsonValue]] = []
+        for sentence in sentences:
+            clauses = re.split(r"(?:;\s*|,?\s+and\s+)", sentence)
+            for clause in clauses:
+                stripped = clause.strip(" \t\r\n-•,.")
+                lowered = stripped.lower()
+                if (
+                    not stripped
+                    or any(marker in lowered for marker in injection_markers)
+                    or any(marker in lowered for marker in vague_markers)
+                ):
+                    continue
+                commitment = cls._action_commitment(stripped)
+                if commitment is None:
+                    continue
+                owner, task_text = commitment
+                due_expression = cls._action_due_expression(stripped)
+                due_date = normalise_action_item_due_date(
+                    due_expression,
+                    meeting_date,
+                )
+                task = cls._normalise_action_task(task_text, due_expression)
+                if len(task) < 5:
+                    continue
+                priority = cls._action_priority(lowered)
+                evidence_parts = [f"The transcript supports the commitment to {task.rstrip('.').lower()}"]
+                if owner is not None:
+                    evidence_parts.append(f"by {owner}")
+                if due_date is not None:
+                    evidence_parts.append(f"due {due_date}")
+                evidence = cls._bounded_plain_text(
+                    " ".join(evidence_parts) + ".",
+                    ACTION_ITEM_EVIDENCE_MAX_LENGTH,
+                )
+                action_items.append(
+                    {
+                        "task": task,
+                        "owner": owner,
+                        "due_date": due_date,
+                        "priority": priority,
+                        "status": "open",
+                        "confidence": 0.92 if owner is not None and due_date is not None else 0.86,
+                        "evidence": evidence,
+                    }
+                )
+                if len(action_items) == ACTION_ITEMS_MAX_COUNT:
+                    return action_items
+        return action_items
+
+    @staticmethod
+    def _action_commitment(sentence: str) -> tuple[str | None, str] | None:
+        name = r"[A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*){0,3}"
+        patterns = (
+            rf"^(?P<owner>{name}):\s+I\s+(?:will|shall|agreed to|committed to)\s+(?P<task>.+)$",
+            rf"^(?:We\s+agreed\s+)?(?P<owner>{name})\s+(?:will|shall|would|agreed to|committed to|promised to|volunteered to)\s+(?P<task>.+)$",
+            rf"^(?:Action item:\s*)?(?P<owner>{name})\s+to\s+(?P<task>.+)$",
+        )
+        for pattern in patterns:
+            match = re.match(pattern, sentence)
+            if match is None:
+                continue
+            owner = match.group("owner")
+            if owner.lower() in {"we", "the", "someone", "somebody", "team"}:
+                owner = None
+            return owner, match.group("task")
+
+        ownerless_patterns = (
+            r"^(?:It was agreed|We agreed|The team agreed)(?: that)? (?:we |the team )?(?:will|would|to) (?P<task>.+)$",
+            r"^An action was agreed(?: to)? (?P<task>.+)$",
+        )
+        for pattern in ownerless_patterns:
+            match = re.match(pattern, sentence, flags=re.IGNORECASE)
+            if match is not None:
+                return None, match.group("task")
+        return None
+
+    @staticmethod
+    def _action_due_expression(sentence: str) -> str | None:
+        match = re.search(
+            r"\b(?:by\s+)?(\d{4}-\d{2}-\d{2}|(?:the\s+)?end of (?:this|next) week|(?:this|next) (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|today|tomorrow)\b",
+            sentence,
+            flags=re.IGNORECASE,
+        )
+        return match.group(1) if match is not None else None
+
+    @classmethod
+    def _normalise_action_task(
+        cls,
+        value: str,
+        due_expression: str | None,
+    ) -> str:
+        task = value.strip(" \t\r\n-•,.")
+        if due_expression is not None:
+            task = re.sub(
+                rf"\s+by\s+(?:the\s+)?{re.escape(due_expression)}\s*$",
+                "",
+                task,
+                flags=re.IGNORECASE,
+            ).strip(" ,.")
+        if task:
+            task = task[0].upper() + task[1:]
+        if task and task[-1] not in ".!?":
+            task += "."
+        return cls._bounded_plain_text(task, ACTION_ITEM_TASK_MAX_LENGTH)
+
+    @staticmethod
+    def _action_priority(content: str) -> str:
+        if any(
+            marker in content
+            for marker in (
+                "urgent",
+                "asap",
+                "blocking",
+                "time-critical",
+                "high priority",
+            )
+        ):
+            return "high"
+        if any(marker in content for marker in ("low priority", "not urgent", "when convenient")):
+            return "low"
+        return "medium"
+
     @staticmethod
     def _bounded_plain_text(value: str, maximum_length: int) -> str:
         normalised = " ".join(value.split()).strip()
@@ -288,6 +470,20 @@ class DeterministicMockAIProvider:
                 "meeting_type": "unsupported",
                 "sentiment": "neutral",
                 "confidence": 2,
+            }
+        if request.job_type == AIJobType.ACTION_ITEMS.value:
+            return {
+                "action_items": [
+                    {
+                        "task": "",
+                        "owner": "",
+                        "due_date": "2026-02-30",
+                        "priority": "urgent",
+                        "status": "completed",
+                        "confidence": 2,
+                        "evidence": "",
+                    }
+                ]
             }
         return {
             "decisions": [

@@ -148,10 +148,32 @@ prompt/transcript content, provider configuration and raw responses. See
 [Meeting Decisions intelligence](meeting-decisions-intelligence.md) for schema
 v1, polling, idempotency and privacy details.
 
+## Action Items intelligence
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/action-items` | Queue or return equivalent Action Items generation |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence/action-items` | Read current safe state/result |
+
+POST derives the tenant from authentication, requires the current same-tenant
+transcript to be non-empty and at most 50,000 trimmed characters, and never
+generates inline. A new job returns `202`; an equivalent pending, running or
+completed job for Action Items prompt/schema v1 returns `200`. Failed or
+cancelled work may receive a new ordinal retry, and a transcript correction
+permits a new version-bound job. Summary and Decisions remain independent.
+
+GET supports `empty`, `queued`, `running`, `completed`, `failed` and
+`cancelled`, with generation availability, safe timestamps/message and the
+latest completed `actionItems` object. An empty list is successful. Responses
+exclude worker/lease fields, internal error codes, prompt/transcript content,
+provider configuration and raw responses. See
+[Meeting Action Items intelligence](meeting-action-items-intelligence.md) for
+schema, date, polling, idempotency and privacy rules.
+
 ## Scope boundary
 
 There are no generic AI job/artefact, provider configuration/model listing,
-cancellation, recording, media upload/storage, transcription, Action Items or
-later intelligence, email, calendar, CRM, billing, worker-control or automation
+cancellation, recording, media upload/storage, transcription, later
+intelligence, email, calendar, CRM, billing, worker-control or automation
 endpoints. Mock/OpenAI selection is server-side worker configuration and does not
 change this API contract. Clerk token verification is not connected.
