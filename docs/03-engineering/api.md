@@ -106,10 +106,25 @@ A participant requires at least one of a same-tenant contact, display name or va
 
 There is at most one transcript row per meeting. Plain text is required and limited to one million characters. Source is `manual` or `upload`; `upload` means the web form read a user-selected `.txt` file, not that RevenueOS stored a file. `PATCH` requires the current positive `version`, increments it on success and returns `409 transcript_version_conflict` for stale writes. Transcript permissions are inherited from the active tenant-scoped meeting.
 
-## Internal AI execution boundary
+## Executive Summary intelligence
 
-WO-004A2 adds internal repositories/services for tenant-scoped infrastructure-test jobs and typed artefacts. WO-004B1 adds a separate worker that can execute that deterministic test. Neither work order adds a route or OpenAPI contract. AI jobs, artefacts, lifecycle and cancellation remain inaccessible to browser/API consumers.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/executive-summary` | Queue or return equivalent generation |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence/executive-summary` | Read current safe state/result |
+
+POST verifies the trusted tenant meeting and a non-empty current transcript of
+at most 50,000 trimmed characters. It never generates inline. A newly queued job
+returns `202`; an equivalent pending/running/completed job returns `200`.
+Equivalence includes transcript, job type, prompt version and schema version.
+Failed/cancelled work can be retried with a new job, and a transcript correction
+requires a new version-specific job.
+
+GET returns `empty`, `queued`, `running`, `completed`, `failed` or `cancelled`,
+generation availability, safe timestamps/message and completed schema content
+when available. It never exposes worker identity, leases, prompt text, provider
+payload, raw errors or transcript text.
 
 ## Scope boundary
 
-There are no recording, media upload/storage, transcription, genuine AI, AI job/artefact, cancellation, email, calendar, CRM, billing, worker-control or automation endpoints. Clerk token verification is not connected.
+There are no generic AI job/artefact, cancellation, recording, media upload/storage, transcription, real/external AI, additional intelligence, email, calendar, CRM, billing, worker-control or automation endpoints. Clerk token verification is not connected.

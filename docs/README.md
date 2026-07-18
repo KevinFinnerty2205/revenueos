@@ -38,6 +38,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [AI worker and durable job queue](03-engineering/ai-worker-queue.md)
 - [AI provider abstraction](03-engineering/ai-provider-abstraction.md)
 - [Prompt registry and structured output](03-engineering/prompt-registry-and-structured-output.md)
+- [Executive Summary intelligence](03-engineering/executive-summary-intelligence.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -73,6 +74,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-004B1: AI Worker and Durable Job Queue](07-sprints/wo-004b1-ai-worker-queue.md)
 - [WO-004B2: AI Provider Abstraction and Deterministic Mock Provider](07-sprints/wo-004b2-ai-provider-abstraction.md)
 - [WO-004B3: Prompt Registry and Structured Output Validation](07-sprints/wo-004b3-prompt-registry.md)
+- [WO-004C1: Executive Summary Intelligence Capability](07-sprints/wo-004c1-executive-summary.md)
 
 ## 08 — Decision records
 
@@ -85,9 +87,10 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0007: PostgreSQL-backed AI worker queue](08-decisions/0007-postgresql-ai-worker-queue.md)
 - [ADR 0008: provider-neutral AI execution](08-decisions/0008-provider-neutral-ai-execution.md)
 - [ADR 0009: versioned prompts and strict structured output](08-decisions/0009-versioned-prompts-and-strict-output.md)
+- [ADR 0010: current-transcript Executive Summary execution](08-decisions/0010-current-transcript-executive-summary.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 are complete. WO-004A1/A2 add tenant-isolated AI persistence and internal domain rules. WO-004B1 adds a separate durable PostgreSQL worker; WO-004B2 routes only its deterministic infrastructure test through a typed, no-network mock provider; WO-004B3 adds immutable application prompt/schema registries, safe rendering and strict bounded output validation for that same test. There is no real/external AI provider, credential, customer-content prompt, AI API, AI UI or Meeting Intelligence. Assistant remains a placeholder. Recording, media storage, transcription, external integrations, production Clerk verification, billing and mobile are not implemented.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1 are complete. C1 is the first Meeting Intelligence product flow: an authenticated user can queue and view a strict Executive Summary from the current transcript through the durable worker and deterministic no-network mock. It is not genuine LLM output, and no customer content leaves the application. There is no real/external AI provider or credential, additional intelligence field, recording, media storage, transcription, external integration, production Clerk verification, billing or mobile application. Assistant remains a placeholder.
 
 Do not use production customer data. Production identity, consent evidence, retention/export/erasure and operational controls are incomplete. Future sprints remain unauthorised until a separate work order is approved.

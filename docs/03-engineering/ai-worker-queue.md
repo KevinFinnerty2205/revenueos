@@ -2,9 +2,9 @@
 
 ## Current boundary
 
-WO-004B1 adds a separately runnable backend worker for the existing internal `infrastructure_test` job type. PostgreSQL remains the durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and creates the existing schema-version-1 test artefact. WO-004B2 routes that executor through a typed provider boundary; WO-004B3 adds application-owned prompt/schema resolution and strict structured-output validation.
+WO-004B1 adds a separately runnable backend worker with PostgreSQL as its durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and persists validated artefacts. WO-004B2/B3 add the provider, prompt and schema execution boundary. WO-004C1 registers `executive_summary` alongside `infrastructure_test`.
 
-The configured provider is the deterministic `mock` / `mock-infrastructure-v1` adapter. It does not read transcript text, make a network request or perform genuine Meeting Intelligence. There is no OpenAI/Anthropic integration, customer-content prompt, API route, web UI or polling.
+The configured provider is the deterministic `mock` / `mock-infrastructure-v1` adapter. Executive Summary loads the exact current tenant transcript in a short transaction, processes it locally and makes no network request. The meeting-scoped API/UI polls this durable lifecycle; there is no OpenAI/Anthropic integration or genuine LLM output.
 
 ## Process and startup
 
@@ -97,6 +97,13 @@ WO-004B1 deliberately adds no cancellation API.
 }
 ```
 
+It also maps `executive_summary` to `ExecutiveSummaryExecutor`. That executor
+requires prompt/schema version 1, loads only the current transcript matching the
+claimed ID/version and tenant, rejects empty or greater-than-50,000-character
+input, and renders JSON-delimited meeting title/date/transcript as untrusted
+data. A changed/deleted transcript fails safely because historical bodies are
+not retained.
+
 Malformed JSON, non-object JSON and schema-invalid output retry within the current execution up to `API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS`; exhaustion produces bounded non-retryable failure. Prompt/schema/configuration and non-retryable provider errors do not retry. Timeouts, temporary unavailability and transient provider failures exit immediately and use the existing durable retry policy. Before an output retry, the executor probes cancellation in a separate short tenant transaction. The successful completion transaction:
 
 - verifies current tenant, running state and worker ownership under a row lock;
@@ -134,12 +141,12 @@ Automated audit events use the original requesting user as the actor because the
 
 ## Known limitations and extension points
 
-- Only the deterministic infrastructure test executes.
+- Only the deterministic infrastructure test and mock Executive Summary execute.
 - Work is processed sequentially within one worker process; scale is achieved with additional worker replicas.
 - Tenant discovery is capped at 1,000 eligible organisations per cycle; deployments approaching that many simultaneously active tenants need an approved pagination/fairness extension.
-- There is no operator dashboard, API/UI lifecycle access, cancellation endpoint or user polling.
-- There is no real provider, customer-content prompt, model-specific JSON mode, transcript snapshot, genuine intelligence, notification or external action.
+- There is no operator dashboard or cancellation endpoint; user polling is limited to the meeting-scoped Executive Summary state.
+- There is no real provider, model-specific JSON mode, transcript snapshot, genuine LLM output, notification or external action.
 - The current transcript version pin does not preserve a historical transcript body.
 - Production identity, consent evidence, retention/export/erasure, deployment monitoring and incident controls remain incomplete. Production customer data is prohibited.
 
-Future real adapters can implement the provider protocol only after a separately approved work order. They must preserve exact trace validation, short transactions, safe errors, forced RLS and atomic artefact-before-completion semantics. See [AI provider abstraction](ai-provider-abstraction.md) and [prompt registry and structured output](prompt-registry-and-structured-output.md).
+Future real adapters can implement the provider protocol only after a separately approved work order. They must preserve exact trace validation, short transactions, safe errors, forced RLS and atomic artefact-before-completion semantics. See [Executive Summary intelligence](executive-summary-intelligence.md), [AI provider abstraction](ai-provider-abstraction.md) and [prompt registry and structured output](prompt-registry-and-structured-output.md).

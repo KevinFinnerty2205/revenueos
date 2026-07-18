@@ -1,12 +1,24 @@
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
+from revenueos.ai_contracts import ExecutiveSummaryArtifactContent
+from revenueos.ai_services import (
+    AIJobRequestResult,
+    AIJobService,
+    ExecutiveSummaryStateResult,
+)
 from revenueos.business_contracts import Page
-from revenueos.domain import MeetingStatus, MeetingType
+from revenueos.domain import AIJobStatus, MeetingStatus, MeetingType
 from revenueos.errors import PublicAPIError
+from revenueos.intelligence_contracts import (
+    ExecutiveSummaryContentResponse,
+    ExecutiveSummaryRequestResponse,
+    ExecutiveSummaryResponse,
+    ExecutiveSummaryState,
+)
 from revenueos.meeting_contracts import (
     MeetingAuditEventResponse,
     MeetingCreate,
@@ -20,6 +32,7 @@ from revenueos.meeting_contracts import (
     TranscriptUpdate,
 )
 from revenueos.meeting_dependencies import (
+    get_ai_job_service,
     get_meeting_service,
     get_participant_service,
     get_transcript_service,
@@ -31,6 +44,7 @@ router = APIRouter(prefix="/api/v1/meetings", tags=["meetings"])
 Meetings = Annotated[MeetingService, Depends(get_meeting_service)]
 Participants = Annotated[ParticipantService, Depends(get_participant_service)]
 Transcripts = Annotated[TranscriptService, Depends(get_transcript_service)]
+Intelligence = Annotated[AIJobService, Depends(get_ai_job_service)]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -83,6 +97,33 @@ async def create_meeting(request: MeetingCreate, service: Meetings) -> MeetingRe
 @router.get("/{meeting_id}", response_model=MeetingResponse)
 async def get_meeting(meeting_id: UUID, service: Meetings) -> MeetingResponse:
     return MeetingResponse.model_validate(await service.get_meeting(meeting_id))
+
+
+@router.post(
+    "/{meeting_id}/intelligence/executive-summary",
+    response_model=ExecutiveSummaryRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_executive_summary(
+    meeting_id: UUID,
+    response: Response,
+    service: Intelligence,
+) -> ExecutiveSummaryRequestResponse:
+    result = await service.request_executive_summary(meeting_id)
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return _executive_summary_request_response(result)
+
+
+@router.get(
+    "/{meeting_id}/intelligence/executive-summary",
+    response_model=ExecutiveSummaryResponse,
+)
+async def get_executive_summary(
+    meeting_id: UUID,
+    service: Intelligence,
+) -> ExecutiveSummaryResponse:
+    return _executive_summary_response(await service.get_executive_summary_state(meeting_id))
 
 
 @router.patch("/{meeting_id}", response_model=MeetingResponse)
@@ -215,3 +256,65 @@ async def delete_transcript(
 ) -> Response:
     await service.delete_transcript(meeting_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _executive_summary_request_response(
+    result: AIJobRequestResult,
+) -> ExecutiveSummaryRequestResponse:
+    job = result.job
+    job_status = cast(
+        Literal["queued", "running", "completed"] | None,
+        {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+        }.get(job.status),
+    )
+    if job_status is None:
+        raise PublicAPIError(
+            "invalid_intelligence_state",
+            "The Executive Summary request could not be represented safely.",
+            500,
+        )
+    return ExecutiveSummaryRequestResponse(
+        job_id=job.id,
+        status=job_status,
+        created=result.created,
+        transcript_version=job.transcript_version,
+        requested_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+def _executive_summary_response(
+    result: ExecutiveSummaryStateResult,
+) -> ExecutiveSummaryResponse:
+    job = result.job
+    content = None
+    if result.artifact is not None:
+        validated = ExecutiveSummaryArtifactContent.model_validate(result.artifact.content_json)
+        content = ExecutiveSummaryContentResponse.model_validate(validated)
+    safe_message = job.last_error_message_safe if job is not None and result.state in {"failed", "cancelled"} else None
+    if result.state == "cancelled" and safe_message is None:
+        safe_message = "Executive Summary generation was cancelled."
+    if result.state == "failed" and safe_message is None:
+        safe_message = "Executive Summary generation could not be completed."
+    return ExecutiveSummaryResponse(
+        state=cast(ExecutiveSummaryState, result.state),
+        generation_available=result.generation_available,
+        unavailable_reason=result.unavailable_reason,
+        job_id=job.id if job is not None else None,
+        transcript_version=job.transcript_version if job is not None else None,
+        requested_at=job.created_at if job is not None else None,
+        started_at=job.started_at if job is not None else None,
+        generated_at=(
+            result.artifact.created_at
+            if result.artifact is not None
+            else job.completed_at
+            if job is not None and result.state == "completed"
+            else None
+        ),
+        safe_message=safe_message,
+        executive_summary=content,
+    )

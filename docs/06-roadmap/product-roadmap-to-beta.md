@@ -64,6 +64,16 @@ WO-003 expanded the earlier proposed Sprint 3 boundary to include direct plain-t
 
 These work orders create implementation seams only and do not change the separately proposed product sprint sequence below.
 
+### WO-004C1 — Executive Summary Intelligence Capability — Complete
+
+- **Objective:** Prove the first end-to-end Meeting Intelligence flow using only the current transcript and deterministic mock.
+- **Major deliverables:** Executive Summary prompt/schema v1, transcript-bound durable job and append-only artefact, meeting-scoped POST/GET API, accessible Intelligence tab and bounded polling.
+- **Out of scope:** Real/external provider, citations/review, Decisions, Action Items, Risks, Open Questions, follow-up, integrations, recording and transcription.
+- **Security gates:** Trusted tenant context, forced RLS, exact transcript version, 50,000-character no-truncation limit, prompt-injection-as-data, content-redacted logs/audits and zero external content transfer.
+- **Demonstration:** Generate a mock Executive Summary from an authorised transcript, observe queued/running state and retain the completed result on refresh.
+
+This capability validates orchestration and product states, not AI quality. The later proposed source-backed intelligence sprint still owns a real provider, citations, human review and evaluation gates. Production customer data remains prohibited.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.

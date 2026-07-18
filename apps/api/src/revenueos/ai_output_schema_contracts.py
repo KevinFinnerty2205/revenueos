@@ -31,7 +31,7 @@ class OutputSchemaDefinition(BaseModel):
 
     schema_key: SchemaKey
     schema_version: int = Field(ge=1)
-    job_type: Literal["infrastructure_test"]
+    job_type: Literal["infrastructure_test", "executive_summary"]
     validation_model: type[BaseModel]
     description: SchemaDescription
     active: bool = True

@@ -85,6 +85,9 @@ content to prompts, prompt activation workflows, database prompt storage,
 experimentation/A-B testing, model-specific JSON modes, semantic repair,
 additional intelligence schemas or an AI-facing API/UI.
 
+ADR 0010 records the approved Executive Summary prompt/schema pair and
+meeting-scoped API/UI without changing this registry/validation decision.
+
 ## Related documents
 
 - [Prompt registry and structured output](../03-engineering/prompt-registry-and-structured-output.md)

@@ -89,7 +89,25 @@ class AIJobStatus(StrEnum):
 
 class AIJobType(StrEnum):
     INFRASTRUCTURE_TEST = "infrastructure_test"
+    EXECUTIVE_SUMMARY = "executive_summary"
 
 
 class AIArtifactType(StrEnum):
     INFRASTRUCTURE_TEST = "infrastructure_test"
+    EXECUTIVE_SUMMARY = "executive_summary"
+
+
+class ExecutiveSummaryMeetingType(StrEnum):
+    SALES_DISCOVERY = "sales_discovery"
+    SALES_DEMO = "sales_demo"
+    CUSTOMER_SUCCESS = "customer_success"
+    RECRUITMENT = "recruitment"
+    INTERNAL = "internal"
+    OTHER = "other"
+
+
+class ExecutiveSummarySentiment(StrEnum):
+    POSITIVE = "positive"
+    NEUTRAL = "neutral"
+    NEGATIVE = "negative"
+    MIXED = "mixed"

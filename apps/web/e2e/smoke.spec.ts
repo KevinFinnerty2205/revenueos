@@ -125,13 +125,66 @@ test("meeting list and create form are responsive and deliberate", async ({
   await expect(page.getByText(/does not record or transcribe/i)).toBeVisible();
 });
 
-test("meeting detail exposes overview, transcript and audit history tabs", async ({
+test("meeting detail generates and presents Executive Summary intelligence", async ({
   page,
 }) => {
+  let executiveSummaryRequested = false;
   await page.route(
     "http://localhost:8000/api/v1/meetings/meeting-1**",
     async (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/intelligence/executive-summary")) {
+        if (route.request().method() === "POST") {
+          executiveSummaryRequested = true;
+          await route.fulfill({
+            status: 202,
+            json: {
+              jobId: "job-1",
+              status: "queued",
+              created: true,
+              transcriptVersion: 1,
+              requestedAt: "2026-07-18T00:00:00Z",
+              startedAt: null,
+              completedAt: null,
+            },
+          });
+          return;
+        }
+        await route.fulfill({
+          json: !executiveSummaryRequested
+            ? {
+                state: "empty",
+                generationAvailable: true,
+                unavailableReason: null,
+                jobId: null,
+                transcriptVersion: null,
+                requestedAt: null,
+                startedAt: null,
+                generatedAt: null,
+                safeMessage: null,
+                executiveSummary: null,
+              }
+            : {
+                state: "completed",
+                generationAvailable: false,
+                unavailableReason: null,
+                jobId: "job-1",
+                transcriptVersion: 1,
+                requestedAt: "2026-07-18T00:00:00Z",
+                startedAt: "2026-07-18T00:00:01Z",
+                generatedAt: "2026-07-18T00:00:02Z",
+                safeMessage: null,
+                executiveSummary: {
+                  executiveSummary:
+                    "The customer discussed expansion plans and confirmed budget.",
+                  meetingType: "sales_discovery",
+                  sentiment: "positive",
+                  confidence: 0.82,
+                },
+              },
+        });
+        return;
+      }
       if (path.endsWith("/participants")) {
         await route.fulfill({ json: [] });
         return;
@@ -200,6 +253,26 @@ test("meeting detail exposes overview, transcript and audit history tabs", async
 
   await expect(
     page.getByRole("heading", { name: "Acme discovery" }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Intelligence" }).click();
+  await page
+    .getByRole("button", { name: "Generate Executive Summary" })
+    .click();
+  await expect(
+    page.getByText(/customer discussed expansion plans/i),
+  ).toBeVisible();
+  await expect(page.getByText("Sales Discovery")).toBeVisible();
+  await expect(page.getByText("82%")).toBeVisible();
+
+  await page.reload();
+  await page.getByRole("tab", { name: "Intelligence" }).click();
+  await expect(
+    page.getByText(/customer discussed expansion plans/i),
+  ).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    page.getByRole("heading", { name: "Executive Summary" }),
   ).toBeVisible();
   await page.getByRole("tab", { name: "Transcript" }).click();
   await expect(page.getByLabel("Transcript text")).toHaveValue(

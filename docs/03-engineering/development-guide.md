@@ -27,7 +27,7 @@ The default identity is a clearly labelled development mock. After migrations, t
 
 ## Run
 
-Use three terminals when exercising the internal infrastructure-test queue:
+Use three terminals when exercising the worker or Executive Summary:
 
 ```bash
 pnpm dev:api
@@ -52,6 +52,12 @@ provider or credential setting is implemented. Prompt/output defaults are
 provider calls allowed for malformed or schema-invalid output within one
 claimed job attempt and accepts values from 1 to 5.
 
+To exercise the product flow, create a meeting with an authorised plain-text
+transcript no longer than 50,000 characters, open its **Intelligence** tab and
+generate the Executive Summary. The UI checks state every three seconds while
+the worker processes the mock job. No API key or external network access is
+required.
+
 ## Database workflow
 
 SQLAlchemy metadata and Alembic migration history must agree:
@@ -73,6 +79,11 @@ provider trace, usage and cost metadata.
 WO-004B3 also requires no migration: existing prompt/schema trace columns plus
 content-free audit metadata represent prompt/schema identity and structured
 output attempt count.
+
+Migration `0007_executive_summary` widens only the existing AI job and artefact
+type check constraints. It adds no table, column, RLS policy or prompt storage;
+upgrade/downgrade tests preserve the worker trace and artefact immutability
+triggers.
 
 ## Validation
 

@@ -2,7 +2,9 @@
 
 WO-004A1 is the historical persistence boundary described here. The current internal application layer is documented in [AI domain services](ai-domain-services.md); it does not alter the job/artefact trace or append-only decisions below.
 
-WO-004A1 adds persistence only. Nothing in this document represents a working AI provider, processing worker, public API or user-facing intelligence feature.
+WO-004A1 originally added persistence only. WO-004C1 now reuses it for a
+mock-generated Executive Summary; see
+[Executive Summary intelligence](executive-summary-intelligence.md).
 
 ## AI jobs
 
@@ -11,7 +13,7 @@ WO-004A1 adds persistence only. Nothing in this document represents a working AI
 - the meeting;
 - the meeting's singular transcript row;
 - the exact positive transcript version observed when the future request is created;
-- the `infrastructure_test` job type and lifecycle state;
+- the allowed `infrastructure_test` or `executive_summary` job type and lifecycle state;
 - optional provider, model and prompt metadata;
 - attempts, scheduling and lease timestamps needed by later worker work;
 - bounded safe error metadata;
@@ -32,7 +34,10 @@ The same non-null key cannot create a second logical run for that tenant, meetin
 
 ## AI artefacts
 
-`ai_artifacts` stores typed JSON produced elsewhere only after validation. WO-004A1 supports only `infrastructure_test`. It intentionally adds no summary-, action-, decision-, risk-, question-, email- or CRM-specific columns.
+`ai_artifacts` stores typed JSON produced elsewhere only after validation.
+Migration `0007_executive_summary` adds Executive Summary only to the existing
+type check; the strict content remains in `content_json`. No summary-, action-,
+decision-, risk-, question-, email- or CRM-specific column was added.
 
 Every artefact repeats and database-validates its job's organisation, meeting, transcript and transcript version. Logical versions are unique by:
 
@@ -69,11 +74,15 @@ Alembic revision `0004_ai_database_foundation`:
 
 Downgrade removes both AI tables and their data, then removes the added transcript uniqueness while retaining all Sprint 3 tables. Back up any environment-appropriate data before rollback. Upgrade, downgrade, re-upgrade and drift are automated validation gates.
 
+Revision `0007_executive_summary` widens the existing job/artefact type checks
+and preserves forced RLS, composite keys and SQLite immutability/trace triggers.
+Its downgrade deletes Executive Summary rows before restoring the earlier
+infrastructure-only checks.
+
 ## Known limitations
 
-- No repository, service, transition policy, job claim, retry execution or cancellation behaviour exists.
-- No provider, prompt registry, structured-output parser, API route, frontend or polling exists.
-- No AI call or real meeting intelligence is performed.
+- Only infrastructure-test and deterministic mock Executive Summary behaviour exists.
+- No real/external model call or additional intelligence capability exists.
 - Historical transcript bodies are not preserved.
 - `content_json` is a storage field; future services must validate a typed schema before insert.
 - No retention, export, hard deletion, integrity seal or customer-data production controls are complete.
@@ -82,4 +91,6 @@ Do not use production customer data.
 
 ## Future extension points
 
-A separately authorised work order may add tenant-scoped repositories/services, durable worker claiming, provider and prompt abstractions, validated `infrastructure_test` execution, safe lifecycle APIs and UI visibility. Those additions must preserve exact traceability, idempotency, append-only artefact versions, forced RLS and content-redacted observability.
+A separately authorised work order may add a real provider or another typed
+capability. It must preserve exact traceability, idempotency, append-only
+artefact versions, forced RLS and content-redacted observability.

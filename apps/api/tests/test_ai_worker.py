@@ -892,7 +892,7 @@ def test_registry_unknown_type_and_retry_formula_are_safe() -> None:
     )
     unbounded = WorkerExecutionError("x" * 101, "secret " * 500, retryable=True)
     assert unbounded.code == "worker_execution_failed"
-    assert unbounded.safe_message == "The AI infrastructure job could not be completed."
+    assert unbounded.safe_message == "The AI job could not be completed."
 
 
 def test_worker_configuration_rejects_unsafe_intervals() -> None:

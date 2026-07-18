@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
@@ -10,24 +11,34 @@ from uuid import UUID
 from revenueos.ai_contracts import (
     SAFE_ERROR_CODE_MAX_LENGTH,
     SAFE_ERROR_MESSAGE_MAX_LENGTH,
+    ExecutiveSummarySource,
 )
+from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
 from revenueos.ai_output_schema_registry import (
     OutputSchemaRegistry,
     create_default_output_schema_registry,
 )
-from revenueos.ai_prompt_contracts import PromptVariables
+from revenueos.ai_prompt_contracts import (
+    PromptVariables,
+    RenderedPrompt,
+)
 from revenueos.ai_prompt_errors import (
     PromptOutputError,
     StructuredOutputAttemptsExhaustedError,
 )
 from revenueos.ai_prompt_registry import (
+    EXECUTIVE_SUMMARY_PROMPT_KEY,
+    EXECUTIVE_SUMMARY_PROMPT_VERSION,
     PromptRegistry,
     create_default_prompt_registry,
 )
 from revenueos.ai_prompt_renderer import render_prompt
-from revenueos.ai_provider import execute_provider_request
+from revenueos.ai_provider import AIProvider, execute_provider_request
 from revenueos.ai_provider_contracts import (
+    ExecutiveSummaryProviderInput,
     InfrastructureTestProviderInput,
+    ProviderInput,
+    ProviderMessage,
     ProviderRequest,
     ProviderResponse,
 )
@@ -53,6 +64,8 @@ class ClaimedAIJob:
     attempt_count: int
     max_attempts: int
     worker_id: str
+    prompt_key: str | None = None
+    prompt_version: int | None = None
 
 
 @dataclass(frozen=True)
@@ -86,11 +99,19 @@ class WorkerExecutionError(Exception):
             or len(bounded_message) > SAFE_ERROR_MESSAGE_MAX_LENGTH
         ):
             bounded_code = "worker_execution_failed"
-            bounded_message = "The AI infrastructure job could not be completed."
+            bounded_message = "The AI job could not be completed."
         super().__init__(bounded_message)
         self.code = bounded_code
         self.safe_message = bounded_message
         self.retryable = retryable
+
+
+CancellationCheck = Callable[[ClaimedAIJob], Awaitable[bool]]
+ExecutiveSummarySourceLoader = Callable[
+    [ClaimedAIJob],
+    Awaitable[ExecutiveSummarySource],
+]
+ProviderInputFactory = Callable[[tuple[ProviderMessage, ...]], ProviderInput]
 
 
 class AIJobExecutor(Protocol):
@@ -99,15 +120,11 @@ class AIJobExecutor(Protocol):
         job: ClaimedAIJob,
         *,
         cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
     ) -> ExecutionResult: ...
 
 
-CancellationCheck = Callable[[ClaimedAIJob], Awaitable[bool]]
-
-
-class InfrastructureTestExecutor:
-    """Queue validation routed through the configured provider boundary."""
-
+class _StructuredOutputExecutor:
     def __init__(
         self,
         settings: Settings,
@@ -122,66 +139,29 @@ class InfrastructureTestExecutor:
             prompt_registry if prompt_registry is not None else create_default_prompt_registry(self._schemas)
         )
 
-    async def execute(
+    async def _execute_structured(
         self,
         job: ClaimedAIJob,
         *,
-        cancellation_check: CancellationCheck | None = None,
+        prompt_key: str,
+        prompt_version: int | None,
+        variables: PromptVariables,
+        input_factory: ProviderInputFactory,
+        cancellation_check: CancellationCheck | None,
     ) -> ExecutionResult:
         try:
-            prompt = self._prompts.resolve_active(self._settings.ai_prompt_key)
+            prompt = (
+                self._prompts.resolve(prompt_key, prompt_version)
+                if prompt_version is not None
+                else self._prompts.resolve_active(prompt_key)
+            )
             schema = self._schemas.resolve(
                 prompt.output_schema_key,
                 prompt.output_schema_version,
             )
-            if (
-                prompt.job_type != job.job_type
-                or schema.job_type != job.job_type
-                or schema.schema_version != job.schema_version
-            ):
-                raise PromptOutputError(
-                    "prompt_schema_trace_mismatch",
-                    "The prompt and output schema do not match the queued job.",
-                )
-            logical_request_id = uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                f"revenueos:{job.organisation_id}:{job.job_id}:{job.attempt_count}",
-            )
-            rendered = render_prompt(
-                prompt,
-                PromptVariables(
-                    values={
-                        "job_id": job.job_id,
-                        "request_id": logical_request_id,
-                    }
-                ),
-            )
-            logger.info(
-                "prompt_resolved",
-                extra={
-                    **self._log_context(job),
-                    "prompt_key": prompt.prompt_key,
-                    "prompt_version": prompt.prompt_version,
-                },
-            )
-            logger.info(
-                "schema_resolved",
-                extra={
-                    **self._log_context(job),
-                    "schema_key": schema.schema_key,
-                    "schema_version": schema.schema_version,
-                },
-            )
-            logger.info(
-                "prompt_rendered",
-                extra={
-                    **self._log_context(job),
-                    "prompt_key": prompt.prompt_key,
-                    "prompt_version": prompt.prompt_version,
-                    "schema_key": schema.schema_key,
-                    "schema_version": schema.schema_version,
-                },
-            )
+            self._validate_configuration_trace(job, prompt.job_type, schema)
+            rendered = render_prompt(prompt, variables)
+            self._log_configuration(job, rendered, schema)
             provider = self._providers.resolve(
                 self._settings.ai_provider_name,
                 self._settings.ai_provider_model_identifier,
@@ -207,12 +187,39 @@ class InfrastructureTestExecutor:
                 retryable=exc.retryable,
             ) from exc
 
+        logical_request_id = uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"revenueos:{job.organisation_id}:{job.job_id}:{job.attempt_count}",
+        )
+        return await self._execute_output_attempts(
+            job,
+            rendered=rendered,
+            schema=schema,
+            provider=provider,
+            logical_request_id=logical_request_id,
+            input_factory=input_factory,
+            cancellation_check=cancellation_check,
+        )
+
+    async def _execute_output_attempts(
+        self,
+        job: ClaimedAIJob,
+        *,
+        rendered: RenderedPrompt,
+        schema: OutputSchemaDefinition,
+        provider: AIProvider,
+        logical_request_id: UUID,
+        input_factory: ProviderInputFactory,
+        cancellation_check: CancellationCheck | None,
+    ) -> ExecutionResult:
         input_token_count = 0
         output_token_count = 0
         estimated_cost_minor_units = 0
         provider_latency_ms = 0
         response: ProviderResponse | None = None
         content: dict[str, object] | None = None
+        output_attempt = 0
+
         for output_attempt in range(
             1,
             self._settings.ai_structured_output_max_attempts + 1,
@@ -226,9 +233,7 @@ class InfrastructureTestExecutor:
                 job_id=job.job_id,
                 job_type=job.job_type,
                 model_identifier=self._settings.ai_provider_model_identifier,
-                input_payload=InfrastructureTestProviderInput(
-                    messages=rendered.messages,
-                ),
+                input_payload=input_factory(rendered.messages),
                 expected_schema_version=schema.schema_version,
                 timeout_seconds=self._settings.ai_provider_timeout_seconds,
             )
@@ -236,8 +241,8 @@ class InfrastructureTestExecutor:
                 "provider_attempt_started",
                 extra={
                     **self._log_context(job),
-                    "prompt_key": prompt.prompt_key,
-                    "prompt_version": prompt.prompt_version,
+                    "prompt_key": rendered.prompt_key,
+                    "prompt_version": rendered.prompt_version,
                     "schema_key": schema.schema_key,
                     "schema_version": schema.schema_version,
                     "structured_output_attempt": output_attempt,
@@ -252,24 +257,7 @@ class InfrastructureTestExecutor:
                     retryable=exc.retryable,
                 ) from exc
 
-            logger.info(
-                "provider_attempt_completed",
-                extra={
-                    **self._log_context(job),
-                    "prompt_key": prompt.prompt_key,
-                    "prompt_version": prompt.prompt_version,
-                    "schema_key": schema.schema_key,
-                    "schema_version": schema.schema_version,
-                    "structured_output_attempt": output_attempt,
-                    "provider_name": response.provider_name,
-                    "model_identifier": response.model_identifier,
-                    "provider_latency_ms": response.provider_latency_ms,
-                    "input_token_count": response.input_token_count,
-                    "output_token_count": response.output_token_count,
-                    "estimated_cost_minor_units": (response.estimated_cost_minor_units),
-                    "finish_reason": response.finish_reason,
-                },
-            )
+            self._log_provider_completion(job, rendered, schema, response, output_attempt)
             input_token_count += response.input_token_count
             output_token_count += response.output_token_count
             estimated_cost_minor_units += response.estimated_cost_minor_units
@@ -281,65 +269,13 @@ class InfrastructureTestExecutor:
                     schemas=self._schemas,
                 )
             except PromptOutputError as exc:
-                log_message = (
-                    "structured_output_parse_failed"
-                    if exc.code in {"malformed_json_output", "non_object_structured_output"}
-                    else "structured_output_validation_failed"
-                )
-                logger.warning(
-                    log_message,
-                    extra={
-                        **self._log_context(job),
-                        "prompt_key": prompt.prompt_key,
-                        "prompt_version": prompt.prompt_version,
-                        "schema_key": schema.schema_key,
-                        "schema_version": schema.schema_version,
-                        "structured_output_attempt": output_attempt,
-                        "error_code": exc.code,
-                        "retryable": exc.retryable_within_execution,
-                    },
-                )
-                if (
-                    not exc.retryable_within_execution
-                    or output_attempt >= self._settings.ai_structured_output_max_attempts
-                ):
-                    exhausted = StructuredOutputAttemptsExhaustedError()
-                    logger.warning(
-                        "structured_output_attempts_exhausted",
-                        extra={
-                            **self._log_context(job),
-                            "prompt_key": prompt.prompt_key,
-                            "prompt_version": prompt.prompt_version,
-                            "schema_key": schema.schema_key,
-                            "schema_version": schema.schema_version,
-                            "structured_output_attempt_count": output_attempt,
-                            "error_code": exhausted.code,
-                            "retryable": False,
-                        },
-                    )
-                    raise WorkerExecutionError(
-                        exhausted.code,
-                        exhausted.safe_message,
-                        retryable=False,
-                    ) from exc
-                if cancellation_check is not None and await cancellation_check(job):
-                    raise WorkerExecutionError(
-                        "execution_cancelled",
-                        "The AI infrastructure job was cancelled.",
-                        retryable=False,
-                    ) from exc
-                logger.info(
-                    "structured_output_retry_scheduled",
-                    extra={
-                        **self._log_context(job),
-                        "prompt_key": prompt.prompt_key,
-                        "prompt_version": prompt.prompt_version,
-                        "schema_key": schema.schema_key,
-                        "schema_version": schema.schema_version,
-                        "structured_output_attempt": output_attempt,
-                        "error_code": exc.code,
-                        "retryable": True,
-                    },
+                await self._handle_invalid_output(
+                    job,
+                    rendered=rendered,
+                    schema=schema,
+                    error=exc,
+                    output_attempt=output_attempt,
+                    cancellation_check=cancellation_check,
                 )
                 continue
 
@@ -347,8 +283,8 @@ class InfrastructureTestExecutor:
                 "structured_output_validated",
                 extra={
                     **self._log_context(job),
-                    "prompt_key": prompt.prompt_key,
-                    "prompt_version": prompt.prompt_version,
+                    "prompt_key": rendered.prompt_key,
+                    "prompt_version": rendered.prompt_version,
                     "schema_key": schema.schema_key,
                     "schema_version": schema.schema_version,
                     "structured_output_attempt_count": output_attempt,
@@ -364,8 +300,8 @@ class InfrastructureTestExecutor:
             )
         return ExecutionResult(
             content=content,
-            prompt_key=prompt.prompt_key,
-            prompt_version=prompt.prompt_version,
+            prompt_key=rendered.prompt_key,
+            prompt_version=rendered.prompt_version,
             schema_key=schema.schema_key,
             schema_version=schema.schema_version,
             structured_output_attempt_count=output_attempt,
@@ -381,6 +317,152 @@ class InfrastructureTestExecutor:
             finish_reason=response.finish_reason,
         )
 
+    async def _handle_invalid_output(
+        self,
+        job: ClaimedAIJob,
+        *,
+        rendered: RenderedPrompt,
+        schema: OutputSchemaDefinition,
+        error: PromptOutputError,
+        output_attempt: int,
+        cancellation_check: CancellationCheck | None,
+    ) -> None:
+        log_message = (
+            "structured_output_parse_failed"
+            if error.code in {"malformed_json_output", "non_object_structured_output"}
+            else "structured_output_validation_failed"
+        )
+        logger.warning(
+            log_message,
+            extra={
+                **self._log_context(job),
+                "prompt_key": rendered.prompt_key,
+                "prompt_version": rendered.prompt_version,
+                "schema_key": schema.schema_key,
+                "schema_version": schema.schema_version,
+                "structured_output_attempt": output_attempt,
+                "error_code": error.code,
+                "retryable": error.retryable_within_execution,
+            },
+        )
+        if not error.retryable_within_execution or output_attempt >= self._settings.ai_structured_output_max_attempts:
+            exhausted = StructuredOutputAttemptsExhaustedError()
+            logger.warning(
+                "structured_output_attempts_exhausted",
+                extra={
+                    **self._log_context(job),
+                    "prompt_key": rendered.prompt_key,
+                    "prompt_version": rendered.prompt_version,
+                    "schema_key": schema.schema_key,
+                    "schema_version": schema.schema_version,
+                    "structured_output_attempt_count": output_attempt,
+                    "error_code": exhausted.code,
+                    "retryable": False,
+                },
+            )
+            raise WorkerExecutionError(
+                exhausted.code,
+                exhausted.safe_message,
+                retryable=False,
+            ) from error
+        if cancellation_check is not None and await cancellation_check(job):
+            raise WorkerExecutionError(
+                "execution_cancelled",
+                "The AI job was cancelled.",
+                retryable=False,
+            ) from error
+        logger.info(
+            "structured_output_retry_scheduled",
+            extra={
+                **self._log_context(job),
+                "prompt_key": rendered.prompt_key,
+                "prompt_version": rendered.prompt_version,
+                "schema_key": schema.schema_key,
+                "schema_version": schema.schema_version,
+                "structured_output_attempt": output_attempt,
+                "error_code": error.code,
+                "retryable": True,
+            },
+        )
+
+    @staticmethod
+    def _validate_configuration_trace(
+        job: ClaimedAIJob,
+        prompt_job_type: str,
+        schema: OutputSchemaDefinition,
+    ) -> None:
+        if (
+            prompt_job_type != job.job_type
+            or schema.job_type != job.job_type
+            or schema.schema_version != job.schema_version
+        ):
+            raise PromptOutputError(
+                "prompt_schema_trace_mismatch",
+                "The prompt and output schema do not match the queued job.",
+            )
+
+    @classmethod
+    def _log_configuration(
+        cls,
+        job: ClaimedAIJob,
+        rendered: RenderedPrompt,
+        schema: OutputSchemaDefinition,
+    ) -> None:
+        logger.info(
+            "prompt_resolved",
+            extra={
+                **cls._log_context(job),
+                "prompt_key": rendered.prompt_key,
+                "prompt_version": rendered.prompt_version,
+            },
+        )
+        logger.info(
+            "schema_resolved",
+            extra={
+                **cls._log_context(job),
+                "schema_key": schema.schema_key,
+                "schema_version": schema.schema_version,
+            },
+        )
+        logger.info(
+            "prompt_rendered",
+            extra={
+                **cls._log_context(job),
+                "prompt_key": rendered.prompt_key,
+                "prompt_version": rendered.prompt_version,
+                "schema_key": schema.schema_key,
+                "schema_version": schema.schema_version,
+            },
+        )
+
+    @classmethod
+    def _log_provider_completion(
+        cls,
+        job: ClaimedAIJob,
+        rendered: RenderedPrompt,
+        schema: OutputSchemaDefinition,
+        response: ProviderResponse,
+        output_attempt: int,
+    ) -> None:
+        logger.info(
+            "provider_attempt_completed",
+            extra={
+                **cls._log_context(job),
+                "prompt_key": rendered.prompt_key,
+                "prompt_version": rendered.prompt_version,
+                "schema_key": schema.schema_key,
+                "schema_version": schema.schema_version,
+                "structured_output_attempt": output_attempt,
+                "provider_name": response.provider_name,
+                "model_identifier": response.model_identifier,
+                "provider_latency_ms": response.provider_latency_ms,
+                "input_token_count": response.input_token_count,
+                "output_token_count": response.output_token_count,
+                "estimated_cost_minor_units": response.estimated_cost_minor_units,
+                "finish_reason": response.finish_reason,
+            },
+        )
+
     @staticmethod
     def _log_context(job: ClaimedAIJob) -> dict[str, object]:
         return {
@@ -390,6 +472,103 @@ class InfrastructureTestExecutor:
             "worker_id": job.worker_id,
             "attempt_count": job.attempt_count,
         }
+
+
+class InfrastructureTestExecutor(_StructuredOutputExecutor):
+    """Queue validation routed through the configured provider boundary."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+    ) -> ExecutionResult:
+        del executive_summary_source_loader
+        return await self._execute_structured(
+            job,
+            prompt_key=self._settings.ai_prompt_key,
+            prompt_version=None,
+            variables=PromptVariables(
+                values={
+                    "job_id": job.job_id,
+                    "request_id": uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        f"revenueos:{job.organisation_id}:{job.job_id}:{job.attempt_count}",
+                    ),
+                }
+            ),
+            input_factory=lambda messages: InfrastructureTestProviderInput(
+                messages=messages,
+            ),
+            cancellation_check=cancellation_check,
+        )
+
+
+class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
+    """Transcript-grounded Executive Summary execution through the mock port."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+    ) -> ExecutionResult:
+        if job.job_type != AIJobType.EXECUTIVE_SUMMARY.value:
+            raise WorkerExecutionError(
+                "invalid_executive_summary_job",
+                "The queued job is not an Executive Summary job.",
+                retryable=False,
+            )
+        if job.prompt_key != EXECUTIVE_SUMMARY_PROMPT_KEY or job.prompt_version != EXECUTIVE_SUMMARY_PROMPT_VERSION:
+            raise WorkerExecutionError(
+                "invalid_prompt_configuration",
+                "The Executive Summary prompt configuration is invalid.",
+                retryable=False,
+            )
+        if executive_summary_source_loader is None:
+            raise WorkerExecutionError(
+                "executive_summary_source_unavailable",
+                "The Executive Summary source loader is unavailable.",
+                retryable=False,
+            )
+
+        logger.info("executive_summary_execution_started", extra=self._log_context(job))
+        source = await executive_summary_source_loader(job)
+        logger.info(
+            "executive_summary_transcript_loaded",
+            extra={
+                **self._log_context(job),
+                "transcript_version": job.transcript_version,
+                "transcript_character_count": len(source.transcript_text),
+            },
+        )
+        return await self._execute_structured(
+            job,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            variables=PromptVariables(
+                values={
+                    "meeting_title": json.dumps(
+                        source.meeting_title,
+                        ensure_ascii=False,
+                    ),
+                    "meeting_date": json.dumps(
+                        source.meeting_date.isoformat(),
+                        ensure_ascii=False,
+                    ),
+                    "transcript_text": json.dumps(
+                        source.transcript_text,
+                        ensure_ascii=False,
+                    ),
+                }
+            ),
+            input_factory=lambda messages: ExecutiveSummaryProviderInput(
+                messages=messages,
+            ),
+            cancellation_check=cancellation_check,
+        )
 
 
 class AIExecutorRegistry:
@@ -403,8 +582,22 @@ class AIExecutorRegistry:
             self._executors = executors
             return
         configuration = settings or Settings()
+        schemas = create_default_output_schema_registry()
+        prompts = create_default_prompt_registry(schemas)
+        providers = AIProviderRegistry()
         self._executors = {
-            AIJobType.INFRASTRUCTURE_TEST.value: InfrastructureTestExecutor(configuration),
+            AIJobType.INFRASTRUCTURE_TEST.value: InfrastructureTestExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
+            AIJobType.EXECUTIVE_SUMMARY.value: ExecutiveSummaryExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
         }
 
     def get(self, job_type: str) -> AIJobExecutor:
