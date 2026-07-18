@@ -65,12 +65,18 @@ class MeetingAuditAction(StrEnum):
     UPDATED = "updated"
     DELETED = "deleted"
     RESTORED = "restored"
+    INTELLIGENCE_REQUESTED = "intelligence_requested"
+    AI_JOB_CREATED = "ai_job_created"
+    AI_JOB_STATUS_CHANGED = "ai_job_status_changed"
+    AI_ARTIFACT_CREATED = "ai_artifact_created"
 
 
 class MeetingAuditEntityType(StrEnum):
     MEETING = "meeting"
     PARTICIPANT = "participant"
     TRANSCRIPT = "transcript"
+    AI_JOB = "ai_job"
+    AI_ARTIFACT = "ai_artifact"
 
 
 class AIJobStatus(StrEnum):

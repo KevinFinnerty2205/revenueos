@@ -597,11 +597,15 @@ class MeetingAuditEvent(Base):
     __tablename__ = "meeting_audit_events"
     __table_args__ = (
         CheckConstraint(
-            "action IN ('created', 'updated', 'deleted', 'restored')",
+            "action IN ("
+            "'created', 'updated', 'deleted', 'restored', "
+            "'intelligence_requested', 'ai_job_created', "
+            "'ai_job_status_changed', 'ai_artifact_created'"
+            ")",
             name="ck_meeting_audit_events_action",
         ),
         CheckConstraint(
-            "entity_type IN ('meeting', 'participant', 'transcript')",
+            "entity_type IN ('meeting', 'participant', 'transcript', 'ai_job', 'ai_artifact')",
             name="ck_meeting_audit_events_entity_type",
         ),
         ForeignKeyConstraint(
@@ -640,10 +644,16 @@ class MeetingAuditEvent(Base):
     )
     meeting_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
-    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(20), nullable=False)
     entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     changed_fields: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True),
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
     version: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

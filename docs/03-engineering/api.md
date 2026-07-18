@@ -106,6 +106,10 @@ A participant requires at least one of a same-tenant contact, display name or va
 
 There is at most one transcript row per meeting. Plain text is required and limited to one million characters. Source is `manual` or `upload`; `upload` means the web form read a user-selected `.txt` file, not that RevenueOS stored a file. `PATCH` requires the current positive `version`, increments it on success and returns `409 transcript_version_conflict` for stale writes. Transcript permissions are inherited from the active tenant-scoped meeting.
 
+## AI domain boundary
+
+WO-004A2 adds internal repositories and services for tenant-scoped infrastructure-test jobs, lifecycle validation and typed artefact persistence. It adds no route or OpenAPI contract. AI job and artefact tables remain inaccessible to browser/API consumers.
+
 ## Scope boundary
 
-There are no recording, media upload/storage, transcription, AI, email, calendar, CRM, billing, worker or automation endpoints. Clerk token verification is not connected.
+There are no recording, media upload/storage, transcription, AI execution, AI job/artefact, email, calendar, CRM, billing, worker or automation endpoints. Clerk token verification is not connected.

@@ -1,5 +1,7 @@
 # AI database foundation
 
+WO-004A1 is the historical persistence boundary described here. The current internal application layer is documented in [AI domain services](ai-domain-services.md); it does not alter the job/artefact trace or append-only decisions below.
+
 WO-004A1 adds persistence only. Nothing in this document represents a working AI provider, processing worker, public API or user-facing intelligence feature.
 
 ## AI jobs
