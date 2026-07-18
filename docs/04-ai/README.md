@@ -5,7 +5,9 @@ services. WO-004B1 adds a durable worker; WO-004B2/B3 add the provider boundary,
 versioned prompts and strict output validation. WO-004C1 uses those seams for
 one customer-facing Executive Summary. WO-004C1A adds an optional server-side
 OpenAI Responses API adapter while retaining the deterministic no-network mock
-as the default. No additional intelligence capability, Anthropic/Gemini
+as the default. WO-004C2 adds an independent, strictly structured
+transcript-grounded Decisions capability through the same stack. No Action
+Items or later intelligence capability, Anthropic/Gemini
 provider, embedding, tool use or agent is active.
 
 See [AI domain services](../03-engineering/ai-domain-services.md), the
@@ -18,7 +20,8 @@ transcript data flow. The
 [prompt registry and structured-output guide](../03-engineering/prompt-registry-and-structured-output.md)
 documents the WO-004B3 extension.
 The [Executive Summary guide](../03-engineering/executive-summary-intelligence.md)
-documents the only current Meeting Intelligence capability.
+and [Meeting Decisions guide](../03-engineering/meeting-decisions-intelligence.md)
+document the current Meeting Intelligence capabilities.
 
 Future AI work must use the typed provider port, schema validation, authorised
 minimum evidence, content-redacted logs, explicit model/prompt versions and

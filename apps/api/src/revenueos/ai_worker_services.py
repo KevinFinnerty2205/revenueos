@@ -11,7 +11,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.ai_contracts import (
+    DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
+    DecisionsSource,
     ExecutiveSummarySource,
 )
 from revenueos.ai_executors import (
@@ -221,6 +223,12 @@ class AIWorkerService:
                     cancellation_check=self.is_cancellation_requested,
                     executive_summary_source_loader=self.load_executive_summary_source,
                 )
+            elif job.job_type == AIJobType.DECISIONS.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    decisions_source_loader=self.load_decisions_source,
+                )
             else:
                 result = await executor.execute(
                     job,
@@ -264,6 +272,23 @@ class AIWorkerService:
                             "prompt_key": result.prompt_key,
                             "prompt_version": result.prompt_version,
                             "schema_version": result.schema_version,
+                        },
+                    )
+                elif job.job_type == AIJobType.DECISIONS.value:
+                    decisions = result.content.get("decisions")
+                    decision_count = len(decisions) if isinstance(decisions, list) else 0
+                    logger.info(
+                        "decisions_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                            "decision_count": decision_count,
+                            "empty_result": decision_count == 0,
                         },
                     )
         except WorkerExecutionError as exc:
@@ -350,6 +375,46 @@ class AIWorkerService:
             transcript_text=normalised_transcript,
         )
 
+    async def load_decisions_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> DecisionsSource:
+        """Load the exact tenant transcript version pinned by a Decisions job."""
+
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            source = await AIWorkerRepository(session).get_executive_summary_source(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_id,
+                job.transcript_version,
+            )
+        if source is None:
+            raise WorkerExecutionError(
+                "decisions_source_unavailable",
+                "The current transcript for Decisions is unavailable.",
+                retryable=False,
+            )
+        meeting_title, meeting_date, transcript_text = source
+        normalised_transcript = transcript_text.strip()
+        if not normalised_transcript:
+            raise WorkerExecutionError(
+                "decisions_transcript_required",
+                "A usable transcript is required to generate Decisions.",
+                retryable=False,
+            )
+        if len(normalised_transcript) > DECISIONS_TRANSCRIPT_MAX_LENGTH:
+            raise WorkerExecutionError(
+                "decisions_transcript_too_large",
+                "The transcript exceeds the Decisions processing limit.",
+                retryable=False,
+            )
+        return DecisionsSource(
+            meeting_title=meeting_title,
+            meeting_date=meeting_date,
+            transcript_text=normalised_transcript,
+        )
+
     async def _heartbeat_loop(
         self,
         job: ClaimedAIJob,
@@ -428,6 +493,15 @@ class AIWorkerService:
                 )
             elif job.job_type == AIJobType.EXECUTIVE_SUMMARY.value:
                 await artifact_service.prepare_executive_summary_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
+            elif job.job_type == AIJobType.DECISIONS.value:
+                await artifact_service.prepare_decisions_artifact(
                     job_id=job.id,
                     meeting_id=job.meeting_id,
                     transcript_id=job.transcript_id,
@@ -520,6 +594,17 @@ class AIWorkerService:
         if claim.job_type == AIJobType.EXECUTIVE_SUMMARY.value:
             logger.warning(
                 "executive_summary_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
+        elif claim.job_type == AIJobType.DECISIONS.value:
+            logger.warning(
+                "decisions_generation_failed",
                 extra={
                     **self._log_context_from_claim(claim),
                     "meeting_id": str(claim.meeting_id),

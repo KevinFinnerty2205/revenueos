@@ -16,12 +16,13 @@ from openai.types.responses import (
 )
 from pydantic import ValidationError
 
-from revenueos.ai_contracts import ExecutiveSummaryArtifactContent
+from revenueos.ai_contracts import DecisionsArtifactContent, ExecutiveSummaryArtifactContent
 from revenueos.ai_openai_provider import (
     OPENAI_PROVIDER_NAME,
     OpenAIProvider,
 )
 from revenueos.ai_provider_contracts import (
+    DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     InfrastructureTestProviderInput,
     ProviderMessage,
@@ -263,6 +264,54 @@ def test_openai_response_maps_strict_output_usage_request_id_and_latency(
     assert TRANSCRIPT_MARKER not in caplog.text
     assert json.dumps(_output()) not in caplog.text
     assert TEST_KEY not in caplog.text
+
+
+def test_openai_accepts_decisions_with_registry_derived_strict_schema() -> None:
+    output = {
+        "decisions": [
+            {
+                "decision": "Proceed with the September pilot.",
+                "owner": None,
+                "status": "confirmed",
+                "confidence": 0.92,
+                "evidence": "The transcript records agreement to start the pilot in September.",
+            }
+        ]
+    }
+    response_create = _ResponseCreate(
+        response=_response(output_text=json.dumps(output)),
+    )
+    request = ProviderRequest(
+        request_id=uuid.uuid4(),
+        organisation_id=uuid.uuid4(),
+        job_id=uuid.uuid4(),
+        job_type="decisions",
+        model_identifier=MODEL,
+        input_payload=DecisionsProviderInput(
+            messages=(
+                ProviderMessage(role="system", content="Return only Decisions fields."),
+                ProviderMessage(role="user", content="Use the supplied untrusted transcript."),
+            )
+        ),
+        expected_schema_version=1,
+        output_schema=ProviderOutputSchema(
+            schema_key="decisions",
+            schema_version=1,
+            json_schema=DecisionsArtifactContent.model_json_schema(mode="validation"),
+        ),
+        timeout_seconds=30,
+    )
+
+    response = asyncio.run(_provider(response_create).execute(request))
+
+    assert response.output_payload == json.dumps(output)
+    assert len(response_create.calls) == 1
+    text = response_create.calls[0]["text"]
+    assert isinstance(text, dict)
+    output_format = text["format"]
+    assert output_format["name"] == "decisions"
+    assert output_format["strict"] is True
+    assert output_format["schema"] == DecisionsArtifactContent.model_json_schema(mode="validation")
 
 
 @pytest.mark.parametrize(
@@ -533,7 +582,7 @@ def test_direct_provider_construction_rejects_malformed_configuration() -> None:
         )
 
 
-def test_openai_provider_rejects_non_executive_summary_requests() -> None:
+def test_openai_provider_rejects_unsupported_requests_before_calling_sdk() -> None:
     response_create = _ResponseCreate(
         response=_response(output_text=json.dumps(_output())),
     )

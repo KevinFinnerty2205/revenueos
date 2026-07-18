@@ -99,5 +99,8 @@ Tests cover contracts, prompt/schema registration, injection treatment, determin
 - Production identity and operational privacy controls are incomplete.
 - Production customer data is prohibited.
 
-Additional intelligence fields, citations/review, another provider, runtime
-model configuration and production enablement require separate approval.
+Decisions is now an independent capability documented in
+[Meeting Decisions intelligence](meeting-decisions-intelligence.md). Action
+Items and later intelligence fields, citations/review, another provider,
+runtime model configuration and production enablement require separate
+approval.

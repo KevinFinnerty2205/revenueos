@@ -3,9 +3,10 @@
 ## Current boundary
 
 WO-004A2 adds the internal tenant-scoped job/artefact application layer.
-WO-004C1 extends it with current-transcript Executive Summary request/state
-rules and typed append-only artefacts. Only that product-safe capability is
-exposed through the meeting-scoped API/UI; generic lifecycle APIs remain
+WO-004C1 extends it with Executive Summary and WO-004C2 adds independent
+current-transcript Decisions request/state rules and typed append-only
+artefacts. Only those product-safe capabilities are exposed through the
+meeting-scoped API/UI; generic lifecycle APIs remain
 internal.
 
 Migration `0005_ai_domain_services` extends the existing meeting audit event with a metadata-only JSON object, expands its action/entity checks and widens the action column for the new event names.
@@ -47,7 +48,7 @@ Repositories always require an organisation ID and add an explicit organisation 
 `AIArtifactService`:
 
 - requires a same-tenant job and matching meeting/transcript/version trace;
-- accepts only registered `infrastructure_test` or `executive_summary`, schema version 1;
+- accepts only registered `infrastructure_test`, `executive_summary` or `decisions`, schema version 1;
 - persists only the Pydantic-validated JSON representation;
 - assigns the next logical version without overwriting prior artefacts;
 - retries one concurrent logical-version conflict before returning a safe conflict; and
@@ -94,6 +95,10 @@ Schema version 1 is:
 Executive Summary schema version 1 is documented in
 [Executive Summary intelligence](executive-summary-intelligence.md). It
 contains only the summary, meeting type, sentiment and finite confidence.
+Decisions schema version 1 is documented in
+[Meeting Decisions intelligence](meeting-decisions-intelligence.md). It
+contains only a bounded list of decision, nullable supported owner, normalised
+status, finite confidence and brief paraphrased evidence.
 
 ## Artefact version assignment
 
@@ -116,12 +121,12 @@ Every service starts with trusted `TenantContext`. Every repository read/write h
 
 ## Known limitations and extension points
 
-- Generic AI lifecycle work remains internal; only the Executive Summary
-  request/state resource is public.
+- Generic AI lifecycle work remains internal; only the Executive Summary and
+  Decisions request/state resources are public.
 - Worker claiming, leases, retry scheduling and cancellation execution support
-  infrastructure tests and Executive Summary.
-- The configured provider may be mock or OpenAI; there is no additional Meeting
-  Intelligence.
+  infrastructure tests, Executive Summary and Decisions.
+- The configured provider may be mock or OpenAI; there is no Action Items or
+  later Meeting Intelligence capability.
 - The transcript version identifies the current mutable transcript row but does not preserve a historical text snapshot.
 - Production identity, retention, export, erasure and operational controls remain incomplete; production customer data is prohibited.
 

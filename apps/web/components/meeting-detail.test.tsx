@@ -46,6 +46,36 @@ describe("MeetingDetail", () => {
       }
       if (url.endsWith("/participants"))
         return Promise.resolve(jsonResponse([]));
+      if (url.endsWith("/intelligence/executive-summary"))
+        return Promise.resolve(
+          jsonResponse({
+            state: "empty",
+            generationAvailable: false,
+            unavailableReason: "Add a usable transcript first.",
+            jobId: null,
+            transcriptVersion: null,
+            requestedAt: null,
+            startedAt: null,
+            generatedAt: null,
+            safeMessage: null,
+            executiveSummary: null,
+          }),
+        );
+      if (url.endsWith("/intelligence/decisions"))
+        return Promise.resolve(
+          jsonResponse({
+            state: "empty",
+            generationAvailable: false,
+            unavailableReason: "Add a usable transcript first.",
+            jobId: null,
+            transcriptVersion: null,
+            requestedAt: null,
+            startedAt: null,
+            generatedAt: null,
+            safeMessage: null,
+            decisions: null,
+          }),
+        );
       if (url.endsWith("/history"))
         return Promise.resolve(jsonResponse(history));
       if (url.endsWith("/transcript")) {

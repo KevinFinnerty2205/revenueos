@@ -4,16 +4,21 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from revenueos.ai_contracts import ExecutiveSummaryArtifactContent
+from revenueos.ai_contracts import DecisionsArtifactContent, ExecutiveSummaryArtifactContent
 from revenueos.ai_services import (
     AIJobRequestResult,
     AIJobService,
+    DecisionsStateResult,
     ExecutiveSummaryStateResult,
 )
 from revenueos.business_contracts import Page
 from revenueos.domain import AIJobStatus, MeetingStatus, MeetingType
 from revenueos.errors import PublicAPIError
 from revenueos.intelligence_contracts import (
+    DecisionsContentResponse,
+    DecisionsRequestResponse,
+    DecisionsResponse,
+    DecisionsState,
     ExecutiveSummaryContentResponse,
     ExecutiveSummaryRequestResponse,
     ExecutiveSummaryResponse,
@@ -124,6 +129,33 @@ async def get_executive_summary(
     service: Intelligence,
 ) -> ExecutiveSummaryResponse:
     return _executive_summary_response(await service.get_executive_summary_state(meeting_id))
+
+
+@router.post(
+    "/{meeting_id}/intelligence/decisions",
+    response_model=DecisionsRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_decisions(
+    meeting_id: UUID,
+    response: Response,
+    service: Intelligence,
+) -> DecisionsRequestResponse:
+    result = await service.request_decisions(meeting_id)
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return _decisions_request_response(result)
+
+
+@router.get(
+    "/{meeting_id}/intelligence/decisions",
+    response_model=DecisionsResponse,
+)
+async def get_decisions(
+    meeting_id: UUID,
+    service: Intelligence,
+) -> DecisionsResponse:
+    return _decisions_response(await service.get_decisions_state(meeting_id))
 
 
 @router.patch("/{meeting_id}", response_model=MeetingResponse)
@@ -317,4 +349,64 @@ def _executive_summary_response(
         ),
         safe_message=safe_message,
         executive_summary=content,
+    )
+
+
+def _decisions_request_response(
+    result: AIJobRequestResult,
+) -> DecisionsRequestResponse:
+    job = result.job
+    job_status = cast(
+        Literal["queued", "running", "completed"] | None,
+        {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+        }.get(job.status),
+    )
+    if job_status is None:
+        raise PublicAPIError(
+            "invalid_intelligence_state",
+            "The Decisions request could not be represented safely.",
+            500,
+        )
+    return DecisionsRequestResponse(
+        job_id=job.id,
+        status=job_status,
+        created=result.created,
+        transcript_version=job.transcript_version,
+        requested_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+def _decisions_response(result: DecisionsStateResult) -> DecisionsResponse:
+    job = result.job
+    content = None
+    if result.artifact is not None:
+        validated = DecisionsArtifactContent.model_validate(result.artifact.content_json)
+        content = DecisionsContentResponse.model_validate(validated)
+    safe_message = job.last_error_message_safe if job is not None and result.state in {"failed", "cancelled"} else None
+    if result.state == "cancelled" and safe_message is None:
+        safe_message = "Decisions generation was cancelled."
+    if result.state == "failed" and safe_message is None:
+        safe_message = "Decisions generation could not be completed."
+    return DecisionsResponse(
+        state=cast(DecisionsState, result.state),
+        generation_available=result.generation_available,
+        unavailable_reason=result.unavailable_reason,
+        job_id=job.id if job is not None else None,
+        transcript_version=job.transcript_version if job is not None else None,
+        requested_at=job.created_at if job is not None else None,
+        started_at=job.started_at if job is not None else None,
+        generated_at=(
+            result.artifact.created_at
+            if result.artifact is not None
+            else job.completed_at
+            if job is not None and result.state == "completed"
+            else None
+        ),
+        safe_message=safe_message,
+        decisions=content,
     )

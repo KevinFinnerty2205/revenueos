@@ -18,8 +18,9 @@ Verified Clerk identity, tenant-safe company/contact/opportunity records, delibe
 opportunity and task records. Sprint 3 completed tenant-safe meetings,
 participants, deliberately supplied plain-text transcripts and meeting audit
 history. WO-004A1/A2/B1/B2/B3 completed the durable AI foundation; WO-004C1
-adds one Executive Summary product flow and WO-004C1A adds optional server-side
-OpenAI execution while keeping mock as default. Verified Clerk identity,
+adds the Executive Summary product flow, WO-004C1A adds optional server-side
+OpenAI execution and WO-004C2 adds structured Decisions while keeping mock as
+default. Verified Clerk identity,
 production customer-content provider approval, media ingestion/storage,
 transcription, source-backed evaluated analysis and follow-up drafting remain
 outstanding.

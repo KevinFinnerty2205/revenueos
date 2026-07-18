@@ -90,11 +90,20 @@ class AIJobStatus(StrEnum):
 class AIJobType(StrEnum):
     INFRASTRUCTURE_TEST = "infrastructure_test"
     EXECUTIVE_SUMMARY = "executive_summary"
+    DECISIONS = "decisions"
 
 
 class AIArtifactType(StrEnum):
     INFRASTRUCTURE_TEST = "infrastructure_test"
     EXECUTIVE_SUMMARY = "executive_summary"
+    DECISIONS = "decisions"
+
+
+class DecisionStatus(StrEnum):
+    CONFIRMED = "confirmed"
+    TENTATIVE = "tentative"
+    REJECTED = "rejected"
+    DEFERRED = "deferred"
 
 
 class ExecutiveSummaryMeetingType(StrEnum):
