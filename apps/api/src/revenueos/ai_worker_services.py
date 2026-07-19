@@ -5,20 +5,28 @@ import logging
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.ai_contracts import (
+    ACTION_ITEMS_SCHEMA_VERSION,
     ACTION_ITEMS_TRANSCRIPT_MAX_LENGTH,
+    DECISIONS_SCHEMA_VERSION,
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
+    EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
+    OPEN_QUESTIONS_SCHEMA_VERSION,
     OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
     ActionItemsSource,
     DecisionsSource,
     ExecutiveSummarySource,
+    FollowUpEmailSource,
+    FollowUpEmailTone,
     OpenQuestionsSource,
     RisksBlockersSource,
 )
@@ -28,13 +36,18 @@ from revenueos.ai_executors import (
     ExecutionResult,
     WorkerExecutionError,
 )
+from revenueos.ai_follow_up_email import (
+    FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES,
+    build_follow_up_email_source,
+)
 from revenueos.ai_lifecycle import prepare_lifecycle_transition
-from revenueos.ai_repositories import AIJobRepository
+from revenueos.ai_repositories import AIArtifactRepository, AIJobRepository
 from revenueos.ai_services import AIArtifactService
 from revenueos.ai_worker_repositories import AIWorkerRepository
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import (
+    AIArtifactType,
     AIJobStatus,
     AIJobType,
     MeetingAuditAction,
@@ -253,6 +266,12 @@ class AIWorkerService:
                     cancellation_check=self.is_cancellation_requested,
                     open_questions_source_loader=self.load_open_questions_source,
                 )
+            elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    follow_up_email_source_loader=self.load_follow_up_email_source,
+                )
             else:
                 result = await executor.execute(
                     job,
@@ -397,6 +416,30 @@ class AIWorkerService:
                             "empty_result": len(questions) == 0,
                             "importance_counts": importance_counts,
                             "owner_count": owner_count,
+                        },
+                    )
+                elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
+                    email_decisions = result.content.get("decisions")
+                    email_action_items = result.content.get("action_items")
+                    email_open_questions = result.content.get("open_questions")
+                    logger.info(
+                        "follow_up_email_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                            "tone": job.composition_tone,
+                            "decision_count": (len(email_decisions) if isinstance(email_decisions, list) else 0),
+                            "action_item_count": (
+                                len(email_action_items) if isinstance(email_action_items, list) else 0
+                            ),
+                            "open_question_count": (
+                                len(email_open_questions) if isinstance(email_open_questions, list) else 0
+                            ),
                         },
                     )
         except WorkerExecutionError as exc:
@@ -643,6 +686,77 @@ class AIWorkerService:
             transcript_text=normalised_transcript,
         )
 
+    async def load_follow_up_email_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> FollowUpEmailSource:
+        """Load only validated intelligence artefacts pinned by the composer job."""
+
+        if job.composition_tone not in {"professional", "friendly", "executive"}:
+            raise WorkerExecutionError(
+                "invalid_follow_up_email_tone",
+                "The Follow-up Email tone is invalid.",
+                retryable=False,
+            )
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            audited_transcript_version = await AIJobRepository(
+                session,
+            ).get_latest_transcript_audit_version(
+                job.organisation_id,
+                job.meeting_id,
+            )
+            artifacts = await AIArtifactRepository(
+                session,
+            ).get_follow_up_email_source_artifacts(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_version,
+            )
+        if audited_transcript_version is not None and audited_transcript_version != job.transcript_version:
+            raise WorkerExecutionError(
+                "follow_up_email_source_outdated",
+                "The validated Meeting Intelligence is no longer current.",
+                retryable=False,
+            )
+        if set(artifacts) != set(FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES):
+            raise WorkerExecutionError(
+                "follow_up_email_source_unavailable",
+                "The validated Meeting Intelligence required for this email is unavailable.",
+                retryable=False,
+            )
+        expected_schema_versions = {
+            AIArtifactType.EXECUTIVE_SUMMARY.value: EXECUTIVE_SUMMARY_SCHEMA_VERSION,
+            AIArtifactType.DECISIONS.value: DECISIONS_SCHEMA_VERSION,
+            AIArtifactType.ACTION_ITEMS.value: ACTION_ITEMS_SCHEMA_VERSION,
+            AIArtifactType.OPEN_QUESTIONS.value: OPEN_QUESTIONS_SCHEMA_VERSION,
+        }
+        if any(
+            artifact.transcript_id != job.transcript_id
+            or artifact.transcript_version != job.transcript_version
+            or artifact.schema_version != expected_schema_versions[artifact_type]
+            for artifact_type, artifact in artifacts.items()
+        ):
+            raise WorkerExecutionError(
+                "follow_up_email_source_trace_mismatch",
+                "The validated Meeting Intelligence does not match the queued email.",
+                retryable=False,
+            )
+        try:
+            return build_follow_up_email_source(
+                executive_summary=artifacts[AIArtifactType.EXECUTIVE_SUMMARY.value].content_json,
+                decisions=artifacts[AIArtifactType.DECISIONS.value].content_json,
+                action_items=artifacts[AIArtifactType.ACTION_ITEMS.value].content_json,
+                open_questions=artifacts[AIArtifactType.OPEN_QUESTIONS.value].content_json,
+                tone=cast(FollowUpEmailTone, job.composition_tone),
+            )
+        except ValidationError as exc:
+            raise WorkerExecutionError(
+                "follow_up_email_source_invalid",
+                "The validated Meeting Intelligence could not be composed safely.",
+                retryable=False,
+            ) from exc
+
     async def _heartbeat_loop(
         self,
         job: ClaimedAIJob,
@@ -757,6 +871,15 @@ class AIWorkerService:
                 )
             elif job.job_type == AIJobType.OPEN_QUESTIONS.value:
                 await artifact_service.prepare_open_questions_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
+            elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
+                await artifact_service.prepare_follow_up_email_artifact(
                     job_id=job.id,
                     meeting_id=job.meeting_id,
                     transcript_id=job.transcript_id,
@@ -901,6 +1024,18 @@ class AIWorkerService:
                     "retryable": error.retryable,
                 },
             )
+        elif claim.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
+            logger.warning(
+                "follow_up_email_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "tone": claim.composition_tone,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
         if retry_scheduled:
             logger.info(
                 "retry_scheduled",
@@ -1015,6 +1150,7 @@ class AIWorkerService:
             job_type=job.job_type,
             prompt_key=job.prompt_key,
             prompt_version=job.prompt_version,
+            composition_tone=job.composition_tone,
             schema_version=job.schema_version,
             attempt_count=job.attempt_count,
             max_attempts=job.max_attempts,

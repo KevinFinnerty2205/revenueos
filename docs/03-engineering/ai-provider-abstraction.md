@@ -10,12 +10,18 @@ The provider-neutral seam supports two implementations:
   SDK and Responses API.
 
 Together they support the existing `infrastructure_test`, `executive_summary`,
-`decisions`, `action_items`, `risks_blockers` and `open_questions` contracts where explicitly allowed. Executive Summary,
-Decisions, Action Items, Risks & Blockers and Open Questions are the only customer-facing AI capabilities. There is no provider UI, tenant-managed credential, additional
-vendor, tool use, streaming or automatic provider fallback.
+`decisions`, `action_items`, `risks_blockers`, `open_questions` and
+`follow_up_email` contracts where explicitly allowed. Executive Summary,
+Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email
+are the only customer-facing AI capabilities. There is no provider UI, tenant-
+managed credential, additional vendor, tool use, streaming or automatic
+provider fallback.
 
-Selecting OpenAI sends the rendered Executive Summary, Decisions, Action Items, Risks & Blockers or Open Questions prompt and bounded meeting
-transcript to OpenAI. The default mock makes no network call. See
+Selecting OpenAI sends the rendered Executive Summary, Decisions, Action Items,
+Risks & Blockers or Open Questions prompt and bounded meeting transcript to
+OpenAI. Follow-up Email sends only the validated Executive Summary, Decisions,
+Action Items and Open Questions projection plus tone; its typed provider input
+has no transcript field. The default mock makes no network call. See
 [OpenAI provider integration](openai-provider-integration.md) for the external
 data boundary and operating guide.
 
@@ -80,6 +86,10 @@ excludes answered-later, rhetorical, conversational, action-request, risk-only
 and decision-only fixtures, normalises importance and supports nullable owners
 or an empty list.
 
+For Follow-up Email the mock copies the validated customer-safe source fields
+exactly, applies stable generic framing for each of the three tones and never
+accepts transcript or Risks & Blockers input.
+
 ## OpenAI adapter
 
 `OpenAIProvider` maps provider-neutral messages to `responses.create`, supplies
@@ -115,8 +125,9 @@ stored.
 ## Worker flow and persistence
 
 1. Claim and commit a tenant-owned job.
-2. Resolve the job prompt/schema and load the exact pinned transcript in a short
-   tenant transaction where applicable.
+2. Resolve the job prompt/schema and load the exact pinned transcript for an
+   extractor or four validated artefacts for Follow-up Email in a short tenant
+   transaction.
 3. Build the validated provider request with the registry-derived schema.
 4. Resolve exactly the configured provider/model.
 5. Execute without an open database transaction.
@@ -150,7 +161,7 @@ exceptions.
 ## Tests and limitations
 
 All automated provider tests use dependency-injected SDK-shaped fakes and make
-no real OpenAI call. Coverage includes the explicit Executive Summary/Decisions
+no real OpenAI call. Coverage includes the explicit customer-capability
 allowlist, rejection of infrastructure/unknown work before SDK invocation,
 configuration, lazy registry selection, strict request mapping,
 response/usage mapping, safe errors, durable worker

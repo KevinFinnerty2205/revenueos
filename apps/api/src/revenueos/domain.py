@@ -94,6 +94,7 @@ class AIJobType(StrEnum):
     ACTION_ITEMS = "action_items"
     RISKS_BLOCKERS = "risks_blockers"
     OPEN_QUESTIONS = "open_questions"
+    FOLLOW_UP_EMAIL = "follow_up_email"
 
 
 class AIArtifactType(StrEnum):
@@ -103,6 +104,13 @@ class AIArtifactType(StrEnum):
     ACTION_ITEMS = "action_items"
     RISKS_BLOCKERS = "risks_blockers"
     OPEN_QUESTIONS = "open_questions"
+    FOLLOW_UP_EMAIL = "follow_up_email"
+
+
+class FollowUpEmailTone(StrEnum):
+    PROFESSIONAL = "professional"
+    FRIENDLY = "friendly"
+    EXECUTIVE = "executive"
 
 
 class RiskCategory(StrEnum):

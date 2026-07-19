@@ -34,6 +34,7 @@ class JSONFormatter(logging.Formatter):
             "prompt_version",
             "schema_key",
             "schema_version",
+            "tone",
             "structured_output_attempt",
             "structured_output_attempt_count",
             "provider_name",

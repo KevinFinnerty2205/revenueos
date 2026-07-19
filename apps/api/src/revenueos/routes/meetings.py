@@ -8,6 +8,7 @@ from revenueos.ai_contracts import (
     ActionItemsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
+    FollowUpEmailArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
 )
@@ -17,11 +18,12 @@ from revenueos.ai_services import (
     AIJobService,
     DecisionsStateResult,
     ExecutiveSummaryStateResult,
+    FollowUpEmailStateResult,
     OpenQuestionsStateResult,
     RisksBlockersStateResult,
 )
 from revenueos.business_contracts import Page
-from revenueos.domain import AIJobStatus, MeetingStatus, MeetingType
+from revenueos.domain import AIJobStatus, FollowUpEmailTone, MeetingStatus, MeetingType
 from revenueos.errors import PublicAPIError
 from revenueos.intelligence_contracts import (
     ActionItemsContentResponse,
@@ -36,6 +38,11 @@ from revenueos.intelligence_contracts import (
     ExecutiveSummaryRequestResponse,
     ExecutiveSummaryResponse,
     ExecutiveSummaryState,
+    FollowUpEmailComposeRequest,
+    FollowUpEmailContentResponse,
+    FollowUpEmailRequestResponse,
+    FollowUpEmailResponse,
+    FollowUpEmailState,
     OpenQuestionsContentResponse,
     OpenQuestionsRequestResponse,
     OpenQuestionsResponse,
@@ -258,6 +265,34 @@ async def get_open_questions(
     service: Intelligence,
 ) -> OpenQuestionsResponse:
     return _open_questions_response(await service.get_open_questions_state(meeting_id))
+
+
+@router.post(
+    "/{meeting_id}/intelligence/follow-up-email",
+    response_model=FollowUpEmailRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_follow_up_email(
+    meeting_id: UUID,
+    request: FollowUpEmailComposeRequest,
+    response: Response,
+    service: Intelligence,
+) -> FollowUpEmailRequestResponse:
+    result = await service.request_follow_up_email(meeting_id, request.tone)
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return _follow_up_email_request_response(result)
+
+
+@router.get(
+    "/{meeting_id}/intelligence/follow-up-email",
+    response_model=FollowUpEmailResponse,
+)
+async def get_follow_up_email(
+    meeting_id: UUID,
+    service: Intelligence,
+) -> FollowUpEmailResponse:
+    return _follow_up_email_response(await service.get_follow_up_email_state(meeting_id))
 
 
 @router.patch("/{meeting_id}", response_model=MeetingResponse)
@@ -691,4 +726,69 @@ def _open_questions_response(result: OpenQuestionsStateResult) -> OpenQuestionsR
         ),
         safe_message=safe_message,
         open_questions=content,
+    )
+
+
+def _follow_up_email_request_response(
+    result: AIJobRequestResult,
+) -> FollowUpEmailRequestResponse:
+    job = result.job
+    job_status = cast(
+        Literal["queued", "running", "completed"] | None,
+        {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+        }.get(job.status),
+    )
+    if job_status is None or job.composition_tone is None:
+        raise PublicAPIError(
+            "invalid_intelligence_state",
+            "The Follow-up Email request could not be represented safely.",
+            500,
+        )
+    return FollowUpEmailRequestResponse(
+        job_id=job.id,
+        status=job_status,
+        created=result.created,
+        transcript_version=job.transcript_version,
+        tone=FollowUpEmailTone(job.composition_tone),
+        requested_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+def _follow_up_email_response(
+    result: FollowUpEmailStateResult,
+) -> FollowUpEmailResponse:
+    job = result.job
+    content = None
+    if result.artifact is not None:
+        validated = FollowUpEmailArtifactContent.model_validate(result.artifact.content_json)
+        content = FollowUpEmailContentResponse.model_validate(validated)
+    safe_message = job.last_error_message_safe if job is not None and result.state in {"failed", "cancelled"} else None
+    if result.state == "cancelled" and safe_message is None:
+        safe_message = "Follow-up Email generation was cancelled."
+    if result.state == "failed" and safe_message is None:
+        safe_message = "Follow-up Email generation could not be completed."
+    tone = FollowUpEmailTone(job.composition_tone) if job is not None and job.composition_tone is not None else None
+    return FollowUpEmailResponse(
+        state=cast(FollowUpEmailState, result.state),
+        generation_available=result.generation_available,
+        unavailable_reason=result.unavailable_reason,
+        job_id=job.id if job is not None else None,
+        transcript_version=job.transcript_version if job is not None else None,
+        requested_at=job.created_at if job is not None else None,
+        started_at=job.started_at if job is not None else None,
+        generated_at=(
+            result.artifact.created_at
+            if result.artifact is not None
+            else job.completed_at
+            if job is not None and result.state == "completed"
+            else None
+        ),
+        safe_message=safe_message,
+        tone=tone,
+        follow_up_email=content,
     )

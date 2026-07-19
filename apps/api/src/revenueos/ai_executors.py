@@ -14,9 +14,12 @@ from revenueos.ai_contracts import (
     ActionItemsSource,
     DecisionsSource,
     ExecutiveSummarySource,
+    FollowUpEmailArtifactContent,
+    FollowUpEmailSource,
     OpenQuestionsSource,
     RisksBlockersSource,
 )
+from revenueos.ai_follow_up_email import output_is_grounded
 from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
 from revenueos.ai_output_schema_registry import (
     OutputSchemaRegistry,
@@ -37,6 +40,8 @@ from revenueos.ai_prompt_registry import (
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
+    FOLLOW_UP_EMAIL_PROMPT_KEY,
+    FOLLOW_UP_EMAIL_PROMPT_VERSION,
     OPEN_QUESTIONS_PROMPT_KEY,
     OPEN_QUESTIONS_PROMPT_VERSION,
     RISKS_BLOCKERS_PROMPT_KEY,
@@ -50,6 +55,7 @@ from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
+    FollowUpEmailProviderInput,
     InfrastructureTestProviderInput,
     OpenQuestionsProviderInput,
     ProviderInput,
@@ -83,6 +89,7 @@ class ClaimedAIJob:
     worker_id: str
     prompt_key: str | None = None
     prompt_version: int | None = None
+    composition_tone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -144,6 +151,10 @@ OpenQuestionsSourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[OpenQuestionsSource],
 ]
+FollowUpEmailSourceLoader = Callable[
+    [ClaimedAIJob],
+    Awaitable[FollowUpEmailSource],
+]
 ProviderInputFactory = Callable[[tuple[ProviderMessage, ...]], ProviderInput]
 
 
@@ -158,6 +169,7 @@ class AIJobExecutor(Protocol):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult: ...
 
 
@@ -540,6 +552,7 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
             executive_summary_source_loader,
@@ -547,6 +560,7 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
             action_items_source_loader,
             risks_blockers_source_loader,
             open_questions_source_loader,
+            follow_up_email_source_loader,
         )
         return await self._execute_structured(
             job,
@@ -581,12 +595,14 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
             decisions_source_loader,
             action_items_source_loader,
             risks_blockers_source_loader,
             open_questions_source_loader,
+            follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.EXECUTIVE_SUMMARY.value:
             raise WorkerExecutionError(
@@ -657,12 +673,14 @@ class DecisionsExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
             executive_summary_source_loader,
             action_items_source_loader,
             risks_blockers_source_loader,
             open_questions_source_loader,
+            follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.DECISIONS.value:
             raise WorkerExecutionError(
@@ -734,12 +752,14 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
             executive_summary_source_loader,
             decisions_source_loader,
             risks_blockers_source_loader,
             open_questions_source_loader,
+            follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.ACTION_ITEMS.value:
             raise WorkerExecutionError(
@@ -818,12 +838,14 @@ class RisksBlockersExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
             executive_summary_source_loader,
             decisions_source_loader,
             action_items_source_loader,
             open_questions_source_loader,
+            follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.RISKS_BLOCKERS.value:
             raise WorkerExecutionError(
@@ -909,12 +931,14 @@ class OpenQuestionsExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
             executive_summary_source_loader,
             decisions_source_loader,
             action_items_source_loader,
             risks_blockers_source_loader,
+            follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.OPEN_QUESTIONS.value:
             raise WorkerExecutionError(
@@ -986,6 +1010,108 @@ class OpenQuestionsExecutor(_StructuredOutputExecutor):
         return result
 
 
+class FollowUpEmailComposer(_StructuredOutputExecutor):
+    """Compose customer-ready email content from validated artefacts only."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
+    ) -> ExecutionResult:
+        del (
+            executive_summary_source_loader,
+            decisions_source_loader,
+            action_items_source_loader,
+            risks_blockers_source_loader,
+            open_questions_source_loader,
+        )
+        if job.job_type != AIJobType.FOLLOW_UP_EMAIL.value:
+            raise WorkerExecutionError(
+                "invalid_follow_up_email_job",
+                "The queued job is not a Follow-up Email job.",
+                retryable=False,
+            )
+        if job.prompt_key != FOLLOW_UP_EMAIL_PROMPT_KEY or job.prompt_version != FOLLOW_UP_EMAIL_PROMPT_VERSION:
+            raise WorkerExecutionError(
+                "invalid_prompt_configuration",
+                "The Follow-up Email prompt configuration is invalid.",
+                retryable=False,
+            )
+        if follow_up_email_source_loader is None:
+            raise WorkerExecutionError(
+                "follow_up_email_source_unavailable",
+                "The validated Meeting Intelligence required for this email is unavailable.",
+                retryable=False,
+            )
+
+        logger.info("follow_up_email_composition_started", extra=self._log_context(job))
+        source = await follow_up_email_source_loader(job)
+        logger.info(
+            "follow_up_email_sources_loaded",
+            extra={
+                **self._log_context(job),
+                "transcript_version": job.transcript_version,
+                "decision_count": len(source.decisions),
+                "action_item_count": len(source.action_items),
+                "open_question_count": len(source.open_questions),
+                "tone": source.tone,
+            },
+        )
+        result = await self._execute_structured(
+            job,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            variables=PromptVariables(
+                values={
+                    "executive_summary": json.dumps(
+                        source.executive_summary,
+                        ensure_ascii=False,
+                    ),
+                    "decisions": json.dumps(source.decisions, ensure_ascii=False),
+                    "action_items": json.dumps(
+                        source.action_items,
+                        ensure_ascii=False,
+                    ),
+                    "open_questions": json.dumps(
+                        source.open_questions,
+                        ensure_ascii=False,
+                    ),
+                    "tone": json.dumps(source.tone, ensure_ascii=False),
+                }
+            ),
+            input_factory=lambda messages: FollowUpEmailProviderInput(
+                messages=messages,
+            ),
+            cancellation_check=cancellation_check,
+        )
+        content = FollowUpEmailArtifactContent.model_validate(result.content)
+        if not output_is_grounded(content, source):
+            raise WorkerExecutionError(
+                "follow_up_email_grounding_failed",
+                "The composed email did not preserve the validated Meeting Intelligence.",
+                retryable=False,
+            )
+        logger.info(
+            "follow_up_email_output_validation_completed",
+            extra={
+                **self._log_context(job),
+                "decision_count": len(content.decisions),
+                "action_item_count": len(content.action_items),
+                "open_question_count": len(content.open_questions),
+                "tone": content.tone,
+                "structured_output_attempt_count": result.structured_output_attempt_count,
+            },
+        )
+        return result
+
+
 class AIExecutorRegistry:
     def __init__(
         self,
@@ -1032,6 +1158,12 @@ class AIExecutorRegistry:
                 schemas,
             ),
             AIJobType.OPEN_QUESTIONS.value: OpenQuestionsExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
+            AIJobType.FOLLOW_UP_EMAIL.value: FollowUpEmailComposer(
                 configuration,
                 providers,
                 prompts,

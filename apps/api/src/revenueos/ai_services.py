@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -19,6 +20,7 @@ from revenueos.ai_contracts import (
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
+    FOLLOW_UP_EMAIL_SCHEMA_VERSION,
     IDEMPOTENCY_KEY_MAX_LENGTH,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
     OPEN_QUESTIONS_SCHEMA_VERSION,
@@ -28,9 +30,15 @@ from revenueos.ai_contracts import (
     ActionItemsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
+    FollowUpEmailArtifactContent,
+    FollowUpEmailSource,
     InfrastructureTestArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
+)
+from revenueos.ai_follow_up_email import (
+    FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES,
+    build_follow_up_email_source,
 )
 from revenueos.ai_lifecycle import prepare_lifecycle_transition
 from revenueos.ai_prompt_registry import (
@@ -40,6 +48,8 @@ from revenueos.ai_prompt_registry import (
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
+    FOLLOW_UP_EMAIL_PROMPT_KEY,
+    FOLLOW_UP_EMAIL_PROMPT_VERSION,
     OPEN_QUESTIONS_PROMPT_KEY,
     OPEN_QUESTIONS_PROMPT_VERSION,
     RISKS_BLOCKERS_PROMPT_KEY,
@@ -55,6 +65,7 @@ from revenueos.domain import (
     AIArtifactType,
     AIJobStatus,
     AIJobType,
+    FollowUpEmailTone,
     MeetingAuditAction,
     MeetingAuditEntityType,
 )
@@ -114,6 +125,22 @@ class OpenQuestionsStateResult:
     unavailable_reason: str | None
     job: AIJob | None
     artifact: AIArtifact | None
+
+
+@dataclass(frozen=True)
+class FollowUpEmailStateResult:
+    state: str
+    generation_available: bool
+    unavailable_reason: str | None
+    job: AIJob | None
+    artifact: AIArtifact | None
+
+
+@dataclass(frozen=True)
+class FollowUpEmailSourceTrace:
+    transcript_id: UUID
+    transcript_version: int
+    source: FollowUpEmailSource
 
 
 class _AIDomainService:
@@ -1363,6 +1390,269 @@ class AIJobService(_AIDomainService):
         )
         raise PublicAPIError(code, reason, 422)
 
+    async def request_follow_up_email(
+        self,
+        meeting_id: UUID,
+        tone: FollowUpEmailTone = FollowUpEmailTone.PROFESSIONAL,
+    ) -> AIJobRequestResult:
+        logger.info(
+            "follow_up_email_requested",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "meeting_id": str(meeting_id),
+                "job_type": AIJobType.FOLLOW_UP_EMAIL.value,
+                "tone": tone.value,
+            },
+        )
+        meeting = await self.repository.lock_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        trace = await self._load_follow_up_email_source_trace(
+            meeting_id,
+            tone,
+        )
+        if trace is None:
+            raise PublicAPIError(
+                "follow_up_email_sources_required",
+                "Generate Executive Summary, Decisions, Action Items and Open Questions for the current meeting before drafting a follow-up email.",
+                422,
+            )
+
+        existing = await self._latest_follow_up_email_job(
+            meeting_id,
+            trace.transcript_version,
+            composition_tone=tone.value,
+        )
+        if existing is not None and existing.status in {
+            AIJobStatus.PENDING.value,
+            AIJobStatus.RUNNING.value,
+        }:
+            await self._audit_intelligence_request(existing)
+            logger.info(
+                "follow_up_email_existing_job_returned",
+                extra=self._job_log_context(existing),
+            )
+            return AIJobRequestResult(job=existing, created=False)
+
+        generation_number = (
+            await self.repository.count_follow_up_email_jobs(
+                self.tenant.organisation_id,
+                meeting_id,
+                trace.transcript_version,
+                prompt_key=FOLLOW_UP_EMAIL_PROMPT_KEY,
+                prompt_version=FOLLOW_UP_EMAIL_PROMPT_VERSION,
+                schema_version=FOLLOW_UP_EMAIL_SCHEMA_VERSION,
+                composition_tone=tone.value,
+            )
+            + 1
+        )
+        idempotency_key = (
+            f"follow_up_email:t{tone.value}:p{FOLLOW_UP_EMAIL_PROMPT_VERSION}:"
+            f"s{FOLLOW_UP_EMAIL_SCHEMA_VERSION}:r{generation_number}"
+        )
+        job = AIJob(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=trace.transcript_id,
+            transcript_version=trace.transcript_version,
+            job_type=AIJobType.FOLLOW_UP_EMAIL.value,
+            status=AIJobStatus.PENDING.value,
+            prompt_key=FOLLOW_UP_EMAIL_PROMPT_KEY,
+            prompt_version=FOLLOW_UP_EMAIL_PROMPT_VERSION,
+            schema_version=FOLLOW_UP_EMAIL_SCHEMA_VERSION,
+            idempotency_key=idempotency_key,
+            composition_tone=tone.value,
+            requested_by_user_id=self.tenant.user_id,
+        )
+        self.repository.create_job(job)
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
+        try:
+            await self.repository.flush()
+            await self.repository.refresh(job)
+            await self.repository.commit()
+        except IntegrityError as exc:
+            await self.repository.rollback()
+            await set_tenant_database_context(
+                self.repository.session,
+                self.tenant.organisation_id,
+            )
+            concurrent = await self._latest_follow_up_email_job(
+                meeting_id,
+                trace.transcript_version,
+                composition_tone=tone.value,
+            )
+            if concurrent is None or concurrent.status not in {
+                AIJobStatus.PENDING.value,
+                AIJobStatus.RUNNING.value,
+            }:
+                raise PublicAPIError(
+                    "persistence_conflict",
+                    "The Follow-up Email request conflicts with existing work.",
+                    409,
+                ) from exc
+            await self._audit_intelligence_request(concurrent)
+            return AIJobRequestResult(job=concurrent, created=False)
+        except SQLAlchemyError as exc:
+            await self.repository.rollback()
+            raise PublicAPIError(
+                "internal_persistence_failure",
+                "The Follow-up Email request could not be queued.",
+                500,
+            ) from exc
+
+        logger.info("follow_up_email_job_queued", extra=self._job_log_context(job))
+        return AIJobRequestResult(job=job, created=True)
+
+    async def get_follow_up_email_state(
+        self,
+        meeting_id: UUID,
+    ) -> FollowUpEmailStateResult:
+        meeting = await self.repository.get_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        trace = await self._load_follow_up_email_source_trace(
+            meeting_id,
+            FollowUpEmailTone.PROFESSIONAL,
+        )
+        if trace is None:
+            return FollowUpEmailStateResult(
+                state="empty",
+                generation_available=False,
+                unavailable_reason=(
+                    "Generate Executive Summary, Decisions, Action Items and Open Questions "
+                    "for the current meeting before drafting a follow-up email."
+                ),
+                job=None,
+                artifact=None,
+            )
+        job = await self._latest_follow_up_email_job(
+            meeting_id,
+            trace.transcript_version,
+        )
+        if job is None:
+            return FollowUpEmailStateResult(
+                state="empty",
+                generation_available=True,
+                unavailable_reason=None,
+                job=None,
+                artifact=None,
+            )
+        state = {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+            AIJobStatus.FAILED.value: "failed",
+            AIJobStatus.CANCELLED.value: "cancelled",
+        }[job.status]
+        artifact = (
+            await AIArtifactRepository(
+                self.repository.session,
+            ).get_latest_artifact_for_job(
+                self.tenant.organisation_id,
+                job.id,
+                AIArtifactType.FOLLOW_UP_EMAIL.value,
+            )
+            if state == "completed"
+            else None
+        )
+        if state == "completed" and artifact is None:
+            state = "failed"
+        return FollowUpEmailStateResult(
+            state=state,
+            generation_available=state in {"completed", "failed", "cancelled"},
+            unavailable_reason=None,
+            job=job,
+            artifact=artifact,
+        )
+
+    async def _latest_follow_up_email_job(
+        self,
+        meeting_id: UUID,
+        transcript_version: int,
+        *,
+        composition_tone: str | None = None,
+    ) -> AIJob | None:
+        return await self.repository.get_latest_follow_up_email_job(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_version,
+            prompt_key=FOLLOW_UP_EMAIL_PROMPT_KEY,
+            prompt_version=FOLLOW_UP_EMAIL_PROMPT_VERSION,
+            schema_version=FOLLOW_UP_EMAIL_SCHEMA_VERSION,
+            composition_tone=composition_tone,
+        )
+
+    async def _load_follow_up_email_source_trace(
+        self,
+        meeting_id: UUID,
+        tone: FollowUpEmailTone,
+    ) -> FollowUpEmailSourceTrace | None:
+        artifacts_repository = AIArtifactRepository(self.repository.session)
+        source_version = await artifacts_repository.get_latest_follow_up_email_source_version(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if source_version is None:
+            return None
+        audited_transcript_version = await self.repository.get_latest_transcript_audit_version(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if audited_transcript_version is not None and audited_transcript_version != source_version:
+            return None
+        artifacts = await artifacts_repository.get_follow_up_email_source_artifacts(
+            self.tenant.organisation_id,
+            meeting_id,
+            source_version,
+        )
+        if set(artifacts) != set(FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES):
+            return None
+        expected_schema_versions = {
+            AIArtifactType.EXECUTIVE_SUMMARY.value: EXECUTIVE_SUMMARY_SCHEMA_VERSION,
+            AIArtifactType.DECISIONS.value: DECISIONS_SCHEMA_VERSION,
+            AIArtifactType.ACTION_ITEMS.value: ACTION_ITEMS_SCHEMA_VERSION,
+            AIArtifactType.OPEN_QUESTIONS.value: OPEN_QUESTIONS_SCHEMA_VERSION,
+        }
+        if any(
+            artifact.schema_version != expected_schema_versions[artifact_type]
+            for artifact_type, artifact in artifacts.items()
+        ):
+            return None
+        transcript_ids = {artifact.transcript_id for artifact in artifacts.values()}
+        if len(transcript_ids) != 1:
+            return None
+        try:
+            source = build_follow_up_email_source(
+                executive_summary=artifacts[AIArtifactType.EXECUTIVE_SUMMARY.value].content_json,
+                decisions=artifacts[AIArtifactType.DECISIONS.value].content_json,
+                action_items=artifacts[AIArtifactType.ACTION_ITEMS.value].content_json,
+                open_questions=artifacts[AIArtifactType.OPEN_QUESTIONS.value].content_json,
+                tone=tone.value,
+            )
+        except ValidationError:
+            return None
+        return FollowUpEmailSourceTrace(
+            transcript_id=next(iter(transcript_ids)),
+            transcript_version=source_version,
+            source=source,
+        )
+
     @staticmethod
     def _executive_summary_unavailable_reason(
         transcript: Transcript | None,
@@ -1399,6 +1689,7 @@ class AIJobService(_AIDomainService):
             "prompt_key": job.prompt_key,
             "prompt_version": job.prompt_version,
             "schema_version": job.schema_version,
+            "tone": job.composition_tone,
         }
 
     async def get_job(self, job_id: UUID) -> AIJob:
@@ -1493,6 +1784,7 @@ class AIJobService(_AIDomainService):
                 "prompt_key": job.prompt_key,
                 "prompt_version": job.prompt_version,
                 "schema_version": job.schema_version,
+                "composition_tone": job.composition_tone,
                 "provider_key": job.provider_key,
                 "model_name": job.model_name,
             },
@@ -2235,6 +2527,115 @@ class AIArtifactService(_AIDomainService):
         )
         return artifact
 
+    async def prepare_follow_up_email_artifact(
+        self,
+        *,
+        job_id: UUID,
+        meeting_id: UUID,
+        transcript_id: UUID,
+        transcript_version: int,
+        schema_version: int,
+        content: Mapping[str, object],
+    ) -> AIArtifact:
+        """Add a validated composed email and metadata-only audit without committing."""
+
+        if schema_version != FOLLOW_UP_EMAIL_SCHEMA_VERSION:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Follow-up Email schema version is not supported.",
+                422,
+            )
+        validated_content = self._validate_follow_up_email_content(content)
+        job = await self._get_job(job_id)
+        self._validate_artifact_trace(
+            job,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            schema_version=schema_version,
+            expected_job_type=AIJobType.FOLLOW_UP_EMAIL,
+        )
+        if validated_content["tone"] != job.composition_tone:
+            raise PublicAPIError(
+                "job_artifact_trace_mismatch",
+                "The Follow-up Email tone does not match the queued job.",
+                422,
+            )
+        artifact_version = await self.artifacts.next_artifact_version(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_id,
+            transcript_version,
+            AIArtifactType.FOLLOW_UP_EMAIL.value,
+        )
+        artifact = AIArtifact(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            job_id=job.id,
+            artifact_type=AIArtifactType.FOLLOW_UP_EMAIL.value,
+            artifact_version=artifact_version,
+            schema_version=schema_version,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            provider_key=job.provider_key,
+            model_name=job.model_name,
+            content_json=validated_content,
+            confidence=Decimal(str(validated_content["confidence"])),
+        )
+        self.artifacts.create_artifact(artifact)
+        safe_metadata = {
+            "job_id": job.id,
+            "artifact_id": artifact.id,
+            "job_type": job.job_type,
+            "transcript_version": transcript_version,
+            "artifact_type": artifact.artifact_type,
+            "artifact_version": artifact.artifact_version,
+            "schema_version": artifact.schema_version,
+            "prompt_key": artifact.prompt_key,
+            "prompt_version": artifact.prompt_version,
+            "provider_key": artifact.provider_key,
+            "model_name": artifact.model_name,
+            "tone": validated_content["tone"],
+            "decision_count": len(cast(list[object], validated_content["decisions"])),
+            "action_item_count": len(cast(list[object], validated_content["action_items"])),
+            "open_question_count": len(cast(list[object], validated_content["open_questions"])),
+        }
+        self.repository.add_audit_event(
+            self._audit(
+                meeting_id=meeting_id,
+                entity_id=artifact.id,
+                action=MeetingAuditAction.AI_ARTIFACT_CREATED,
+                entity_type=MeetingAuditEntityType.AI_ARTIFACT,
+                transcript_version=transcript_version,
+                metadata=safe_metadata,
+            )
+        )
+        logger.info(
+            "follow_up_email_artifact_created",
+            extra={
+                "organisation_id": str(artifact.organisation_id),
+                "meeting_id": str(artifact.meeting_id),
+                "job_id": str(artifact.job_id),
+                "artifact_id": str(artifact.id),
+                "artifact_type": artifact.artifact_type,
+                "artifact_version": artifact.artifact_version,
+                "transcript_version": artifact.transcript_version,
+                "prompt_key": artifact.prompt_key,
+                "prompt_version": artifact.prompt_version,
+                "schema_version": artifact.schema_version,
+                "provider_name": artifact.provider_key,
+                "model_identifier": artifact.model_name,
+                "tone": validated_content["tone"],
+                "decision_count": safe_metadata["decision_count"],
+                "action_item_count": safe_metadata["action_item_count"],
+                "open_question_count": safe_metadata["open_question_count"],
+            },
+        )
+        return artifact
+
     async def get_artifact(self, artifact_id: UUID) -> AIArtifact:
         artifact = await self.artifacts.get_artifact(
             self.tenant.organisation_id,
@@ -2355,6 +2756,19 @@ class AIArtifactService(_AIDomainService):
             raise PublicAPIError(
                 "invalid_artifact_content",
                 "The Open Questions artefact content is invalid.",
+                422,
+            ) from exc
+
+    @staticmethod
+    def _validate_follow_up_email_content(
+        content: Mapping[str, object],
+    ) -> dict[str, object]:
+        try:
+            return FollowUpEmailArtifactContent.model_validate(content).as_json()
+        except ValidationError as exc:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Follow-up Email artefact content is invalid.",
                 422,
             ) from exc
 

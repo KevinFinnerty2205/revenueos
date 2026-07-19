@@ -167,6 +167,21 @@ class OpenQuestionsProviderInput(BaseModel):
         return self
 
 
+class FollowUpEmailProviderInput(BaseModel):
+    """Provider-neutral Follow-up Email input with no transcript field."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["follow_up_email"] = "follow_up_email"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> FollowUpEmailProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("Follow-up Email messages must be ordered system then user.")
+        return self
+
+
 ProviderInput = (
     InfrastructureTestProviderInput
     | ExecutiveSummaryProviderInput
@@ -174,6 +189,7 @@ ProviderInput = (
     | ActionItemsProviderInput
     | RisksBlockersProviderInput
     | OpenQuestionsProviderInput
+    | FollowUpEmailProviderInput
 )
 
 

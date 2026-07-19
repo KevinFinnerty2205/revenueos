@@ -43,6 +43,14 @@ OPEN_QUESTION_OWNER_MAX_LENGTH = 200
 OPEN_QUESTION_EVIDENCE_MIN_LENGTH = 5
 OPEN_QUESTION_EVIDENCE_MAX_LENGTH = 500
 OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH = 50_000
+FOLLOW_UP_EMAIL_SCHEMA_VERSION = 1
+FOLLOW_UP_EMAIL_SUBJECT_MAX_LENGTH = 200
+FOLLOW_UP_EMAIL_GREETING_MAX_LENGTH = 200
+FOLLOW_UP_EMAIL_SUMMARY_MIN_LENGTH = 20
+FOLLOW_UP_EMAIL_SUMMARY_MAX_LENGTH = 2_000
+FOLLOW_UP_EMAIL_ITEM_MAX_LENGTH = 1_000
+FOLLOW_UP_EMAIL_CLOSING_MAX_LENGTH = 300
+FOLLOW_UP_EMAIL_MAX_COUNT = 25
 IDEMPOTENCY_KEY_MAX_LENGTH = 200
 SAFE_ERROR_CODE_MAX_LENGTH = 100
 SAFE_ERROR_MESSAGE_MAX_LENGTH = 1000
@@ -537,3 +545,109 @@ class OpenQuestionsSource(BaseModel):
         if len(normalised) > OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH:
             raise ValueError("Transcript text exceeds the Open Questions limit.")
         return normalised
+
+
+FollowUpEmailTone = Literal["professional", "friendly", "executive"]
+FollowUpEmailItem = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=FOLLOW_UP_EMAIL_ITEM_MAX_LENGTH,
+    ),
+]
+
+
+class FollowUpEmailArtifactContent(BaseModel):
+    """Strict, immutable Follow-up Email structured-output schema version 1."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    subject: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=FOLLOW_UP_EMAIL_SUBJECT_MAX_LENGTH,
+        ),
+    ]
+    greeting: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=FOLLOW_UP_EMAIL_GREETING_MAX_LENGTH,
+        ),
+    ]
+    summary: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=FOLLOW_UP_EMAIL_SUMMARY_MIN_LENGTH,
+            max_length=FOLLOW_UP_EMAIL_SUMMARY_MAX_LENGTH,
+        ),
+    ]
+    decisions: tuple[FollowUpEmailItem, ...] = Field(
+        max_length=FOLLOW_UP_EMAIL_MAX_COUNT,
+    )
+    action_items: tuple[FollowUpEmailItem, ...] = Field(
+        max_length=FOLLOW_UP_EMAIL_MAX_COUNT,
+    )
+    open_questions: tuple[FollowUpEmailItem, ...] = Field(
+        max_length=FOLLOW_UP_EMAIL_MAX_COUNT,
+    )
+    closing: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=FOLLOW_UP_EMAIL_CLOSING_MAX_LENGTH,
+        ),
+    ]
+    tone: FollowUpEmailTone
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+    @field_validator("decisions", "action_items", "open_questions", mode="before")
+    @classmethod
+    def normalise_json_arrays(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    def as_json(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+
+class FollowUpEmailSource(BaseModel):
+    """Customer-safe composition context built only from validated artefacts."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    executive_summary: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=FOLLOW_UP_EMAIL_SUMMARY_MIN_LENGTH,
+            max_length=FOLLOW_UP_EMAIL_SUMMARY_MAX_LENGTH,
+        ),
+    ]
+    decisions: tuple[FollowUpEmailItem, ...] = Field(
+        max_length=FOLLOW_UP_EMAIL_MAX_COUNT,
+    )
+    action_items: tuple[FollowUpEmailItem, ...] = Field(
+        max_length=FOLLOW_UP_EMAIL_MAX_COUNT,
+    )
+    open_questions: tuple[FollowUpEmailItem, ...] = Field(
+        max_length=FOLLOW_UP_EMAIL_MAX_COUNT,
+    )
+    tone: FollowUpEmailTone

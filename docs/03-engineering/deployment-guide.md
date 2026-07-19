@@ -51,11 +51,11 @@ variables, data flow, smoke test and rollback.
 7. Start/update the web application and exercise a synthetic smoke journey.
 8. Monitor safe failure, lease, retry, rate-limit and latency signals.
 
-WO-004C1A requires no schema migration; WO-004C2, WO-004C3, WO-004C4 and
-WO-004C5 require only `0008_decisions`, `0009_action_items`,
-`0010_risks_blockers` and `0011_open_questions`, which widen existing AI type
-checks. The current trace fields
-already hold provider/model/request/token metadata.
+WO-004C1A requires no schema migration; WO-004C2 through WO-004C5 require
+`0008_decisions` through `0011_open_questions`, which widen existing AI type
+checks. WO-004C6 requires `0012_follow_up_email`, which also adds the guarded
+nullable job tone column. The current trace fields already hold provider/model/
+request/token metadata.
 
 ## Rollback
 
@@ -63,7 +63,9 @@ Roll back API, worker and web to the same previously validated release. For an
 OpenAI-specific operational issue, select `AI_PROVIDER=mock`, restart the
 worker, verify new work uses the mock, and revoke/remove the unused OpenAI key.
 Do not rewrite completed artefact trace. Database downgrade is unnecessary for
-an OpenAI rollback. Downgrading `0011_open_questions` is destructive to Open
+an OpenAI rollback. Downgrading `0012_follow_up_email` is destructive to Follow-
+up Email jobs/artefacts and drops their tone column; downgrading
+`0011_open_questions` is destructive to Open
 Questions jobs/artefacts; downgrading `0010_risks_blockers` is destructive to
 Risks & Blockers jobs/artefacts; downgrading `0009_action_items` is destructive to Action
 Items jobs/artefacts; downgrading `0008_decisions` is destructive to Decisions
