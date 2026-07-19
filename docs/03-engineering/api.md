@@ -190,10 +190,31 @@ list is successful. Worker/lease fields, prompts, transcripts, raw errors,
 provider responses and internal configuration are excluded. See
 [Meeting Risks & Blockers intelligence](meeting-risks-blockers-intelligence.md).
 
+## Open Questions intelligence
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/open-questions` | Queue or return equivalent Open Questions generation |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence/open-questions` | Read current safe state/result |
+
+POST derives the tenant from authentication, requires the current same-tenant
+transcript to be non-empty and at most 50,000 trimmed characters, and never
+generates inline. New work returns `202`; an equivalent pending, running or
+completed job for prompt/schema v1 returns `200`. Failed/cancelled work may be
+retried and transcript changes permit a new version-bound job. Existing
+intelligence jobs remain independent.
+
+GET supports all six lifecycle states and returns safe timestamps, messages and
+the latest completed `openQuestions` object. An empty `openQuestions` list is
+successful. Worker/lease fields, prompts, transcripts, raw errors, provider
+responses and internal configuration are excluded. See
+[Meeting Open Questions intelligence](meeting-open-questions-intelligence.md).
+
 ## Scope boundary
 
 There are no generic AI job/artefact, provider configuration/model listing,
-cancellation, recording, media upload/storage, transcription, Open Questions or later
-intelligence, email, calendar, CRM, billing, worker-control or automation
+cancellation, recording, media upload/storage, transcription, Follow-up Email
+or later intelligence, question-answering, email, calendar, CRM, billing,
+worker-control or automation
 endpoints. Mock/OpenAI selection is server-side worker configuration and does not
 change this API contract. Clerk token verification is not connected.

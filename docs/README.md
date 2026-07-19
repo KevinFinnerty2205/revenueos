@@ -43,6 +43,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Meeting Decisions intelligence](03-engineering/meeting-decisions-intelligence.md)
 - [Meeting Action Items intelligence](03-engineering/meeting-action-items-intelligence.md)
 - [Meeting Risks & Blockers intelligence](03-engineering/meeting-risks-blockers-intelligence.md)
+- [Meeting Open Questions intelligence](03-engineering/meeting-open-questions-intelligence.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -84,6 +85,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-004C2: Meeting Decisions Intelligence](07-sprints/wo-004c2-meeting-decisions.md)
 - [WO-004C3: Meeting Action Items Intelligence](07-sprints/wo-004c3-meeting-action-items.md)
 - [WO-004C4: Meeting Risks & Blockers Intelligence](07-sprints/wo-004c4-meeting-risks-blockers.md)
+- [WO-004C5: Meeting Open Questions Intelligence](07-sprints/wo-004c5-meeting-open-questions.md)
 
 ## 08 — Decision records
 
@@ -101,17 +103,18 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0012: current-transcript Decisions execution](08-decisions/0012-current-transcript-decisions.md)
 - [ADR 0013: current-transcript Action Items execution](08-decisions/0013-current-transcript-action-items.md)
 - [ADR 0014: current-transcript Risks & Blockers execution](08-decisions/0014-current-transcript-risks-blockers.md)
+- [ADR 0015: current-transcript Open Questions execution](08-decisions/0015-current-transcript-open-questions.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4 are complete. An
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5 are complete. An
 authenticated user can independently queue and view a strict Executive Summary,
-Decisions, Action Items and Risks & Blockers result from the current transcript
+Decisions, Action Items, Risks & Blockers and Open Questions result from the current transcript
 through the durable worker. Mock remains the deterministic no-network default;
-the optional server-side OpenAI Responses API provider supports all four
+the optional server-side OpenAI Responses API provider supports all five
 capabilities without changing the API/UI. OpenAI selection sends the selected
-transcript to OpenAI. There is no Open Questions or later intelligence field,
-provider UI, recording, media storage, transcription, external integration,
+transcript to OpenAI. There is no Follow-up Email or later intelligence field,
+question answering, provider UI, recording, media storage, transcription, external integration,
 production Clerk verification, billing or mobile application. Assistant remains
 a placeholder.
 

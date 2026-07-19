@@ -152,12 +152,28 @@ class RisksBlockersProviderInput(BaseModel):
         return self
 
 
+class OpenQuestionsProviderInput(BaseModel):
+    """Provider-neutral Open Questions input containing rendered messages."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["open_questions"] = "open_questions"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> OpenQuestionsProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("Open Questions messages must be ordered system then user.")
+        return self
+
+
 ProviderInput = (
     InfrastructureTestProviderInput
     | ExecutiveSummaryProviderInput
     | DecisionsProviderInput
     | ActionItemsProviderInput
     | RisksBlockersProviderInput
+    | OpenQuestionsProviderInput
 )
 
 

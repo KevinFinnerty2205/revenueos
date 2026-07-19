@@ -14,6 +14,7 @@ from revenueos.ai_contracts import (
     ActionItemsSource,
     DecisionsSource,
     ExecutiveSummarySource,
+    OpenQuestionsSource,
     RisksBlockersSource,
 )
 from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
@@ -36,6 +37,8 @@ from revenueos.ai_prompt_registry import (
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
+    OPEN_QUESTIONS_PROMPT_KEY,
+    OPEN_QUESTIONS_PROMPT_VERSION,
     RISKS_BLOCKERS_PROMPT_KEY,
     RISKS_BLOCKERS_PROMPT_VERSION,
     PromptRegistry,
@@ -48,6 +51,7 @@ from revenueos.ai_provider_contracts import (
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     InfrastructureTestProviderInput,
+    OpenQuestionsProviderInput,
     ProviderInput,
     ProviderMessage,
     ProviderOutputSchema,
@@ -136,6 +140,10 @@ RisksBlockersSourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[RisksBlockersSource],
 ]
+OpenQuestionsSourceLoader = Callable[
+    [ClaimedAIJob],
+    Awaitable[OpenQuestionsSource],
+]
 ProviderInputFactory = Callable[[tuple[ProviderMessage, ...]], ProviderInput]
 
 
@@ -149,6 +157,7 @@ class AIJobExecutor(Protocol):
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
     ) -> ExecutionResult: ...
 
 
@@ -530,12 +539,14 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
             executive_summary_source_loader,
             decisions_source_loader,
             action_items_source_loader,
             risks_blockers_source_loader,
+            open_questions_source_loader,
         )
         return await self._execute_structured(
             job,
@@ -569,8 +580,14 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
     ) -> ExecutionResult:
-        del decisions_source_loader, action_items_source_loader, risks_blockers_source_loader
+        del (
+            decisions_source_loader,
+            action_items_source_loader,
+            risks_blockers_source_loader,
+            open_questions_source_loader,
+        )
         if job.job_type != AIJobType.EXECUTIVE_SUMMARY.value:
             raise WorkerExecutionError(
                 "invalid_executive_summary_job",
@@ -639,8 +656,14 @@ class DecisionsExecutor(_StructuredOutputExecutor):
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
     ) -> ExecutionResult:
-        del executive_summary_source_loader, action_items_source_loader, risks_blockers_source_loader
+        del (
+            executive_summary_source_loader,
+            action_items_source_loader,
+            risks_blockers_source_loader,
+            open_questions_source_loader,
+        )
         if job.job_type != AIJobType.DECISIONS.value:
             raise WorkerExecutionError(
                 "invalid_decisions_job",
@@ -710,8 +733,14 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
     ) -> ExecutionResult:
-        del executive_summary_source_loader, decisions_source_loader, risks_blockers_source_loader
+        del (
+            executive_summary_source_loader,
+            decisions_source_loader,
+            risks_blockers_source_loader,
+            open_questions_source_loader,
+        )
         if job.job_type != AIJobType.ACTION_ITEMS.value:
             raise WorkerExecutionError(
                 "invalid_action_items_job",
@@ -788,8 +817,14 @@ class RisksBlockersExecutor(_StructuredOutputExecutor):
         decisions_source_loader: DecisionsSourceLoader | None = None,
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
     ) -> ExecutionResult:
-        del executive_summary_source_loader, decisions_source_loader, action_items_source_loader
+        del (
+            executive_summary_source_loader,
+            decisions_source_loader,
+            action_items_source_loader,
+            open_questions_source_loader,
+        )
         if job.job_type != AIJobType.RISKS_BLOCKERS.value:
             raise WorkerExecutionError(
                 "invalid_risks_blockers_job",
@@ -861,6 +896,96 @@ class RisksBlockersExecutor(_StructuredOutputExecutor):
         return result
 
 
+class OpenQuestionsExecutor(_StructuredOutputExecutor):
+    """Transcript-grounded Open Questions execution through the provider port."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+    ) -> ExecutionResult:
+        del (
+            executive_summary_source_loader,
+            decisions_source_loader,
+            action_items_source_loader,
+            risks_blockers_source_loader,
+        )
+        if job.job_type != AIJobType.OPEN_QUESTIONS.value:
+            raise WorkerExecutionError(
+                "invalid_open_questions_job",
+                "The queued job is not an Open Questions job.",
+                retryable=False,
+            )
+        if job.prompt_key != OPEN_QUESTIONS_PROMPT_KEY or job.prompt_version != OPEN_QUESTIONS_PROMPT_VERSION:
+            raise WorkerExecutionError(
+                "invalid_prompt_configuration",
+                "The Open Questions prompt configuration is invalid.",
+                retryable=False,
+            )
+        if open_questions_source_loader is None:
+            raise WorkerExecutionError(
+                "open_questions_source_unavailable",
+                "The Open Questions source loader is unavailable.",
+                retryable=False,
+            )
+
+        logger.info("open_questions_execution_started", extra=self._log_context(job))
+        source = await open_questions_source_loader(job)
+        logger.info(
+            "open_questions_transcript_loaded",
+            extra={
+                **self._log_context(job),
+                "transcript_version": job.transcript_version,
+                "transcript_character_count": len(source.transcript_text),
+                "meeting_date_available": True,
+            },
+        )
+        result = await self._execute_structured(
+            job,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            variables=PromptVariables(
+                values={
+                    "meeting_title": json.dumps(source.meeting_title, ensure_ascii=False),
+                    "meeting_date": json.dumps(source.meeting_date.isoformat(), ensure_ascii=False),
+                    "transcript_text": json.dumps(source.transcript_text, ensure_ascii=False),
+                }
+            ),
+            input_factory=lambda messages: OpenQuestionsProviderInput(messages=messages),
+            cancellation_check=cancellation_check,
+        )
+        values = result.content.get("open_questions")
+        questions = values if isinstance(values, list) else []
+        importance_counts = {importance: 0 for importance in ("high", "medium", "low")}
+        owner_count = 0
+        for item in questions:
+            if not isinstance(item, dict):
+                continue
+            importance = item.get("importance")
+            if isinstance(importance, str) and importance in importance_counts:
+                importance_counts[importance] += 1
+            if item.get("owner") is not None:
+                owner_count += 1
+        logger.info(
+            "open_questions_output_validation_completed",
+            extra={
+                **self._log_context(job),
+                "open_question_count": len(questions),
+                "empty_result": len(questions) == 0,
+                "importance_counts": importance_counts,
+                "owner_count": owner_count,
+                "structured_output_attempt_count": result.structured_output_attempt_count,
+            },
+        )
+        return result
+
+
 class AIExecutorRegistry:
     def __init__(
         self,
@@ -901,6 +1026,12 @@ class AIExecutorRegistry:
                 schemas,
             ),
             AIJobType.RISKS_BLOCKERS.value: RisksBlockersExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
+            AIJobType.OPEN_QUESTIONS.value: OpenQuestionsExecutor(
                 configuration,
                 providers,
                 prompts,

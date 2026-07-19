@@ -21,12 +21,15 @@ from revenueos.ai_contracts import (
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
     IDEMPOTENCY_KEY_MAX_LENGTH,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    OPEN_QUESTIONS_SCHEMA_VERSION,
+    OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_SCHEMA_VERSION,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
     ActionItemsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     InfrastructureTestArtifactContent,
+    OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
 )
 from revenueos.ai_lifecycle import prepare_lifecycle_transition
@@ -37,6 +40,8 @@ from revenueos.ai_prompt_registry import (
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
+    OPEN_QUESTIONS_PROMPT_KEY,
+    OPEN_QUESTIONS_PROMPT_VERSION,
     RISKS_BLOCKERS_PROMPT_KEY,
     RISKS_BLOCKERS_PROMPT_VERSION,
 )
@@ -95,6 +100,15 @@ class ActionItemsStateResult:
 
 @dataclass(frozen=True)
 class RisksBlockersStateResult:
+    state: str
+    generation_available: bool
+    unavailable_reason: str | None
+    job: AIJob | None
+    artifact: AIArtifact | None
+
+
+@dataclass(frozen=True)
+class OpenQuestionsStateResult:
     state: str
     generation_available: bool
     unavailable_reason: str | None
@@ -1131,6 +1145,224 @@ class AIJobService(_AIDomainService):
         )
         raise PublicAPIError(code, reason, 422)
 
+    async def request_open_questions(
+        self,
+        meeting_id: UUID,
+    ) -> AIJobRequestResult:
+        logger.info(
+            "open_questions_requested",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "meeting_id": str(meeting_id),
+                "job_type": AIJobType.OPEN_QUESTIONS.value,
+            },
+        )
+        meeting = await self.repository.lock_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        transcript = await self.repository.get_transcript_for_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        self._require_usable_open_questions_transcript(transcript)
+        assert transcript is not None
+
+        existing = await self._latest_open_questions_job(meeting_id, transcript.version)
+        if existing is not None and existing.status in {
+            AIJobStatus.PENDING.value,
+            AIJobStatus.RUNNING.value,
+            AIJobStatus.COMPLETED.value,
+        }:
+            await self._audit_intelligence_request(existing)
+            logger.info(
+                "open_questions_existing_job_returned",
+                extra=self._job_log_context(existing),
+            )
+            return AIJobRequestResult(job=existing, created=False)
+
+        retry_number = (
+            await self.repository.count_equivalent_jobs(
+                self.tenant.organisation_id,
+                meeting_id,
+                transcript.version,
+                job_type=AIJobType.OPEN_QUESTIONS.value,
+                prompt_key=OPEN_QUESTIONS_PROMPT_KEY,
+                prompt_version=OPEN_QUESTIONS_PROMPT_VERSION,
+                schema_version=OPEN_QUESTIONS_SCHEMA_VERSION,
+            )
+            + 1
+        )
+        idempotency_key = (
+            f"open_questions:p{OPEN_QUESTIONS_PROMPT_VERSION}:s{OPEN_QUESTIONS_SCHEMA_VERSION}:r{retry_number}"
+        )
+        job = AIJob(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript.id,
+            transcript_version=transcript.version,
+            job_type=AIJobType.OPEN_QUESTIONS.value,
+            status=AIJobStatus.PENDING.value,
+            prompt_key=OPEN_QUESTIONS_PROMPT_KEY,
+            prompt_version=OPEN_QUESTIONS_PROMPT_VERSION,
+            schema_version=OPEN_QUESTIONS_SCHEMA_VERSION,
+            idempotency_key=idempotency_key,
+            requested_by_user_id=self.tenant.user_id,
+        )
+        self.repository.create_job(job)
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
+        try:
+            await self.repository.flush()
+            await self.repository.refresh(job)
+            await self.repository.commit()
+        except IntegrityError as exc:
+            await self.repository.rollback()
+            await set_tenant_database_context(
+                self.repository.session,
+                self.tenant.organisation_id,
+            )
+            concurrent = await self._latest_open_questions_job(
+                meeting_id,
+                transcript.version,
+            )
+            if concurrent is None or concurrent.status not in {
+                AIJobStatus.PENDING.value,
+                AIJobStatus.RUNNING.value,
+                AIJobStatus.COMPLETED.value,
+            }:
+                raise PublicAPIError(
+                    "persistence_conflict",
+                    "The Open Questions request conflicts with existing work.",
+                    409,
+                ) from exc
+            await self._audit_intelligence_request(concurrent)
+            logger.info(
+                "open_questions_existing_job_returned",
+                extra=self._job_log_context(concurrent),
+            )
+            return AIJobRequestResult(job=concurrent, created=False)
+        except SQLAlchemyError as exc:
+            await self.repository.rollback()
+            raise PublicAPIError(
+                "internal_persistence_failure",
+                "The Open Questions request could not be queued.",
+                500,
+            ) from exc
+
+        logger.info("open_questions_job_queued", extra=self._job_log_context(job))
+        return AIJobRequestResult(job=job, created=True)
+
+    async def get_open_questions_state(
+        self,
+        meeting_id: UUID,
+    ) -> OpenQuestionsStateResult:
+        meeting = await self.repository.get_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        transcript = await self.repository.get_transcript_for_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        unavailable_reason = self._open_questions_unavailable_reason(transcript)
+        if unavailable_reason is not None:
+            return OpenQuestionsStateResult(
+                state="empty",
+                generation_available=False,
+                unavailable_reason=unavailable_reason,
+                job=None,
+                artifact=None,
+            )
+        assert transcript is not None
+        job = await self._latest_open_questions_job(meeting_id, transcript.version)
+        if job is None:
+            return OpenQuestionsStateResult(
+                state="empty",
+                generation_available=True,
+                unavailable_reason=None,
+                job=None,
+                artifact=None,
+            )
+        state = {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+            AIJobStatus.FAILED.value: "failed",
+            AIJobStatus.CANCELLED.value: "cancelled",
+        }[job.status]
+        artifact = (
+            await AIArtifactRepository(self.repository.session).get_latest_artifact_for_job(
+                self.tenant.organisation_id,
+                job.id,
+                AIArtifactType.OPEN_QUESTIONS.value,
+            )
+            if state == "completed"
+            else None
+        )
+        if state == "completed" and artifact is None:
+            state = "failed"
+        return OpenQuestionsStateResult(
+            state=state,
+            generation_available=state in {"failed", "cancelled"},
+            unavailable_reason=None,
+            job=job,
+            artifact=artifact,
+        )
+
+    async def _latest_open_questions_job(
+        self,
+        meeting_id: UUID,
+        transcript_version: int,
+    ) -> AIJob | None:
+        return await self.repository.get_latest_equivalent_job(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_version,
+            job_type=AIJobType.OPEN_QUESTIONS.value,
+            prompt_key=OPEN_QUESTIONS_PROMPT_KEY,
+            prompt_version=OPEN_QUESTIONS_PROMPT_VERSION,
+            schema_version=OPEN_QUESTIONS_SCHEMA_VERSION,
+        )
+
+    @staticmethod
+    def _open_questions_unavailable_reason(
+        transcript: Transcript | None,
+    ) -> str | None:
+        if transcript is None or not transcript.raw_text.strip():
+            return "Add a usable transcript before generating Open Questions."
+        if len(transcript.raw_text.strip()) > OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH:
+            return "This transcript exceeds the 50,000-character Open Questions processing limit."
+        return None
+
+    @classmethod
+    def _require_usable_open_questions_transcript(
+        cls,
+        transcript: Transcript | None,
+    ) -> None:
+        reason = cls._open_questions_unavailable_reason(transcript)
+        if reason is None:
+            return
+        code = (
+            "open_questions_transcript_required"
+            if transcript is None or not transcript.raw_text.strip()
+            else "open_questions_transcript_too_large"
+        )
+        raise PublicAPIError(code, reason, 422)
+
     @staticmethod
     def _executive_summary_unavailable_reason(
         transcript: Transcript | None,
@@ -1879,6 +2111,130 @@ class AIArtifactService(_AIDomainService):
         )
         return artifact
 
+    async def prepare_open_questions_artifact(
+        self,
+        *,
+        job_id: UUID,
+        meeting_id: UUID,
+        transcript_id: UUID,
+        transcript_version: int,
+        schema_version: int,
+        content: Mapping[str, object],
+    ) -> AIArtifact:
+        """Add validated Open Questions and metadata-only audit without committing."""
+
+        if schema_version != OPEN_QUESTIONS_SCHEMA_VERSION:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Open Questions schema version is not supported.",
+                422,
+            )
+        validated_content = self._validate_open_questions_content(content)
+        job = await self._get_job(job_id)
+        await self._validate_trace(
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+        )
+        self._validate_artifact_trace(
+            job,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            schema_version=schema_version,
+            expected_job_type=AIJobType.OPEN_QUESTIONS,
+        )
+        artifact_version = await self.artifacts.next_artifact_version(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_id,
+            transcript_version,
+            AIArtifactType.OPEN_QUESTIONS.value,
+        )
+        artifact = AIArtifact(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            job_id=job.id,
+            artifact_type=AIArtifactType.OPEN_QUESTIONS.value,
+            artifact_version=artifact_version,
+            schema_version=schema_version,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            provider_key=job.provider_key,
+            model_name=job.model_name,
+            content_json=validated_content,
+        )
+        self.artifacts.create_artifact(artifact)
+        values = validated_content["open_questions"]
+        if not isinstance(values, list):
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Open Questions artefact content is invalid.",
+                422,
+            )
+        importance_counts = {importance: 0 for importance in ("high", "medium", "low")}
+        owner_count = 0
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            importance = item.get("importance")
+            if isinstance(importance, str) and importance in importance_counts:
+                importance_counts[importance] += 1
+            if item.get("owner") is not None:
+                owner_count += 1
+        safe_metadata = {
+            "job_id": job.id,
+            "artifact_id": artifact.id,
+            "job_type": job.job_type,
+            "transcript_version": transcript_version,
+            "artifact_type": artifact.artifact_type,
+            "artifact_version": artifact.artifact_version,
+            "schema_version": artifact.schema_version,
+            "prompt_key": artifact.prompt_key,
+            "prompt_version": artifact.prompt_version,
+            "provider_key": artifact.provider_key,
+            "model_name": artifact.model_name,
+            "open_question_count": len(values),
+            "empty_result": len(values) == 0,
+            "importance_counts": importance_counts,
+            "owner_count": owner_count,
+        }
+        self.repository.add_audit_event(
+            self._audit(
+                meeting_id=meeting_id,
+                entity_id=artifact.id,
+                action=MeetingAuditAction.AI_ARTIFACT_CREATED,
+                entity_type=MeetingAuditEntityType.AI_ARTIFACT,
+                transcript_version=transcript_version,
+                metadata=safe_metadata,
+            )
+        )
+        logger.info(
+            "open_questions_artifact_created",
+            extra={
+                "organisation_id": str(artifact.organisation_id),
+                "meeting_id": str(artifact.meeting_id),
+                "job_id": str(artifact.job_id),
+                "artifact_id": str(artifact.id),
+                "artifact_type": artifact.artifact_type,
+                "artifact_version": artifact.artifact_version,
+                "transcript_version": artifact.transcript_version,
+                "prompt_key": artifact.prompt_key,
+                "prompt_version": artifact.prompt_version,
+                "schema_version": artifact.schema_version,
+                "provider_name": artifact.provider_key,
+                "model_identifier": artifact.model_name,
+                "open_question_count": len(values),
+                "empty_result": len(values) == 0,
+                "importance_counts": importance_counts,
+                "owner_count": owner_count,
+            },
+        )
+        return artifact
+
     async def get_artifact(self, artifact_id: UUID) -> AIArtifact:
         artifact = await self.artifacts.get_artifact(
             self.tenant.organisation_id,
@@ -1986,6 +2342,19 @@ class AIArtifactService(_AIDomainService):
             raise PublicAPIError(
                 "invalid_artifact_content",
                 "The Risks & Blockers artefact content is invalid.",
+                422,
+            ) from exc
+
+    @staticmethod
+    def _validate_open_questions_content(
+        content: Mapping[str, object],
+    ) -> dict[str, object]:
+        try:
+            return OpenQuestionsArtifactContent.model_validate(content).as_json()
+        except ValidationError as exc:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Open Questions artefact content is invalid.",
                 422,
             ) from exc
 

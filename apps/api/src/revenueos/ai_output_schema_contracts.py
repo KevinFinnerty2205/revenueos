@@ -37,6 +37,7 @@ class OutputSchemaDefinition(BaseModel):
         "decisions",
         "action_items",
         "risks_blockers",
+        "open_questions",
     ]
     validation_model: type[BaseModel]
     description: SchemaDescription

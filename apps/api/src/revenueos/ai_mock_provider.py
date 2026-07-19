@@ -20,6 +20,10 @@ from revenueos.ai_contracts import (
     DECISIONS_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    OPEN_QUESTION_EVIDENCE_MAX_LENGTH,
+    OPEN_QUESTION_MAX_LENGTH,
+    OPEN_QUESTIONS_MAX_COUNT,
+    OPEN_QUESTIONS_SCHEMA_VERSION,
     RISK_EVIDENCE_MAX_LENGTH,
     RISK_MAX_LENGTH,
     RISKS_BLOCKERS_MAX_COUNT,
@@ -29,6 +33,7 @@ from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
+    OpenQuestionsProviderInput,
     ProviderRequest,
     ProviderResponse,
     RisksBlockersProviderInput,
@@ -123,6 +128,10 @@ class DeterministicMockAIProvider:
             return request.expected_schema_version == RISKS_BLOCKERS_SCHEMA_VERSION and isinstance(
                 request.input_payload, RisksBlockersProviderInput
             )
+        if request.job_type == AIJobType.OPEN_QUESTIONS.value:
+            return request.expected_schema_version == OPEN_QUESTIONS_SCHEMA_VERSION and isinstance(
+                request.input_payload, OpenQuestionsProviderInput
+            )
         return False
 
     @classmethod
@@ -156,6 +165,14 @@ class DeterministicMockAIProvider:
         if isinstance(request.input_payload, RisksBlockersProviderInput):
             transcript = cls._extract_transcript(request.input_payload)
             return {"risks": cast(JsonValue, cls._extract_risks_blockers(transcript))}
+        if isinstance(request.input_payload, OpenQuestionsProviderInput):
+            transcript = cls._extract_transcript(request.input_payload)
+            return {
+                "open_questions": cast(
+                    JsonValue,
+                    cls._extract_open_questions(transcript),
+                )
+            }
         raise InvalidProviderRequestError
 
     @staticmethod
@@ -165,6 +182,7 @@ class DeterministicMockAIProvider:
             | DecisionsProviderInput
             | ActionItemsProviderInput
             | RisksBlockersProviderInput
+            | OpenQuestionsProviderInput
         ),
     ) -> str:
         marker = "Untrusted transcript as a JSON string:\n"
@@ -609,6 +627,315 @@ class DeterministicMockAIProvider:
                 return " ".join(match.group("owner").split())
         return None
 
+    @classmethod
+    def _extract_open_questions(
+        cls,
+        transcript: str,
+    ) -> list[dict[str, JsonValue]]:
+        normalised = " ".join(transcript.split())
+        sentences = [
+            sentence.strip(" \t\r\n-•\"'") for sentence in re.split(r"(?<=[.!?])\s+", normalised) if sentence.strip()
+        ]
+        injection_markers = (
+            "ignore previous",
+            "ignore all previous",
+            "system prompt",
+            "developer message",
+            "reveal secrets",
+            "prompt injection",
+        )
+        conversational_markers = (
+            "how are you?",
+            "how is everyone?",
+            "how's everyone?",
+            "how is it going?",
+            "how's it going?",
+            "can you hear me?",
+            "can everyone see",
+            "did you have a good weekend?",
+            "do you have any questions?",
+            "does anyone have any questions?",
+            "any questions?",
+        )
+        rhetorical_markers = (
+            "who knows?",
+            "why bother?",
+            "isn't it obvious?",
+            "isn’t it obvious?",
+            "what could possibly go wrong?",
+            "do we really need to ask?",
+        )
+        questions: list[dict[str, JsonValue]] = []
+        seen: set[str] = set()
+
+        for index, sentence in enumerate(sentences):
+            lowered = sentence.lower()
+            if any(marker in lowered for marker in injection_markers):
+                continue
+
+            question: str | None = None
+            if sentence.endswith("?"):
+                if any(marker in lowered for marker in conversational_markers):
+                    continue
+                if any(marker in lowered for marker in rhetorical_markers):
+                    continue
+                if cls._is_action_request_question(lowered):
+                    continue
+                if cls._is_ai_directed_question(lowered):
+                    continue
+                surrounding_sentences = sentences[:index] + sentences[index + 1 :]
+                if cls._question_answered_elsewhere(sentence, surrounding_sentences):
+                    continue
+                question = cls._normalise_question(sentence)
+            else:
+                question = cls._question_from_unresolved_statement(sentence)
+
+            if question is None:
+                continue
+            deduplication_key = question.casefold()
+            if deduplication_key in seen:
+                continue
+            seen.add(deduplication_key)
+            importance = cls._question_importance(lowered)
+            questions.append(
+                {
+                    "question": question,
+                    "owner": cls._question_owner(sentence),
+                    "importance": importance,
+                    "confidence": 0.91 if sentence.endswith("?") else 0.84,
+                    "evidence": cls._bounded_plain_text(
+                        (
+                            "The transcript raises this question without a later answer."
+                            if sentence.endswith("?")
+                            else f"The transcript leaves this information unresolved: {sentence}"
+                        ),
+                        OPEN_QUESTION_EVIDENCE_MAX_LENGTH,
+                    ),
+                }
+            )
+            if len(questions) == OPEN_QUESTIONS_MAX_COUNT:
+                break
+        return questions
+
+    @staticmethod
+    def _is_action_request_question(content: str) -> bool:
+        if re.match(r"^(?:can|could|would|will)\s+(?:you|we|they)\b", content) is None:
+            return False
+        return any(
+            marker in content
+            for marker in (
+                " send ",
+                " share ",
+                " provide ",
+                " arrange ",
+                " schedule ",
+                " book ",
+                " email ",
+                " call ",
+                " follow up",
+                " update ",
+                " create ",
+            )
+        )
+
+    @staticmethod
+    def _is_ai_directed_question(content: str) -> bool:
+        return any(
+            marker in content
+            for marker in (
+                "ai,",
+                "assistant,",
+                "chatgpt",
+                "language model",
+                "system prompt",
+                "what are your instructions",
+            )
+        )
+
+    @classmethod
+    def _question_answered_elsewhere(
+        cls,
+        question: str,
+        surrounding_sentences: list[str],
+    ) -> bool:
+        stop_words = {
+            "a",
+            "an",
+            "and",
+            "are",
+            "as",
+            "at",
+            "be",
+            "been",
+            "by",
+            "did",
+            "do",
+            "does",
+            "for",
+            "has",
+            "have",
+            "how",
+            "is",
+            "it",
+            "of",
+            "on",
+            "or",
+            "our",
+            "the",
+            "their",
+            "this",
+            "to",
+            "was",
+            "were",
+            "what",
+            "when",
+            "where",
+            "which",
+            "who",
+            "why",
+            "will",
+        }
+        keywords = {
+            token for token in re.findall(r"[a-z0-9]+", question.lower()) if len(token) >= 3 and token not in stop_words
+        }
+        if not keywords:
+            return False
+        answer_markers = (
+            " yes",
+            " no",
+            "approved",
+            "confirmed",
+            "decided",
+            "resolved",
+            "completed",
+            "rejected",
+            "owns",
+            "responsible",
+            "the answer",
+            " is ",
+            " are ",
+            " will ",
+            " has ",
+            " have ",
+        )
+        for context_sentence in surrounding_sentences:
+            lowered = f" {context_sentence.lower()} "
+            overlap = sum(1 for keyword in keywords if keyword in lowered)
+            if overlap >= min(2, len(keywords)) and any(marker in lowered for marker in answer_markers):
+                return True
+        return False
+
+    @classmethod
+    def _normalise_question(cls, value: str) -> str:
+        question = " ".join(value.split()).strip(" \"'")
+        if question:
+            question = question[0].upper() + question[1:]
+        if len(question) <= OPEN_QUESTION_MAX_LENGTH:
+            return question
+        shortened = question[: OPEN_QUESTION_MAX_LENGTH - 1].rsplit(" ", 1)[0].rstrip(" ,;:.!?")
+        return f"{shortened}?"
+
+    @classmethod
+    def _question_from_unresolved_statement(cls, sentence: str) -> str | None:
+        lowered = sentence.lower()
+        unresolved_markers = (
+            " unclear",
+            " unknown",
+            " unresolved",
+            " outstanding",
+            " pending",
+            " not confirmed",
+            " unconfirmed",
+            " to be determined",
+            " yet to be decided",
+            " still need to know",
+            " don't know",
+            " do not know",
+        )
+        if not any(marker in lowered for marker in unresolved_markers):
+            return None
+        if any(
+            marker in lowered
+            for marker in (
+                " risk",
+                " may delay",
+                " might delay",
+                " could delay",
+                " will delay",
+            )
+        ):
+            return None
+
+        unknown_match = re.search(
+            r"\b(?:we\s+)?(?:still\s+)?(?:do not|don't)\s+know\s+(?P<subject>.+?)[.!]?$",
+            sentence,
+            flags=re.IGNORECASE,
+        )
+        if unknown_match is not None:
+            subject = unknown_match.group("subject").strip(" .")
+            return cls._normalise_question(f"What is {subject}?")
+
+        subject_match = re.search(
+            r"(?P<subject>.+?)\s+(?:is|remains|was)\s+(?:still\s+)?"
+            r"(?:unclear|unknown|unresolved|outstanding|pending|unconfirmed|not confirmed)"
+            r"[.!]?$",
+            sentence,
+            flags=re.IGNORECASE,
+        )
+        if subject_match is None:
+            return None
+        subject = subject_match.group("subject").strip(" .")
+        if "approval" in subject.lower():
+            return cls._normalise_question(f"When will {subject} be completed?")
+        if any(marker in subject.lower() for marker in ("owner", "responsibility", "responsible")):
+            return cls._normalise_question(f"Who is responsible for {subject}?")
+        return cls._normalise_question(f"What is the confirmed position on {subject}?")
+
+    @staticmethod
+    def _question_owner(sentence: str) -> str | None:
+        patterns = (
+            r"\bowner(?: is|:)?\s+(?P<owner>[A-Z][A-Za-z&' -]{1,80})(?:[.,;:?]|$)",
+            r"\banswer expected from\s+(?P<owner>[A-Z][A-Za-z&' -]{1,80})(?:[.,;:?]|$)",
+            r"\b(?P<owner>[A-Z][A-Za-z&' -]{1,80})\s+(?:must|needs to)\s+(?:answer|confirm|clarify)\b",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, sentence)
+            if match is not None:
+                return " ".join(match.group("owner").split())
+        return None
+
+    @staticmethod
+    def _question_importance(content: str) -> str:
+        if any(
+            marker in content
+            for marker in (
+                "block",
+                "cannot proceed",
+                "can't proceed",
+                "legal approval",
+                "contract signature",
+                "budget approval",
+                "security approval",
+                "commercial outcome",
+                "implementation depends",
+                "deadline",
+                "critical timeline",
+            )
+        ):
+            return "high"
+        if any(
+            marker in content
+            for marker in (
+                "nice to know",
+                "when convenient",
+                "limited impact",
+                "optional",
+                "low priority",
+            )
+        ):
+            return "low"
+        return "medium"
+
     @staticmethod
     def _bounded_plain_text(value: str, maximum_length: int) -> str:
         normalised = " ".join(value.split()).strip()
@@ -656,6 +983,19 @@ class DeterministicMockAIProvider:
                         "confidence": 2,
                         "evidence": "",
                         "probability": 90,
+                    }
+                ]
+            }
+        if request.job_type == AIJobType.OPEN_QUESTIONS.value:
+            return {
+                "open_questions": [
+                    {
+                        "question": "This is not a question",
+                        "owner": "",
+                        "importance": "critical",
+                        "confidence": 2,
+                        "evidence": "",
+                        "answer": "Invented",
                     }
                 ]
             }

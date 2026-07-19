@@ -35,6 +35,14 @@ RISK_OWNER_MAX_LENGTH = 200
 RISK_EVIDENCE_MIN_LENGTH = 5
 RISK_EVIDENCE_MAX_LENGTH = 500
 RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH = 50_000
+OPEN_QUESTIONS_SCHEMA_VERSION = 1
+OPEN_QUESTIONS_MAX_COUNT = 25
+OPEN_QUESTION_MIN_LENGTH = 5
+OPEN_QUESTION_MAX_LENGTH = 500
+OPEN_QUESTION_OWNER_MAX_LENGTH = 200
+OPEN_QUESTION_EVIDENCE_MIN_LENGTH = 5
+OPEN_QUESTION_EVIDENCE_MAX_LENGTH = 500
+OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH = 50_000
 IDEMPOTENCY_KEY_MAX_LENGTH = 200
 SAFE_ERROR_CODE_MAX_LENGTH = 100
 SAFE_ERROR_MESSAGE_MAX_LENGTH = 1000
@@ -427,4 +435,105 @@ class RisksBlockersSource(BaseModel):
             raise ValueError("Transcript text must not be empty.")
         if len(normalised) > RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH:
             raise ValueError("Transcript text exceeds the Risks & Blockers limit.")
+        return normalised
+
+
+class OpenQuestionItem(BaseModel):
+    """One immutable, transcript-supported unresolved question in schema version 1."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    question: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=OPEN_QUESTION_MIN_LENGTH,
+            max_length=OPEN_QUESTION_MAX_LENGTH,
+        ),
+    ]
+    owner: (
+        Annotated[
+            str,
+            StringConstraints(
+                strip_whitespace=True,
+                min_length=1,
+                max_length=OPEN_QUESTION_OWNER_MAX_LENGTH,
+            ),
+        ]
+        | None
+    )
+    importance: Literal["high", "medium", "low"]
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=OPEN_QUESTION_EVIDENCE_MIN_LENGTH,
+            max_length=OPEN_QUESTION_EVIDENCE_MAX_LENGTH,
+        ),
+    ]
+
+    @field_validator("question")
+    @classmethod
+    def validate_question_form(cls, value: str) -> str:
+        if not value.endswith("?"):
+            raise ValueError("Open Questions must end with a question mark.")
+        return value
+
+
+class OpenQuestionsArtifactContent(BaseModel):
+    """Strict, immutable Open Questions structured-output schema version 1."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    open_questions: tuple[OpenQuestionItem, ...] = Field(
+        max_length=OPEN_QUESTIONS_MAX_COUNT,
+    )
+
+    @field_validator("open_questions", mode="before")
+    @classmethod
+    def normalise_json_array(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    def as_json(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+
+class OpenQuestionsSource(BaseModel):
+    """Pinned meeting/transcript input for Open Questions execution."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    meeting_title: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+    ]
+    meeting_date: datetime
+    transcript_text: str
+
+    @field_validator("transcript_text")
+    @classmethod
+    def validate_transcript_text(cls, value: str) -> str:
+        normalised = value.strip()
+        if not normalised:
+            raise ValueError("Transcript text must not be empty.")
+        if len(normalised) > OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH:
+            raise ValueError("Transcript text exceeds the Open Questions limit.")
         return normalised

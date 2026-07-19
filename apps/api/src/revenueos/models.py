@@ -666,7 +666,7 @@ class AIJob(TimestampMixin, Base):
     __tablename__ = "ai_jobs"
     __table_args__ = (
         CheckConstraint(
-            "job_type IN ('infrastructure_test', 'executive_summary', 'decisions', 'action_items', 'risks_blockers')",
+            "job_type IN ('infrastructure_test', 'executive_summary', 'decisions', 'action_items', 'risks_blockers', 'open_questions')",
             name="ck_ai_jobs_type",
         ),
         CheckConstraint(
@@ -850,7 +850,7 @@ class AIArtifact(Base):
     __tablename__ = "ai_artifacts"
     __table_args__ = (
         CheckConstraint(
-            "artifact_type IN ('infrastructure_test', 'executive_summary', 'decisions', 'action_items', 'risks_blockers')",
+            "artifact_type IN ('infrastructure_test', 'executive_summary', 'decisions', 'action_items', 'risks_blockers', 'open_questions')",
             name="ck_ai_artifacts_type",
         ),
         CheckConstraint("artifact_version > 0", name="ck_ai_artifacts_version"),
