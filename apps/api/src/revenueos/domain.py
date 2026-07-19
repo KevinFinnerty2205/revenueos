@@ -93,6 +93,7 @@ class AIJobType(StrEnum):
     DECISIONS = "decisions"
     ACTION_ITEMS = "action_items"
     RISKS_BLOCKERS = "risks_blockers"
+    OPEN_QUESTIONS = "open_questions"
 
 
 class AIArtifactType(StrEnum):
@@ -101,6 +102,7 @@ class AIArtifactType(StrEnum):
     DECISIONS = "decisions"
     ACTION_ITEMS = "action_items"
     RISKS_BLOCKERS = "risks_blockers"
+    OPEN_QUESTIONS = "open_questions"
 
 
 class RiskCategory(StrEnum):
@@ -121,6 +123,12 @@ class RiskCategory(StrEnum):
 
 
 class RiskSeverity(StrEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class OpenQuestionImportance(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"

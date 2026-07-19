@@ -2,13 +2,13 @@
 
 ## Current scope
 
-WO-004C4 keeps the Sprint 3 modular monolith and
-WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3 AI baseline. The durable worker runs its
-infrastructure test plus current-transcript Executive Summary, Decisions, Action Items and Risks & Blockers through immutable
+WO-004C5 keeps the Sprint 3 modular monolith and
+WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4 AI baseline. The durable worker runs its
+infrastructure test plus current-transcript Executive Summary, Decisions, Action Items, Risks & Blockers and Open Questions through immutable
 prompts/schemas and bounded validation. The selected provider is either the
 default no-network mock or a server-only OpenAI Responses API adapter. A
 meeting-scoped APIs and Intelligence tab expose those independent capabilities. There is no
-Open Questions or later intelligence schema, recording/media pipeline, connector, billing
+Follow-up Email or later intelligence schema, question-answering workflow, recording/media pipeline, connector, billing
 service or mobile application.
 
 ```text
@@ -54,7 +54,7 @@ Next.js App Router, strict TypeScript and Tailwind CSS provide the responsive we
 
 Development auth returns one fixed example user/organisation, provisions that identity only in a migrated development database, and displays a warning banner. Production never provisions or falls back to the mock identity. The Clerk adapter boundary and environment path exist, but Clerk sessions are not connected.
 
-Companies, contacts, opportunities and tasks share list and form components. Meetings use focused list, aggregate form and detail components because participant and transcript state is nested. The detail view exposes accessible Overview, Intelligence, Transcript and History tabs. Intelligence contains independent Executive Summary, Decisions, Action Items and Risks & Blockers panels. Each safely handles six lifecycle states and uses one non-overlapping three-second polling chain that terminates at terminal state or unmount. The browser reads an explicitly selected `.txt` file into the form; no file is uploaded to object storage and no recording or transcription occurs. Components provide loading, empty, safe error and responsive mobile/desktop states. Business validation remains server-side even when HTML constraints improve feedback.
+Companies, contacts, opportunities and tasks share list and form components. Meetings use focused list, aggregate form and detail components because participant and transcript state is nested. The detail view exposes accessible Overview, Intelligence, Transcript and History tabs. Intelligence contains independent Executive Summary, Decisions, Action Items, Risks & Blockers and Open Questions panels. Each safely handles six lifecycle states and uses one non-overlapping three-second polling chain that terminates at terminal state or unmount. The browser reads an explicitly selected `.txt` file into the form; no file is uploaded to object storage and no recording or transcription occurs. Components provide loading, empty, safe error and responsive mobile/desktop states. Business validation remains server-side even when HTML constraints improve feedback.
 
 ## API architecture
 
@@ -69,6 +69,7 @@ FastAPI exposes:
 - meeting-scoped POST/GET Decisions at `/api/v1/meetings/{meetingId}/intelligence/decisions`.
 - meeting-scoped POST/GET Action Items at `/api/v1/meetings/{meetingId}/intelligence/action-items`.
 - meeting-scoped POST/GET Risks & Blockers at `/api/v1/meetings/{meetingId}/intelligence/risks-blockers`.
+- meeting-scoped POST/GET Open Questions at `/api/v1/meetings/{meetingId}/intelligence/open-questions`.
 
 Routes use Pydantic request/response models, camel-case JSON, bounded pagination, explicit filters/sorts, request IDs, structured content-redacted logs, explicit CORS and central safe error handlers. Route handlers delegate business rules to services and all SQL to repositories. Meeting, participant and transcript services share one tenant-aware repository without introducing a new persistence pattern.
 
@@ -88,14 +89,14 @@ One active or soft-deleted transcript row is retained per meeting. Mutations loc
 
 Each AI job captures the exact current transcript version requested; it cannot silently point to a different meeting or transcript. Each AI artefact must match its job's organisation, meeting, transcript and transcript version. Logical artefact versions are unique and earlier content cannot be updated at the database layer; only a one-way `superseded_at` marker may change. The current transcript table still mutates one body in place, so a pinned version number does not yet provide historical source-text reconstruction.
 
-`AIJobService` validates the active meeting/transcript trace and applies the explicit lifecycle matrix. Infrastructure tests retain caller-provided bounded idempotency keys. Executive Summary, Decisions, Action Items and Risks & Blockers each use meeting, current transcript version, job type, prompt version and schema version for equivalence; repeated active/completed requests return the same capability job, while failed/cancelled work can create a new ordinal retry and transcript corrections create new logical work. Entering `running` consumes an attempt; failed-to-pending preparation preserves the attempt count and clears stale execution metadata.
+`AIJobService` validates the active meeting/transcript trace and applies the explicit lifecycle matrix. Infrastructure tests retain caller-provided bounded idempotency keys. Executive Summary, Decisions, Action Items, Risks & Blockers and Open Questions each use meeting, current transcript version, job type, prompt version and schema version for equivalence; repeated active/completed requests return the same capability job, while failed/cancelled work can create a new ordinal retry and transcript corrections create new logical work. Entering `running` consumes an attempt; failed-to-pending preparation preserves the attempt count and clears stale execution metadata.
 
-`AIArtifactService` accepts only registered strict schema-version-1 infrastructure-test, Executive Summary, Decisions, Action Items or Risks & Blockers content, proves its trace matches the tenant-scoped job and assigns the next append-only logical version. Job creation, lifecycle changes and artefact creation commit atomically with content-minimised audit events. Audit metadata contains identifiers/type/status/version, optional prompt/schema/provider/model labels and content-free item/count flags, never supplied transcript text, generated risk/task/owner/evidence content, artefact content, prompt/model bodies, secrets or raw exceptions.
+`AIArtifactService` accepts only registered strict schema-version-1 infrastructure-test, Executive Summary, Decisions, Action Items, Risks & Blockers or Open Questions content, proves its trace matches the tenant-scoped job and assigns the next append-only logical version. Job creation, lifecycle changes and artefact creation commit atomically with content-minimised audit events. Audit metadata contains identifiers/type/status/version, optional prompt/schema/provider/model labels and content-free item/count flags, never supplied transcript text, generated question/risk/task/owner/evidence content, artefact content, prompt/model bodies, secrets or raw exceptions.
 
 `AIWorkerService` discovers only opaque organisation IDs through a fixed PostgreSQL scheduler function, then sets one transaction-local tenant context for every queue transaction. Claims and recovery use `FOR UPDATE SKIP LOCKED`; heartbeat updates require exact worker ownership. Execution occurs without an open database transaction. The completion transaction locks the owned running job, rechecks cancellation, stages the validated artefact and commits artefact/audits/completed state atomically. Retries use persisted attempts, bounded exponential backoff and `next_attempt_at`.
 
 `InfrastructureTestExecutor`, `ExecutiveSummaryExecutor`, `DecisionsExecutor`,
-`ActionItemsExecutor` and `RisksBlockersExecutor` resolve their prompt/schema pairs and invoke exactly the
+`ActionItemsExecutor`, `RisksBlockersExecutor` and `OpenQuestionsExecutor` resolve their prompt/schema pairs and invoke exactly the
 configured provider. Transcript intelligence loads only the exact current
 tenant transcript pinned by the job,
 enforces 50,000 characters without truncation and renders transcript/title as
@@ -116,7 +117,7 @@ authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0010_risks_blockers` is the head migration and widens only
+source exists. Migration `0011_open_questions` is the head migration and widens only
 job/artefact type checks. Table shape, forced RLS, composite keys and
 immutability guards otherwise remain unchanged.
 
@@ -154,5 +155,6 @@ See [AI database foundation](ai-database-foundation.md),
 [prompt registry and structured output](prompt-registry-and-structured-output.md),
 [Executive Summary intelligence](executive-summary-intelligence.md),
 [Meeting Decisions intelligence](meeting-decisions-intelligence.md),
-[Meeting Action Items intelligence](meeting-action-items-intelligence.md) and
-[Meeting Risks & Blockers intelligence](meeting-risks-blockers-intelligence.md).
+[Meeting Action Items intelligence](meeting-action-items-intelligence.md),
+[Meeting Risks & Blockers intelligence](meeting-risks-blockers-intelligence.md) and
+[Meeting Open Questions intelligence](meeting-open-questions-intelligence.md).

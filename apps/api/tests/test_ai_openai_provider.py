@@ -20,6 +20,7 @@ from revenueos.ai_contracts import (
     ActionItemsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
+    OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
 )
 from revenueos.ai_openai_provider import (
@@ -31,6 +32,7 @@ from revenueos.ai_provider_contracts import (
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     InfrastructureTestProviderInput,
+    OpenQuestionsProviderInput,
     ProviderMessage,
     ProviderOutputSchema,
     ProviderRequest,
@@ -414,6 +416,52 @@ def test_openai_accepts_risks_blockers_with_registry_derived_strict_schema() -> 
     assert output_format["name"] == "risks_blockers"
     assert output_format["strict"] is True
     assert output_format["schema"] == RisksBlockersArtifactContent.model_json_schema(mode="validation")
+
+
+def test_openai_accepts_open_questions_with_registry_derived_strict_schema() -> None:
+    output = {
+        "open_questions": [
+            {
+                "question": "Has legal approved the final contract terms?",
+                "owner": "Customer Legal",
+                "importance": "high",
+                "confidence": 0.92,
+                "evidence": "The customer said legal approval was still outstanding.",
+            }
+        ]
+    }
+    response_create = _ResponseCreate(response=_response(output_text=json.dumps(output)))
+    request = ProviderRequest(
+        request_id=uuid.uuid4(),
+        organisation_id=uuid.uuid4(),
+        job_id=uuid.uuid4(),
+        job_type="open_questions",
+        model_identifier=MODEL,
+        input_payload=OpenQuestionsProviderInput(
+            messages=(
+                ProviderMessage(role="system", content="Return only Open Questions fields."),
+                ProviderMessage(role="user", content="Use the supplied untrusted transcript."),
+            )
+        ),
+        expected_schema_version=1,
+        output_schema=ProviderOutputSchema(
+            schema_key="open_questions",
+            schema_version=1,
+            json_schema=OpenQuestionsArtifactContent.model_json_schema(mode="validation"),
+        ),
+        timeout_seconds=30,
+    )
+
+    response = asyncio.run(_provider(response_create).execute(request))
+
+    assert response.output_payload == json.dumps(output)
+    assert len(response_create.calls) == 1
+    text = response_create.calls[0]["text"]
+    assert isinstance(text, dict)
+    output_format = text["format"]
+    assert output_format["name"] == "open_questions"
+    assert output_format["strict"] is True
+    assert output_format["schema"] == OpenQuestionsArtifactContent.model_json_schema(mode="validation")
 
 
 @pytest.mark.parametrize(

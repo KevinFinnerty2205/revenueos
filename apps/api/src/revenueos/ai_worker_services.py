@@ -14,10 +14,12 @@ from revenueos.ai_contracts import (
     ACTION_ITEMS_TRANSCRIPT_MAX_LENGTH,
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
+    OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
     ActionItemsSource,
     DecisionsSource,
     ExecutiveSummarySource,
+    OpenQuestionsSource,
     RisksBlockersSource,
 )
 from revenueos.ai_executors import (
@@ -245,6 +247,12 @@ class AIWorkerService:
                     cancellation_check=self.is_cancellation_requested,
                     risks_blockers_source_loader=self.load_risks_blockers_source,
                 )
+            elif job.job_type == AIJobType.OPEN_QUESTIONS.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    open_questions_source_loader=self.load_open_questions_source,
+                )
             else:
                 result = await executor.execute(
                     job,
@@ -360,6 +368,35 @@ class AIWorkerService:
                             "empty_result": len(risks) == 0,
                             "severity_counts": severity_counts,
                             "category_counts": category_counts,
+                        },
+                    )
+                elif job.job_type == AIJobType.OPEN_QUESTIONS.value:
+                    values = result.content.get("open_questions")
+                    questions = values if isinstance(values, list) else []
+                    importance_counts = {importance: 0 for importance in ("high", "medium", "low")}
+                    owner_count = 0
+                    for item in questions:
+                        if not isinstance(item, dict):
+                            continue
+                        importance = item.get("importance")
+                        if isinstance(importance, str) and importance in importance_counts:
+                            importance_counts[importance] += 1
+                        if item.get("owner") is not None:
+                            owner_count += 1
+                    logger.info(
+                        "open_questions_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                            "open_question_count": len(questions),
+                            "empty_result": len(questions) == 0,
+                            "importance_counts": importance_counts,
+                            "owner_count": owner_count,
                         },
                     )
         except WorkerExecutionError as exc:
@@ -566,6 +603,46 @@ class AIWorkerService:
             transcript_text=normalised_transcript,
         )
 
+    async def load_open_questions_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> OpenQuestionsSource:
+        """Load the exact tenant transcript version pinned by an Open Questions job."""
+
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            source = await AIWorkerRepository(session).get_executive_summary_source(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_id,
+                job.transcript_version,
+            )
+        if source is None:
+            raise WorkerExecutionError(
+                "open_questions_source_unavailable",
+                "The current transcript for Open Questions is unavailable.",
+                retryable=False,
+            )
+        meeting_title, meeting_date, transcript_text = source
+        normalised_transcript = transcript_text.strip()
+        if not normalised_transcript:
+            raise WorkerExecutionError(
+                "open_questions_transcript_required",
+                "A usable transcript is required to generate Open Questions.",
+                retryable=False,
+            )
+        if len(normalised_transcript) > OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH:
+            raise WorkerExecutionError(
+                "open_questions_transcript_too_large",
+                "The transcript exceeds the Open Questions processing limit.",
+                retryable=False,
+            )
+        return OpenQuestionsSource(
+            meeting_title=meeting_title,
+            meeting_date=meeting_date,
+            transcript_text=normalised_transcript,
+        )
+
     async def _heartbeat_loop(
         self,
         job: ClaimedAIJob,
@@ -671,6 +748,15 @@ class AIWorkerService:
                 )
             elif job.job_type == AIJobType.RISKS_BLOCKERS.value:
                 await artifact_service.prepare_risks_blockers_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
+            elif job.job_type == AIJobType.OPEN_QUESTIONS.value:
+                await artifact_service.prepare_open_questions_artifact(
                     job_id=job.id,
                     meeting_id=job.meeting_id,
                     transcript_id=job.transcript_id,
@@ -796,6 +882,17 @@ class AIWorkerService:
         elif claim.job_type == AIJobType.RISKS_BLOCKERS.value:
             logger.warning(
                 "risks_blockers_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
+        elif claim.job_type == AIJobType.OPEN_QUESTIONS.value:
+            logger.warning(
+                "open_questions_generation_failed",
                 extra={
                     **self._log_context_from_claim(claim),
                     "meeting_id": str(claim.meeting_id),

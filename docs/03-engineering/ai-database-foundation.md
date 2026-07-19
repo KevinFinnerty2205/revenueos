@@ -102,7 +102,8 @@ composite-key and trigger protections.
 
 - Only infrastructure-test, Executive Summary, Decisions, Action Items and Risks & Blockers
   behaviour exists.
-- OpenAI is optional; no Open Questions or later Meeting Intelligence capability exists.
+- OpenAI is optional; no Follow-up Email or later Meeting Intelligence
+  capability exists.
 - Historical transcript bodies are not preserved.
 - `content_json` is a storage field; future services must validate a typed schema before insert.
 - No retention, export, hard deletion, integrity seal or customer-data production controls are complete.

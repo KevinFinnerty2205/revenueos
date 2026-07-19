@@ -7,9 +7,10 @@ one customer-facing Executive Summary. WO-004C1A adds an optional server-side
 OpenAI Responses API adapter while retaining the deterministic no-network mock
 as the default. WO-004C2 adds an independent, strictly structured
 transcript-grounded Decisions capability, WO-004C3 adds concrete committed
-Action Items with conservative due-date handling, and WO-004C4 adds strict
-transcript-grounded Risks & Blockers through the same stack. No Open Questions
-or later intelligence capability, Anthropic/Gemini provider, embedding, tool use
+Action Items with conservative due-date handling, WO-004C4 adds strict
+transcript-grounded Risks & Blockers, and WO-004C5 adds genuinely unresolved
+Open Questions through the same stack. No Follow-up Email or later intelligence
+capability, Anthropic/Gemini provider, embedding, tool use
 or agent is active.
 
 See [AI domain services](../03-engineering/ai-domain-services.md), the
@@ -25,6 +26,7 @@ The [Executive Summary guide](../03-engineering/executive-summary-intelligence.m
 [Meeting Decisions guide](../03-engineering/meeting-decisions-intelligence.md)
 the [Meeting Action Items guide](../03-engineering/meeting-action-items-intelligence.md)
 and [Meeting Risks & Blockers guide](../03-engineering/meeting-risks-blockers-intelligence.md)
+and [Meeting Open Questions guide](../03-engineering/meeting-open-questions-intelligence.md)
 document the current Meeting Intelligence capabilities.
 
 Future AI work must use the typed provider port, schema validation, authorised

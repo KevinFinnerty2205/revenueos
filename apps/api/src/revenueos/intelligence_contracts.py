@@ -13,6 +13,7 @@ from revenueos.domain import (
     DecisionStatus,
     ExecutiveSummaryMeetingType,
     ExecutiveSummarySentiment,
+    OpenQuestionImportance,
     RiskCategory,
     RiskSeverity,
 )
@@ -193,3 +194,48 @@ class RisksBlockersResponse(APIModel):
     generated_at: datetime | None
     safe_message: str | None
     risks_blockers: RisksBlockersContentResponse | None
+
+
+OpenQuestionsState = Literal[
+    "empty",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+]
+
+
+class OpenQuestionItemResponse(APIModel):
+    question: str
+    owner: str | None
+    importance: OpenQuestionImportance
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: str
+
+
+class OpenQuestionsContentResponse(APIModel):
+    open_questions: list[OpenQuestionItemResponse]
+
+
+class OpenQuestionsRequestResponse(APIModel):
+    job_id: UUID
+    status: Literal["queued", "running", "completed"]
+    created: bool
+    transcript_version: int = Field(ge=1)
+    requested_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class OpenQuestionsResponse(APIModel):
+    state: OpenQuestionsState
+    generation_available: bool
+    unavailable_reason: str | None
+    job_id: UUID | None
+    transcript_version: int | None = Field(default=None, ge=1)
+    requested_at: datetime | None
+    started_at: datetime | None
+    generated_at: datetime | None
+    safe_message: str | None
+    open_questions: OpenQuestionsContentResponse | None

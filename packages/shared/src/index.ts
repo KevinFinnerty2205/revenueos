@@ -127,6 +127,14 @@ export type RiskCategory =
   | "dependency"
   | "other";
 export type RiskSeverity = "high" | "medium" | "low";
+export type OpenQuestionsState =
+  | "empty"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type OpenQuestionImportance = "high" | "medium" | "low";
 
 export interface EntityPage<T> {
   items: T[];
@@ -360,6 +368,41 @@ export interface RisksBlockersResponse {
 }
 
 export interface RisksBlockersRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface OpenQuestionItem {
+  question: string;
+  owner: string | null;
+  importance: OpenQuestionImportance;
+  confidence: number;
+  evidence: string;
+}
+
+export interface OpenQuestionsContent {
+  openQuestions: OpenQuestionItem[];
+}
+
+export interface OpenQuestionsResponse {
+  state: OpenQuestionsState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  openQuestions: OpenQuestionsContent | null;
+}
+
+export interface OpenQuestionsRequestResponse {
   jobId: string;
   status: "queued" | "running" | "completed";
   created: boolean;

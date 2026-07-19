@@ -125,7 +125,7 @@ test("meeting list and create form are responsive and deliberate", async ({
   await expect(page.getByText(/does not record or transcribe/i)).toBeVisible();
 });
 
-test("meeting detail generates and persists Summary, Decisions, Action Items and Risks intelligence", async ({
+test("meeting detail generates and persists all five Meeting Intelligence capabilities", async ({
   page,
 }) => {
   let executiveSummaryRequested = false;
@@ -135,6 +135,8 @@ test("meeting detail generates and persists Summary, Decisions, Action Items and
   let actionItemsStatusReads = 0;
   let risksBlockersRequested = false;
   let risksBlockersStatusReads = 0;
+  let openQuestionsRequested = false;
+  let openQuestionsStatusReads = 0;
   await page.route(
     "http://localhost:8000/api/v1/meetings/meeting-1**",
     async (route) => {
@@ -422,6 +424,83 @@ test("meeting detail generates and persists Summary, Decisions, Action Items and
         });
         return;
       }
+      if (path.endsWith("/intelligence/open-questions")) {
+        if (route.request().method() === "POST") {
+          openQuestionsRequested = true;
+          await route.fulfill({
+            status: 202,
+            json: {
+              jobId: "job-5",
+              status: "queued",
+              created: true,
+              transcriptVersion: 1,
+              requestedAt: "2026-07-18T00:00:00Z",
+              startedAt: null,
+              completedAt: null,
+            },
+          });
+          return;
+        }
+        if (!openQuestionsRequested) {
+          await route.fulfill({
+            json: {
+              state: "empty",
+              generationAvailable: true,
+              unavailableReason: null,
+              jobId: null,
+              transcriptVersion: null,
+              requestedAt: null,
+              startedAt: null,
+              generatedAt: null,
+              safeMessage: null,
+              openQuestions: null,
+            },
+          });
+          return;
+        }
+        openQuestionsStatusReads += 1;
+        await route.fulfill({
+          json:
+            openQuestionsStatusReads === 1
+              ? {
+                  state: "queued",
+                  generationAvailable: false,
+                  unavailableReason: null,
+                  jobId: "job-5",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: null,
+                  generatedAt: null,
+                  safeMessage: null,
+                  openQuestions: null,
+                }
+              : {
+                  state: "completed",
+                  generationAvailable: false,
+                  unavailableReason: null,
+                  jobId: "job-5",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: "2026-07-18T00:00:01Z",
+                  generatedAt: "2026-07-18T00:00:02Z",
+                  safeMessage: null,
+                  openQuestions: {
+                    openQuestions: [
+                      {
+                        question:
+                          "Has legal approved the final contract terms?",
+                        owner: "Customer Legal",
+                        importance: "high",
+                        confidence: 0.92,
+                        evidence:
+                          "The customer said legal approval was still outstanding.",
+                      },
+                    ],
+                  },
+                },
+        });
+        return;
+      }
       if (path.endsWith("/participants")) {
         await route.fulfill({ json: [] });
         return;
@@ -529,6 +608,15 @@ test("meeting detail generates and persists Summary, Decisions, Action Items and
   await expect(page.getByText("Customer Procurement")).toBeVisible();
   await expect(page.getByText("Procurement", { exact: true })).toBeVisible();
   await expect(page.getByText("93%", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Generate Open Questions" }).click();
+  await expect(
+    page.getByText("Open Questions generation is queued…"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Has legal approved the final contract terms?"),
+  ).toBeVisible();
+  await expect(page.getByText("Customer Legal")).toBeVisible();
+  await expect(page.getByText("92%", { exact: true }).last()).toBeVisible();
 
   await page.reload();
   await page.getByRole("tab", { name: "Intelligence" }).click();
@@ -544,6 +632,9 @@ test("meeting detail generates and persists Summary, Decisions, Action Items and
   await expect(
     page.getByText("Procurement approval may delay implementation."),
   ).toBeVisible();
+  await expect(
+    page.getByText("Has legal approved the final contract terms?"),
+  ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
@@ -551,6 +642,9 @@ test("meeting detail generates and persists Summary, Decisions, Action Items and
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Risks & Blockers" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Open Questions" }),
   ).toBeVisible();
   await page.getByRole("tab", { name: "Transcript" }).click();
   await expect(page.getByLabel("Transcript text")).toHaveValue(

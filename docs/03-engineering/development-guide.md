@@ -56,7 +56,8 @@ claimed job attempt and accepts values from 1 to 5.
 
 To exercise the product flow, create a meeting with an authorised plain-text
 transcript no longer than 50,000 characters, open its **Intelligence** tab and
-generate the Executive Summary, Decisions, Action Items or Risks & Blockers. Each UI panel checks state every three seconds while
+generate the Executive Summary, Decisions, Action Items, Risks & Blockers or
+Open Questions. Each UI panel checks state every three seconds while
 the worker processes the mock job. No API key or external network access is
 required. Enabling OpenAI sends the rendered capability instructions and
 selected transcript to OpenAI. Use only synthetic non-sensitive data and follow
@@ -101,6 +102,10 @@ Action Items rows before restoring the Decisions-era checks.
 Migration `0010_risks_blockers` widens the same checks for Risks & Blockers
 without adding a table, column, RLS policy or prompt storage. Its downgrade
 deletes Risks & Blockers rows before restoring the Action Items-era checks.
+
+Migration `0011_open_questions` widens the same checks for Open Questions
+without adding a table, column, RLS policy or prompt storage. Its downgrade
+deletes Open Questions rows before restoring the Risks & Blockers-era checks.
 
 WO-004C1A requires no migration because the existing trace fields already
 represent provider, model, request ID, usage and cost/currency metadata.

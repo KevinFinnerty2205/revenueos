@@ -40,6 +40,7 @@ class PromptDefinition(BaseModel):
         "decisions",
         "action_items",
         "risks_blockers",
+        "open_questions",
     ]
     system_template: PromptTemplate
     user_template: PromptTemplate

@@ -133,6 +133,18 @@ production customer data or any later intelligence output.
 The capability is transcript-evidence limited. It does not infer probability,
 plan mitigation or authorise production customer data or later intelligence.
 
+### WO-004C5 — Meeting Open Questions Intelligence — Complete
+
+- **Objective:** Add the fifth end-to-end Meeting Intelligence capability using only questions that remain unresolved after the whole transcript.
+- **Major deliverables:** Open Questions prompt/schema v1, nullable owner, normalised importance, deterministic populated/empty/exclusion fixtures, explicit OpenAI allowlist extension, transcript-pinned durable job, append-only artefact, POST/GET API, accessible panel and terminating three-second polling.
+- **Out of scope:** Generated/suggested answers, question assignment or resolution, reminders, Follow-up Email, task creation, CRM changes, scoring frameworks, memory, recording, transcription, streaming and automation.
+- **Security gates:** Trusted tenant context, forced RLS, exact transcript version, no truncation, whole-transcript answered-later exclusion, prompt-injection-as-data, validated-content-only persistence, content-redacted telemetry/audits and explicit OpenAI external-data warning.
+- **Demonstration:** Generate Open Questions from a synthetic authorised transcript, observe queued/processing then completed cards or a successful empty result, refresh and retain the result.
+
+The capability extracts questions only. It does not answer, assign or track
+resolution and does not authorise production customer data or later
+intelligence.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.
