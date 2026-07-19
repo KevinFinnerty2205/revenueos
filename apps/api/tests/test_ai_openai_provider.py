@@ -20,6 +20,7 @@ from revenueos.ai_contracts import (
     ActionItemsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
+    FollowUpEmailArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
 )
@@ -31,6 +32,7 @@ from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
+    FollowUpEmailProviderInput,
     InfrastructureTestProviderInput,
     OpenQuestionsProviderInput,
     ProviderMessage,
@@ -462,6 +464,62 @@ def test_openai_accepts_open_questions_with_registry_derived_strict_schema() -> 
     assert output_format["name"] == "open_questions"
     assert output_format["strict"] is True
     assert output_format["schema"] == OpenQuestionsArtifactContent.model_json_schema(mode="validation")
+
+
+def test_openai_accepts_follow_up_email_without_a_transcript_request() -> None:
+    output = {
+        "subject": "Meeting follow-up",
+        "greeting": "Hello,",
+        "summary": "The customer confirmed the pilot scope and implementation approach.",
+        "decisions": ["Proceed with the pilot"],
+        "action_items": [],
+        "open_questions": [],
+        "closing": "Kind regards,",
+        "tone": "professional",
+        "confidence": 0.95,
+    }
+    response_create = _ResponseCreate(response=_response(output_text=json.dumps(output)))
+    request = ProviderRequest(
+        request_id=uuid.uuid4(),
+        organisation_id=uuid.uuid4(),
+        job_id=uuid.uuid4(),
+        job_type="follow_up_email",
+        model_identifier=MODEL,
+        input_payload=FollowUpEmailProviderInput(
+            messages=(
+                ProviderMessage(role="system", content="Compose only from validated artefacts."),
+                ProviderMessage(
+                    role="user",
+                    content=(
+                        "Validated Executive Summary: customer confirmed the pilot.\n"
+                        "Validated Decisions: proceed with the pilot.\n"
+                        "Tone: professional."
+                    ),
+                ),
+            )
+        ),
+        expected_schema_version=1,
+        output_schema=ProviderOutputSchema(
+            schema_key="follow_up_email",
+            schema_version=1,
+            json_schema=FollowUpEmailArtifactContent.model_json_schema(mode="validation"),
+        ),
+        timeout_seconds=30,
+    )
+
+    response = asyncio.run(_provider(response_create).execute(request))
+
+    assert response.output_payload == json.dumps(output)
+    assert len(response_create.calls) == 1
+    call = response_create.calls[0]
+    assert TRANSCRIPT_MARKER not in repr(call["input"])
+    assert "transcript" not in repr(call["input"]).lower()
+    text = call["text"]
+    assert isinstance(text, dict)
+    output_format = text["format"]
+    assert output_format["name"] == "follow_up_email"
+    assert output_format["strict"] is True
+    assert output_format["schema"] == FollowUpEmailArtifactContent.model_json_schema(mode="validation")
 
 
 @pytest.mark.parametrize(

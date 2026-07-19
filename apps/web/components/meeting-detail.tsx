@@ -25,6 +25,7 @@ import { DecisionsPanel } from "@/components/decisions-panel";
 import { ActionItemsPanel } from "@/components/action-items-panel";
 import { RisksBlockersPanel } from "@/components/risks-blockers-panel";
 import { OpenQuestionsPanel } from "@/components/open-questions-panel";
+import { FollowUpEmailPanel } from "@/components/follow-up-email-panel";
 
 type MeetingTab = "overview" | "intelligence" | "transcript" | "history";
 const meetingTabs: MeetingTab[] = [
@@ -422,6 +423,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
             <ActionItemsPanel meetingId={meeting.id} />
             <RisksBlockersPanel meetingId={meeting.id} />
             <OpenQuestionsPanel meetingId={meeting.id} />
+            <FollowUpEmailPanel meetingId={meeting.id} />
           </div>
         </div>
       ) : null}

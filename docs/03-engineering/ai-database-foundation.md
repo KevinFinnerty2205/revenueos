@@ -98,11 +98,17 @@ adding a table or column. Its downgrade deletes Risks & Blockers artefacts/jobs
 before restoring the Action Items-era checks and preserves the same RLS,
 composite-key and trigger protections.
 
+Revision `0011_open_questions` widens the same checks for Open Questions.
+Revision `0012_follow_up_email` widens them for Follow-up Email and adds the
+guarded nullable `composition_tone` AI job column. Their downgrades delete the
+newer capability rows before restoring prior checks; tenant keys, forced RLS
+and indexes remain unchanged.
+
 ## Known limitations
 
-- Only infrastructure-test, Executive Summary, Decisions, Action Items and Risks & Blockers
-  behaviour exists.
-- OpenAI is optional; no Follow-up Email or later Meeting Intelligence
+- Only infrastructure-test, Executive Summary, Decisions, Action Items, Risks &
+  Blockers, Open Questions and Follow-up Email behaviour exists.
+- OpenAI is optional; no email-send integration or later Meeting Intelligence
   capability exists.
 - Historical transcript bodies are not preserved.
 - `content_json` is a storage field; future services must validate a typed schema before insert.

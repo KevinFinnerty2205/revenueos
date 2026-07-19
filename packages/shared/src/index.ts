@@ -135,6 +135,14 @@ export type OpenQuestionsState =
   | "failed"
   | "cancelled";
 export type OpenQuestionImportance = "high" | "medium" | "low";
+export type FollowUpEmailState =
+  | "empty"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type FollowUpEmailTone = "professional" | "friendly" | "executive";
 
 export interface EntityPage<T> {
   items: T[];
@@ -407,6 +415,43 @@ export interface OpenQuestionsRequestResponse {
   status: "queued" | "running" | "completed";
   created: boolean;
   transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface FollowUpEmailContent {
+  subject: string;
+  greeting: string;
+  summary: string;
+  decisions: string[];
+  actionItems: string[];
+  openQuestions: string[];
+  closing: string;
+  tone: FollowUpEmailTone;
+  confidence: number;
+}
+
+export interface FollowUpEmailResponse {
+  state: FollowUpEmailState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  tone: FollowUpEmailTone | null;
+  followUpEmail: FollowUpEmailContent | null;
+}
+
+export interface FollowUpEmailRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  tone: FollowUpEmailTone;
   requestedAt: string;
   startedAt: string | null;
   completedAt: string | null;

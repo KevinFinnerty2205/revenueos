@@ -125,7 +125,7 @@ test("meeting list and create form are responsive and deliberate", async ({
   await expect(page.getByText(/does not record or transcribe/i)).toBeVisible();
 });
 
-test("meeting detail generates and persists all five Meeting Intelligence capabilities", async ({
+test("meeting detail generates and persists all six Meeting Intelligence capabilities", async ({
   page,
 }) => {
   let executiveSummaryRequested = false;
@@ -137,6 +137,8 @@ test("meeting detail generates and persists all five Meeting Intelligence capabi
   let risksBlockersStatusReads = 0;
   let openQuestionsRequested = false;
   let openQuestionsStatusReads = 0;
+  let followUpEmailRequested = false;
+  let followUpEmailStatusReads = 0;
   await page.route(
     "http://localhost:8000/api/v1/meetings/meeting-1**",
     async (route) => {
@@ -501,6 +503,91 @@ test("meeting detail generates and persists all five Meeting Intelligence capabi
         });
         return;
       }
+      if (path.endsWith("/intelligence/follow-up-email")) {
+        if (route.request().method() === "POST") {
+          followUpEmailRequested = true;
+          expect(route.request().postDataJSON()).toEqual({ tone: "friendly" });
+          await route.fulfill({
+            status: 202,
+            json: {
+              jobId: "job-6",
+              status: "queued",
+              created: true,
+              transcriptVersion: 1,
+              tone: "friendly",
+              requestedAt: "2026-07-18T00:00:00Z",
+              startedAt: null,
+              completedAt: null,
+            },
+          });
+          return;
+        }
+        if (!followUpEmailRequested) {
+          await route.fulfill({
+            json: {
+              state: "empty",
+              generationAvailable: true,
+              unavailableReason: null,
+              jobId: null,
+              transcriptVersion: null,
+              requestedAt: null,
+              startedAt: null,
+              generatedAt: null,
+              safeMessage: null,
+              tone: null,
+              followUpEmail: null,
+            },
+          });
+          return;
+        }
+        followUpEmailStatusReads += 1;
+        await route.fulfill({
+          json:
+            followUpEmailStatusReads === 1
+              ? {
+                  state: "queued",
+                  generationAvailable: false,
+                  unavailableReason: null,
+                  jobId: "job-6",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: null,
+                  generatedAt: null,
+                  safeMessage: null,
+                  tone: "friendly",
+                  followUpEmail: null,
+                }
+              : {
+                  state: "completed",
+                  generationAvailable: true,
+                  unavailableReason: null,
+                  jobId: "job-6",
+                  transcriptVersion: 1,
+                  requestedAt: "2026-07-18T00:00:00Z",
+                  startedAt: "2026-07-18T00:00:01Z",
+                  generatedAt: "2026-07-18T00:00:02Z",
+                  safeMessage: null,
+                  tone: "friendly",
+                  followUpEmail: {
+                    subject: "Following up on our discussion",
+                    greeting: "Hi,",
+                    summary:
+                      "The customer discussed expansion plans and confirmed budget.",
+                    decisions: ["Proceed with the September pilot."],
+                    actionItems: [
+                      "Send the revised commercial proposal. (Owner: Kevin; Due: 2026-08-01)",
+                    ],
+                    openQuestions: [
+                      "Has legal approved the final contract terms?",
+                    ],
+                    closing: "Thanks,",
+                    tone: "friendly",
+                    confidence: 0.95,
+                  },
+                },
+        });
+        return;
+      }
       if (path.endsWith("/participants")) {
         await route.fulfill({ json: [] });
         return;
@@ -617,23 +704,49 @@ test("meeting detail generates and persists all five Meeting Intelligence capabi
   ).toBeVisible();
   await expect(page.getByText("Customer Legal")).toBeVisible();
   await expect(page.getByText("92%", { exact: true }).last()).toBeVisible();
+  await page.getByLabel("Tone").selectOption("friendly");
+  await page.getByRole("button", { name: "Draft Follow-up Email" }).click();
+  await expect(
+    page.getByText("Follow-up Email composition is queued…"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Subject: Following up on our discussion"),
+  ).toBeVisible();
+  await expect(page.getByText("Friendly tone · 95% confidence")).toBeVisible();
+  await expect(page.getByText("Hi,", { exact: true })).toBeVisible();
+  await expect(page.getByText("Thanks,", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Regenerate" })).toBeVisible();
 
   await page.reload();
   await page.getByRole("tab", { name: "Intelligence" }).click();
   await expect(
-    page.getByText(/customer discussed expansion plans/i),
+    page
+      .getByRole("article", { name: "Executive Summary" })
+      .getByText(/customer discussed expansion plans/i),
   ).toBeVisible();
   await expect(
-    page.getByText("Proceed with the September pilot."),
+    page
+      .getByRole("article", { name: "Decisions" })
+      .getByText("Proceed with the September pilot."),
   ).toBeVisible();
   await expect(
-    page.getByText("Send the revised commercial proposal."),
+    page
+      .getByRole("article", { name: "Action Items" })
+      .getByText("Send the revised commercial proposal."),
   ).toBeVisible();
   await expect(
     page.getByText("Procurement approval may delay implementation."),
   ).toBeVisible();
   await expect(
-    page.getByText("Has legal approved the final contract terms?"),
+    page
+      .getByRole("article", { name: "Open Questions" })
+      .getByText("Has legal approved the final contract terms?"),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("article", { name: "Draft Follow-up Email" })
+      .getByText("Subject: Following up on our discussion"),
   ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -644,7 +757,12 @@ test("meeting detail generates and persists all five Meeting Intelligence capabi
     page.getByRole("heading", { name: "Risks & Blockers" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Open Questions" }),
+    page
+      .getByRole("article", { name: "Open Questions" })
+      .getByRole("heading", { name: "Open Questions" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Draft Follow-up Email" }),
   ).toBeVisible();
   await page.getByRole("tab", { name: "Transcript" }).click();
   await expect(page.getByLabel("Transcript text")).toHaveValue(

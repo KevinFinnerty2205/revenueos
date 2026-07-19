@@ -9,9 +9,12 @@ as the default. WO-004C2 adds an independent, strictly structured
 transcript-grounded Decisions capability, WO-004C3 adds concrete committed
 Action Items with conservative due-date handling, WO-004C4 adds strict
 transcript-grounded Risks & Blockers, and WO-004C5 adds genuinely unresolved
-Open Questions through the same stack. No Follow-up Email or later intelligence
-capability, Anthropic/Gemini provider, embedding, tool use
-or agent is active.
+Open Questions through the same stack. WO-004C6 adds the first customer-ready
+composer: a Follow-up Email produced only from validated Executive Summary,
+Decisions, Action Items and Open Questions artefacts plus an explicit tone. It
+never reads or sends the transcript and deliberately excludes Risks & Blockers.
+No later intelligence capability, send integration, Anthropic/Gemini provider,
+embedding, tool use or agent is active.
 
 See [AI domain services](../03-engineering/ai-domain-services.md), the
 [AI worker queue](../03-engineering/ai-worker-queue.md) and
@@ -26,15 +29,19 @@ The [Executive Summary guide](../03-engineering/executive-summary-intelligence.m
 [Meeting Decisions guide](../03-engineering/meeting-decisions-intelligence.md)
 the [Meeting Action Items guide](../03-engineering/meeting-action-items-intelligence.md)
 and [Meeting Risks & Blockers guide](../03-engineering/meeting-risks-blockers-intelligence.md)
-and [Meeting Open Questions guide](../03-engineering/meeting-open-questions-intelligence.md)
+and [Meeting Open Questions guide](../03-engineering/meeting-open-questions-intelligence.md),
+and the [Follow-up Email Composer guide](../03-engineering/follow-up-email-composer.md)
 document the current Meeting Intelligence capabilities.
 
 Future AI work must use the typed provider port, schema validation, authorised
 minimum evidence, content-redacted logs, explicit model/prompt versions and
 human approval for consequential output.
 
-OpenAI selection sends the bounded selected meeting transcript to OpenAI.
-Production customer data remains prohibited until production identity, consent,
-provider privacy/retention, deletion and operational gates are approved.
+For the five transcript-grounded capabilities, OpenAI selection sends the
+bounded selected meeting transcript to OpenAI. For Follow-up Email, it sends
+only the validated customer-safe four-artefact projection and tone; the
+composer never transmits transcript text. Production customer data remains
+prohibited until production identity, consent, provider privacy/retention,
+deletion and operational gates are approved.
 
 The [AI system blueprint](ai-system-blueprint.md) defines the target components, safeguards, evaluation, observability, cost and latency boundaries through beta. It is architecture documentation, not implementation.

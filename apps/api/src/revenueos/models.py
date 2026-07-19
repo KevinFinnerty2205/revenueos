@@ -666,7 +666,7 @@ class AIJob(TimestampMixin, Base):
     __tablename__ = "ai_jobs"
     __table_args__ = (
         CheckConstraint(
-            "job_type IN ('infrastructure_test', 'executive_summary', 'decisions', 'action_items', 'risks_blockers', 'open_questions')",
+            "job_type IN ('infrastructure_test', 'executive_summary', 'decisions', 'action_items', 'risks_blockers', 'open_questions', 'follow_up_email')",
             name="ck_ai_jobs_type",
         ),
         CheckConstraint(
@@ -712,6 +712,12 @@ class AIJob(TimestampMixin, Base):
         CheckConstraint(
             "currency IS NULL OR (length(currency) = 3 AND currency = upper(currency))",
             name="ck_ai_jobs_currency",
+        ),
+        CheckConstraint(
+            "(job_type = 'follow_up_email' AND composition_tone IS NOT NULL AND "
+            "composition_tone IN ('professional', 'friendly', 'executive')) OR "
+            "(job_type <> 'follow_up_email' AND composition_tone IS NULL)",
+            name="ck_ai_jobs_composition_tone",
         ),
         ForeignKeyConstraint(
             ["organisation_id", "meeting_id"],
@@ -795,6 +801,7 @@ class AIJob(TimestampMixin, Base):
     prompt_version: Mapped[int | None] = mapped_column(Integer)
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     idempotency_key: Mapped[str | None] = mapped_column(String(200))
+    composition_tone: Mapped[str | None] = mapped_column(String(20))
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")
     requested_by_user_id: Mapped[uuid.UUID] = mapped_column(
@@ -850,7 +857,7 @@ class AIArtifact(Base):
     __tablename__ = "ai_artifacts"
     __table_args__ = (
         CheckConstraint(
-            "artifact_type IN ('infrastructure_test', 'executive_summary', 'decisions', 'action_items', 'risks_blockers', 'open_questions')",
+            "artifact_type IN ('infrastructure_test', 'executive_summary', 'decisions', 'action_items', 'risks_blockers', 'open_questions', 'follow_up_email')",
             name="ck_ai_artifacts_type",
         ),
         CheckConstraint("artifact_version > 0", name="ck_ai_artifacts_version"),

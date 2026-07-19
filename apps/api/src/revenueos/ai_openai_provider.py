@@ -20,6 +20,7 @@ from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
+    FollowUpEmailProviderInput,
     OpenQuestionsProviderInput,
     ProviderRequest,
     ProviderResponse,
@@ -114,13 +115,15 @@ class OpenAIProvider:
             | type[DecisionsProviderInput]
             | type[ActionItemsProviderInput]
             | type[RisksBlockersProviderInput]
-            | type[OpenQuestionsProviderInput],
+            | type[OpenQuestionsProviderInput]
+            | type[FollowUpEmailProviderInput],
         ] = {
             "executive_summary": ExecutiveSummaryProviderInput,
             "decisions": DecisionsProviderInput,
             "action_items": ActionItemsProviderInput,
             "risks_blockers": RisksBlockersProviderInput,
             "open_questions": OpenQuestionsProviderInput,
+            "follow_up_email": FollowUpEmailProviderInput,
         }
         expected_input = supported_inputs.get(request.job_type)
         if expected_input is None or not isinstance(request.input_payload, expected_input):

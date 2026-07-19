@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.ai_follow_up_email import FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES
 from revenueos.business_repositories import PageResult
 from revenueos.models import (
     AIArtifact,
@@ -233,6 +234,74 @@ class AIJobRepository:
         )
         return int(count or 0)
 
+    async def get_latest_follow_up_email_job(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+        transcript_version: int,
+        *,
+        prompt_key: str,
+        prompt_version: int,
+        schema_version: int,
+        composition_tone: str | None = None,
+    ) -> AIJob | None:
+        conditions = [
+            AIJob.organisation_id == organisation_id,
+            AIJob.meeting_id == meeting_id,
+            AIJob.transcript_version == transcript_version,
+            AIJob.job_type == "follow_up_email",
+            AIJob.prompt_key == prompt_key,
+            AIJob.prompt_version == prompt_version,
+            AIJob.schema_version == schema_version,
+        ]
+        if composition_tone is not None:
+            conditions.append(AIJob.composition_tone == composition_tone)
+        result = await self.session.execute(
+            select(AIJob).where(*conditions).order_by(AIJob.created_at.desc(), AIJob.id.desc()).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def count_follow_up_email_jobs(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+        transcript_version: int,
+        *,
+        prompt_key: str,
+        prompt_version: int,
+        schema_version: int,
+        composition_tone: str,
+    ) -> int:
+        count = await self.session.scalar(
+            select(func.count())
+            .select_from(AIJob)
+            .where(
+                AIJob.organisation_id == organisation_id,
+                AIJob.meeting_id == meeting_id,
+                AIJob.transcript_version == transcript_version,
+                AIJob.job_type == "follow_up_email",
+                AIJob.prompt_key == prompt_key,
+                AIJob.prompt_version == prompt_version,
+                AIJob.schema_version == schema_version,
+                AIJob.composition_tone == composition_tone,
+            )
+        )
+        return int(count or 0)
+
+    async def get_latest_transcript_audit_version(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+    ) -> int | None:
+        version = await self.session.scalar(
+            select(func.max(MeetingAuditEvent.version)).where(
+                MeetingAuditEvent.organisation_id == organisation_id,
+                MeetingAuditEvent.meeting_id == meeting_id,
+                MeetingAuditEvent.entity_type == "transcript",
+            )
+        )
+        return int(version) if version is not None else None
+
     @staticmethod
     def update_lifecycle_metadata(
         job: AIJob,
@@ -363,6 +432,49 @@ class AIArtifactRepository:
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def get_latest_follow_up_email_source_version(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+    ) -> int | None:
+        version = await self.session.scalar(
+            select(func.max(AIArtifact.transcript_version)).where(
+                AIArtifact.organisation_id == organisation_id,
+                AIArtifact.meeting_id == meeting_id,
+                AIArtifact.artifact_type.in_(
+                    FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES,
+                ),
+            )
+        )
+        return int(version) if version is not None else None
+
+    async def get_follow_up_email_source_artifacts(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+        transcript_version: int,
+    ) -> dict[str, AIArtifact]:
+        result = await self.session.scalars(
+            select(AIArtifact)
+            .where(
+                AIArtifact.organisation_id == organisation_id,
+                AIArtifact.meeting_id == meeting_id,
+                AIArtifact.transcript_version == transcript_version,
+                AIArtifact.artifact_type.in_(
+                    FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES,
+                ),
+            )
+            .order_by(
+                AIArtifact.artifact_type.asc(),
+                AIArtifact.artifact_version.desc(),
+                AIArtifact.id.desc(),
+            )
+        )
+        artifacts: dict[str, AIArtifact] = {}
+        for artifact in result.all():
+            artifacts.setdefault(artifact.artifact_type, artifact)
+        return artifacts
 
     async def list_artifact_versions(
         self,

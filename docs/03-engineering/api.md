@@ -210,11 +210,34 @@ successful. Worker/lease fields, prompts, transcripts, raw errors, provider
 responses and internal configuration are excluded. See
 [Meeting Open Questions intelligence](meeting-open-questions-intelligence.md).
 
+## Follow-up Email Composer
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/follow-up-email` | Queue, reuse or regenerate a validated-artefact-grounded draft |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence/follow-up-email` | Read current safe state/draft |
+
+POST accepts `tone` as exactly `professional`, `friendly` or `executive`
+(`professional` by default). Generation is available only when validated
+Executive Summary, Decisions, Action Items and Open Questions artefacts exist
+for the same current transcript version. It never loads transcript text and
+never consumes Risks & Blockers. New work returns `202`; an equivalent pending
+or running job returns `200`. Completed work may be deliberately regenerated as
+a new append-only job/artefact.
+
+GET supports `empty`, `queued`, `running`, `completed`, `failed` and
+`cancelled`. It returns generation availability, a safe unavailability reason
+or message, safe timestamps, tone and completed `followUpEmail` content. The
+strict result contains subject, greeting, summary, decision/action/open-
+question arrays, closing, tone and confidence. It excludes source artefacts,
+transcript, risks, evidence, prompts, raw errors, worker fields and provider
+payloads. See [Follow-up Email Composer](follow-up-email-composer.md).
+
 ## Scope boundary
 
 There are no generic AI job/artefact, provider configuration/model listing,
-cancellation, recording, media upload/storage, transcription, Follow-up Email
-or later intelligence, question-answering, email, calendar, CRM, billing,
+cancellation, recording, media upload/storage, transcription, later
+intelligence, question-answering, email sending, calendar, CRM, billing,
 worker-control or automation
 endpoints. Mock/OpenAI selection is server-side worker configuration and does not
 change this API contract. Clerk token verification is not connected.

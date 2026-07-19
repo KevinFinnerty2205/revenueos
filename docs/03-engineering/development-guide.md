@@ -57,10 +57,14 @@ claimed job attempt and accepts values from 1 to 5.
 To exercise the product flow, create a meeting with an authorised plain-text
 transcript no longer than 50,000 characters, open its **Intelligence** tab and
 generate the Executive Summary, Decisions, Action Items, Risks & Blockers or
-Open Questions. Each UI panel checks state every three seconds while
-the worker processes the mock job. No API key or external network access is
-required. Enabling OpenAI sends the rendered capability instructions and
-selected transcript to OpenAI. Use only synthetic non-sensitive data and follow
+Open Questions. Once Executive Summary, Decisions, Action Items and Open
+Questions are complete for the current version, draft a Follow-up Email in one
+of the three tones and exercise plain-text copy/regeneration. Each UI panel
+checks state every three seconds while the worker processes the mock job. No API
+key or external network access is required. Enabling OpenAI sends the rendered
+extractor instructions and selected transcript to OpenAI; Follow-up Email sends
+only its validated customer-safe artefact projection and tone. Use only
+synthetic non-sensitive data and follow
 the [manual smoke procedure](openai-provider-integration.md#manual-non-production-smoke-test);
 never put an actual key value in shell history, screenshots or repository files.
 
@@ -106,6 +110,12 @@ deletes Risks & Blockers rows before restoring the Action Items-era checks.
 Migration `0011_open_questions` widens the same checks for Open Questions
 without adding a table, column, RLS policy or prompt storage. Its downgrade
 deletes Open Questions rows before restoring the Risks & Blockers-era checks.
+
+Migration `0012_follow_up_email` widens the same checks for Follow-up Email and
+adds nullable `composition_tone` to AI jobs. A check requires a supported tone
+only for that job type, and trace guards make it immutable. Its downgrade
+deletes Follow-up Email rows before restoring the Open Questions-era checks and
+dropping the column.
 
 WO-004C1A requires no migration because the existing trace fields already
 represent provider, model, request ID, usage and cost/currency metadata.

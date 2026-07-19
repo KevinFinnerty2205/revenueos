@@ -19,6 +19,7 @@ from revenueos.ai_contracts import (
     DECISIONS_MAX_COUNT,
     DECISIONS_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
+    FOLLOW_UP_EMAIL_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
     OPEN_QUESTION_EVIDENCE_MAX_LENGTH,
     OPEN_QUESTION_MAX_LENGTH,
@@ -33,6 +34,7 @@ from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
+    FollowUpEmailProviderInput,
     OpenQuestionsProviderInput,
     ProviderRequest,
     ProviderResponse,
@@ -132,6 +134,10 @@ class DeterministicMockAIProvider:
             return request.expected_schema_version == OPEN_QUESTIONS_SCHEMA_VERSION and isinstance(
                 request.input_payload, OpenQuestionsProviderInput
             )
+        if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
+            return request.expected_schema_version == FOLLOW_UP_EMAIL_SCHEMA_VERSION and isinstance(
+                request.input_payload, FollowUpEmailProviderInput
+            )
         return False
 
     @classmethod
@@ -173,6 +179,69 @@ class DeterministicMockAIProvider:
                     cls._extract_open_questions(transcript),
                 )
             }
+        if isinstance(request.input_payload, FollowUpEmailProviderInput):
+            summary = cls._extract_composition_value(
+                request.input_payload,
+                "Validated Executive Summary as a JSON string: ",
+            )
+            decisions = cls._extract_composition_value(
+                request.input_payload,
+                "Validated Decisions as a JSON array: ",
+            )
+            action_items = cls._extract_composition_value(
+                request.input_payload,
+                "Validated Action Items as a JSON array: ",
+            )
+            open_questions = cls._extract_composition_value(
+                request.input_payload,
+                "Validated Open Questions as a JSON array: ",
+            )
+            tone = cls._extract_composition_value(
+                request.input_payload,
+                "Requested Tone as a JSON string: ",
+            )
+            if (
+                not isinstance(summary, str)
+                or not isinstance(decisions, list)
+                or not all(isinstance(item, str) for item in decisions)
+                or not isinstance(action_items, list)
+                or not all(isinstance(item, str) for item in action_items)
+                or not isinstance(open_questions, list)
+                or not all(isinstance(item, str) for item in open_questions)
+                or not isinstance(tone, str)
+                or tone not in {"professional", "friendly", "executive"}
+            ):
+                raise InvalidProviderRequestError
+            greeting, closing = {
+                "professional": ("Hello,", "Kind regards,"),
+                "friendly": ("Hi,", "Thanks,"),
+                "executive": ("Hello,", "Regards,"),
+            }[tone]
+            return {
+                "subject": "Meeting follow-up",
+                "greeting": greeting,
+                "summary": summary,
+                "decisions": cast(JsonValue, decisions),
+                "action_items": cast(JsonValue, action_items),
+                "open_questions": cast(JsonValue, open_questions),
+                "closing": closing,
+                "tone": tone,
+                "confidence": 0.95,
+            }
+        raise InvalidProviderRequestError
+
+    @staticmethod
+    def _extract_composition_value(
+        input_payload: FollowUpEmailProviderInput,
+        prefix: str,
+    ) -> JsonValue:
+        for line in input_payload.messages[1].content.splitlines():
+            if not line.startswith(prefix):
+                continue
+            try:
+                return cast(JsonValue, json.loads(line[len(prefix) :]))
+            except (TypeError, ValueError) as exc:
+                raise InvalidProviderRequestError from exc
         raise InvalidProviderRequestError
 
     @staticmethod
@@ -998,6 +1067,19 @@ class DeterministicMockAIProvider:
                         "answer": "Invented",
                     }
                 ]
+            }
+        if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
+            return {
+                "subject": "",
+                "greeting": "",
+                "summary": "Too short.",
+                "decisions": [1],
+                "action_items": [],
+                "open_questions": [],
+                "closing": "",
+                "tone": "casual",
+                "confidence": 2,
+                "body": "Unexpected field",
             }
         return {
             "decisions": [

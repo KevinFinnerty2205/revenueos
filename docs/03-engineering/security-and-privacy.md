@@ -1,6 +1,6 @@
 # Security and privacy
 
-This is the WO-004C3 engineering baseline, not legal advice or a certification claim.
+This is the WO-004C6 engineering baseline, not legal advice or a certification claim.
 
 ## Authentication and authorisation
 
@@ -74,6 +74,15 @@ normalised importance and owner count are allowed. Answer, due-date, severity
 and other later fields are rejected by the strict schema. OpenAI receives the
 bounded transcript only when selected.
 
+WO-004C6 Follow-up Email requests load only same-tenant validated Executive
+Summary, Decisions, Action Items and Open Questions artefacts. The request and
+worker use transcript audit version metadata to prove currency but never query
+transcript content. Risks & Blockers are excluded, and the typed provider input
+has no transcript field. Email/source text is excluded from logs/audits; only
+tone, counts and ordinary trace metadata are allowed. A post-provider grounding
+check rejects changed or invented facts before persistence. OpenAI receives
+only the validated customer-safe projection and tone when selected.
+
 WO-004C1A changes only provider execution after the tenant-bound source
 transaction closes. OpenAI selection does not receive a client-supplied tenant
 identifier and does not change repository predicates, worker ownership,
@@ -110,7 +119,9 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - AI artefact content is validated-data storage for future use, protected from overwrite by a database trigger and separated from the supplied transcript.
 - AI job, lifecycle and artefact writes commit atomically with metadata-only audit events.
 - AI audits may identify job/artefact/type/status/version, prompt/schema/provider/model labels and structured-output attempt count, but exclude transcript/artefact bodies, prompt templates/rendered messages, raw/invalid output, provider secrets, participant-sensitive values and raw exceptions.
-- Infrastructure-test, Executive Summary, Decisions, Action Items, Risks & Blockers and Open Questions JSON are strict, versioned and rejected before persistence when malformed or extended unexpectedly.
+- Infrastructure-test, Executive Summary, Decisions, Action Items, Risks &
+  Blockers, Open Questions and Follow-up Email JSON are strict, versioned and
+  rejected before persistence when malformed or extended unexpectedly.
 - Worker claims use PostgreSQL row locks, bounded leases and exact worker ownership; no in-memory queue can override persisted state.
 - Retry/cancellation/recovery and artefact completion use short atomic transactions and store only bounded safe errors.
 - Worker logs allow safe IDs, attempts, status, duration and error codes only; they exclude content, participant data, secrets, database URLs and raw exception messages.
@@ -121,8 +132,10 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - The selected provider receives only job-specific ordered messages and the
   registry-derived output schema. The mock processes the bounded
   JSON-delimited transcript in-process and makes no network call. OpenAI
-  selection sends the rendered instructions and selected transcript to OpenAI
-  through the server-side Responses API.
+  selection sends the rendered extractor instructions and selected transcript
+  to OpenAI through the server-side Responses API. Follow-up Email instead
+  sends only its validated source projection and tone; it never reads or sends
+  transcript text.
 - OpenAI requests use strict structured output, `store=false`, no tools, no
   streaming and zero SDK retries. The application Pydantic validator remains
   authoritative.

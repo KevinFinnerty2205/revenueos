@@ -2,12 +2,15 @@
 
 ## Current boundary
 
-WO-004B1 adds a separately runnable backend worker with PostgreSQL as its durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and persists validated artefacts. WO-004B2/B3 add the provider, prompt and schema execution boundary. WO-004C1 registers `executive_summary`; WO-004C2 adds independent `decisions`; WO-004C3 adds independent `action_items`; WO-004C4 adds independent `risks_blockers`; and WO-004C5 adds independent `open_questions` execution through the same queue.
+WO-004B1 adds a separately runnable backend worker with PostgreSQL as its durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and persists validated artefacts. WO-004B2/B3 add the provider, prompt and schema execution boundary. WO-004C1 registers `executive_summary`; WO-004C2 adds independent `decisions`; WO-004C3 adds independent `action_items`; WO-004C4 adds independent `risks_blockers`; WO-004C5 adds independent `open_questions`; and WO-004C6 adds `follow_up_email` composition from validated intelligence artefacts through the same queue.
 
 The worker resolves exactly the configured provider. `mock` /
 `mock-infrastructure-v1` remains the deterministic no-network default.
 `openai` uses the server-side Responses API adapter and sends the rendered
-Executive Summary, Decisions, Action Items, Risks & Blockers or Open Questions prompt/transcript outside the application. The meeting-scoped
+Executive Summary, Decisions, Action Items, Risks & Blockers or Open Questions
+prompt/transcript outside the application. Follow-up Email sends only the
+validated four-artefact customer-safe projection and selected tone; its worker
+path never queries transcript text. The meeting-scoped
 API/UI polls the same durable lifecycle in both modes.
 
 ## Process and startup
@@ -133,6 +136,16 @@ and accepts a required list of at most 25 strict items. Question count, empty
 flag, counts by normalised importance and owner count are content-free
 telemetry; question/owner/evidence text is not logged.
 
+`follow_up_email` maps to the dedicated `FollowUpEmailComposer`. It checks the
+pinned version against content-free transcript audit metadata and loads only
+strict Executive Summary, Decisions, Action Items and Open Questions artefacts
+through tenant-scoped AI repositories. It excludes Risks & Blockers and never
+loads transcript text. The typed provider input contains only the projected
+summary/arrays and explicit tone. Strict schema validation is followed by an
+exact-fact grounding check before the append-only artefact can be staged.
+Source/output counts and tone are content-free telemetry; email/source text is
+not logged.
+
 Malformed JSON, non-object JSON and schema-invalid output retry within the current execution up to `API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS`; exhaustion produces bounded non-retryable failure. Prompt/schema/configuration and non-retryable provider errors do not retry. Timeouts, temporary unavailability and transient provider failures exit immediately and use the existing durable retry policy. Before an output retry, the executor probes cancellation in a separate short tenant transaction. The successful completion transaction:
 
 - verifies current tenant, running state and worker ownership under a row lock;
@@ -175,13 +188,13 @@ Automated audit events use the original requesting user as the actor because the
 ## Known limitations and extension points
 
 - Only infrastructure test, Executive Summary, Decisions, Action Items, Risks &
-  Blockers and Open Questions execute; no Follow-up Email or later intelligence
-  capability exists.
+  Blockers, Open Questions and Follow-up Email execute; no later intelligence
+  or send capability exists.
 - Work is processed sequentially within one worker process; scale is achieved with additional worker replicas.
 - Tenant discovery is capped at 1,000 eligible organisations per cycle; deployments approaching that many simultaneously active tenants need an approved pagination/fairness extension.
 - There is no operator dashboard or cancellation endpoint; user polling is
   limited to the meeting-scoped Executive Summary, Decisions, Action Items,
-  Risks & Blockers and Open Questions
+  Risks & Blockers, Open Questions and Follow-up Email
   states.
 - There is no immutable transcript snapshot, accurate cost estimate,
   notification or external action.
@@ -197,5 +210,6 @@ consent/retention operations gate. See
 [Meeting Action Items intelligence](meeting-action-items-intelligence.md),
 [Meeting Risks & Blockers intelligence](meeting-risks-blockers-intelligence.md),
 [Meeting Open Questions intelligence](meeting-open-questions-intelligence.md),
+[Follow-up Email Composer](follow-up-email-composer.md),
 [AI provider abstraction](ai-provider-abstraction.md) and
 [prompt registry and structured output](prompt-registry-and-structured-output.md).

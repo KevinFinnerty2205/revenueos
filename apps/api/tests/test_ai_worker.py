@@ -858,6 +858,7 @@ def test_worker_logs_allow_only_metadata_fields() -> None:
     record.processing_duration_ms = 12  # type: ignore[attr-defined]
     record.provider_name = "mock"  # type: ignore[attr-defined]
     record.total_token_count = 0  # type: ignore[attr-defined]
+    record.tone = "professional"  # type: ignore[attr-defined]
     record.transcript_text = "must not be logged"  # type: ignore[attr-defined]
     payload = json.loads(JSONFormatter().format(record))
 
@@ -865,6 +866,7 @@ def test_worker_logs_allow_only_metadata_fields() -> None:
     assert payload["processing_duration_ms"] == 12
     assert payload["provider_name"] == "mock"
     assert payload["total_token_count"] == 0
+    assert payload["tone"] == "professional"
     assert "transcript_text" not in payload
     assert "must not be logged" not in JSONFormatter().format(record)
 
