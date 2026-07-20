@@ -52,6 +52,16 @@ class JSONFormatter(logging.Formatter):
             "artifact_version",
             "error_code",
             "retryable",
+            "overall_state",
+            "previous_overall_state",
+            "polling_event",
+            "ready_count",
+            "queued_count",
+            "processing_count",
+            "failed_count",
+            "not_generated_count",
+            "created_count",
+            "reused_count",
         )
         for key in safe_metadata_keys:
             value = getattr(record, key, None)

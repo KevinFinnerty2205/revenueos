@@ -190,3 +190,9 @@ there are no reminders; prompts/schemas remain code-deployed; the mock is
 deliberately narrow; OpenAI sends content externally when selected; cost uses
 the current integer project convention; historical transcript bodies are not
 retained; and production customer data remains prohibited.
+## Unified workspace navigation
+
+WO-005 presents this capability in the unified Meeting Intelligence workspace
+and uses its completed current-version artefact as a Follow-up Email prerequisite.
+Its individual API, schema, persistence, retry and transcript rules are unchanged.
+See [Unified Meeting Intelligence](unified-meeting-intelligence.md).

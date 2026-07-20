@@ -106,6 +106,33 @@ A participant requires at least one of a same-tenant contact, display name or va
 
 There is at most one transcript row per meeting. Plain text is required and limited to one million characters. Source is `manual` or `upload`; `upload` means the web form read a user-selected `.txt` file, not that RevenueOS stored a file. `PATCH` requires the current positive `version`, increments it on success and returns `409 transcript_version_conflict` for stale writes. Transcript permissions are inherited from the active tenant-scoped meeting.
 
+## Unified Meeting Intelligence
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all six current-version capability states and content through one product-safe view |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/generate` | Create or reuse missing extraction work and conditionally queue Follow-up Email |
+
+GET returns a derived overall state, generation/retry availability, last activity
+time, deterministic progress counts and the six ordered capability views. Valid
+empty lists are completed with `emptyResult=true`. The response excludes job and
+artefact IDs, transcript/prompts, provider/model and schema configuration, worker
+fields, internal error codes and raw errors.
+
+Later polling reads may include the optional safe query metadata
+`previousOverallState` and `pollingEvent=started|continued`. These values are
+validated enums used only for metadata-only transition and polling lifecycle
+logs; they do not alter the aggregate result.
+
+POST reuses the five existing extraction request services and creates only
+missing/failed/cancelled work for the current transcript. It queues Follow-up
+Email only after matching Executive Summary, Decisions, Action Items and Open
+Questions artefacts are complete. New work returns `202`; complete reuse returns
+`200`. The endpoint never calls a provider inline. All individual endpoints below
+remain supported. See
+[Unified Meeting Intelligence](unified-meeting-intelligence.md) for state
+precedence, idempotency, polling and privacy rules.
+
 ## Executive Summary intelligence
 
 | Method | Path | Purpose |

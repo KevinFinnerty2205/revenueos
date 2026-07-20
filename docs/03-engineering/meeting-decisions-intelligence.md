@@ -210,3 +210,9 @@ code-deployed. There is no Action Item or due-date extraction, immutable
 historical transcript body, accurate cost calculation, provider/model UI,
 recording, transcription, external integration or production customer-data
 approval.
+## Unified workspace navigation
+
+WO-005 presents this capability as **Key Decisions** in the unified Meeting
+Intelligence workspace and aggregate read. Its individual API, schema,
+persistence, retry and transcript-grounding rules are unchanged. See
+[Unified Meeting Intelligence](unified-meeting-intelligence.md).

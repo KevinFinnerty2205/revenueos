@@ -21,7 +21,7 @@ Sprints 1–3 provide:
 - a dashboard with polished empty sections;
 - tenant-isolated list/create/edit/delete workflows for companies, contacts, opportunities and tasks;
 - tenant-isolated meeting, participant and deliberately supplied plain-text transcript workflows with local audit history; and
-- a Meeting Detail Intelligence tab that independently queues and displays a transcript-grounded Executive Summary, strict Decisions list, concrete Action Items list, structured Risks & Blockers list and genuinely unresolved Open Questions through the configured mock or OpenAI provider;
+- a unified Meeting Detail Intelligence workspace that derives safe overall state and progress while independently persisting a transcript-grounded Executive Summary, strict Key Decisions, concrete Action Items, structured Risks & Blockers, genuinely unresolved Open Questions and an artefact-only Follow-up Email;
 - an Assistant placeholder that states its capability is not implemented.
 
 The current product accepts only deliberately entered meeting metadata and plain-text transcripts. The default provider is a deterministic no-network mock; an explicitly configured server-side OpenAI adapter can process Executive Summary, Decisions, Action Items, Risks & Blockers and Open Questions and sends the selected transcript externally. The application does not answer or assign questions, record, store media, transcribe, connect external systems, verify production Clerk sessions or process payments. Production customer data must not be used.
