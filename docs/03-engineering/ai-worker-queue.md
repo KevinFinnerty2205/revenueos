@@ -137,11 +137,14 @@ flag, counts by normalised importance and owner count are content-free
 telemetry; question/owner/evidence text is not logged.
 
 `follow_up_email` maps to the dedicated `FollowUpEmailComposer`. It checks the
-pinned version against content-free transcript audit metadata and loads only
-strict Executive Summary, Decisions, Action Items and Open Questions artefacts
-through tenant-scoped AI repositories. It excludes Risks & Blockers and never
-loads transcript text. The typed provider input contains only the projected
-summary/arrays and explicit tone. Strict schema validation is followed by an
+pinned transcript, prompt and schema versions against content-free transcript
+audit metadata and loads only strict Executive Summary, Decisions, Action Items
+and Open Questions artefacts through tenant-scoped AI repositories. It excludes
+Risks & Blockers and never loads transcript text. Unified generation does not
+change worker claiming or execution: the safe orchestration endpoint only adds
+the durable composer job after the aggregate state proves its prerequisites.
+The typed provider input contains only the projected summary/arrays and explicit
+tone. Strict schema validation is followed by an
 exact-fact grounding check before the append-only artefact can be staged.
 Source/output counts and tone are content-free telemetry; email/source text is
 not logged.

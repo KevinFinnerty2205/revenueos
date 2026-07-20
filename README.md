@@ -4,23 +4,24 @@ RevenueOS is the AI sales teammate that remembers every customer interaction and
 
 This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated
 business entities, Sprint 3 Meeting Domain, WO-004A1/A2/B1/B2/B3 AI
-infrastructure and WO-004C1/C1A/C2/C3/C4 Meeting Intelligence/provider capability.
-Meetings, deliberately supplied transcripts, audit history, AI
-persistence/domain rules and a separate durable worker are implemented. The
-Meeting Detail Intelligence tab can queue and display a transcript-grounded
-Executive Summary, Decisions, Action Items and Risks & Blockers through versioned prompts and strict
-structured-output validation. The default provider is a deterministic
-no-network mock; an
-optional server-side OpenAI Responses API adapter is configuration-selectable.
-No Open Questions or later intelligence capability, browser credential,
-recording, media storage, transcription, integration, production Clerk
-verification or billing is implemented.
+infrastructure, WO-004C1–C6 capabilities and WO-005 unified Meeting Intelligence
+workspace. Meetings, deliberately supplied transcripts, audit history,
+AI persistence/domain rules and a separate durable worker are implemented. The
+Meeting Detail Intelligence tab presents independently persisted Executive
+Summary, Key Decisions, Action Items, Risks & Blockers, Open Questions and
+Follow-up Email through one derived, accessible workspace. The default provider
+is a deterministic no-network mock; an optional server-side OpenAI Responses API
+adapter is configuration-selectable. No new post-WO-005 intelligence capability,
+browser credential, recording, media storage, transcription, sending/integration,
+production Clerk verification or billing is implemented.
 
 ## Product blueprint
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-Target documents distinguish future direction from shipped functionality and do not authorise another sprint. The current implementation boundary is Sprints 1–3 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4.
+Target documents distinguish future direction from shipped functionality and do
+not authorise another sprint. The current implementation boundary is Sprints 1–3
+plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 and WO-005.
 
 ## Prerequisites
 
@@ -113,7 +114,13 @@ Protected routes:
 - `/assistant`
 - `/settings`
 
-Assistant remains an honest placeholder. Company, contact, opportunity and task pages use the versioned API and provide list/create/edit states. Meeting pages provide list/search/filter/pagination, create/edit, participant management, deliberate plain-text transcript input and Overview/Intelligence/Transcript/History detail tabs. Intelligence contains independent Executive Summary, Decisions, Action Items and Risks & Blockers panels. All use the mock by default and need no frontend change when the worker selects OpenAI.
+Assistant remains an honest placeholder. Company, contact, opportunity and task
+pages use the versioned API and provide list/create/edit states. Meeting pages
+provide list/search/filter/pagination, create/edit, participant management,
+deliberate plain-text transcript input and Overview/Intelligence/Transcript/History
+detail tabs. Intelligence is one unified workspace over six independent durable
+capabilities. All use the mock by default and need no frontend change when the
+worker selects OpenAI.
 
 API routes:
 
@@ -128,10 +135,13 @@ API routes:
 - nested participant CRUD under `/api/v1/meetings/{meetingId}/participants`
 - singular transcript CRUD under `/api/v1/meetings/{meetingId}/transcript`
 - `GET /api/v1/meetings/{meetingId}/history` — content-minimised audit activity
+- `GET /api/v1/meetings/{meetingId}/intelligence` — retrieve the unified product-safe current-version view
+- `POST /api/v1/meetings/{meetingId}/intelligence/generate` — idempotently create/reuse missing Meeting Intelligence work
 - `POST /api/v1/meetings/{meetingId}/intelligence/executive-summary` — queue or return equivalent Executive Summary generation
 - `GET /api/v1/meetings/{meetingId}/intelligence/executive-summary` — retrieve current safe state/result
 - `POST /api/v1/meetings/{meetingId}/intelligence/decisions` — queue or return equivalent Decisions generation
 - `GET /api/v1/meetings/{meetingId}/intelligence/decisions` — retrieve current safe state/result
+- equivalent POST/GET routes for `action-items`, `risks-blockers`, `open-questions` and `follow-up-email`
 
 ## Validation
 
@@ -180,10 +190,12 @@ exercise the optional real adapter with synthetic non-sensitive content,
 configure server-only `OPENAI_API_KEY`, `OPENAI_MODEL`,
 `OPENAI_TIMEOUT_SECONDS` and `OPENAI_MAX_OUTPUT_TOKENS`.
 
-> Setting `AI_PROVIDER=openai` sends the rendered Executive Summary or Decisions
-> instructions and selected meeting transcript to OpenAI. Never expose the key
-> through a browser or `NEXT_PUBLIC_*` variable. Use a managed secret service in
-> deployed environments. Production customer-content use remains prohibited.
+> Setting `AI_PROVIDER=openai` sends the rendered extractor instructions and
+> selected meeting transcript to OpenAI. Follow-up Email sends only validated
+> Executive Summary, Decisions, Action Items and Open Questions artefacts; it
+> excludes Risks & Blockers and never reads or sends transcript text. Never expose
+> the key through a browser or `NEXT_PUBLIC_*` variable. Production
+> customer-content use remains prohibited.
 
 See the [OpenAI provider integration guide](docs/03-engineering/openai-provider-integration.md)
 for strict output, error/retry behaviour, smoke testing and rollback.
@@ -224,6 +236,9 @@ See the [documentation index](docs/README.md),
 [Meeting Decisions architecture](docs/03-engineering/meeting-decisions-intelligence.md),
 [Meeting Action Items architecture](docs/03-engineering/meeting-action-items-intelligence.md),
 [Meeting Risks & Blockers architecture](docs/03-engineering/meeting-risks-blockers-intelligence.md),
+[Meeting Open Questions architecture](docs/03-engineering/meeting-open-questions-intelligence.md),
+[Follow-up Email Composer](docs/03-engineering/follow-up-email-composer.md),
+[Unified Meeting Intelligence workspace](docs/03-engineering/unified-meeting-intelligence.md),
 [OpenAI provider guide](docs/03-engineering/openai-provider-integration.md),
 [prompt/output architecture](docs/03-engineering/prompt-registry-and-structured-output.md)
-and [WO-004C4 record](docs/07-sprints/wo-004c4-meeting-risks-blockers.md).
+and [WO-005 record](docs/07-sprints/wo-005-unified-meeting-intelligence.md).

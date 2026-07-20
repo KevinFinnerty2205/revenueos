@@ -356,6 +356,7 @@ class AIJobService(_AIDomainService):
         )
         self._require_usable_executive_summary_transcript(transcript)
         assert transcript is not None
+        transcript_version = transcript.version
 
         existing = await self._latest_executive_summary_job(
             meeting_id,
@@ -417,7 +418,7 @@ class AIJobService(_AIDomainService):
             )
             concurrent = await self._latest_executive_summary_job(
                 meeting_id,
-                transcript.version,
+                transcript_version,
             )
             if concurrent is None or concurrent.status not in {
                 AIJobStatus.PENDING.value,
@@ -558,6 +559,7 @@ class AIJobService(_AIDomainService):
         )
         self._require_usable_decisions_transcript(transcript)
         assert transcript is not None
+        transcript_version = transcript.version
 
         existing = await self._latest_decisions_job(meeting_id, transcript.version)
         if existing is not None and existing.status in {
@@ -612,7 +614,7 @@ class AIJobService(_AIDomainService):
                 self.repository.session,
                 self.tenant.organisation_id,
             )
-            concurrent = await self._latest_decisions_job(meeting_id, transcript.version)
+            concurrent = await self._latest_decisions_job(meeting_id, transcript_version)
             if concurrent is None or concurrent.status not in {
                 AIJobStatus.PENDING.value,
                 AIJobStatus.RUNNING.value,
@@ -766,6 +768,7 @@ class AIJobService(_AIDomainService):
         )
         self._require_usable_action_items_transcript(transcript)
         assert transcript is not None
+        transcript_version = transcript.version
 
         existing = await self._latest_action_items_job(meeting_id, transcript.version)
         if existing is not None and existing.status in {
@@ -822,7 +825,7 @@ class AIJobService(_AIDomainService):
             )
             concurrent = await self._latest_action_items_job(
                 meeting_id,
-                transcript.version,
+                transcript_version,
             )
             if concurrent is None or concurrent.status not in {
                 AIJobStatus.PENDING.value,
@@ -982,6 +985,7 @@ class AIJobService(_AIDomainService):
         )
         self._require_usable_risks_blockers_transcript(transcript)
         assert transcript is not None
+        transcript_version = transcript.version
 
         existing = await self._latest_risks_blockers_job(meeting_id, transcript.version)
         if existing is not None and existing.status in {
@@ -1040,7 +1044,7 @@ class AIJobService(_AIDomainService):
             )
             concurrent = await self._latest_risks_blockers_job(
                 meeting_id,
-                transcript.version,
+                transcript_version,
             )
             if concurrent is None or concurrent.status not in {
                 AIJobStatus.PENDING.value,
@@ -1200,6 +1204,7 @@ class AIJobService(_AIDomainService):
         )
         self._require_usable_open_questions_transcript(transcript)
         assert transcript is not None
+        transcript_version = transcript.version
 
         existing = await self._latest_open_questions_job(meeting_id, transcript.version)
         if existing is not None and existing.status in {
@@ -1258,7 +1263,7 @@ class AIJobService(_AIDomainService):
             )
             concurrent = await self._latest_open_questions_job(
                 meeting_id,
-                transcript.version,
+                transcript_version,
             )
             if concurrent is None or concurrent.status not in {
                 AIJobStatus.PENDING.value,
@@ -1441,8 +1446,10 @@ class AIJobService(_AIDomainService):
             )
             return AIJobRequestResult(job=existing, created=False)
 
+        # Active work does not advance the generation. Concurrent requests therefore
+        # derive the same key and the database uniqueness constraint resolves the race.
         generation_number = (
-            await self.repository.count_follow_up_email_jobs(
+            await self.repository.count_terminal_follow_up_email_jobs(
                 self.tenant.organisation_id,
                 meeting_id,
                 trace.transcript_version,
@@ -1629,8 +1636,27 @@ class AIJobService(_AIDomainService):
             AIArtifactType.ACTION_ITEMS.value: ACTION_ITEMS_SCHEMA_VERSION,
             AIArtifactType.OPEN_QUESTIONS.value: OPEN_QUESTIONS_SCHEMA_VERSION,
         }
+        expected_prompt_versions = {
+            AIArtifactType.EXECUTIVE_SUMMARY.value: (
+                EXECUTIVE_SUMMARY_PROMPT_KEY,
+                EXECUTIVE_SUMMARY_PROMPT_VERSION,
+            ),
+            AIArtifactType.DECISIONS.value: (
+                DECISIONS_PROMPT_KEY,
+                DECISIONS_PROMPT_VERSION,
+            ),
+            AIArtifactType.ACTION_ITEMS.value: (
+                ACTION_ITEMS_PROMPT_KEY,
+                ACTION_ITEMS_PROMPT_VERSION,
+            ),
+            AIArtifactType.OPEN_QUESTIONS.value: (
+                OPEN_QUESTIONS_PROMPT_KEY,
+                OPEN_QUESTIONS_PROMPT_VERSION,
+            ),
+        }
         if any(
             artifact.schema_version != expected_schema_versions[artifact_type]
+            or (artifact.prompt_key, artifact.prompt_version) != expected_prompt_versions[artifact_type]
             for artifact_type, artifact in artifacts.items()
         ):
             return None

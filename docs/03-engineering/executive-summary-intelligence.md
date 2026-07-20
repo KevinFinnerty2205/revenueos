@@ -104,3 +104,9 @@ Decisions is now an independent capability documented in
 Items and later intelligence fields, citations/review, another provider,
 runtime model configuration and production enablement require separate
 approval.
+## Unified workspace navigation
+
+WO-005 presents this capability first in the unified Meeting Intelligence
+workspace and reads it through the aggregate endpoint. Its individual endpoint,
+schema, job, artefact, retry and transcript rules are unchanged. See
+[Unified Meeting Intelligence](unified-meeting-intelligence.md).

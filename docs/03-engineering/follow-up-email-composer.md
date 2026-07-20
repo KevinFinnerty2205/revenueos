@@ -23,9 +23,10 @@ The Follow-up Email is composed only from four validated, persisted artefacts:
 - Open Questions `question` values, with a supported owner when present.
 
 The request service checks content-free transcript audit metadata to confirm
-that these artefacts belong to the current transcript version. It then loads
-the four artefacts through tenant-scoped AI repositories. The worker repeats
-the current-version metadata check and loads the same four pinned artefacts.
+that these artefacts belong to the current transcript version and validates
+their code-deployed prompt/schema versions. It then loads the four artefacts
+through tenant-scoped AI repositories. The worker repeats those trace checks
+and loads the same stable current-version source set.
 Neither path queries the transcript body. `FollowUpEmailProviderInput` has no
 transcript field, and prompt v1 has exactly five variables:
 `executive_summary`, `decisions`, `action_items`, `open_questions` and `tone`.
@@ -133,17 +134,20 @@ availability, a product-safe unavailability reason or failure message, safe
 timestamps, tone and completed schema content. It excludes source artefacts,
 transcript, prompts, raw errors, leases, worker fields and provider payloads.
 
-The Meeting Detail Intelligence tab contains a **Draft Follow-up Email** panel
-after Open Questions. It has unavailable, ready, queued, running, completed,
-failed and cancelled states; a labelled tone selector; visible focus; and a
-single non-overlapping three-second polling chain that stops at a terminal
-state or unmount. The completed view renders subject, greeting, summary and
+The unified Meeting Detail Intelligence workspace contains **Follow-up Email**
+after Open Questions. The aggregate polling chain calls the safe idempotent
+orchestration endpoint only after all four sources are ready. The section has
+unavailable, not-generated, queued, processing, completed, failed and cancelled
+states; a labelled tone selector and visible focus. The completed view renders subject, greeting, summary and
 only non-empty Decisions, Action Items and Open Questions sections, followed by
 closing, confidence and generated time.
 
 **Copy email** writes plain text to the browser clipboard. It does not copy
 HTML and omits headings for empty sections. **Regenerate** requests another
 draft using the selected tone. There is deliberately no Send control.
+
+See [Unified Meeting Intelligence](unified-meeting-intelligence.md) for overall
+state, aggregate API, progress, dependency orchestration and polling rules.
 
 ## Migration, tenancy, privacy and observability
 

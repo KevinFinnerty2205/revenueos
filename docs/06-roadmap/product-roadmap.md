@@ -19,10 +19,12 @@ opportunity and task records. Sprint 3 completed tenant-safe meetings,
 participants, deliberately supplied plain-text transcripts and meeting audit
 history. WO-004A1/A2/B1/B2/B3 completed the durable AI foundation; WO-004C1
 adds the Executive Summary product flow, WO-004C1A adds optional server-side
-OpenAI execution and WO-004C2 adds structured Decisions while keeping mock as
-default. Verified Clerk identity,
+OpenAI execution, and WO-004C2–C6 add Decisions, Action Items, Risks & Blockers,
+Open Questions and artefact-only Follow-up Email while keeping mock as default.
+WO-005 unifies those six capabilities behind one derived workspace and
+idempotent generation action. Verified Clerk identity,
 production customer-content provider approval, media ingestion/storage,
-transcription, source-backed evaluated analysis and follow-up drafting remain
+transcription, source-backed evaluation and approved sending/integrations remain
 outstanding.
 
 ## Phase 3 — Relationship Memory

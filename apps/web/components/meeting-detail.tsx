@@ -20,12 +20,7 @@ import {
 import { ApiClientError, apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatMeetingDate } from "@/lib/meetings";
-import { ExecutiveSummaryPanel } from "@/components/executive-summary-panel";
-import { DecisionsPanel } from "@/components/decisions-panel";
-import { ActionItemsPanel } from "@/components/action-items-panel";
-import { RisksBlockersPanel } from "@/components/risks-blockers-panel";
-import { OpenQuestionsPanel } from "@/components/open-questions-panel";
-import { FollowUpEmailPanel } from "@/components/follow-up-email-panel";
+import { MeetingIntelligenceWorkspace } from "@/components/meeting-intelligence-workspace";
 
 type MeetingTab = "overview" | "intelligence" | "transcript" | "history";
 const meetingTabs: MeetingTab[] = [
@@ -417,14 +412,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
           role="tabpanel"
           aria-labelledby="meeting-tab-intelligence"
         >
-          <div className="grid gap-6">
-            <ExecutiveSummaryPanel meetingId={meeting.id} />
-            <DecisionsPanel meetingId={meeting.id} />
-            <ActionItemsPanel meetingId={meeting.id} />
-            <RisksBlockersPanel meetingId={meeting.id} />
-            <OpenQuestionsPanel meetingId={meeting.id} />
-            <FollowUpEmailPanel meetingId={meeting.id} />
-          </div>
+          <MeetingIntelligenceWorkspace meetingId={meeting.id} />
         </div>
       ) : null}
 

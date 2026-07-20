@@ -33,9 +33,10 @@ Only the worker performs the provider call, but configuration validation must
 remain consistent across server processes built from the release.
 
 > Enabling OpenAI transmits the selected meeting transcript and rendered
-> Executive Summary or Decisions instructions to OpenAI. Production customer-content use is
-> blocked operationally until the privacy and production-readiness gates are
-> approved.
+> extractor instructions to OpenAI. Follow-up Email transmits only its validated
+> customer-safe artefact projection and never transcript text. Production
+> customer-content use is blocked operationally until the privacy and
+> production-readiness gates are approved.
 
 See [OpenAI provider integration](openai-provider-integration.md) for the exact
 variables, data flow, smoke test and rollback.
@@ -55,7 +56,9 @@ WO-004C1A requires no schema migration; WO-004C2 through WO-004C5 require
 `0008_decisions` through `0011_open_questions`, which widen existing AI type
 checks. WO-004C6 requires `0012_follow_up_email`, which also adds the guarded
 nullable job tone column. The current trace fields already hold provider/model/
-request/token metadata.
+request/token metadata. WO-005 requires no migration; deploy API, worker and web
+from the same immutable release so aggregate prompt/schema selection and worker
+source validation agree.
 
 ## Rollback
 

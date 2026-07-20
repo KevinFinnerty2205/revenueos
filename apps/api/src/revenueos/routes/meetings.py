@@ -43,6 +43,9 @@ from revenueos.intelligence_contracts import (
     FollowUpEmailRequestResponse,
     FollowUpEmailResponse,
     FollowUpEmailState,
+    MeetingIntelligenceGenerationResponse,
+    MeetingIntelligenceOverallState,
+    MeetingIntelligenceResponse,
     OpenQuestionsContentResponse,
     OpenQuestionsRequestResponse,
     OpenQuestionsResponse,
@@ -52,6 +55,7 @@ from revenueos.intelligence_contracts import (
     RisksBlockersResponse,
     RisksBlockersState,
 )
+from revenueos.intelligence_workspace import MeetingIntelligenceService
 from revenueos.meeting_contracts import (
     MeetingAuditEventResponse,
     MeetingCreate,
@@ -66,6 +70,7 @@ from revenueos.meeting_contracts import (
 )
 from revenueos.meeting_dependencies import (
     get_ai_job_service,
+    get_meeting_intelligence_service,
     get_meeting_service,
     get_participant_service,
     get_transcript_service,
@@ -78,6 +83,10 @@ Meetings = Annotated[MeetingService, Depends(get_meeting_service)]
 Participants = Annotated[ParticipantService, Depends(get_participant_service)]
 Transcripts = Annotated[TranscriptService, Depends(get_transcript_service)]
 Intelligence = Annotated[AIJobService, Depends(get_ai_job_service)]
+IntelligenceWorkspace = Annotated[
+    MeetingIntelligenceService,
+    Depends(get_meeting_intelligence_service),
+]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -130,6 +139,45 @@ async def create_meeting(request: MeetingCreate, service: Meetings) -> MeetingRe
 @router.get("/{meeting_id}", response_model=MeetingResponse)
 async def get_meeting(meeting_id: UUID, service: Meetings) -> MeetingResponse:
     return MeetingResponse.model_validate(await service.get_meeting(meeting_id))
+
+
+@router.get(
+    "/{meeting_id}/intelligence",
+    response_model=MeetingIntelligenceResponse,
+)
+async def get_meeting_intelligence(
+    meeting_id: UUID,
+    service: IntelligenceWorkspace,
+    previous_overall_state: Annotated[
+        MeetingIntelligenceOverallState | None,
+        Query(alias="previousOverallState"),
+    ] = None,
+    polling_event: Annotated[
+        Literal["started", "continued"] | None,
+        Query(alias="pollingEvent"),
+    ] = None,
+) -> MeetingIntelligenceResponse:
+    return await service.get_workspace(
+        meeting_id,
+        previous_overall_state=previous_overall_state,
+        polling_event=polling_event,
+    )
+
+
+@router.post(
+    "/{meeting_id}/intelligence/generate",
+    response_model=MeetingIntelligenceGenerationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def generate_meeting_intelligence(
+    meeting_id: UUID,
+    response: Response,
+    service: IntelligenceWorkspace,
+) -> MeetingIntelligenceGenerationResponse:
+    result = await service.generate(meeting_id)
+    if result.created_count == 0:
+        response.status_code = status.HTTP_200_OK
+    return result.response
 
 
 @router.post(

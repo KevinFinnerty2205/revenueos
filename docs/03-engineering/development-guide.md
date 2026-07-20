@@ -56,17 +56,23 @@ claimed job attempt and accepts values from 1 to 5.
 
 To exercise the product flow, create a meeting with an authorised plain-text
 transcript no longer than 50,000 characters, open its **Intelligence** tab and
-generate the Executive Summary, Decisions, Action Items, Risks & Blockers or
-Open Questions. Once Executive Summary, Decisions, Action Items and Open
-Questions are complete for the current version, draft a Follow-up Email in one
-of the three tones and exercise plain-text copy/regeneration. Each UI panel
-checks state every three seconds while the worker processes the mock job. No API
-key or external network access is required. Enabling OpenAI sends the rendered
+select **Generate Meeting Intelligence**. The workspace queues missing
+Executive Summary, Decisions, Action Items, Risks & Blockers and Open Questions
+jobs, then queues Follow-up Email after its four source sections are ready. One
+aggregate UI chain checks state every three seconds while the worker processes
+the mock jobs. Capability-level retry and Follow-up Email tone, plain-text Copy
+and Regenerate remain available. No API key or external network access is
+required. Enabling OpenAI sends the rendered
 extractor instructions and selected transcript to OpenAI; Follow-up Email sends
 only its validated customer-safe artefact projection and tone. Use only
 synthetic non-sensitive data and follow
 the [manual smoke procedure](openai-provider-integration.md#manual-non-production-smoke-test);
 never put an actual key value in shell history, screenshots or repository files.
+
+WO-005 adds no migration. Direct aggregate API testing uses
+`GET /api/v1/meetings/{meetingId}/intelligence`; orchestration uses POST on the
+same path plus `/generate`. See
+[Unified Meeting Intelligence](unified-meeting-intelligence.md).
 
 ## Database workflow
 

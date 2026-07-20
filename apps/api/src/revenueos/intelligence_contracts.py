@@ -291,3 +291,105 @@ class FollowUpEmailResponse(APIModel):
     safe_message: str | None
     tone: FollowUpEmailTone | None
     follow_up_email: FollowUpEmailContentResponse | None
+
+
+MeetingIntelligenceCapabilityName = Literal[
+    "executive_summary",
+    "decisions",
+    "action_items",
+    "risks_blockers",
+    "open_questions",
+    "follow_up_email",
+]
+MeetingIntelligenceCapabilityState = Literal[
+    "unavailable",
+    "not_generated",
+    "queued",
+    "processing",
+    "completed",
+    "failed",
+    "cancelled",
+]
+MeetingIntelligenceOverallState = Literal[
+    "unavailable",
+    "not_started",
+    "partially_generated",
+    "queued",
+    "processing",
+    "completed",
+    "completed_with_empty_results",
+    "partially_failed",
+    "failed",
+]
+
+
+class MeetingIntelligenceCapabilityResponse(APIModel):
+    state: MeetingIntelligenceCapabilityState
+    generation_available: bool
+    message: str | None
+    generated_at: datetime | None
+    empty_result: bool
+
+
+class MeetingIntelligenceExecutiveSummaryResponse(
+    MeetingIntelligenceCapabilityResponse,
+):
+    content: ExecutiveSummaryContentResponse | None
+
+
+class MeetingIntelligenceDecisionsResponse(MeetingIntelligenceCapabilityResponse):
+    content: DecisionsContentResponse | None
+
+
+class MeetingIntelligenceActionItemsResponse(
+    MeetingIntelligenceCapabilityResponse,
+):
+    content: ActionItemsContentResponse | None
+
+
+class MeetingIntelligenceRisksBlockersResponse(
+    MeetingIntelligenceCapabilityResponse,
+):
+    content: RisksBlockersContentResponse | None
+
+
+class MeetingIntelligenceOpenQuestionsResponse(
+    MeetingIntelligenceCapabilityResponse,
+):
+    content: OpenQuestionsContentResponse | None
+
+
+class MeetingIntelligenceFollowUpEmailResponse(
+    MeetingIntelligenceCapabilityResponse,
+):
+    tone: FollowUpEmailTone | None
+    content: FollowUpEmailContentResponse | None
+
+
+class MeetingIntelligenceProgressResponse(APIModel):
+    ready: int = Field(ge=0, le=6)
+    queued: int = Field(ge=0, le=6)
+    processing: int = Field(ge=0, le=6)
+    failed: int = Field(ge=0, le=6)
+    not_generated: int = Field(ge=0, le=6)
+    total: Literal[6] = 6
+    summary: str
+
+
+class MeetingIntelligenceResponse(APIModel):
+    overall_state: MeetingIntelligenceOverallState
+    generation_available: bool
+    retry_available: bool
+    last_updated_at: datetime | None
+    progress: MeetingIntelligenceProgressResponse
+    executive_summary: MeetingIntelligenceExecutiveSummaryResponse
+    decisions: MeetingIntelligenceDecisionsResponse
+    action_items: MeetingIntelligenceActionItemsResponse
+    risks_blockers: MeetingIntelligenceRisksBlockersResponse
+    open_questions: MeetingIntelligenceOpenQuestionsResponse
+    follow_up_email: MeetingIntelligenceFollowUpEmailResponse
+
+
+class MeetingIntelligenceGenerationResponse(MeetingIntelligenceResponse):
+    created_capabilities: list[MeetingIntelligenceCapabilityName]
+    reused_capabilities: list[MeetingIntelligenceCapabilityName]

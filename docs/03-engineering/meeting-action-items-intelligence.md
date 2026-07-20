@@ -223,3 +223,9 @@ bodies are not retained. Cost remains the current integer-minor-unit project
 convention. There is no completion tracking, task editing/creation, reminder,
 calendar/email/CRM integration, recording, transcription or production
 customer-data approval.
+## Unified workspace navigation
+
+WO-005 presents this capability in the unified Meeting Intelligence workspace
+and aggregate read. Its individual API, strict schema, durable job/artefact,
+retry and transcript-grounding rules are unchanged. See
+[Unified Meeting Intelligence](unified-meeting-intelligence.md).

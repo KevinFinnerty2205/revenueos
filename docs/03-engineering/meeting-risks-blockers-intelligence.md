@@ -183,3 +183,9 @@ planning or risk editing; prompts/schemas remain code-deployed; the mock is
 deliberately narrow; OpenAI sends content externally when selected; cost uses
 the current integer project convention; historical transcript bodies are not
 retained; and production customer data remains prohibited.
+## Unified workspace navigation
+
+WO-005 presents this capability in the unified Meeting Intelligence workspace
+with explicit text severity labels. Its individual API, schema, persistence,
+retry and transcript-grounding rules are unchanged, and it remains excluded from
+Follow-up Email. See [Unified Meeting Intelligence](unified-meeting-intelligence.md).

@@ -41,6 +41,16 @@ from revenueos.ai_follow_up_email import (
     build_follow_up_email_source,
 )
 from revenueos.ai_lifecycle import prepare_lifecycle_transition
+from revenueos.ai_prompt_registry import (
+    ACTION_ITEMS_PROMPT_KEY,
+    ACTION_ITEMS_PROMPT_VERSION,
+    DECISIONS_PROMPT_KEY,
+    DECISIONS_PROMPT_VERSION,
+    EXECUTIVE_SUMMARY_PROMPT_KEY,
+    EXECUTIVE_SUMMARY_PROMPT_VERSION,
+    OPEN_QUESTIONS_PROMPT_KEY,
+    OPEN_QUESTIONS_PROMPT_VERSION,
+)
 from revenueos.ai_repositories import AIArtifactRepository, AIJobRepository
 from revenueos.ai_services import AIArtifactService
 from revenueos.ai_worker_repositories import AIWorkerRepository
@@ -731,10 +741,29 @@ class AIWorkerService:
             AIArtifactType.ACTION_ITEMS.value: ACTION_ITEMS_SCHEMA_VERSION,
             AIArtifactType.OPEN_QUESTIONS.value: OPEN_QUESTIONS_SCHEMA_VERSION,
         }
+        expected_prompt_versions = {
+            AIArtifactType.EXECUTIVE_SUMMARY.value: (
+                EXECUTIVE_SUMMARY_PROMPT_KEY,
+                EXECUTIVE_SUMMARY_PROMPT_VERSION,
+            ),
+            AIArtifactType.DECISIONS.value: (
+                DECISIONS_PROMPT_KEY,
+                DECISIONS_PROMPT_VERSION,
+            ),
+            AIArtifactType.ACTION_ITEMS.value: (
+                ACTION_ITEMS_PROMPT_KEY,
+                ACTION_ITEMS_PROMPT_VERSION,
+            ),
+            AIArtifactType.OPEN_QUESTIONS.value: (
+                OPEN_QUESTIONS_PROMPT_KEY,
+                OPEN_QUESTIONS_PROMPT_VERSION,
+            ),
+        }
         if any(
             artifact.transcript_id != job.transcript_id
             or artifact.transcript_version != job.transcript_version
             or artifact.schema_version != expected_schema_versions[artifact_type]
+            or (artifact.prompt_key, artifact.prompt_version) != expected_prompt_versions[artifact_type]
             for artifact_type, artifact in artifacts.items()
         ):
             raise WorkerExecutionError(

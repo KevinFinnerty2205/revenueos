@@ -45,6 +45,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Meeting Risks & Blockers intelligence](03-engineering/meeting-risks-blockers-intelligence.md)
 - [Meeting Open Questions intelligence](03-engineering/meeting-open-questions-intelligence.md)
 - [Follow-up Email Composer](03-engineering/follow-up-email-composer.md)
+- [Unified Meeting Intelligence workspace](03-engineering/unified-meeting-intelligence.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -88,6 +89,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-004C4: Meeting Risks & Blockers Intelligence](07-sprints/wo-004c4-meeting-risks-blockers.md)
 - [WO-004C5: Meeting Open Questions Intelligence](07-sprints/wo-004c5-meeting-open-questions.md)
 - [WO-004C6: Follow-up Email Composer](07-sprints/wo-004c6-follow-up-email-composer.md)
+- [WO-005: Unified Meeting Intelligence workspace](07-sprints/wo-005-unified-meeting-intelligence.md)
 
 ## 08 — Decision records
 
@@ -107,22 +109,23 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0014: current-transcript Risks & Blockers execution](08-decisions/0014-current-transcript-risks-blockers.md)
 - [ADR 0015: current-transcript Open Questions execution](08-decisions/0015-current-transcript-open-questions.md)
 - [ADR 0016: compose customer content from validated intelligence only](08-decisions/0016-validated-intelligence-composers.md)
+- [ADR 0017: derive a unified Meeting Intelligence workspace](08-decisions/0017-derived-meeting-intelligence-workspace.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 are complete. An
-authenticated user can independently queue and view a strict Executive Summary,
-Decisions, Action Items, Risks & Blockers and Open Questions result from the
-current transcript through the durable worker. The user can then compose a
-strict Follow-up Email from the four validated customer-safe artefacts
-(excluding Risks & Blockers), choose one of three tones, copy plain text and
-regenerate. Mock remains the deterministic no-network default; the optional
-server-side OpenAI Responses API provider supports all six capabilities without
-changing the API/UI. Transcript-grounded capabilities send the selected
-transcript to OpenAI when configured; the Follow-up Email Composer sends only
-the validated artefact projection and never queries or transmits transcript
-text. There is no send integration, question answering, provider UI, recording,
-media storage, transcription, external integration, production Clerk
-verification, billing or mobile application. Assistant remains a placeholder.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005 are complete.
+An authenticated user can generate and read Executive Summary, Key Decisions,
+Action Items, Risks & Blockers, Open Questions and Follow-up Email through one
+derived Meeting Intelligence workspace while each capability remains independently
+persisted and traceable. One aggregate read and polling flow exposes safe overall
+state and progress; one idempotent action creates only missing work and queues the
+composer after its four validated customer-safe artefacts are ready. Mock remains
+the deterministic no-network default; optional server-side OpenAI supports all six
+capabilities. Transcript-grounded extractors send the selected transcript to
+OpenAI only when configured; Follow-up Email sends only its validated artefact
+projection and never queries or transmits transcript text. There is no send,
+editing, approval, question answering, provider UI, recording, media storage,
+transcription, external integration, production Clerk verification, billing or
+mobile application. Assistant remains a placeholder.
 
 Do not use production customer data. Production identity, consent evidence, retention/export/erasure and operational controls are incomplete. Future sprints remain unauthorised until a separate work order is approved.

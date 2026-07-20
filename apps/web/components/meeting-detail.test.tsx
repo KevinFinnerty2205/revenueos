@@ -46,6 +46,33 @@ describe("MeetingDetail", () => {
       }
       if (url.endsWith("/participants"))
         return Promise.resolve(jsonResponse([]));
+      if (url.endsWith("/intelligence"))
+        return Promise.resolve(
+          jsonResponse({
+            overallState: "unavailable",
+            generationAvailable: false,
+            retryAvailable: false,
+            lastUpdatedAt: null,
+            progress: {
+              ready: 0,
+              queued: 0,
+              processing: 0,
+              failed: 0,
+              notGenerated: 6,
+              total: 6,
+              summary: "0 of 6 ready",
+            },
+            executiveSummary: unavailableCapability(),
+            decisions: unavailableCapability(),
+            actionItems: unavailableCapability(),
+            risksBlockers: unavailableCapability(),
+            openQuestions: unavailableCapability(),
+            followUpEmail: {
+              ...unavailableCapability(),
+              tone: null,
+            },
+          }),
+        );
       if (url.endsWith("/intelligence/executive-summary"))
         return Promise.resolve(
           jsonResponse({
@@ -174,3 +201,14 @@ describe("MeetingDetail", () => {
     );
   });
 });
+
+function unavailableCapability() {
+  return {
+    state: "unavailable",
+    generationAvailable: false,
+    message: "Add a usable transcript first.",
+    generatedAt: null,
+    emptyResult: false,
+    content: null,
+  };
+}

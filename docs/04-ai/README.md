@@ -31,7 +31,10 @@ the [Meeting Action Items guide](../03-engineering/meeting-action-items-intellig
 and [Meeting Risks & Blockers guide](../03-engineering/meeting-risks-blockers-intelligence.md)
 and [Meeting Open Questions guide](../03-engineering/meeting-open-questions-intelligence.md),
 and the [Follow-up Email Composer guide](../03-engineering/follow-up-email-composer.md)
-document the current Meeting Intelligence capabilities.
+document the current Meeting Intelligence capabilities. The
+[Unified Meeting Intelligence guide](../03-engineering/unified-meeting-intelligence.md)
+documents their aggregate product state and orchestration without changing
+prompt, schema, provider or artefact boundaries.
 
 Future AI work must use the typed provider port, schema validation, authorised
 minimum evidence, content-redacted logs, explicit model/prompt versions and

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.ai_services import AIJobService
 from revenueos.database import get_db, set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.intelligence_workspace import MeetingIntelligenceService
 from revenueos.meeting_repositories import MeetingRepository
 from revenueos.meeting_services import MeetingService, ParticipantService, TranscriptService
 from revenueos.tenant import TenantContext, get_tenant_context
@@ -57,3 +58,11 @@ async def get_ai_job_service(
 ) -> AsyncIterator[AIJobService]:
     await _authorise_meeting_context(session, tenant)
     yield AIJobService(session, tenant)
+
+
+async def get_meeting_intelligence_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+) -> AsyncIterator[MeetingIntelligenceService]:
+    await _authorise_meeting_context(session, tenant)
+    yield MeetingIntelligenceService(session, tenant)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -157,6 +158,27 @@ class AIJobRepository:
         )
         return PageResult(items=list(result.all()), total=int(total or 0))
 
+    async def list_intelligence_jobs_for_meeting(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+        transcript_version: int,
+        job_types: Sequence[str],
+    ) -> list[AIJob]:
+        """Load current-version capability jobs in one tenant-scoped query."""
+
+        result = await self.session.scalars(
+            select(AIJob)
+            .where(
+                AIJob.organisation_id == organisation_id,
+                AIJob.meeting_id == meeting_id,
+                AIJob.transcript_version == transcript_version,
+                AIJob.job_type.in_(job_types),
+            )
+            .order_by(AIJob.created_at.desc(), AIJob.id.desc())
+        )
+        return list(result.all())
+
     async def find_idempotent_job(
         self,
         organisation_id: UUID,
@@ -261,7 +283,7 @@ class AIJobRepository:
         )
         return result.scalar_one_or_none()
 
-    async def count_follow_up_email_jobs(
+    async def count_terminal_follow_up_email_jobs(
         self,
         organisation_id: UUID,
         meeting_id: UUID,
@@ -284,6 +306,7 @@ class AIJobRepository:
                 AIJob.prompt_version == prompt_version,
                 AIJob.schema_version == schema_version,
                 AIJob.composition_tone == composition_tone,
+                AIJob.status.in_(("completed", "failed", "cancelled")),
             )
         )
         return int(count or 0)
@@ -432,6 +455,33 @@ class AIArtifactRepository:
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def list_intelligence_artifacts_for_jobs(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+        transcript_version: int,
+        job_ids: Sequence[UUID],
+    ) -> list[AIArtifact]:
+        """Load artefacts for aggregate capability state without N+1 reads."""
+
+        if not job_ids:
+            return []
+        result = await self.session.scalars(
+            select(AIArtifact)
+            .where(
+                AIArtifact.organisation_id == organisation_id,
+                AIArtifact.meeting_id == meeting_id,
+                AIArtifact.transcript_version == transcript_version,
+                AIArtifact.job_id.in_(job_ids),
+            )
+            .order_by(
+                AIArtifact.job_id.asc(),
+                AIArtifact.artifact_version.desc(),
+                AIArtifact.id.desc(),
+            )
+        )
+        return list(result.all())
 
     async def get_latest_follow_up_email_source_version(
         self,

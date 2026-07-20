@@ -76,12 +76,19 @@ bounded transcript only when selected.
 
 WO-004C6 Follow-up Email requests load only same-tenant validated Executive
 Summary, Decisions, Action Items and Open Questions artefacts. The request and
-worker use transcript audit version metadata to prove currency but never query
-transcript content. Risks & Blockers are excluded, and the typed provider input
+worker use transcript audit version metadata plus source prompt/schema versions
+to prove currency but never query transcript content. Risks & Blockers are excluded, and the typed provider input
 has no transcript field. Email/source text is excluded from logs/audits; only
 tone, counts and ordinary trace metadata are allowed. A post-provider grounding
 check rejects changed or invented facts before persistence. OpenAI receives
 only the validated customer-safe projection and tone when selected.
+
+WO-005 aggregate read and generation routes inherit the same verified meeting
+membership dependency, explicit organisation predicates and forced RLS. The
+aggregator is not privileged and returns only product-safe state/content for the
+current transcript. Orchestration logs only overall/capability counts and
+created/reused metadata; it never logs generated content. Cross-tenant aggregate
+read and generation return not found.
 
 WO-004C1A changes only provider execution after the tenant-bound source
 transaction closes. OpenAI selection does not receive a client-supplied tenant

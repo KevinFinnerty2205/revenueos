@@ -143,6 +143,31 @@ export type FollowUpEmailState =
   | "failed"
   | "cancelled";
 export type FollowUpEmailTone = "professional" | "friendly" | "executive";
+export type MeetingIntelligenceCapabilityName =
+  | "executive_summary"
+  | "decisions"
+  | "action_items"
+  | "risks_blockers"
+  | "open_questions"
+  | "follow_up_email";
+export type MeetingIntelligenceCapabilityState =
+  | "unavailable"
+  | "not_generated"
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type MeetingIntelligenceOverallState =
+  | "unavailable"
+  | "not_started"
+  | "partially_generated"
+  | "queued"
+  | "processing"
+  | "completed"
+  | "completed_with_empty_results"
+  | "partially_failed"
+  | "failed";
 
 export interface EntityPage<T> {
   items: T[];
@@ -455,4 +480,48 @@ export interface FollowUpEmailRequestResponse {
   requestedAt: string;
   startedAt: string | null;
   completedAt: string | null;
+}
+
+export interface MeetingIntelligenceCapability<TContent> {
+  state: MeetingIntelligenceCapabilityState;
+  generationAvailable: boolean;
+  message: string | null;
+  generatedAt: string | null;
+  emptyResult: boolean;
+  content: TContent | null;
+}
+
+export interface MeetingIntelligenceFollowUpEmailCapability
+  extends MeetingIntelligenceCapability<FollowUpEmailContent> {
+  tone: FollowUpEmailTone | null;
+}
+
+export interface MeetingIntelligenceProgress {
+  ready: number;
+  queued: number;
+  processing: number;
+  failed: number;
+  notGenerated: number;
+  total: 6;
+  summary: string;
+}
+
+export interface MeetingIntelligenceResponse {
+  overallState: MeetingIntelligenceOverallState;
+  generationAvailable: boolean;
+  retryAvailable: boolean;
+  lastUpdatedAt: string | null;
+  progress: MeetingIntelligenceProgress;
+  executiveSummary: MeetingIntelligenceCapability<ExecutiveSummaryContent>;
+  decisions: MeetingIntelligenceCapability<DecisionsContent>;
+  actionItems: MeetingIntelligenceCapability<ActionItemsContent>;
+  risksBlockers: MeetingIntelligenceCapability<RisksBlockersContent>;
+  openQuestions: MeetingIntelligenceCapability<OpenQuestionsContent>;
+  followUpEmail: MeetingIntelligenceFollowUpEmailCapability;
+}
+
+export interface MeetingIntelligenceGenerationResponse
+  extends MeetingIntelligenceResponse {
+  createdCapabilities: MeetingIntelligenceCapabilityName[];
+  reusedCapabilities: MeetingIntelligenceCapabilityName[];
 }
