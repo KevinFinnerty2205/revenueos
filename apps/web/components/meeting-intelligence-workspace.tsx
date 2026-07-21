@@ -14,6 +14,7 @@ import type {
   MeetingIntelligenceOverallState,
   MeetingIntelligenceResponse,
   OpenQuestionsContent,
+  ObjectionsCompetitiveSignalsContent,
   RisksBlockersContent,
 } from "@revenueos/shared";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -27,6 +28,7 @@ const tones: FollowUpEmailTone[] = ["professional", "friendly", "executive"];
 const capabilityEndpoints: Record<MeetingIntelligenceCapabilityName, string> = {
   executive_summary: "executive-summary",
   buying_signals: "buying-signals",
+  objections_competitive_signals: "objections-competitive-signals",
   decisions: "decisions",
   action_items: "action-items",
   risks_blockers: "risks-blockers",
@@ -291,8 +293,8 @@ export function MeetingIntelligenceWorkspace({
             </div>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
               Turn the current meeting transcript into a clear summary, buying
-              signals, decisions, actions, risks, open questions and a
-              customer-ready follow-up.
+              signals, objections, competitive context, decisions, actions,
+              risks, open questions and a customer-ready follow-up.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <p role="status" aria-live="polite" className="font-bold">
@@ -361,6 +363,21 @@ export function MeetingIntelligenceWorkspace({
         onRequest={() => void requestCapability("buying_signals")}
       >
         <BuyingSignalsView content={workspace.buyingSignals.content} />
+      </CapabilitySection>
+
+      <CapabilitySection
+        id="objections-competitive-signals"
+        title="Objections & Competitive Signals"
+        capability={workspace.objectionsCompetitiveSignals}
+        busy={capabilityBusy === "objections_competitive_signals"}
+        notGeneratedMessage="Objections and competitive signals have not been analysed for this meeting."
+        onRequest={() =>
+          void requestCapability("objections_competitive_signals")
+        }
+      >
+        <ObjectionsCompetitiveSignalsView
+          content={workspace.objectionsCompetitiveSignals.content}
+        />
       </CapabilitySection>
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
@@ -638,6 +655,122 @@ function BuyingSignalsView({
             </li>
           ))}
         </ol>
+      )}
+    </div>
+  );
+}
+
+function ObjectionsCompetitiveSignalsView({
+  content,
+}: {
+  content: ObjectionsCompetitiveSignalsContent | null;
+}) {
+  if (!content) return <MissingContent />;
+  const empty =
+    content.objections.length === 0 && content.competitors.length === 0;
+  return (
+    <div className="mt-5">
+      <dl className="grid gap-4 sm:grid-cols-2">
+        <Detail label="Current meeting objection pressure">
+          {humanise(content.overallObjectionPressure)}
+        </Detail>
+      </dl>
+      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          Summary
+        </h4>
+        <p className="mt-2 text-sm leading-6 text-slate-800">
+          {content.summary}
+        </p>
+      </div>
+      {empty ? (
+        content.summary ===
+        "No objections or competitive signals were identified in this meeting." ? null : (
+          <EmptyResult>
+            No objections or competitive signals were identified in this
+            meeting.
+          </EmptyResult>
+        )
+      ) : (
+        <div className="mt-6 grid gap-7 xl:grid-cols-2">
+          <section aria-labelledby="meeting-objections-heading">
+            <h4
+              id="meeting-objections-heading"
+              className="text-sm font-bold text-slate-950"
+            >
+              Objections
+            </h4>
+            {content.objections.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-600">
+                No objections were identified.
+              </p>
+            ) : (
+              <ol className="mt-2 divide-y divide-slate-100">
+                {content.objections.map((item, index) => (
+                  <li
+                    key={`${index}-${item.objection}`}
+                    className="py-5 first:pt-3 last:pb-0"
+                  >
+                    <p className="text-sm font-bold leading-6 text-slate-950">
+                      {item.objection}
+                    </p>
+                    <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Detail label="Category">
+                        {humanise(item.category)}
+                      </Detail>
+                      <Detail label="Status">{humanise(item.status)}</Detail>
+                      <Detail label="Strength">
+                        {humanise(item.strength)}
+                      </Detail>
+                      {item.owner ? (
+                        <Detail label="Owner">{item.owner}</Detail>
+                      ) : null}
+                      <Detail label="Confidence">
+                        {formatConfidence(item.confidence)}
+                      </Detail>
+                    </dl>
+                    <Evidence>{item.evidence}</Evidence>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+          <section aria-labelledby="meeting-competitors-heading">
+            <h4
+              id="meeting-competitors-heading"
+              className="text-sm font-bold text-slate-950"
+            >
+              Competitors
+            </h4>
+            {content.competitors.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-600">
+                No competitors were identified.
+              </p>
+            ) : (
+              <ol className="mt-2 divide-y divide-slate-100">
+                {content.competitors.map((item, index) => (
+                  <li
+                    key={`${index}-${item.name}`}
+                    className="py-5 first:pt-3 last:pb-0"
+                  >
+                    <p className="text-sm font-bold leading-6 text-slate-950">
+                      {item.name}
+                    </p>
+                    <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Detail label="Position">
+                        {humanise(item.position)}
+                      </Detail>
+                      <Detail label="Confidence">
+                        {formatConfidence(item.confidence)}
+                      </Detail>
+                    </dl>
+                    <Evidence>{item.evidence}</Evidence>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </div>
       )}
     </div>
   );

@@ -10,6 +10,7 @@ from revenueos.ai_contracts import (
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
+    ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
 )
@@ -21,6 +22,7 @@ from revenueos.ai_services import (
     DecisionsStateResult,
     ExecutiveSummaryStateResult,
     FollowUpEmailStateResult,
+    ObjectionsCompetitiveSignalsStateResult,
     OpenQuestionsStateResult,
     RisksBlockersStateResult,
 )
@@ -52,6 +54,10 @@ from revenueos.intelligence_contracts import (
     MeetingIntelligenceGenerationResponse,
     MeetingIntelligenceOverallState,
     MeetingIntelligenceResponse,
+    ObjectionsCompetitiveSignalsContentResponse,
+    ObjectionsCompetitiveSignalsRequestResponse,
+    ObjectionsCompetitiveSignalsResponse,
+    ObjectionsCompetitiveSignalsState,
     OpenQuestionsContentResponse,
     OpenQuestionsRequestResponse,
     OpenQuestionsResponse,
@@ -238,6 +244,33 @@ async def get_buying_signals(
     service: Intelligence,
 ) -> BuyingSignalsResponse:
     return _buying_signals_response(await service.get_buying_signals_state(meeting_id))
+
+
+@router.post(
+    "/{meeting_id}/intelligence/objections-competitive-signals",
+    response_model=ObjectionsCompetitiveSignalsRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_objections_competitive_signals(
+    meeting_id: UUID,
+    response: Response,
+    service: Intelligence,
+) -> ObjectionsCompetitiveSignalsRequestResponse:
+    result = await service.request_objections_competitive_signals(meeting_id)
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return _objections_competitive_signals_request_response(result)
+
+
+@router.get(
+    "/{meeting_id}/intelligence/objections-competitive-signals",
+    response_model=ObjectionsCompetitiveSignalsResponse,
+)
+async def get_objections_competitive_signals(
+    meeting_id: UUID,
+    service: Intelligence,
+) -> ObjectionsCompetitiveSignalsResponse:
+    return _objections_competitive_signals_response(await service.get_objections_competitive_signals_state(meeting_id))
 
 
 @router.post(
@@ -629,6 +662,68 @@ def _buying_signals_response(
         ),
         safe_message=safe_message,
         buying_signals=content,
+    )
+
+
+def _objections_competitive_signals_request_response(
+    result: AIJobRequestResult,
+) -> ObjectionsCompetitiveSignalsRequestResponse:
+    job = result.job
+    job_status = cast(
+        Literal["queued", "running", "completed"] | None,
+        {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+        }.get(job.status),
+    )
+    if job_status is None:
+        raise PublicAPIError(
+            "invalid_intelligence_state",
+            "The Objections & Competitive Signals request could not be represented safely.",
+            500,
+        )
+    return ObjectionsCompetitiveSignalsRequestResponse(
+        job_id=job.id,
+        status=job_status,
+        created=result.created,
+        transcript_version=job.transcript_version,
+        requested_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+def _objections_competitive_signals_response(
+    result: ObjectionsCompetitiveSignalsStateResult,
+) -> ObjectionsCompetitiveSignalsResponse:
+    job = result.job
+    content = None
+    if result.artifact is not None:
+        validated = ObjectionsCompetitiveSignalsArtifactContent.model_validate(result.artifact.content_json)
+        content = ObjectionsCompetitiveSignalsContentResponse.model_validate(validated)
+    safe_message = job.last_error_message_safe if job is not None and result.state in {"failed", "cancelled"} else None
+    if result.state == "cancelled" and safe_message is None:
+        safe_message = "Objections & Competitive Signals generation was cancelled."
+    if result.state == "failed" and safe_message is None:
+        safe_message = "Objections & Competitive Signals generation could not be completed."
+    return ObjectionsCompetitiveSignalsResponse(
+        state=cast(ObjectionsCompetitiveSignalsState, result.state),
+        generation_available=result.generation_available,
+        unavailable_reason=result.unavailable_reason,
+        job_id=job.id if job is not None else None,
+        transcript_version=job.transcript_version if job is not None else None,
+        requested_at=job.created_at if job is not None else None,
+        started_at=job.started_at if job is not None else None,
+        generated_at=(
+            result.artifact.created_at
+            if result.artifact is not None
+            else job.completed_at
+            if job is not None and result.state == "completed"
+            else None
+        ),
+        safe_message=safe_message,
+        objections_competitive_signals=content,
     )
 
 

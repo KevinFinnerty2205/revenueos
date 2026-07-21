@@ -15,7 +15,9 @@ Decisions, Action Items and Open Questions artefacts plus an explicit tone. It
 never reads or sends the transcript and deliberately excludes Risks & Blockers.
 WO-006A adds transcript-grounded Buying Signals and a qualitative current-
 meeting Deal Momentum assessment with explicit evidence and uncertainty. It
-does not estimate win probability, forecast or score the deal.
+does not estimate win probability, forecast or score the deal. WO-006B adds
+transcript-grounded objections, handling state and competitor-position signals,
+plus qualitative current-meeting objection pressure without predictive scoring.
 No later intelligence capability, send integration, Anthropic/Gemini provider,
 embedding, tool use or agent is active.
 
@@ -34,6 +36,7 @@ The [Executive Summary guide](../03-engineering/executive-summary-intelligence.m
 [Meeting Risks & Blockers guide](../03-engineering/meeting-risks-blockers-intelligence.md),
 [Meeting Open Questions guide](../03-engineering/meeting-open-questions-intelligence.md),
 the [Buying Signals & Deal Momentum guide](../03-engineering/buying-signals-intelligence.md),
+the [Objections & Competitive Signals guide](../03-engineering/objections-competitive-signals-intelligence.md),
 and [Follow-up Email Composer guide](../03-engineering/follow-up-email-composer.md)
 document the current Meeting Intelligence capabilities. The
 [Unified Meeting Intelligence guide](../03-engineering/unified-meeting-intelligence.md)
@@ -44,7 +47,7 @@ Future AI work must use the typed provider port, schema validation, authorised
 minimum evidence, content-redacted logs, explicit model/prompt versions and
 human approval for consequential output.
 
-For the six transcript-grounded capabilities, OpenAI selection sends the
+For the seven transcript-grounded capabilities, OpenAI selection sends the
 bounded selected meeting transcript to OpenAI. For Follow-up Email, it sends
 only the validated customer-safe four-artefact projection and tone; the
 composer never transmits transcript text. Production customer data remains

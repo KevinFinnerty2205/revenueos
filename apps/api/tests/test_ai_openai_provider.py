@@ -22,6 +22,7 @@ from revenueos.ai_contracts import (
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
+    ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
 )
@@ -36,6 +37,7 @@ from revenueos.ai_provider_contracts import (
     ExecutiveSummaryProviderInput,
     FollowUpEmailProviderInput,
     InfrastructureTestProviderInput,
+    ObjectionsCompetitiveSignalsProviderInput,
     OpenQuestionsProviderInput,
     ProviderMessage,
     ProviderOutputSchema,
@@ -515,6 +517,60 @@ def test_openai_accepts_buying_signals_with_registry_derived_strict_schema() -> 
     assert output_format["name"] == "buying_signals"
     assert output_format["strict"] is True
     assert output_format["schema"] == BuyingSignalsArtifactContent.model_json_schema(mode="validation")
+
+
+def test_openai_accepts_objections_with_registry_derived_strict_schema() -> None:
+    output = {
+        "objections": [
+            {
+                "objection": "The customer said the proposed price is too high.",
+                "category": "pricing",
+                "status": "unresolved",
+                "strength": "strong",
+                "owner": "Customer procurement",
+                "confidence": 0.94,
+                "evidence": "The customer said pricing would prevent the purchase.",
+            }
+        ],
+        "competitors": [],
+        "overall_objection_pressure": "high",
+        "summary": "Pricing resistance creates high current meeting objection pressure.",
+    }
+    response_create = _ResponseCreate(response=_response(output_text=json.dumps(output)))
+    request = ProviderRequest(
+        request_id=uuid.uuid4(),
+        organisation_id=uuid.uuid4(),
+        job_id=uuid.uuid4(),
+        job_type="objections_competitive_signals",
+        model_identifier=MODEL,
+        input_payload=ObjectionsCompetitiveSignalsProviderInput(
+            messages=(
+                ProviderMessage(
+                    role="system",
+                    content="Return only Objections & Competitive Signals fields.",
+                ),
+                ProviderMessage(role="user", content="Use the supplied untrusted transcript."),
+            )
+        ),
+        expected_schema_version=1,
+        output_schema=ProviderOutputSchema(
+            schema_key="objections_competitive_signals",
+            schema_version=1,
+            json_schema=ObjectionsCompetitiveSignalsArtifactContent.model_json_schema(mode="validation"),
+        ),
+        timeout_seconds=30,
+    )
+
+    response = asyncio.run(_provider(response_create).execute(request))
+
+    assert response.output_payload == json.dumps(output)
+    assert len(response_create.calls) == 1
+    text = response_create.calls[0]["text"]
+    assert isinstance(text, dict)
+    output_format = text["format"]
+    assert output_format["name"] == "objections_competitive_signals"
+    assert output_format["strict"] is True
+    assert output_format["schema"] == (ObjectionsCompetitiveSignalsArtifactContent.model_json_schema(mode="validation"))
 
 
 def test_openai_accepts_follow_up_email_without_a_transcript_request() -> None:

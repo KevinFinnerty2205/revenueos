@@ -110,11 +110,11 @@ There is at most one transcript row per meeting. Plain text is required and limi
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all seven current-version capability states and content through one product-safe view |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all eight current-version capability states and content through one product-safe view |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/generate` | Create or reuse missing extraction work and conditionally queue Follow-up Email |
 
 GET returns a derived overall state, generation/retry availability, last activity
-time, deterministic progress counts and the seven ordered capability views. Valid
+time, deterministic progress counts and the eight ordered capability views. Valid
 empty lists are completed with `emptyResult=true`. The response excludes job and
 artefact IDs, transcript/prompts, provider/model and schema configuration, worker
 fields, internal error codes and raw errors.
@@ -124,7 +124,7 @@ Later polling reads may include the optional safe query metadata
 validated enums used only for metadata-only transition and polling lifecycle
 logs; they do not alter the aggregate result.
 
-POST reuses the six existing extraction request services and creates only
+POST reuses the seven extraction request services and creates only
 missing/failed/cancelled work for the current transcript. It queues Follow-up
 Email only after matching Executive Summary, Decisions, Action Items and Open
 Questions artefacts are complete. New work returns `202`; complete reuse returns
@@ -172,6 +172,26 @@ normalised signals, qualitative current-meeting momentum, a grounded summary
 and evidence confidence. It contains no close probability, forecast or deal
 score, and excludes all internal/provider/worker/prompt/transcript fields. See
 [Buying Signals and Deal Momentum intelligence](buying-signals-intelligence.md).
+
+## Objections & Competitive Signals intelligence
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/objections-competitive-signals` | Queue or return equivalent objection/competitive-signal generation |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence/objections-competitive-signals` | Read current safe state/result |
+
+POST requires trusted tenant access and the non-empty current transcript, capped
+at 50,000 trimmed characters without truncation. New asynchronous work returns
+`202`; an equivalent pending, running or completed prompt/schema v1 job returns
+`200`. Failed/cancelled work follows the established ordinal retry rule, while a
+transcript correction permits a new version-bound job.
+
+GET returns the established lifecycle state, generation availability, safe
+timestamps/message and validated `objectionsCompetitiveSignals` content. Empty
+objection and competitor lists are successful. The result contains qualitative
+current-meeting objection pressure, not close/loss probability, a forecast or a
+numeric score, and excludes internal/provider/worker/prompt/transcript fields.
+See [Objections & Competitive Signals intelligence](objections-competitive-signals-intelligence.md).
 
 ## Decisions intelligence
 

@@ -95,6 +95,7 @@ class AIJobType(StrEnum):
     RISKS_BLOCKERS = "risks_blockers"
     OPEN_QUESTIONS = "open_questions"
     BUYING_SIGNALS = "buying_signals"
+    OBJECTIONS_COMPETITIVE_SIGNALS = "objections_competitive_signals"
     FOLLOW_UP_EMAIL = "follow_up_email"
 
 
@@ -106,6 +107,7 @@ class AIArtifactType(StrEnum):
     RISKS_BLOCKERS = "risks_blockers"
     OPEN_QUESTIONS = "open_questions"
     BUYING_SIGNALS = "buying_signals"
+    OBJECTIONS_COMPETITIVE_SIGNALS = "objections_competitive_signals"
     FOLLOW_UP_EMAIL = "follow_up_email"
 
 
@@ -161,6 +163,57 @@ class DealMomentum(StrEnum):
     NEUTRAL = "neutral"
     NEGATIVE = "negative"
     STRONG_NEGATIVE = "strong_negative"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+
+
+class ObjectionCategory(StrEnum):
+    PRICING = "pricing"
+    BUDGET = "budget"
+    COMMERCIAL = "commercial"
+    LEGAL = "legal"
+    SECURITY = "security"
+    PRIVACY = "privacy"
+    TECHNICAL = "technical"
+    INTEGRATION = "integration"
+    IMPLEMENTATION = "implementation"
+    RESOURCING = "resourcing"
+    PROCUREMENT = "procurement"
+    TIMELINE = "timeline"
+    PRODUCT_FIT = "product_fit"
+    STAKEHOLDER = "stakeholder"
+    CHANGE_MANAGEMENT = "change_management"
+    COMPETITOR = "competitor"
+    TRUST = "trust"
+    OTHER = "other"
+
+
+class ObjectionStatus(StrEnum):
+    RESOLVED = "resolved"
+    PARTIALLY_ADDRESSED = "partially_addressed"
+    DEFERRED = "deferred"
+    UNRESOLVED = "unresolved"
+
+
+class ObjectionStrength(StrEnum):
+    STRONG = "strong"
+    MODERATE = "moderate"
+    WEAK = "weak"
+
+
+class CompetitorPosition(StrEnum):
+    STRONGER = "stronger"
+    WEAKER = "weaker"
+    NEUTRAL = "neutral"
+    PRESENT = "present"
+    UNCLEAR = "unclear"
+
+
+class OverallObjectionPressure(StrEnum):
+    NONE = "none"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    SEVERE = "severe"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
 
 

@@ -25,6 +25,8 @@ from revenueos.ai_contracts import (
     FOLLOW_UP_EMAIL_SCHEMA_VERSION,
     IDEMPOTENCY_KEY_MAX_LENGTH,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
+    OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     OPEN_QUESTIONS_SCHEMA_VERSION,
     OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_SCHEMA_VERSION,
@@ -36,6 +38,7 @@ from revenueos.ai_contracts import (
     FollowUpEmailArtifactContent,
     FollowUpEmailSource,
     InfrastructureTestArtifactContent,
+    ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
 )
@@ -55,6 +58,8 @@ from revenueos.ai_prompt_registry import (
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
     FOLLOW_UP_EMAIL_PROMPT_KEY,
     FOLLOW_UP_EMAIL_PROMPT_VERSION,
+    OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
+    OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
     OPEN_QUESTIONS_PROMPT_KEY,
     OPEN_QUESTIONS_PROMPT_VERSION,
     RISKS_BLOCKERS_PROMPT_KEY,
@@ -134,6 +139,15 @@ class OpenQuestionsStateResult:
 
 @dataclass(frozen=True)
 class BuyingSignalsStateResult:
+    state: str
+    generation_available: bool
+    unavailable_reason: str | None
+    job: AIJob | None
+    artifact: AIArtifact | None
+
+
+@dataclass(frozen=True)
+class ObjectionsCompetitiveSignalsStateResult:
     state: str
     generation_available: bool
     unavailable_reason: str | None
@@ -1628,6 +1642,236 @@ class AIJobService(_AIDomainService):
         )
         raise PublicAPIError(code, reason, 422)
 
+    async def request_objections_competitive_signals(
+        self,
+        meeting_id: UUID,
+    ) -> AIJobRequestResult:
+        logger.info(
+            "objections_competitive_signals_requested",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "meeting_id": str(meeting_id),
+                "job_type": AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
+            },
+        )
+        meeting = await self.repository.lock_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        transcript = await self.repository.get_transcript_for_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        self._require_usable_objections_competitive_signals_transcript(transcript)
+        assert transcript is not None
+        transcript_version = transcript.version
+
+        existing = await self._latest_objections_competitive_signals_job(
+            meeting_id,
+            transcript.version,
+        )
+        if existing is not None and existing.status in {
+            AIJobStatus.PENDING.value,
+            AIJobStatus.RUNNING.value,
+            AIJobStatus.COMPLETED.value,
+        }:
+            await self._audit_intelligence_request(existing)
+            logger.info(
+                "objections_competitive_signals_existing_job_returned",
+                extra={**self._job_log_context(existing), "existing_job_reused": True},
+            )
+            return AIJobRequestResult(job=existing, created=False)
+
+        retry_number = (
+            await self.repository.count_equivalent_jobs(
+                self.tenant.organisation_id,
+                meeting_id,
+                transcript.version,
+                job_type=AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
+                prompt_key=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
+                prompt_version=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
+                schema_version=OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
+            )
+            + 1
+        )
+        idempotency_key = (
+            "objections_competitive_signals:"
+            f"p{OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION}:"
+            f"s{OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION}:r{retry_number}"
+        )
+        job = AIJob(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript.id,
+            transcript_version=transcript.version,
+            job_type=AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
+            status=AIJobStatus.PENDING.value,
+            prompt_key=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
+            prompt_version=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
+            schema_version=OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
+            idempotency_key=idempotency_key,
+            requested_by_user_id=self.tenant.user_id,
+        )
+        self.repository.create_job(job)
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
+        try:
+            await self.repository.flush()
+            await self.repository.refresh(job)
+            await self.repository.commit()
+        except IntegrityError as exc:
+            await self.repository.rollback()
+            await set_tenant_database_context(
+                self.repository.session,
+                self.tenant.organisation_id,
+            )
+            concurrent = await self._latest_objections_competitive_signals_job(
+                meeting_id,
+                transcript_version,
+            )
+            if concurrent is None or concurrent.status not in {
+                AIJobStatus.PENDING.value,
+                AIJobStatus.RUNNING.value,
+                AIJobStatus.COMPLETED.value,
+            }:
+                raise PublicAPIError(
+                    "persistence_conflict",
+                    "The Objections & Competitive Signals request conflicts with existing work.",
+                    409,
+                ) from exc
+            await self._audit_intelligence_request(concurrent)
+            logger.info(
+                "objections_competitive_signals_existing_job_returned",
+                extra={**self._job_log_context(concurrent), "existing_job_reused": True},
+            )
+            return AIJobRequestResult(job=concurrent, created=False)
+        except SQLAlchemyError as exc:
+            await self.repository.rollback()
+            raise PublicAPIError(
+                "internal_persistence_failure",
+                "The Objections & Competitive Signals request could not be queued.",
+                500,
+            ) from exc
+
+        logger.info(
+            "objections_competitive_signals_job_queued",
+            extra=self._job_log_context(job),
+        )
+        return AIJobRequestResult(job=job, created=True)
+
+    async def get_objections_competitive_signals_state(
+        self,
+        meeting_id: UUID,
+    ) -> ObjectionsCompetitiveSignalsStateResult:
+        meeting = await self.repository.get_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        transcript = await self.repository.get_transcript_for_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        unavailable_reason = self._objections_competitive_signals_unavailable_reason(transcript)
+        if unavailable_reason is not None:
+            return ObjectionsCompetitiveSignalsStateResult(
+                state="empty",
+                generation_available=False,
+                unavailable_reason=unavailable_reason,
+                job=None,
+                artifact=None,
+            )
+        assert transcript is not None
+        job = await self._latest_objections_competitive_signals_job(
+            meeting_id,
+            transcript.version,
+        )
+        if job is None:
+            return ObjectionsCompetitiveSignalsStateResult(
+                state="empty",
+                generation_available=True,
+                unavailable_reason=None,
+                job=None,
+                artifact=None,
+            )
+        state = {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+            AIJobStatus.FAILED.value: "failed",
+            AIJobStatus.CANCELLED.value: "cancelled",
+        }[job.status]
+        artifact = (
+            await AIArtifactRepository(self.repository.session).get_latest_artifact_for_job(
+                self.tenant.organisation_id,
+                job.id,
+                AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
+            )
+            if state == "completed"
+            else None
+        )
+        if state == "completed" and artifact is None:
+            state = "failed"
+        return ObjectionsCompetitiveSignalsStateResult(
+            state=state,
+            generation_available=state in {"failed", "cancelled"},
+            unavailable_reason=None,
+            job=job,
+            artifact=artifact,
+        )
+
+    async def _latest_objections_competitive_signals_job(
+        self,
+        meeting_id: UUID,
+        transcript_version: int,
+    ) -> AIJob | None:
+        return await self.repository.get_latest_equivalent_job(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_version,
+            job_type=AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
+            prompt_key=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
+            prompt_version=OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
+            schema_version=OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
+        )
+
+    @staticmethod
+    def _objections_competitive_signals_unavailable_reason(
+        transcript: Transcript | None,
+    ) -> str | None:
+        if transcript is None or not transcript.raw_text.strip():
+            return "Add a usable transcript before generating Objections & Competitive Signals."
+        if len(transcript.raw_text.strip()) > OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH:
+            return "This transcript exceeds the 50,000-character Objections & Competitive Signals processing limit."
+        return None
+
+    @classmethod
+    def _require_usable_objections_competitive_signals_transcript(
+        cls,
+        transcript: Transcript | None,
+    ) -> None:
+        reason = cls._objections_competitive_signals_unavailable_reason(transcript)
+        if reason is None:
+            return
+        code = (
+            "objections_competitive_signals_transcript_required"
+            if transcript is None or not transcript.raw_text.strip()
+            else "objections_competitive_signals_transcript_too_large"
+        )
+        raise PublicAPIError(code, reason, 422)
+
     async def request_follow_up_email(
         self,
         meeting_id: UUID,
@@ -2914,6 +3158,147 @@ class AIArtifactService(_AIDomainService):
         )
         return artifact
 
+    async def prepare_objections_competitive_signals_artifact(
+        self,
+        *,
+        job_id: UUID,
+        meeting_id: UUID,
+        transcript_id: UUID,
+        transcript_version: int,
+        schema_version: int,
+        content: Mapping[str, object],
+    ) -> AIArtifact:
+        """Add validated objection signals and metadata-only audit without committing."""
+
+        if schema_version != OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Objections & Competitive Signals schema version is not supported.",
+                422,
+            )
+        validated_content = self._validate_objections_competitive_signals_content(content)
+        job = await self._get_job(job_id)
+        await self._validate_trace(
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+        )
+        self._validate_artifact_trace(
+            job,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            schema_version=schema_version,
+            expected_job_type=AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS,
+        )
+        artifact_version = await self.artifacts.next_artifact_version(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_id,
+            transcript_version,
+            AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
+        )
+        artifact = AIArtifact(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            job_id=job.id,
+            artifact_type=AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
+            artifact_version=artifact_version,
+            schema_version=schema_version,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            provider_key=job.provider_key,
+            model_name=job.model_name,
+            content_json=validated_content,
+        )
+        self.artifacts.create_artifact(artifact)
+        objection_values = validated_content["objections"]
+        competitor_values = validated_content["competitors"]
+        overall_pressure = validated_content["overall_objection_pressure"]
+        if (
+            not isinstance(objection_values, list)
+            or not isinstance(competitor_values, list)
+            or not isinstance(overall_pressure, str)
+        ):
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Objections & Competitive Signals artefact content is invalid.",
+                422,
+            )
+        category_counts: dict[str, int] = {}
+        status_counts = {status: 0 for status in ("resolved", "partially_addressed", "deferred", "unresolved")}
+        strength_counts = {strength: 0 for strength in ("strong", "moderate", "weak")}
+        for item in objection_values:
+            if not isinstance(item, dict):
+                continue
+            category = item.get("category")
+            status = item.get("status")
+            strength = item.get("strength")
+            if isinstance(category, str):
+                category_counts[category] = category_counts.get(category, 0) + 1
+            if isinstance(status, str) and status in status_counts:
+                status_counts[status] += 1
+            if isinstance(strength, str) and strength in strength_counts:
+                strength_counts[strength] += 1
+        safe_metadata = {
+            "job_id": job.id,
+            "artifact_id": artifact.id,
+            "job_type": job.job_type,
+            "transcript_version": transcript_version,
+            "artifact_type": artifact.artifact_type,
+            "artifact_version": artifact.artifact_version,
+            "schema_version": artifact.schema_version,
+            "prompt_key": artifact.prompt_key,
+            "prompt_version": artifact.prompt_version,
+            "provider_key": artifact.provider_key,
+            "model_name": artifact.model_name,
+            "objection_count": len(objection_values),
+            "competitor_count": len(competitor_values),
+            "category_counts": category_counts,
+            "status_counts": status_counts,
+            "strength_counts": strength_counts,
+            "overall_objection_pressure": overall_pressure,
+            "empty_result": not objection_values and not competitor_values,
+        }
+        self.repository.add_audit_event(
+            self._audit(
+                meeting_id=meeting_id,
+                entity_id=artifact.id,
+                action=MeetingAuditAction.AI_ARTIFACT_CREATED,
+                entity_type=MeetingAuditEntityType.AI_ARTIFACT,
+                transcript_version=transcript_version,
+                metadata=safe_metadata,
+            )
+        )
+        logger.info(
+            "objections_competitive_signals_artifact_created",
+            extra={
+                "organisation_id": str(artifact.organisation_id),
+                "meeting_id": str(artifact.meeting_id),
+                "job_id": str(artifact.job_id),
+                "artifact_id": str(artifact.id),
+                "artifact_type": artifact.artifact_type,
+                "artifact_version": artifact.artifact_version,
+                "transcript_version": artifact.transcript_version,
+                "prompt_key": artifact.prompt_key,
+                "prompt_version": artifact.prompt_version,
+                "schema_version": artifact.schema_version,
+                "provider_name": artifact.provider_key,
+                "model_identifier": artifact.model_name,
+                "objection_count": len(objection_values),
+                "competitor_count": len(competitor_values),
+                "category_counts": category_counts,
+                "status_counts": status_counts,
+                "strength_counts": strength_counts,
+                "overall_objection_pressure": overall_pressure,
+                "empty_result": not objection_values and not competitor_values,
+            },
+        )
+        return artifact
+
     async def prepare_follow_up_email_artifact(
         self,
         *,
@@ -3156,6 +3541,19 @@ class AIArtifactService(_AIDomainService):
             raise PublicAPIError(
                 "invalid_artifact_content",
                 "The Buying Signals artefact content is invalid.",
+                422,
+            ) from exc
+
+    @staticmethod
+    def _validate_objections_competitive_signals_content(
+        content: Mapping[str, object],
+    ) -> dict[str, object]:
+        try:
+            return ObjectionsCompetitiveSignalsArtifactContent.model_validate(content).as_json()
+        except ValidationError as exc:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Objections & Competitive Signals artefact content is invalid.",
                 422,
             ) from exc
 

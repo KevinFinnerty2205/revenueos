@@ -22,6 +22,7 @@ from revenueos.ai_provider_contracts import (
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     FollowUpEmailProviderInput,
+    ObjectionsCompetitiveSignalsProviderInput,
     OpenQuestionsProviderInput,
     ProviderRequest,
     ProviderResponse,
@@ -118,6 +119,7 @@ class OpenAIProvider:
             | type[RisksBlockersProviderInput]
             | type[OpenQuestionsProviderInput]
             | type[BuyingSignalsProviderInput]
+            | type[ObjectionsCompetitiveSignalsProviderInput]
             | type[FollowUpEmailProviderInput],
         ] = {
             "executive_summary": ExecutiveSummaryProviderInput,
@@ -126,6 +128,7 @@ class OpenAIProvider:
             "risks_blockers": RisksBlockersProviderInput,
             "open_questions": OpenQuestionsProviderInput,
             "buying_signals": BuyingSignalsProviderInput,
+            "objections_competitive_signals": ObjectionsCompetitiveSignalsProviderInput,
             "follow_up_email": FollowUpEmailProviderInput,
         }
         expected_input = supported_inputs.get(request.job_type)

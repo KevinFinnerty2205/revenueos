@@ -97,6 +97,14 @@ normalised type, polarity and strength are allowed. The strict schema rejects
 unknown scoring/probability fields and contradictory momentum. OpenAI receives
 the same bounded transcript only when explicitly selected.
 
+WO-006B Objections & Competitive Signals retains the same tenant,
+transcript-version, worker and persistence checks. Objection, competitor,
+summary and evidence text is excluded from logs and audits; only bounded counts
+by category/status/strength, competitor count, pressure and empty-result flags
+are allowed. Strict validation rejects predictive fields and contradictory
+pressure/summary output. OpenAI receives the same bounded transcript only when
+explicitly selected.
+
 WO-004C1A changes only provider execution after the tenant-bound source
 transaction closes. OpenAI selection does not receive a client-supplied tenant
 identifier and does not change repository predicates, worker ownership,
@@ -133,7 +141,8 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - AI artefact content is validated-data storage for future use, protected from overwrite by a database trigger and separated from the supplied transcript.
 - AI job, lifecycle and artefact writes commit atomically with metadata-only audit events.
 - AI audits may identify job/artefact/type/status/version, prompt/schema/provider/model labels and structured-output attempt count, but exclude transcript/artefact bodies, prompt templates/rendered messages, raw/invalid output, provider secrets, participant-sensitive values and raw exceptions.
-- Infrastructure-test, Executive Summary, Buying Signals, Decisions, Action
+- Infrastructure-test, Executive Summary, Buying Signals, Objections &
+  Competitive Signals, Decisions, Action
   Items, Risks & Blockers, Open Questions and Follow-up Email JSON are strict, versioned and
   rejected before persistence when malformed or extended unexpectedly.
 - Worker claims use PostgreSQL row locks, bounded leases and exact worker ownership; no in-memory queue can override persisted state.
@@ -162,7 +171,9 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - Provider output must be one complete JSON object that validates through the
   registered strict Pydantic schema; markdown extraction, `eval` and broad
   repair are prohibited.
-- Executive Summary, Buying Signals, Decisions, Action Items, Risks & Blockers and Open Questions input is limited to 50,000 trimmed characters, is never
+- Executive Summary, Buying Signals, Objections & Competitive Signals,
+  Decisions, Action Items, Risks & Blockers and Open Questions input is limited
+  to 50,000 trimmed characters, is never
   silently truncated, and is excluded from logs, audits, safe errors and
   product-status responses. Prompt-injection instructions in transcript data
   have no tool or write authority.

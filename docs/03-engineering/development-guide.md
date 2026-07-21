@@ -57,22 +57,25 @@ claimed job attempt and accepts values from 1 to 5.
 To exercise the product flow, create a meeting with an authorised plain-text
 transcript no longer than 50,000 characters, open its **Intelligence** tab and
 select **Generate Meeting Intelligence**. The workspace queues missing
-Executive Summary, Buying Signals, Decisions, Action Items, Risks & Blockers
-and Open Questions jobs, then queues Follow-up Email after its four source
+Executive Summary, Buying Signals, Objections & Competitive Signals, Decisions,
+Action Items, Risks & Blockers and Open Questions jobs, then queues Follow-up
+Email after its four source
 sections are ready. One
 aggregate UI chain checks state every three seconds while the worker processes
 the mock jobs. Capability-level retry and Follow-up Email tone, plain-text Copy
 and Regenerate remain available. No API key or external network access is
 required. Enabling OpenAI sends the rendered
 extractor instructions and selected transcript to OpenAI; Buying Signals adds
-qualitative current-meeting momentum without predictive scoring. Follow-up Email sends
+qualitative current-meeting momentum and Objections adds qualitative
+current-meeting pressure without predictive scoring. Follow-up Email sends
 only its validated customer-safe artefact projection and tone. Use only
 synthetic non-sensitive data and follow
 the [manual smoke procedure](openai-provider-integration.md#manual-non-production-smoke-test);
 never put an actual key value in shell history, screenshots or repository files.
 
-WO-005 adds no migration. WO-006A adds `0013_buying_signals`, which widens only
-the job and artefact type checks. Direct aggregate API testing uses
+WO-005 adds no migration. WO-006A adds `0013_buying_signals` and WO-006B adds
+`0014_objections`, each widening only the job and artefact type checks. Direct
+aggregate API testing uses
 `GET /api/v1/meetings/{meetingId}/intelligence`; orchestration uses POST on the
 same path plus `/generate`. See
 [Unified Meeting Intelligence](unified-meeting-intelligence.md).
@@ -129,6 +132,10 @@ dropping the column.
 Migration `0013_buying_signals` widens the same checks for Buying Signals
 without adding a table, column, policy or index. Its downgrade deletes Buying
 Signals artefacts/jobs before restoring the Follow-up Email-era checks.
+
+Migration `0014_objections` widens the same checks for Objections & Competitive
+Signals without adding a table, column, policy or index. Its downgrade deletes
+those artefacts/jobs before restoring the Buying Signals-era checks.
 
 WO-004C1A requires no migration because the existing trace fields already
 represent provider, model, request ID, usage and cost/currency metadata.

@@ -488,7 +488,7 @@ def test_api_queues_idempotently_persists_and_aggregates_buying_signals(
     assert "providerRequestId" not in completed.text
 
     aggregate = client.get(base).json()
-    assert aggregate["progress"]["total"] == 7
+    assert aggregate["progress"]["total"] == 8
     assert aggregate["progress"]["ready"] == 1
     assert aggregate["buyingSignals"]["state"] == "completed"
     assert aggregate["buyingSignals"]["content"]["overallMomentum"] == "strong_positive"
