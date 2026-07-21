@@ -154,9 +154,18 @@ intelligence.
 - **Security gates:** Trusted tenant context, forced RLS, exact current transcript version, no truncation, prompt-injection-as-data, strict cross-field validation, content-redacted telemetry/audits and explicit OpenAI external-data warning.
 - **Demonstration:** Generate Buying Signals from a synthetic authorised transcript, review evidence-backed signal cards and qualitative current-meeting momentum, observe `insufficient_evidence` for a polite but unsupported conversation and retain the result on refresh.
 
-WO-006A extends the already implemented seven-capability Meeting Intelligence
-workspace; it does not change the separately proposed production-readiness
-sequence below or authorise production customer data.
+### WO-006B — Objections & Competitive Signals — Complete
+
+- **Objective:** Add a seventh independent transcript-grounded extraction for expressed buyer resistance, handling state and explicit competitive context without outcome prediction.
+- **Major deliverables:** Strict bounded objection/competitor schema and closed taxonomies; qualitative pressure with deterministic consistency checks; prompt v1; populated, empty, exclusion and malformed mock fixtures; explicit OpenAI allowlist extension; transcript-pinned durable job; append-only artefact; migration `0014_objections`; POST/GET API; aggregate/orchestration integration; accessible textual UI; and metadata-only telemetry.
+- **Dependencies:** Existing AI infrastructure, six earlier extractors, Follow-up Email and the unified workspace. Objections remains independent and is not a Follow-up Email prerequisite or input.
+- **Out of scope:** Close/loss probability, deal score, forecast, MEDDICC/BANT, next-best action, stakeholder map, cross-meeting/account intelligence, CRM/external actions, recording, transcription, streaming and automation.
+- **Security gates:** Trusted tenant context, forced RLS, exact current transcript version, no truncation, prompt-injection-as-data, strict cross-field validation, content-redacted telemetry/audits and explicit OpenAI external-data warning.
+- **Demonstration:** Generate from a synthetic authorised transcript, review objection handling and competitor evidence, verify question/risk/politeness-only content yields an empty result, and retain the result on refresh.
+
+WO-006B extends the implemented eight-capability Meeting Intelligence workspace;
+it does not change the separately proposed production-readiness sequence below
+or authorise production customer data.
 
 ### Sprint 4 — Production Identity and Organisation Administration
 

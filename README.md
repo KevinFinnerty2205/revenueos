@@ -4,13 +4,15 @@ RevenueOS is the AI sales teammate that remembers every customer interaction and
 
 This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated
 business entities, Sprint 3 Meeting Domain, WO-004A1/A2/B1/B2/B3 AI
-infrastructure, WO-004C1–C6 capabilities, WO-005 unified Meeting Intelligence
-workspace and WO-006A Buying Signals & Deal Momentum Intelligence. Meetings,
+infrastructure, WO-004C1–C6 capabilities, WO-005 unified Meeting Intelligence,
+WO-006A Buying Signals & Deal Momentum and WO-006B Objections & Competitive
+Signals. Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The
 Meeting Detail Intelligence tab presents independently persisted Executive
-Summary, Buying Signals & Deal Momentum, Key Decisions, Action Items, Risks &
-Blockers, Open Questions and Follow-up Email through one derived, accessible
+Summary, Buying Signals & Deal Momentum, Objections & Competitive Signals, Key
+Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email
+through one derived, accessible
 workspace. The default provider is a deterministic no-network mock; an optional
 server-side OpenAI Responses API
 adapter is configuration-selectable. No predictive scoring, forecasting,
@@ -23,7 +25,7 @@ The [RevenueOS master product blueprint](docs/01-product/master-product-blueprin
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
-plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005 and WO-006A.
+plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A and WO-006B.
 
 ## Prerequisites
 
@@ -120,8 +122,9 @@ Assistant remains an honest placeholder. Company, contact, opportunity and task
 pages use the versioned API and provide list/create/edit states. Meeting pages
 provide list/search/filter/pagination, create/edit, participant management,
 deliberate plain-text transcript input and Overview/Intelligence/Transcript/History
-detail tabs. Intelligence is one unified workspace over six independent durable
-capabilities. All use the mock by default and need no frontend change when the
+detail tabs. Intelligence is one unified workspace over seven independent
+transcript extractions and one composed output. All use the mock by default and
+need no frontend change when the
 worker selects OpenAI.
 
 API routes:
@@ -143,6 +146,8 @@ API routes:
 - `GET /api/v1/meetings/{meetingId}/intelligence/executive-summary` — retrieve current safe state/result
 - `POST /api/v1/meetings/{meetingId}/intelligence/buying-signals` — queue or return equivalent Buying Signals generation
 - `GET /api/v1/meetings/{meetingId}/intelligence/buying-signals` — retrieve current signals and qualitative deal momentum
+- `POST /api/v1/meetings/{meetingId}/intelligence/objections-competitive-signals` — queue or return equivalent objection/competitive-signal generation
+- `GET /api/v1/meetings/{meetingId}/intelligence/objections-competitive-signals` — retrieve current objection pressure and supported items
 - `POST /api/v1/meetings/{meetingId}/intelligence/decisions` — queue or return equivalent Decisions generation
 - `GET /api/v1/meetings/{meetingId}/intelligence/decisions` — retrieve current safe state/result
 - equivalent POST/GET routes for `action-items`, `risks-blockers`, `open-questions` and `follow-up-email`
@@ -195,8 +200,8 @@ configure server-only `OPENAI_API_KEY`, `OPENAI_MODEL`,
 `OPENAI_TIMEOUT_SECONDS` and `OPENAI_MAX_OUTPUT_TOKENS`.
 
 > Setting `AI_PROVIDER=openai` sends the rendered extractor instructions and
-> selected meeting transcript to OpenAI for the six extractors, including
-> Buying Signals. Follow-up Email sends only validated
+> selected meeting transcript to OpenAI for the seven extractors, including
+> Buying Signals and Objections & Competitive Signals. Follow-up Email sends only validated
 > Executive Summary, Decisions, Action Items and Open Questions artefacts; it
 > excludes Risks & Blockers and never reads or sends transcript text. Never expose
 > the key through a browser or `NEXT_PUBLIC_*` variable. Production
@@ -243,8 +248,10 @@ See the [documentation index](docs/README.md),
 [Meeting Risks & Blockers architecture](docs/03-engineering/meeting-risks-blockers-intelligence.md),
 [Meeting Open Questions architecture](docs/03-engineering/meeting-open-questions-intelligence.md),
 [Buying Signals & Deal Momentum architecture](docs/03-engineering/buying-signals-intelligence.md),
+[Objections & Competitive Signals architecture](docs/03-engineering/objections-competitive-signals-intelligence.md),
 [Follow-up Email Composer](docs/03-engineering/follow-up-email-composer.md),
 [Unified Meeting Intelligence workspace](docs/03-engineering/unified-meeting-intelligence.md),
 [OpenAI provider guide](docs/03-engineering/openai-provider-integration.md),
 [prompt/output architecture](docs/03-engineering/prompt-registry-and-structured-output.md)
-and [WO-006A record](docs/07-sprints/wo-006a-buying-signals-deal-momentum.md).
+[WO-006A record](docs/07-sprints/wo-006a-buying-signals-deal-momentum.md)
+and [WO-006B record](docs/07-sprints/wo-006b-objections-competitive-signals.md).

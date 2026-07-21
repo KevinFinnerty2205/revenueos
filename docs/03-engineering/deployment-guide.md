@@ -33,7 +33,8 @@ Only the worker performs the provider call, but configuration validation must
 remain consistent across server processes built from the release.
 
 > Enabling OpenAI transmits the selected meeting transcript and rendered
-> extractor instructions to OpenAI, including for Buying Signals. Follow-up
+> extractor instructions to OpenAI, including for Buying Signals and
+> Objections & Competitive Signals. Follow-up
 > Email transmits only its validated
 > customer-safe artefact projection and never transcript text. Production
 > customer-content use is blocked operationally until the privacy and
@@ -57,9 +58,10 @@ WO-004C1A requires no schema migration; WO-004C2 through WO-004C5 require
 `0008_decisions` through `0011_open_questions`, which widen existing AI type
 checks. WO-004C6 requires `0012_follow_up_email`, which also adds the guarded
 nullable job tone column. The current trace fields already hold provider/model/
-request/token metadata. WO-005 requires no migration. WO-006A requires the head
-migration `0013_buying_signals`, which widens the existing job/artefact type
-checks without adding a table or column. Deploy API, worker and web
+request/token metadata. WO-005 requires no migration. WO-006A requires
+`0013_buying_signals`; WO-006B requires the head migration `0014_objections`.
+Both widen only the existing job/artefact type checks without adding a table or
+column. Deploy API, worker and web
 from the same immutable release so aggregate prompt/schema selection and worker
 source validation agree.
 
@@ -69,7 +71,8 @@ Roll back API, worker and web to the same previously validated release. For an
 OpenAI-specific operational issue, select `AI_PROVIDER=mock`, restart the
 worker, verify new work uses the mock, and revoke/remove the unused OpenAI key.
 Do not rewrite completed artefact trace. Database downgrade is unnecessary for
-an OpenAI rollback. Downgrading `0013_buying_signals` is destructive to Buying
+an OpenAI rollback. Downgrading `0014_objections` is destructive to Objections &
+Competitive Signals jobs/artefacts; downgrading `0013_buying_signals` is destructive to Buying
 Signals jobs/artefacts; downgrading `0012_follow_up_email` is destructive to Follow-
 up Email jobs/artefacts and drops their tone column; downgrading
 `0011_open_questions` is destructive to Open

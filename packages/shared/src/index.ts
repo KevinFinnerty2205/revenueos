@@ -125,6 +125,51 @@ export type DealMomentum =
   | "negative"
   | "strong_negative"
   | "insufficient_evidence";
+export type ObjectionsCompetitiveSignalsState =
+  | "empty"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type ObjectionCategory =
+  | "pricing"
+  | "budget"
+  | "commercial"
+  | "legal"
+  | "security"
+  | "privacy"
+  | "technical"
+  | "integration"
+  | "implementation"
+  | "resourcing"
+  | "procurement"
+  | "timeline"
+  | "product_fit"
+  | "stakeholder"
+  | "change_management"
+  | "competitor"
+  | "trust"
+  | "other";
+export type ObjectionStatus =
+  | "resolved"
+  | "partially_addressed"
+  | "deferred"
+  | "unresolved";
+export type ObjectionStrength = "strong" | "moderate" | "weak";
+export type CompetitorPosition =
+  | "stronger"
+  | "weaker"
+  | "neutral"
+  | "present"
+  | "unclear";
+export type OverallObjectionPressure =
+  | "none"
+  | "low"
+  | "medium"
+  | "high"
+  | "severe"
+  | "insufficient_evidence";
 export type DecisionsState =
   | "empty"
   | "queued"
@@ -188,6 +233,7 @@ export type FollowUpEmailTone = "professional" | "friendly" | "executive";
 export type MeetingIntelligenceCapabilityName =
   | "executive_summary"
   | "buying_signals"
+  | "objections_competitive_signals"
   | "decisions"
   | "action_items"
   | "risks_blockers"
@@ -374,6 +420,53 @@ export interface BuyingSignalsResponse {
 }
 
 export interface BuyingSignalsRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface ObjectionItem {
+  objection: string;
+  category: ObjectionCategory;
+  status: ObjectionStatus;
+  strength: ObjectionStrength;
+  owner: string | null;
+  confidence: number;
+  evidence: string;
+}
+
+export interface CompetitorSignal {
+  name: string;
+  position: CompetitorPosition;
+  confidence: number;
+  evidence: string;
+}
+
+export interface ObjectionsCompetitiveSignalsContent {
+  objections: ObjectionItem[];
+  competitors: CompetitorSignal[];
+  overallObjectionPressure: OverallObjectionPressure;
+  summary: string;
+}
+
+export interface ObjectionsCompetitiveSignalsResponse {
+  state: ObjectionsCompetitiveSignalsState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  objectionsCompetitiveSignals: ObjectionsCompetitiveSignalsContent | null;
+}
+
+export interface ObjectionsCompetitiveSignalsRequestResponse {
   jobId: string;
   status: "queued" | "running" | "completed";
   created: boolean;
@@ -583,7 +676,7 @@ export interface MeetingIntelligenceProgress {
   processing: number;
   failed: number;
   notGenerated: number;
-  total: 7;
+  total: 8;
   summary: string;
 }
 
@@ -595,6 +688,7 @@ export interface MeetingIntelligenceResponse {
   progress: MeetingIntelligenceProgress;
   executiveSummary: MeetingIntelligenceCapability<ExecutiveSummaryContent>;
   buyingSignals: MeetingIntelligenceCapability<BuyingSignalsContent>;
+  objectionsCompetitiveSignals: MeetingIntelligenceCapability<ObjectionsCompetitiveSignalsContent>;
   decisions: MeetingIntelligenceCapability<DecisionsContent>;
   actionItems: MeetingIntelligenceCapability<ActionItemsContent>;
   risksBlockers: MeetingIntelligenceCapability<RisksBlockersContent>;

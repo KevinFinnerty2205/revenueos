@@ -5,8 +5,9 @@
 WO-004A2 adds the internal tenant-scoped job/artefact application layer.
 WO-004C1 extends it with Executive Summary; WO-004C2 adds independent
 current-transcript Decisions; WO-004C3 adds Action Items; WO-004C4 adds
-Risks & Blockers; and WO-004C5 adds Open Questions request/state rules and
-typed append-only artefacts. WO-004C6 adds Follow-up Email request/state rules
+Risks & Blockers; WO-004C5 adds Open Questions; WO-006A adds Buying Signals;
+and WO-006B adds Objections & Competitive Signals request/state rules and typed
+append-only artefacts. WO-004C6 adds Follow-up Email request/state rules
 over four validated source artefacts, with no transcript-content query. Only those
 product-safe capabilities are exposed through the
 meeting-scoped API/UI; generic lifecycle APIs remain
@@ -55,8 +56,9 @@ Repositories always require an organisation ID and add an explicit organisation 
 
 - requires a same-tenant job and matching meeting/transcript/version trace;
 - accepts only registered `infrastructure_test`, `executive_summary`,
-  `decisions`, `action_items`, `risks_blockers`, `open_questions` or
-  `follow_up_email`, schema version 1;
+  `buying_signals`, `objections_competitive_signals`, `decisions`,
+  `action_items`, `risks_blockers`, `open_questions` or `follow_up_email`,
+  schema version 1;
 - persists only the Pydantic-validated JSON representation;
 - assigns the next logical version without overwriting prior artefacts;
 - retries one concurrent logical-version conflict before returning a safe conflict; and
@@ -116,6 +118,9 @@ Decisions schema version 1 is documented in
 [Meeting Decisions intelligence](meeting-decisions-intelligence.md). It
 contains only a bounded list of decision, nullable supported owner, normalised
 status, finite confidence and brief paraphrased evidence.
+Buying Signals and Objections & Competitive Signals schemas are documented in
+[Buying Signals & Deal Momentum intelligence](buying-signals-intelligence.md)
+and [Objections & Competitive Signals intelligence](objections-competitive-signals-intelligence.md).
 
 ## Artefact version assignment
 
@@ -139,11 +144,13 @@ Every service starts with trusted `TenantContext`. Every repository read/write h
 ## Known limitations and extension points
 
 - Generic AI lifecycle work remains internal; only the Executive Summary,
-  Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email
+  Buying Signals, Objections & Competitive Signals, Decisions, Action Items,
+  Risks & Blockers, Open Questions and Follow-up Email
   request/state resources are public.
 - Worker claiming, leases, retry scheduling and cancellation execution support
-  infrastructure tests, Executive Summary, Decisions, Action Items, Risks &
-  Blockers, Open Questions and Follow-up Email.
+  infrastructure tests, Executive Summary, Buying Signals, Objections &
+  Competitive Signals, Decisions, Action Items, Risks & Blockers, Open
+  Questions and Follow-up Email.
 - The configured provider may be mock or OpenAI; there is no email-send
   integration or later Meeting Intelligence capability.
 - The transcript version identifies the current mutable transcript row but does not preserve a historical text snapshot.

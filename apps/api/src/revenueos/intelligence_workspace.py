@@ -19,6 +19,8 @@ from revenueos.ai_contracts import (
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
     FOLLOW_UP_EMAIL_SCHEMA_VERSION,
+    OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
+    OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     OPEN_QUESTIONS_SCHEMA_VERSION,
     OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_SCHEMA_VERSION,
@@ -28,6 +30,7 @@ from revenueos.ai_contracts import (
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
+    ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
 )
@@ -42,6 +45,8 @@ from revenueos.ai_prompt_registry import (
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
     FOLLOW_UP_EMAIL_PROMPT_KEY,
     FOLLOW_UP_EMAIL_PROMPT_VERSION,
+    OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
+    OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
     OPEN_QUESTIONS_PROMPT_KEY,
     OPEN_QUESTIONS_PROMPT_VERSION,
     RISKS_BLOCKERS_PROMPT_KEY,
@@ -64,11 +69,13 @@ from revenueos.intelligence_contracts import (
     MeetingIntelligenceExecutiveSummaryResponse,
     MeetingIntelligenceFollowUpEmailResponse,
     MeetingIntelligenceGenerationResponse,
+    MeetingIntelligenceObjectionsCompetitiveSignalsResponse,
     MeetingIntelligenceOpenQuestionsResponse,
     MeetingIntelligenceOverallState,
     MeetingIntelligenceProgressResponse,
     MeetingIntelligenceResponse,
     MeetingIntelligenceRisksBlockersResponse,
+    ObjectionsCompetitiveSignalsContentResponse,
     OpenQuestionsContentResponse,
     RisksBlockersContentResponse,
 )
@@ -80,6 +87,7 @@ logger = logging.getLogger("revenueos.intelligence_workspace")
 CapabilityName = Literal[
     "executive_summary",
     "buying_signals",
+    "objections_competitive_signals",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -149,6 +157,16 @@ CAPABILITIES = (
         BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     ),
     CapabilityConfiguration(
+        "objections_competitive_signals",
+        AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
+        AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
+        OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
+        OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
+        OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
+        "Objections & Competitive Signals",
+        OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH,
+    ),
+    CapabilityConfiguration(
         "decisions",
         AIJobType.DECISIONS.value,
         AIArtifactType.DECISIONS.value,
@@ -203,6 +221,7 @@ CONFIG_BY_NAME = {configuration.name: configuration for configuration in CAPABIL
 EXTRACTION_NAMES: tuple[CapabilityName, ...] = (
     "executive_summary",
     "buying_signals",
+    "objections_competitive_signals",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -277,6 +296,7 @@ class MeetingIntelligenceService:
         requesters = {
             "executive_summary": self.capabilities.request_executive_summary,
             "buying_signals": self.capabilities.request_buying_signals,
+            "objections_competitive_signals": self.capabilities.request_objections_competitive_signals,
             "decisions": self.capabilities.request_decisions,
             "action_items": self.capabilities.request_action_items,
             "risks_blockers": self.capabilities.request_risks_blockers,
@@ -510,6 +530,12 @@ class MeetingIntelligenceService:
                 BuyingSignalsContentResponse.model_validate(signals),
                 len(signals.signals) == 0 or signals.overall_momentum == "insufficient_evidence",
             )
+        if name == "objections_competitive_signals":
+            objection_signals = ObjectionsCompetitiveSignalsArtifactContent.model_validate(artifact.content_json)
+            return (
+                ObjectionsCompetitiveSignalsContentResponse.model_validate(objection_signals),
+                len(objection_signals.objections) == 0 and len(objection_signals.competitors) == 0,
+            )
         if name == "decisions":
             decisions = DecisionsArtifactContent.model_validate(artifact.content_json)
             return DecisionsContentResponse.model_validate(decisions), len(decisions.decisions) == 0
@@ -599,6 +625,14 @@ class MeetingIntelligenceService:
                     "content": snapshots["buying_signals"].content,
                 }
             ),
+            objections_competitive_signals=(
+                MeetingIntelligenceObjectionsCompetitiveSignalsResponse.model_validate(
+                    {
+                        **self._capability_fields(snapshots["objections_competitive_signals"]),
+                        "content": snapshots["objections_competitive_signals"].content,
+                    }
+                )
+            ),
             decisions=MeetingIntelligenceDecisionsResponse.model_validate(
                 {
                     **self._capability_fields(snapshots["decisions"]),
@@ -662,7 +696,7 @@ class MeetingIntelligenceService:
             return "failed"
         if queued > 0:
             return "queued"
-        if ready == 7:
+        if ready == len(CAPABILITIES):
             return "completed_with_empty_results" if any_empty_result else "completed"
         if ready > 0:
             return "partially_generated"
@@ -685,7 +719,7 @@ class MeetingIntelligenceService:
             return f"{failed} section{'s' if failed != 1 else ''} failed"
         if queued > 0:
             return f"{queued} section{'s' if queued != 1 else ''} queued"
-        return f"{ready} of 7 ready"
+        return f"{ready} of {len(CAPABILITIES)} ready"
 
     def _unavailable_snapshots(
         self,

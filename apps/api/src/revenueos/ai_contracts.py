@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
@@ -57,6 +58,20 @@ BUYING_SIGNAL_EVIDENCE_MAX_LENGTH = 400
 BUYING_SIGNALS_SUMMARY_MIN_LENGTH = 20
 BUYING_SIGNALS_SUMMARY_MAX_LENGTH = 800
 BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH = 50_000
+OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION = 1
+OBJECTIONS_MAX_COUNT = 20
+COMPETITORS_MAX_COUNT = 10
+OBJECTION_MIN_LENGTH = 5
+OBJECTION_MAX_LENGTH = 500
+OBJECTION_OWNER_MAX_LENGTH = 200
+OBJECTION_EVIDENCE_MIN_LENGTH = 5
+OBJECTION_EVIDENCE_MAX_LENGTH = 400
+COMPETITOR_NAME_MAX_LENGTH = 200
+COMPETITOR_EVIDENCE_MIN_LENGTH = 5
+COMPETITOR_EVIDENCE_MAX_LENGTH = 400
+OBJECTIONS_SUMMARY_MIN_LENGTH = 20
+OBJECTIONS_SUMMARY_MAX_LENGTH = 800
+OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH = 50_000
 FOLLOW_UP_EMAIL_SCHEMA_VERSION = 1
 FOLLOW_UP_EMAIL_SUBJECT_MAX_LENGTH = 200
 FOLLOW_UP_EMAIL_GREETING_MAX_LENGTH = 200
@@ -779,6 +794,252 @@ class BuyingSignalsSource(BaseModel):
             raise ValueError("Transcript text must not be empty.")
         if len(normalised) > BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH:
             raise ValueError("Transcript text exceeds the Buying Signals limit.")
+        return normalised
+
+
+ObjectionCategoryValue = Literal[
+    "pricing",
+    "budget",
+    "commercial",
+    "legal",
+    "security",
+    "privacy",
+    "technical",
+    "integration",
+    "implementation",
+    "resourcing",
+    "procurement",
+    "timeline",
+    "product_fit",
+    "stakeholder",
+    "change_management",
+    "competitor",
+    "trust",
+    "other",
+]
+ObjectionStatusValue = Literal[
+    "resolved",
+    "partially_addressed",
+    "deferred",
+    "unresolved",
+]
+ObjectionStrengthValue = Literal["strong", "moderate", "weak"]
+CompetitorPositionValue = Literal["stronger", "weaker", "neutral", "present", "unclear"]
+OverallObjectionPressureValue = Literal[
+    "none",
+    "low",
+    "medium",
+    "high",
+    "severe",
+    "insufficient_evidence",
+]
+
+_SUMMARY_OBJECTION_GROUPS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("price", "pricing"), "pricing"),
+    (("budget",), "budget"),
+    (("commercial",), "commercial"),
+    (("legal", "contract"), "legal"),
+    (("security",), "security"),
+    (("privacy",), "privacy"),
+    (("technical",), "technical"),
+    (("integration",), "integration"),
+    (("implementation", "rollout"), "implementation"),
+    (("resourcing", "resources"), "resourcing"),
+    (("procurement",), "procurement"),
+    (("timeline", "timing"), "timeline"),
+    (("product fit",), "product_fit"),
+    (("stakeholder",), "stakeholder"),
+    (("change management", "adoption"), "change_management"),
+    (("trust",), "trust"),
+)
+_NAMED_COMPETITOR_PATTERN = re.compile(r"\bcompetitor\s+[a-z0-9][a-z0-9_-]*", re.IGNORECASE)
+
+
+class ObjectionItem(BaseModel):
+    """One immutable, transcript-supported expression of buyer resistance."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    objection: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=OBJECTION_MIN_LENGTH,
+            max_length=OBJECTION_MAX_LENGTH,
+        ),
+    ]
+    category: ObjectionCategoryValue
+    status: ObjectionStatusValue
+    strength: ObjectionStrengthValue
+    owner: (
+        Annotated[
+            str,
+            StringConstraints(
+                strip_whitespace=True,
+                min_length=1,
+                max_length=OBJECTION_OWNER_MAX_LENGTH,
+            ),
+        ]
+        | None
+    )
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=OBJECTION_EVIDENCE_MIN_LENGTH,
+            max_length=OBJECTION_EVIDENCE_MAX_LENGTH,
+        ),
+    ]
+
+
+class CompetitorSignal(BaseModel):
+    """One immutable, transcript-supported competitor mention and position."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    name: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=COMPETITOR_NAME_MAX_LENGTH,
+        ),
+    ]
+    position: CompetitorPositionValue
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=COMPETITOR_EVIDENCE_MIN_LENGTH,
+            max_length=COMPETITOR_EVIDENCE_MAX_LENGTH,
+        ),
+    ]
+
+
+class ObjectionsCompetitiveSignalsArtifactContent(BaseModel):
+    """Strict immutable Objections & Competitive Signals schema version 1."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    objections: tuple[ObjectionItem, ...] = Field(max_length=OBJECTIONS_MAX_COUNT)
+    competitors: tuple[CompetitorSignal, ...] = Field(max_length=COMPETITORS_MAX_COUNT)
+    overall_objection_pressure: OverallObjectionPressureValue
+    summary: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=OBJECTIONS_SUMMARY_MIN_LENGTH,
+            max_length=OBJECTIONS_SUMMARY_MAX_LENGTH,
+        ),
+    ]
+
+    @field_validator("objections", "competitors", mode="before")
+    @classmethod
+    def normalise_json_arrays(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def validate_pressure_and_summary_consistency(
+        self,
+    ) -> ObjectionsCompetitiveSignalsArtifactContent:
+        has_content = bool(self.objections or self.competitors)
+        strong_unresolved = any(
+            objection.strength == "strong" and objection.status == "unresolved" for objection in self.objections
+        )
+        directional_competitor = any(competitor.position in {"stronger", "weaker"} for competitor in self.competitors)
+        if not has_content and self.overall_objection_pressure not in {
+            "none",
+            "insufficient_evidence",
+        }:
+            raise ValueError("An empty result requires none or insufficient_evidence pressure.")
+        if strong_unresolved and self.overall_objection_pressure in {
+            "none",
+            "low",
+            "insufficient_evidence",
+        }:
+            raise ValueError("A strong unresolved objection requires meaningful objection pressure.")
+        if self.overall_objection_pressure == "severe" and not (
+            strong_unresolved or any(competitor.position == "stronger" for competitor in self.competitors)
+        ):
+            raise ValueError("Severe pressure requires strong unresolved or stronger competitor evidence.")
+        if self.overall_objection_pressure == "insufficient_evidence" and (
+            any(objection.strength in {"strong", "moderate"} for objection in self.objections)
+            or directional_competitor
+            or any(objection.confidence > 0.7 for objection in self.objections)
+            or any(competitor.confidence > 0.7 for competitor in self.competitors)
+        ):
+            raise ValueError("Insufficient evidence conflicts with material validated content.")
+        if (
+            self.objections
+            and all(objection.status == "resolved" and objection.strength == "weak" for objection in self.objections)
+            and not self.competitors
+            and self.overall_objection_pressure == "severe"
+        ):
+            raise ValueError("Resolved weak objections cannot create severe pressure.")
+
+        categories = {objection.category for objection in self.objections}
+        lowered_summary = self.summary.casefold()
+        for terms, category in _SUMMARY_OBJECTION_GROUPS:
+            if any(term in lowered_summary for term in terms) and category not in categories:
+                raise ValueError("Summary references an objection category absent from the result.")
+        if not self.competitors and any(
+            term in lowered_summary for term in ("competitor", "competition", "other vendor")
+        ):
+            raise ValueError("Summary references competition absent from the result.")
+        known_competitors = {competitor.name.casefold() for competitor in self.competitors}
+        for match in _NAMED_COMPETITOR_PATTERN.findall(self.summary):
+            if match.casefold() not in known_competitors:
+                raise ValueError("Summary references an unknown competitor.")
+        return self
+
+    def as_json(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+
+class ObjectionsCompetitiveSignalsSource(BaseModel):
+    """Pinned meeting/transcript input for objection and competitor extraction."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    meeting_title: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+    ]
+    meeting_date: datetime
+    transcript_text: str
+
+    @field_validator("transcript_text")
+    @classmethod
+    def validate_transcript_text(cls, value: str) -> str:
+        normalised = value.strip()
+        if not normalised:
+            raise ValueError("Transcript text must not be empty.")
+        if len(normalised) > OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH:
+            raise ValueError("Transcript text exceeds the Objections & Competitive Signals limit.")
         return normalised
 
 

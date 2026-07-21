@@ -142,11 +142,12 @@ Responses omit worker ownership, leases, attempts, internal error codes, prompts
 transcripts, raw output and provider configuration.
 
 The aggregate endpoint includes `buyingSignals`. Generate Meeting Intelligence
-now queues six independent transcript extractions: Executive Summary, Buying
-Signals, Decisions, Action Items, Risks & Blockers and Open Questions. Follow-up
-Email remains the seventh capability and separate composed output. Its four
+now queues seven independent transcript extractions: Executive Summary, Buying
+Signals, Objections & Competitive Signals, Decisions, Action Items, Risks &
+Blockers and Open Questions. Follow-up Email remains the eighth capability and
+separate composed output. Its four
 prerequisites and artefact-only provider input are unchanged; Buying Signals is
-not an email input. Progress therefore uses `total=7` and the existing bounded
+not an email input. Progress therefore uses `total=8` and the existing bounded
 four-query aggregate read avoids N+1 reads.
 
 The frontend section appears after Executive Summary and before Decisions. It

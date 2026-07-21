@@ -13,12 +13,17 @@ from revenueos.domain import (
     BuyingSignalPolarity,
     BuyingSignalStrength,
     BuyingSignalType,
+    CompetitorPosition,
     DealMomentum,
     DecisionStatus,
     ExecutiveSummaryMeetingType,
     ExecutiveSummarySentiment,
     FollowUpEmailTone,
+    ObjectionCategory,
+    ObjectionStatus,
+    ObjectionStrength,
     OpenQuestionImportance,
+    OverallObjectionPressure,
     RiskCategory,
     RiskSeverity,
 )
@@ -109,6 +114,63 @@ class BuyingSignalsResponse(APIModel):
     generated_at: datetime | None
     safe_message: str | None
     buying_signals: BuyingSignalsContentResponse | None
+
+
+ObjectionsCompetitiveSignalsState = Literal[
+    "empty",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+]
+
+
+class ObjectionItemResponse(APIModel):
+    objection: str
+    category: ObjectionCategory
+    status: ObjectionStatus
+    strength: ObjectionStrength
+    owner: str | None
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: str
+
+
+class CompetitorSignalResponse(APIModel):
+    name: str
+    position: CompetitorPosition
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: str
+
+
+class ObjectionsCompetitiveSignalsContentResponse(APIModel):
+    objections: list[ObjectionItemResponse]
+    competitors: list[CompetitorSignalResponse]
+    overall_objection_pressure: OverallObjectionPressure
+    summary: str
+
+
+class ObjectionsCompetitiveSignalsRequestResponse(APIModel):
+    job_id: UUID
+    status: Literal["queued", "running", "completed"]
+    created: bool
+    transcript_version: int = Field(ge=1)
+    requested_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class ObjectionsCompetitiveSignalsResponse(APIModel):
+    state: ObjectionsCompetitiveSignalsState
+    generation_available: bool
+    unavailable_reason: str | None
+    job_id: UUID | None
+    transcript_version: int | None = Field(default=None, ge=1)
+    requested_at: datetime | None
+    started_at: datetime | None
+    generated_at: datetime | None
+    safe_message: str | None
+    objections_competitive_signals: ObjectionsCompetitiveSignalsContentResponse | None
 
 
 DecisionsState = Literal[
@@ -348,6 +410,7 @@ class FollowUpEmailResponse(APIModel):
 MeetingIntelligenceCapabilityName = Literal[
     "executive_summary",
     "buying_signals",
+    "objections_competitive_signals",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -396,6 +459,12 @@ class MeetingIntelligenceBuyingSignalsResponse(
     content: BuyingSignalsContentResponse | None
 
 
+class MeetingIntelligenceObjectionsCompetitiveSignalsResponse(
+    MeetingIntelligenceCapabilityResponse,
+):
+    content: ObjectionsCompetitiveSignalsContentResponse | None
+
+
 class MeetingIntelligenceDecisionsResponse(MeetingIntelligenceCapabilityResponse):
     content: DecisionsContentResponse | None
 
@@ -426,12 +495,12 @@ class MeetingIntelligenceFollowUpEmailResponse(
 
 
 class MeetingIntelligenceProgressResponse(APIModel):
-    ready: int = Field(ge=0, le=7)
-    queued: int = Field(ge=0, le=7)
-    processing: int = Field(ge=0, le=7)
-    failed: int = Field(ge=0, le=7)
-    not_generated: int = Field(ge=0, le=7)
-    total: Literal[7] = 7
+    ready: int = Field(ge=0, le=8)
+    queued: int = Field(ge=0, le=8)
+    processing: int = Field(ge=0, le=8)
+    failed: int = Field(ge=0, le=8)
+    not_generated: int = Field(ge=0, le=8)
+    total: Literal[8] = 8
     summary: str
 
 
@@ -443,6 +512,7 @@ class MeetingIntelligenceResponse(APIModel):
     progress: MeetingIntelligenceProgressResponse
     executive_summary: MeetingIntelligenceExecutiveSummaryResponse
     buying_signals: MeetingIntelligenceBuyingSignalsResponse
+    objections_competitive_signals: MeetingIntelligenceObjectionsCompetitiveSignalsResponse
     decisions: MeetingIntelligenceDecisionsResponse
     action_items: MeetingIntelligenceActionItemsResponse
     risks_blockers: MeetingIntelligenceRisksBlockersResponse

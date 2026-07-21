@@ -3,9 +3,10 @@
 ## Product behaviour
 
 WO-005 replaces the independent Meeting Detail Intelligence panels with one
-responsive reading workspace. WO-006A extends it to seven capabilities presented
-as Executive Summary, Buying Signals & Deal Momentum, Key Decisions, Action
-Items, Risks & Blockers, Open Questions and Follow-up Email.
+responsive reading workspace. WO-006A and WO-006B extend it to eight capabilities
+presented as Executive Summary, Buying Signals & Deal Momentum, Objections &
+Competitive Signals, Key Decisions, Action Items, Risks & Blockers, Open
+Questions and Follow-up Email.
 The header shows one product-safe overall state, a deterministic count summary,
 the last activity time, the primary **Generate Meeting Intelligence** action and
 a retry action when terminal failures exist.
@@ -23,7 +24,7 @@ codes, transcript text, prompt text or raw provider output.
 ## Aggregate read API
 
 `GET /api/v1/meetings/{meetingId}/intelligence` returns the current transcript
-version's seven product-safe capability views, overall state, last activity time,
+version's eight product-safe capability views, overall state, last activity time,
 generation/retry availability and progress counts. It preserves all individual
 capability endpoints.
 
@@ -52,9 +53,9 @@ The overall state is derived, never persisted. Precedence is deterministic:
    capability has usable completed content;
 5. `queued` when one or more capabilities are pending and none is running or
    failed;
-6. `completed_with_empty_results` when all seven capabilities completed and at
+6. `completed_with_empty_results` when all eight capabilities completed and at
    least one list capability produced a valid empty result;
-7. `completed` when all seven capabilities completed with non-empty results where
+7. `completed` when all eight capabilities completed with non-empty results where
    the schema supports emptiness;
 8. `partially_generated` when at least one capability completed and remaining
    capabilities have not been requested; and
@@ -65,8 +66,8 @@ completed empty result is ready. Follow-up Email remains unavailable or not
 generated until its required sources are ready.
 
 Progress includes `ready`, `queued`, `processing`, `failed`, `notGenerated` and
-`total=7`, plus accessible text such as `3 of 7 ready`, `Generating 2 sections`
-or `6 ready · 1 failed`. No progress percentage is shown because capabilities are not
+`total=8`, plus accessible text such as `3 of 8 ready`, `Generating 2 sections`
+or `7 ready · 1 failed`. No progress percentage is shown because capabilities are not
 assigned misleading equal weights.
 
 ## Generation orchestration
@@ -76,7 +77,8 @@ orchestration endpoint. It:
 
 1. validates membership, tenant-scoped meeting access and transcript usability;
 2. calls the existing request services for Executive Summary, Buying Signals,
-   Decisions, Action Items, Risks & Blockers and Open Questions;
+   Objections & Competitive Signals, Decisions, Action Items, Risks & Blockers
+   and Open Questions;
 3. reuses equivalent active/completed extraction jobs and creates only missing,
    failed or cancelled work under existing rules;
 4. derives an intermediate aggregate state; and
@@ -134,12 +136,14 @@ prevent an older response from replacing newer state.
 
 Network failures keep the last completed content visible and provide a safe
 retry. Individual capability generation/retry endpoints remain available.
-Buying Signals uses the same chain and creates no independent poller.
+Buying Signals and Objections & Competitive Signals use the same chain and
+create no independent poller.
 Follow-up Email retains tone selection, plain-text Copy and Regenerate. There is
 no Send action.
 
 The layout is a single reading column on mobile. Buying Signals appears after
-Executive Summary and before Decisions. Desktop places Decisions beside
+Executive Summary; Objections & Competitive Signals follows it before Decisions.
+Desktop places Decisions beside
 Action Items and Risks & Blockers beside Open Questions while keeping Executive
 Summary and Follow-up Email full width. Sections share headings, status labels,
 timestamps, spacing, loading/error treatment and retry controls. Semantic tab,
@@ -184,16 +188,19 @@ provider remains the default. Do not use production customer data.
 
 ## Migration, rollback and known limitations
 
-WO-005 required no database migration. WO-006A adds `0013_buying_signals` only to
-widen the constrained AI job and artefact type allowlists; aggregate state remains
-derived from existing job, artefact and current-transcript traces.
+WO-005 required no database migration. WO-006A adds `0013_buying_signals` and
+WO-006B adds `0014_objections`, each widening only the constrained AI job and
+artefact type allowlists; aggregate state remains derived from existing job,
+artefact and current-transcript traces.
 
 Rollback is an application deploy rollback: restore the prior Meeting Detail
 panel composition and remove the aggregate routes/service/contract additions.
 Existing individual endpoints, jobs, artefacts and migrations remain compatible;
 no data rollback is needed for WO-005. Rolling back WO-006A requires accepting
 deletion of Buying Signals jobs/artefacts before downgrading
-`0013_buying_signals`. In-flight jobs continue under the durable worker.
+`0013_buying_signals`. Rolling back WO-006B similarly requires accepting
+deletion of Objections & Competitive Signals jobs/artefacts before downgrading
+`0014_objections`. In-flight jobs continue under the durable worker.
 
 Known limitations remain:
 

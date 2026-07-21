@@ -39,6 +39,7 @@ class OutputSchemaDefinition(BaseModel):
         "risks_blockers",
         "open_questions",
         "buying_signals",
+        "objections_competitive_signals",
         "follow_up_email",
     ]
     validation_model: type[BaseModel]

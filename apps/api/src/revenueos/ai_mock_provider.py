@@ -16,6 +16,7 @@ from revenueos.ai_contracts import (
     ACTION_ITEMS_SCHEMA_VERSION,
     BUYING_SIGNALS_MAX_COUNT,
     BUYING_SIGNALS_SCHEMA_VERSION,
+    COMPETITORS_MAX_COUNT,
     DECISION_EVIDENCE_MAX_LENGTH,
     DECISION_MAX_LENGTH,
     DECISIONS_MAX_COUNT,
@@ -23,6 +24,10 @@ from revenueos.ai_contracts import (
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     FOLLOW_UP_EMAIL_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    OBJECTION_EVIDENCE_MAX_LENGTH,
+    OBJECTION_MAX_LENGTH,
+    OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
+    OBJECTIONS_MAX_COUNT,
     OPEN_QUESTION_EVIDENCE_MAX_LENGTH,
     OPEN_QUESTION_MAX_LENGTH,
     OPEN_QUESTIONS_MAX_COUNT,
@@ -38,6 +43,7 @@ from revenueos.ai_provider_contracts import (
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     FollowUpEmailProviderInput,
+    ObjectionsCompetitiveSignalsProviderInput,
     OpenQuestionsProviderInput,
     ProviderRequest,
     ProviderResponse,
@@ -141,6 +147,11 @@ class DeterministicMockAIProvider:
             return request.expected_schema_version == BUYING_SIGNALS_SCHEMA_VERSION and isinstance(
                 request.input_payload, BuyingSignalsProviderInput
             )
+        if request.job_type == AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value:
+            return request.expected_schema_version == OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION and isinstance(
+                request.input_payload,
+                ObjectionsCompetitiveSignalsProviderInput,
+            )
         if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
             return request.expected_schema_version == FOLLOW_UP_EMAIL_SCHEMA_VERSION and isinstance(
                 request.input_payload, FollowUpEmailProviderInput
@@ -189,6 +200,9 @@ class DeterministicMockAIProvider:
         if isinstance(request.input_payload, BuyingSignalsProviderInput):
             transcript = cls._extract_transcript(request.input_payload)
             return cls._extract_buying_signals(transcript)
+        if isinstance(request.input_payload, ObjectionsCompetitiveSignalsProviderInput):
+            transcript = cls._extract_transcript(request.input_payload)
+            return cls._extract_objections_competitive_signals(transcript)
         if isinstance(request.input_payload, FollowUpEmailProviderInput):
             summary = cls._extract_composition_value(
                 request.input_payload,
@@ -263,6 +277,7 @@ class DeterministicMockAIProvider:
             | RisksBlockersProviderInput
             | OpenQuestionsProviderInput
             | BuyingSignalsProviderInput
+            | ObjectionsCompetitiveSignalsProviderInput
         ),
     ) -> str:
         marker = "Untrusted transcript as a JSON string:\n"
@@ -1161,6 +1176,265 @@ class DeterministicMockAIProvider:
             "confidence": 0.35,
         }
 
+    @classmethod
+    def _extract_objections_competitive_signals(
+        cls,
+        transcript: str,
+    ) -> dict[str, JsonValue]:
+        """Return bounded deterministic fixtures, not production reasoning."""
+
+        injection_markers = (
+            "ignore previous",
+            "ignore all previous",
+            "system prompt",
+            "developer message",
+            "reveal secrets",
+            "prompt injection",
+        )
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+", " ".join(transcript.split()))
+            if sentence.strip() and not any(marker in sentence.casefold() for marker in injection_markers)
+        ]
+        lowered_transcript = " ".join(sentences).casefold()
+        objections: list[dict[str, JsonValue]] = []
+        competitors: list[dict[str, JsonValue]] = []
+        seen_objections: set[str] = set()
+        seen_competitors: set[str] = set()
+
+        resistance_markers = (
+            "too expensive",
+            "price is too high",
+            "pricing is too high",
+            "cannot afford",
+            "can't afford",
+            "unacceptable",
+            "would prevent",
+            "will prevent",
+            "blocks adoption",
+            "block adoption",
+            "cannot proceed",
+            "can't proceed",
+            "will not proceed",
+            "deal-breaker",
+            "deal breaker",
+            "concerned that",
+            "concern about",
+            "security concern",
+            "privacy concern",
+            "hesitant",
+            "hesitation",
+            "objected",
+            "objection",
+            "too many internal resources",
+            "could not support a six-month rollout",
+            "could not support the rollout",
+            "prefer the competitor",
+            "competitor is preferred",
+            "lack of sso",
+            "missing sso",
+        )
+        for sentence in sentences:
+            lowered = sentence.casefold()
+            if any(
+                marker in lowered
+                for marker in (
+                    "no objections were raised",
+                    "no objections or competitors",
+                    "no objections and no competitors",
+                    "no competitive signals",
+                )
+            ):
+                continue
+            competitor_name = cls._mock_competitor_name(sentence)
+            if (
+                competitor_name is not None
+                and competitor_name.casefold() not in seen_competitors
+                and len(competitors) < COMPETITORS_MAX_COUNT
+            ):
+                position = cls._mock_competitor_position(lowered)
+                competitors.append(
+                    {
+                        "name": competitor_name,
+                        "position": position,
+                        "confidence": 0.9 if position in {"stronger", "weaker"} else 0.82,
+                        "evidence": cls._bounded_plain_text(
+                            f"The transcript identifies {competitor_name} in the customer's evaluation context.",
+                            OBJECTION_EVIDENCE_MAX_LENGTH,
+                        ),
+                    }
+                )
+                seen_competitors.add(competitor_name.casefold())
+
+            if not any(marker in lowered for marker in resistance_markers):
+                continue
+            if sentence.endswith("?") and not any(
+                marker in lowered for marker in ("would prevent", "will prevent", "cannot proceed", "can't proceed")
+            ):
+                continue
+            category = cls._mock_objection_category(lowered)
+            status = cls._mock_objection_status(lowered)
+            strength = cls._mock_objection_strength(lowered)
+            category_label = category.replace("_", " ")
+            objection_text = cls._bounded_plain_text(
+                f"The customer raised a {category_label} objection.",
+                OBJECTION_MAX_LENGTH,
+            )
+            key = objection_text.casefold()
+            if key in seen_objections:
+                continue
+            objections.append(
+                {
+                    "objection": objection_text,
+                    "category": category,
+                    "status": status,
+                    "strength": strength,
+                    "owner": cls._mock_objection_owner(lowered),
+                    "confidence": 0.94 if strength == "strong" else 0.86 if strength == "moderate" else 0.76,
+                    "evidence": cls._bounded_plain_text(
+                        f"The transcript records expressed buyer resistance about {category_label}.",
+                        OBJECTION_EVIDENCE_MAX_LENGTH,
+                    ),
+                }
+            )
+            seen_objections.add(key)
+            if len(objections) == OBJECTIONS_MAX_COUNT:
+                break
+
+        if not objections and not competitors:
+            explicit_none = any(
+                marker in lowered_transcript
+                for marker in (
+                    "no objections or competitors",
+                    "no objections and no competitors",
+                    "no objections were raised",
+                    "no competitive signals",
+                )
+            )
+            return {
+                "objections": [],
+                "competitors": [],
+                "overall_objection_pressure": "none" if explicit_none else "insufficient_evidence",
+                "summary": (
+                    "No objections or competitive signals were identified in the current meeting."
+                    if explicit_none
+                    else "There was not enough transcript evidence to identify objection pressure reliably."
+                ),
+            }
+
+        strong_unresolved_count = sum(
+            item["strength"] == "strong" and item["status"] == "unresolved" for item in objections
+        )
+        if strong_unresolved_count >= 2:
+            pressure = "severe"
+        elif strong_unresolved_count == 1 or any(item["position"] == "stronger" for item in competitors):
+            pressure = "high"
+        elif any(
+            item["status"] in {"unresolved", "partially_addressed"} and item["strength"] == "moderate"
+            for item in objections
+        ):
+            pressure = "medium"
+        else:
+            pressure = "low"
+        return {
+            "objections": cast(JsonValue, objections),
+            "competitors": cast(JsonValue, competitors),
+            "overall_objection_pressure": pressure,
+            "summary": (f"Validated extracted items indicate {pressure} current meeting objection pressure."),
+        }
+
+    @staticmethod
+    def _mock_objection_category(content: str) -> str:
+        category_markers: tuple[tuple[str, tuple[str, ...]], ...] = (
+            ("pricing", ("price", "pricing", "expensive")),
+            ("budget", ("budget", "afford")),
+            ("legal", ("legal", "contract terms")),
+            ("security", ("security", "sso")),
+            ("privacy", ("privacy", "data residency")),
+            ("integration", ("integration", "integrate")),
+            ("implementation", ("implementation", "rollout")),
+            ("resourcing", ("resources", "resourcing", "capacity")),
+            ("procurement", ("procurement",)),
+            ("timeline", ("timeline", "timing", "deadline")),
+            ("product_fit", ("product fit", "feature gap")),
+            ("stakeholder", ("stakeholder", "executive sponsor")),
+            ("change_management", ("change management", "adoption")),
+            ("competitor", ("competitor", "another vendor", "alternative vendor")),
+            ("trust", ("trust", "credibility")),
+            ("technical", ("technical",)),
+            ("commercial", ("commercial", "terms")),
+        )
+        for category, markers in category_markers:
+            if any(marker in content for marker in markers):
+                return category
+        return "other"
+
+    @staticmethod
+    def _mock_objection_status(content: str) -> str:
+        if any(marker in content for marker in ("resolved", "fully addressed", "accepted the answer")):
+            return "resolved"
+        if any(marker in content for marker in ("partially addressed", "helps but", "somewhat addressed")):
+            return "partially_addressed"
+        if any(marker in content for marker in ("deferred", "revisit", "later meeting", "put aside")):
+            return "deferred"
+        return "unresolved"
+
+    @staticmethod
+    def _mock_objection_strength(content: str) -> str:
+        if any(
+            marker in content
+            for marker in (
+                "would prevent",
+                "will prevent",
+                "cannot proceed",
+                "can't proceed",
+                "will not proceed",
+                "unacceptable",
+                "deal-breaker",
+                "deal breaker",
+            )
+        ):
+            return "strong"
+        if any(marker in content for marker in ("minor concern", "slight concern", "weak objection")):
+            return "weak"
+        return "moderate"
+
+    @staticmethod
+    def _mock_objection_owner(content: str) -> str | None:
+        owners = (
+            ("customer it", "Customer IT"),
+            ("security team", "Customer security team"),
+            ("legal team", "Customer legal team"),
+            ("procurement team", "Customer procurement team"),
+            ("finance team", "Customer finance team"),
+        )
+        for marker, owner in owners:
+            if marker in content:
+                return owner
+        return None
+
+    @staticmethod
+    def _mock_competitor_name(sentence: str) -> str | None:
+        named = re.search(r"\bCompetitor\s+[A-Z0-9][A-Za-z0-9_-]*", sentence)
+        if named is not None:
+            return named.group(0)
+        lowered = sentence.casefold()
+        if "another vendor" in lowered or "alternative vendor" in lowered:
+            return "Unnamed competitor"
+        return None
+
+    @staticmethod
+    def _mock_competitor_position(content: str) -> str:
+        if any(marker in content for marker in ("stronger", "preferred", "prefer ", "better", "already integrates")):
+            return "stronger"
+        if any(marker in content for marker in ("weaker", "fell short", "less capable", "does not support")):
+            return "weaker"
+        if any(marker in content for marker in ("neutral", "similar", "equivalent")):
+            return "neutral"
+        if any(marker in content for marker in ("mentioned", "also evaluating", "considering")):
+            return "present"
+        return "unclear"
+
     @staticmethod
     def _is_action_request_question(content: str) -> bool:
         if re.match(r"^(?:can|could|would|will)\s+(?:you|we|they)\b", content) is None:
@@ -1458,6 +1732,33 @@ class DeterministicMockAIProvider:
                 "overall_momentum": "will_close",
                 "momentum_summary": "Too short.",
                 "confidence": 2,
+                "deal_score": 99,
+            }
+        if request.job_type == AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value:
+            return {
+                "objections": [
+                    {
+                        "objection": "",
+                        "category": "unsupported",
+                        "status": "ignored",
+                        "strength": "critical",
+                        "owner": "",
+                        "confidence": 2,
+                        "evidence": "",
+                        "close_probability": 0.9,
+                    }
+                ],
+                "competitors": [
+                    {
+                        "name": "",
+                        "position": "winning",
+                        "confidence": 2,
+                        "evidence": "",
+                        "market_share": 90,
+                    }
+                ],
+                "overall_objection_pressure": "certain_loss",
+                "summary": "Too short.",
                 "deal_score": 99,
             }
         if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:

@@ -182,6 +182,21 @@ class BuyingSignalsProviderInput(BaseModel):
         return self
 
 
+class ObjectionsCompetitiveSignalsProviderInput(BaseModel):
+    """Provider-neutral Objections & Competitive Signals input."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["objections_competitive_signals"] = "objections_competitive_signals"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> ObjectionsCompetitiveSignalsProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("Objections & Competitive Signals messages must be ordered system then user.")
+        return self
+
+
 class FollowUpEmailProviderInput(BaseModel):
     """Provider-neutral Follow-up Email input with no transcript field."""
 
@@ -205,6 +220,7 @@ ProviderInput = (
     | RisksBlockersProviderInput
     | OpenQuestionsProviderInput
     | BuyingSignalsProviderInput
+    | ObjectionsCompetitiveSignalsProviderInput
     | FollowUpEmailProviderInput
 )
 

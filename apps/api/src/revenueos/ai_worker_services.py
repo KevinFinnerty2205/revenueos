@@ -20,6 +20,7 @@ from revenueos.ai_contracts import (
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
+    OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     OPEN_QUESTIONS_SCHEMA_VERSION,
     OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
@@ -29,6 +30,7 @@ from revenueos.ai_contracts import (
     ExecutiveSummarySource,
     FollowUpEmailSource,
     FollowUpEmailTone,
+    ObjectionsCompetitiveSignalsSource,
     OpenQuestionsSource,
     RisksBlockersSource,
 )
@@ -284,6 +286,12 @@ class AIWorkerService:
                     cancellation_check=self.is_cancellation_requested,
                     buying_signals_source_loader=self.load_buying_signals_source,
                 )
+            elif job.job_type == AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    objections_competitive_signals_source_loader=self.load_objections_competitive_signals_source,
+                )
             elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
                 result = await executor.execute(
                     job,
@@ -466,6 +474,56 @@ class AIWorkerService:
                             "strength_counts": strength_counts,
                             "overall_momentum": (overall_momentum if isinstance(overall_momentum, str) else None),
                             "insufficient_evidence": overall_momentum == "insufficient_evidence",
+                        },
+                    )
+                elif job.job_type == AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value:
+                    objection_values = result.content.get("objections")
+                    competitor_values = result.content.get("competitors")
+                    objections = objection_values if isinstance(objection_values, list) else []
+                    competitors = competitor_values if isinstance(competitor_values, list) else []
+                    objection_category_counts: dict[str, int] = {}
+                    objection_status_counts = {
+                        status: 0
+                        for status in (
+                            "resolved",
+                            "partially_addressed",
+                            "deferred",
+                            "unresolved",
+                        )
+                    }
+                    objection_strength_counts = {strength: 0 for strength in ("strong", "moderate", "weak")}
+                    for item in objections:
+                        if not isinstance(item, dict):
+                            continue
+                        category = item.get("category")
+                        status_value = item.get("status")
+                        strength = item.get("strength")
+                        if isinstance(category, str):
+                            objection_category_counts[category] = objection_category_counts.get(category, 0) + 1
+                        if isinstance(status_value, str) and status_value in objection_status_counts:
+                            objection_status_counts[status_value] += 1
+                        if isinstance(strength, str) and strength in objection_strength_counts:
+                            objection_strength_counts[strength] += 1
+                    overall_pressure = result.content.get("overall_objection_pressure")
+                    logger.info(
+                        "objections_competitive_signals_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                            "objection_count": len(objections),
+                            "competitor_count": len(competitors),
+                            "category_counts": objection_category_counts,
+                            "status_counts": objection_status_counts,
+                            "strength_counts": objection_strength_counts,
+                            "overall_objection_pressure": (
+                                overall_pressure if isinstance(overall_pressure, str) else None
+                            ),
+                            "empty_result": not objections and not competitors,
                         },
                     )
                 elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
@@ -776,6 +834,46 @@ class AIWorkerService:
             transcript_text=normalised_transcript,
         )
 
+    async def load_objections_competitive_signals_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> ObjectionsCompetitiveSignalsSource:
+        """Load the exact tenant transcript pinned by an objection signals job."""
+
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            source = await AIWorkerRepository(session).get_executive_summary_source(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_id,
+                job.transcript_version,
+            )
+        if source is None:
+            raise WorkerExecutionError(
+                "objections_competitive_signals_source_unavailable",
+                "The current transcript for Objections & Competitive Signals is unavailable.",
+                retryable=False,
+            )
+        meeting_title, meeting_date, transcript_text = source
+        normalised_transcript = transcript_text.strip()
+        if not normalised_transcript:
+            raise WorkerExecutionError(
+                "objections_competitive_signals_transcript_required",
+                "A usable transcript is required to generate Objections & Competitive Signals.",
+                retryable=False,
+            )
+        if len(normalised_transcript) > OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH:
+            raise WorkerExecutionError(
+                "objections_competitive_signals_transcript_too_large",
+                "The transcript exceeds the Objections & Competitive Signals processing limit.",
+                retryable=False,
+            )
+        return ObjectionsCompetitiveSignalsSource(
+            meeting_title=meeting_title,
+            meeting_date=meeting_date,
+            transcript_text=normalised_transcript,
+        )
+
     async def load_follow_up_email_source(
         self,
         job: ClaimedAIJob,
@@ -996,6 +1094,15 @@ class AIWorkerService:
                     schema_version=job.schema_version,
                     content=result.content,
                 )
+            elif job.job_type == AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value:
+                await artifact_service.prepare_objections_competitive_signals_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
             elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
                 await artifact_service.prepare_follow_up_email_artifact(
                     job_id=job.id,
@@ -1145,6 +1252,17 @@ class AIWorkerService:
         elif claim.job_type == AIJobType.BUYING_SIGNALS.value:
             logger.warning(
                 "buying_signals_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
+        elif claim.job_type == AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value:
+            logger.warning(
+                "objections_competitive_signals_generation_failed",
                 extra={
                     **self._log_context_from_claim(claim),
                     "meeting_id": str(claim.meeting_id),

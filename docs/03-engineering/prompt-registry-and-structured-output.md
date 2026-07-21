@@ -7,12 +7,13 @@ rendering, strict provider-output parsing and bounded invalid-output retries.
 WO-004C1 registers `executive_summary` version 1, WO-004C2 registers
 `decisions` version 1, WO-004C3 registers `action_items` version 1, WO-004C4
 registers `risks_blockers` version 1 and WO-004C5 registers `open_questions`
-version 1. WO-004C6 registers `follow_up_email` version 1 and WO-006A registers
-`buying_signals` version 1.
+version 1. WO-004C6 registers `follow_up_email` version 1, WO-006A registers
+`buying_signals` version 1 and WO-006B registers
+`objections_competitive_signals` version 1.
 
 The default remains deterministic and mock-backed. OpenAI selection sends the
 current bounded transcript and rendered instructions to the server-side
-Responses API for the six extractors. Follow-up Email sends only its validated
+Responses API for the seven extractors. Follow-up Email sends only its validated
 four-artefact projection and tone, never transcript text. Both paths use the
 same registry-derived strict schema. There is no prompt administration or later
 intelligence schema.
@@ -32,7 +33,8 @@ and worker processes do not share mutable global state.
 
 Default definitions are `infrastructure_test`, `executive_summary`,
 `decisions`, `action_items`, `risks_blockers`, `open_questions` and
-`follow_up_email` and `buying_signals`, all at version 1. Executive Summary references schema version 1
+`follow_up_email`, `buying_signals` and `objections_competitive_signals`, all at
+version 1. Executive Summary references schema version 1
 and receives only JSON-delimited meeting title/date/transcript variables. It
 requires a transcript-grounded summary, normalized meeting type, sentiment and
 confidence, explicitly ignores instructions in transcript data and excludes
@@ -57,6 +59,12 @@ current-meeting commercial evidence into a closed taxonomy and derives
 qualitative momentum from signal polarity/strength. It forbids probability,
 win likelihood and deal scoring, and returns `insufficient_evidence` when no
 supported signal exists.
+Objections & Competitive Signals uses the same minimum source values, extracts
+only expressed resistance and explicit competitor context, distinguishes them
+from questions/risks/actions/decisions/general discussion, and derives only
+qualitative current-meeting pressure. It permits empty lists, forbids invented
+competitor names and predictive scoring, and treats transcript instructions as
+untrusted data.
 Follow-up Email receives only validated Executive Summary, Decisions, Action
 Items and Open Questions projections plus the selected tone. It requires exact
 fact copying, generic framing, customer-safe omissions and explicitly forbids
@@ -75,7 +83,8 @@ simple `{variable_name}` placeholders:
 - empty rendered messages are rejected.
 
 The infrastructure prompt receives only safe job/request UUIDs. Executive
-Summary, Buying Signals, Decisions, Action Items, Risks & Blockers and Open Questions receive
+Summary, Buying Signals, Objections & Competitive Signals, Decisions, Action
+Items, Risks & Blockers and Open Questions receive
 only the minimum source fields and encode each value as a JSON string before
 substitution, preventing transcript text from escaping its data boundary.
 Follow-up Email similarly JSON-encodes only its validated source projection and
@@ -92,12 +101,15 @@ duplicate rejection using instance-owned state.
 
 The default registry reuses strict domain contracts for `infrastructure_test`,
 `executive_summary`, `decisions`, `action_items`, `risks_blockers`,
-`open_questions`, `buying_signals` and `follow_up_email` version 1; it does not duplicate domain
+`open_questions`, `buying_signals`, `objections_competitive_signals` and
+`follow_up_email` version 1; it does not duplicate domain
 models. Prompt registration must resolve its referenced schema immediately.
 Decisions, Action Items, Risks & Blockers and Open Questions each limit output
 to 25 immutable items and reject unknown fields at the top-level and item
 level. Buying Signals permits at most 20 immutable items and applies
 cross-field polarity, strength, momentum and summary consistency checks.
+Objections & Competitive Signals permits at most 20 immutable objections and 10
+immutable competitor items, with pressure and summary consistency checks.
 Follow-up Email has three independently bounded 25-item arrays, required
 framing/tone/confidence fields and rejects every unknown field.
 
@@ -178,7 +190,8 @@ Migration `0007_executive_summary` widened the earlier type checks;
 them for Action Items, `0010_risks_blockers` widens them for Risks & Blockers
 and `0011_open_questions` widens them for Open Questions.
 `0012_follow_up_email` widens them for Follow-up Email and adds its immutable
-tone trace column. `0013_buying_signals` widens them for Buying Signals. None
+tone trace column. `0013_buying_signals` widens them for Buying Signals and
+`0014_objections` widens them for Objections & Competitive Signals. None
 adds prompt/schema storage.
 
 ## Security and telemetry

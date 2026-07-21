@@ -202,15 +202,15 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await expect(
     page.getByRole("heading", { name: "Meeting Intelligence" }),
   ).toBeVisible();
-  await expect(page.getByText("0 of 7 ready")).toBeVisible();
+  await expect(page.getByText("0 of 8 ready")).toBeVisible();
 
   await page
     .getByRole("button", { name: "Generate Meeting Intelligence" })
     .click();
   await expect(
-    page.getByText(/Generating 6 sections|6 sections queued/),
+    page.getByText(/Generating 7 sections|7 sections queued/),
   ).toBeVisible();
-  await expect(page.getByText("7 of 7 ready")).toBeVisible({ timeout: 12_000 });
+  await expect(page.getByText("8 of 8 ready")).toBeVisible({ timeout: 12_000 });
   await expect(
     page
       .getByRole("article", { name: "Buying Signals & Deal Momentum" })
@@ -218,6 +218,16 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   ).toBeVisible();
   await expect(page.getByText(/win probability/i)).toHaveCount(0);
   await expect(page.getByText(/deal score/i)).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("article", { name: "Objections & Competitive Signals" })
+      .getByText("Competitor X", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("article", { name: "Objections & Competitive Signals" })
+      .getByText("Current meeting objection pressure"),
+  ).toBeVisible();
   await expect(
     page
       .getByRole("article", { name: "Key Decisions" })
@@ -248,7 +258,12 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await page.getByRole("button", { name: "Copy" }).click();
   await expect(page.getByText("Email copied to clipboard.")).toBeVisible();
   await expect(page.getByRole("button", { name: /send/i })).toHaveCount(0);
-  if (process.env.CAPTURE_WO_006A_SCREENSHOT === "1") {
+  if (process.env.CAPTURE_WO_006B_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-006b-objections-competitive-signals.png",
+      fullPage: true,
+    });
+  } else if (process.env.CAPTURE_WO_006A_SCREENSHOT === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-006a-buying-signals-deal-momentum.png",
       fullPage: true,
@@ -262,7 +277,7 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
 
   await page.reload();
   await page.getByRole("tab", { name: "Intelligence" }).click();
-  await expect(page.getByText("7 of 7 ready")).toBeVisible();
+  await expect(page.getByText("8 of 8 ready")).toBeVisible();
   await expect(
     page
       .getByRole("article", { name: "Key Decisions" })
@@ -324,8 +339,8 @@ function workspace(
       : stage === "email"
         ? "queued"
         : "unavailable";
-  const ready = stage === "completed" ? 7 : contentReady ? 6 : 0;
-  const processing = stage === "extractions" ? 6 : 0;
+  const ready = stage === "completed" ? 8 : contentReady ? 7 : 0;
+  const processing = stage === "extractions" ? 7 : 0;
   const queued = stage === "email" ? 1 : 0;
   return {
     overallState:
@@ -346,18 +361,18 @@ function workspace(
       queued,
       processing,
       failed: 0,
-      notGenerated: 7 - ready - queued - processing,
-      total: 7,
+      notGenerated: 8 - ready - queued - processing,
+      total: 8,
       summary:
         stage === "not_started"
-          ? "0 of 7 ready"
+          ? "0 of 8 ready"
           : stage === "extractions"
-            ? "Generating 6 sections"
+            ? "Generating 7 sections"
             : stage === "prerequisites"
-              ? "6 of 7 ready"
+              ? "7 of 8 ready"
               : stage === "email"
                 ? "1 section queued"
-                : "7 of 7 ready",
+                : "8 of 8 ready",
     },
     executiveSummary: capability(
       extractionState,
@@ -388,6 +403,38 @@ function workspace(
             momentumSummary:
               "The current meeting shows strong positive momentum from the extracted signals.",
             confidence: 0.9,
+          }
+        : null,
+    ),
+    objectionsCompetitiveSignals: capability(
+      extractionState,
+      contentReady
+        ? {
+            objections: [
+              {
+                objection:
+                  "The customer believes implementation needs too many resources.",
+                category: "implementation",
+                status: "unresolved",
+                strength: "strong",
+                owner: "Customer IT",
+                confidence: 0.93,
+                evidence:
+                  "Customer IT said it could not support the proposed rollout.",
+              },
+            ],
+            competitors: [
+              {
+                name: "Competitor X",
+                position: "stronger",
+                confidence: 0.88,
+                evidence:
+                  "The competitor already integrates with the customer's stack.",
+              },
+            ],
+            overallObjectionPressure: "high",
+            summary:
+              "Implementation capacity and Competitor X create meaningful pressure.",
           }
         : null,
     ),
@@ -495,6 +542,7 @@ function generationWorkspace(
         ? [
             "executive_summary",
             "buying_signals",
+            "objections_competitive_signals",
             "decisions",
             "action_items",
             "risks_blockers",
