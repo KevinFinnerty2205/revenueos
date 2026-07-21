@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from revenueos.ai_contracts import (
     ACTION_ITEMS_SCHEMA_VERSION,
+    BUYING_SIGNALS_SCHEMA_VERSION,
     DECISIONS_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     FOLLOW_UP_EMAIL_SCHEMA_VERSION,
@@ -14,6 +15,7 @@ from revenueos.ai_contracts import (
     OPEN_QUESTIONS_SCHEMA_VERSION,
     RISKS_BLOCKERS_SCHEMA_VERSION,
     ActionItemsArtifactContent,
+    BuyingSignalsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
@@ -36,6 +38,7 @@ DECISIONS_SCHEMA_KEY = "decisions"
 ACTION_ITEMS_SCHEMA_KEY = "action_items"
 RISKS_BLOCKERS_SCHEMA_KEY = "risks_blockers"
 OPEN_QUESTIONS_SCHEMA_KEY = "open_questions"
+BUYING_SIGNALS_SCHEMA_KEY = "buying_signals"
 FOLLOW_UP_EMAIL_SCHEMA_KEY = "follow_up_email"
 
 
@@ -145,6 +148,14 @@ def create_default_output_schema_registry() -> OutputSchemaRegistry:
                 job_type=AIJobType.OPEN_QUESTIONS.value,
                 validation_model=OpenQuestionsArtifactContent,
                 description="Strict schema for transcript-grounded meeting Open Questions.",
+                active=True,
+            ),
+            OutputSchemaDefinition(
+                schema_key=BUYING_SIGNALS_SCHEMA_KEY,
+                schema_version=BUYING_SIGNALS_SCHEMA_VERSION,
+                job_type=AIJobType.BUYING_SIGNALS.value,
+                validation_model=BuyingSignalsArtifactContent,
+                description="Strict schema for transcript-grounded Buying Signals and Deal Momentum.",
                 active=True,
             ),
             OutputSchemaDefinition(

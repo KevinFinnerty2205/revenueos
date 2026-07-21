@@ -3,7 +3,14 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 INFRASTRUCTURE_TEST_SCHEMA_VERSION = 1
 INFRASTRUCTURE_TEST_MESSAGE_MAX_LENGTH = 500
@@ -43,6 +50,13 @@ OPEN_QUESTION_OWNER_MAX_LENGTH = 200
 OPEN_QUESTION_EVIDENCE_MIN_LENGTH = 5
 OPEN_QUESTION_EVIDENCE_MAX_LENGTH = 500
 OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH = 50_000
+BUYING_SIGNALS_SCHEMA_VERSION = 1
+BUYING_SIGNALS_MAX_COUNT = 20
+BUYING_SIGNAL_EVIDENCE_MIN_LENGTH = 5
+BUYING_SIGNAL_EVIDENCE_MAX_LENGTH = 400
+BUYING_SIGNALS_SUMMARY_MIN_LENGTH = 20
+BUYING_SIGNALS_SUMMARY_MAX_LENGTH = 800
+BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH = 50_000
 FOLLOW_UP_EMAIL_SCHEMA_VERSION = 1
 FOLLOW_UP_EMAIL_SUBJECT_MAX_LENGTH = 200
 FOLLOW_UP_EMAIL_GREETING_MAX_LENGTH = 200
@@ -544,6 +558,227 @@ class OpenQuestionsSource(BaseModel):
             raise ValueError("Transcript text must not be empty.")
         if len(normalised) > OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH:
             raise ValueError("Transcript text exceeds the Open Questions limit.")
+        return normalised
+
+
+BuyingSignalTypeValue = Literal[
+    "budget_confirmed",
+    "budget_unconfirmed",
+    "timeline_confirmed",
+    "timeline_unclear",
+    "decision_maker_engaged",
+    "decision_maker_missing",
+    "champion_identified",
+    "champion_not_evident",
+    "procurement_active",
+    "procurement_unclear",
+    "competitor_present",
+    "competitor_absent",
+    "urgency_present",
+    "urgency_absent",
+    "commercial_intent",
+    "implementation_commitment",
+    "next_step_committed",
+    "next_step_weak",
+    "stakeholder_alignment",
+    "stakeholder_misalignment",
+    "technical_fit_confirmed",
+    "technical_fit_uncertain",
+    "security_or_legal_progress",
+    "security_or_legal_blocker",
+    "other",
+]
+BuyingSignalPolarityValue = Literal["positive", "neutral", "negative"]
+BuyingSignalStrengthValue = Literal["strong", "moderate", "weak"]
+DealMomentumValue = Literal[
+    "strong_positive",
+    "positive",
+    "neutral",
+    "negative",
+    "strong_negative",
+    "insufficient_evidence",
+]
+
+_POSITIVE_SIGNAL_TYPES = {
+    "budget_confirmed",
+    "timeline_confirmed",
+    "decision_maker_engaged",
+    "champion_identified",
+    "procurement_active",
+    "urgency_present",
+    "commercial_intent",
+    "implementation_commitment",
+    "next_step_committed",
+    "stakeholder_alignment",
+    "technical_fit_confirmed",
+    "security_or_legal_progress",
+}
+_MISSING_SIGNAL_TYPES = {
+    "budget_unconfirmed",
+    "timeline_unclear",
+    "decision_maker_missing",
+    "champion_not_evident",
+    "procurement_unclear",
+    "urgency_absent",
+    "next_step_weak",
+    "technical_fit_uncertain",
+}
+_NEGATIVE_SIGNAL_TYPES = {
+    "stakeholder_misalignment",
+    "security_or_legal_blocker",
+}
+_SUMMARY_SIGNAL_GROUPS: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
+    (("budget",), frozenset({"budget_confirmed", "budget_unconfirmed"})),
+    (("timeline",), frozenset({"timeline_confirmed", "timeline_unclear"})),
+    (
+        ("decision maker", "decision-maker", "economic buyer"),
+        frozenset({"decision_maker_engaged", "decision_maker_missing"}),
+    ),
+    (("champion",), frozenset({"champion_identified", "champion_not_evident"})),
+    (("procurement",), frozenset({"procurement_active", "procurement_unclear"})),
+    (("competitor", "competition"), frozenset({"competitor_present", "competitor_absent"})),
+    (("urgency",), frozenset({"urgency_present", "urgency_absent"})),
+    (("commercial intent", "commercial commitment"), frozenset({"commercial_intent"})),
+    (("implementation",), frozenset({"implementation_commitment"})),
+    (("next step", "next meeting"), frozenset({"next_step_committed", "next_step_weak"})),
+    (("stakeholder",), frozenset({"stakeholder_alignment", "stakeholder_misalignment"})),
+    (("technical",), frozenset({"technical_fit_confirmed", "technical_fit_uncertain"})),
+    (("security", "legal"), frozenset({"security_or_legal_progress", "security_or_legal_blocker"})),
+)
+
+
+class BuyingSignal(BaseModel):
+    """One immutable transcript-grounded buying or deal-progress signal."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    signal_type: BuyingSignalTypeValue
+    polarity: BuyingSignalPolarityValue
+    strength: BuyingSignalStrengthValue
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=BUYING_SIGNAL_EVIDENCE_MIN_LENGTH,
+            max_length=BUYING_SIGNAL_EVIDENCE_MAX_LENGTH,
+        ),
+    ]
+
+    @model_validator(mode="after")
+    def validate_signal_semantics(self) -> BuyingSignal:
+        allowed_polarities: set[str]
+        if self.signal_type in _POSITIVE_SIGNAL_TYPES:
+            allowed_polarities = {"positive"}
+        elif self.signal_type in _NEGATIVE_SIGNAL_TYPES:
+            allowed_polarities = {"negative"}
+        elif self.signal_type in _MISSING_SIGNAL_TYPES:
+            allowed_polarities = {"neutral", "negative"}
+        elif self.signal_type == "competitor_present":
+            allowed_polarities = {"neutral", "negative"}
+        elif self.signal_type == "competitor_absent":
+            allowed_polarities = {"neutral", "positive"}
+        else:
+            allowed_polarities = {"positive", "neutral", "negative"}
+        if self.polarity not in allowed_polarities:
+            raise ValueError("Signal polarity does not match the normalized signal type.")
+        if self.polarity == "neutral" and self.strength == "strong":
+            raise ValueError("Neutral signals cannot have strong strength.")
+        return self
+
+
+class BuyingSignalsArtifactContent(BaseModel):
+    """Strict immutable Buying Signals and Deal Momentum schema version 1."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    signals: tuple[BuyingSignal, ...] = Field(max_length=BUYING_SIGNALS_MAX_COUNT)
+    overall_momentum: DealMomentumValue
+    momentum_summary: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=BUYING_SIGNALS_SUMMARY_MIN_LENGTH,
+            max_length=BUYING_SIGNALS_SUMMARY_MAX_LENGTH,
+        ),
+    ]
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+    @field_validator("signals", mode="before")
+    @classmethod
+    def normalise_json_array(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def validate_momentum_consistency(self) -> BuyingSignalsArtifactContent:
+        polarities = {signal.polarity for signal in self.signals}
+        if not self.signals and self.overall_momentum != "insufficient_evidence":
+            raise ValueError("No extracted signals requires insufficient_evidence momentum.")
+        if self.overall_momentum == "strong_positive" and not any(
+            signal.polarity == "positive" and signal.strength == "strong" for signal in self.signals
+        ):
+            raise ValueError("Strong positive momentum requires a strong positive signal.")
+        if self.overall_momentum == "strong_negative" and not any(
+            signal.polarity == "negative" and signal.strength == "strong" for signal in self.signals
+        ):
+            raise ValueError("Strong negative momentum requires a strong negative signal.")
+        if self.overall_momentum in {"positive", "strong_positive"} and "positive" not in polarities:
+            raise ValueError("Positive momentum requires positive transcript evidence.")
+        if self.overall_momentum in {"negative", "strong_negative"} and "negative" not in polarities:
+            raise ValueError("Negative momentum requires negative transcript evidence.")
+        if self.overall_momentum == "insufficient_evidence" and any(
+            signal.strength == "strong" for signal in self.signals
+        ):
+            raise ValueError("Insufficient evidence cannot contain strong signals.")
+
+        signal_types = {signal.signal_type for signal in self.signals}
+        lowered_summary = self.momentum_summary.casefold()
+        for terms, supported_types in _SUMMARY_SIGNAL_GROUPS:
+            if any(term in lowered_summary for term in terms) and signal_types.isdisjoint(supported_types):
+                raise ValueError("Momentum summary references a signal type absent from the signal list.")
+        return self
+
+    def as_json(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+
+class BuyingSignalsSource(BaseModel):
+    """Pinned meeting/transcript input for Buying Signals execution."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    meeting_title: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+    ]
+    meeting_date: datetime
+    transcript_text: str
+
+    @field_validator("transcript_text")
+    @classmethod
+    def validate_transcript_text(cls, value: str) -> str:
+        normalised = value.strip()
+        if not normalised:
+            raise ValueError("Transcript text must not be empty.")
+        if len(normalised) > BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH:
+            raise ValueError("Transcript text exceeds the Buying Signals limit.")
         return normalised
 
 

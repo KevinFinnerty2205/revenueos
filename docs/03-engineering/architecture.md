@@ -2,16 +2,18 @@
 
 ## Current scope
 
-WO-004C6 keeps the Sprint 3 modular monolith and
-WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5 AI baseline. The durable worker runs
+WO-006A keeps the Sprint 3 modular monolith and
+WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 and WO-005 baseline. The durable worker runs
 its infrastructure test plus current-transcript Executive Summary, Decisions,
-Action Items, Risks & Blockers and Open Questions through immutable prompts/
-schemas and bounded validation. It also composes Follow-up Email from the four
+Action Items, Risks & Blockers, Open Questions and Buying Signals through
+immutable prompts/schemas and bounded validation. It also composes Follow-up Email from the four
 validated customer-safe artefacts other than Risks & Blockers; that path never
 queries or transmits transcript text. The selected provider is either the
 default no-network mock or a server-only OpenAI Responses API adapter. Meeting-
 scoped APIs and one derived Meeting Intelligence workspace expose those
-independent capabilities without combining their persistence.
+independent capabilities without combining their persistence. Buying Signals
+derives evidence-backed qualitative momentum for the current meeting only; it
+does not predict outcomes or score the deal.
 There is no email-send integration, later intelligence schema, question-
 answering workflow, recording/media pipeline, connector, billing service or
 mobile application.
@@ -59,7 +61,7 @@ Next.js App Router, strict TypeScript and Tailwind CSS provide the responsive we
 
 Development auth returns one fixed example user/organisation, provisions that identity only in a migrated development database, and displays a warning banner. Production never provisions or falls back to the mock identity. The Clerk adapter boundary and environment path exist, but Clerk sessions are not connected.
 
-Companies, contacts, opportunities and tasks share list and form components. Meetings use focused list, aggregate form and detail components because participant and transcript state is nested. The detail view exposes accessible Overview, Intelligence, Transcript and History tabs. Intelligence is one ordered, responsive workspace over Executive Summary, Key Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email. One non-overlapping three-second aggregate polling chain terminates when idle or on unmount, resumes after generation/retry and uses sequence guards against stale responses. Shared section treatment covers unavailable, not-generated, queued, processing, completed/valid-empty, failed and cancelled states while preserving completed content during partial failures. The composer retains tone, plain-text Copy and deliberate Regenerate, but no Send. The browser reads an explicitly selected `.txt` file into the form; no file is uploaded to object storage and no recording or transcription occurs. Components provide loading, empty, safe error and responsive mobile/desktop states. Business validation remains server-side even when HTML constraints improve feedback.
+Companies, contacts, opportunities and tasks share list and form components. Meetings use focused list, aggregate form and detail components because participant and transcript state is nested. The detail view exposes accessible Overview, Intelligence, Transcript and History tabs. Intelligence is one ordered, responsive workspace over Executive Summary, Buying Signals & Deal Momentum, Key Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email. One non-overlapping three-second aggregate polling chain terminates when idle or on unmount, resumes after generation/retry and uses sequence guards against stale responses. Shared section treatment covers unavailable, not-generated, queued, processing, completed/valid-empty, failed and cancelled states while preserving completed content during partial failures. The composer retains tone, plain-text Copy and deliberate Regenerate, but no Send. The browser reads an explicitly selected `.txt` file into the form; no file is uploaded to object storage and no recording or transcription occurs. Components provide loading, empty, safe error and responsive mobile/desktop states. Business validation remains server-side even when HTML constraints improve feedback.
 
 ## API architecture
 
@@ -70,7 +72,7 @@ FastAPI exposes:
 - `GET /api/v1/me` for the authenticated identity and active organisation context;
 - CRUD collections and resources under `/api/v1/companies`, `/api/v1/contacts`, `/api/v1/opportunities` and `/api/v1/tasks`;
 - meeting, nested participant, singular transcript and audit-history resources under `/api/v1/meetings`;
-- meeting-scoped POST/GET for Executive Summary, Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email;
+- meeting-scoped POST/GET for Executive Summary, Buying Signals, Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email;
 - aggregate current-version GET at `/api/v1/meetings/{meetingId}/intelligence`; and
 - idempotent generation orchestration POST at `/api/v1/meetings/{meetingId}/intelligence/generate`.
 
@@ -92,7 +94,7 @@ One active or soft-deleted transcript row is retained per meeting. Mutations loc
 
 Each AI job captures the exact current transcript version requested; it cannot silently point to a different meeting or transcript. Each AI artefact must match its job's organisation, meeting, transcript and transcript version. Logical artefact versions are unique and earlier content cannot be updated at the database layer; only a one-way `superseded_at` marker may change. The current transcript table still mutates one body in place, so a pinned version number does not yet provide historical source-text reconstruction.
 
-`AIJobService` validates the active meeting/transcript trace and applies the explicit lifecycle matrix. Infrastructure tests retain caller-provided bounded idempotency keys. Executive Summary, Decisions, Action Items, Risks & Blockers and Open Questions each use meeting, current transcript version, job type, prompt version and schema version for equivalence; repeated active/completed requests return the same capability job, while failed/cancelled work can create a new ordinal retry and transcript corrections create new logical work. Follow-up Email uses the validated source artefact version, type, prompt/schema and tone for active-work equivalence; completed work can be deliberately regenerated into a new append-only job. Entering `running` consumes an attempt; failed-to-pending preparation preserves the attempt count and clears stale execution metadata.
+`AIJobService` validates the active meeting/transcript trace and applies the explicit lifecycle matrix. Infrastructure tests retain caller-provided bounded idempotency keys. Executive Summary, Buying Signals, Decisions, Action Items, Risks & Blockers and Open Questions each use meeting, current transcript version, job type, prompt version and schema version for equivalence; repeated active/completed requests return the same capability job, while failed/cancelled work can create a new ordinal retry and transcript corrections create new logical work. Follow-up Email uses the validated source artefact version, type, prompt/schema and tone for active-work equivalence; completed work can be deliberately regenerated into a new append-only job. Entering `running` consumes an attempt; failed-to-pending preparation preserves the attempt count and clears stale execution metadata.
 
 `MeetingIntelligenceService` derives the aggregate view in bounded tenant-scoped
 queries and invokes those existing request methods for unified generation. It
@@ -102,12 +104,13 @@ overall state is never stored. The browser calls the same safe orchestration
 endpoint when the aggregate state proves composer prerequisites are ready; no
 workflow engine or synchronous provider path is introduced.
 
-`AIArtifactService` accepts only registered strict schema-version-1 infrastructure-test, Executive Summary, Decisions, Action Items, Risks & Blockers, Open Questions or Follow-up Email content, proves its trace matches the tenant-scoped job and assigns the next append-only logical version. Job creation, lifecycle changes and artefact creation commit atomically with content-minimised audit events. Audit metadata contains identifiers/type/status/version, optional prompt/schema/provider/model/tone labels and content-free item/count flags, never supplied transcript text, generated email/question/risk/task/owner/evidence content, artefact content, prompt/model bodies, secrets or raw exceptions.
+`AIArtifactService` accepts only registered strict schema-version-1 infrastructure-test, Executive Summary, Buying Signals, Decisions, Action Items, Risks & Blockers, Open Questions or Follow-up Email content, proves its trace matches the tenant-scoped job and assigns the next append-only logical version. Job creation, lifecycle changes and artefact creation commit atomically with content-minimised audit events. Audit metadata contains identifiers/type/status/version, optional prompt/schema/provider/model/tone labels and content-free item/count flags, never supplied transcript text, generated signal/email/question/risk/task/owner/evidence content, artefact content, prompt/model bodies, secrets or raw exceptions.
 
 `AIWorkerService` discovers only opaque organisation IDs through a fixed PostgreSQL scheduler function, then sets one transaction-local tenant context for every queue transaction. Claims and recovery use `FOR UPDATE SKIP LOCKED`; heartbeat updates require exact worker ownership. Execution occurs without an open database transaction. The completion transaction locks the owned running job, rechecks cancellation, stages the validated artefact and commits artefact/audits/completed state atomically. Retries use persisted attempts, bounded exponential backoff and `next_attempt_at`.
 
 `InfrastructureTestExecutor`, `ExecutiveSummaryExecutor`, `DecisionsExecutor`,
-`ActionItemsExecutor`, `RisksBlockersExecutor`, `OpenQuestionsExecutor` and
+`ActionItemsExecutor`, `RisksBlockersExecutor`, `OpenQuestionsExecutor`,
+`BuyingSignalsExecutor` and
 `FollowUpEmailComposer` resolve their prompt/schema pairs and invoke exactly the
 configured provider. Transcript intelligence loads only the exact current
 tenant transcript pinned by the job,
@@ -129,7 +132,7 @@ exactly before persistence.
 The mock processes the transcript deterministically with no network call. The
 OpenAI adapter uses the official asynchronous Responses API with strict
 `json_schema`, `store=false`, no tools and no streaming. Enabling it sends the
-rendered instructions and selected transcript to OpenAI for the five
+rendered instructions and selected transcript to OpenAI for the six
 transcript-grounded extractors. Follow-up Email sends only its validated
 customer-safe source projection and tone. SDK types remain inside the adapter
 and SDK retries are disabled so the durable worker remains the retry authority.
@@ -137,8 +140,9 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0012_follow_up_email` is the head migration. It widens
-job/artefact type checks and adds a guarded nullable composition-tone column.
+source exists. Migration `0013_buying_signals` is the head migration. It widens
+job/artefact type checks for Buying Signals; `0012_follow_up_email` added the
+guarded nullable composition-tone column.
 Forced RLS, composite tenant keys and indexes remain unchanged.
 
 The API starts without a database so developers can inspect health and the shell, but `/ready` returns `503` and marks persistence unavailable. CRUD routes return a safe service-unavailable response.
@@ -177,6 +181,7 @@ See [AI database foundation](ai-database-foundation.md),
 [Meeting Decisions intelligence](meeting-decisions-intelligence.md),
 [Meeting Action Items intelligence](meeting-action-items-intelligence.md),
 [Meeting Risks & Blockers intelligence](meeting-risks-blockers-intelligence.md),
-[Meeting Open Questions intelligence](meeting-open-questions-intelligence.md)
+[Meeting Open Questions intelligence](meeting-open-questions-intelligence.md),
+[Buying Signals & Deal Momentum intelligence](buying-signals-intelligence.md)
 and [Follow-up Email Composer](follow-up-email-composer.md), plus the
 [Unified Meeting Intelligence workspace](unified-meeting-intelligence.md).

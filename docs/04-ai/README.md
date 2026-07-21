@@ -13,6 +13,9 @@ Open Questions through the same stack. WO-004C6 adds the first customer-ready
 composer: a Follow-up Email produced only from validated Executive Summary,
 Decisions, Action Items and Open Questions artefacts plus an explicit tone. It
 never reads or sends the transcript and deliberately excludes Risks & Blockers.
+WO-006A adds transcript-grounded Buying Signals and a qualitative current-
+meeting Deal Momentum assessment with explicit evidence and uncertainty. It
+does not estimate win probability, forecast or score the deal.
 No later intelligence capability, send integration, Anthropic/Gemini provider,
 embedding, tool use or agent is active.
 
@@ -26,11 +29,12 @@ transcript data flow. The
 [prompt registry and structured-output guide](../03-engineering/prompt-registry-and-structured-output.md)
 documents the WO-004B3 extension.
 The [Executive Summary guide](../03-engineering/executive-summary-intelligence.md),
-[Meeting Decisions guide](../03-engineering/meeting-decisions-intelligence.md)
-the [Meeting Action Items guide](../03-engineering/meeting-action-items-intelligence.md)
-and [Meeting Risks & Blockers guide](../03-engineering/meeting-risks-blockers-intelligence.md)
-and [Meeting Open Questions guide](../03-engineering/meeting-open-questions-intelligence.md),
-and the [Follow-up Email Composer guide](../03-engineering/follow-up-email-composer.md)
+[Meeting Decisions guide](../03-engineering/meeting-decisions-intelligence.md),
+[Meeting Action Items guide](../03-engineering/meeting-action-items-intelligence.md),
+[Meeting Risks & Blockers guide](../03-engineering/meeting-risks-blockers-intelligence.md),
+[Meeting Open Questions guide](../03-engineering/meeting-open-questions-intelligence.md),
+the [Buying Signals & Deal Momentum guide](../03-engineering/buying-signals-intelligence.md),
+and [Follow-up Email Composer guide](../03-engineering/follow-up-email-composer.md)
 document the current Meeting Intelligence capabilities. The
 [Unified Meeting Intelligence guide](../03-engineering/unified-meeting-intelligence.md)
 documents their aggregate product state and orchestration without changing
@@ -40,7 +44,7 @@ Future AI work must use the typed provider port, schema validation, authorised
 minimum evidence, content-redacted logs, explicit model/prompt versions and
 human approval for consequential output.
 
-For the five transcript-grounded capabilities, OpenAI selection sends the
+For the six transcript-grounded capabilities, OpenAI selection sends the
 bounded selected meeting transcript to OpenAI. For Follow-up Email, it sends
 only the validated customer-safe four-artefact projection and tone; the
 composer never transmits transcript text. Production customer data remains

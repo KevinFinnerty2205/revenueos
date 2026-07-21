@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from revenueos.ai_contracts import (
     ActionItemsArtifactContent,
+    BuyingSignalsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
@@ -16,6 +17,7 @@ from revenueos.ai_services import (
     ActionItemsStateResult,
     AIJobRequestResult,
     AIJobService,
+    BuyingSignalsStateResult,
     DecisionsStateResult,
     ExecutiveSummaryStateResult,
     FollowUpEmailStateResult,
@@ -30,6 +32,10 @@ from revenueos.intelligence_contracts import (
     ActionItemsRequestResponse,
     ActionItemsResponse,
     ActionItemsState,
+    BuyingSignalsContentResponse,
+    BuyingSignalsRequestResponse,
+    BuyingSignalsResponse,
+    BuyingSignalsState,
     DecisionsContentResponse,
     DecisionsRequestResponse,
     DecisionsResponse,
@@ -205,6 +211,33 @@ async def get_executive_summary(
     service: Intelligence,
 ) -> ExecutiveSummaryResponse:
     return _executive_summary_response(await service.get_executive_summary_state(meeting_id))
+
+
+@router.post(
+    "/{meeting_id}/intelligence/buying-signals",
+    response_model=BuyingSignalsRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_buying_signals(
+    meeting_id: UUID,
+    response: Response,
+    service: Intelligence,
+) -> BuyingSignalsRequestResponse:
+    result = await service.request_buying_signals(meeting_id)
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return _buying_signals_request_response(result)
+
+
+@router.get(
+    "/{meeting_id}/intelligence/buying-signals",
+    response_model=BuyingSignalsResponse,
+)
+async def get_buying_signals(
+    meeting_id: UUID,
+    service: Intelligence,
+) -> BuyingSignalsResponse:
+    return _buying_signals_response(await service.get_buying_signals_state(meeting_id))
 
 
 @router.post(
@@ -534,6 +567,68 @@ def _executive_summary_response(
         ),
         safe_message=safe_message,
         executive_summary=content,
+    )
+
+
+def _buying_signals_request_response(
+    result: AIJobRequestResult,
+) -> BuyingSignalsRequestResponse:
+    job = result.job
+    job_status = cast(
+        Literal["queued", "running", "completed"] | None,
+        {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+        }.get(job.status),
+    )
+    if job_status is None:
+        raise PublicAPIError(
+            "invalid_intelligence_state",
+            "The Buying Signals request could not be represented safely.",
+            500,
+        )
+    return BuyingSignalsRequestResponse(
+        job_id=job.id,
+        status=job_status,
+        created=result.created,
+        transcript_version=job.transcript_version,
+        requested_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+def _buying_signals_response(
+    result: BuyingSignalsStateResult,
+) -> BuyingSignalsResponse:
+    job = result.job
+    content = None
+    if result.artifact is not None:
+        validated = BuyingSignalsArtifactContent.model_validate(result.artifact.content_json)
+        content = BuyingSignalsContentResponse.model_validate(validated)
+    safe_message = job.last_error_message_safe if job is not None and result.state in {"failed", "cancelled"} else None
+    if result.state == "cancelled" and safe_message is None:
+        safe_message = "Buying Signals generation was cancelled."
+    if result.state == "failed" and safe_message is None:
+        safe_message = "Buying Signals generation could not be completed."
+    return BuyingSignalsResponse(
+        state=cast(BuyingSignalsState, result.state),
+        generation_available=result.generation_available,
+        unavailable_reason=result.unavailable_reason,
+        job_id=job.id if job is not None else None,
+        transcript_version=job.transcript_version if job is not None else None,
+        requested_at=job.created_at if job is not None else None,
+        started_at=job.started_at if job is not None else None,
+        generated_at=(
+            result.artifact.created_at
+            if result.artifact is not None
+            else job.completed_at
+            if job is not None and result.state == "completed"
+            else None
+        ),
+        safe_message=safe_message,
+        buying_signals=content,
     )
 
 

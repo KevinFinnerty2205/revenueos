@@ -83,6 +83,48 @@ export type ExecutiveSummaryMeetingType =
   | "other";
 export type ExecutiveSummarySentiment =
   "positive" | "neutral" | "negative" | "mixed";
+export type BuyingSignalsState =
+  | "empty"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type BuyingSignalType =
+  | "budget_confirmed"
+  | "budget_unconfirmed"
+  | "timeline_confirmed"
+  | "timeline_unclear"
+  | "decision_maker_engaged"
+  | "decision_maker_missing"
+  | "champion_identified"
+  | "champion_not_evident"
+  | "procurement_active"
+  | "procurement_unclear"
+  | "competitor_present"
+  | "competitor_absent"
+  | "urgency_present"
+  | "urgency_absent"
+  | "commercial_intent"
+  | "implementation_commitment"
+  | "next_step_committed"
+  | "next_step_weak"
+  | "stakeholder_alignment"
+  | "stakeholder_misalignment"
+  | "technical_fit_confirmed"
+  | "technical_fit_uncertain"
+  | "security_or_legal_progress"
+  | "security_or_legal_blocker"
+  | "other";
+export type BuyingSignalPolarity = "positive" | "neutral" | "negative";
+export type BuyingSignalStrength = "strong" | "moderate" | "weak";
+export type DealMomentum =
+  | "strong_positive"
+  | "positive"
+  | "neutral"
+  | "negative"
+  | "strong_negative"
+  | "insufficient_evidence";
 export type DecisionsState =
   | "empty"
   | "queued"
@@ -145,6 +187,7 @@ export type FollowUpEmailState =
 export type FollowUpEmailTone = "professional" | "friendly" | "executive";
 export type MeetingIntelligenceCapabilityName =
   | "executive_summary"
+  | "buying_signals"
   | "decisions"
   | "action_items"
   | "risks_blockers"
@@ -293,6 +336,44 @@ export interface ExecutiveSummaryResponse {
 }
 
 export interface ExecutiveSummaryRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface BuyingSignal {
+  signalType: BuyingSignalType;
+  polarity: BuyingSignalPolarity;
+  strength: BuyingSignalStrength;
+  confidence: number;
+  evidence: string;
+}
+
+export interface BuyingSignalsContent {
+  signals: BuyingSignal[];
+  overallMomentum: DealMomentum;
+  momentumSummary: string;
+  confidence: number;
+}
+
+export interface BuyingSignalsResponse {
+  state: BuyingSignalsState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  buyingSignals: BuyingSignalsContent | null;
+}
+
+export interface BuyingSignalsRequestResponse {
   jobId: string;
   status: "queued" | "running" | "completed";
   created: boolean;
@@ -502,7 +583,7 @@ export interface MeetingIntelligenceProgress {
   processing: number;
   failed: number;
   notGenerated: number;
-  total: 6;
+  total: 7;
   summary: string;
 }
 
@@ -513,6 +594,7 @@ export interface MeetingIntelligenceResponse {
   lastUpdatedAt: string | null;
   progress: MeetingIntelligenceProgress;
   executiveSummary: MeetingIntelligenceCapability<ExecutiveSummaryContent>;
+  buyingSignals: MeetingIntelligenceCapability<BuyingSignalsContent>;
   decisions: MeetingIntelligenceCapability<DecisionsContent>;
   actionItems: MeetingIntelligenceCapability<ActionItemsContent>;
   risksBlockers: MeetingIntelligenceCapability<RisksBlockersContent>;

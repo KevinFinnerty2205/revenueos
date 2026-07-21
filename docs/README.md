@@ -46,6 +46,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Meeting Open Questions intelligence](03-engineering/meeting-open-questions-intelligence.md)
 - [Follow-up Email Composer](03-engineering/follow-up-email-composer.md)
 - [Unified Meeting Intelligence workspace](03-engineering/unified-meeting-intelligence.md)
+- [Buying Signals and Deal Momentum intelligence](03-engineering/buying-signals-intelligence.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -90,6 +91,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-004C5: Meeting Open Questions Intelligence](07-sprints/wo-004c5-meeting-open-questions.md)
 - [WO-004C6: Follow-up Email Composer](07-sprints/wo-004c6-follow-up-email-composer.md)
 - [WO-005: Unified Meeting Intelligence workspace](07-sprints/wo-005-unified-meeting-intelligence.md)
+- [WO-006A: Buying Signals and Deal Momentum Intelligence](07-sprints/wo-006a-buying-signals-deal-momentum.md)
 
 ## 08 — Decision records
 
@@ -110,18 +112,20 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0015: current-transcript Open Questions execution](08-decisions/0015-current-transcript-open-questions.md)
 - [ADR 0016: compose customer content from validated intelligence only](08-decisions/0016-validated-intelligence-composers.md)
 - [ADR 0017: derive a unified Meeting Intelligence workspace](08-decisions/0017-derived-meeting-intelligence-workspace.md)
+- [ADR 0018: derive qualitative deal momentum from current-meeting evidence](08-decisions/0018-current-meeting-qualitative-deal-momentum.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005 are complete.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A are complete.
 An authenticated user can generate and read Executive Summary, Key Decisions,
-Action Items, Risks & Blockers, Open Questions and Follow-up Email through one
-derived Meeting Intelligence workspace while each capability remains independently
-persisted and traceable. One aggregate read and polling flow exposes safe overall
-state and progress; one idempotent action creates only missing work and queues the
-composer after its four validated customer-safe artefacts are ready. Mock remains
-the deterministic no-network default; optional server-side OpenAI supports all six
-capabilities. Transcript-grounded extractors send the selected transcript to
+Action Items, Risks & Blockers, Open Questions, Buying Signals and Follow-up
+Email through one derived Meeting Intelligence workspace while each capability
+remains independently persisted and traceable. One aggregate read and polling
+flow exposes safe overall state and progress; one idempotent action creates only
+missing work and queues the composer after its four validated customer-safe
+artefacts are ready. Mock remains the deterministic no-network default;
+optional server-side OpenAI supports all seven capabilities. Transcript-grounded
+extractors send the selected transcript to
 OpenAI only when configured; Follow-up Email sends only its validated artefact
 projection and never queries or transmits transcript text. There is no send,
 editing, approval, question answering, provider UI, recording, media storage,

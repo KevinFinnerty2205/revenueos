@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from revenueos.ai_contracts import (
     ACTION_ITEMS_SCHEMA_VERSION,
     ACTION_ITEMS_TRANSCRIPT_MAX_LENGTH,
+    BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     DECISIONS_SCHEMA_VERSION,
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
@@ -23,6 +24,7 @@ from revenueos.ai_contracts import (
     OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
     ActionItemsSource,
+    BuyingSignalsSource,
     DecisionsSource,
     ExecutiveSummarySource,
     FollowUpEmailSource,
@@ -276,6 +278,12 @@ class AIWorkerService:
                     cancellation_check=self.is_cancellation_requested,
                     open_questions_source_loader=self.load_open_questions_source,
                 )
+            elif job.job_type == AIJobType.BUYING_SIGNALS.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    buying_signals_source_loader=self.load_buying_signals_source,
+                )
             elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
                 result = await executor.execute(
                     job,
@@ -426,6 +434,38 @@ class AIWorkerService:
                             "empty_result": len(questions) == 0,
                             "importance_counts": importance_counts,
                             "owner_count": owner_count,
+                        },
+                    )
+                elif job.job_type == AIJobType.BUYING_SIGNALS.value:
+                    values = result.content.get("signals")
+                    signals = values if isinstance(values, list) else []
+                    polarity_counts = {polarity: 0 for polarity in ("positive", "neutral", "negative")}
+                    strength_counts = {strength: 0 for strength in ("strong", "moderate", "weak")}
+                    for item in signals:
+                        if not isinstance(item, dict):
+                            continue
+                        polarity = item.get("polarity")
+                        strength = item.get("strength")
+                        if isinstance(polarity, str) and polarity in polarity_counts:
+                            polarity_counts[polarity] += 1
+                        if isinstance(strength, str) and strength in strength_counts:
+                            strength_counts[strength] += 1
+                    overall_momentum = result.content.get("overall_momentum")
+                    logger.info(
+                        "buying_signals_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                            "signal_count": len(signals),
+                            "polarity_counts": polarity_counts,
+                            "strength_counts": strength_counts,
+                            "overall_momentum": (overall_momentum if isinstance(overall_momentum, str) else None),
+                            "insufficient_evidence": overall_momentum == "insufficient_evidence",
                         },
                     )
                 elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
@@ -696,6 +736,46 @@ class AIWorkerService:
             transcript_text=normalised_transcript,
         )
 
+    async def load_buying_signals_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> BuyingSignalsSource:
+        """Load the exact tenant transcript version pinned by a Buying Signals job."""
+
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            source = await AIWorkerRepository(session).get_executive_summary_source(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_id,
+                job.transcript_version,
+            )
+        if source is None:
+            raise WorkerExecutionError(
+                "buying_signals_source_unavailable",
+                "The current transcript for Buying Signals is unavailable.",
+                retryable=False,
+            )
+        meeting_title, meeting_date, transcript_text = source
+        normalised_transcript = transcript_text.strip()
+        if not normalised_transcript:
+            raise WorkerExecutionError(
+                "buying_signals_transcript_required",
+                "A usable transcript is required to generate Buying Signals.",
+                retryable=False,
+            )
+        if len(normalised_transcript) > BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH:
+            raise WorkerExecutionError(
+                "buying_signals_transcript_too_large",
+                "The transcript exceeds the Buying Signals processing limit.",
+                retryable=False,
+            )
+        return BuyingSignalsSource(
+            meeting_title=meeting_title,
+            meeting_date=meeting_date,
+            transcript_text=normalised_transcript,
+        )
+
     async def load_follow_up_email_source(
         self,
         job: ClaimedAIJob,
@@ -907,6 +987,15 @@ class AIWorkerService:
                     schema_version=job.schema_version,
                     content=result.content,
                 )
+            elif job.job_type == AIJobType.BUYING_SIGNALS.value:
+                await artifact_service.prepare_buying_signals_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
             elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
                 await artifact_service.prepare_follow_up_email_artifact(
                     job_id=job.id,
@@ -1045,6 +1134,17 @@ class AIWorkerService:
         elif claim.job_type == AIJobType.OPEN_QUESTIONS.value:
             logger.warning(
                 "open_questions_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
+        elif claim.job_type == AIJobType.BUYING_SIGNALS.value:
+            logger.warning(
+                "buying_signals_generation_failed",
                 extra={
                     **self._log_context_from_claim(claim),
                     "meeting_id": str(claim.meeting_id),
