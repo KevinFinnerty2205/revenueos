@@ -10,14 +10,14 @@ The provider-neutral seam supports two implementations:
   SDK and Responses API.
 
 Together they support the existing `infrastructure_test`, `executive_summary`,
-`decisions`, `action_items`, `risks_blockers`, `open_questions` and
+`decisions`, `action_items`, `risks_blockers`, `open_questions`, `buying_signals` and
 `follow_up_email` contracts where explicitly allowed. Executive Summary,
-Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email
+Buying Signals, Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email
 are the only customer-facing AI capabilities. There is no provider UI, tenant-
 managed credential, additional vendor, tool use, streaming or automatic
 provider fallback.
 
-Selecting OpenAI sends the rendered Executive Summary, Decisions, Action Items,
+Selecting OpenAI sends the rendered Executive Summary, Buying Signals, Decisions, Action Items,
 Risks & Blockers or Open Questions prompt and bounded meeting transcript to
 OpenAI. Follow-up Email sends only the validated Executive Summary, Decisions,
 Action Items and Open Questions projection plus tone; its typed provider input
@@ -85,6 +85,11 @@ For Open Questions the mock recognises narrow unresolved-question markers,
 excludes answered-later, rhetorical, conversational, action-request, risk-only
 and decision-only fixtures, normalises importance and supports nullable owners
 or an empty list.
+
+For Buying Signals the mock recognises a bounded set of explicit commercial
+markers, returns paraphrased evidence and deterministic qualitative momentum,
+and emits `insufficient_evidence` for unsupported or merely polite transcript
+language. It makes no prediction or scoring claim.
 
 For Follow-up Email the mock copies the validated customer-safe source fields
 exactly, applies stable generic framing for each of the three tones and never

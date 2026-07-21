@@ -4,8 +4,8 @@
 
 WO-004C1A adds the first external AI adapter behind the existing
 provider-neutral boundary. The separately deployed worker can run the existing
-Executive Summary, Decisions, Action Items, Risks & Blockers, Open Questions
-and Follow-up Email through either the deterministic `mock` provider or the
+Executive Summary, Buying Signals, Decisions, Action Items, Risks & Blockers,
+Open Questions and Follow-up Email through either the deterministic `mock` provider or the
 server-only `openai` provider. Selection is process
 configuration; there is no
 browser setting, tenant credential, model selector or fallback provider.
@@ -14,8 +14,8 @@ The default remains `mock`. Automated tests and ordinary local development need
 no OpenAI credential and make no external call.
 
 > **External data-flow warning:** setting `AI_PROVIDER=openai` sends the
-> rendered Executive Summary, Decisions, Action Items, Risks & Blockers or Open
-> Questions instructions and selected meeting transcript to OpenAI. Follow-up
+> rendered Executive Summary, Buying Signals, Decisions, Action Items, Risks &
+> Blockers or Open Questions instructions and selected meeting transcript to OpenAI. Follow-up
 > Email sends only the validated customer-safe four-artefact projection and
 > selected tone; its path never queries or transmits transcript text. Do not
 > enable it with production customer content until production
@@ -28,7 +28,7 @@ no OpenAI credential and make no external call.
 converts the provider-neutral ordered `system`/`user` messages to Responses API
 input and requests a strict `json_schema` text format. The JSON Schema is
 generated directly from the matching registered Pydantic Executive Summary,
-Decisions, Action Items, Risks & Blockers, Open Questions or Follow-up Email
+Buying Signals, Decisions, Action Items, Risks & Blockers, Open Questions or Follow-up Email
 schema v1; there is no second vendor-specific product schema.
 
 The adapter disables response storage with `store=false`, requests no tools,
@@ -66,7 +66,7 @@ validation or provider construction.
 ## Request lifecycle
 
 1. The API queues the tenant-owned supported intelligence job.
-2. For the five extractors, the worker loads the exact pinned transcript in a
+2. For the six extractors, the worker loads the exact pinned transcript in a
    short tenant-bound transaction. For Follow-up Email, it loads only the exact
    four validated artefacts and checks content-free transcript-version audit
    metadata; it never loads transcript text.
@@ -153,8 +153,8 @@ retain their original provider/model trace.
 
 ## Known limitations
 
-- Only Executive Summary, Decisions, Action Items, Risks & Blockers, Open
-  Questions and Follow-up Email use the real adapter;
+- Only Executive Summary, Buying Signals, Decisions, Action Items, Risks &
+  Blockers, Open Questions and Follow-up Email use the real adapter;
   infrastructure test and unknown job types are rejected before SDK
   invocation.
 - There is no pricing source, budget enforcement or accurate cost estimate.

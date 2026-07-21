@@ -12,6 +12,7 @@ from revenueos.ai_contracts import (
     SAFE_ERROR_CODE_MAX_LENGTH,
     SAFE_ERROR_MESSAGE_MAX_LENGTH,
     ActionItemsSource,
+    BuyingSignalsSource,
     DecisionsSource,
     ExecutiveSummarySource,
     FollowUpEmailArtifactContent,
@@ -36,6 +37,8 @@ from revenueos.ai_prompt_errors import (
 from revenueos.ai_prompt_registry import (
     ACTION_ITEMS_PROMPT_KEY,
     ACTION_ITEMS_PROMPT_VERSION,
+    BUYING_SIGNALS_PROMPT_KEY,
+    BUYING_SIGNALS_PROMPT_VERSION,
     DECISIONS_PROMPT_KEY,
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
@@ -53,6 +56,7 @@ from revenueos.ai_prompt_renderer import render_prompt
 from revenueos.ai_provider import AIProvider, execute_provider_request
 from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
+    BuyingSignalsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     FollowUpEmailProviderInput,
@@ -151,6 +155,10 @@ OpenQuestionsSourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[OpenQuestionsSource],
 ]
+BuyingSignalsSourceLoader = Callable[
+    [ClaimedAIJob],
+    Awaitable[BuyingSignalsSource],
+]
 FollowUpEmailSourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[FollowUpEmailSource],
@@ -169,6 +177,7 @@ class AIJobExecutor(Protocol):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult: ...
 
@@ -552,6 +561,7 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -560,6 +570,7 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
             action_items_source_loader,
             risks_blockers_source_loader,
             open_questions_source_loader,
+            buying_signals_source_loader,
             follow_up_email_source_loader,
         )
         return await self._execute_structured(
@@ -595,6 +606,7 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -602,6 +614,7 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
             action_items_source_loader,
             risks_blockers_source_loader,
             open_questions_source_loader,
+            buying_signals_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.EXECUTIVE_SUMMARY.value:
@@ -673,6 +686,7 @@ class DecisionsExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -680,6 +694,7 @@ class DecisionsExecutor(_StructuredOutputExecutor):
             action_items_source_loader,
             risks_blockers_source_loader,
             open_questions_source_loader,
+            buying_signals_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.DECISIONS.value:
@@ -752,6 +767,7 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -759,6 +775,7 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
             decisions_source_loader,
             risks_blockers_source_loader,
             open_questions_source_loader,
+            buying_signals_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.ACTION_ITEMS.value:
@@ -838,6 +855,7 @@ class RisksBlockersExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -845,6 +863,7 @@ class RisksBlockersExecutor(_StructuredOutputExecutor):
             decisions_source_loader,
             action_items_source_loader,
             open_questions_source_loader,
+            buying_signals_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.RISKS_BLOCKERS.value:
@@ -931,6 +950,7 @@ class OpenQuestionsExecutor(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -938,6 +958,7 @@ class OpenQuestionsExecutor(_StructuredOutputExecutor):
             decisions_source_loader,
             action_items_source_loader,
             risks_blockers_source_loader,
+            buying_signals_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.OPEN_QUESTIONS.value:
@@ -1010,6 +1031,104 @@ class OpenQuestionsExecutor(_StructuredOutputExecutor):
         return result
 
 
+class BuyingSignalsExecutor(_StructuredOutputExecutor):
+    """Transcript-grounded Buying Signals execution through the provider port."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
+    ) -> ExecutionResult:
+        del (
+            executive_summary_source_loader,
+            decisions_source_loader,
+            action_items_source_loader,
+            risks_blockers_source_loader,
+            open_questions_source_loader,
+            follow_up_email_source_loader,
+        )
+        if job.job_type != AIJobType.BUYING_SIGNALS.value:
+            raise WorkerExecutionError(
+                "invalid_buying_signals_job",
+                "The queued job is not a Buying Signals job.",
+                retryable=False,
+            )
+        if job.prompt_key != BUYING_SIGNALS_PROMPT_KEY or job.prompt_version != BUYING_SIGNALS_PROMPT_VERSION:
+            raise WorkerExecutionError(
+                "invalid_prompt_configuration",
+                "The Buying Signals prompt configuration is invalid.",
+                retryable=False,
+            )
+        if buying_signals_source_loader is None:
+            raise WorkerExecutionError(
+                "buying_signals_source_unavailable",
+                "The Buying Signals source loader is unavailable.",
+                retryable=False,
+            )
+
+        logger.info("buying_signals_execution_started", extra=self._log_context(job))
+        source = await buying_signals_source_loader(job)
+        logger.info(
+            "buying_signals_transcript_loaded",
+            extra={
+                **self._log_context(job),
+                "transcript_version": job.transcript_version,
+                "transcript_character_count": len(source.transcript_text),
+                "meeting_date_available": True,
+            },
+        )
+        result = await self._execute_structured(
+            job,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            variables=PromptVariables(
+                values={
+                    "meeting_title": json.dumps(source.meeting_title, ensure_ascii=False),
+                    "meeting_date": json.dumps(source.meeting_date.isoformat(), ensure_ascii=False),
+                    "transcript_text": json.dumps(source.transcript_text, ensure_ascii=False),
+                }
+            ),
+            input_factory=lambda messages: BuyingSignalsProviderInput(messages=messages),
+            cancellation_check=cancellation_check,
+        )
+        values = result.content.get("signals")
+        signals = values if isinstance(values, list) else []
+        polarity_counts = {polarity: 0 for polarity in ("positive", "neutral", "negative")}
+        strength_counts = {strength: 0 for strength in ("strong", "moderate", "weak")}
+        for item in signals:
+            if not isinstance(item, dict):
+                continue
+            polarity = item.get("polarity")
+            strength = item.get("strength")
+            if isinstance(polarity, str) and polarity in polarity_counts:
+                polarity_counts[polarity] += 1
+            if isinstance(strength, str) and strength in strength_counts:
+                strength_counts[strength] += 1
+        overall_momentum = result.content.get("overall_momentum")
+        logger.info(
+            "buying_signals_output_validation_completed",
+            extra={
+                **self._log_context(job),
+                "signal_count": len(signals),
+                "empty_result": len(signals) == 0,
+                "polarity_counts": polarity_counts,
+                "strength_counts": strength_counts,
+                "overall_momentum": overall_momentum if isinstance(overall_momentum, str) else None,
+                "insufficient_evidence": overall_momentum == "insufficient_evidence",
+                "structured_output_attempt_count": result.structured_output_attempt_count,
+            },
+        )
+        return result
+
+
 class FollowUpEmailComposer(_StructuredOutputExecutor):
     """Compose customer-ready email content from validated artefacts only."""
 
@@ -1023,6 +1142,7 @@ class FollowUpEmailComposer(_StructuredOutputExecutor):
         action_items_source_loader: ActionItemsSourceLoader | None = None,
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -1031,6 +1151,7 @@ class FollowUpEmailComposer(_StructuredOutputExecutor):
             action_items_source_loader,
             risks_blockers_source_loader,
             open_questions_source_loader,
+            buying_signals_source_loader,
         )
         if job.job_type != AIJobType.FOLLOW_UP_EMAIL.value:
             raise WorkerExecutionError(
@@ -1158,6 +1279,12 @@ class AIExecutorRegistry:
                 schemas,
             ),
             AIJobType.OPEN_QUESTIONS.value: OpenQuestionsExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
+            AIJobType.BUYING_SIGNALS.value: BuyingSignalsExecutor(
                 configuration,
                 providers,
                 prompts,

@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.ai_contracts import (
     ACTION_ITEMS_SCHEMA_VERSION,
     ACTION_ITEMS_TRANSCRIPT_MAX_LENGTH,
+    BUYING_SIGNALS_SCHEMA_VERSION,
+    BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     DECISIONS_SCHEMA_VERSION,
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
@@ -22,6 +24,7 @@ from revenueos.ai_contracts import (
     RISKS_BLOCKERS_SCHEMA_VERSION,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
     ActionItemsArtifactContent,
+    BuyingSignalsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
@@ -31,6 +34,8 @@ from revenueos.ai_contracts import (
 from revenueos.ai_prompt_registry import (
     ACTION_ITEMS_PROMPT_KEY,
     ACTION_ITEMS_PROMPT_VERSION,
+    BUYING_SIGNALS_PROMPT_KEY,
+    BUYING_SIGNALS_PROMPT_VERSION,
     DECISIONS_PROMPT_KEY,
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
@@ -49,10 +54,12 @@ from revenueos.domain import AIArtifactType, AIJobStatus, AIJobType, FollowUpEma
 from revenueos.errors import PublicAPIError
 from revenueos.intelligence_contracts import (
     ActionItemsContentResponse,
+    BuyingSignalsContentResponse,
     DecisionsContentResponse,
     ExecutiveSummaryContentResponse,
     FollowUpEmailContentResponse,
     MeetingIntelligenceActionItemsResponse,
+    MeetingIntelligenceBuyingSignalsResponse,
     MeetingIntelligenceDecisionsResponse,
     MeetingIntelligenceExecutiveSummaryResponse,
     MeetingIntelligenceFollowUpEmailResponse,
@@ -72,6 +79,7 @@ logger = logging.getLogger("revenueos.intelligence_workspace")
 
 CapabilityName = Literal[
     "executive_summary",
+    "buying_signals",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -131,6 +139,16 @@ CAPABILITIES = (
         EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
     ),
     CapabilityConfiguration(
+        "buying_signals",
+        AIJobType.BUYING_SIGNALS.value,
+        AIArtifactType.BUYING_SIGNALS.value,
+        BUYING_SIGNALS_PROMPT_KEY,
+        BUYING_SIGNALS_PROMPT_VERSION,
+        BUYING_SIGNALS_SCHEMA_VERSION,
+        "Buying Signals",
+        BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH,
+    ),
+    CapabilityConfiguration(
         "decisions",
         AIJobType.DECISIONS.value,
         AIArtifactType.DECISIONS.value,
@@ -184,6 +202,7 @@ CAPABILITIES = (
 CONFIG_BY_NAME = {configuration.name: configuration for configuration in CAPABILITIES}
 EXTRACTION_NAMES: tuple[CapabilityName, ...] = (
     "executive_summary",
+    "buying_signals",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -257,6 +276,7 @@ class MeetingIntelligenceService:
         reused: list[CapabilityName] = []
         requesters = {
             "executive_summary": self.capabilities.request_executive_summary,
+            "buying_signals": self.capabilities.request_buying_signals,
             "decisions": self.capabilities.request_decisions,
             "action_items": self.capabilities.request_action_items,
             "risks_blockers": self.capabilities.request_risks_blockers,
@@ -484,6 +504,12 @@ class MeetingIntelligenceService:
         if name == "executive_summary":
             summary = ExecutiveSummaryArtifactContent.model_validate(artifact.content_json)
             return ExecutiveSummaryContentResponse.model_validate(summary), False
+        if name == "buying_signals":
+            signals = BuyingSignalsArtifactContent.model_validate(artifact.content_json)
+            return (
+                BuyingSignalsContentResponse.model_validate(signals),
+                len(signals.signals) == 0 or signals.overall_momentum == "insufficient_evidence",
+            )
         if name == "decisions":
             decisions = DecisionsArtifactContent.model_validate(artifact.content_json)
             return DecisionsContentResponse.model_validate(decisions), len(decisions.decisions) == 0
@@ -567,6 +593,12 @@ class MeetingIntelligenceService:
                     "content": snapshots["executive_summary"].content,
                 }
             ),
+            buying_signals=MeetingIntelligenceBuyingSignalsResponse.model_validate(
+                {
+                    **self._capability_fields(snapshots["buying_signals"]),
+                    "content": snapshots["buying_signals"].content,
+                }
+            ),
             decisions=MeetingIntelligenceDecisionsResponse.model_validate(
                 {
                     **self._capability_fields(snapshots["decisions"]),
@@ -630,7 +662,7 @@ class MeetingIntelligenceService:
             return "failed"
         if queued > 0:
             return "queued"
-        if ready == 6:
+        if ready == 7:
             return "completed_with_empty_results" if any_empty_result else "completed"
         if ready > 0:
             return "partially_generated"
@@ -653,7 +685,7 @@ class MeetingIntelligenceService:
             return f"{failed} section{'s' if failed != 1 else ''} failed"
         if queued > 0:
             return f"{queued} section{'s' if queued != 1 else ''} queued"
-        return f"{ready} of 6 ready"
+        return f"{ready} of 7 ready"
 
     def _unavailable_snapshots(
         self,

@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.ai_contracts import (
     ACTION_ITEMS_SCHEMA_VERSION,
     ACTION_ITEMS_TRANSCRIPT_MAX_LENGTH,
+    BUYING_SIGNALS_SCHEMA_VERSION,
+    BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     DECISIONS_SCHEMA_VERSION,
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
@@ -28,6 +30,7 @@ from revenueos.ai_contracts import (
     RISKS_BLOCKERS_SCHEMA_VERSION,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
     ActionItemsArtifactContent,
+    BuyingSignalsArtifactContent,
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
@@ -44,6 +47,8 @@ from revenueos.ai_lifecycle import prepare_lifecycle_transition
 from revenueos.ai_prompt_registry import (
     ACTION_ITEMS_PROMPT_KEY,
     ACTION_ITEMS_PROMPT_VERSION,
+    BUYING_SIGNALS_PROMPT_KEY,
+    BUYING_SIGNALS_PROMPT_VERSION,
     DECISIONS_PROMPT_KEY,
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
@@ -120,6 +125,15 @@ class RisksBlockersStateResult:
 
 @dataclass(frozen=True)
 class OpenQuestionsStateResult:
+    state: str
+    generation_available: bool
+    unavailable_reason: str | None
+    job: AIJob | None
+    artifact: AIArtifact | None
+
+
+@dataclass(frozen=True)
+class BuyingSignalsStateResult:
     state: str
     generation_available: bool
     unavailable_reason: str | None
@@ -1395,6 +1409,225 @@ class AIJobService(_AIDomainService):
         )
         raise PublicAPIError(code, reason, 422)
 
+    async def request_buying_signals(
+        self,
+        meeting_id: UUID,
+    ) -> AIJobRequestResult:
+        logger.info(
+            "buying_signals_requested",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "meeting_id": str(meeting_id),
+                "job_type": AIJobType.BUYING_SIGNALS.value,
+            },
+        )
+        meeting = await self.repository.lock_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        transcript = await self.repository.get_transcript_for_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        self._require_usable_buying_signals_transcript(transcript)
+        assert transcript is not None
+        transcript_version = transcript.version
+
+        existing = await self._latest_buying_signals_job(meeting_id, transcript.version)
+        if existing is not None and existing.status in {
+            AIJobStatus.PENDING.value,
+            AIJobStatus.RUNNING.value,
+            AIJobStatus.COMPLETED.value,
+        }:
+            await self._audit_intelligence_request(existing)
+            logger.info(
+                "buying_signals_existing_job_returned",
+                extra={**self._job_log_context(existing), "existing_job_reused": True},
+            )
+            return AIJobRequestResult(job=existing, created=False)
+
+        retry_number = (
+            await self.repository.count_equivalent_jobs(
+                self.tenant.organisation_id,
+                meeting_id,
+                transcript.version,
+                job_type=AIJobType.BUYING_SIGNALS.value,
+                prompt_key=BUYING_SIGNALS_PROMPT_KEY,
+                prompt_version=BUYING_SIGNALS_PROMPT_VERSION,
+                schema_version=BUYING_SIGNALS_SCHEMA_VERSION,
+            )
+            + 1
+        )
+        idempotency_key = (
+            f"buying_signals:p{BUYING_SIGNALS_PROMPT_VERSION}:s{BUYING_SIGNALS_SCHEMA_VERSION}:r{retry_number}"
+        )
+        job = AIJob(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript.id,
+            transcript_version=transcript.version,
+            job_type=AIJobType.BUYING_SIGNALS.value,
+            status=AIJobStatus.PENDING.value,
+            prompt_key=BUYING_SIGNALS_PROMPT_KEY,
+            prompt_version=BUYING_SIGNALS_PROMPT_VERSION,
+            schema_version=BUYING_SIGNALS_SCHEMA_VERSION,
+            idempotency_key=idempotency_key,
+            requested_by_user_id=self.tenant.user_id,
+        )
+        self.repository.create_job(job)
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
+        try:
+            await self.repository.flush()
+            await self.repository.refresh(job)
+            await self.repository.commit()
+        except IntegrityError as exc:
+            await self.repository.rollback()
+            await set_tenant_database_context(
+                self.repository.session,
+                self.tenant.organisation_id,
+            )
+            concurrent = await self._latest_buying_signals_job(
+                meeting_id,
+                transcript_version,
+            )
+            if concurrent is None or concurrent.status not in {
+                AIJobStatus.PENDING.value,
+                AIJobStatus.RUNNING.value,
+                AIJobStatus.COMPLETED.value,
+            }:
+                raise PublicAPIError(
+                    "persistence_conflict",
+                    "The Buying Signals request conflicts with existing work.",
+                    409,
+                ) from exc
+            await self._audit_intelligence_request(concurrent)
+            logger.info(
+                "buying_signals_existing_job_returned",
+                extra={**self._job_log_context(concurrent), "existing_job_reused": True},
+            )
+            return AIJobRequestResult(job=concurrent, created=False)
+        except SQLAlchemyError as exc:
+            await self.repository.rollback()
+            raise PublicAPIError(
+                "internal_persistence_failure",
+                "The Buying Signals request could not be queued.",
+                500,
+            ) from exc
+
+        logger.info("buying_signals_job_queued", extra=self._job_log_context(job))
+        return AIJobRequestResult(job=job, created=True)
+
+    async def get_buying_signals_state(
+        self,
+        meeting_id: UUID,
+    ) -> BuyingSignalsStateResult:
+        meeting = await self.repository.get_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        transcript = await self.repository.get_transcript_for_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        unavailable_reason = self._buying_signals_unavailable_reason(transcript)
+        if unavailable_reason is not None:
+            return BuyingSignalsStateResult(
+                state="empty",
+                generation_available=False,
+                unavailable_reason=unavailable_reason,
+                job=None,
+                artifact=None,
+            )
+        assert transcript is not None
+        job = await self._latest_buying_signals_job(meeting_id, transcript.version)
+        if job is None:
+            return BuyingSignalsStateResult(
+                state="empty",
+                generation_available=True,
+                unavailable_reason=None,
+                job=None,
+                artifact=None,
+            )
+        state = {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+            AIJobStatus.FAILED.value: "failed",
+            AIJobStatus.CANCELLED.value: "cancelled",
+        }[job.status]
+        artifact = (
+            await AIArtifactRepository(self.repository.session).get_latest_artifact_for_job(
+                self.tenant.organisation_id,
+                job.id,
+                AIArtifactType.BUYING_SIGNALS.value,
+            )
+            if state == "completed"
+            else None
+        )
+        if state == "completed" and artifact is None:
+            state = "failed"
+        return BuyingSignalsStateResult(
+            state=state,
+            generation_available=state in {"failed", "cancelled"},
+            unavailable_reason=None,
+            job=job,
+            artifact=artifact,
+        )
+
+    async def _latest_buying_signals_job(
+        self,
+        meeting_id: UUID,
+        transcript_version: int,
+    ) -> AIJob | None:
+        return await self.repository.get_latest_equivalent_job(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_version,
+            job_type=AIJobType.BUYING_SIGNALS.value,
+            prompt_key=BUYING_SIGNALS_PROMPT_KEY,
+            prompt_version=BUYING_SIGNALS_PROMPT_VERSION,
+            schema_version=BUYING_SIGNALS_SCHEMA_VERSION,
+        )
+
+    @staticmethod
+    def _buying_signals_unavailable_reason(
+        transcript: Transcript | None,
+    ) -> str | None:
+        if transcript is None or not transcript.raw_text.strip():
+            return "Add a usable transcript before generating Buying Signals."
+        if len(transcript.raw_text.strip()) > BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH:
+            return "This transcript exceeds the 50,000-character Buying Signals processing limit."
+        return None
+
+    @classmethod
+    def _require_usable_buying_signals_transcript(
+        cls,
+        transcript: Transcript | None,
+    ) -> None:
+        reason = cls._buying_signals_unavailable_reason(transcript)
+        if reason is None:
+            return
+        code = (
+            "buying_signals_transcript_required"
+            if transcript is None or not transcript.raw_text.strip()
+            else "buying_signals_transcript_too_large"
+        )
+        raise PublicAPIError(code, reason, 422)
+
     async def request_follow_up_email(
         self,
         meeting_id: UUID,
@@ -2553,6 +2786,134 @@ class AIArtifactService(_AIDomainService):
         )
         return artifact
 
+    async def prepare_buying_signals_artifact(
+        self,
+        *,
+        job_id: UUID,
+        meeting_id: UUID,
+        transcript_id: UUID,
+        transcript_version: int,
+        schema_version: int,
+        content: Mapping[str, object],
+    ) -> AIArtifact:
+        """Add validated Buying Signals and metadata-only audit without committing."""
+
+        if schema_version != BUYING_SIGNALS_SCHEMA_VERSION:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Buying Signals schema version is not supported.",
+                422,
+            )
+        validated_content = self._validate_buying_signals_content(content)
+        job = await self._get_job(job_id)
+        await self._validate_trace(
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+        )
+        self._validate_artifact_trace(
+            job,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            schema_version=schema_version,
+            expected_job_type=AIJobType.BUYING_SIGNALS,
+        )
+        artifact_version = await self.artifacts.next_artifact_version(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_id,
+            transcript_version,
+            AIArtifactType.BUYING_SIGNALS.value,
+        )
+        artifact = AIArtifact(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            job_id=job.id,
+            artifact_type=AIArtifactType.BUYING_SIGNALS.value,
+            artifact_version=artifact_version,
+            schema_version=schema_version,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            provider_key=job.provider_key,
+            model_name=job.model_name,
+            content_json=validated_content,
+        )
+        self.artifacts.create_artifact(artifact)
+        values = validated_content["signals"]
+        overall_momentum = validated_content["overall_momentum"]
+        if not isinstance(values, list) or not isinstance(overall_momentum, str):
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Buying Signals artefact content is invalid.",
+                422,
+            )
+        polarity_counts = {polarity: 0 for polarity in ("positive", "neutral", "negative")}
+        strength_counts = {strength: 0 for strength in ("strong", "moderate", "weak")}
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            polarity = item.get("polarity")
+            strength = item.get("strength")
+            if isinstance(polarity, str) and polarity in polarity_counts:
+                polarity_counts[polarity] += 1
+            if isinstance(strength, str) and strength in strength_counts:
+                strength_counts[strength] += 1
+        safe_metadata = {
+            "job_id": job.id,
+            "artifact_id": artifact.id,
+            "job_type": job.job_type,
+            "transcript_version": transcript_version,
+            "artifact_type": artifact.artifact_type,
+            "artifact_version": artifact.artifact_version,
+            "schema_version": artifact.schema_version,
+            "prompt_key": artifact.prompt_key,
+            "prompt_version": artifact.prompt_version,
+            "provider_key": artifact.provider_key,
+            "model_name": artifact.model_name,
+            "signal_count": len(values),
+            "polarity_counts": polarity_counts,
+            "strength_counts": strength_counts,
+            "overall_momentum": overall_momentum,
+            "insufficient_evidence": overall_momentum == "insufficient_evidence",
+        }
+        self.repository.add_audit_event(
+            self._audit(
+                meeting_id=meeting_id,
+                entity_id=artifact.id,
+                action=MeetingAuditAction.AI_ARTIFACT_CREATED,
+                entity_type=MeetingAuditEntityType.AI_ARTIFACT,
+                transcript_version=transcript_version,
+                metadata=safe_metadata,
+            )
+        )
+        logger.info(
+            "buying_signals_artifact_created",
+            extra={
+                "organisation_id": str(artifact.organisation_id),
+                "meeting_id": str(artifact.meeting_id),
+                "job_id": str(artifact.job_id),
+                "artifact_id": str(artifact.id),
+                "artifact_type": artifact.artifact_type,
+                "artifact_version": artifact.artifact_version,
+                "transcript_version": artifact.transcript_version,
+                "prompt_key": artifact.prompt_key,
+                "prompt_version": artifact.prompt_version,
+                "schema_version": artifact.schema_version,
+                "provider_name": artifact.provider_key,
+                "model_identifier": artifact.model_name,
+                "signal_count": len(values),
+                "polarity_counts": polarity_counts,
+                "strength_counts": strength_counts,
+                "overall_momentum": overall_momentum,
+                "insufficient_evidence": overall_momentum == "insufficient_evidence",
+            },
+        )
+        return artifact
+
     async def prepare_follow_up_email_artifact(
         self,
         *,
@@ -2782,6 +3143,19 @@ class AIArtifactService(_AIDomainService):
             raise PublicAPIError(
                 "invalid_artifact_content",
                 "The Open Questions artefact content is invalid.",
+                422,
+            ) from exc
+
+    @staticmethod
+    def _validate_buying_signals_content(
+        content: Mapping[str, object],
+    ) -> dict[str, object]:
+        try:
+            return BuyingSignalsArtifactContent.model_validate(content).as_json()
+        except ValidationError as exc:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Buying Signals artefact content is invalid.",
                 422,
             ) from exc
 

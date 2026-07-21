@@ -167,6 +167,21 @@ class OpenQuestionsProviderInput(BaseModel):
         return self
 
 
+class BuyingSignalsProviderInput(BaseModel):
+    """Provider-neutral Buying Signals input containing rendered messages."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["buying_signals"] = "buying_signals"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> BuyingSignalsProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("Buying Signals messages must be ordered system then user.")
+        return self
+
+
 class FollowUpEmailProviderInput(BaseModel):
     """Provider-neutral Follow-up Email input with no transcript field."""
 
@@ -189,6 +204,7 @@ ProviderInput = (
     | ActionItemsProviderInput
     | RisksBlockersProviderInput
     | OpenQuestionsProviderInput
+    | BuyingSignalsProviderInput
     | FollowUpEmailProviderInput
 )
 

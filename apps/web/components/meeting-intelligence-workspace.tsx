@@ -2,6 +2,7 @@
 
 import type {
   ActionItemsContent,
+  BuyingSignalsContent,
   DecisionsContent,
   ExecutiveSummaryContent,
   FollowUpEmailContent,
@@ -25,6 +26,7 @@ const tones: FollowUpEmailTone[] = ["professional", "friendly", "executive"];
 
 const capabilityEndpoints: Record<MeetingIntelligenceCapabilityName, string> = {
   executive_summary: "executive-summary",
+  buying_signals: "buying-signals",
   decisions: "decisions",
   action_items: "action-items",
   risks_blockers: "risks-blockers",
@@ -288,9 +290,9 @@ export function MeetingIntelligenceWorkspace({
               </span>
             </div>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-              Turn the current meeting transcript into a clear summary,
-              decisions, actions, risks, open questions and a customer-ready
-              follow-up.
+              Turn the current meeting transcript into a clear summary, buying
+              signals, decisions, actions, risks, open questions and a
+              customer-ready follow-up.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <p role="status" aria-live="polite" className="font-bold">
@@ -348,6 +350,17 @@ export function MeetingIntelligenceWorkspace({
         onRequest={() => void requestCapability("executive_summary")}
       >
         <ExecutiveSummaryView content={workspace.executiveSummary.content} />
+      </CapabilitySection>
+
+      <CapabilitySection
+        id="buying-signals"
+        title="Buying Signals & Deal Momentum"
+        capability={workspace.buyingSignals}
+        busy={capabilityBusy === "buying_signals"}
+        notGeneratedMessage="Buying signals have not been analysed for this meeting."
+        onRequest={() => void requestCapability("buying_signals")}
+      >
+        <BuyingSignalsView content={workspace.buyingSignals.content} />
       </CapabilitySection>
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
@@ -418,6 +431,7 @@ function CapabilitySection({
   title,
   capability,
   busy,
+  notGeneratedMessage,
   onRequest,
   children,
 }: {
@@ -425,6 +439,7 @@ function CapabilitySection({
   title: string;
   capability: MeetingIntelligenceCapability<unknown>;
   busy: boolean;
+  notGeneratedMessage?: string;
   onRequest: () => void;
   children: ReactNode;
 }) {
@@ -468,7 +483,9 @@ function CapabilitySection({
         </StateMessage>
       ) : null}
       {capability.state === "not_generated" ? (
-        <StateMessage>This section has not been generated yet.</StateMessage>
+        <StateMessage>
+          {notGeneratedMessage ?? "This section has not been generated yet."}
+        </StateMessage>
       ) : null}
       {capability.state === "queued" ? (
         <StateMessage role="status">This section is queued.</StateMessage>
@@ -563,6 +580,74 @@ function ExecutiveSummaryView({
     </div>
   );
 }
+
+function BuyingSignalsView({
+  content,
+}: {
+  content: BuyingSignalsContent | null;
+}) {
+  if (!content) return <MissingContent />;
+  const insufficient = content.overallMomentum === "insufficient_evidence";
+  return (
+    <div className="mt-5">
+      <dl className="grid gap-4 sm:grid-cols-2">
+        <Detail label="Current meeting momentum">
+          {humanise(content.overallMomentum)}
+        </Detail>
+        <Detail label="Assessment confidence">
+          {formatConfidence(content.confidence)}
+        </Detail>
+      </dl>
+      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          Momentum summary
+        </h4>
+        <p className="mt-2 text-sm leading-6 text-slate-800">
+          {content.momentumSummary}
+        </p>
+      </div>
+      {insufficient ? null : content.signals.length === 0 ? (
+        <EmptyResult>
+          No transcript-supported buying signals were identified in this
+          meeting.
+        </EmptyResult>
+      ) : (
+        <ol className="mt-3 divide-y divide-slate-100">
+          {content.signals.map((signal, index) => (
+            <li
+              key={`${index}-${signal.signalType}`}
+              className="py-5 first:pt-3 last:pb-0"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <p className="text-sm font-bold leading-6 text-slate-950">
+                  {humanise(signal.signalType)}
+                </p>
+                <span
+                  className={`rounded-full border px-2.5 py-1 text-xs font-bold ${signalPolarityClasses[signal.polarity]}`}
+                >
+                  {humanise(signal.polarity)} signal
+                </span>
+              </div>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Detail label="Strength">{humanise(signal.strength)}</Detail>
+                <Detail label="Confidence">
+                  {formatConfidence(signal.confidence)}
+                </Detail>
+              </dl>
+              <Evidence>{signal.evidence}</Evidence>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+const signalPolarityClasses = {
+  positive: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  neutral: "border-slate-200 bg-slate-100 text-slate-700",
+  negative: "border-amber-300 bg-amber-100 text-amber-900",
+} as const;
 
 function DecisionsView({ content }: { content: DecisionsContent | null }) {
   if (!content) return <MissingContent />;

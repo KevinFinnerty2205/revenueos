@@ -110,11 +110,11 @@ There is at most one transcript row per meeting. Plain text is required and limi
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all six current-version capability states and content through one product-safe view |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all seven current-version capability states and content through one product-safe view |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/generate` | Create or reuse missing extraction work and conditionally queue Follow-up Email |
 
 GET returns a derived overall state, generation/retry availability, last activity
-time, deterministic progress counts and the six ordered capability views. Valid
+time, deterministic progress counts and the seven ordered capability views. Valid
 empty lists are completed with `emptyResult=true`. The response excludes job and
 artefact IDs, transcript/prompts, provider/model and schema configuration, worker
 fields, internal error codes and raw errors.
@@ -124,7 +124,7 @@ Later polling reads may include the optional safe query metadata
 validated enums used only for metadata-only transition and polling lifecycle
 logs; they do not alter the aggregate result.
 
-POST reuses the five existing extraction request services and creates only
+POST reuses the six existing extraction request services and creates only
 missing/failed/cancelled work for the current transcript. It queues Follow-up
 Email only after matching Executive Summary, Decisions, Action Items and Open
 Questions artefacts are complete. New work returns `202`; complete reuse returns
@@ -151,6 +151,27 @@ GET returns `empty`, `queued`, `running`, `completed`, `failed` or `cancelled`,
 generation availability, safe timestamps/message and completed schema content
 when available. It never exposes worker identity, leases, prompt text, provider
 payload, raw errors or transcript text.
+
+## Buying Signals and Deal Momentum intelligence
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/buying-signals` | Queue or return equivalent Buying Signals generation |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence/buying-signals` | Read current safe state/result |
+
+POST requires trusted tenant access and a non-empty current transcript of at
+most 50,000 trimmed characters. New asynchronous work returns `202`; an
+equivalent pending, running or completed prompt/schema v1 job returns `200`.
+Failed/cancelled work follows the established ordinal retry rule and a
+transcript correction permits a new version-bound job.
+
+GET returns the established lifecycle state, generation availability, safe
+timestamps/message and validated `buyingSignals` content. A successful result
+may contain no signals with `insufficient_evidence`. The result contains only
+normalised signals, qualitative current-meeting momentum, a grounded summary
+and evidence confidence. It contains no close probability, forecast or deal
+score, and excludes all internal/provider/worker/prompt/transcript fields. See
+[Buying Signals and Deal Momentum intelligence](buying-signals-intelligence.md).
 
 ## Decisions intelligence
 

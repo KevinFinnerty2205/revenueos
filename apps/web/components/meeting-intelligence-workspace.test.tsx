@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ActionItemsContent,
+  BuyingSignalsContent,
   DecisionsContent,
   ExecutiveSummaryContent,
   MeetingIntelligenceCapability,
@@ -57,6 +58,35 @@ const decisionsContent = {
       evidence: "The customer approved the pilot.",
     },
   ],
+};
+const buyingSignalsContent: BuyingSignalsContent = {
+  signals: [
+    {
+      signalType: "budget_confirmed",
+      polarity: "positive",
+      strength: "strong",
+      confidence: 0.94,
+      evidence: "The customer confirmed that budget is approved.",
+    },
+    {
+      signalType: "procurement_unclear",
+      polarity: "neutral",
+      strength: "weak",
+      confidence: 0.72,
+      evidence: "The procurement path was discussed but remains unclear.",
+    },
+    {
+      signalType: "security_or_legal_blocker",
+      polarity: "negative",
+      strength: "moderate",
+      confidence: 0.86,
+      evidence: "Outstanding legal approval blocks contract signature.",
+    },
+  ],
+  overallMomentum: "neutral",
+  momentumSummary:
+    "The current meeting contains mixed positive and negative signals, so momentum is neutral.",
+  confidence: 0.88,
 };
 const actionItemsContent = {
   actionItems: [
@@ -117,11 +147,12 @@ function notStartedWorkspace(): MeetingIntelligenceResponse {
       queued: 0,
       processing: 0,
       failed: 0,
-      notGenerated: 6,
-      total: 6,
-      summary: "0 of 6 ready",
+      notGenerated: 7,
+      total: 7,
+      summary: "0 of 7 ready",
     },
     executiveSummary: capability("not_generated"),
+    buyingSignals: capability("not_generated"),
     decisions: capability("not_generated"),
     actionItems: capability("not_generated"),
     risksBlockers: capability("not_generated"),
@@ -141,14 +172,17 @@ function queuedWorkspace(): MeetingIntelligenceResponse {
     lastUpdatedAt: "2026-07-20T00:00:00Z",
     progress: {
       ready: 0,
-      queued: 5,
+      queued: 6,
       processing: 0,
       failed: 0,
       notGenerated: 1,
-      total: 6,
-      summary: "5 sections queued",
+      total: 7,
+      summary: "6 sections queued",
     },
     executiveSummary: capability<ExecutiveSummaryContent>("queued", null, {
+      generationAvailable: false,
+    }),
+    buyingSignals: capability<BuyingSignalsContent>("queued", null, {
       generationAvailable: false,
     }),
     decisions: capability<DecisionsContent>("queued", null, {
@@ -173,15 +207,16 @@ function completedWorkspace(): MeetingIntelligenceResponse {
     retryAvailable: false,
     lastUpdatedAt: "2026-07-20T01:00:00Z",
     progress: {
-      ready: 6,
+      ready: 7,
       queued: 0,
       processing: 0,
       failed: 0,
       notGenerated: 0,
-      total: 6,
-      summary: "6 of 6 ready",
+      total: 7,
+      summary: "7 of 7 ready",
     },
     executiveSummary: capability("completed", summaryContent),
+    buyingSignals: capability("completed", buyingSignalsContent),
     decisions: capability("completed", decisionsContent),
     actionItems: capability("completed", actionItemsContent),
     risksBlockers: capability("completed", risksContent),
@@ -204,6 +239,7 @@ describe("MeetingIntelligenceWorkspace", () => {
       ...queuedWorkspace(),
       createdCapabilities: [
         "executive_summary",
+        "buying_signals",
         "decisions",
         "action_items",
         "risks_blockers",
@@ -222,12 +258,13 @@ describe("MeetingIntelligenceWorkspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Meeting Intelligence" }),
     ).toBeVisible();
-    expect(screen.getByText("0 of 6 ready")).toBeVisible();
+    expect(screen.getByText("0 of 7 ready")).toBeVisible();
     const sectionNames = screen
       .getAllByRole("heading", { level: 3 })
       .map((heading) => heading.textContent);
     expect(sectionNames).toEqual([
       "Executive Summary",
+      "Buying Signals & Deal Momentum",
       "Key Decisions",
       "Action Items",
       "Risks & Blockers",
@@ -255,9 +292,9 @@ describe("MeetingIntelligenceWorkspace", () => {
       overallState: "processing" as const,
       progress: {
         ...queuedWorkspace().progress,
-        queued: 4,
+        queued: 5,
         processing: 1,
-        summary: "Generating 5 sections",
+        summary: "Generating 6 sections",
       },
       executiveSummary: capability("processing", null, {
         generationAvailable: false,
@@ -275,12 +312,12 @@ describe("MeetingIntelligenceWorkspace", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(screen.getByText("5 sections queued")).toBeVisible();
+    expect(screen.getByText("6 sections queued")).toBeVisible();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3_000);
     });
-    expect(screen.getByText("Generating 5 sections")).toBeVisible();
+    expect(screen.getByText("Generating 6 sections")).toBeVisible();
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
       "previousOverallState=queued",
     );
@@ -290,7 +327,7 @@ describe("MeetingIntelligenceWorkspace", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3_000);
     });
-    expect(screen.getByText("6 of 6 ready")).toBeVisible();
+    expect(screen.getByText("7 of 7 ready")).toBeVisible();
     expect(String(fetchMock.mock.calls[2]?.[0])).toContain(
       "previousOverallState=processing",
     );
@@ -305,19 +342,69 @@ describe("MeetingIntelligenceWorkspace", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("renders grounded deal momentum and supports capability-level generation", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(notStartedWorkspace()))
+      .mockResolvedValueOnce(jsonResponse({ status: "queued" }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-1" />);
+
+    expect(
+      await screen.findByText(
+        "Buying signals have not been analysed for this meeting.",
+      ),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Generate Buying Signals & Deal Momentum",
+      }),
+    );
+    await waitFor(() => {
+      expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("POST");
+      expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
+        "/intelligence/buying-signals",
+      );
+    });
+  });
+
+  it("shows momentum, positive neutral and negative signals without predictive scoring", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(completedWorkspace())),
+    );
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-1" />);
+
+    expect(await screen.findByText("Current meeting momentum")).toBeVisible();
+    expect(screen.getByText("Budget Confirmed")).toBeVisible();
+    expect(screen.getByText("Positive signal")).toBeVisible();
+    expect(screen.getByText("Neutral signal")).toBeVisible();
+    expect(screen.getByText("Negative signal")).toBeVisible();
+    expect(screen.getByText("Strong")).toBeVisible();
+    expect(screen.getByText("94%")).toBeVisible();
+    expect(
+      screen.getByText("The customer confirmed that budget is approved."),
+    ).toBeVisible();
+    expect(screen.queryByText(/win probability/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/deal score/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/deal will close/i)).not.toBeInTheDocument();
+  });
+
   it("queues Follow-up Email only after the aggregate read marks prerequisites ready", async () => {
     const prerequisitesReady = {
       ...completedWorkspace(),
       overallState: "partially_generated" as const,
       generationAvailable: true,
       progress: {
-        ready: 5,
+        ready: 6,
         queued: 0,
         processing: 0,
         failed: 0,
         notGenerated: 1,
-        total: 6 as const,
-        summary: "5 of 6 ready",
+        total: 7 as const,
+        summary: "6 of 7 ready",
       },
       followUpEmail: {
         ...capability("not_generated", null, { generationAvailable: true }),
@@ -329,12 +416,12 @@ describe("MeetingIntelligenceWorkspace", () => {
       overallState: "queued" as const,
       generationAvailable: false,
       progress: {
-        ready: 5,
+        ready: 6,
         queued: 1,
         processing: 0,
         failed: 0,
         notGenerated: 0,
-        total: 6 as const,
+        total: 7 as const,
         summary: "1 section queued",
       },
       followUpEmail: {
@@ -344,6 +431,7 @@ describe("MeetingIntelligenceWorkspace", () => {
       createdCapabilities: ["follow_up_email"],
       reusedCapabilities: [
         "executive_summary",
+        "buying_signals",
         "decisions",
         "action_items",
         "risks_blockers",
@@ -373,13 +461,13 @@ describe("MeetingIntelligenceWorkspace", () => {
       generationAvailable: true,
       retryAvailable: true,
       progress: {
-        ready: 5,
+        ready: 6,
         queued: 0,
         processing: 0,
         failed: 1,
         notGenerated: 0,
-        total: 6 as const,
-        summary: "5 ready · 1 failed",
+        total: 7 as const,
+        summary: "6 ready · 1 failed",
       },
       risksBlockers: capability("failed", null, {
         generationAvailable: true,
@@ -438,6 +526,17 @@ describe("MeetingIntelligenceWorkspace", () => {
         { risks: [] },
         { emptyResult: true },
       ),
+      buyingSignals: capability(
+        "completed",
+        {
+          signals: [],
+          overallMomentum: "insufficient_evidence" as const,
+          momentumSummary:
+            "There was not enough transcript evidence to assess deal momentum reliably.",
+          confidence: 0.3,
+        },
+        { emptyResult: true },
+      ),
     };
     const fetchMock = vi
       .fn()
@@ -468,6 +567,11 @@ describe("MeetingIntelligenceWorkspace", () => {
     expect(
       screen.getByText("No risks or blockers were identified in this meeting."),
     ).toBeVisible();
+    expect(
+      screen.getByText(
+        "There was not enough transcript evidence to assess deal momentum reliably.",
+      ),
+    ).toBeVisible();
   });
 
   it("prevents an aborted stale meeting response from replacing newer state", async () => {
@@ -487,13 +591,13 @@ describe("MeetingIntelligenceWorkspace", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     rerender(<MeetingIntelligenceWorkspace meetingId="meeting-2" />);
 
-    expect(await screen.findByText("6 of 6 ready")).toBeVisible();
+    expect(await screen.findByText("7 of 7 ready")).toBeVisible();
     await act(async () => {
       resolveFirst?.(jsonResponse(queuedWorkspace()));
       await Promise.resolve();
     });
-    expect(screen.getByText("6 of 6 ready")).toBeVisible();
-    expect(screen.queryByText("5 sections queued")).not.toBeInTheDocument();
+    expect(screen.getByText("7 of 7 ready")).toBeVisible();
+    expect(screen.queryByText("6 sections queued")).not.toBeInTheDocument();
   });
 
   it("copies the rendered Follow-up Email and never exposes a Send action", async () => {

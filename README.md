@@ -4,15 +4,17 @@ RevenueOS is the AI sales teammate that remembers every customer interaction and
 
 This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated
 business entities, Sprint 3 Meeting Domain, WO-004A1/A2/B1/B2/B3 AI
-infrastructure, WO-004C1–C6 capabilities and WO-005 unified Meeting Intelligence
-workspace. Meetings, deliberately supplied transcripts, audit history,
-AI persistence/domain rules and a separate durable worker are implemented. The
+infrastructure, WO-004C1–C6 capabilities, WO-005 unified Meeting Intelligence
+workspace and WO-006A Buying Signals & Deal Momentum Intelligence. Meetings,
+deliberately supplied transcripts, audit history, AI persistence/domain rules
+and a separate durable worker are implemented. The
 Meeting Detail Intelligence tab presents independently persisted Executive
-Summary, Key Decisions, Action Items, Risks & Blockers, Open Questions and
-Follow-up Email through one derived, accessible workspace. The default provider
-is a deterministic no-network mock; an optional server-side OpenAI Responses API
-adapter is configuration-selectable. No new post-WO-005 intelligence capability,
-browser credential, recording, media storage, transcription, sending/integration,
+Summary, Buying Signals & Deal Momentum, Key Decisions, Action Items, Risks &
+Blockers, Open Questions and Follow-up Email through one derived, accessible
+workspace. The default provider is a deterministic no-network mock; an optional
+server-side OpenAI Responses API
+adapter is configuration-selectable. No predictive scoring, forecasting,
+browser credentials, recording, media storage, transcription, sending/integration,
 production Clerk verification or billing is implemented.
 
 ## Product blueprint
@@ -21,7 +23,7 @@ The [RevenueOS master product blueprint](docs/01-product/master-product-blueprin
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
-plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 and WO-005.
+plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005 and WO-006A.
 
 ## Prerequisites
 
@@ -139,6 +141,8 @@ API routes:
 - `POST /api/v1/meetings/{meetingId}/intelligence/generate` — idempotently create/reuse missing Meeting Intelligence work
 - `POST /api/v1/meetings/{meetingId}/intelligence/executive-summary` — queue or return equivalent Executive Summary generation
 - `GET /api/v1/meetings/{meetingId}/intelligence/executive-summary` — retrieve current safe state/result
+- `POST /api/v1/meetings/{meetingId}/intelligence/buying-signals` — queue or return equivalent Buying Signals generation
+- `GET /api/v1/meetings/{meetingId}/intelligence/buying-signals` — retrieve current signals and qualitative deal momentum
 - `POST /api/v1/meetings/{meetingId}/intelligence/decisions` — queue or return equivalent Decisions generation
 - `GET /api/v1/meetings/{meetingId}/intelligence/decisions` — retrieve current safe state/result
 - equivalent POST/GET routes for `action-items`, `risks-blockers`, `open-questions` and `follow-up-email`
@@ -191,7 +195,8 @@ configure server-only `OPENAI_API_KEY`, `OPENAI_MODEL`,
 `OPENAI_TIMEOUT_SECONDS` and `OPENAI_MAX_OUTPUT_TOKENS`.
 
 > Setting `AI_PROVIDER=openai` sends the rendered extractor instructions and
-> selected meeting transcript to OpenAI. Follow-up Email sends only validated
+> selected meeting transcript to OpenAI for the six extractors, including
+> Buying Signals. Follow-up Email sends only validated
 > Executive Summary, Decisions, Action Items and Open Questions artefacts; it
 > excludes Risks & Blockers and never reads or sends transcript text. Never expose
 > the key through a browser or `NEXT_PUBLIC_*` variable. Production
@@ -237,8 +242,9 @@ See the [documentation index](docs/README.md),
 [Meeting Action Items architecture](docs/03-engineering/meeting-action-items-intelligence.md),
 [Meeting Risks & Blockers architecture](docs/03-engineering/meeting-risks-blockers-intelligence.md),
 [Meeting Open Questions architecture](docs/03-engineering/meeting-open-questions-intelligence.md),
+[Buying Signals & Deal Momentum architecture](docs/03-engineering/buying-signals-intelligence.md),
 [Follow-up Email Composer](docs/03-engineering/follow-up-email-composer.md),
 [Unified Meeting Intelligence workspace](docs/03-engineering/unified-meeting-intelligence.md),
 [OpenAI provider guide](docs/03-engineering/openai-provider-integration.md),
 [prompt/output architecture](docs/03-engineering/prompt-registry-and-structured-output.md)
-and [WO-005 record](docs/07-sprints/wo-005-unified-meeting-intelligence.md).
+and [WO-006A record](docs/07-sprints/wo-006a-buying-signals-deal-momentum.md).

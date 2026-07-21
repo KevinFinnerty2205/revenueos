@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from revenueos.ai_provider_contracts import (
     PROVIDER_REQUEST_ID_MAX_LENGTH,
     ActionItemsProviderInput,
+    BuyingSignalsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     FollowUpEmailProviderInput,
@@ -116,6 +117,7 @@ class OpenAIProvider:
             | type[ActionItemsProviderInput]
             | type[RisksBlockersProviderInput]
             | type[OpenQuestionsProviderInput]
+            | type[BuyingSignalsProviderInput]
             | type[FollowUpEmailProviderInput],
         ] = {
             "executive_summary": ExecutiveSummaryProviderInput,
@@ -123,6 +125,7 @@ class OpenAIProvider:
             "action_items": ActionItemsProviderInput,
             "risks_blockers": RisksBlockersProviderInput,
             "open_questions": OpenQuestionsProviderInput,
+            "buying_signals": BuyingSignalsProviderInput,
             "follow_up_email": FollowUpEmailProviderInput,
         }
         expected_input = supported_inputs.get(request.job_type)

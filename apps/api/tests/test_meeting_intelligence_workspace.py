@@ -2,24 +2,27 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from revenueos.ai_mock_provider import MOCK_MODEL_IDENTIFIER, MOCK_PROVIDER_NAME
 from revenueos.ai_worker_services import AIWorkerService
 from revenueos.auth import get_current_user
 from revenueos.config import Settings
+from revenueos.database import set_tenant_database_context
 from revenueos.intelligence_workspace import MeetingIntelligenceService
 from revenueos.main import create_app
 from revenueos.models import AIJob
+from revenueos.tenant import TenantContext
 
-from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL
+from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL
 from .test_meeting_api import (
     cast_auth_dependency,
     create_meeting,
@@ -86,8 +89,8 @@ def _count_jobs() -> int:
         (True, 1, 1, 1, 1, False, "processing"),
         (True, 2, 0, 0, 1, False, "partially_failed"),
         (True, 0, 0, 0, 1, False, "failed"),
-        (True, 6, 0, 0, 0, False, "completed"),
-        (True, 6, 0, 0, 0, True, "completed_with_empty_results"),
+        (True, 7, 0, 0, 0, False, "completed"),
+        (True, 7, 0, 0, 0, True, "completed_with_empty_results"),
     ),
 )
 def test_overall_state_precedence_is_deterministic(
@@ -129,11 +132,12 @@ def test_aggregate_read_is_product_safe_and_unavailable_without_transcript(
         "queued": 0,
         "processing": 0,
         "failed": 0,
-        "notGenerated": 6,
-        "total": 6,
-        "summary": "0 of 6 ready",
+        "notGenerated": 7,
+        "total": 7,
+        "summary": "0 of 7 ready",
     }
     assert body["executiveSummary"]["state"] == "unavailable"
+    assert body["buyingSignals"]["state"] == "unavailable"
     assert body["followUpEmail"]["state"] == "unavailable"
     for internal_field in (
         "jobId",
@@ -148,6 +152,55 @@ def test_aggregate_read_is_product_safe_and_unavailable_without_transcript(
     ):
         assert internal_field not in response.text
     assert client.get("/api/v1/meetings/00000000-0000-4000-8000-000000000099/intelligence").status_code == 404
+
+
+def test_aggregate_read_remains_bounded_to_four_queries(client: TestClient) -> None:
+    meeting = create_meeting(
+        client,
+        transcript={
+            "rawText": "The customer confirmed the pilot budget and next meeting.",
+            "language": "en",
+            "source": "manual",
+        },
+    )
+    assert client.post(f"/api/v1/meetings/{meeting['id']}/intelligence/generate").status_code == 202
+
+    async def read_workspace() -> tuple[int, int]:
+        engine = create_async_engine(TEST_DB_URL)
+        select_statements: list[str] = []
+
+        def record_statement(
+            connection: object,
+            cursor: object,
+            statement: str,
+            parameters: object,
+            context: object,
+            executemany: bool,
+        ) -> None:
+            del connection, cursor, parameters, context, executemany
+            if statement.lstrip().upper().startswith("SELECT"):
+                select_statements.append(statement)
+
+        event.listen(engine.sync_engine, "before_cursor_execute", record_statement)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                response = await MeetingIntelligenceService(
+                    session,
+                    TenantContext(
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        user_id=PRIMARY_USER_ID,
+                        role="admin",
+                    ),
+                ).get_workspace(uuid.UUID(meeting["id"]))
+        finally:
+            event.remove(engine.sync_engine, "before_cursor_execute", record_statement)
+            await engine.dispose()
+        return len(select_statements), response.progress.total
+
+    query_count, total = asyncio.run(read_workspace())
+    assert query_count == 4
+    assert total == 7
 
 
 def test_aggregate_read_emits_metadata_only_polling_and_transition_telemetry(
@@ -226,38 +279,40 @@ def test_generation_orchestrates_missing_work_and_composer_dependencies(
     assert first.status_code == 202, first.text
     assert first.json()["createdCapabilities"] == [
         "executive_summary",
+        "buying_signals",
         "decisions",
         "action_items",
         "risks_blockers",
         "open_questions",
     ]
     assert first.json()["followUpEmail"]["state"] == "unavailable"
-    assert _count_jobs() == 5
+    assert _count_jobs() == 6
 
     repeated = client.post(f"{base}/generate")
     assert repeated.status_code == 200
     assert repeated.json()["createdCapabilities"] == []
-    assert len(repeated.json()["reusedCapabilities"]) == 5
-    assert _count_jobs() == 5
+    assert len(repeated.json()["reusedCapabilities"]) == 6
+    assert _count_jobs() == 6
 
-    for _ in range(5):
+    for _ in range(6):
         _run_worker_once()
     prerequisites_ready = client.get(base)
     assert prerequisites_ready.json()["overallState"] == "partially_generated"
-    assert prerequisites_ready.json()["progress"]["ready"] == 5
+    assert prerequisites_ready.json()["progress"]["ready"] == 6
     assert prerequisites_ready.json()["followUpEmail"]["state"] == "not_generated"
 
     composer = client.post(f"{base}/generate")
     assert composer.status_code == 202
     assert composer.json()["createdCapabilities"] == ["follow_up_email"]
     assert composer.json()["followUpEmail"]["state"] == "queued"
-    assert _count_jobs() == 6
+    assert _count_jobs() == 7
 
     _run_worker_once()
     completed = client.get(base)
     body = completed.json()
     assert body["overallState"] in {"completed", "completed_with_empty_results"}
-    assert body["progress"]["ready"] == 6
+    assert body["progress"]["ready"] == 7
+    assert body["buyingSignals"]["state"] == "completed"
     assert body["followUpEmail"]["content"]["summary"] == body["executiveSummary"]["content"]["executiveSummary"]
     assert "risksBlockers" not in body["followUpEmail"]["content"]
     assert "rawText" not in completed.text
@@ -265,7 +320,7 @@ def test_generation_orchestrates_missing_work_and_composer_dependencies(
     final_repeat = client.post(f"{base}/generate")
     assert final_repeat.status_code == 200
     assert final_repeat.json()["createdCapabilities"] == []
-    assert _count_jobs() == 6
+    assert _count_jobs() == 7
 
 
 def test_concurrent_generate_requests_do_not_duplicate_equivalent_jobs(
@@ -285,15 +340,15 @@ def test_concurrent_generate_requests_do_not_duplicate_equivalent_jobs(
         responses = list(executor.map(lambda _: client.post(endpoint), range(2)))
 
     assert {response.status_code for response in responses} <= {200, 202}
-    assert _count_jobs() == 5
+    assert _count_jobs() == 6
 
-    for _ in range(5):
+    for _ in range(6):
         _run_worker_once()
     with ThreadPoolExecutor(max_workers=2) as executor:
         composer_responses = list(executor.map(lambda _: client.post(endpoint), range(2)))
 
     assert {response.status_code for response in composer_responses} <= {200, 202}
-    assert _count_jobs() == 6
+    assert _count_jobs() == 7
 
 
 def test_transcript_version_change_queues_new_extraction_jobs(client: TestClient) -> None:
@@ -307,7 +362,7 @@ def test_transcript_version_change_queues_new_extraction_jobs(client: TestClient
     )
     base = f"/api/v1/meetings/{meeting['id']}"
     assert client.post(f"{base}/intelligence/generate").status_code == 202
-    assert _count_jobs() == 5
+    assert _count_jobs() == 6
 
     update = client.patch(
         f"{base}/transcript",
@@ -319,8 +374,8 @@ def test_transcript_version_change_queues_new_extraction_jobs(client: TestClient
     assert update.status_code == 200
     second = client.post(f"{base}/intelligence/generate")
     assert second.status_code == 202
-    assert len(second.json()["createdCapabilities"]) == 5
-    assert _count_jobs() == 10
+    assert len(second.json()["createdCapabilities"]) == 6
+    assert _count_jobs() == 12
 
 
 def test_cancelled_capability_is_not_ready_and_uses_failure_precedence(
@@ -359,7 +414,7 @@ def test_cancelled_capability_is_not_ready_and_uses_failure_precedence(
     retry = client.post(f"{base}/generate")
     assert retry.status_code == 202
     assert retry.json()["createdCapabilities"] == ["risks_blockers"]
-    assert _count_jobs() == 6
+    assert _count_jobs() == 7
 
 
 def test_valid_empty_sections_count_as_ready_and_complete_with_empty_results(
@@ -376,7 +431,7 @@ def test_valid_empty_sections_count_as_ready_and_complete_with_empty_results(
     )
     base = f"/api/v1/meetings/{meeting['id']}/intelligence"
     assert client.post(f"{base}/generate").status_code == 202
-    for _ in range(5):
+    for _ in range(6):
         _run_worker_once()
     assert client.post(f"{base}/generate").status_code == 202
     _run_worker_once()
@@ -384,11 +439,12 @@ def test_valid_empty_sections_count_as_ready_and_complete_with_empty_results(
     response = client.get(base)
     body = response.json()
     assert body["overallState"] == "completed_with_empty_results"
-    assert body["progress"]["ready"] == 6
+    assert body["progress"]["ready"] == 7
     assert body["decisions"]["emptyResult"] is True
     assert body["actionItems"]["emptyResult"] is True
     assert body["risksBlockers"]["emptyResult"] is True
     assert body["openQuestions"]["emptyResult"] is True
+    assert body["buyingSignals"]["emptyResult"] is True
 
 
 def test_aggregate_and_generation_are_tenant_scoped(

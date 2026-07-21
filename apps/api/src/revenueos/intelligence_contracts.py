@@ -10,6 +10,10 @@ from revenueos.contracts import APIModel
 from revenueos.domain import (
     ActionItemPriority,
     ActionItemStatus,
+    BuyingSignalPolarity,
+    BuyingSignalStrength,
+    BuyingSignalType,
+    DealMomentum,
     DecisionStatus,
     ExecutiveSummaryMeetingType,
     ExecutiveSummarySentiment,
@@ -57,6 +61,54 @@ class ExecutiveSummaryResponse(APIModel):
     generated_at: datetime | None
     safe_message: str | None
     executive_summary: ExecutiveSummaryContentResponse | None
+
+
+BuyingSignalsState = Literal[
+    "empty",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+]
+
+
+class BuyingSignalResponse(APIModel):
+    signal_type: BuyingSignalType
+    polarity: BuyingSignalPolarity
+    strength: BuyingSignalStrength
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: str
+
+
+class BuyingSignalsContentResponse(APIModel):
+    signals: list[BuyingSignalResponse]
+    overall_momentum: DealMomentum
+    momentum_summary: str
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class BuyingSignalsRequestResponse(APIModel):
+    job_id: UUID
+    status: Literal["queued", "running", "completed"]
+    created: bool
+    transcript_version: int = Field(ge=1)
+    requested_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class BuyingSignalsResponse(APIModel):
+    state: BuyingSignalsState
+    generation_available: bool
+    unavailable_reason: str | None
+    job_id: UUID | None
+    transcript_version: int | None = Field(default=None, ge=1)
+    requested_at: datetime | None
+    started_at: datetime | None
+    generated_at: datetime | None
+    safe_message: str | None
+    buying_signals: BuyingSignalsContentResponse | None
 
 
 DecisionsState = Literal[
@@ -295,6 +347,7 @@ class FollowUpEmailResponse(APIModel):
 
 MeetingIntelligenceCapabilityName = Literal[
     "executive_summary",
+    "buying_signals",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -337,6 +390,12 @@ class MeetingIntelligenceExecutiveSummaryResponse(
     content: ExecutiveSummaryContentResponse | None
 
 
+class MeetingIntelligenceBuyingSignalsResponse(
+    MeetingIntelligenceCapabilityResponse,
+):
+    content: BuyingSignalsContentResponse | None
+
+
 class MeetingIntelligenceDecisionsResponse(MeetingIntelligenceCapabilityResponse):
     content: DecisionsContentResponse | None
 
@@ -367,12 +426,12 @@ class MeetingIntelligenceFollowUpEmailResponse(
 
 
 class MeetingIntelligenceProgressResponse(APIModel):
-    ready: int = Field(ge=0, le=6)
-    queued: int = Field(ge=0, le=6)
-    processing: int = Field(ge=0, le=6)
-    failed: int = Field(ge=0, le=6)
-    not_generated: int = Field(ge=0, le=6)
-    total: Literal[6] = 6
+    ready: int = Field(ge=0, le=7)
+    queued: int = Field(ge=0, le=7)
+    processing: int = Field(ge=0, le=7)
+    failed: int = Field(ge=0, le=7)
+    not_generated: int = Field(ge=0, le=7)
+    total: Literal[7] = 7
     summary: str
 
 
@@ -383,6 +442,7 @@ class MeetingIntelligenceResponse(APIModel):
     last_updated_at: datetime | None
     progress: MeetingIntelligenceProgressResponse
     executive_summary: MeetingIntelligenceExecutiveSummaryResponse
+    buying_signals: MeetingIntelligenceBuyingSignalsResponse
     decisions: MeetingIntelligenceDecisionsResponse
     action_items: MeetingIntelligenceActionItemsResponse
     risks_blockers: MeetingIntelligenceRisksBlockersResponse

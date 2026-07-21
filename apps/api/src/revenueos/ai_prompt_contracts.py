@@ -41,6 +41,7 @@ class PromptDefinition(BaseModel):
         "action_items",
         "risks_blockers",
         "open_questions",
+        "buying_signals",
         "follow_up_email",
     ]
     system_template: PromptTemplate

@@ -145,6 +145,19 @@ The capability extracts questions only. It does not answer, assign or track
 resolution and does not authorise production customer data or later
 intelligence.
 
+### WO-006A — Buying Signals & Deal Momentum Intelligence — Complete
+
+- **Objective:** Add a sixth independent transcript-grounded extraction that makes current-meeting commercial evidence and qualitative momentum visible without predictive scoring.
+- **Major deliverables:** Closed signal taxonomy; strict signal/polarity/strength/momentum/confidence schema; deterministic populated, mixed, neutral and insufficient-evidence mock fixtures; explicit OpenAI allowlist extension; transcript-pinned durable job; append-only artefact; migration `0013_buying_signals`; POST/GET API; aggregate workspace integration; accessible textual UI; and metadata-only telemetry.
+- **Dependencies:** AI infrastructure, the five earlier extractors, Follow-up Email and the WO-005 unified workspace. Buying Signals remains independent and is not a Follow-up Email prerequisite.
+- **Out of scope:** Win probability, deal scoring, forecast category, opportunity mutation, CRM updates, trend history, coaching, next-best action, send/integration, recording and transcription.
+- **Security gates:** Trusted tenant context, forced RLS, exact current transcript version, no truncation, prompt-injection-as-data, strict cross-field validation, content-redacted telemetry/audits and explicit OpenAI external-data warning.
+- **Demonstration:** Generate Buying Signals from a synthetic authorised transcript, review evidence-backed signal cards and qualitative current-meeting momentum, observe `insufficient_evidence` for a polite but unsupported conversation and retain the result on refresh.
+
+WO-006A extends the already implemented seven-capability Meeting Intelligence
+workspace; it does not change the separately proposed production-readiness
+sequence below or authorise production customer data.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.

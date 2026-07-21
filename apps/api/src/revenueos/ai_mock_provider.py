@@ -14,6 +14,8 @@ from revenueos.ai_contracts import (
     ACTION_ITEM_TASK_MAX_LENGTH,
     ACTION_ITEMS_MAX_COUNT,
     ACTION_ITEMS_SCHEMA_VERSION,
+    BUYING_SIGNALS_MAX_COUNT,
+    BUYING_SIGNALS_SCHEMA_VERSION,
     DECISION_EVIDENCE_MAX_LENGTH,
     DECISION_MAX_LENGTH,
     DECISIONS_MAX_COUNT,
@@ -32,6 +34,7 @@ from revenueos.ai_contracts import (
 )
 from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
+    BuyingSignalsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     FollowUpEmailProviderInput,
@@ -134,6 +137,10 @@ class DeterministicMockAIProvider:
             return request.expected_schema_version == OPEN_QUESTIONS_SCHEMA_VERSION and isinstance(
                 request.input_payload, OpenQuestionsProviderInput
             )
+        if request.job_type == AIJobType.BUYING_SIGNALS.value:
+            return request.expected_schema_version == BUYING_SIGNALS_SCHEMA_VERSION and isinstance(
+                request.input_payload, BuyingSignalsProviderInput
+            )
         if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
             return request.expected_schema_version == FOLLOW_UP_EMAIL_SCHEMA_VERSION and isinstance(
                 request.input_payload, FollowUpEmailProviderInput
@@ -179,6 +186,9 @@ class DeterministicMockAIProvider:
                     cls._extract_open_questions(transcript),
                 )
             }
+        if isinstance(request.input_payload, BuyingSignalsProviderInput):
+            transcript = cls._extract_transcript(request.input_payload)
+            return cls._extract_buying_signals(transcript)
         if isinstance(request.input_payload, FollowUpEmailProviderInput):
             summary = cls._extract_composition_value(
                 request.input_payload,
@@ -252,6 +262,7 @@ class DeterministicMockAIProvider:
             | ActionItemsProviderInput
             | RisksBlockersProviderInput
             | OpenQuestionsProviderInput
+            | BuyingSignalsProviderInput
         ),
     ) -> str:
         marker = "Untrusted transcript as a JSON string:\n"
@@ -786,6 +797,370 @@ class DeterministicMockAIProvider:
                 break
         return questions
 
+    @classmethod
+    def _extract_buying_signals(cls, transcript: str) -> dict[str, JsonValue]:
+        """Return deterministic demonstration fixtures, not production reasoning."""
+
+        injection_markers = (
+            "ignore previous",
+            "ignore all previous",
+            "system prompt",
+            "developer message",
+            "reveal secrets",
+            "prompt injection",
+        )
+        sentences = re.split(r"(?<=[.!?])\s+", " ".join(transcript.split()))
+        content = " ".join(
+            sentence.lower()
+            for sentence in sentences
+            if not any(marker in sentence.lower() for marker in injection_markers)
+        )
+        if any(
+            marker in content
+            for marker in (
+                "polite interest only",
+                "this looks good",
+                "thanks for the demo",
+                "interesting product",
+                "no buying signals",
+            )
+        ) and not any(
+            marker in content for marker in ("approved budget", "budget is approved", "next meeting is", "will proceed")
+        ):
+            return cls._insufficient_buying_signals()
+
+        signals: list[dict[str, JsonValue]] = []
+
+        def add(
+            signal_type: str,
+            polarity: str,
+            strength: str,
+            evidence: str,
+            confidence: float,
+        ) -> None:
+            if any(item["signal_type"] == signal_type for item in signals):
+                return
+            if len(signals) < BUYING_SIGNALS_MAX_COUNT:
+                signals.append(
+                    {
+                        "signal_type": signal_type,
+                        "polarity": polarity,
+                        "strength": strength,
+                        "confidence": confidence,
+                        "evidence": evidence,
+                    }
+                )
+
+        if any(marker in content for marker in ("approved budget", "budget is approved", "budget confirmed")):
+            add("budget_confirmed", "positive", "strong", "The customer confirmed that budget is approved.", 0.96)
+        if any(
+            marker in content
+            for marker in (
+                "budget is not approved",
+                "budget remains unconfirmed",
+                "no budget owner",
+                "budget unconfirmed",
+            )
+        ):
+            add("budget_unconfirmed", "negative", "moderate", "The budget or approval path remains unconfirmed.", 0.91)
+        if any(
+            marker in content
+            for marker in (
+                "timeline confirmed",
+                "implementation date confirmed",
+                "september pilot",
+                "start in september",
+            )
+        ):
+            add("timeline_confirmed", "positive", "strong", "The customer confirmed a target delivery timeline.", 0.94)
+        if any(
+            marker in content
+            for marker in ("timeline is unclear", "timeline remains vague", "no target date", "unclear timeline")
+        ):
+            add(
+                "timeline_unclear",
+                "negative",
+                "moderate",
+                "The meeting did not establish a reliable target timeline.",
+                0.9,
+            )
+        if any(
+            marker in content
+            for marker in (
+                "decision-maker confirmed",
+                "decision maker confirmed",
+                "economic buyer approved",
+                "final decision-maker agreed",
+            )
+        ):
+            add(
+                "decision_maker_engaged",
+                "positive",
+                "strong",
+                "The final decision-maker actively confirmed the proposed direction.",
+                0.95,
+            )
+        if any(
+            marker in content
+            for marker in (
+                "decision-maker was absent",
+                "decision maker was absent",
+                "no access to the decision-maker",
+                "decision maker missing",
+            )
+        ):
+            add(
+                "decision_maker_missing",
+                "negative",
+                "moderate",
+                "The decision-maker was absent and no access path was established.",
+                0.91,
+            )
+        if any(
+            marker in content
+            for marker in ("champion identified", "advocate internally", "will champion", "internal champion")
+        ):
+            add(
+                "champion_identified",
+                "positive",
+                "moderate",
+                "A participant committed to advocate internally for the solution.",
+                0.9,
+            )
+        if any(marker in content for marker in ("no internal champion", "champion not evident")):
+            add(
+                "champion_not_evident",
+                "negative",
+                "moderate",
+                "The discussion established that no internal champion is currently evident.",
+                0.87,
+            )
+        if any(
+            marker in content for marker in ("procurement has started", "procurement is active", "entered procurement")
+        ):
+            add(
+                "procurement_active",
+                "positive",
+                "strong",
+                "The customer confirmed that the formal procurement process has started.",
+                0.95,
+            )
+        if any(
+            marker in content
+            for marker in ("procurement is unclear", "procurement process is unknown", "procurement unclear")
+        ):
+            add("procurement_unclear", "negative", "moderate", "The procurement process and path remain unclear.", 0.88)
+        if any(
+            marker in content
+            for marker in (
+                "prefer the competitor",
+                "competitor is preferred",
+                "evaluating a competitor",
+                "competitor present",
+            )
+        ):
+            add(
+                "competitor_present",
+                "negative",
+                "moderate",
+                "The customer is actively considering or prefers a competing option.",
+                0.9,
+            )
+        if any(marker in content for marker in ("no competitors under consideration", "competitor absent")):
+            add(
+                "competitor_absent",
+                "positive",
+                "weak",
+                "The customer confirmed that no competing option is under consideration.",
+                0.82,
+            )
+        if any(
+            marker in content for marker in ("urgent requirement", "must launch", "time-critical", "urgency present")
+        ):
+            add(
+                "urgency_present",
+                "positive",
+                "moderate",
+                "The customer described a time-bound need to make progress.",
+                0.88,
+            )
+        if any(marker in content for marker in ("no urgency", "urgency absent")):
+            add(
+                "urgency_absent",
+                "neutral",
+                "weak",
+                "The customer explicitly indicated that the initiative is not urgent.",
+                0.82,
+            )
+        if any(
+            marker in content
+            for marker in ("intent to proceed", "ready to purchase", "will proceed", "commercial intent")
+        ):
+            add(
+                "commercial_intent",
+                "positive",
+                "strong",
+                "The customer stated a clear intention to proceed commercially.",
+                0.95,
+            )
+        if any(
+            marker in content
+            for marker in (
+                "implementation team committed",
+                "implementation resources committed",
+                "resources are committed",
+            )
+        ):
+            add(
+                "implementation_commitment",
+                "positive",
+                "strong",
+                "The customer committed resources for implementation.",
+                0.93,
+            )
+        if any(
+            marker in content
+            for marker in (
+                "next meeting is booked",
+                "next meeting is scheduled",
+                "committed next step",
+                "next step committed",
+            )
+        ):
+            add(
+                "next_step_committed",
+                "positive",
+                "strong",
+                "The customer committed to a defined next meeting or deliverable.",
+                0.96,
+            )
+        if any(
+            marker in content
+            for marker in ("maybe meet again", "no committed next step", "next step is vague", "weak next step")
+        ):
+            add(
+                "next_step_weak", "negative", "moderate", "The meeting ended without a firm next-step commitment.", 0.89
+            )
+        if any(marker in content for marker in ("stakeholders aligned", "stakeholder alignment")):
+            add(
+                "stakeholder_alignment",
+                "positive",
+                "moderate",
+                "The relevant stakeholders expressed an aligned direction.",
+                0.89,
+            )
+        if any(marker in content for marker in ("stakeholders disagree", "stakeholder misalignment")):
+            add(
+                "stakeholder_misalignment",
+                "negative",
+                "strong",
+                "Material stakeholder disagreement remains unresolved.",
+                0.93,
+            )
+        if any(
+            marker in content
+            for marker in ("technical fit confirmed", "technical requirements are met", "feasibility confirmed")
+        ):
+            add(
+                "technical_fit_confirmed",
+                "positive",
+                "strong",
+                "The customer confirmed that the solution meets the technical requirements.",
+                0.94,
+            )
+        if any(
+            marker in content
+            for marker in ("technical uncertainty", "technical fit uncertain", "feasibility remains unresolved")
+        ):
+            add("technical_fit_uncertain", "negative", "moderate", "Technical feasibility remains unresolved.", 0.91)
+        if any(
+            marker in content
+            for marker in (
+                "security review is progressing",
+                "legal review is progressing",
+                "security approved",
+                "legal approved",
+            )
+        ):
+            add(
+                "security_or_legal_progress",
+                "positive",
+                "moderate",
+                "Security or legal review is demonstrably progressing.",
+                0.91,
+            )
+        if any(
+            marker in content
+            for marker in (
+                "legal approval blocks",
+                "security review blocks",
+                "legal blocker",
+                "security blocker",
+                "cannot sign until legal",
+            )
+        ):
+            add(
+                "security_or_legal_blocker",
+                "negative",
+                "strong",
+                "Outstanding security or legal approval materially blocks progress.",
+                0.95,
+            )
+        if "neutral meeting" in content and not signals:
+            add(
+                "other",
+                "neutral",
+                "weak",
+                "The discussion contained a neutral deal-context observation without a commitment.",
+                0.72,
+            )
+
+        if not signals:
+            return cls._insufficient_buying_signals()
+
+        polarities = {str(item["polarity"]) for item in signals}
+        has_strong_positive = any(item["polarity"] == "positive" and item["strength"] == "strong" for item in signals)
+        has_strong_negative = any(item["polarity"] == "negative" and item["strength"] == "strong" for item in signals)
+        if polarities <= {"neutral"}:
+            momentum = "neutral"
+            summary = "The current meeting contains neutral evidence without a clear direction of deal momentum."
+            confidence = 0.72
+        elif "positive" in polarities and "negative" in polarities:
+            momentum = "neutral"
+            summary = "The current meeting contains mixed positive and negative signals, so momentum is neutral."
+            confidence = 0.82
+        elif "positive" in polarities:
+            momentum = "strong_positive" if has_strong_positive else "positive"
+            summary = (
+                "The current meeting shows strong positive momentum based on the extracted positive signals."
+                if has_strong_positive
+                else "The current meeting shows positive momentum based on the extracted positive signals."
+            )
+            confidence = 0.91
+        else:
+            momentum = "strong_negative" if has_strong_negative else "negative"
+            summary = (
+                "The current meeting shows strong negative momentum based on the extracted negative signals."
+                if has_strong_negative
+                else "The current meeting shows negative momentum based on the extracted negative signals."
+            )
+            confidence = 0.9
+        return {
+            "signals": cast(JsonValue, signals),
+            "overall_momentum": momentum,
+            "momentum_summary": summary,
+            "confidence": confidence,
+        }
+
+    @staticmethod
+    def _insufficient_buying_signals() -> dict[str, JsonValue]:
+        return {
+            "signals": [],
+            "overall_momentum": "insufficient_evidence",
+            "momentum_summary": "There was not enough transcript evidence to assess deal momentum reliably.",
+            "confidence": 0.35,
+        }
+
     @staticmethod
     def _is_action_request_question(content: str) -> bool:
         if re.match(r"^(?:can|could|would|will)\s+(?:you|we|they)\b", content) is None:
@@ -1067,6 +1442,23 @@ class DeterministicMockAIProvider:
                         "answer": "Invented",
                     }
                 ]
+            }
+        if request.job_type == AIJobType.BUYING_SIGNALS.value:
+            return {
+                "signals": [
+                    {
+                        "signal_type": "unsupported",
+                        "polarity": "optimistic",
+                        "strength": "certain",
+                        "confidence": 2,
+                        "evidence": "",
+                        "win_probability": 90,
+                    }
+                ],
+                "overall_momentum": "will_close",
+                "momentum_summary": "Too short.",
+                "confidence": 2,
+                "deal_score": 99,
             }
         if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
             return {
