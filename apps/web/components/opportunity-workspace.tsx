@@ -289,6 +289,12 @@ export function OpportunityWorkspace({
                 </div>
                 <Link
                   href={`/meetings/${workspace.latestMeeting.id}`}
+                  onClick={() => {
+                    void apiRequest<void>(
+                      `/api/v1/opportunities/${opportunity.id}/workspace/latest-meeting-navigation`,
+                      { method: "POST", keepalive: true },
+                    ).catch(() => undefined);
+                  }}
                   className="inline-flex min-h-11 items-center rounded-xl border border-white/30 px-4 text-sm font-bold text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white"
                 >
                   Open latest meeting intelligence

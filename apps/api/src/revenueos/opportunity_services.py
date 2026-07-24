@@ -169,6 +169,37 @@ class OpportunityWorkspaceService:
             logger.info("opportunity_workspace_partial_data", extra=context)
         return response
 
+    async def record_latest_meeting_navigation(self, opportunity_id: UUID) -> None:
+        record = await self.repository.get_opportunity(
+            self.tenant.organisation_id,
+            opportunity_id,
+        )
+        if record is None:
+            raise PublicAPIError(
+                "opportunity_not_found",
+                "The requested opportunity was not found.",
+                404,
+            )
+        recent = await self.repository.recent_meetings(
+            self.tenant.organisation_id,
+            opportunity_id,
+            limit=1,
+        )
+        if not recent:
+            raise PublicAPIError(
+                "latest_meeting_unavailable",
+                "This opportunity has no active associated meeting.",
+                409,
+            )
+        logger.info(
+            "opportunity_workspace_latest_meeting_navigation",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "opportunity_id": str(opportunity_id),
+                "meeting_id": str(recent[0].meeting.id),
+            },
+        )
+
     async def set_meeting_opportunity(
         self,
         meeting_id: UUID,

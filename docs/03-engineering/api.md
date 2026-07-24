@@ -50,6 +50,7 @@ A contact requires a company in the same organisation and a syntactically valid 
 | `PATCH` | `/api/v1/opportunities/{opportunityId}` | Update an opportunity |
 | `DELETE` | `/api/v1/opportunities/{opportunityId}` | Delete an unused opportunity |
 | `GET` | `/api/v1/opportunities/{opportunityId}/workspace` | Read the latest-meeting Opportunity Workspace |
+| `POST` | `/api/v1/opportunities/{opportunityId}/workspace/latest-meeting-navigation` | Record metadata-only navigation to the selected latest meeting |
 
 List parameters: `search`, `companyId`, `stage`, `status`, `sortBy` (`name`, `estimated_value`, `expected_close_date`, `created_at`, `updated_at`) and `sortOrder`. Items include company display name, deterministic latest active meeting date, current qualitative momentum and a bounded Next Best Action preview when valid. The web list defaults to `updated_at DESC`.
 

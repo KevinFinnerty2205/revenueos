@@ -119,6 +119,9 @@ opportunity, meeting, participant or capability; there is no N+1 loop.
   display metadata, latest meeting, up to 20 recent meetings, the latest
   product-safe Meeting Intelligence view, available-section count, partial
   state and a generated timestamp.
+- `POST /api/v1/opportunities/{opportunityId}/workspace/latest-meeting-navigation`
+  validates the current latest active meeting and records the content-free
+  navigation telemetry event.
 - `PATCH /api/v1/meetings/{meetingId}/opportunity` associates or disassociates
   a meeting with `opportunityId` and required `expectedUpdatedAt`.
 

@@ -88,6 +88,18 @@ async def get_opportunity_workspace(
     return await service.get_workspace(opportunity_id)
 
 
+@router.post(
+    "/{opportunity_id}/workspace/latest-meeting-navigation",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def record_latest_meeting_navigation(
+    opportunity_id: UUID,
+    service: WorkspaceService,
+) -> Response:
+    await service.record_latest_meeting_navigation(opportunity_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.patch("/{opportunity_id}", response_model=OpportunityResponse)
 async def update_opportunity(
     opportunity_id: UUID,

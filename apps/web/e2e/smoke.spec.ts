@@ -479,7 +479,9 @@ test("opportunity workspace persists an associated meeting and composes stored i
     await expect(page.getByText(new RegExp(prohibited, "i"))).toHaveCount(0);
   }
 
-  await page.getByRole("link", { name: "Expansion review" }).click();
+  await page
+    .getByRole("link", { name: "Open latest meeting intelligence" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Pilot readiness review" }),
   ).toBeVisible();

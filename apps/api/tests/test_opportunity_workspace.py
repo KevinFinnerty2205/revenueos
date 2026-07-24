@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from uuid import UUID
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import event, select
@@ -334,3 +335,32 @@ def test_workspace_query_count_is_bounded_as_recent_meetings_grow(
     assert response.status_code == 200, response.text
     assert len(response.json()["recentMeetings"]) == 6
     assert select_count <= 5
+
+
+def test_latest_meeting_navigation_telemetry_is_tenant_validated_and_metadata_only(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    company_id = str(create_company(client)["id"])
+    opportunity = create_opportunity(client, company_id, name="Sensitive opportunity name")
+
+    unavailable = client.post(f"/api/v1/opportunities/{opportunity['id']}/workspace/latest-meeting-navigation")
+    assert unavailable.status_code == 409
+    assert unavailable.json()["code"] == "latest_meeting_unavailable"
+
+    meeting = create_meeting(client, company_id=company_id)
+    _associate(client, meeting, str(opportunity["id"]))
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def capture_event(message: str, *, extra: dict[str, object]) -> None:
+        events.append((message, extra))
+
+    monkeypatch.setattr("revenueos.opportunity_services.logger.info", capture_event)
+    response = client.post(f"/api/v1/opportunities/{opportunity['id']}/workspace/latest-meeting-navigation")
+
+    assert response.status_code == 204
+    event = next(item for item in events if item[0] == "opportunity_workspace_latest_meeting_navigation")
+    assert event[1]["organisation_id"]
+    assert event[1]["opportunity_id"] == str(opportunity["id"])
+    assert event[1]["meeting_id"] == str(meeting["id"])
+    assert "Sensitive opportunity name" not in str(event)
