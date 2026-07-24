@@ -15,6 +15,7 @@ from revenueos.ai_contracts import (
     OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
     OPEN_QUESTIONS_SCHEMA_VERSION,
     RISKS_BLOCKERS_SCHEMA_VERSION,
+    STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
     ActionItemsArtifactContent,
     BuyingSignalsArtifactContent,
     DecisionsArtifactContent,
@@ -24,6 +25,7 @@ from revenueos.ai_contracts import (
     ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
+    StakeholderIntelligenceArtifactContent,
 )
 from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
 from revenueos.ai_prompt_errors import (
@@ -42,6 +44,7 @@ RISKS_BLOCKERS_SCHEMA_KEY = "risks_blockers"
 OPEN_QUESTIONS_SCHEMA_KEY = "open_questions"
 BUYING_SIGNALS_SCHEMA_KEY = "buying_signals"
 OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_KEY = "objections_competitive_signals"
+STAKEHOLDER_INTELLIGENCE_SCHEMA_KEY = "stakeholder_intelligence"
 FOLLOW_UP_EMAIL_SCHEMA_KEY = "follow_up_email"
 
 
@@ -167,6 +170,14 @@ def create_default_output_schema_registry() -> OutputSchemaRegistry:
                 job_type=AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value,
                 validation_model=ObjectionsCompetitiveSignalsArtifactContent,
                 description=("Strict schema for transcript-grounded objections and competitive signals."),
+                active=True,
+            ),
+            OutputSchemaDefinition(
+                schema_key=STAKEHOLDER_INTELLIGENCE_SCHEMA_KEY,
+                schema_version=STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+                job_type=AIJobType.STAKEHOLDER_INTELLIGENCE.value,
+                validation_model=StakeholderIntelligenceArtifactContent,
+                description="Strict schema for transcript-grounded Stakeholder Intelligence.",
                 active=True,
             ),
             OutputSchemaDefinition(

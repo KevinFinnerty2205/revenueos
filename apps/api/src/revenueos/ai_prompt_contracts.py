@@ -43,6 +43,7 @@ class PromptDefinition(BaseModel):
         "open_questions",
         "buying_signals",
         "objections_competitive_signals",
+        "stakeholder_intelligence",
         "follow_up_email",
     ]
     system_template: PromptTemplate

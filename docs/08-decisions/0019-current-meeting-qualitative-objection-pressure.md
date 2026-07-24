@@ -22,9 +22,10 @@ likelihood of a commercial outcome. Deterministic rules reject contradictory
 status/strength/pressure combinations and summary references unsupported by the
 validated items. No hidden weighted score is introduced.
 
-The capability is independently jobbed and persisted. It joins the aggregate as
-the seventh extraction. Follow-up Email remains an eighth separate composition
-and neither requires nor consumes objections.
+The capability is independently jobbed and persisted. At WO-006B adoption it
+joined the aggregate as the seventh extraction beside an eighth Follow-up Email
+composition. WO-006C later adds Stakeholder Intelligence without making either
+objections or stakeholders a Follow-up Email prerequisite/input.
 
 ## Alternatives considered
 

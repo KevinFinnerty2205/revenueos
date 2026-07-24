@@ -37,7 +37,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "ai_jobs",
             "ai_artifacts",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0014_objections",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0015_stakeholders",)
         task_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
         assert task_columns["organisation_id"] == 1
         assert task_columns["title"] == 1
@@ -356,6 +356,39 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         )
         connection.execute(
             """
+            INSERT INTO ai_jobs
+                (id, organisation_id, meeting_id, transcript_id,
+                 transcript_version, job_type, requested_by_user_id,
+                 idempotency_key)
+            VALUES
+                ('stakeholder-job-1', 'organisation-1', 'meeting-1',
+                 'transcript-1', 1, 'stakeholder_intelligence', 'user-1',
+                 'stakeholder-migration-test')
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO ai_artifacts
+                (id, organisation_id, meeting_id, transcript_id,
+                 transcript_version, job_id, artifact_type, artifact_version,
+                 schema_version, content_json)
+            VALUES
+                ('stakeholder-artifact-1', 'organisation-1', 'meeting-1',
+                 'transcript-1', 1, 'stakeholder-job-1',
+                 'stakeholder_intelligence', 1, 1,
+                 '{"stakeholders":[],"role_coverage":{' ||
+                 '"economic_buyer":"not_discussed",' ||
+                 '"decision_maker":"not_discussed",' ||
+                 '"champion":"not_discussed",' ||
+                 '"technical_buyer":"not_discussed",' ||
+                 '"procurement":"not_discussed",' ||
+                 '"legal_security":"not_discussed"},' ||
+                 '"stakeholder_summary":"There was not enough evidence to identify stakeholder roles reliably.",' ||
+                 '"confidence":0.3}')
+            """
+        )
+        connection.execute(
+            """
             INSERT INTO ai_artifacts
                 (id, organisation_id, meeting_id, transcript_id,
                  transcript_version, job_id, artifact_type, artifact_version,
@@ -396,6 +429,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert connection.execute(
             "SELECT count(*) FROM ai_jobs WHERE job_type = 'objections_competitive_signals'"
         ).fetchone() == (0,)
+        assert connection.execute(
+            "SELECT count(*) FROM ai_jobs WHERE job_type = 'stakeholder_intelligence'"
+        ).fetchone() == (0,)
         with pytest.raises(IntegrityError, match="ck_ai_jobs_type"):
             connection.execute(
                 """
@@ -412,7 +448,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0014_objections",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0015_stakeholders",)
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -464,7 +500,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0014_objections",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0015_stakeholders",)
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -508,7 +544,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0014_objections",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0015_stakeholders",)
 
     command.downgrade(configuration, "0004_ai_database_foundation")
     with connect(database_path) as connection:
@@ -522,7 +558,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0014_objections",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0015_stakeholders",)
 
     command.downgrade(configuration, "0003_meeting_domain")
     with connect(database_path) as connection:
@@ -544,7 +580,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert {"ai_jobs", "ai_artifacts"}.issubset(tables_after_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0014_objections",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0015_stakeholders",)
 
     command.downgrade(configuration, "0002_core_business_entities")
     with connect(database_path) as connection:
@@ -617,7 +653,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0014_objections"
+                    assert version == "0015_stakeholders"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

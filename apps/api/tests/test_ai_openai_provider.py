@@ -25,6 +25,7 @@ from revenueos.ai_contracts import (
     ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
+    StakeholderIntelligenceArtifactContent,
 )
 from revenueos.ai_openai_provider import (
     OPENAI_PROVIDER_NAME,
@@ -44,6 +45,7 @@ from revenueos.ai_provider_contracts import (
     ProviderRequest,
     ProviderResponse,
     RisksBlockersProviderInput,
+    StakeholderIntelligenceProviderInput,
 )
 from revenueos.ai_provider_errors import (
     InvalidProviderRequestError,
@@ -571,6 +573,71 @@ def test_openai_accepts_objections_with_registry_derived_strict_schema() -> None
     assert output_format["name"] == "objections_competitive_signals"
     assert output_format["strict"] is True
     assert output_format["schema"] == (ObjectionsCompetitiveSignalsArtifactContent.model_json_schema(mode="validation"))
+
+
+def test_openai_accepts_stakeholders_with_registry_derived_strict_schema() -> None:
+    output = {
+        "stakeholders": [
+            {
+                "name": "Jane Smith",
+                "organisation": "Customer",
+                "role": "champion",
+                "influence": "high",
+                "stance": "supportive",
+                "engagement": "active",
+                "evidence": "Jane Smith said she would present the proposal internally.",
+                "confidence": 0.94,
+            }
+        ],
+        "role_coverage": {
+            "economic_buyer": "not_discussed",
+            "champion": "identified",
+            "technical_evaluator": "not_discussed",
+            "procurement": "not_discussed",
+            "legal": "not_discussed",
+            "security": "not_discussed",
+        },
+        "stakeholder_summary": ("Jane Smith is a likely champion based on current meeting evidence."),
+        "confidence": 0.92,
+    }
+    response_create = _ResponseCreate(response=_response(output_text=json.dumps(output)))
+    request = ProviderRequest(
+        request_id=uuid.uuid4(),
+        organisation_id=uuid.uuid4(),
+        job_id=uuid.uuid4(),
+        job_type="stakeholder_intelligence",
+        model_identifier=MODEL,
+        input_payload=StakeholderIntelligenceProviderInput(
+            messages=(
+                ProviderMessage(
+                    role="system",
+                    content="Return only Stakeholder Intelligence fields.",
+                ),
+                ProviderMessage(
+                    role="user",
+                    content="Use the supplied untrusted transcript.",
+                ),
+            )
+        ),
+        expected_schema_version=1,
+        output_schema=ProviderOutputSchema(
+            schema_key="stakeholder_intelligence",
+            schema_version=1,
+            json_schema=StakeholderIntelligenceArtifactContent.model_json_schema(mode="validation"),
+        ),
+        timeout_seconds=30,
+    )
+
+    response = asyncio.run(_provider(response_create).execute(request))
+
+    assert response.output_payload == json.dumps(output)
+    assert len(response_create.calls) == 1
+    text = response_create.calls[0]["text"]
+    assert isinstance(text, dict)
+    output_format = text["format"]
+    assert output_format["name"] == "stakeholder_intelligence"
+    assert output_format["strict"] is True
+    assert output_format["schema"] == (StakeholderIntelligenceArtifactContent.model_json_schema(mode="validation"))
 
 
 def test_openai_accepts_follow_up_email_without_a_transcript_request() -> None:

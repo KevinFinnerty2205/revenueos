@@ -197,6 +197,21 @@ class ObjectionsCompetitiveSignalsProviderInput(BaseModel):
         return self
 
 
+class StakeholderIntelligenceProviderInput(BaseModel):
+    """Provider-neutral Stakeholder Intelligence input."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["stakeholder_intelligence"] = "stakeholder_intelligence"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> StakeholderIntelligenceProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("Stakeholder Intelligence messages must be ordered system then user.")
+        return self
+
+
 class FollowUpEmailProviderInput(BaseModel):
     """Provider-neutral Follow-up Email input with no transcript field."""
 
@@ -221,6 +236,7 @@ ProviderInput = (
     | OpenQuestionsProviderInput
     | BuyingSignalsProviderInput
     | ObjectionsCompetitiveSignalsProviderInput
+    | StakeholderIntelligenceProviderInput
     | FollowUpEmailProviderInput
 )
 

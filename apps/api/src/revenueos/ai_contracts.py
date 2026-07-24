@@ -72,6 +72,15 @@ COMPETITOR_EVIDENCE_MAX_LENGTH = 400
 OBJECTIONS_SUMMARY_MIN_LENGTH = 20
 OBJECTIONS_SUMMARY_MAX_LENGTH = 800
 OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH = 50_000
+STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION = 1
+STAKEHOLDERS_MAX_COUNT = 30
+STAKEHOLDER_NAME_MAX_LENGTH = 200
+STAKEHOLDER_ORGANISATION_MAX_LENGTH = 200
+STAKEHOLDER_EVIDENCE_MIN_LENGTH = 5
+STAKEHOLDER_EVIDENCE_MAX_LENGTH = 400
+STAKEHOLDER_SUMMARY_MIN_LENGTH = 20
+STAKEHOLDER_SUMMARY_MAX_LENGTH = 800
+STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH = 50_000
 FOLLOW_UP_EMAIL_SCHEMA_VERSION = 1
 FOLLOW_UP_EMAIL_SUBJECT_MAX_LENGTH = 200
 FOLLOW_UP_EMAIL_GREETING_MAX_LENGTH = 200
@@ -1040,6 +1049,278 @@ class ObjectionsCompetitiveSignalsSource(BaseModel):
             raise ValueError("Transcript text must not be empty.")
         if len(normalised) > OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH:
             raise ValueError("Transcript text exceeds the Objections & Competitive Signals limit.")
+        return normalised
+
+
+StakeholderRoleValue = Literal[
+    "economic_buyer",
+    "decision_maker",
+    "champion",
+    "influencer",
+    "blocker",
+    "technical_buyer",
+    "technical_evaluator",
+    "end_user",
+    "procurement",
+    "legal",
+    "security",
+    "finance",
+    "executive_sponsor",
+    "implementation_owner",
+    "vendor_representative",
+    "participant",
+    "unknown",
+]
+StakeholderInfluenceValue = Literal["high", "medium", "low", "unclear"]
+StakeholderStanceValue = Literal[
+    "supportive",
+    "neutral",
+    "resistant",
+    "mixed",
+    "unclear",
+]
+StakeholderEngagementValue = Literal[
+    "active",
+    "passive",
+    "absent_but_referenced",
+    "unclear",
+]
+StakeholderCoverageStateValue = Literal[
+    "identified",
+    "not_identified",
+    "unclear",
+    "not_discussed",
+]
+
+_COVERAGE_ROLE_MAP: dict[str, frozenset[str]] = {
+    "economic_buyer": frozenset({"economic_buyer"}),
+    "decision_maker": frozenset({"decision_maker"}),
+    "champion": frozenset({"champion"}),
+    "technical_buyer": frozenset({"technical_buyer"}),
+    "procurement": frozenset({"procurement"}),
+    "legal_security": frozenset({"legal", "security"}),
+}
+_SUMMARY_NON_COVERAGE_ROLE_TERMS: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
+    (("influencer",), frozenset({"influencer"})),
+    (("blocker",), frozenset({"blocker"})),
+    (("technical evaluator",), frozenset({"technical_evaluator"})),
+    (("end user",), frozenset({"end_user"})),
+    (("finance",), frozenset({"finance"})),
+    (("executive sponsor",), frozenset({"executive_sponsor"})),
+    (("implementation owner",), frozenset({"implementation_owner"})),
+    (("vendor representative",), frozenset({"vendor_representative"})),
+)
+_SUMMARY_RELATIONSHIP_TERMS = (
+    "reports to",
+    "reporting to",
+    "manager of",
+    "manages ",
+    "relationship between",
+    "connected to",
+)
+_PROPER_NAME_PATTERN = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b")
+_SUMMARY_NON_NAME_PHRASES = {
+    "current meeting",
+    "economic buyer",
+    "decision maker",
+    "technical buyer",
+    "legal security",
+}
+
+
+def _reject_control_characters(value: str) -> str:
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("Stakeholder text must be concise plain text.")
+    return value
+
+
+class StakeholderItem(BaseModel):
+    """One immutable stakeholder classification grounded in this meeting."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    name: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=STAKEHOLDER_NAME_MAX_LENGTH,
+        ),
+    ]
+    organisation: (
+        Annotated[
+            str,
+            StringConstraints(
+                strip_whitespace=True,
+                min_length=1,
+                max_length=STAKEHOLDER_ORGANISATION_MAX_LENGTH,
+            ),
+        ]
+        | None
+    )
+    role: StakeholderRoleValue
+    influence: StakeholderInfluenceValue
+    stance: StakeholderStanceValue
+    engagement: StakeholderEngagementValue
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=STAKEHOLDER_EVIDENCE_MIN_LENGTH,
+            max_length=STAKEHOLDER_EVIDENCE_MAX_LENGTH,
+        ),
+    ]
+
+    @field_validator("name", "organisation", "evidence")
+    @classmethod
+    def validate_plain_text(cls, value: str | None) -> str | None:
+        return _reject_control_characters(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def validate_classification_consistency(self) -> StakeholderItem:
+        if self.role == "blocker" and self.stance == "supportive":
+            raise ValueError("A blocker cannot have a supportive stance in schema version 1.")
+        if self.engagement == "absent_but_referenced" and self.role == "participant":
+            raise ValueError("An absent referenced stakeholder cannot be classified as a participant.")
+        if self.role in {"participant", "unknown"} and self.influence == "high":
+            raise ValueError("High influence requires a stronger transcript-supported role.")
+        if self.role == "unknown" and self.confidence > 0.5:
+            raise ValueError("An unknown role cannot have confidence above 0.5.")
+        if self.role == "participant" and self.confidence > 0.8:
+            raise ValueError("A participant without a stronger role cannot have confidence above 0.8.")
+        return self
+
+
+class StakeholderRoleCoverage(BaseModel):
+    """Fixed current-meeting coverage states for material buying roles."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    economic_buyer: StakeholderCoverageStateValue
+    decision_maker: StakeholderCoverageStateValue
+    champion: StakeholderCoverageStateValue
+    technical_buyer: StakeholderCoverageStateValue
+    procurement: StakeholderCoverageStateValue
+    legal_security: StakeholderCoverageStateValue
+
+
+class StakeholderIntelligenceArtifactContent(BaseModel):
+    """Strict immutable Stakeholder Intelligence schema version 1."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    stakeholders: tuple[StakeholderItem, ...] = Field(max_length=STAKEHOLDERS_MAX_COUNT)
+    role_coverage: StakeholderRoleCoverage
+    stakeholder_summary: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=STAKEHOLDER_SUMMARY_MIN_LENGTH,
+            max_length=STAKEHOLDER_SUMMARY_MAX_LENGTH,
+        ),
+    ]
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+    @field_validator("stakeholders", mode="before")
+    @classmethod
+    def normalise_json_array(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @field_validator("stakeholder_summary")
+    @classmethod
+    def validate_summary_plain_text(cls, value: str) -> str:
+        return _reject_control_characters(value)
+
+    @model_validator(mode="after")
+    def validate_stakeholder_consistency(self) -> StakeholderIntelligenceArtifactContent:
+        roles = {stakeholder.role for stakeholder in self.stakeholders}
+        names = [stakeholder.name.casefold() for stakeholder in self.stakeholders]
+        if len(names) != len(set(names)):
+            raise ValueError("A stakeholder may appear only once with one primary role.")
+
+        for coverage_field, supported_roles in _COVERAGE_ROLE_MAP.items():
+            state = getattr(self.role_coverage, coverage_field)
+            has_matching_role = not roles.isdisjoint(supported_roles)
+            if state == "identified" and not has_matching_role:
+                raise ValueError(f"Identified {coverage_field} coverage requires a matching stakeholder.")
+            if has_matching_role and state != "identified":
+                raise ValueError(f"A classified {coverage_field} stakeholder requires identified coverage.")
+
+        lowered_summary = self.stakeholder_summary.casefold()
+        if not self.stakeholders:
+            if any(getattr(self.role_coverage, field) == "identified" for field in _COVERAGE_ROLE_MAP):
+                raise ValueError("An empty stakeholder list cannot support identified role coverage.")
+            if self.confidence > 0.5:
+                raise ValueError("An empty stakeholder result cannot have high confidence.")
+            if not any(
+                phrase in lowered_summary
+                for phrase in (
+                    "not enough evidence",
+                    "insufficient evidence",
+                    "no reliable stakeholder evidence",
+                )
+            ):
+                raise ValueError("An empty result summary must state that evidence is insufficient.")
+
+        for terms, supported_roles in _SUMMARY_NON_COVERAGE_ROLE_TERMS:
+            if any(term in lowered_summary for term in terms) and roles.isdisjoint(supported_roles):
+                raise ValueError("Stakeholder summary references a role absent from the result.")
+        if any(term in lowered_summary for term in _SUMMARY_RELATIONSHIP_TERMS):
+            raise ValueError("Stakeholder summary must not introduce unsupported relationships.")
+
+        known_names = set(names)
+        for candidate in _PROPER_NAME_PATTERN.findall(self.stakeholder_summary):
+            lowered_candidate = candidate.casefold()
+            if lowered_candidate in _SUMMARY_NON_NAME_PHRASES:
+                continue
+            if not any(
+                lowered_candidate in known_name or known_name in lowered_candidate for known_name in known_names
+            ):
+                raise ValueError("Stakeholder summary references a person absent from the result.")
+        return self
+
+    def as_json(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+
+class StakeholderIntelligenceSource(BaseModel):
+    """Pinned current meeting transcript input for Stakeholder Intelligence."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    meeting_title: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+    ]
+    meeting_date: datetime
+    transcript_text: str
+
+    @field_validator("transcript_text")
+    @classmethod
+    def validate_transcript_text(cls, value: str) -> str:
+        normalised = value.strip()
+        if not normalised:
+            raise ValueError("Transcript text must not be empty.")
+        if len(normalised) > STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH:
+            raise ValueError("Transcript text exceeds the Stakeholder Intelligence limit.")
         return normalised
 
 

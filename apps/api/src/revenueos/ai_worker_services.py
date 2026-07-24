@@ -24,6 +24,7 @@ from revenueos.ai_contracts import (
     OPEN_QUESTIONS_SCHEMA_VERSION,
     OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
+    STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH,
     ActionItemsSource,
     BuyingSignalsSource,
     DecisionsSource,
@@ -33,6 +34,7 @@ from revenueos.ai_contracts import (
     ObjectionsCompetitiveSignalsSource,
     OpenQuestionsSource,
     RisksBlockersSource,
+    StakeholderIntelligenceSource,
 )
 from revenueos.ai_executors import (
     AIExecutorRegistry,
@@ -292,6 +294,12 @@ class AIWorkerService:
                     cancellation_check=self.is_cancellation_requested,
                     objections_competitive_signals_source_loader=self.load_objections_competitive_signals_source,
                 )
+            elif job.job_type == AIJobType.STAKEHOLDER_INTELLIGENCE.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    stakeholder_intelligence_source_loader=self.load_stakeholder_intelligence_source,
+                )
             elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
                 result = await executor.execute(
                     job,
@@ -524,6 +532,46 @@ class AIWorkerService:
                                 overall_pressure if isinstance(overall_pressure, str) else None
                             ),
                             "empty_result": not objections and not competitors,
+                        },
+                    )
+                elif job.job_type == AIJobType.STAKEHOLDER_INTELLIGENCE.value:
+                    stakeholder_values = result.content.get("stakeholders")
+                    stakeholders = stakeholder_values if isinstance(stakeholder_values, list) else []
+                    role_counts: dict[str, int] = {}
+                    stance_counts = {stance: 0 for stance in ("supportive", "neutral", "resistant", "mixed", "unclear")}
+                    engagement_counts = {
+                        engagement: 0 for engagement in ("active", "passive", "absent_but_referenced", "unclear")
+                    }
+                    for item in stakeholders:
+                        if not isinstance(item, dict):
+                            continue
+                        role = item.get("role")
+                        stance = item.get("stance")
+                        engagement = item.get("engagement")
+                        if isinstance(role, str):
+                            role_counts[role] = role_counts.get(role, 0) + 1
+                        if isinstance(stance, str) and stance in stance_counts:
+                            stance_counts[stance] += 1
+                        if isinstance(engagement, str) and engagement in engagement_counts:
+                            engagement_counts[engagement] += 1
+                    coverage_values = result.content.get("role_coverage")
+                    role_coverage_states = coverage_values if isinstance(coverage_values, dict) else {}
+                    logger.info(
+                        "stakeholder_intelligence_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                            "stakeholder_count": len(stakeholders),
+                            "role_counts": role_counts,
+                            "stance_counts": stance_counts,
+                            "engagement_counts": engagement_counts,
+                            "role_coverage_states": role_coverage_states,
+                            "empty_result": not stakeholders,
                         },
                     )
                 elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
@@ -874,6 +922,46 @@ class AIWorkerService:
             transcript_text=normalised_transcript,
         )
 
+    async def load_stakeholder_intelligence_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> StakeholderIntelligenceSource:
+        """Load the exact tenant transcript pinned by a stakeholder job."""
+
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            source = await AIWorkerRepository(session).get_executive_summary_source(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_id,
+                job.transcript_version,
+            )
+        if source is None:
+            raise WorkerExecutionError(
+                "stakeholder_intelligence_source_unavailable",
+                "The current transcript for Stakeholder Intelligence is unavailable.",
+                retryable=False,
+            )
+        meeting_title, meeting_date, transcript_text = source
+        normalised_transcript = transcript_text.strip()
+        if not normalised_transcript:
+            raise WorkerExecutionError(
+                "stakeholder_intelligence_transcript_required",
+                "A usable transcript is required to generate Stakeholder Intelligence.",
+                retryable=False,
+            )
+        if len(normalised_transcript) > STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH:
+            raise WorkerExecutionError(
+                "stakeholder_intelligence_transcript_too_large",
+                "The transcript exceeds the Stakeholder Intelligence processing limit.",
+                retryable=False,
+            )
+        return StakeholderIntelligenceSource(
+            meeting_title=meeting_title,
+            meeting_date=meeting_date,
+            transcript_text=normalised_transcript,
+        )
+
     async def load_follow_up_email_source(
         self,
         job: ClaimedAIJob,
@@ -1103,6 +1191,15 @@ class AIWorkerService:
                     schema_version=job.schema_version,
                     content=result.content,
                 )
+            elif job.job_type == AIJobType.STAKEHOLDER_INTELLIGENCE.value:
+                await artifact_service.prepare_stakeholder_intelligence_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
             elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
                 await artifact_service.prepare_follow_up_email_artifact(
                     job_id=job.id,
@@ -1263,6 +1360,17 @@ class AIWorkerService:
         elif claim.job_type == AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value:
             logger.warning(
                 "objections_competitive_signals_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
+        elif claim.job_type == AIJobType.STAKEHOLDER_INTELLIGENCE.value:
+            logger.warning(
+                "stakeholder_intelligence_generation_failed",
                 extra={
                     **self._log_context_from_claim(claim),
                     "meeting_id": str(claim.meeting_id),

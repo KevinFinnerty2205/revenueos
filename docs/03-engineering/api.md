@@ -110,11 +110,11 @@ There is at most one transcript row per meeting. Plain text is required and limi
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all eight current-version capability states and content through one product-safe view |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all nine current-version capability states and content through one product-safe view |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/generate` | Create or reuse missing extraction work and conditionally queue Follow-up Email |
 
 GET returns a derived overall state, generation/retry availability, last activity
-time, deterministic progress counts and the eight ordered capability views. Valid
+time, deterministic progress counts and the nine ordered capability views. Valid
 empty lists are completed with `emptyResult=true`. The response excludes job and
 artefact IDs, transcript/prompts, provider/model and schema configuration, worker
 fields, internal error codes and raw errors.
@@ -124,7 +124,7 @@ Later polling reads may include the optional safe query metadata
 validated enums used only for metadata-only transition and polling lifecycle
 logs; they do not alter the aggregate result.
 
-POST reuses the seven extraction request services and creates only
+POST reuses the eight extraction request services and creates only
 missing/failed/cancelled work for the current transcript. It queues Follow-up
 Email only after matching Executive Summary, Decisions, Action Items and Open
 Questions artefacts are complete. New work returns `202`; complete reuse returns
@@ -192,6 +192,27 @@ objection and competitor lists are successful. The result contains qualitative
 current-meeting objection pressure, not close/loss probability, a forecast or a
 numeric score, and excludes internal/provider/worker/prompt/transcript fields.
 See [Objections & Competitive Signals intelligence](objections-competitive-signals-intelligence.md).
+
+## Stakeholder Intelligence
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/stakeholders` | Queue or return equivalent Stakeholder Intelligence generation |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence/stakeholders` | Read current safe stakeholder state/result |
+
+POST requires trusted tenant access and the non-empty current transcript, capped
+at 50,000 trimmed characters without truncation. New asynchronous work returns
+`202`; an equivalent pending, running or completed prompt/schema v1 job returns
+`200`. Failed/cancelled work follows the ordinal retry rule and a transcript
+correction permits a new version-bound job.
+
+GET returns the established lifecycle state, generation availability, safe
+timestamps/message and validated `stakeholderIntelligence` content. An empty
+stakeholder list is successful. Content contains evidence-backed current-meeting
+roles, qualitative influence/stance/engagement, six fixed coverage states and
+confidence. It contains no relationship history, graph, CRM identity, MEDDICC/
+BANT or predictive score, and excludes internal/provider/worker/prompt/
+transcript fields. See [Stakeholder Intelligence](stakeholder-intelligence.md).
 
 ## Decisions intelligence
 
