@@ -50,6 +50,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Objections & Competitive Signals intelligence](03-engineering/objections-competitive-signals-intelligence.md)
 - [Stakeholder Intelligence](03-engineering/stakeholder-intelligence.md)
 - [Next Best Action Intelligence](03-engineering/next-best-action-intelligence.md)
+- [Opportunity Workspace](03-engineering/opportunity-workspace.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -98,6 +99,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-006B: Objections & Competitive Signals](07-sprints/wo-006b-objections-competitive-signals.md)
 - [WO-006C: Stakeholder Intelligence](07-sprints/wo-006c-stakeholder-intelligence.md)
 - [WO-006D: Next Best Action Intelligence](07-sprints/wo-006d-next-best-action-intelligence.md)
+- [WO-007: Opportunity Workspace Foundation](07-sprints/wo-007-opportunity-workspace.md)
 
 ## 08 — Decision records
 
@@ -122,10 +124,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0019: derive qualitative objection pressure from current-meeting evidence](08-decisions/0019-current-meeting-qualitative-objection-pressure.md)
 - [ADR 0020: model stakeholders as cautious current-meeting evidence](08-decisions/0020-current-meeting-stakeholder-intelligence.md)
 - [ADR 0021: ground Next Best Action in validated intelligence only](08-decisions/0021-validated-intelligence-next-best-action.md)
+- [ADR 0022: own meeting association and derive the latest-meeting Opportunity Workspace](08-decisions/0022-opportunity-ownership-latest-meeting-read-model.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D are complete.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007 are complete.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -139,7 +142,9 @@ extractors send the selected transcript to
 OpenAI only when configured; Follow-up Email sends only its validated artefact
 projection and never queries or transmits transcript text. Next Best Action
 sends only its eight validated artefacts and likewise never reads transcript
-text. There is no send,
+text. WO-007 adds a tenant-safe Opportunity Workspace over the latest
+associated meeting's existing current-version artefacts; it performs no
+transcript read, AI generation or longitudinal reasoning. There is no send,
 editing, approval, question answering, provider UI, recording, media storage,
 transcription, external integration, production Clerk verification, billing or
 mobile application. Assistant remains a placeholder.

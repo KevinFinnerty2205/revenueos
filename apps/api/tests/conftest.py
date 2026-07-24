@@ -25,6 +25,7 @@ from revenueos.models import (
     MeetingAuditEvent,
     MeetingParticipant,
     Opportunity,
+    OpportunityAuditEvent,
     Organisation,
     OrganisationMembership,
     Task,
@@ -120,6 +121,7 @@ def clean_business_entities() -> Iterator[None]:
             for model in (
                 AIArtifact,
                 AIJob,
+                OpportunityAuditEvent,
                 MeetingAuditEvent,
                 Transcript,
                 MeetingParticipant,

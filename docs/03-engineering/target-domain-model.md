@@ -22,14 +22,15 @@ The current persisted model includes organisations, users, memberships, companie
 | OrganisationMembership | Links user to organisation and role | Tenant-owned; verified Clerk membership plus application policy must agree | Invited/active/removed; access ends immediately, metadata retained per audit policy | **Current — Sprint 1** |
 | Company | Relationship account; has contacts, opportunities, meetings, events and memory | Tenant-owned; manual now, CRM may become authoritative for mapped fields | Active/inactive; delete or archive according to relationship/source dependencies | **Current — Sprint 2** |
 | Contact | Person linked to a company and meetings | Tenant-owned; manual now, CRM/provider identity may be authoritative by field | Active/merged/deleted; personal data follows deletion and source policy | **Current — Sprint 2** |
-| Opportunity | Commercial context linked to company, tasks and meetings | Tenant-owned; manual now, supported CRM authoritative for mapped fields | Open stages → closed; retain according to customer and CRM policy | **Current — Sprint 2** |
+| Opportunity | Commercial context with optional company, manual value/date, owner, tasks and associated meetings; its workspace derives the latest meeting view | Tenant-owned; manual now, supported CRM may later become authoritative for explicitly mapped fields | `open`, `won`, `lost` or `on_hold`; stage remains independently user-managed | **Current — Sprint 2, expanded WO-007** |
 | Task | Human-owned commitment linked to company/contact/opportunity and later source evidence | Tenant-owned; RevenueOS authoritative for native tasks, external task system if later mapped | Open/in progress → completed/cancelled; configurable operational retention | **Current — Sprint 2** |
+| OpportunityAuditEvent | Metadata-only opportunity create/update/delete and meeting-association activity | Tenant-owned; RevenueOS service transaction is authoritative | Append-only metadata; deliberately has no content payload or opportunity FK so delete audit can remain | **Current — WO-007** |
 
 ## Meeting and ingestion entities
 
 | Entity | Purpose and key relationships | Tenant and source of truth | Lifecycle and retention | Current / expected sprint |
 | --- | --- | --- | --- | --- |
-| Meeting | Conversation aggregate linking participants, optional company and supplied transcript | Tenant-owned; RevenueOS is authoritative for manually entered metadata | Scheduled/completed/cancelled; soft-deleted with active children and hidden from normal reads | **Current — Sprint 3** |
+| Meeting | Conversation aggregate linking participants, optional company, optional same-tenant opportunity and supplied transcript | Tenant-owned; RevenueOS is authoritative for manually entered metadata and explicit opportunity association | Scheduled/completed/cancelled; soft-deleted with active children and hidden from normal reads | **Current — Sprint 3, expanded WO-007** |
 | MeetingParticipant | A meeting-specific attendee and optional confirmed contact link | Tenant-owned; user-entered identity or same-tenant contact reference | Invited/attended/absent/unknown; active or soft-deleted with meeting | **Current — Sprint 3** |
 | Transcript | One versioned plain-text representation supplied for a meeting | Tenant-owned; pasted or browser-read `.txt`, with user correction authoritative | Created/restored → corrected by optimistic version → soft-deleted; no snapshot history yet | **Current — Sprint 3** |
 | MeetingAuditEvent | Content-minimised activity metadata for meeting, participant and transcript mutations | Tenant-owned; RevenueOS service transaction is authoritative | Append-only metadata retained with meeting; retention/export policy is not implemented | **Current — Sprint 3** |
@@ -70,7 +71,7 @@ Organisation
 ├── Company
 │   ├── Contact
 │   ├── Opportunity
-│   ├── Meeting
+│   ├── Meeting ── Opportunity?
 │   │   ├── MeetingParticipant ── Contact?
 │   │   ├── Transcript ── TranscriptSegment
 │   │   ├── AIArtifact
@@ -84,6 +85,7 @@ Organisation
 ```
 
 - A task linked to multiple relationship records must resolve to one consistent company/organisation.
+- A meeting may reference at most one opportunity; its composite foreign key and service validation keep organisation and, when both exist, company consistent. Opportunity Workspace latest order is meeting date then UUID, both descending, excluding cancelled and deleted meetings.
 - A meeting participant can remain unlinked; an uncertain candidate is not a contact.
 - Memory and AI artefacts may cite multiple sources, but every source must be accessible in the same tenant.
 - An approval cannot be reused for a different action version, destination or organisation.

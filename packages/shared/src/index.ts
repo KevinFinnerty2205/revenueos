@@ -48,12 +48,16 @@ export interface ApiError {
 
 export type CompanyStatus = "prospect" | "active" | "inactive";
 export type OpportunityStage =
-  | "discovery"
   | "qualification"
+  | "discovery"
+  | "evaluation"
   | "proposal"
   | "negotiation"
+  | "procurement"
   | "closed_won"
-  | "closed_lost";
+  | "closed_lost"
+  | "other";
+export type OpportunityStatus = "open" | "won" | "lost" | "on_hold";
 export type TaskStatus = "open" | "in_progress" | "completed" | "cancelled";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type MeetingType = "remote" | "phone" | "in_person" | "other";
@@ -282,14 +286,24 @@ export interface Contact extends TenantEntity {
 }
 
 export interface Opportunity extends TenantEntity {
-  companyId: string;
+  companyId: string | null;
   name: string;
   stage: OpportunityStage;
-  value: string;
-  currency: string;
-  probability: number;
+  status: OpportunityStatus;
+  estimatedValue: string | null;
+  currency: string | null;
   expectedCloseDate: string | null;
   ownerUserId: string;
+  description: string | null;
+}
+
+export interface OpportunityListItem extends Opportunity {
+  companyName: string | null;
+  ownerName: string;
+  latestMeetingId: string | null;
+  latestMeetingDate: string | null;
+  latestMeetingMomentum: string | null;
+  latestNextBestAction: string | null;
 }
 
 export interface Task extends TenantEntity {
@@ -312,6 +326,7 @@ export interface Meeting extends TenantEntity {
   meetingType: MeetingType;
   status: MeetingStatus;
   companyId: string | null;
+  opportunityId: string | null;
   ownerUserId: string;
   createdBy: string;
   updatedBy: string;
@@ -777,4 +792,49 @@ export interface MeetingIntelligenceResponse {
 export interface MeetingIntelligenceGenerationResponse extends MeetingIntelligenceResponse {
   createdCapabilities: MeetingIntelligenceCapabilityName[];
   reusedCapabilities: MeetingIntelligenceCapabilityName[];
+}
+
+export type IntelligenceReadiness =
+  "unavailable" | "not_generated" | "partial" | "ready";
+
+export interface OpportunityWorkspaceOpportunity {
+  id: string;
+  companyId: string | null;
+  companyName: string | null;
+  name: string;
+  stage: OpportunityStage;
+  status: OpportunityStatus;
+  estimatedValue: string | null;
+  currency: string | null;
+  expectedCloseDate: string | null;
+  ownerUserId: string;
+  ownerName: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OpportunityMeetingSummary {
+  id: string;
+  title: string;
+  meetingDate: string;
+  status: MeetingStatus;
+  companyId: string | null;
+  companyName: string | null;
+  participantCount: number;
+  transcriptAvailable: boolean;
+  transcriptVersion: number | null;
+  intelligenceReadiness: IntelligenceReadiness;
+  intelligenceSectionsAvailable: number;
+  updatedAt: string;
+}
+
+export interface OpportunityWorkspaceResponse {
+  opportunity: OpportunityWorkspaceOpportunity;
+  latestMeeting: OpportunityMeetingSummary | null;
+  recentMeetings: OpportunityMeetingSummary[];
+  intelligence: MeetingIntelligenceResponse | null;
+  intelligenceSectionsAvailable: number;
+  partialData: boolean;
+  generatedAt: string;
 }

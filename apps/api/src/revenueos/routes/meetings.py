@@ -83,6 +83,7 @@ from revenueos.intelligence_workspace import MeetingIntelligenceService
 from revenueos.meeting_contracts import (
     MeetingAuditEventResponse,
     MeetingCreate,
+    MeetingOpportunityUpdate,
     MeetingParticipantCreate,
     MeetingParticipantResponse,
     MeetingParticipantUpdate,
@@ -100,6 +101,8 @@ from revenueos.meeting_dependencies import (
     get_transcript_service,
 )
 from revenueos.meeting_services import MeetingService, ParticipantService, TranscriptService
+from revenueos.opportunity_dependencies import get_opportunity_workspace_service
+from revenueos.opportunity_services import OpportunityWorkspaceService
 from revenueos.routes.business import page_response
 
 router = APIRouter(prefix="/api/v1/meetings", tags=["meetings"])
@@ -110,6 +113,10 @@ Intelligence = Annotated[AIJobService, Depends(get_ai_job_service)]
 IntelligenceWorkspace = Annotated[
     MeetingIntelligenceService,
     Depends(get_meeting_intelligence_service),
+]
+OpportunityWorkspace = Annotated[
+    OpportunityWorkspaceService,
+    Depends(get_opportunity_workspace_service),
 ]
 
 
@@ -163,6 +170,18 @@ async def create_meeting(request: MeetingCreate, service: Meetings) -> MeetingRe
 @router.get("/{meeting_id}", response_model=MeetingResponse)
 async def get_meeting(meeting_id: UUID, service: Meetings) -> MeetingResponse:
     return MeetingResponse.model_validate(await service.get_meeting(meeting_id))
+
+
+@router.patch(
+    "/{meeting_id}/opportunity",
+    response_model=MeetingResponse,
+)
+async def set_meeting_opportunity(
+    meeting_id: UUID,
+    request: MeetingOpportunityUpdate,
+    service: OpportunityWorkspace,
+) -> MeetingResponse:
+    return MeetingResponse.model_validate(await service.set_meeting_opportunity(meeting_id, request))
 
 
 @router.get(

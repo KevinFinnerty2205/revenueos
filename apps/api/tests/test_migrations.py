@@ -36,8 +36,18 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "meeting_audit_events",
             "ai_jobs",
             "ai_artifacts",
+            "opportunity_audit_events",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0016_next_best_action",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0017_opportunity_workspace",
+        )
+        opportunity_columns = {
+            row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
+        }
+        assert opportunity_columns["status"] == 1
+        assert opportunity_columns["estimated_value"] == 0
+        assert opportunity_columns["currency"] == 0
+        assert "probability" not in opportunity_columns
         task_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
         assert task_columns["organisation_id"] == 1
         assert task_columns["title"] == 1
@@ -48,6 +58,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert meeting_columns["created_by"] == 1
         assert meeting_columns["updated_by"] == 1
         assert meeting_columns["deleted_at"] == 0
+        assert meeting_columns["opportunity_id"] == 0
         participant_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(meeting_participants)").fetchall()
         }
@@ -461,7 +472,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0016_next_best_action",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0017_opportunity_workspace",
+        )
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -513,7 +526,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0016_next_best_action",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0017_opportunity_workspace",
+        )
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -557,7 +572,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0016_next_best_action",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0017_opportunity_workspace",
+        )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
     with connect(database_path) as connection:
@@ -571,7 +588,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0016_next_best_action",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0017_opportunity_workspace",
+        )
 
     command.downgrade(configuration, "0003_meeting_domain")
     with connect(database_path) as connection:
@@ -593,7 +612,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert {"ai_jobs", "ai_artifacts"}.issubset(tables_after_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0016_next_best_action",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0017_opportunity_workspace",
+        )
 
     command.downgrade(configuration, "0002_core_business_entities")
     with connect(database_path) as connection:
@@ -666,7 +687,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0016_next_best_action"
+                    assert version == "0017_opportunity_workspace"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

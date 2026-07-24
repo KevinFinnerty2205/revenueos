@@ -38,12 +38,15 @@ const filterOptions: Partial<
     label: "Stage",
     plural: "stages",
     values: [
-      "discovery",
       "qualification",
+      "discovery",
+      "evaluation",
       "proposal",
       "negotiation",
+      "procurement",
       "closed_won",
       "closed_lost",
+      "other",
     ],
   },
   tasks: {
@@ -269,10 +272,16 @@ function EntityRows({
               ))}
             </dl>
             <Link
-              href={`/${entity}/${row.id}/edit`}
+              href={
+                entity === "opportunities"
+                  ? `/opportunities/${row.id}`
+                  : `/${entity}/${row.id}/edit`
+              }
               className="mt-5 inline-flex text-sm font-bold text-teal-700 hover:text-teal-900"
             >
-              Edit {entityLabels[entity].singular}
+              {entity === "opportunities"
+                ? "Open workspace"
+                : `Edit ${entityLabels[entity].singular}`}
             </Link>
           </article>
         ))}
@@ -305,10 +314,14 @@ function EntityRows({
                   ))}
                   <td className="px-5 py-4 text-right">
                     <Link
-                      href={`/${entity}/${row.id}/edit`}
+                      href={
+                        entity === "opportunities"
+                          ? `/opportunities/${row.id}`
+                          : `/${entity}/${row.id}/edit`
+                      }
                       className="font-bold text-teal-700 hover:text-teal-900"
                     >
-                      Edit
+                      {entity === "opportunities" ? "Open" : "Edit"}
                     </Link>
                   </td>
                 </tr>
@@ -356,9 +369,12 @@ function displayCells(
       { label: "Stage", value: humanise(opportunity.stage) },
       {
         label: "Value",
-        value: formatCurrency(opportunity.value, opportunity.currency),
+        value:
+          opportunity.estimatedValue && opportunity.currency
+            ? formatCurrency(opportunity.estimatedValue, opportunity.currency)
+            : "—",
       },
-      { label: "Probability", value: `${opportunity.probability}%` },
+      { label: "Status", value: humanise(opportunity.status) },
     ];
   }
   const task = item as Task;

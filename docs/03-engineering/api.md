@@ -49,10 +49,13 @@ A contact requires a company in the same organisation and a syntactically valid 
 | `GET` | `/api/v1/opportunities/{opportunityId}` | Read an opportunity |
 | `PATCH` | `/api/v1/opportunities/{opportunityId}` | Update an opportunity |
 | `DELETE` | `/api/v1/opportunities/{opportunityId}` | Delete an unused opportunity |
+| `GET` | `/api/v1/opportunities/{opportunityId}/workspace` | Read the latest-meeting Opportunity Workspace |
 
-List parameters: `search`, `companyId`, `stage`, `sortBy` (`name`, `value`, `probability`, `expected_close_date`, `created_at`, `updated_at`) and `sortOrder`.
+List parameters: `search`, `companyId`, `stage`, `status`, `sortBy` (`name`, `estimated_value`, `expected_close_date`, `created_at`, `updated_at`) and `sortOrder`. Items include company display name, deterministic latest active meeting date, current qualitative momentum and a bounded Next Best Action preview when valid. The web list defaults to `updated_at DESC`.
 
-Values are non-negative fixed-precision decimals. Currency is a three-letter uppercase code and probability is 0–100.
+Company is optional. Estimated value and currency must either both be null or both be supplied; value is a non-negative fixed-precision decimal and currency is a three-letter uppercase code. Expected close is an optional user-managed date. Updates accept optional `expectedUpdatedAt` and return `409 stale_write` when the record changed. Stages are `qualification`, `discovery`, `evaluation`, `proposal`, `negotiation`, `procurement`, `closed_won`, `closed_lost` and `other`; statuses are `open`, `won`, `lost` and `on_hold`. Probability and forecast categories do not exist.
+
+The workspace returns display metadata, the deterministic latest associated meeting, at most 20 newest recent associated meetings, product-safe readiness and the ten existing capability states/results for the latest meeting's current transcript version. Cancelled and soft-deleted meetings are excluded; ordering is `meeting_date DESC, meeting UUID DESC`. It never returns transcript text or AI infrastructure trace and never starts generation. See [Opportunity Workspace](opportunity-workspace.md) for trace and empty-state rules.
 
 ## Tasks
 
@@ -76,12 +79,13 @@ A task may be general or linked to records. If company, contact or opportunity l
 | `POST` | `/api/v1/meetings` | Create a meeting, optionally with initial participants and transcript |
 | `GET` | `/api/v1/meetings/{meetingId}` | Read an active meeting |
 | `PATCH` | `/api/v1/meetings/{meetingId}` | Update meeting metadata |
+| `PATCH` | `/api/v1/meetings/{meetingId}/opportunity` | Associate or disassociate one same-tenant opportunity |
 | `DELETE` | `/api/v1/meetings/{meetingId}` | Soft-delete a meeting and its active children |
 | `GET` | `/api/v1/meetings/{meetingId}/history` | List content-minimised audit events |
 
 List parameters: `search`, `companyId`, `status`, `meetingType`, `dateFrom`, `dateTo`, `sortBy` (`meeting_date`, `title`, `created_at`, `updated_at`) and `sortOrder`. Dates must include a timezone. `meetingType` is `remote`, `phone`, `in_person` or `other`; status is `scheduled`, `completed` or `cancelled`.
 
-Company and owner are optional/defaulted as documented by the schema, but any supplied relationship must resolve inside the trusted organisation. Meeting create is transactional across initial meeting, participant, transcript and audit rows.
+Company and owner are optional/defaulted as documented by the schema, but any supplied relationship must resolve inside the trusted organisation. Meeting create is transactional across initial meeting, participant, transcript and audit rows. The opportunity association body contains nullable `opportunityId` and required timezone-aware `expectedUpdatedAt`; it locks the meeting, rejects stale or cross-company/cross-tenant writes and audits metadata only.
 
 ## Meeting participants
 

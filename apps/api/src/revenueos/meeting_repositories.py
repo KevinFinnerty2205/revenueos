@@ -16,6 +16,7 @@ from revenueos.models import (
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
+    Opportunity,
     OrganisationMembership,
     Transcript,
 )
@@ -50,6 +51,19 @@ class MeetingRepository:
             select(Contact).where(
                 Contact.organisation_id == organisation_id,
                 Contact.id == contact_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_opportunity(
+        self,
+        organisation_id: UUID,
+        opportunity_id: UUID,
+    ) -> Opportunity | None:
+        result = await self.session.execute(
+            select(Opportunity).where(
+                Opportunity.organisation_id == organisation_id,
+                Opportunity.id == opportunity_id,
             )
         )
         return result.scalar_one_or_none()

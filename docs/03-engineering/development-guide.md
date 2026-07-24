@@ -74,6 +74,14 @@ synthetic non-sensitive data and follow
 the [manual smoke procedure](openai-provider-integration.md#manual-non-production-smoke-test);
 never put an actual key value in shell history, screenshots or repository files.
 
+To exercise WO-007, create an opportunity, open its workspace and explicitly
+associate a same-organisation meeting. The opportunity list and workspace read
+the latest stored current-version artefacts without contacting the provider or
+reading transcript text. Generation and retry remain in that meeting's
+**Intelligence** tab. The deterministic browser test covers create, associate,
+refresh, persistence and direct navigation using mocks only. See
+[Opportunity Workspace](opportunity-workspace.md).
+
 WO-005 adds no migration. WO-006A adds `0013_buying_signals`, WO-006B adds
 `0014_objections`, WO-006C adds `0015_stakeholders` and WO-006D adds
 `0016_next_best_action`, each widening only the job and artefact type checks. Direct
@@ -146,6 +154,14 @@ deletes only those artefacts/jobs before restoring the Objections-era checks.
 Migration `0016_next_best_action` widens the same checks for Next Best Action
 without adding a table, column, policy or index. Its downgrade deletes only
 those artefacts/jobs before restoring the Stakeholder Intelligence-era checks.
+
+Migration `0017_opportunity_workspace` expands Opportunity stage/status/value
+metadata, removes probability, adds list indexes, adds nullable
+`meetings.opportunity_id` with a composite organisation-safe foreign key and
+creates metadata-only Opportunity audit events with forced RLS. Its downgrade
+removes all opportunity audits and meeting associations and may delete
+company-less opportunities after dependent links are cleared. Always back up
+and obtain an explicit data-loss decision before downgrade.
 
 WO-004C1A requires no migration because the existing trace fields already
 represent provider, model, request ID, usage and cost/currency metadata.

@@ -99,7 +99,6 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
       label: "Company",
       kind: "reference",
       reference: "companies",
-      required: true,
       fullWidth: true,
     },
     {
@@ -115,19 +114,28 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
       kind: "select",
       required: true,
       options: [
-        "discovery",
         "qualification",
+        "discovery",
+        "evaluation",
         "proposal",
         "negotiation",
+        "procurement",
         "closed_won",
         "closed_lost",
+        "other",
       ],
     },
     {
-      name: "value",
-      label: "Value",
-      kind: "number",
+      name: "status",
+      label: "Status",
+      kind: "select",
       required: true,
+      options: ["open", "won", "lost", "on_hold"],
+    },
+    {
+      name: "estimatedValue",
+      label: "Estimated value",
+      kind: "number",
       min: 0,
       step: "0.01",
     },
@@ -135,22 +143,18 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
       name: "currency",
       label: "Currency",
       kind: "select",
-      required: true,
       options: ["AUD", "USD", "NZD", "GBP", "EUR"],
-    },
-    {
-      name: "probability",
-      label: "Probability (%)",
-      kind: "number",
-      required: true,
-      min: 0,
-      max: 100,
-      step: "1",
     },
     {
       name: "expectedCloseDate",
       label: "Expected close date",
       kind: "date",
+    },
+    {
+      name: "description",
+      label: "Description",
+      kind: "textarea",
+      fullWidth: true,
     },
   ],
   tasks: [
@@ -208,9 +212,7 @@ const createDefaults: Record<BusinessEntityName, Record<string, string>> = {
   contacts: {},
   opportunities: {
     stage: "discovery",
-    value: "0",
-    currency: "AUD",
-    probability: "0",
+    status: "open",
   },
   tasks: { status: "open", priority: "medium" },
 };
@@ -237,6 +239,9 @@ export function BusinessEntityForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string | null>(
+    null,
+  );
 
   const loadForm = useCallback(
     async (signal: AbortSignal) => {
@@ -262,16 +267,24 @@ export function BusinessEntityForm({
         }),
       );
       let loadedValues = createDefaults[entity];
+      let loadedUpdatedAt: string | null = null;
       if (entityId) {
         const record = await apiRequest<Record<string, unknown>>(
           `/api/v1/${entity}/${entityId}`,
           { signal },
         );
         loadedValues = valuesForForm(record, formFields);
+        if (
+          entity === "opportunities" &&
+          typeof record.updatedAt === "string"
+        ) {
+          loadedUpdatedAt = record.updatedAt;
+        }
       }
       return {
         options: Object.fromEntries(optionEntries) as ReferenceOptions,
         values: loadedValues,
+        updatedAt: loadedUpdatedAt,
       };
     },
     [entity, entityId, formFields],
@@ -283,6 +296,7 @@ export function BusinessEntityForm({
       .then((loaded) => {
         setReferenceOptions(loaded.options);
         setValues(loaded.values);
+        setExpectedUpdatedAt(loaded.updatedAt);
       })
       .catch((requestError: unknown) => {
         if (
@@ -310,11 +324,22 @@ export function BusinessEntityForm({
     setSubmitError(null);
     setSubmitting(true);
     try {
-      await apiRequest(`/api/v1/${entity}${entityId ? `/${entityId}` : ""}`, {
-        method: entityId ? "PATCH" : "POST",
-        body: JSON.stringify(payloadFor(formFields, values)),
-      });
-      router.push(`/${entity}`);
+      const payload = payloadFor(formFields, values);
+      if (entity === "opportunities" && entityId && expectedUpdatedAt) {
+        payload.expectedUpdatedAt = expectedUpdatedAt;
+      }
+      const saved = await apiRequest<{ id?: string }>(
+        `/api/v1/${entity}${entityId ? `/${entityId}` : ""}`,
+        {
+          method: entityId ? "PATCH" : "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+      router.push(
+        entity === "opportunities" && (entityId || saved.id)
+          ? `/opportunities/${entityId ?? saved.id}`
+          : `/${entity}`,
+      );
     } catch (requestError: unknown) {
       setSubmitError(
         requestError instanceof Error

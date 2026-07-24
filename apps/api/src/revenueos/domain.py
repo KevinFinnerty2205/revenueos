@@ -8,12 +8,30 @@ class CompanyStatus(StrEnum):
 
 
 class OpportunityStage(StrEnum):
-    DISCOVERY = "discovery"
     QUALIFICATION = "qualification"
+    DISCOVERY = "discovery"
+    EVALUATION = "evaluation"
     PROPOSAL = "proposal"
     NEGOTIATION = "negotiation"
+    PROCUREMENT = "procurement"
     CLOSED_WON = "closed_won"
     CLOSED_LOST = "closed_lost"
+    OTHER = "other"
+
+
+class OpportunityStatus(StrEnum):
+    OPEN = "open"
+    WON = "won"
+    LOST = "lost"
+    ON_HOLD = "on_hold"
+
+
+class OpportunityAuditAction(StrEnum):
+    CREATED = "created"
+    UPDATED = "updated"
+    DELETED = "deleted"
+    MEETING_ASSOCIATED = "meeting_associated"
+    MEETING_DISASSOCIATED = "meeting_disassociated"
 
 
 class TaskStatus(StrEnum):
