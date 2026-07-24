@@ -24,6 +24,11 @@ coverage. It does not create relationship history, a graph, CRM identity or a
 predictive score. No later intelligence capability, send integration, Anthropic/Gemini provider,
 embedding, tool use or agent is active.
 
+WO-006D adds Next Best Action as a second validated-intelligence composer. It
+uses all eight current-version extraction artefacts, never reads transcript
+text, excludes Follow-up Email as a source and returns at most five grounded
+recommendations without CRM, email, task or automation authority.
+
 See [AI domain services](../03-engineering/ai-domain-services.md), the
 [AI worker queue](../03-engineering/ai-worker-queue.md) and
 [AI provider abstraction](../03-engineering/ai-provider-abstraction.md) for the
@@ -41,6 +46,7 @@ The [Executive Summary guide](../03-engineering/executive-summary-intelligence.m
 the [Buying Signals & Deal Momentum guide](../03-engineering/buying-signals-intelligence.md),
 the [Objections & Competitive Signals guide](../03-engineering/objections-competitive-signals-intelligence.md),
 the [Stakeholder Intelligence guide](../03-engineering/stakeholder-intelligence.md),
+the [Next Best Action guide](../03-engineering/next-best-action-intelligence.md),
 and [Follow-up Email Composer guide](../03-engineering/follow-up-email-composer.md)
 document the current Meeting Intelligence capabilities. The
 [Unified Meeting Intelligence guide](../03-engineering/unified-meeting-intelligence.md)
@@ -53,8 +59,9 @@ human approval for consequential output.
 
 For the eight transcript-grounded capabilities, OpenAI selection sends the
 bounded selected meeting transcript to OpenAI. For Follow-up Email, it sends
-only the validated customer-safe four-artefact projection and tone; the
-composer never transmits transcript text. Production customer data remains
+only the validated customer-safe four-artefact projection and tone. Next Best
+Action sends only the eight validated extraction artefacts. Neither composer
+transmits transcript text. Production customer data remains
 prohibited until production identity, consent, provider privacy/retention,
 deletion and operational gates are approved.
 

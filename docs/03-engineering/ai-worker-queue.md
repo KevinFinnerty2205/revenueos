@@ -2,14 +2,15 @@
 
 ## Current boundary
 
-WO-004B1 adds a separately runnable backend worker with PostgreSQL as its durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and persists validated artefacts. WO-004B2/B3 add the provider, prompt and schema execution boundary. WO-004C1 registers `executive_summary`; WO-004C2 adds independent `decisions`; WO-004C3 adds independent `action_items`; WO-004C4 adds independent `risks_blockers`; WO-004C5 adds independent `open_questions`; WO-004C6 adds `follow_up_email` composition from validated intelligence artefacts; WO-006A adds independent `buying_signals`; WO-006B adds independent `objections_competitive_signals`; and WO-006C adds independent `stakeholder_intelligence` through the same queue.
+WO-004B1 adds a separately runnable backend worker with PostgreSQL as its durable queue and source of truth. The worker claims jobs, maintains leases, retries bounded failures, recovers abandoned work, honours cancellation and persists validated artefacts. WO-004B2/B3 add the provider, prompt and schema execution boundary. WO-004C1 registers `executive_summary`; WO-004C2 adds independent `decisions`; WO-004C3 adds independent `action_items`; WO-004C4 adds independent `risks_blockers`; WO-004C5 adds independent `open_questions`; WO-004C6 adds `follow_up_email` composition from validated intelligence artefacts; WO-006A adds independent `buying_signals`; WO-006B adds independent `objections_competitive_signals`; WO-006C adds independent `stakeholder_intelligence`; and WO-006D adds validated-artefact `next_best_action` composition through the same queue.
 
 The worker resolves exactly the configured provider. `mock` /
 `mock-infrastructure-v1` remains the deterministic no-network default.
 `openai` uses the server-side Responses API adapter and sends the rendered
 Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions,
 Action Items, Risks & Blockers or Open Questions
-prompt/transcript outside the application. Follow-up Email sends only the
+prompt/transcript outside the application. Next Best Action sends only the
+eight validated extraction artefacts. Follow-up Email sends only the
 validated four-artefact customer-safe projection and selected tone; its worker
 path never queries transcript text. The meeting-scoped
 API/UI polls the same durable lifecycle in both modes.
@@ -217,7 +218,7 @@ Automated audit events use the original requesting user as the actor because the
 ## Known limitations and extension points
 
 - Only infrastructure test, Executive Summary, Buying Signals, Objections &
-  Competitive Signals, Stakeholder Intelligence, Decisions,
+  Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions,
   Action Items, Risks & Blockers, Open Questions and Follow-up Email execute;
   no later intelligence
   or send capability exists.
@@ -225,7 +226,7 @@ Automated audit events use the original requesting user as the actor because the
 - Tenant discovery is capped at 1,000 eligible organisations per cycle; deployments approaching that many simultaneously active tenants need an approved pagination/fairness extension.
 - There is no operator dashboard or cancellation endpoint; user polling is
   limited to the meeting-scoped Executive Summary, Buying Signals, Objections &
-  Competitive Signals, Stakeholder Intelligence, Decisions, Action Items,
+  Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions, Action Items,
   Risks & Blockers, Open Questions and Follow-up Email
   states.
 - There is no immutable transcript snapshot, accurate cost estimate,
@@ -245,6 +246,7 @@ consent/retention operations gate. See
 [Buying Signals & Deal Momentum intelligence](buying-signals-intelligence.md),
 [Objections & Competitive Signals intelligence](objections-competitive-signals-intelligence.md),
 [Stakeholder Intelligence](stakeholder-intelligence.md),
+[Next Best Action Intelligence](next-best-action-intelligence.md),
 [Follow-up Email Composer](follow-up-email-composer.md),
 [AI provider abstraction](ai-provider-abstraction.md) and
 [prompt registry and structured output](prompt-registry-and-structured-output.md).

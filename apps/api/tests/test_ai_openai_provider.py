@@ -22,6 +22,7 @@ from revenueos.ai_contracts import (
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
+    NextBestActionArtifactContent,
     ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
@@ -38,6 +39,7 @@ from revenueos.ai_provider_contracts import (
     ExecutiveSummaryProviderInput,
     FollowUpEmailProviderInput,
     InfrastructureTestProviderInput,
+    NextBestActionProviderInput,
     ObjectionsCompetitiveSignalsProviderInput,
     OpenQuestionsProviderInput,
     ProviderMessage,
@@ -694,6 +696,65 @@ def test_openai_accepts_follow_up_email_without_a_transcript_request() -> None:
     assert output_format["name"] == "follow_up_email"
     assert output_format["strict"] is True
     assert output_format["schema"] == FollowUpEmailArtifactContent.model_json_schema(mode="validation")
+
+
+def test_openai_accepts_next_best_action_without_a_transcript_request() -> None:
+    output = {
+        "overall_recommendation": "Identify the economic buyer.",
+        "priority": "high",
+        "confidence": 0.94,
+        "reasoning": ["Stakeholders: economic_buyer:not_identified."],
+        "recommended_actions": [
+            {
+                "action": "Identify the economic buyer.",
+                "reason": "Stakeholders: economic_buyer:not_identified.",
+                "priority": "high",
+                "confidence": 0.94,
+                "depends_on": ["stakeholders"],
+            }
+        ],
+    }
+    response_create = _ResponseCreate(response=_response(output_text=json.dumps(output)))
+    request = ProviderRequest(
+        request_id=uuid.uuid4(),
+        organisation_id=uuid.uuid4(),
+        job_id=uuid.uuid4(),
+        job_type="next_best_action",
+        model_identifier=MODEL,
+        input_payload=NextBestActionProviderInput(
+            messages=(
+                ProviderMessage(
+                    role="system",
+                    content="Recommend only from validated artefacts.",
+                ),
+                ProviderMessage(
+                    role="user",
+                    content=('Validated Stakeholders JSON: {"role_coverage":{"economic_buyer":"not_identified"}}'),
+                ),
+            )
+        ),
+        expected_schema_version=1,
+        output_schema=ProviderOutputSchema(
+            schema_key="next_best_action",
+            schema_version=1,
+            json_schema=NextBestActionArtifactContent.model_json_schema(mode="validation"),
+        ),
+        timeout_seconds=30,
+    )
+
+    response = asyncio.run(_provider(response_create).execute(request))
+
+    assert response.output_payload == json.dumps(output)
+    assert len(response_create.calls) == 1
+    call = response_create.calls[0]
+    assert TRANSCRIPT_MARKER not in repr(call["input"])
+    assert "transcript" not in repr(call["input"]).lower()
+    text = call["text"]
+    assert isinstance(text, dict)
+    output_format = text["format"]
+    assert output_format["name"] == "next_best_action"
+    assert output_format["strict"] is True
+    assert output_format["schema"] == NextBestActionArtifactContent.model_json_schema(mode="validation")
 
 
 @pytest.mark.parametrize(

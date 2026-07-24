@@ -25,6 +25,7 @@ from revenueos.ai_contracts import (
     FOLLOW_UP_EMAIL_SCHEMA_VERSION,
     IDEMPOTENCY_KEY_MAX_LENGTH,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    NEXT_BEST_ACTION_SCHEMA_VERSION,
     OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
     OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     OPEN_QUESTIONS_SCHEMA_VERSION,
@@ -40,6 +41,8 @@ from revenueos.ai_contracts import (
     FollowUpEmailArtifactContent,
     FollowUpEmailSource,
     InfrastructureTestArtifactContent,
+    NextBestActionArtifactContent,
+    NextBestActionSource,
     ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
@@ -50,6 +53,10 @@ from revenueos.ai_follow_up_email import (
     build_follow_up_email_source,
 )
 from revenueos.ai_lifecycle import prepare_lifecycle_transition
+from revenueos.ai_next_best_action import (
+    NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES,
+    build_next_best_action_source,
+)
 from revenueos.ai_prompt_registry import (
     ACTION_ITEMS_PROMPT_KEY,
     ACTION_ITEMS_PROMPT_VERSION,
@@ -61,6 +68,8 @@ from revenueos.ai_prompt_registry import (
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
     FOLLOW_UP_EMAIL_PROMPT_KEY,
     FOLLOW_UP_EMAIL_PROMPT_VERSION,
+    NEXT_BEST_ACTION_PROMPT_KEY,
+    NEXT_BEST_ACTION_PROMPT_VERSION,
     OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
     OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
     OPEN_QUESTIONS_PROMPT_KEY,
@@ -170,6 +179,15 @@ class StakeholderIntelligenceStateResult:
 
 
 @dataclass(frozen=True)
+class NextBestActionStateResult:
+    state: str
+    generation_available: bool
+    unavailable_reason: str | None
+    job: AIJob | None
+    artifact: AIArtifact | None
+
+
+@dataclass(frozen=True)
 class FollowUpEmailStateResult:
     state: str
     generation_available: bool
@@ -183,6 +201,13 @@ class FollowUpEmailSourceTrace:
     transcript_id: UUID
     transcript_version: int
     source: FollowUpEmailSource
+
+
+@dataclass(frozen=True)
+class NextBestActionSourceTrace:
+    transcript_id: UUID
+    transcript_version: int
+    source: NextBestActionSource
 
 
 class _AIDomainService:
@@ -417,7 +442,7 @@ class AIJobService(_AIDomainService):
             return AIJobRequestResult(job=existing, created=False)
 
         retry_number = (
-            await self.repository.count_equivalent_jobs(
+            await self.repository.count_failed_or_cancelled_equivalent_jobs(
                 self.tenant.organisation_id,
                 meeting_id,
                 transcript.version,
@@ -617,7 +642,7 @@ class AIJobService(_AIDomainService):
             return AIJobRequestResult(job=existing, created=False)
 
         retry_number = (
-            await self.repository.count_equivalent_jobs(
+            await self.repository.count_failed_or_cancelled_equivalent_jobs(
                 self.tenant.organisation_id,
                 meeting_id,
                 transcript.version,
@@ -826,7 +851,7 @@ class AIJobService(_AIDomainService):
             return AIJobRequestResult(job=existing, created=False)
 
         retry_number = (
-            await self.repository.count_equivalent_jobs(
+            await self.repository.count_failed_or_cancelled_equivalent_jobs(
                 self.tenant.organisation_id,
                 meeting_id,
                 transcript.version,
@@ -1043,7 +1068,7 @@ class AIJobService(_AIDomainService):
             return AIJobRequestResult(job=existing, created=False)
 
         retry_number = (
-            await self.repository.count_equivalent_jobs(
+            await self.repository.count_failed_or_cancelled_equivalent_jobs(
                 self.tenant.organisation_id,
                 meeting_id,
                 transcript.version,
@@ -1262,7 +1287,7 @@ class AIJobService(_AIDomainService):
             return AIJobRequestResult(job=existing, created=False)
 
         retry_number = (
-            await self.repository.count_equivalent_jobs(
+            await self.repository.count_failed_or_cancelled_equivalent_jobs(
                 self.tenant.organisation_id,
                 meeting_id,
                 transcript.version,
@@ -1481,7 +1506,7 @@ class AIJobService(_AIDomainService):
             return AIJobRequestResult(job=existing, created=False)
 
         retry_number = (
-            await self.repository.count_equivalent_jobs(
+            await self.repository.count_failed_or_cancelled_equivalent_jobs(
                 self.tenant.organisation_id,
                 meeting_id,
                 transcript.version,
@@ -1703,7 +1728,7 @@ class AIJobService(_AIDomainService):
             return AIJobRequestResult(job=existing, created=False)
 
         retry_number = (
-            await self.repository.count_equivalent_jobs(
+            await self.repository.count_failed_or_cancelled_equivalent_jobs(
                 self.tenant.organisation_id,
                 meeting_id,
                 transcript.version,
@@ -1933,7 +1958,7 @@ class AIJobService(_AIDomainService):
             return AIJobRequestResult(job=existing, created=False)
 
         retry_number = (
-            await self.repository.count_equivalent_jobs(
+            await self.repository.count_failed_or_cancelled_equivalent_jobs(
                 self.tenant.organisation_id,
                 meeting_id,
                 transcript.version,
@@ -2112,6 +2137,307 @@ class AIJobService(_AIDomainService):
             else "stakeholder_intelligence_transcript_too_large"
         )
         raise PublicAPIError(code, reason, 422)
+
+    async def request_next_best_action(
+        self,
+        meeting_id: UUID,
+    ) -> AIJobRequestResult:
+        logger.info(
+            "next_best_action_requested",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "meeting_id": str(meeting_id),
+                "job_type": AIJobType.NEXT_BEST_ACTION.value,
+            },
+        )
+        meeting = await self.repository.lock_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        trace = await self._load_next_best_action_source_trace(meeting_id)
+        if trace is None:
+            raise PublicAPIError(
+                "next_best_action_sources_required",
+                "Generate the required validated Meeting Intelligence before requesting Next Best Action.",
+                422,
+            )
+
+        existing = await self._latest_next_best_action_job(
+            meeting_id,
+            trace.transcript_version,
+        )
+        if existing is not None and existing.status in {
+            AIJobStatus.PENDING.value,
+            AIJobStatus.RUNNING.value,
+            AIJobStatus.COMPLETED.value,
+        }:
+            await self._audit_intelligence_request(existing)
+            logger.info(
+                "next_best_action_existing_job_returned",
+                extra=self._job_log_context(existing),
+            )
+            return AIJobRequestResult(job=existing, created=False)
+
+        retry_number = (
+            await self.repository.count_failed_or_cancelled_equivalent_jobs(
+                self.tenant.organisation_id,
+                meeting_id,
+                trace.transcript_version,
+                job_type=AIJobType.NEXT_BEST_ACTION.value,
+                prompt_key=NEXT_BEST_ACTION_PROMPT_KEY,
+                prompt_version=NEXT_BEST_ACTION_PROMPT_VERSION,
+                schema_version=NEXT_BEST_ACTION_SCHEMA_VERSION,
+            )
+            + 1
+        )
+        idempotency_key = (
+            f"next_best_action:p{NEXT_BEST_ACTION_PROMPT_VERSION}:s{NEXT_BEST_ACTION_SCHEMA_VERSION}:r{retry_number}"
+        )
+        job = AIJob(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=trace.transcript_id,
+            transcript_version=trace.transcript_version,
+            job_type=AIJobType.NEXT_BEST_ACTION.value,
+            status=AIJobStatus.PENDING.value,
+            prompt_key=NEXT_BEST_ACTION_PROMPT_KEY,
+            prompt_version=NEXT_BEST_ACTION_PROMPT_VERSION,
+            schema_version=NEXT_BEST_ACTION_SCHEMA_VERSION,
+            idempotency_key=idempotency_key,
+            requested_by_user_id=self.tenant.user_id,
+        )
+        self.repository.create_job(job)
+        self.repository.add_audit_event(
+            self._job_audit(
+                job,
+                MeetingAuditAction.INTELLIGENCE_REQUESTED,
+            )
+        )
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
+        try:
+            await self.repository.flush()
+            await self.repository.refresh(job)
+            await self.repository.commit()
+        except IntegrityError as exc:
+            await self.repository.rollback()
+            await set_tenant_database_context(
+                self.repository.session,
+                self.tenant.organisation_id,
+            )
+            concurrent = await self._latest_next_best_action_job(
+                meeting_id,
+                trace.transcript_version,
+            )
+            if concurrent is None or concurrent.status not in {
+                AIJobStatus.PENDING.value,
+                AIJobStatus.RUNNING.value,
+                AIJobStatus.COMPLETED.value,
+            }:
+                raise PublicAPIError(
+                    "persistence_conflict",
+                    "The Next Best Action request conflicts with existing work.",
+                    409,
+                ) from exc
+            await self._audit_intelligence_request(concurrent)
+            return AIJobRequestResult(job=concurrent, created=False)
+        except SQLAlchemyError as exc:
+            await self.repository.rollback()
+            raise PublicAPIError(
+                "internal_persistence_failure",
+                "The Next Best Action request could not be queued.",
+                500,
+            ) from exc
+
+        logger.info(
+            "next_best_action_job_queued",
+            extra=self._job_log_context(job),
+        )
+        return AIJobRequestResult(job=job, created=True)
+
+    async def get_next_best_action_state(
+        self,
+        meeting_id: UUID,
+    ) -> NextBestActionStateResult:
+        meeting = await self.repository.get_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        trace = await self._load_next_best_action_source_trace(meeting_id)
+        if trace is None:
+            return NextBestActionStateResult(
+                state="empty",
+                generation_available=False,
+                unavailable_reason=(
+                    "Generate the required validated Meeting Intelligence before requesting Next Best Action."
+                ),
+                job=None,
+                artifact=None,
+            )
+        job = await self._latest_next_best_action_job(
+            meeting_id,
+            trace.transcript_version,
+        )
+        if job is None:
+            return NextBestActionStateResult(
+                state="empty",
+                generation_available=True,
+                unavailable_reason=None,
+                job=None,
+                artifact=None,
+            )
+        state = {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+            AIJobStatus.FAILED.value: "failed",
+            AIJobStatus.CANCELLED.value: "cancelled",
+        }[job.status]
+        artifact = (
+            await AIArtifactRepository(
+                self.repository.session,
+            ).get_latest_artifact_for_job(
+                self.tenant.organisation_id,
+                job.id,
+                AIArtifactType.NEXT_BEST_ACTION.value,
+            )
+            if state == "completed"
+            else None
+        )
+        if state == "completed" and artifact is None:
+            state = "failed"
+        return NextBestActionStateResult(
+            state=state,
+            generation_available=state in {"failed", "cancelled"},
+            unavailable_reason=None,
+            job=job,
+            artifact=artifact,
+        )
+
+    async def _latest_next_best_action_job(
+        self,
+        meeting_id: UUID,
+        transcript_version: int,
+    ) -> AIJob | None:
+        return await self.repository.get_latest_equivalent_job(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_version,
+            job_type=AIJobType.NEXT_BEST_ACTION.value,
+            prompt_key=NEXT_BEST_ACTION_PROMPT_KEY,
+            prompt_version=NEXT_BEST_ACTION_PROMPT_VERSION,
+            schema_version=NEXT_BEST_ACTION_SCHEMA_VERSION,
+        )
+
+    async def _load_next_best_action_source_trace(
+        self,
+        meeting_id: UUID,
+    ) -> NextBestActionSourceTrace | None:
+        artifacts_repository = AIArtifactRepository(
+            self.repository.session,
+        )
+        source_version = await artifacts_repository.get_latest_next_best_action_source_version(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if source_version is None:
+            return None
+        audited_transcript_version = await self.repository.get_latest_transcript_audit_version(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if audited_transcript_version is not None and audited_transcript_version != source_version:
+            return None
+        artifacts = await artifacts_repository.get_next_best_action_source_artifacts(
+            self.tenant.organisation_id,
+            meeting_id,
+            source_version,
+        )
+        if set(artifacts) != set(NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES):
+            return None
+        expected_schema_versions = {
+            AIArtifactType.EXECUTIVE_SUMMARY.value: (EXECUTIVE_SUMMARY_SCHEMA_VERSION),
+            AIArtifactType.BUYING_SIGNALS.value: BUYING_SIGNALS_SCHEMA_VERSION,
+            AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value: (OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION),
+            AIArtifactType.STAKEHOLDER_INTELLIGENCE.value: (STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION),
+            AIArtifactType.DECISIONS.value: DECISIONS_SCHEMA_VERSION,
+            AIArtifactType.ACTION_ITEMS.value: ACTION_ITEMS_SCHEMA_VERSION,
+            AIArtifactType.OPEN_QUESTIONS.value: OPEN_QUESTIONS_SCHEMA_VERSION,
+            AIArtifactType.RISKS_BLOCKERS.value: RISKS_BLOCKERS_SCHEMA_VERSION,
+        }
+        expected_prompt_versions = {
+            AIArtifactType.EXECUTIVE_SUMMARY.value: (
+                EXECUTIVE_SUMMARY_PROMPT_KEY,
+                EXECUTIVE_SUMMARY_PROMPT_VERSION,
+            ),
+            AIArtifactType.BUYING_SIGNALS.value: (
+                BUYING_SIGNALS_PROMPT_KEY,
+                BUYING_SIGNALS_PROMPT_VERSION,
+            ),
+            AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value: (
+                OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
+                OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
+            ),
+            AIArtifactType.STAKEHOLDER_INTELLIGENCE.value: (
+                STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+                STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
+            ),
+            AIArtifactType.DECISIONS.value: (
+                DECISIONS_PROMPT_KEY,
+                DECISIONS_PROMPT_VERSION,
+            ),
+            AIArtifactType.ACTION_ITEMS.value: (
+                ACTION_ITEMS_PROMPT_KEY,
+                ACTION_ITEMS_PROMPT_VERSION,
+            ),
+            AIArtifactType.OPEN_QUESTIONS.value: (
+                OPEN_QUESTIONS_PROMPT_KEY,
+                OPEN_QUESTIONS_PROMPT_VERSION,
+            ),
+            AIArtifactType.RISKS_BLOCKERS.value: (
+                RISKS_BLOCKERS_PROMPT_KEY,
+                RISKS_BLOCKERS_PROMPT_VERSION,
+            ),
+        }
+        if any(
+            artifact.schema_version != expected_schema_versions[artifact_type]
+            or (artifact.prompt_key, artifact.prompt_version) != expected_prompt_versions[artifact_type]
+            for artifact_type, artifact in artifacts.items()
+        ):
+            return None
+        transcript_ids = {artifact.transcript_id for artifact in artifacts.values()}
+        if len(transcript_ids) != 1:
+            return None
+        try:
+            source = build_next_best_action_source(
+                executive_summary=artifacts[AIArtifactType.EXECUTIVE_SUMMARY.value].content_json,
+                buying_signals=artifacts[AIArtifactType.BUYING_SIGNALS.value].content_json,
+                objections=artifacts[AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value].content_json,
+                stakeholders=artifacts[AIArtifactType.STAKEHOLDER_INTELLIGENCE.value].content_json,
+                decisions=artifacts[AIArtifactType.DECISIONS.value].content_json,
+                action_items=artifacts[AIArtifactType.ACTION_ITEMS.value].content_json,
+                open_questions=artifacts[AIArtifactType.OPEN_QUESTIONS.value].content_json,
+                risks=artifacts[AIArtifactType.RISKS_BLOCKERS.value].content_json,
+            )
+        except ValidationError:
+            return None
+        return NextBestActionSourceTrace(
+            transcript_id=next(iter(transcript_ids)),
+            transcript_version=source_version,
+            source=source,
+        )
 
     async def request_follow_up_email(
         self,
@@ -3677,6 +4003,112 @@ class AIArtifactService(_AIDomainService):
         )
         return artifact
 
+    async def prepare_next_best_action_artifact(
+        self,
+        *,
+        job_id: UUID,
+        meeting_id: UUID,
+        transcript_id: UUID,
+        transcript_version: int,
+        schema_version: int,
+        content: Mapping[str, object],
+    ) -> AIArtifact:
+        """Add a validated recommendation and metadata-only audit."""
+
+        if schema_version != NEXT_BEST_ACTION_SCHEMA_VERSION:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Next Best Action schema version is not supported.",
+                422,
+            )
+        validated_content = self._validate_next_best_action_content(content)
+        job = await self._get_job(job_id)
+        self._validate_artifact_trace(
+            job,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            schema_version=schema_version,
+            expected_job_type=AIJobType.NEXT_BEST_ACTION,
+        )
+        artifact_version = await self.artifacts.next_artifact_version(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_id,
+            transcript_version,
+            AIArtifactType.NEXT_BEST_ACTION.value,
+        )
+        confidence = validated_content["confidence"]
+        recommendations = validated_content["recommended_actions"]
+        priority = validated_content["priority"]
+        if not isinstance(confidence, float) or not isinstance(recommendations, list) or not isinstance(priority, str):
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Next Best Action artefact content is invalid.",
+                422,
+            )
+        artifact = AIArtifact(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            job_id=job.id,
+            artifact_type=AIArtifactType.NEXT_BEST_ACTION.value,
+            artifact_version=artifact_version,
+            schema_version=schema_version,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            provider_key=job.provider_key,
+            model_name=job.model_name,
+            content_json=validated_content,
+            confidence=Decimal(str(confidence)),
+        )
+        self.artifacts.create_artifact(artifact)
+        safe_metadata = {
+            "job_id": job.id,
+            "artifact_id": artifact.id,
+            "job_type": job.job_type,
+            "transcript_version": transcript_version,
+            "artifact_type": artifact.artifact_type,
+            "artifact_version": artifact.artifact_version,
+            "schema_version": artifact.schema_version,
+            "prompt_key": artifact.prompt_key,
+            "prompt_version": artifact.prompt_version,
+            "provider_key": artifact.provider_key,
+            "model_name": artifact.model_name,
+            "recommendation_count": len(recommendations),
+        }
+        self.repository.add_audit_event(
+            self._audit(
+                meeting_id=meeting_id,
+                entity_id=artifact.id,
+                action=MeetingAuditAction.AI_ARTIFACT_CREATED,
+                entity_type=MeetingAuditEntityType.AI_ARTIFACT,
+                transcript_version=transcript_version,
+                metadata=safe_metadata,
+            )
+        )
+        logger.info(
+            "next_best_action_artifact_created",
+            extra={
+                "organisation_id": str(artifact.organisation_id),
+                "meeting_id": str(artifact.meeting_id),
+                "job_id": str(artifact.job_id),
+                "artifact_id": str(artifact.id),
+                "artifact_type": artifact.artifact_type,
+                "artifact_version": artifact.artifact_version,
+                "transcript_version": artifact.transcript_version,
+                "prompt_key": artifact.prompt_key,
+                "prompt_version": artifact.prompt_version,
+                "schema_version": artifact.schema_version,
+                "provider_name": artifact.provider_key,
+                "model_identifier": artifact.model_name,
+                "recommendation_count": len(recommendations),
+            },
+        )
+        return artifact
+
     async def prepare_follow_up_email_artifact(
         self,
         *,
@@ -3945,6 +4377,21 @@ class AIArtifactService(_AIDomainService):
             raise PublicAPIError(
                 "invalid_artifact_content",
                 "The Stakeholder Intelligence artefact content is invalid.",
+                422,
+            ) from exc
+
+    @staticmethod
+    def _validate_next_best_action_content(
+        content: Mapping[str, object],
+    ) -> dict[str, object]:
+        try:
+            return NextBestActionArtifactContent.model_validate(
+                content,
+            ).as_json()
+        except ValidationError as exc:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Next Best Action artefact content is invalid.",
                 422,
             ) from exc
 

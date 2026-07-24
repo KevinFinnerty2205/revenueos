@@ -15,15 +15,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from revenueos.ai_contracts import (
     ACTION_ITEMS_SCHEMA_VERSION,
     ACTION_ITEMS_TRANSCRIPT_MAX_LENGTH,
+    BUYING_SIGNALS_SCHEMA_VERSION,
     BUYING_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     DECISIONS_SCHEMA_VERSION,
     DECISIONS_TRANSCRIPT_MAX_LENGTH,
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
+    OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
     OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     OPEN_QUESTIONS_SCHEMA_VERSION,
     OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
+    RISKS_BLOCKERS_SCHEMA_VERSION,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
+    STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
     STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH,
     ActionItemsSource,
     BuyingSignalsSource,
@@ -31,6 +35,7 @@ from revenueos.ai_contracts import (
     ExecutiveSummarySource,
     FollowUpEmailSource,
     FollowUpEmailTone,
+    NextBestActionSource,
     ObjectionsCompetitiveSignalsSource,
     OpenQuestionsSource,
     RisksBlockersSource,
@@ -47,15 +52,27 @@ from revenueos.ai_follow_up_email import (
     build_follow_up_email_source,
 )
 from revenueos.ai_lifecycle import prepare_lifecycle_transition
+from revenueos.ai_next_best_action import (
+    NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES,
+    build_next_best_action_source,
+)
 from revenueos.ai_prompt_registry import (
     ACTION_ITEMS_PROMPT_KEY,
     ACTION_ITEMS_PROMPT_VERSION,
+    BUYING_SIGNALS_PROMPT_KEY,
+    BUYING_SIGNALS_PROMPT_VERSION,
     DECISIONS_PROMPT_KEY,
     DECISIONS_PROMPT_VERSION,
     EXECUTIVE_SUMMARY_PROMPT_KEY,
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
+    OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
+    OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
     OPEN_QUESTIONS_PROMPT_KEY,
     OPEN_QUESTIONS_PROMPT_VERSION,
+    RISKS_BLOCKERS_PROMPT_KEY,
+    RISKS_BLOCKERS_PROMPT_VERSION,
+    STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+    STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
 )
 from revenueos.ai_repositories import AIArtifactRepository, AIJobRepository
 from revenueos.ai_services import AIArtifactService
@@ -299,6 +316,12 @@ class AIWorkerService:
                     job,
                     cancellation_check=self.is_cancellation_requested,
                     stakeholder_intelligence_source_loader=self.load_stakeholder_intelligence_source,
+                )
+            elif job.job_type == AIJobType.NEXT_BEST_ACTION.value:
+                result = await executor.execute(
+                    job,
+                    cancellation_check=self.is_cancellation_requested,
+                    next_best_action_source_loader=self.load_next_best_action_source,
                 )
             elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
                 result = await executor.execute(
@@ -572,6 +595,24 @@ class AIWorkerService:
                             "engagement_counts": engagement_counts,
                             "role_coverage_states": role_coverage_states,
                             "empty_result": not stakeholders,
+                        },
+                    )
+                elif job.job_type == AIJobType.NEXT_BEST_ACTION.value:
+                    recommendation_values = result.content.get(
+                        "recommended_actions",
+                    )
+                    recommendations = recommendation_values if isinstance(recommendation_values, list) else []
+                    logger.info(
+                        "next_best_action_generation_completed",
+                        extra={
+                            **self._log_context_from_claim(job),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version": job.transcript_version,
+                            "processing_duration_ms": duration_ms,
+                            "prompt_key": result.prompt_key,
+                            "prompt_version": result.prompt_version,
+                            "schema_version": result.schema_version,
+                            "recommendation_count": len(recommendations),
                         },
                     )
                 elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
@@ -962,6 +1003,116 @@ class AIWorkerService:
             transcript_text=normalised_transcript,
         )
 
+    async def load_next_best_action_source(
+        self,
+        job: ClaimedAIJob,
+    ) -> NextBestActionSource:
+        """Load validated artefacts only; never load transcript content."""
+
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(
+                session,
+                job.organisation_id,
+            )
+            audited_transcript_version = await AIJobRepository(
+                session,
+            ).get_latest_transcript_audit_version(
+                job.organisation_id,
+                job.meeting_id,
+            )
+            artifacts = await AIArtifactRepository(
+                session,
+            ).get_next_best_action_source_artifacts(
+                job.organisation_id,
+                job.meeting_id,
+                job.transcript_version,
+            )
+        if audited_transcript_version is not None and audited_transcript_version != job.transcript_version:
+            raise WorkerExecutionError(
+                "next_best_action_source_outdated",
+                "The validated Meeting Intelligence is no longer current.",
+                retryable=False,
+            )
+        if set(artifacts) != set(NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES):
+            raise WorkerExecutionError(
+                "next_best_action_source_unavailable",
+                "The validated Meeting Intelligence required for Next Best Action is unavailable.",
+                retryable=False,
+            )
+        expected_schema_versions = {
+            AIArtifactType.EXECUTIVE_SUMMARY.value: (EXECUTIVE_SUMMARY_SCHEMA_VERSION),
+            AIArtifactType.BUYING_SIGNALS.value: BUYING_SIGNALS_SCHEMA_VERSION,
+            AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value: (OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION),
+            AIArtifactType.STAKEHOLDER_INTELLIGENCE.value: (STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION),
+            AIArtifactType.DECISIONS.value: DECISIONS_SCHEMA_VERSION,
+            AIArtifactType.ACTION_ITEMS.value: ACTION_ITEMS_SCHEMA_VERSION,
+            AIArtifactType.OPEN_QUESTIONS.value: OPEN_QUESTIONS_SCHEMA_VERSION,
+            AIArtifactType.RISKS_BLOCKERS.value: RISKS_BLOCKERS_SCHEMA_VERSION,
+        }
+        expected_prompt_versions = {
+            AIArtifactType.EXECUTIVE_SUMMARY.value: (
+                EXECUTIVE_SUMMARY_PROMPT_KEY,
+                EXECUTIVE_SUMMARY_PROMPT_VERSION,
+            ),
+            AIArtifactType.BUYING_SIGNALS.value: (
+                BUYING_SIGNALS_PROMPT_KEY,
+                BUYING_SIGNALS_PROMPT_VERSION,
+            ),
+            AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value: (
+                OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
+                OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
+            ),
+            AIArtifactType.STAKEHOLDER_INTELLIGENCE.value: (
+                STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+                STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
+            ),
+            AIArtifactType.DECISIONS.value: (
+                DECISIONS_PROMPT_KEY,
+                DECISIONS_PROMPT_VERSION,
+            ),
+            AIArtifactType.ACTION_ITEMS.value: (
+                ACTION_ITEMS_PROMPT_KEY,
+                ACTION_ITEMS_PROMPT_VERSION,
+            ),
+            AIArtifactType.OPEN_QUESTIONS.value: (
+                OPEN_QUESTIONS_PROMPT_KEY,
+                OPEN_QUESTIONS_PROMPT_VERSION,
+            ),
+            AIArtifactType.RISKS_BLOCKERS.value: (
+                RISKS_BLOCKERS_PROMPT_KEY,
+                RISKS_BLOCKERS_PROMPT_VERSION,
+            ),
+        }
+        if any(
+            artifact.transcript_id != job.transcript_id
+            or artifact.transcript_version != job.transcript_version
+            or artifact.schema_version != expected_schema_versions[artifact_type]
+            or (artifact.prompt_key, artifact.prompt_version) != expected_prompt_versions[artifact_type]
+            for artifact_type, artifact in artifacts.items()
+        ):
+            raise WorkerExecutionError(
+                "next_best_action_source_trace_mismatch",
+                "The validated Meeting Intelligence does not match the queued recommendation.",
+                retryable=False,
+            )
+        try:
+            return build_next_best_action_source(
+                executive_summary=artifacts[AIArtifactType.EXECUTIVE_SUMMARY.value].content_json,
+                buying_signals=artifacts[AIArtifactType.BUYING_SIGNALS.value].content_json,
+                objections=artifacts[AIArtifactType.OBJECTIONS_COMPETITIVE_SIGNALS.value].content_json,
+                stakeholders=artifacts[AIArtifactType.STAKEHOLDER_INTELLIGENCE.value].content_json,
+                decisions=artifacts[AIArtifactType.DECISIONS.value].content_json,
+                action_items=artifacts[AIArtifactType.ACTION_ITEMS.value].content_json,
+                open_questions=artifacts[AIArtifactType.OPEN_QUESTIONS.value].content_json,
+                risks=artifacts[AIArtifactType.RISKS_BLOCKERS.value].content_json,
+            )
+        except ValidationError as exc:
+            raise WorkerExecutionError(
+                "next_best_action_source_invalid",
+                "The validated Meeting Intelligence could not be composed safely.",
+                retryable=False,
+            ) from exc
+
     async def load_follow_up_email_source(
         self,
         job: ClaimedAIJob,
@@ -1200,6 +1351,15 @@ class AIWorkerService:
                     schema_version=job.schema_version,
                     content=result.content,
                 )
+            elif job.job_type == AIJobType.NEXT_BEST_ACTION.value:
+                await artifact_service.prepare_next_best_action_artifact(
+                    job_id=job.id,
+                    meeting_id=job.meeting_id,
+                    transcript_id=job.transcript_id,
+                    transcript_version=job.transcript_version,
+                    schema_version=job.schema_version,
+                    content=result.content,
+                )
             elif job.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
                 await artifact_service.prepare_follow_up_email_artifact(
                     job_id=job.id,
@@ -1371,6 +1531,17 @@ class AIWorkerService:
         elif claim.job_type == AIJobType.STAKEHOLDER_INTELLIGENCE.value:
             logger.warning(
                 "stakeholder_intelligence_generation_failed",
+                extra={
+                    **self._log_context_from_claim(claim),
+                    "meeting_id": str(claim.meeting_id),
+                    "transcript_version": claim.transcript_version,
+                    "error_code": error.code,
+                    "retryable": error.retryable,
+                },
+            )
+        elif claim.job_type == AIJobType.NEXT_BEST_ACTION.value:
+            logger.warning(
+                "next_best_action_generation_failed",
                 extra={
                     **self._log_context_from_claim(claim),
                     "meeting_id": str(claim.meeting_id),

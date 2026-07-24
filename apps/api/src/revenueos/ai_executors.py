@@ -17,12 +17,17 @@ from revenueos.ai_contracts import (
     ExecutiveSummarySource,
     FollowUpEmailArtifactContent,
     FollowUpEmailSource,
+    NextBestActionArtifactContent,
+    NextBestActionSource,
     ObjectionsCompetitiveSignalsSource,
     OpenQuestionsSource,
     RisksBlockersSource,
     StakeholderIntelligenceSource,
 )
 from revenueos.ai_follow_up_email import output_is_grounded
+from revenueos.ai_next_best_action import (
+    output_is_grounded as next_best_action_is_grounded,
+)
 from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
 from revenueos.ai_output_schema_registry import (
     OutputSchemaRegistry,
@@ -47,6 +52,8 @@ from revenueos.ai_prompt_registry import (
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
     FOLLOW_UP_EMAIL_PROMPT_KEY,
     FOLLOW_UP_EMAIL_PROMPT_VERSION,
+    NEXT_BEST_ACTION_PROMPT_KEY,
+    NEXT_BEST_ACTION_PROMPT_VERSION,
     OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
     OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
     OPEN_QUESTIONS_PROMPT_KEY,
@@ -67,6 +74,7 @@ from revenueos.ai_provider_contracts import (
     ExecutiveSummaryProviderInput,
     FollowUpEmailProviderInput,
     InfrastructureTestProviderInput,
+    NextBestActionProviderInput,
     ObjectionsCompetitiveSignalsProviderInput,
     OpenQuestionsProviderInput,
     ProviderInput,
@@ -179,6 +187,10 @@ FollowUpEmailSourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[FollowUpEmailSource],
 ]
+NextBestActionSourceLoader = Callable[
+    [ClaimedAIJob],
+    Awaitable[NextBestActionSource],
+]
 ProviderInputFactory = Callable[[tuple[ProviderMessage, ...]], ProviderInput]
 
 
@@ -196,6 +208,7 @@ class AIJobExecutor(Protocol):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult: ...
 
@@ -582,6 +595,7 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -593,6 +607,7 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
             stakeholder_intelligence_source_loader,
+            next_best_action_source_loader,
             follow_up_email_source_loader,
         )
         return await self._execute_structured(
@@ -631,6 +646,7 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -641,6 +657,7 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
             stakeholder_intelligence_source_loader,
+            next_best_action_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.EXECUTIVE_SUMMARY.value:
@@ -715,6 +732,7 @@ class DecisionsExecutor(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -725,6 +743,7 @@ class DecisionsExecutor(_StructuredOutputExecutor):
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
             stakeholder_intelligence_source_loader,
+            next_best_action_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.DECISIONS.value:
@@ -800,6 +819,7 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -810,6 +830,7 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
             stakeholder_intelligence_source_loader,
+            next_best_action_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.ACTION_ITEMS.value:
@@ -892,6 +913,7 @@ class RisksBlockersExecutor(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -902,6 +924,7 @@ class RisksBlockersExecutor(_StructuredOutputExecutor):
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
             stakeholder_intelligence_source_loader,
+            next_best_action_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.RISKS_BLOCKERS.value:
@@ -991,6 +1014,7 @@ class OpenQuestionsExecutor(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -1001,6 +1025,7 @@ class OpenQuestionsExecutor(_StructuredOutputExecutor):
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
             stakeholder_intelligence_source_loader,
+            next_best_action_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.OPEN_QUESTIONS.value:
@@ -1089,6 +1114,7 @@ class BuyingSignalsExecutor(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -1099,6 +1125,7 @@ class BuyingSignalsExecutor(_StructuredOutputExecutor):
             open_questions_source_loader,
             objections_competitive_signals_source_loader,
             stakeholder_intelligence_source_loader,
+            next_best_action_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.BUYING_SIGNALS.value:
@@ -1191,6 +1218,7 @@ class ObjectionsCompetitiveSignalsExecutor(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -1201,6 +1229,7 @@ class ObjectionsCompetitiveSignalsExecutor(_StructuredOutputExecutor):
             open_questions_source_loader,
             buying_signals_source_loader,
             stakeholder_intelligence_source_loader,
+            next_best_action_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value:
@@ -1306,6 +1335,7 @@ class StakeholderIntelligenceExecutor(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -1316,6 +1346,7 @@ class StakeholderIntelligenceExecutor(_StructuredOutputExecutor):
             open_questions_source_loader,
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
+            next_best_action_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.STAKEHOLDER_INTELLIGENCE.value:
@@ -1400,6 +1431,108 @@ class StakeholderIntelligenceExecutor(_StructuredOutputExecutor):
         return result
 
 
+class NextBestActionComposer(_StructuredOutputExecutor):
+    """Recommend from validated intelligence artefacts without a transcript."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
+        objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
+    ) -> ExecutionResult:
+        del (
+            executive_summary_source_loader,
+            decisions_source_loader,
+            action_items_source_loader,
+            risks_blockers_source_loader,
+            open_questions_source_loader,
+            buying_signals_source_loader,
+            objections_competitive_signals_source_loader,
+            stakeholder_intelligence_source_loader,
+            follow_up_email_source_loader,
+        )
+        if job.job_type != AIJobType.NEXT_BEST_ACTION.value:
+            raise WorkerExecutionError(
+                "invalid_next_best_action_job",
+                "The queued job is not a Next Best Action job.",
+                retryable=False,
+            )
+        if job.prompt_key != NEXT_BEST_ACTION_PROMPT_KEY or job.prompt_version != NEXT_BEST_ACTION_PROMPT_VERSION:
+            raise WorkerExecutionError(
+                "invalid_prompt_configuration",
+                "The Next Best Action prompt configuration is invalid.",
+                retryable=False,
+            )
+        if next_best_action_source_loader is None:
+            raise WorkerExecutionError(
+                "next_best_action_source_unavailable",
+                "The validated Meeting Intelligence required for Next Best Action is unavailable.",
+                retryable=False,
+            )
+
+        logger.info(
+            "next_best_action_composition_started",
+            extra=self._log_context(job),
+        )
+        source = await next_best_action_source_loader(job)
+        logger.info(
+            "next_best_action_sources_loaded",
+            extra={
+                **self._log_context(job),
+                "transcript_version": job.transcript_version,
+                "source_artifact_count": 8,
+                "buying_signal_count": len(source.buying_signals.signals),
+                "objection_count": len(source.objections.objections),
+                "stakeholder_count": len(source.stakeholders.stakeholders),
+                "decision_count": len(source.decisions.decisions),
+                "action_item_count": len(source.action_items.action_items),
+                "open_question_count": len(source.open_questions.open_questions),
+                "risk_count": len(source.risks.risks),
+            },
+        )
+        source_values = source.model_dump(mode="json")
+        result = await self._execute_structured(
+            job,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            variables=PromptVariables(
+                values={key: json.dumps(value, ensure_ascii=False) for key, value in source_values.items()}
+            ),
+            input_factory=lambda messages: NextBestActionProviderInput(
+                messages=messages,
+            ),
+            cancellation_check=cancellation_check,
+        )
+        content = NextBestActionArtifactContent.model_validate(
+            result.content,
+        )
+        if not next_best_action_is_grounded(content, source):
+            raise WorkerExecutionError(
+                "next_best_action_grounding_failed",
+                "The recommendation was not grounded in validated Meeting Intelligence.",
+                retryable=False,
+            )
+        logger.info(
+            "next_best_action_output_validation_completed",
+            extra={
+                **self._log_context(job),
+                "recommendation_count": len(content.recommended_actions),
+                "structured_output_attempt_count": (result.structured_output_attempt_count),
+            },
+        )
+        return result
+
+
 class FollowUpEmailComposer(_StructuredOutputExecutor):
     """Compose customer-ready email content from validated artefacts only."""
 
@@ -1416,6 +1549,7 @@ class FollowUpEmailComposer(_StructuredOutputExecutor):
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
         stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        next_best_action_source_loader: NextBestActionSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -1427,6 +1561,7 @@ class FollowUpEmailComposer(_StructuredOutputExecutor):
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
             stakeholder_intelligence_source_loader,
+            next_best_action_source_loader,
         )
         if job.job_type != AIJobType.FOLLOW_UP_EMAIL.value:
             raise WorkerExecutionError(
@@ -1572,6 +1707,12 @@ class AIExecutorRegistry:
                 schemas,
             ),
             AIJobType.STAKEHOLDER_INTELLIGENCE.value: StakeholderIntelligenceExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
+            AIJobType.NEXT_BEST_ACTION.value: NextBestActionComposer(
                 configuration,
                 providers,
                 prompts,

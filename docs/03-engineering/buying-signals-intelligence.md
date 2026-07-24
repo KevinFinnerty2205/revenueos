@@ -147,7 +147,8 @@ Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions, 
 Blockers and Open Questions. Follow-up Email remains the ninth capability and
 separate composed output. Its four
 prerequisites and artefact-only provider input are unchanged; Buying Signals and
-Stakeholder Intelligence are not email inputs. Progress therefore uses `total=9` and the existing bounded
+Stakeholder Intelligence are not email inputs. Progress uses `total=10` after
+WO-006D and the existing bounded
 four-query aggregate read avoids N+1 reads.
 
 The frontend section appears after Executive Summary and before Decisions. It

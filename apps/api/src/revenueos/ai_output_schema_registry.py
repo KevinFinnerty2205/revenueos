@@ -12,6 +12,7 @@ from revenueos.ai_contracts import (
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     FOLLOW_UP_EMAIL_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    NEXT_BEST_ACTION_SCHEMA_VERSION,
     OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
     OPEN_QUESTIONS_SCHEMA_VERSION,
     RISKS_BLOCKERS_SCHEMA_VERSION,
@@ -22,6 +23,7 @@ from revenueos.ai_contracts import (
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
     InfrastructureTestArtifactContent,
+    NextBestActionArtifactContent,
     ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
@@ -45,6 +47,7 @@ OPEN_QUESTIONS_SCHEMA_KEY = "open_questions"
 BUYING_SIGNALS_SCHEMA_KEY = "buying_signals"
 OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_KEY = "objections_competitive_signals"
 STAKEHOLDER_INTELLIGENCE_SCHEMA_KEY = "stakeholder_intelligence"
+NEXT_BEST_ACTION_SCHEMA_KEY = "next_best_action"
 FOLLOW_UP_EMAIL_SCHEMA_KEY = "follow_up_email"
 
 
@@ -178,6 +181,14 @@ def create_default_output_schema_registry() -> OutputSchemaRegistry:
                 job_type=AIJobType.STAKEHOLDER_INTELLIGENCE.value,
                 validation_model=StakeholderIntelligenceArtifactContent,
                 description="Strict schema for transcript-grounded Stakeholder Intelligence.",
+                active=True,
+            ),
+            OutputSchemaDefinition(
+                schema_key=NEXT_BEST_ACTION_SCHEMA_KEY,
+                schema_version=NEXT_BEST_ACTION_SCHEMA_VERSION,
+                job_type=AIJobType.NEXT_BEST_ACTION.value,
+                validation_model=NextBestActionArtifactContent,
+                description=("Strict schema for validated-artefact-grounded Next Best Action recommendations."),
                 active=True,
             ),
             OutputSchemaDefinition(

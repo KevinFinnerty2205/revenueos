@@ -176,7 +176,7 @@ Signals, Stakeholder Intelligence, Decisions, Action Items, Risks & Blockers and
 Follow-up Email remains the ninth capability and a separate composition. Its
 four prerequisites and validated artefact-only input are unchanged; objections
 are neither a prerequisite nor an email input. Progress therefore uses
-`total=9`, and the aggregate read retains its bounded four-query path.
+`total=10` after WO-006D, and the aggregate read retains its bounded four-query path.
 
 The UI section appears after Buying Signals and before Decisions. It shows a
 textual current-meeting pressure label, summary, objection cards and competitor

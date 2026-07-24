@@ -175,6 +175,15 @@ export type StakeholderEngagement =
   "active" | "passive" | "absent_but_referenced" | "unclear";
 export type StakeholderCoverageState =
   "identified" | "not_identified" | "unclear" | "not_discussed";
+export type NextBestActionState =
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
+export type RecommendationPriority = "high" | "medium" | "low";
+export type RecommendationDependency =
+  | "buying_signals"
+  | "stakeholders"
+  | "risks"
+  | "open_questions"
+  | "action_items";
 export type DecisionsState =
   "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type DecisionStatus =
@@ -212,6 +221,7 @@ export type MeetingIntelligenceCapabilityName =
   | "buying_signals"
   | "objections_competitive_signals"
   | "stakeholder_intelligence"
+  | "next_best_action"
   | "decisions"
   | "action_items"
   | "risks_blockers"
@@ -504,6 +514,45 @@ export interface StakeholderIntelligenceRequestResponse {
   completedAt: string | null;
 }
 
+export interface RecommendedAction {
+  action: string;
+  reason: string;
+  priority: RecommendationPriority;
+  confidence: number;
+  dependsOn: RecommendationDependency[];
+}
+
+export interface NextBestActionContent {
+  overallRecommendation: string;
+  priority: RecommendationPriority;
+  confidence: number;
+  reasoning: string[];
+  recommendedActions: RecommendedAction[];
+}
+
+export interface NextBestActionResponse {
+  state: NextBestActionState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  nextBestAction: NextBestActionContent | null;
+}
+
+export interface NextBestActionRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
 export interface DecisionItem {
   decision: string;
   owner: string | null;
@@ -703,7 +752,7 @@ export interface MeetingIntelligenceProgress {
   processing: number;
   failed: number;
   notGenerated: number;
-  total: 9;
+  total: 10;
   summary: string;
 }
 
@@ -717,6 +766,7 @@ export interface MeetingIntelligenceResponse {
   buyingSignals: MeetingIntelligenceCapability<BuyingSignalsContent>;
   objectionsCompetitiveSignals: MeetingIntelligenceCapability<ObjectionsCompetitiveSignalsContent>;
   stakeholderIntelligence: MeetingIntelligenceCapability<StakeholderIntelligenceContent>;
+  nextBestAction: MeetingIntelligenceCapability<NextBestActionContent>;
   decisions: MeetingIntelligenceCapability<DecisionsContent>;
   actionItems: MeetingIntelligenceCapability<ActionItemsContent>;
   risksBlockers: MeetingIntelligenceCapability<RisksBlockersContent>;

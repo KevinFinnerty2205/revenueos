@@ -113,6 +113,15 @@ allowed. Strict validation rejects invented names/roles/relationships, graphs,
 CRM fields and predictive scores. OpenAI receives the same bounded transcript
 only when explicitly selected.
 
+WO-006D Next Best Action loads only the eight same-tenant, current-version
+validated extraction artefacts. The request, worker and typed provider input do
+not query or carry transcript text, and Follow-up Email is excluded. Exact
+source-reference grounding rejects unsupported reasoning or dependencies.
+Recommendation and reasoning content stays out of logs/audits; only safe
+counts and ordinary trace metadata are allowed. Priority and confidence also
+remain out of telemetry and audits. The result
+has no CRM, email, task, automation or integration authority.
+
 WO-004C1A changes only provider execution after the tenant-bound source
 transaction closes. OpenAI selection does not receive a client-supplied tenant
 identifier and does not change repository predicates, worker ownership,
@@ -151,7 +160,7 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - AI audits may identify job/artefact/type/status/version, prompt/schema/provider/model labels and structured-output attempt count, but exclude transcript/artefact bodies, prompt templates/rendered messages, raw/invalid output, provider secrets, participant-sensitive values and raw exceptions.
 - Infrastructure-test, Executive Summary, Buying Signals, Objections &
   Competitive Signals, Stakeholder Intelligence, Decisions, Action
-  Items, Risks & Blockers, Open Questions and Follow-up Email JSON are strict, versioned and
+  Items, Risks & Blockers, Open Questions, Next Best Action and Follow-up Email JSON are strict, versioned and
   rejected before persistence when malformed or extended unexpectedly.
 - Worker claims use PostgreSQL row locks, bounded leases and exact worker ownership; no in-memory queue can override persisted state.
 - Retry/cancellation/recovery and artefact completion use short atomic transactions and store only bounded safe errors.
@@ -164,8 +173,9 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
   registry-derived output schema. The mock processes the bounded
   JSON-delimited transcript in-process and makes no network call. OpenAI
   selection sends the rendered extractor instructions and selected transcript
-  to OpenAI through the server-side Responses API. Follow-up Email instead
-  sends only its validated source projection and tone; it never reads or sends
+  to OpenAI through the server-side Responses API. Next Best Action sends only
+  the eight validated extraction artefacts; Follow-up Email sends only its
+  validated source projection and tone. Neither composer reads or sends
   transcript text.
 - OpenAI requests use strict structured output, `store=false`, no tools, no
   streaming and zero SDK retries. The application Pydantic validator remains

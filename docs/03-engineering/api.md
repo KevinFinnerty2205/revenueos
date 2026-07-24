@@ -110,11 +110,11 @@ There is at most one transcript row per meeting. Plain text is required and limi
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all nine current-version capability states and content through one product-safe view |
-| `POST` | `/api/v1/meetings/{meetingId}/intelligence/generate` | Create or reuse missing extraction work and conditionally queue Follow-up Email |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all ten current-version capability states and content through one product-safe view |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/generate` | Create or reuse missing extraction work and conditionally queue both composers |
 
 GET returns a derived overall state, generation/retry availability, last activity
-time, deterministic progress counts and the nine ordered capability views. Valid
+time, deterministic progress counts and the ten ordered capability views. Valid
 empty lists are completed with `emptyResult=true`. The response excludes job and
 artefact IDs, transcript/prompts, provider/model and schema configuration, worker
 fields, internal error codes and raw errors.
@@ -125,9 +125,10 @@ validated enums used only for metadata-only transition and polling lifecycle
 logs; they do not alter the aggregate result.
 
 POST reuses the eight extraction request services and creates only
-missing/failed/cancelled work for the current transcript. It queues Follow-up
-Email only after matching Executive Summary, Decisions, Action Items and Open
-Questions artefacts are complete. New work returns `202`; complete reuse returns
+missing/failed/cancelled work for the current transcript. It queues Next Best
+Action after all eight artefacts are complete and Follow-up Email after matching
+Executive Summary, Decisions, Action Items and Open Questions artefacts are
+complete. New work returns `202`; complete reuse returns
 `200`. The endpoint never calls a provider inline. All individual endpoints below
 remain supported. See
 [Unified Meeting Intelligence](unified-meeting-intelligence.md) for state
@@ -213,6 +214,27 @@ roles, qualitative influence/stance/engagement, six fixed coverage states and
 confidence. It contains no relationship history, graph, CRM identity, MEDDICC/
 BANT or predictive score, and excludes internal/provider/worker/prompt/
 transcript fields. See [Stakeholder Intelligence](stakeholder-intelligence.md).
+
+## Next Best Action Intelligence
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/next-best-action` | Queue or return equivalent validated-intelligence composition |
+| `GET` | `/api/v1/meetings/{meetingId}/intelligence/next-best-action` | Read current safe recommendation state/result |
+
+POST requires all eight validated extraction artefacts for the current trusted
+tenant, meeting and transcript trace. It queues durable work with
+`next_best_action` prompt/schema v1 and returns `202`; equivalent pending,
+running or completed work returns `200`. Missing, stale, invalid or mismatched
+sources fail closed with `next_best_action_sources_required`.
+
+GET returns the established lifecycle state, safe generation availability,
+timestamps/message and validated `nextBestAction` content. Content contains one
+overall recommendation, priority, confidence, grounded reasoning and one to
+five ordered recommended actions with constrained source dependencies. It
+contains no transcript, Follow-up Email source, prompt/provider/worker details
+or operational control. See
+[Next Best Action Intelligence](next-best-action-intelligence.md).
 
 ## Decisions intelligence
 

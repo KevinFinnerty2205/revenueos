@@ -9,6 +9,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.ai_follow_up_email import FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES
+from revenueos.ai_next_best_action import (
+    NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES,
+)
 from revenueos.business_repositories import PageResult
 from revenueos.models import (
     AIArtifact,
@@ -230,7 +233,7 @@ class AIJobRepository:
         )
         return result.scalar_one_or_none()
 
-    async def count_equivalent_jobs(
+    async def count_failed_or_cancelled_equivalent_jobs(
         self,
         organisation_id: UUID,
         meeting_id: UUID,
@@ -252,6 +255,7 @@ class AIJobRepository:
                 AIJob.prompt_key == prompt_key,
                 AIJob.prompt_version == prompt_version,
                 AIJob.schema_version == schema_version,
+                AIJob.status.in_(("failed", "cancelled")),
             )
         )
         return int(count or 0)
@@ -513,6 +517,49 @@ class AIArtifactRepository:
                 AIArtifact.transcript_version == transcript_version,
                 AIArtifact.artifact_type.in_(
                     FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES,
+                ),
+            )
+            .order_by(
+                AIArtifact.artifact_type.asc(),
+                AIArtifact.artifact_version.desc(),
+                AIArtifact.id.desc(),
+            )
+        )
+        artifacts: dict[str, AIArtifact] = {}
+        for artifact in result.all():
+            artifacts.setdefault(artifact.artifact_type, artifact)
+        return artifacts
+
+    async def get_latest_next_best_action_source_version(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+    ) -> int | None:
+        version = await self.session.scalar(
+            select(func.max(AIArtifact.transcript_version)).where(
+                AIArtifact.organisation_id == organisation_id,
+                AIArtifact.meeting_id == meeting_id,
+                AIArtifact.artifact_type.in_(
+                    NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES,
+                ),
+            )
+        )
+        return int(version) if version is not None else None
+
+    async def get_next_best_action_source_artifacts(
+        self,
+        organisation_id: UUID,
+        meeting_id: UUID,
+        transcript_version: int,
+    ) -> dict[str, AIArtifact]:
+        result = await self.session.scalars(
+            select(AIArtifact)
+            .where(
+                AIArtifact.organisation_id == organisation_id,
+                AIArtifact.meeting_id == meeting_id,
+                AIArtifact.transcript_version == transcript_version,
+                AIArtifact.artifact_type.in_(
+                    NEXT_BEST_ACTION_SOURCE_ARTIFACT_TYPES,
                 ),
             )
             .order_by(

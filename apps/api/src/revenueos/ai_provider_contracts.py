@@ -64,7 +64,7 @@ CurrencyCode = Annotated[
 ]
 MessageContent = Annotated[
     str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=60_000),
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=250_000),
 ]
 
 
@@ -212,6 +212,26 @@ class StakeholderIntelligenceProviderInput(BaseModel):
         return self
 
 
+class NextBestActionProviderInput(BaseModel):
+    """Provider-neutral recommendation input with no transcript field."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["next_best_action"] = "next_best_action"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> NextBestActionProviderInput:
+        if tuple(message.role for message in self.messages) != (
+            "system",
+            "user",
+        ):
+            raise ValueError(
+                "Next Best Action messages must be ordered system then user.",
+            )
+        return self
+
+
 class FollowUpEmailProviderInput(BaseModel):
     """Provider-neutral Follow-up Email input with no transcript field."""
 
@@ -237,6 +257,7 @@ ProviderInput = (
     | BuyingSignalsProviderInput
     | ObjectionsCompetitiveSignalsProviderInput
     | StakeholderIntelligenceProviderInput
+    | NextBestActionProviderInput
     | FollowUpEmailProviderInput
 )
 

@@ -97,6 +97,7 @@ class AIJobType(StrEnum):
     BUYING_SIGNALS = "buying_signals"
     OBJECTIONS_COMPETITIVE_SIGNALS = "objections_competitive_signals"
     STAKEHOLDER_INTELLIGENCE = "stakeholder_intelligence"
+    NEXT_BEST_ACTION = "next_best_action"
     FOLLOW_UP_EMAIL = "follow_up_email"
 
 
@@ -110,6 +111,7 @@ class AIArtifactType(StrEnum):
     BUYING_SIGNALS = "buying_signals"
     OBJECTIONS_COMPETITIVE_SIGNALS = "objections_competitive_signals"
     STAKEHOLDER_INTELLIGENCE = "stakeholder_intelligence"
+    NEXT_BEST_ACTION = "next_best_action"
     FOLLOW_UP_EMAIL = "follow_up_email"
 
 
