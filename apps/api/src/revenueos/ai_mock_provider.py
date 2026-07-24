@@ -24,6 +24,7 @@ from revenueos.ai_contracts import (
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     FOLLOW_UP_EMAIL_SCHEMA_VERSION,
     INFRASTRUCTURE_TEST_SCHEMA_VERSION,
+    NEXT_BEST_ACTION_SCHEMA_VERSION,
     OBJECTION_EVIDENCE_MAX_LENGTH,
     OBJECTION_MAX_LENGTH,
     OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
@@ -46,6 +47,7 @@ from revenueos.ai_provider_contracts import (
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
     FollowUpEmailProviderInput,
+    NextBestActionProviderInput,
     ObjectionsCompetitiveSignalsProviderInput,
     OpenQuestionsProviderInput,
     ProviderRequest,
@@ -161,6 +163,11 @@ class DeterministicMockAIProvider:
                 request.input_payload,
                 StakeholderIntelligenceProviderInput,
             )
+        if request.job_type == AIJobType.NEXT_BEST_ACTION.value:
+            return request.expected_schema_version == NEXT_BEST_ACTION_SCHEMA_VERSION and isinstance(
+                request.input_payload,
+                NextBestActionProviderInput,
+            )
         if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
             return request.expected_schema_version == FOLLOW_UP_EMAIL_SCHEMA_VERSION and isinstance(
                 request.input_payload, FollowUpEmailProviderInput
@@ -215,6 +222,28 @@ class DeterministicMockAIProvider:
         if isinstance(request.input_payload, StakeholderIntelligenceProviderInput):
             transcript = cls._extract_transcript(request.input_payload)
             return cls._extract_stakeholder_intelligence(transcript)
+        if isinstance(request.input_payload, NextBestActionProviderInput):
+            sources = {
+                field: cls._extract_composition_value(
+                    request.input_payload,
+                    f"Validated {label} JSON: ",
+                )
+                for field, label in (
+                    ("executive_summary", "Executive Summary"),
+                    ("buying_signals", "Buying Signals"),
+                    ("objections", "Objections"),
+                    ("stakeholders", "Stakeholders"),
+                    ("decisions", "Decisions"),
+                    ("action_items", "Action Items"),
+                    ("open_questions", "Open Questions"),
+                    ("risks", "Risks"),
+                )
+            }
+            if not all(isinstance(value, dict) for value in sources.values()):
+                raise InvalidProviderRequestError
+            return cls._recommend_next_best_actions(
+                cast(dict[str, dict[str, JsonValue]], sources),
+            )
         if isinstance(request.input_payload, FollowUpEmailProviderInput):
             summary = cls._extract_composition_value(
                 request.input_payload,
@@ -268,7 +297,7 @@ class DeterministicMockAIProvider:
 
     @staticmethod
     def _extract_composition_value(
-        input_payload: FollowUpEmailProviderInput,
+        input_payload: FollowUpEmailProviderInput | NextBestActionProviderInput,
         prefix: str,
     ) -> JsonValue:
         for line in input_payload.messages[1].content.splitlines():
@@ -279,6 +308,156 @@ class DeterministicMockAIProvider:
             except (TypeError, ValueError) as exc:
                 raise InvalidProviderRequestError from exc
         raise InvalidProviderRequestError
+
+    @staticmethod
+    def _recommend_next_best_actions(
+        sources: dict[str, dict[str, JsonValue]],
+    ) -> dict[str, JsonValue]:
+        """Return deterministic recommendations from validated artefact JSON."""
+
+        buying = sources["buying_signals"]
+        stakeholders = sources["stakeholders"]
+        risks_source = sources["risks"]
+        questions_source = sources["open_questions"]
+        signal_values = buying.get("signals")
+        signals = signal_values if isinstance(signal_values, list) else []
+        signal_types = {
+            value for item in signals if isinstance(item, dict) and isinstance((value := item.get("signal_type")), str)
+        }
+        coverage_value = stakeholders.get("role_coverage")
+        coverage = coverage_value if isinstance(coverage_value, dict) else {}
+        risk_values = risks_source.get("risks")
+        risks = risk_values if isinstance(risk_values, list) else []
+        question_values = questions_source.get("open_questions")
+        questions = question_values if isinstance(question_values, list) else []
+        recommendations: list[dict[str, JsonValue]] = []
+
+        missing_references: list[str] = []
+        missing_dependencies: list[str] = []
+        if "decision_maker_missing" in signal_types:
+            missing_references.append(
+                "Buying Signals: decision_maker_missing.",
+            )
+            missing_dependencies.append("buying_signals")
+        if coverage.get("economic_buyer") == "not_identified":
+            missing_references.append(
+                "Stakeholders: economic_buyer:not_identified.",
+            )
+            missing_dependencies.append("stakeholders")
+        elif coverage.get("decision_maker") == "not_identified":
+            missing_references.append(
+                "Stakeholders: decision_maker:not_identified.",
+            )
+            missing_dependencies.append("stakeholders")
+        if missing_references:
+            recommendations.append(
+                {
+                    "action": "Identify the economic buyer.",
+                    "reason": " ".join(missing_references),
+                    "priority": "high",
+                    "confidence": 0.94,
+                    "depends_on": cast(JsonValue, missing_dependencies),
+                }
+            )
+
+        technical_risk = next(
+            (
+                item
+                for item in risks
+                if isinstance(item, dict) and item.get("category") == "technical" and isinstance(item.get("risk"), str)
+            ),
+            None,
+        )
+        if technical_risk is not None:
+            risk_text = cast(str, technical_risk["risk"])
+            priority = "high" if technical_risk.get("severity") == "high" else "medium"
+            recommendations.append(
+                {
+                    "action": "Book a technical workshop.",
+                    "reason": f"Risks: {risk_text}",
+                    "priority": priority,
+                    "confidence": 0.92,
+                    "depends_on": ["risks"],
+                }
+            )
+
+        if "next_step_weak" in signal_types:
+            recommendations.append(
+                {
+                    "action": "Schedule a follow-up meeting.",
+                    "reason": "Buying Signals: next_step_weak.",
+                    "priority": "high",
+                    "confidence": 0.91,
+                    "depends_on": ["buying_signals"],
+                }
+            )
+
+        high_question = next(
+            (
+                item
+                for item in questions
+                if isinstance(item, dict) and item.get("importance") == "high" and isinstance(item.get("question"), str)
+            ),
+            None,
+        )
+        if high_question is not None:
+            question = cast(str, high_question["question"])
+            recommendations.append(
+                {
+                    "action": "Resolve the highest-priority open question.",
+                    "reason": f"Open Questions: {question}",
+                    "priority": "high",
+                    "confidence": 0.9,
+                    "depends_on": ["open_questions"],
+                }
+            )
+
+        material_risk = next(
+            (
+                item
+                for item in risks
+                if isinstance(item, dict)
+                and item is not technical_risk
+                and item.get("severity") in {"high", "medium"}
+                and isinstance(item.get("risk"), str)
+            ),
+            None,
+        )
+        if material_risk is not None:
+            risk_text = cast(str, material_risk["risk"])
+            recommendations.append(
+                {
+                    "action": "Address the highest-priority blocker.",
+                    "reason": f"Risks: {risk_text}",
+                    "priority": ("high" if material_risk.get("severity") == "high" else "medium"),
+                    "confidence": 0.89,
+                    "depends_on": ["risks"],
+                }
+            )
+
+        if not recommendations:
+            momentum = buying.get("overall_momentum")
+            reference = momentum if isinstance(momentum, str) else "insufficient_evidence"
+            recommendations.append(
+                {
+                    "action": "Schedule a follow-up meeting.",
+                    "reason": f"Buying Signals: {reference}.",
+                    "priority": "medium",
+                    "confidence": 0.78,
+                    "depends_on": ["buying_signals"],
+                }
+            )
+
+        bounded = recommendations[:5]
+        primary = bounded[0]
+        reasoning = [cast(str, recommendation["reason"]) for recommendation in bounded]
+        return {
+            "overall_recommendation": primary["action"],
+            "priority": primary["priority"],
+            "confidence": primary["confidence"],
+            "reasoning": cast(JsonValue, reasoning),
+            "recommended_actions": cast(JsonValue, bounded),
+        }
 
     @staticmethod
     def _extract_transcript(
@@ -2258,6 +2437,23 @@ class DeterministicMockAIProvider:
                 "stakeholder_summary": "Too short.",
                 "confidence": 2,
                 "close_probability": 0.9,
+            }
+        if request.job_type == AIJobType.NEXT_BEST_ACTION.value:
+            return {
+                "overall_recommendation": "Update the CRM.",
+                "priority": "urgent",
+                "confidence": 2,
+                "reasoning": [],
+                "recommended_actions": [
+                    {
+                        "action": "Send an email.",
+                        "reason": "Invented unsupported reason.",
+                        "priority": "critical",
+                        "confidence": 2,
+                        "depends_on": ["transcript"],
+                    }
+                ],
+                "automation": True,
             }
         if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
             return {

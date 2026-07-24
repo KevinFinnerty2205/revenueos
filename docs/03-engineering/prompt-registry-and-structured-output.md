@@ -72,6 +72,10 @@ evidence-backed primary role to a named or supported anonymous person, separates
 influence/stance/current-meeting engagement, and fills six fixed coverage
 fields with explicit uncertainty. It forbids invented identity or relationships,
 historical claims, MEDDICC/BANT, graphs, CRM actions and predictive scoring.
+Next Best Action receives only the eight validated extraction artefacts. It
+requires one to five ordered recommendations, exact source references,
+constrained dependencies and no transcript, Follow-up Email, CRM update, email,
+task or automation action.
 Follow-up Email receives only validated Executive Summary, Decisions, Action
 Items and Open Questions projections plus the selected tone. It requires exact
 fact copying, generic framing, customer-safe omissions and explicitly forbids
@@ -94,8 +98,9 @@ Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intellige
 Items, Risks & Blockers and Open Questions receive
 only the minimum source fields and encode each value as a JSON string before
 substitution, preventing transcript text from escaping its data boundary.
-Follow-up Email similarly JSON-encodes only its validated source projection and
-tone; its provider contract has no transcript field. Rendered output becomes an ordered immutable tuple of provider-neutral
+Next Best Action JSON-encodes its eight validated artefacts, while Follow-up
+Email JSON-encodes only its validated source projection and tone. Both provider
+contracts have no transcript field. Rendered output becomes an ordered immutable tuple of provider-neutral
 `system` then `user` messages. Full templates and rendered content never enter
 logs or persistence.
 
@@ -109,7 +114,7 @@ duplicate rejection using instance-owned state.
 The default registry reuses strict domain contracts for `infrastructure_test`,
 `executive_summary`, `decisions`, `action_items`, `risks_blockers`,
 `open_questions`, `buying_signals`, `objections_competitive_signals`,
-`stakeholder_intelligence` and
+`stakeholder_intelligence`, `next_best_action` and
 `follow_up_email` version 1; it does not duplicate domain
 models. Prompt registration must resolve its referenced schema immediately.
 Decisions, Action Items, Risks & Blockers and Open Questions each limit output
@@ -121,6 +126,10 @@ immutable competitor items, with pressure and summary consistency checks.
 Stakeholder Intelligence permits at most 30 immutable people, enforces one
 primary role per name, fixed role coverage and cross-field uncertainty/summary
 consistency checks.
+Next Best Action permits at most five unique ordered actions, requires
+`high|medium|low` priority and finite confidence, constrains dependency values
+and checks overall/primary consistency. A post-schema grounding check requires
+exact source values for reasoning and every declared dependency.
 Follow-up Email has three independently bounded 25-item arrays, required
 framing/tone/confidence fields and rejects every unknown field.
 
@@ -203,7 +212,8 @@ and `0011_open_questions` widens them for Open Questions.
 `0012_follow_up_email` widens them for Follow-up Email and adds its immutable
 tone trace column. `0013_buying_signals` widens them for Buying Signals and
 `0014_objections` widens them for Objections & Competitive Signals and
-`0015_stakeholders` widens them for Stakeholder Intelligence. None
+`0015_stakeholders` widens them for Stakeholder Intelligence and
+`0016_next_best_action` widens them for Next Best Action. None
 adds prompt/schema storage.
 
 ## Security and telemetry

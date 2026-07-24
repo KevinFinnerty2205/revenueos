@@ -81,6 +81,13 @@ STAKEHOLDER_EVIDENCE_MAX_LENGTH = 400
 STAKEHOLDER_SUMMARY_MIN_LENGTH = 20
 STAKEHOLDER_SUMMARY_MAX_LENGTH = 800
 STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH = 50_000
+NEXT_BEST_ACTION_SCHEMA_VERSION = 1
+NEXT_BEST_ACTION_MAX_COUNT = 5
+NEXT_BEST_ACTION_TEXT_MIN_LENGTH = 5
+NEXT_BEST_ACTION_TEXT_MAX_LENGTH = 500
+NEXT_BEST_ACTION_REASON_MIN_LENGTH = 10
+NEXT_BEST_ACTION_REASON_MAX_LENGTH = 1_000
+NEXT_BEST_ACTION_REASONING_MAX_COUNT = 12
 FOLLOW_UP_EMAIL_SCHEMA_VERSION = 1
 FOLLOW_UP_EMAIL_SUBJECT_MAX_LENGTH = 200
 FOLLOW_UP_EMAIL_GREETING_MAX_LENGTH = 200
@@ -1322,6 +1329,142 @@ class StakeholderIntelligenceSource(BaseModel):
         if len(normalised) > STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH:
             raise ValueError("Transcript text exceeds the Stakeholder Intelligence limit.")
         return normalised
+
+
+RecommendationPriority = Literal["high", "medium", "low"]
+RecommendationDependency = Literal[
+    "buying_signals",
+    "stakeholders",
+    "risks",
+    "open_questions",
+    "action_items",
+]
+RecommendationText = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=NEXT_BEST_ACTION_TEXT_MIN_LENGTH,
+        max_length=NEXT_BEST_ACTION_TEXT_MAX_LENGTH,
+    ),
+]
+RecommendationReason = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=NEXT_BEST_ACTION_REASON_MIN_LENGTH,
+        max_length=NEXT_BEST_ACTION_REASON_MAX_LENGTH,
+    ),
+]
+_PROHIBITED_RECOMMENDATION_PATTERN = re.compile(
+    r"\b(?:crm|email|e-mail|task|automation|automate|automated|automating)\b",
+    re.IGNORECASE,
+)
+
+
+class RecommendedAction(BaseModel):
+    """One bounded recommendation grounded in declared intelligence inputs."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    action: RecommendationText
+    reason: RecommendationReason
+    priority: RecommendationPriority
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    depends_on: tuple[RecommendationDependency, ...] = Field(
+        min_length=0,
+        max_length=5,
+    )
+
+    @field_validator("depends_on", mode="before")
+    @classmethod
+    def normalise_dependencies(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @field_validator("action")
+    @classmethod
+    def reject_operational_actions(cls, value: str) -> str:
+        if _PROHIBITED_RECOMMENDATION_PATTERN.search(value):
+            raise ValueError(
+                "Recommendations must not create CRM updates, emails, tasks or automation.",
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_dependencies(self) -> RecommendedAction:
+        if len(self.depends_on) != len(set(self.depends_on)):
+            raise ValueError("Recommendation dependencies must be unique.")
+        return self
+
+
+class NextBestActionArtifactContent(BaseModel):
+    """Strict immutable Next Best Action schema version 1."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        str_strip_whitespace=True,
+    )
+
+    overall_recommendation: RecommendationText
+    priority: RecommendationPriority
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    reasoning: tuple[RecommendationReason, ...] = Field(
+        min_length=1,
+        max_length=NEXT_BEST_ACTION_REASONING_MAX_COUNT,
+    )
+    recommended_actions: tuple[RecommendedAction, ...] = Field(
+        min_length=1,
+        max_length=NEXT_BEST_ACTION_MAX_COUNT,
+    )
+
+    @field_validator("reasoning", "recommended_actions", mode="before")
+    @classmethod
+    def normalise_json_arrays(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def validate_recommendation_consistency(self) -> NextBestActionArtifactContent:
+        primary = self.recommended_actions[0]
+        if self.overall_recommendation != primary.action:
+            raise ValueError("The overall recommendation must match the first recommended action.")
+        if self.priority != primary.priority:
+            raise ValueError("The overall priority must match the first recommended action.")
+        normalised_actions = [item.action.casefold() for item in self.recommended_actions]
+        if len(normalised_actions) != len(set(normalised_actions)):
+            raise ValueError("Recommended actions must be unique.")
+        return self
+
+    def as_json(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+
+class NextBestActionSource(BaseModel):
+    """Validated intelligence composition context with no transcript field."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+    )
+
+    executive_summary: ExecutiveSummaryArtifactContent
+    buying_signals: BuyingSignalsArtifactContent
+    objections: ObjectionsCompetitiveSignalsArtifactContent
+    stakeholders: StakeholderIntelligenceArtifactContent
+    decisions: DecisionsArtifactContent
+    action_items: ActionItemsArtifactContent
+    open_questions: OpenQuestionsArtifactContent
+    risks: RisksBlockersArtifactContent
 
 
 FollowUpEmailTone = Literal["professional", "friendly", "executive"]

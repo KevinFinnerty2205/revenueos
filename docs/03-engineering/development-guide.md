@@ -57,7 +57,7 @@ claimed job attempt and accepts values from 1 to 5.
 To exercise the product flow, create a meeting with an authorised plain-text
 transcript no longer than 50,000 characters, open its **Intelligence** tab and
 select **Generate Meeting Intelligence**. The workspace queues missing
-Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions,
+Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions,
 Action Items, Risks & Blockers and Open Questions jobs, then queues Follow-up
 Email after its four source
 sections are ready. One
@@ -67,7 +67,7 @@ and Regenerate remain available. No API key or external network access is
 required. Enabling OpenAI sends the rendered
 extractor instructions and selected transcript to OpenAI; Buying Signals adds
 qualitative current-meeting momentum, Objections adds qualitative current-meeting
-pressure and Stakeholder Intelligence adds cautious current-meeting roles and
+pressure, Stakeholder Intelligence adds cautious current-meeting roles and
 coverage without predictive scoring, a relationship graph or CRM identity. Follow-up Email sends
 only its validated customer-safe artefact projection and tone. Use only
 synthetic non-sensitive data and follow
@@ -75,7 +75,8 @@ the [manual smoke procedure](openai-provider-integration.md#manual-non-productio
 never put an actual key value in shell history, screenshots or repository files.
 
 WO-005 adds no migration. WO-006A adds `0013_buying_signals`, WO-006B adds
-`0014_objections` and WO-006C adds `0015_stakeholders`, each widening only the job and artefact type checks. Direct
+`0014_objections`, WO-006C adds `0015_stakeholders` and WO-006D adds
+`0016_next_best_action`, each widening only the job and artefact type checks. Direct
 aggregate API testing uses
 `GET /api/v1/meetings/{meetingId}/intelligence`; orchestration uses POST on the
 same path plus `/generate`. See
@@ -141,6 +142,10 @@ those artefacts/jobs before restoring the Buying Signals-era checks.
 Migration `0015_stakeholders` widens the same checks for Stakeholder
 Intelligence without adding a table, column, policy or index. Its downgrade
 deletes only those artefacts/jobs before restoring the Objections-era checks.
+
+Migration `0016_next_best_action` widens the same checks for Next Best Action
+without adding a table, column, policy or index. Its downgrade deletes only
+those artefacts/jobs before restoring the Stakeholder Intelligence-era checks.
 
 WO-004C1A requires no migration because the existing trace fields already
 represent provider, model, request ID, usage and cost/currency metadata.

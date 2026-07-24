@@ -19,6 +19,7 @@ from revenueos.ai_contracts import (
     EXECUTIVE_SUMMARY_SCHEMA_VERSION,
     EXECUTIVE_SUMMARY_TRANSCRIPT_MAX_LENGTH,
     FOLLOW_UP_EMAIL_SCHEMA_VERSION,
+    NEXT_BEST_ACTION_SCHEMA_VERSION,
     OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_VERSION,
     OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     OPEN_QUESTIONS_SCHEMA_VERSION,
@@ -32,6 +33,7 @@ from revenueos.ai_contracts import (
     DecisionsArtifactContent,
     ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
+    NextBestActionArtifactContent,
     ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
@@ -48,6 +50,8 @@ from revenueos.ai_prompt_registry import (
     EXECUTIVE_SUMMARY_PROMPT_VERSION,
     FOLLOW_UP_EMAIL_PROMPT_KEY,
     FOLLOW_UP_EMAIL_PROMPT_VERSION,
+    NEXT_BEST_ACTION_PROMPT_KEY,
+    NEXT_BEST_ACTION_PROMPT_VERSION,
     OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_KEY,
     OBJECTIONS_COMPETITIVE_SIGNALS_PROMPT_VERSION,
     OPEN_QUESTIONS_PROMPT_KEY,
@@ -74,6 +78,7 @@ from revenueos.intelligence_contracts import (
     MeetingIntelligenceExecutiveSummaryResponse,
     MeetingIntelligenceFollowUpEmailResponse,
     MeetingIntelligenceGenerationResponse,
+    MeetingIntelligenceNextBestActionResponse,
     MeetingIntelligenceObjectionsCompetitiveSignalsResponse,
     MeetingIntelligenceOpenQuestionsResponse,
     MeetingIntelligenceOverallState,
@@ -81,6 +86,7 @@ from revenueos.intelligence_contracts import (
     MeetingIntelligenceResponse,
     MeetingIntelligenceRisksBlockersResponse,
     MeetingIntelligenceStakeholderIntelligenceResponse,
+    NextBestActionContentResponse,
     ObjectionsCompetitiveSignalsContentResponse,
     OpenQuestionsContentResponse,
     RisksBlockersContentResponse,
@@ -96,6 +102,7 @@ CapabilityName = Literal[
     "buying_signals",
     "objections_competitive_signals",
     "stakeholder_intelligence",
+    "next_best_action",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -225,6 +232,16 @@ CAPABILITIES = (
         OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     ),
     CapabilityConfiguration(
+        "next_best_action",
+        AIJobType.NEXT_BEST_ACTION.value,
+        AIArtifactType.NEXT_BEST_ACTION.value,
+        NEXT_BEST_ACTION_PROMPT_KEY,
+        NEXT_BEST_ACTION_PROMPT_VERSION,
+        NEXT_BEST_ACTION_SCHEMA_VERSION,
+        "Next Best Action",
+        None,
+    ),
+    CapabilityConfiguration(
         "follow_up_email",
         AIJobType.FOLLOW_UP_EMAIL.value,
         AIArtifactType.FOLLOW_UP_EMAIL.value,
@@ -250,6 +267,16 @@ FOLLOW_UP_EMAIL_PREREQUISITES: tuple[CapabilityName, ...] = (
     "executive_summary",
     "decisions",
     "action_items",
+    "open_questions",
+)
+NEXT_BEST_ACTION_PREREQUISITES: tuple[CapabilityName, ...] = (
+    "executive_summary",
+    "buying_signals",
+    "objections_competitive_signals",
+    "stakeholder_intelligence",
+    "decisions",
+    "action_items",
+    "risks_blockers",
     "open_questions",
 )
 
@@ -329,6 +356,42 @@ class MeetingIntelligenceService:
 
         await self._reset_tenant_context()
         intermediate, snapshots = await self._read_workspace(meeting_id)
+        next_best_action_ready = all(snapshots[name].state == "completed" for name in NEXT_BEST_ACTION_PREREQUISITES)
+        next_best_action_state = snapshots["next_best_action"].state
+        if next_best_action_ready and next_best_action_state in {
+            "not_generated",
+            "failed",
+            "cancelled",
+        }:
+            logger.info(
+                "next_best_action_prerequisites_satisfied",
+                extra=self._log_context(meeting_id, intermediate),
+            )
+            await self._reset_tenant_context()
+            next_best_action_result = await self.capabilities.request_next_best_action(meeting_id)
+            self._record_orchestration_result(
+                meeting_id,
+                "next_best_action",
+                next_best_action_result,
+                created,
+                reused,
+            )
+        elif next_best_action_state in {
+            "queued",
+            "processing",
+            "completed",
+        }:
+            reused.append("next_best_action")
+            logger.info(
+                "meeting_intelligence_orchestration_reused_job",
+                extra={
+                    "organisation_id": str(self.tenant.organisation_id),
+                    "meeting_id": str(meeting_id),
+                    "job_type": AIJobType.NEXT_BEST_ACTION.value,
+                    "reused_count": 1,
+                },
+            )
+
         prerequisites_ready = all(snapshots[name].state == "completed" for name in FOLLOW_UP_EMAIL_PREREQUISITES)
         email_state = snapshots["follow_up_email"].state
         if prerequisites_ready and email_state in {
@@ -429,12 +492,36 @@ class MeetingIntelligenceService:
             return self._response(unavailable, transcript_usable=False), unavailable
 
         snapshots: dict[CapabilityName, CapabilitySnapshot] = {}
-        for configuration in CAPABILITIES[:-1]:
+        for name in EXTRACTION_NAMES:
+            configuration = CONFIG_BY_NAME[name]
             snapshots[configuration.name] = self._snapshot(
                 configuration,
                 selected_jobs[configuration.name],
                 artifacts_by_job,
                 generation_available_when_empty=True,
+            )
+        next_best_action_prerequisites_ready = all(
+            snapshots[name].state == "completed" for name in NEXT_BEST_ACTION_PREREQUISITES
+        )
+        next_best_action_configuration = CONFIG_BY_NAME["next_best_action"]
+        next_best_action_job = selected_jobs["next_best_action"]
+        if next_best_action_job is None and not next_best_action_prerequisites_ready:
+            snapshots["next_best_action"] = CapabilitySnapshot(
+                state="unavailable",
+                generation_available=False,
+                message=("This section will be recommended after all validated Meeting Intelligence inputs are ready."),
+                generated_at=None,
+                empty_result=False,
+                content=None,
+                tone=None,
+                job=None,
+            )
+        else:
+            snapshots["next_best_action"] = self._snapshot(
+                next_best_action_configuration,
+                next_best_action_job,
+                artifacts_by_job,
+                generation_available_when_empty=(next_best_action_prerequisites_ready),
             )
         prerequisites_ready = all(snapshots[name].state == "completed" for name in FOLLOW_UP_EMAIL_PREREQUISITES)
         email_configuration = CONFIG_BY_NAME["follow_up_email"]
@@ -562,6 +649,12 @@ class MeetingIntelligenceService:
                 StakeholderIntelligenceContentResponse.model_validate(stakeholders),
                 len(stakeholders.stakeholders) == 0,
             )
+        if name == "next_best_action":
+            recommendation = NextBestActionArtifactContent.model_validate(artifact.content_json)
+            return (
+                NextBestActionContentResponse.model_validate(recommendation),
+                False,
+            )
         if name == "decisions":
             decisions = DecisionsArtifactContent.model_validate(artifact.content_json)
             return DecisionsContentResponse.model_validate(decisions), len(decisions.decisions) == 0
@@ -665,6 +758,12 @@ class MeetingIntelligenceService:
                     "content": snapshots["stakeholder_intelligence"].content,
                 }
             ),
+            next_best_action=MeetingIntelligenceNextBestActionResponse.model_validate(
+                {
+                    **self._capability_fields(snapshots["next_best_action"]),
+                    "content": snapshots["next_best_action"].content,
+                }
+            ),
             decisions=MeetingIntelligenceDecisionsResponse.model_validate(
                 {
                     **self._capability_fields(snapshots["decisions"]),
@@ -758,7 +857,8 @@ class MeetingIntelligenceService:
         transcript: Transcript | None,
     ) -> dict[CapabilityName, CapabilitySnapshot]:
         snapshots: dict[CapabilityName, CapabilitySnapshot] = {}
-        for configuration in CAPABILITIES[:-1]:
+        for name in EXTRACTION_NAMES:
+            configuration = CONFIG_BY_NAME[name]
             snapshots[configuration.name] = CapabilitySnapshot(
                 state="unavailable",
                 generation_available=False,
@@ -769,6 +869,19 @@ class MeetingIntelligenceService:
                 tone=None,
                 job=None,
             )
+        snapshots["next_best_action"] = CapabilitySnapshot(
+            state="unavailable",
+            generation_available=False,
+            message=(
+                "Add a usable transcript and generate all validated Meeting "
+                "Intelligence inputs before requesting Next Best Action."
+            ),
+            generated_at=None,
+            empty_result=False,
+            content=None,
+            tone=None,
+            job=None,
+        )
         snapshots["follow_up_email"] = CapabilitySnapshot(
             state="unavailable",
             generation_available=False,

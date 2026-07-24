@@ -774,7 +774,7 @@ def test_api_queues_concurrently_persists_and_aggregates_product_safe_results(
         assert forbidden not in completed.text
 
     aggregate = client.get(base).json()
-    assert aggregate["progress"]["total"] == 9
+    assert aggregate["progress"]["total"] == 10
     assert aggregate["progress"]["ready"] == 1
     assert aggregate["stakeholderIntelligence"]["state"] == "completed"
     assert aggregate["stakeholderIntelligence"]["content"] == content

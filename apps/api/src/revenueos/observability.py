@@ -62,6 +62,15 @@ class JSONFormatter(logging.Formatter):
             "not_generated_count",
             "created_count",
             "reused_count",
+            "source_artifact_count",
+            "buying_signal_count",
+            "objection_count",
+            "stakeholder_count",
+            "decision_count",
+            "action_item_count",
+            "open_question_count",
+            "risk_count",
+            "recommendation_count",
         )
         for key in safe_metadata_keys:
             value = getattr(record, key, None)

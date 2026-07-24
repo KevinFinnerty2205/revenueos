@@ -163,7 +163,7 @@ Decisions, Action Items, Risks & Blockers and Open Questions. Follow-up Email is
 the ninth capability and remains a separate composition. Its four prerequisites
 and artefact-only provider input are unchanged; Stakeholder Intelligence is
 neither a prerequisite nor an input. Aggregate progress therefore uses
-`total=9` while retaining the bounded four-query read path.
+`total=10` after WO-006D while retaining the bounded four-query read path.
 
 The responsive Stakeholders section appears after Objections & Competitive
 Signals and before Decisions. It shows the textual summary, current-meeting

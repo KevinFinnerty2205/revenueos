@@ -14,6 +14,7 @@ import type {
   ExecutiveSummaryContent,
   MeetingIntelligenceCapability,
   MeetingIntelligenceResponse,
+  NextBestActionContent,
   ObjectionsCompetitiveSignalsContent,
   OpenQuestionsContent,
   RisksBlockersContent,
@@ -200,6 +201,25 @@ const emailContent = {
   tone: "professional" as const,
   confidence: 0.92,
 };
+const nextBestActionContent: NextBestActionContent = {
+  overallRecommendation: "Identify the economic buyer.",
+  priority: "high",
+  confidence: 0.94,
+  reasoning: [
+    "Buying Signals: decision_maker_missing.",
+    "Stakeholders: economic_buyer:not_identified.",
+  ],
+  recommendedActions: [
+    {
+      action: "Identify the economic buyer.",
+      reason:
+        "Buying Signals: decision_maker_missing. Stakeholders: economic_buyer:not_identified.",
+      priority: "high",
+      confidence: 0.94,
+      dependsOn: ["buying_signals", "stakeholders"],
+    },
+  ],
+};
 
 function notStartedWorkspace(): MeetingIntelligenceResponse {
   return {
@@ -212,9 +232,9 @@ function notStartedWorkspace(): MeetingIntelligenceResponse {
       queued: 0,
       processing: 0,
       failed: 0,
-      notGenerated: 9,
-      total: 9,
-      summary: "0 of 9 ready",
+      notGenerated: 10,
+      total: 10,
+      summary: "0 of 10 ready",
     },
     executiveSummary: capability("not_generated"),
     buyingSignals: capability("not_generated"),
@@ -224,6 +244,9 @@ function notStartedWorkspace(): MeetingIntelligenceResponse {
     actionItems: capability("not_generated"),
     risksBlockers: capability("not_generated"),
     openQuestions: capability("not_generated"),
+    nextBestAction: capability<NextBestActionContent>("unavailable", null, {
+      generationAvailable: false,
+    }),
     followUpEmail: {
       ...capability("unavailable", null, { generationAvailable: false }),
       tone: null,
@@ -242,8 +265,8 @@ function queuedWorkspace(): MeetingIntelligenceResponse {
       queued: 8,
       processing: 0,
       failed: 0,
-      notGenerated: 1,
-      total: 9,
+      notGenerated: 2,
+      total: 10,
       summary: "8 sections queued",
     },
     executiveSummary: capability<ExecutiveSummaryContent>("queued", null, {
@@ -283,13 +306,13 @@ function completedWorkspace(): MeetingIntelligenceResponse {
     retryAvailable: false,
     lastUpdatedAt: "2026-07-20T01:00:00Z",
     progress: {
-      ready: 9,
+      ready: 10,
       queued: 0,
       processing: 0,
       failed: 0,
       notGenerated: 0,
-      total: 9,
-      summary: "9 of 9 ready",
+      total: 10,
+      summary: "10 of 10 ready",
     },
     executiveSummary: capability("completed", summaryContent),
     buyingSignals: capability("completed", buyingSignalsContent),
@@ -299,6 +322,7 @@ function completedWorkspace(): MeetingIntelligenceResponse {
     actionItems: capability("completed", actionItemsContent),
     risksBlockers: capability("completed", risksContent),
     openQuestions: capability("completed", questionsContent),
+    nextBestAction: capability("completed", nextBestActionContent),
     followUpEmail: {
       ...capability("completed", emailContent, { generationAvailable: true }),
       tone: "professional",
@@ -338,7 +362,7 @@ describe("MeetingIntelligenceWorkspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Meeting Intelligence" }),
     ).toBeVisible();
-    expect(screen.getByText("0 of 9 ready")).toBeVisible();
+    expect(screen.getByText("0 of 10 ready")).toBeVisible();
     const sectionNames = screen
       .getAllByRole("heading", { level: 3 })
       .map((heading) => heading.textContent);
@@ -347,6 +371,7 @@ describe("MeetingIntelligenceWorkspace", () => {
       "Buying Signals & Deal Momentum",
       "Objections & Competitive Signals",
       "Stakeholders",
+      "Next Best Action",
       "Key Decisions",
       "Action Items",
       "Risks & Blockers",
@@ -409,7 +434,7 @@ describe("MeetingIntelligenceWorkspace", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3_000);
     });
-    expect(screen.getByText("9 of 9 ready")).toBeVisible();
+    expect(screen.getByText("10 of 10 ready")).toBeVisible();
     expect(String(fetchMock.mock.calls[2]?.[0])).toContain(
       "previousOverallState=processing",
     );
@@ -477,6 +502,32 @@ describe("MeetingIntelligenceWorkspace", () => {
     expect(screen.queryByText(/win probability/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/deal score/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/deal will close/i)).not.toBeInTheDocument();
+  });
+
+  it("renders grounded next actions without operational controls", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(completedWorkspace())),
+    );
+
+    render(<MeetingIntelligenceWorkspace meetingId="meeting-1" />);
+
+    const section = await screen.findByRole("article", {
+      name: "Next Best Action",
+    });
+    expect(within(section).getByText("Overall Recommendation")).toBeVisible();
+    expect(
+      within(section).getAllByText("Identify the economic buyer."),
+    ).toHaveLength(2);
+    expect(within(section).getByText("Reasoning")).toBeVisible();
+    expect(within(section).getByText("Recommended Actions")).toBeVisible();
+    expect(within(section).getAllByText("94%")).toHaveLength(2);
+    expect(within(section).getByText("High priority")).toBeVisible();
+    expect(
+      within(section).getByText("Buying Signals, Stakeholders"),
+    ).toBeVisible();
+    expect(within(section).queryByRole("button")).not.toBeInTheDocument();
+    expect(section).not.toHaveTextContent(/crm|automation|send email/i);
   });
 
   it("renders objection and competitor evidence without predictive scoring", async () => {
@@ -694,8 +745,8 @@ describe("MeetingIntelligenceWorkspace", () => {
         queued: 7,
         processing: 1,
         failed: 0,
-        notGenerated: 1,
-        total: 9 as const,
+        notGenerated: 2,
+        total: 10 as const,
         summary: "Generating 1 section",
       },
       objectionsCompetitiveSignals:
@@ -770,7 +821,7 @@ describe("MeetingIntelligenceWorkspace", () => {
     ).toHaveAttribute("role", "alert");
   });
 
-  it("queues Follow-up Email only after the aggregate read marks prerequisites ready", async () => {
+  it("queues both validated composers only after the aggregate read marks prerequisites ready", async () => {
     const prerequisitesReady = {
       ...completedWorkspace(),
       overallState: "partially_generated" as const,
@@ -780,10 +831,13 @@ describe("MeetingIntelligenceWorkspace", () => {
         queued: 0,
         processing: 0,
         failed: 0,
-        notGenerated: 1,
-        total: 9 as const,
-        summary: "8 of 9 ready",
+        notGenerated: 2,
+        total: 10 as const,
+        summary: "8 of 10 ready",
       },
+      nextBestAction: capability<NextBestActionContent>("not_generated", null, {
+        generationAvailable: true,
+      }),
       followUpEmail: {
         ...capability("not_generated", null, { generationAvailable: true }),
         tone: null,
@@ -795,18 +849,21 @@ describe("MeetingIntelligenceWorkspace", () => {
       generationAvailable: false,
       progress: {
         ready: 8,
-        queued: 1,
+        queued: 2,
         processing: 0,
         failed: 0,
         notGenerated: 0,
-        total: 9 as const,
-        summary: "1 section queued",
+        total: 10 as const,
+        summary: "2 sections queued",
       },
+      nextBestAction: capability<NextBestActionContent>("queued", null, {
+        generationAvailable: false,
+      }),
       followUpEmail: {
         ...capability("queued", null, { generationAvailable: false }),
         tone: "professional" as const,
       },
-      createdCapabilities: ["follow_up_email"],
+      createdCapabilities: ["next_best_action", "follow_up_email"],
       reusedCapabilities: [
         "executive_summary",
         "buying_signals",
@@ -826,7 +883,7 @@ describe("MeetingIntelligenceWorkspace", () => {
 
     render(<MeetingIntelligenceWorkspace meetingId="meeting-1" />);
 
-    expect(await screen.findByText("1 section queued")).toBeVisible();
+    expect(await screen.findByText("2 sections queued")).toBeVisible();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("POST");
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
@@ -841,13 +898,13 @@ describe("MeetingIntelligenceWorkspace", () => {
       generationAvailable: true,
       retryAvailable: true,
       progress: {
-        ready: 8,
+        ready: 9,
         queued: 0,
         processing: 0,
         failed: 1,
         notGenerated: 0,
-        total: 9 as const,
-        summary: "8 ready · 1 failed",
+        total: 10 as const,
+        summary: "9 ready · 1 failed",
       },
       risksBlockers: capability("failed", null, {
         generationAvailable: true,
@@ -1010,12 +1067,12 @@ describe("MeetingIntelligenceWorkspace", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     rerender(<MeetingIntelligenceWorkspace meetingId="meeting-2" />);
 
-    expect(await screen.findByText("9 of 9 ready")).toBeVisible();
+    expect(await screen.findByText("10 of 10 ready")).toBeVisible();
     await act(async () => {
       resolveFirst?.(jsonResponse(queuedWorkspace()));
       await Promise.resolve();
     });
-    expect(screen.getByText("9 of 9 ready")).toBeVisible();
+    expect(screen.getByText("10 of 10 ready")).toBeVisible();
     expect(screen.queryByText("8 sections queued")).not.toBeInTheDocument();
   });
 

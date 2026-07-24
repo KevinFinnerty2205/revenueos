@@ -11,9 +11,10 @@ The provider-neutral seam supports two implementations:
 
 Together they support the existing `infrastructure_test`, `executive_summary`,
 `decisions`, `action_items`, `risks_blockers`, `open_questions`, `buying_signals`,
-`objections_competitive_signals`, `stakeholder_intelligence` and
+`objections_competitive_signals`, `stakeholder_intelligence`,
+`next_best_action` and
 `follow_up_email` contracts where explicitly allowed. Executive Summary,
-Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions, Action Items,
+Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions, Action Items,
 Risks & Blockers, Open Questions and Follow-up Email
 are the only customer-facing AI capabilities. There is no provider UI, tenant-
 managed credential, additional vendor, tool use, streaming or automatic
@@ -22,7 +23,8 @@ provider fallback.
 Selecting OpenAI sends the rendered Executive Summary, Buying Signals,
 Objections & Competitive Signals, Stakeholder Intelligence, Decisions, Action Items,
 Risks & Blockers or Open Questions prompt and bounded meeting transcript to
-OpenAI. Follow-up Email sends only the validated Executive Summary, Decisions,
+OpenAI. Next Best Action sends only the eight validated extraction artefacts.
+Follow-up Email sends only the validated Executive Summary, Decisions,
 Action Items and Open Questions projection plus tone; its typed provider input
 has no transcript field. The default mock makes no network call. See
 [OpenAI provider integration](openai-provider-integration.md) for the external
@@ -104,6 +106,11 @@ people, evidence-backed roles, influence, stance, current-meeting engagement and
 independent fixed-role coverage. It returns a cautious insufficient-evidence
 result when unsupported and never creates a graph, identity match or score.
 
+For Next Best Action the mock deterministically prioritises missing buyer
+coverage, technical risk, weak next steps, high-priority questions and material
+blockers from the eight validated source artefacts. It never accepts transcript
+or Follow-up Email input and never creates an operational action.
+
 For Follow-up Email the mock copies the validated customer-safe source fields
 exactly, applies stable generic framing for each of the three tones and never
 accepts transcript or Risks & Blockers input.
@@ -144,7 +151,8 @@ stored.
 
 1. Claim and commit a tenant-owned job.
 2. Resolve the job prompt/schema and load the exact pinned transcript for an
-   extractor or four validated artefacts for Follow-up Email in a short tenant
+   extractor, eight validated artefacts for Next Best Action or four validated
+   artefacts for Follow-up Email in a short tenant
    transaction.
 3. Build the validated provider request with the registry-derived schema.
 4. Resolve exactly the configured provider/model.

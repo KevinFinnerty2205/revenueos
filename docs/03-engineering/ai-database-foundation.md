@@ -122,6 +122,11 @@ Intelligence. Its downgrade deletes only those artefacts/jobs before restoring
 the Objections-era checks and preserves the same tenant keys, forced RLS,
 indexes and SQLite trace/immutability triggers.
 
+Revision `0016_next_best_action` widens only those checks for Next Best Action.
+Its downgrade deletes only those artefacts/jobs before restoring the
+Stakeholder Intelligence-era checks and preserves the same tenant keys, forced
+RLS, indexes and SQLite trace/immutability triggers.
+
 ## Known limitations
 
 - Only infrastructure-test, Executive Summary, Buying Signals, Objections &

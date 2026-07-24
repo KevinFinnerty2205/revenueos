@@ -202,7 +202,7 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await expect(
     page.getByRole("heading", { name: "Meeting Intelligence" }),
   ).toBeVisible();
-  await expect(page.getByText("0 of 9 ready")).toBeVisible();
+  await expect(page.getByText("0 of 10 ready")).toBeVisible();
 
   await page
     .getByRole("button", { name: "Generate Meeting Intelligence" })
@@ -210,7 +210,9 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await expect(
     page.getByText(/Generating 8 sections|8 sections queued/),
   ).toBeVisible();
-  await expect(page.getByText("9 of 9 ready")).toBeVisible({ timeout: 12_000 });
+  await expect(page.getByText("10 of 10 ready")).toBeVisible({
+    timeout: 12_000,
+  });
   await expect(
     page
       .getByRole("article", { name: "Buying Signals & Deal Momentum" })
@@ -242,6 +244,21 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await expect(page.getByText(/crm action/i)).toHaveCount(0);
   await expect(
     page
+      .getByRole("article", { name: "Next Best Action" })
+      .getByText("Identify the economic buyer.", { exact: true })
+      .first(),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("article", { name: "Next Best Action" })
+      .getByText("94%", { exact: true })
+      .first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: "Next Best Action" }).getByRole("button"),
+  ).toHaveCount(0);
+  await expect(
+    page
       .getByRole("article", { name: "Key Decisions" })
       .getByText("Proceed with the pilot.", { exact: true }),
   ).toBeVisible();
@@ -270,7 +287,12 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await page.getByRole("button", { name: "Copy" }).click();
   await expect(page.getByText("Email copied to clipboard.")).toBeVisible();
   await expect(page.getByRole("button", { name: /send/i })).toHaveCount(0);
-  if (process.env.CAPTURE_WO_006C_SCREENSHOT === "1") {
+  if (process.env.CAPTURE_WO_006D_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-006d-next-best-action.png",
+      fullPage: true,
+    });
+  } else if (process.env.CAPTURE_WO_006C_SCREENSHOT === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-006c-stakeholder-intelligence.png",
       fullPage: true,
@@ -294,7 +316,7 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
 
   await page.reload();
   await page.getByRole("tab", { name: "Intelligence" }).click();
-  await expect(page.getByText("9 of 9 ready")).toBeVisible();
+  await expect(page.getByText("10 of 10 ready")).toBeVisible();
   await expect(
     page
       .getByRole("article", { name: "Key Decisions" })
@@ -356,9 +378,9 @@ function workspace(
       : stage === "email"
         ? "queued"
         : "unavailable";
-  const ready = stage === "completed" ? 9 : contentReady ? 8 : 0;
+  const ready = stage === "completed" ? 10 : contentReady ? 8 : 0;
   const processing = stage === "extractions" ? 8 : 0;
-  const queued = stage === "email" ? 1 : 0;
+  const queued = stage === "email" ? 2 : 0;
   return {
     overallState:
       stage === "not_started"
@@ -378,18 +400,18 @@ function workspace(
       queued,
       processing,
       failed: 0,
-      notGenerated: 9 - ready - queued - processing,
-      total: 9,
+      notGenerated: 10 - ready - queued - processing,
+      total: 10,
       summary:
         stage === "not_started"
-          ? "0 of 9 ready"
+          ? "0 of 10 ready"
           : stage === "extractions"
             ? "Generating 8 sections"
             : stage === "prerequisites"
-              ? "8 of 9 ready"
+              ? "8 of 10 ready"
               : stage === "email"
-                ? "1 section queued"
-                : "9 of 9 ready",
+                ? "2 sections queued"
+                : "10 of 10 ready",
     },
     executiveSummary: capability(
       extractionState,
@@ -553,6 +575,36 @@ function workspace(
           }
         : null,
     ),
+    nextBestAction: capability(
+      stage === "completed"
+        ? "completed"
+        : stage === "email"
+          ? "queued"
+          : contentReady
+            ? "not_generated"
+            : "unavailable",
+      stage === "completed"
+        ? {
+            overallRecommendation: "Identify the economic buyer.",
+            priority: "high",
+            confidence: 0.94,
+            reasoning: [
+              "Buying Signals: decision_maker_missing.",
+              "Stakeholders: economic_buyer:not_identified.",
+            ],
+            recommendedActions: [
+              {
+                action: "Identify the economic buyer.",
+                reason:
+                  "Buying Signals: decision_maker_missing. Stakeholders: economic_buyer:not_identified.",
+                priority: "high",
+                confidence: 0.94,
+                dependsOn: ["buying_signals", "stakeholders"],
+              },
+            ],
+          }
+        : null,
+    ),
     followUpEmail: {
       ...capability(
         emailState,
@@ -598,7 +650,7 @@ function generationWorkspace(
             "open_questions",
           ]
         : stage === "email"
-          ? ["follow_up_email"]
+          ? ["next_best_action", "follow_up_email"]
           : [],
     reusedCapabilities: [],
   };

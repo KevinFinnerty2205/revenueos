@@ -116,7 +116,7 @@ def test_provider_messages_are_strict_bounded_and_immutable() -> None:
     for values in (
         {"role": "assistant", "content": "Not supported."},
         {"role": "system", "content": ""},
-        {"role": "system", "content": "x" * 60_001},
+        {"role": "system", "content": "x" * 250_001},
         {"role": "system", "content": "Safe.", "unexpected": True},
     ):
         with pytest.raises(ValidationError):

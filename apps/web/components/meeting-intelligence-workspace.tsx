@@ -13,6 +13,7 @@ import type {
   MeetingIntelligenceGenerationResponse,
   MeetingIntelligenceOverallState,
   MeetingIntelligenceResponse,
+  NextBestActionContent,
   OpenQuestionsContent,
   ObjectionsCompetitiveSignalsContent,
   RisksBlockersContent,
@@ -31,6 +32,7 @@ const capabilityEndpoints: Record<MeetingIntelligenceCapabilityName, string> = {
   buying_signals: "buying-signals",
   objections_competitive_signals: "objections-competitive-signals",
   stakeholder_intelligence: "stakeholders",
+  next_best_action: "next-best-action",
   decisions: "decisions",
   action_items: "action-items",
   risks_blockers: "risks-blockers",
@@ -108,7 +110,7 @@ export function MeetingIntelligenceWorkspace({
         );
         if (stopped || sequence !== requestSequence.current) return;
 
-        if (shouldQueueFollowUpEmail(next)) {
+        if (shouldQueueComposers(next)) {
           next = await apiRequest<MeetingIntelligenceGenerationResponse>(
             `/api/v1/meetings/${meetingId}/intelligence/generate`,
             { method: "POST", signal: controller.signal },
@@ -296,8 +298,8 @@ export function MeetingIntelligenceWorkspace({
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
               Turn the current meeting transcript into a clear summary, buying
               signals, objections, competitive context, decisions, actions,
-              stakeholder context, risks, open questions and a customer-ready
-              follow-up.
+              stakeholder context, risks, open questions, a recommended next
+              move and a customer-ready follow-up.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <p role="status" aria-live="polite" className="font-bold">
@@ -396,6 +398,18 @@ export function MeetingIntelligenceWorkspace({
         />
       </CapabilitySection>
 
+      <CapabilitySection
+        id="next-best-action"
+        title="Next Best Action"
+        capability={workspace.nextBestAction}
+        busy={capabilityBusy === "next_best_action"}
+        notGeneratedMessage="The recommendation will be composed after all validated Meeting Intelligence inputs are ready."
+        onRequest={() => void requestCapability("next_best_action")}
+        showRequest={false}
+      >
+        <NextBestActionView content={workspace.nextBestAction.content} />
+      </CapabilitySection>
+
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <CapabilitySection
           id="decisions"
@@ -466,6 +480,7 @@ function CapabilitySection({
   busy,
   notGeneratedMessage,
   onRequest,
+  showRequest = true,
   children,
 }: {
   id: string;
@@ -474,6 +489,7 @@ function CapabilitySection({
   busy: boolean;
   notGeneratedMessage?: string;
   onRequest: () => void;
+  showRequest?: boolean;
   children: ReactNode;
 }) {
   const active =
@@ -534,7 +550,7 @@ function CapabilitySection({
         </p>
       ) : null}
 
-      {requestAvailable ? (
+      {requestAvailable && showRequest ? (
         <button
           type="button"
           className="secondary-button mt-5"
@@ -924,6 +940,85 @@ function stakeholderRoleLabel(
   return `Likely ${humanise(role)}`;
 }
 
+function NextBestActionView({
+  content,
+}: {
+  content: NextBestActionContent | null;
+}) {
+  if (!content) return <MissingContent />;
+  return (
+    <div className="mt-5">
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 sm:p-5">
+        <h4 className="text-xs font-bold uppercase tracking-wide text-emerald-800">
+          Overall Recommendation
+        </h4>
+        <p className="mt-2 text-lg font-bold leading-7 text-slate-950">
+          {content.overallRecommendation}
+        </p>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+          <Detail label="Priority">{humanise(content.priority)}</Detail>
+          <Detail label="Confidence">
+            {formatConfidence(content.confidence)}
+          </Detail>
+        </dl>
+      </div>
+
+      <section className="mt-6" aria-labelledby="recommendation-reasoning">
+        <h4
+          id="recommendation-reasoning"
+          className="text-sm font-bold text-slate-950"
+        >
+          Reasoning
+        </h4>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
+          {content.reasoning.map((reason, index) => (
+            <li key={`${index}-${reason}`}>{reason}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mt-7" aria-labelledby="recommended-actions">
+        <h4
+          id="recommended-actions"
+          className="text-sm font-bold text-slate-950"
+        >
+          Recommended Actions
+        </h4>
+        <ol className="mt-2 divide-y divide-slate-100">
+          {content.recommendedActions.map((recommendation, index) => (
+            <li
+              key={`${index}-${recommendation.action}`}
+              className="py-5 first:pt-3 last:pb-0"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <p className="text-sm font-bold leading-6 text-slate-950">
+                  {recommendation.action}
+                </p>
+                <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800">
+                  {humanise(recommendation.priority)} priority
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate-700">
+                {recommendation.reason}
+              </p>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Detail label="Confidence">
+                  {formatConfidence(recommendation.confidence)}
+                </Detail>
+                <Detail label="Depends on">
+                  {recommendation.dependsOn
+                    .map((dependency) => humanise(dependency))
+                    .join(", ")}
+                </Detail>
+              </dl>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
+  );
+}
+
 function DecisionsView({ content }: { content: DecisionsContent | null }) {
   if (!content) return <MissingContent />;
   if (content.decisions.length === 0)
@@ -1187,8 +1282,8 @@ function EmailList({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function shouldQueueFollowUpEmail(workspace: MeetingIntelligenceResponse) {
-  return (
+function shouldQueueComposers(workspace: MeetingIntelligenceResponse) {
+  const followUpEmailReady =
     workspace.followUpEmail.state === "not_generated" &&
     workspace.followUpEmail.generationAvailable &&
     [
@@ -1196,8 +1291,21 @@ function shouldQueueFollowUpEmail(workspace: MeetingIntelligenceResponse) {
       workspace.decisions,
       workspace.actionItems,
       workspace.openQuestions,
-    ].every((capability) => capability.state === "completed")
-  );
+    ].every((capability) => capability.state === "completed");
+  const nextBestActionReady =
+    workspace.nextBestAction.state === "not_generated" &&
+    workspace.nextBestAction.generationAvailable &&
+    [
+      workspace.executiveSummary,
+      workspace.buyingSignals,
+      workspace.objectionsCompetitiveSignals,
+      workspace.stakeholderIntelligence,
+      workspace.decisions,
+      workspace.actionItems,
+      workspace.risksBlockers,
+      workspace.openQuestions,
+    ].every((capability) => capability.state === "completed");
+  return followUpEmailReady || nextBestActionReady;
 }
 
 function isActive(workspace: MeetingIntelligenceResponse) {

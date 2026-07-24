@@ -6,8 +6,8 @@ WO-004A2 adds the internal tenant-scoped job/artefact application layer.
 WO-004C1 extends it with Executive Summary; WO-004C2 adds independent
 current-transcript Decisions; WO-004C3 adds Action Items; WO-004C4 adds
 Risks & Blockers; WO-004C5 adds Open Questions; WO-006A adds Buying Signals;
-WO-006B adds Objections & Competitive Signals and WO-006C adds Stakeholder
-Intelligence request/state rules and typed
+WO-006B adds Objections & Competitive Signals, WO-006C adds Stakeholder
+Intelligence and WO-006D adds Next Best Action request/state rules and typed
 append-only artefacts. WO-004C6 adds Follow-up Email request/state rules
 over four validated source artefacts, with no transcript-content query. Only those
 product-safe capabilities are exposed through the
@@ -24,6 +24,8 @@ Migration `0005_ai_domain_services` extends the existing meeting audit event wit
 - latest-job lookup and paginated meeting history;
 - Follow-up Email active-equivalence/count lookup and current transcript audit-
   version metadata lookup;
+- Next Best Action active-equivalence/count lookup and exact eight-artefact
+  source-trace lookup;
 - idempotency lookup by organisation, meeting, transcript version, job type and key;
 - explicit lifecycle metadata updates;
 - deterministic pending-eligibility and stale-running queries; and
@@ -34,6 +36,7 @@ Migration `0005_ai_domain_services` extends the existing meeting audit event wit
 - append-only creation and organisation-scoped retrieval by ID;
 - latest artefact lookup by meeting, transcript version and type;
 - exact four-artefact Follow-up Email source loading and source-version lookup;
+- exact eight-artefact Next Best Action source loading and source-version lookup;
 - logical version and per-job listings; and
 - calculation of the next logical artefact version.
 
@@ -57,7 +60,8 @@ Repositories always require an organisation ID and add an explicit organisation 
 
 - requires a same-tenant job and matching meeting/transcript/version trace;
 - accepts only registered `infrastructure_test`, `executive_summary`,
-  `buying_signals`, `objections_competitive_signals`, `decisions`,
+  `buying_signals`, `objections_competitive_signals`, `stakeholder_intelligence`,
+  `next_best_action`, `decisions`,
   `action_items`, `risks_blockers`, `open_questions` or `follow_up_email`,
   schema version 1;
 - persists only the Pydantic-validated JSON representation;
@@ -73,6 +77,12 @@ tone and queues composition. Equivalent active work is reused; a completed
 draft can create a deliberate new append-only job. Completion validates the
 strict Follow-up Email schema and pinned job trace without calling the ordinary
 transcript-content trace loader.
+
+The Next Best Action service requires all eight current-version extraction
+artefacts, validates their prompt/schema and transcript trace without reading
+transcript content, and excludes Follow-up Email. Equivalent active/completed
+work is reused. Completion validates strict schema v1 plus exact-reference
+grounding before append-only persistence.
 
 Cross-tenant identifiers are indistinguishable from missing resources. Services return safe domain codes and messages and never expose database/provider exception text.
 
@@ -147,12 +157,12 @@ Every service starts with trusted `TenantContext`. Every repository read/write h
 ## Known limitations and extension points
 
 - Generic AI lifecycle work remains internal; only the Executive Summary,
-  Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions, Action Items,
+  Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions, Action Items,
   Risks & Blockers, Open Questions and Follow-up Email
   request/state resources are public.
 - Worker claiming, leases, retry scheduling and cancellation execution support
   infrastructure tests, Executive Summary, Buying Signals, Objections &
-  Competitive Signals, Stakeholder Intelligence, Decisions, Action Items, Risks & Blockers, Open
+  Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions, Action Items, Risks & Blockers, Open
   Questions and Follow-up Email.
 - The configured provider may be mock or OpenAI; there is no email-send
   integration or later Meeting Intelligence capability.

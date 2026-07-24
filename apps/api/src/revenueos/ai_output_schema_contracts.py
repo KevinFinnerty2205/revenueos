@@ -41,6 +41,7 @@ class OutputSchemaDefinition(BaseModel):
         "buying_signals",
         "objections_competitive_signals",
         "stakeholder_intelligence",
+        "next_best_action",
         "follow_up_email",
     ]
     validation_model: type[BaseModel]

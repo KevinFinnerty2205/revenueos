@@ -6,7 +6,7 @@ WO-004C1A adds the first external AI adapter behind the existing
 provider-neutral boundary. The separately deployed worker can run the existing
 Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions,
 Action Items, Risks & Blockers,
-Open Questions and Follow-up Email through either the deterministic `mock` provider or the
+Open Questions, Next Best Action and Follow-up Email through either the deterministic `mock` provider or the
 server-only `openai` provider. Selection is process
 configuration; there is no
 browser setting, tenant credential, model selector or fallback provider.
@@ -19,7 +19,8 @@ no OpenAI credential and make no external call.
 > Decisions, Action Items, Risks &
 > Blockers or Open Questions instructions and selected meeting transcript to OpenAI. Follow-up
 > Email sends only the validated customer-safe four-artefact projection and
-> selected tone; its path never queries or transmits transcript text. Do not
+> selected tone. Next Best Action sends only the eight validated extraction
+> artefacts. Neither composer queries or transmits transcript text. Do not
 > enable it with production customer content until production
 > identity, consent, retention, deletion, provider privacy and operational
 > controls are approved.
@@ -31,7 +32,7 @@ converts the provider-neutral ordered `system`/`user` messages to Responses API
 input and requests a strict `json_schema` text format. The JSON Schema is
 generated directly from the matching registered Pydantic Executive Summary,
 Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions, Action Items,
-Risks & Blockers, Open Questions or Follow-up Email
+Risks & Blockers, Open Questions, Next Best Action or Follow-up Email
 schema v1; there is no second vendor-specific product schema.
 
 The adapter disables response storage with `store=false`, requests no tools,
@@ -70,7 +71,8 @@ validation or provider construction.
 
 1. The API queues the tenant-owned supported intelligence job.
 2. For the eight extractors, the worker loads the exact pinned transcript in a
-   short tenant-bound transaction. For Follow-up Email, it loads only the exact
+   short tenant-bound transaction. For Next Best Action, it loads only the
+   eight validated extraction artefacts. For Follow-up Email, it loads only the exact
    four validated artefacts and checks content-free transcript-version audit
    metadata; it never loads transcript text.
 3. The transaction closes and cancellation is checked before provider
@@ -158,7 +160,7 @@ retain their original provider/model trace.
 
 - Only Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence,
   Decisions, Action Items, Risks &
-  Blockers, Open Questions and Follow-up Email use the real adapter;
+  Blockers, Open Questions, Next Best Action and Follow-up Email use the real adapter;
   infrastructure test and unknown job types are rejected before SDK
   invocation.
 - There is no pricing source, budget enforcement or accurate cost estimate.

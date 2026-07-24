@@ -6,6 +6,10 @@ from uuid import UUID
 
 from pydantic import Field
 
+from revenueos.ai_contracts import (
+    RecommendationDependency,
+    RecommendationPriority,
+)
 from revenueos.contracts import APIModel
 from revenueos.domain import (
     ActionItemPriority,
@@ -236,6 +240,58 @@ class StakeholderIntelligenceResponse(APIModel):
     generated_at: datetime | None
     safe_message: str | None
     stakeholder_intelligence: StakeholderIntelligenceContentResponse | None
+
+
+NextBestActionState = Literal[
+    "empty",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+]
+
+
+class RecommendedActionResponse(APIModel):
+    action: str
+    reason: str
+    priority: RecommendationPriority
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    depends_on: list[RecommendationDependency]
+
+
+class NextBestActionContentResponse(APIModel):
+    overall_recommendation: str
+    priority: RecommendationPriority
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    reasoning: list[str]
+    recommended_actions: list[RecommendedActionResponse] = Field(
+        min_length=1,
+        max_length=5,
+    )
+
+
+class NextBestActionRequestResponse(APIModel):
+    job_id: UUID
+    status: Literal["queued", "running", "completed"]
+    created: bool
+    transcript_version: int = Field(ge=1)
+    requested_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class NextBestActionResponse(APIModel):
+    state: NextBestActionState
+    generation_available: bool
+    unavailable_reason: str | None
+    job_id: UUID | None
+    transcript_version: int | None = Field(default=None, ge=1)
+    requested_at: datetime | None
+    started_at: datetime | None
+    generated_at: datetime | None
+    safe_message: str | None
+    next_best_action: NextBestActionContentResponse | None
 
 
 DecisionsState = Literal[
@@ -477,6 +533,7 @@ MeetingIntelligenceCapabilityName = Literal[
     "buying_signals",
     "objections_competitive_signals",
     "stakeholder_intelligence",
+    "next_best_action",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -537,6 +594,12 @@ class MeetingIntelligenceStakeholderIntelligenceResponse(
     content: StakeholderIntelligenceContentResponse | None
 
 
+class MeetingIntelligenceNextBestActionResponse(
+    MeetingIntelligenceCapabilityResponse,
+):
+    content: NextBestActionContentResponse | None
+
+
 class MeetingIntelligenceDecisionsResponse(MeetingIntelligenceCapabilityResponse):
     content: DecisionsContentResponse | None
 
@@ -567,12 +630,12 @@ class MeetingIntelligenceFollowUpEmailResponse(
 
 
 class MeetingIntelligenceProgressResponse(APIModel):
-    ready: int = Field(ge=0, le=9)
-    queued: int = Field(ge=0, le=9)
-    processing: int = Field(ge=0, le=9)
-    failed: int = Field(ge=0, le=9)
-    not_generated: int = Field(ge=0, le=9)
-    total: Literal[9] = 9
+    ready: int = Field(ge=0, le=10)
+    queued: int = Field(ge=0, le=10)
+    processing: int = Field(ge=0, le=10)
+    failed: int = Field(ge=0, le=10)
+    not_generated: int = Field(ge=0, le=10)
+    total: Literal[10] = 10
     summary: str
 
 
@@ -586,6 +649,7 @@ class MeetingIntelligenceResponse(APIModel):
     buying_signals: MeetingIntelligenceBuyingSignalsResponse
     objections_competitive_signals: MeetingIntelligenceObjectionsCompetitiveSignalsResponse
     stakeholder_intelligence: MeetingIntelligenceStakeholderIntelligenceResponse
+    next_best_action: MeetingIntelligenceNextBestActionResponse
     decisions: MeetingIntelligenceDecisionsResponse
     action_items: MeetingIntelligenceActionItemsResponse
     risks_blockers: MeetingIntelligenceRisksBlockersResponse
