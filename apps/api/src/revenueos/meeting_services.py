@@ -58,6 +58,31 @@ class _MeetingDomainService:
         if await self.repository.get_contact(self.tenant.organisation_id, contact_id) is None:
             raise self._not_found("contact")
 
+    async def _require_opportunity(self, opportunity_id: UUID) -> UUID | None:
+        opportunity = await self.repository.get_opportunity(
+            self.tenant.organisation_id,
+            opportunity_id,
+        )
+        if opportunity is None:
+            raise self._not_found("opportunity")
+        return opportunity.company_id
+
+    @staticmethod
+    def _require_consistent_company(
+        meeting_company_id: UUID | None,
+        opportunity_company_id: UUID | None,
+    ) -> None:
+        if (
+            meeting_company_id is not None
+            and opportunity_company_id is not None
+            and meeting_company_id != opportunity_company_id
+        ):
+            raise PublicAPIError(
+                "inconsistent_relationship",
+                "The meeting and opportunity must refer to the same company.",
+                422,
+            )
+
     async def _require_member(self, user_id: UUID, field_name: str) -> None:
         if not await self.repository.membership_exists(self.tenant.organisation_id, user_id):
             raise PublicAPIError(
@@ -177,6 +202,9 @@ class MeetingService(_MeetingDomainService):
         await self._require_member(owner_user_id, "ownerUserId")
         if request.company_id is not None:
             await self._require_company(request.company_id)
+        if request.opportunity_id is not None:
+            opportunity_company_id = await self._require_opportunity(request.opportunity_id)
+            self._require_consistent_company(request.company_id, opportunity_company_id)
         for participant_request in request.participants:
             if participant_request.contact_id is not None:
                 await self._require_contact(participant_request.contact_id)
@@ -189,6 +217,7 @@ class MeetingService(_MeetingDomainService):
             meeting_type=request.meeting_type.value,
             status=request.status.value,
             company_id=request.company_id,
+            opportunity_id=request.opportunity_id,
             owner_user_id=owner_user_id,
             created_by=self.tenant.user_id,
             updated_by=self.tenant.user_id,
@@ -222,6 +251,7 @@ class MeetingService(_MeetingDomainService):
                         "meeting_type",
                         "status",
                         "company_id",
+                        "opportunity_id",
                         "owner_user_id",
                     ],
                 )
@@ -271,6 +301,14 @@ class MeetingService(_MeetingDomainService):
         values = request.model_dump(exclude_unset=True)
         if "company_id" in values and values["company_id"] is not None:
             await self._require_company(values["company_id"])
+        opportunity_company_id = None
+        opportunity_id = values.get("opportunity_id", meeting.opportunity_id)
+        if opportunity_id is not None:
+            opportunity_company_id = await self._require_opportunity(opportunity_id)
+        self._require_consistent_company(
+            values.get("company_id", meeting.company_id),
+            opportunity_company_id,
+        )
         if "owner_user_id" in values:
             await self._require_member(values["owner_user_id"], "ownerUserId")
         meeting.updated_by = self.tenant.user_id

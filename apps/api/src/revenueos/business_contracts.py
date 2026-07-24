@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, ClassVar
 from uuid import UUID
@@ -15,7 +15,13 @@ from pydantic import (
 )
 
 from revenueos.contracts import APIModel
-from revenueos.domain import CompanyStatus, OpportunityStage, TaskPriority, TaskStatus
+from revenueos.domain import (
+    CompanyStatus,
+    OpportunityStage,
+    OpportunityStatus,
+    TaskPriority,
+    TaskStatus,
+)
 
 Name200 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 Name100 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
@@ -120,25 +126,29 @@ class ContactResponse(APIModel):
 
 
 class OpportunityCreate(APIModel):
-    company_id: UUID
+    company_id: UUID | None = None
     name: Name200
     stage: OpportunityStage = OpportunityStage.DISCOVERY
-    value: Decimal = Field(default=Decimal("0"), ge=0, max_digits=18, decimal_places=2)
-    currency: CurrencyCode = "AUD"
-    probability: int = Field(default=0, ge=0, le=100)
+    status: OpportunityStatus = OpportunityStatus.OPEN
+    estimated_value: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=2)
+    currency: CurrencyCode | None = None
     expected_close_date: date | None = None
     owner_user_id: UUID | None = None
+    description: Description | None = None
+
+    @model_validator(mode="after")
+    def validate_value_currency(self) -> OpportunityCreate:
+        if (self.estimated_value is None) != (self.currency is None):
+            raise ValueError("estimatedValue and currency must be supplied together.")
+        return self
 
 
 class OpportunityUpdate(UpdateRequest):
     required_when_present = frozenset(
         {
-            "company_id",
             "name",
             "stage",
-            "value",
-            "currency",
-            "probability",
+            "status",
             "owner_user_id",
         }
     )
@@ -146,24 +156,44 @@ class OpportunityUpdate(UpdateRequest):
     company_id: UUID | None = None
     name: Name200 | None = None
     stage: OpportunityStage | None = None
-    value: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=2)
+    status: OpportunityStatus | None = None
+    estimated_value: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=2)
     currency: CurrencyCode | None = None
-    probability: int | None = Field(default=None, ge=0, le=100)
     expected_close_date: date | None = None
     owner_user_id: UUID | None = None
+    description: Description | None = None
+    expected_updated_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_value_currency(self) -> OpportunityUpdate:
+        if "expected_updated_at" in self.model_fields_set:
+            value = self.expected_updated_at
+            if value is None:
+                raise ValueError("expectedUpdatedAt cannot be null.")
+            if value.utcoffset() is None:
+                self.expected_updated_at = value.replace(tzinfo=UTC)
+        changed = self.model_fields_set - {"expected_updated_at"}
+        if not changed:
+            raise ValueError("At least one opportunity field must be supplied.")
+        if ("estimated_value" in changed) != ("currency" in changed):
+            raise ValueError("estimatedValue and currency must be updated together.")
+        if "estimated_value" in changed and ((self.estimated_value is None) != (self.currency is None)):
+            raise ValueError("estimatedValue and currency must be supplied together.")
+        return self
 
 
 class OpportunityResponse(APIModel):
     id: UUID
     organisation_id: UUID
-    company_id: UUID
+    company_id: UUID | None
     name: str
     stage: OpportunityStage
-    value: Decimal
-    currency: str
-    probability: int
+    status: OpportunityStatus
+    estimated_value: Decimal | None
+    currency: str | None
     expected_close_date: date | None
     owner_user_id: UUID
+    description: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -6,6 +6,7 @@ import type {
   Meeting,
   MeetingAuditEvent,
   MeetingParticipant,
+  Opportunity,
   Transcript,
 } from "@revenueos/shared";
 import Link from "next/link";
@@ -36,6 +37,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [history, setHistory] = useState<MeetingAuditEvent[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [activeTab, setActiveTab] = useState<MeetingTab>("overview");
   const [transcriptText, setTranscriptText] = useState("");
   const [language, setLanguage] = useState("en");
@@ -48,14 +50,17 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
 
   const loadMeeting = useCallback(
     async (signal: AbortSignal) => {
+      const loadedMeeting = await apiRequest<Meeting>(
+        `/api/v1/meetings/${meetingId}`,
+        { signal },
+      );
       const [
-        loadedMeeting,
         loadedParticipants,
         loadedTranscript,
         loadedHistory,
         companyPage,
+        loadedOpportunity,
       ] = await Promise.all([
-        apiRequest<Meeting>(`/api/v1/meetings/${meetingId}`, { signal }),
         apiRequest<MeetingParticipant[]>(
           `/api/v1/meetings/${meetingId}/participants`,
           { signal },
@@ -68,6 +73,12 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
         apiRequest<EntityPage<Company>>("/api/v1/companies?pageSize=100", {
           signal,
         }),
+        loadedMeeting.opportunityId
+          ? apiRequest<Opportunity>(
+              `/api/v1/opportunities/${loadedMeeting.opportunityId}`,
+              { signal },
+            )
+          : Promise.resolve(null),
       ]);
       return {
         meeting: loadedMeeting,
@@ -75,6 +86,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
         transcript: loadedTranscript,
         history: loadedHistory,
         companies: companyPage.items,
+        opportunity: loadedOpportunity,
       };
     },
     [meetingId],
@@ -89,6 +101,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
         setTranscript(loaded.transcript);
         setHistory(loaded.history);
         setCompanies(loaded.companies);
+        setOpportunity(loaded.opportunity);
         setTranscriptText(loaded.transcript?.rawText ?? "");
         setLanguage(loaded.transcript?.language ?? "en");
       })
@@ -299,6 +312,18 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
                 {formatMeetingDate(meeting.meetingDate)}
               </Detail>
               <Detail label="Company">{companyName}</Detail>
+              <Detail label="Opportunity">
+                {opportunity ? (
+                  <Link
+                    href={`/opportunities/${opportunity.id}`}
+                    className="font-bold text-teal-700 hover:text-teal-900"
+                  >
+                    {opportunity.name}
+                  </Link>
+                ) : (
+                  "No opportunity"
+                )}
+              </Detail>
               <Detail label="Type">{humanise(meeting.meetingType)}</Detail>
               <Detail label="Status">{humanise(meeting.status)}</Detail>
               <Detail label="Description" fullWidth>

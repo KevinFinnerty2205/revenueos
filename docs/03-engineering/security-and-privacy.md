@@ -129,6 +129,22 @@ completion locks, composite tenant keys or forced RLS. The provider adapter has
 no database access. Cross-tenant API, worker and PostgreSQL tests remain
 authoritative.
 
+WO-007 Opportunity Workspace derives all organisation context from verified
+authentication. Opportunity, company, meeting, job and artefact reads retain
+explicit organisation predicates and forced RLS; composite foreign keys prevent
+cross-tenant company or meeting association even if service validation regresses.
+Association writes lock the meeting and reject stale timestamps. The workspace
+selects transcript ID/version metadata only, never transcript text, and performs
+no provider call or job creation.
+
+Opportunity audits and telemetry are metadata only. They may contain tenant,
+opportunity and meeting identifiers, action, changed-field names, counts and
+timestamps. They must not contain opportunity names or descriptions,
+stakeholder names, objections, decisions, action text, risks, questions, email
+content, transcript content, prompts or provider output. The aggregate response
+also excludes prompt/schema/provider/model labels and operational job fields.
+See [Opportunity Workspace](opportunity-workspace.md).
+
 ## Secrets
 
 Environment examples contain names and local-only placeholders. Real credentials belong in environment-specific managed secret stores. Production startup rejects mock auth or incomplete Clerk verification configuration.

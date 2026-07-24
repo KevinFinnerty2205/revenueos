@@ -332,6 +332,164 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   expect(hasHorizontalOverflow).toBe(false);
 });
 
+test("opportunity workspace persists an associated meeting and composes stored intelligence", async ({
+  page,
+}) => {
+  let associated = false;
+
+  await page.route(
+    "http://localhost:8000/api/v1/opportunities**",
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith("/workspace")) {
+        await route.fulfill({ json: opportunityWorkspace(associated) });
+        return;
+      }
+      if (path.endsWith("/opportunity-1")) {
+        await route.fulfill({ json: opportunity() });
+        return;
+      }
+      if (request.method() === "POST") {
+        await route.fulfill({ status: 201, json: opportunity() });
+        return;
+      }
+      await route.fulfill({
+        json: { items: [], page: 1, pageSize: 20, total: 0, pages: 0 },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/companies**",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: "company-1",
+              organisationId: "organisation-1",
+              name: "Acme Australia",
+              website: null,
+              industry: null,
+              employeeCount: null,
+              status: "prospect",
+              ownerUserId: "user-1",
+              createdAt: "2026-07-20T00:00:00Z",
+              updatedAt: "2026-07-20T00:00:00Z",
+            },
+          ],
+          page: 1,
+          pageSize: 100,
+          total: 1,
+          pages: 1,
+        },
+      });
+    },
+  );
+  await page.route("http://localhost:8000/api/v1/meetings**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith("/opportunity") && request.method() === "PATCH") {
+      associated = true;
+      await route.fulfill({ json: opportunityMeeting() });
+      return;
+    }
+    if (path.endsWith("/participants") || path.endsWith("/history")) {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    if (path.endsWith("/transcript")) {
+      await route.fulfill({
+        json: {
+          id: "transcript-1",
+          organisationId: "organisation-1",
+          meetingId: "meeting-1",
+          rawText: "Synthetic authorised test transcript.",
+          language: "en-AU",
+          version: 1,
+          source: "manual",
+          createdAt: "2026-07-20T00:00:00Z",
+          updatedAt: "2026-07-20T00:00:00Z",
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/meeting-1")) {
+      await route.fulfill({ json: opportunityMeeting() });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        items: [
+          {
+            ...opportunityMeeting(),
+            opportunityId: associated ? "opportunity-1" : null,
+          },
+        ],
+        page: 1,
+        pageSize: 100,
+        total: 1,
+        pages: 1,
+      },
+    });
+  });
+
+  await page.goto("/opportunities");
+  await expect(
+    page.getByRole("heading", { name: "Opportunities" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Create opportunity" }).first().click();
+  await page.getByLabel("Company").selectOption("company-1");
+  await page.getByLabel("Opportunity name").fill("Platform expansion");
+  await page.getByLabel("Stage").selectOption("proposal");
+  await page.getByLabel("Estimated value").fill("125000.50");
+  await page.getByLabel("Currency").selectOption("AUD");
+  await page.getByLabel("Expected close date").fill("2026-09-30");
+  await page.getByRole("button", { name: "Create opportunity" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Platform expansion" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "No meetings associated" }),
+  ).toBeVisible();
+  await page.getByLabel("Meeting", { exact: true }).selectOption("meeting-1");
+  await page.getByRole("button", { name: "Associate meeting" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Latest Next Best Action" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Identify the economic buyer.", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Expansion review" }),
+  ).toHaveAttribute("href", "/meetings/meeting-1");
+
+  await page.getByRole("button", { name: "Refresh workspace" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Latest Next Best Action" }),
+  ).toBeVisible();
+  for (const prohibited of [
+    "probability",
+    "forecast",
+    "provider",
+    "prompt",
+    "worker",
+  ]) {
+    await expect(page.getByText(new RegExp(prohibited, "i"))).toHaveCount(0);
+  }
+
+  await page
+    .getByRole("link", { name: "Open latest meeting intelligence" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Pilot readiness review" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Platform expansion" }),
+  ).toHaveAttribute("href", "/opportunities/opportunity-1");
+});
+
 function meeting() {
   return {
     id: "meeting-1",
@@ -347,6 +505,64 @@ function meeting() {
     updatedBy: "user-1",
     createdAt: "2026-07-20T00:00:00Z",
     updatedAt: "2026-07-20T00:00:00Z",
+  };
+}
+
+function opportunity() {
+  return {
+    id: "opportunity-1",
+    organisationId: "organisation-1",
+    companyId: "company-1",
+    name: "Platform expansion",
+    stage: "proposal",
+    status: "open",
+    estimatedValue: "125000.50",
+    currency: "AUD",
+    expectedCloseDate: "2026-09-30",
+    ownerUserId: "user-1",
+    description: null,
+    createdAt: "2026-07-20T00:00:00Z",
+    updatedAt: "2026-07-24T00:00:00Z",
+  };
+}
+
+function opportunityMeeting() {
+  return {
+    ...meeting(),
+    title: "Pilot readiness review",
+    companyId: "company-1",
+    opportunityId: "opportunity-1",
+    updatedAt: "2026-07-24T00:00:00Z",
+  };
+}
+
+function opportunityWorkspace(hasMeeting: boolean) {
+  const summary = {
+    id: "meeting-1",
+    title: "Expansion review",
+    meetingDate: "2026-07-20T00:00:00Z",
+    status: "completed",
+    companyId: "company-1",
+    companyName: "Acme Australia",
+    participantCount: 2,
+    transcriptAvailable: true,
+    transcriptVersion: 1,
+    intelligenceReadiness: "ready",
+    intelligenceSectionsAvailable: 10,
+    updatedAt: "2026-07-24T00:00:00Z",
+  };
+  return {
+    opportunity: {
+      ...opportunity(),
+      companyName: "Acme Australia",
+      ownerName: "Alex Morgan",
+    },
+    latestMeeting: hasMeeting ? summary : null,
+    recentMeetings: hasMeeting ? [summary] : [],
+    intelligence: hasMeeting ? workspace("completed") : null,
+    intelligenceSectionsAvailable: hasMeeting ? 10 : 0,
+    partialData: false,
+    generatedAt: "2026-07-24T00:00:08Z",
   };
 }
 

@@ -29,6 +29,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "companies",
         "contacts",
         "opportunities",
+        "opportunity_audit_events",
         "tasks",
         "meetings",
         "meeting_participants",
@@ -158,11 +159,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         text(
                             """
                             INSERT INTO opportunities
-                                (id, organisation_id, company_id, name, stage, value,
-                                 currency, probability, owner_user_id)
+                                (id, organisation_id, company_id, name, stage, status,
+                                 estimated_value, currency, owner_user_id)
                             VALUES
                                 (:opportunity_id, :organisation_id, :company_id,
-                                 :opportunity_name, 'discovery', :value, 'AUD', 20, :user_id)
+                                 :opportunity_name, 'discovery', 'open', :value, 'AUD', :user_id)
                             """
                         ),
                         {
@@ -513,6 +514,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 for table in (
                     "ai_artifacts",
                     "ai_jobs",
+                    "opportunity_audit_events",
                     "meeting_audit_events",
                     "transcripts",
                     "meeting_participants",

@@ -164,11 +164,7 @@ class BusinessRepository:
         statement = select(Opportunity).where(*conditions)
         if sort_by == "value":
             statement = statement.order_by(
-                Opportunity.value.desc() if sort_order == "desc" else Opportunity.value.asc()
-            )
-        elif sort_by == "probability":
-            statement = statement.order_by(
-                Opportunity.probability.desc() if sort_order == "desc" else Opportunity.probability.asc()
+                Opportunity.estimated_value.desc() if sort_order == "desc" else Opportunity.estimated_value.asc()
             )
         elif sort_by == "expected_close_date":
             statement = statement.order_by(
@@ -197,13 +193,16 @@ class BusinessRepository:
         self,
         organisation_id: UUID,
         opportunity_id: UUID,
+        *,
+        for_update: bool = False,
     ) -> Opportunity | None:
-        result = await self.session.execute(
-            select(Opportunity).where(
-                Opportunity.organisation_id == organisation_id,
-                Opportunity.id == opportunity_id,
-            )
+        statement = select(Opportunity).where(
+            Opportunity.organisation_id == organisation_id,
+            Opportunity.id == opportunity_id,
         )
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
     async def list_tasks(
