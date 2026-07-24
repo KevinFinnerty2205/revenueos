@@ -16,6 +16,7 @@ import type {
   OpenQuestionsContent,
   ObjectionsCompetitiveSignalsContent,
   RisksBlockersContent,
+  StakeholderIntelligenceContent,
 } from "@revenueos/shared";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
@@ -29,6 +30,7 @@ const capabilityEndpoints: Record<MeetingIntelligenceCapabilityName, string> = {
   executive_summary: "executive-summary",
   buying_signals: "buying-signals",
   objections_competitive_signals: "objections-competitive-signals",
+  stakeholder_intelligence: "stakeholders",
   decisions: "decisions",
   action_items: "action-items",
   risks_blockers: "risks-blockers",
@@ -294,7 +296,8 @@ export function MeetingIntelligenceWorkspace({
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
               Turn the current meeting transcript into a clear summary, buying
               signals, objections, competitive context, decisions, actions,
-              risks, open questions and a customer-ready follow-up.
+              stakeholder context, risks, open questions and a customer-ready
+              follow-up.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <p role="status" aria-live="polite" className="font-bold">
@@ -377,6 +380,19 @@ export function MeetingIntelligenceWorkspace({
       >
         <ObjectionsCompetitiveSignalsView
           content={workspace.objectionsCompetitiveSignals.content}
+        />
+      </CapabilitySection>
+
+      <CapabilitySection
+        id="stakeholders"
+        title="Stakeholders"
+        capability={workspace.stakeholderIntelligence}
+        busy={capabilityBusy === "stakeholder_intelligence"}
+        notGeneratedMessage="Stakeholder roles have not been analysed for this meeting."
+        onRequest={() => void requestCapability("stakeholder_intelligence")}
+      >
+        <StakeholderIntelligenceView
+          content={workspace.stakeholderIntelligence.content}
         />
       </CapabilitySection>
 
@@ -781,6 +797,132 @@ const signalPolarityClasses = {
   neutral: "border-slate-200 bg-slate-100 text-slate-700",
   negative: "border-amber-300 bg-amber-100 text-amber-900",
 } as const;
+
+const stakeholderCoverageFields = [
+  ["economicBuyer", "Economic Buyer"],
+  ["decisionMaker", "Decision Maker"],
+  ["champion", "Champion"],
+  ["technicalBuyer", "Technical Buyer"],
+  ["procurement", "Procurement"],
+  ["legalSecurity", "Legal / Security"],
+] as const;
+
+function StakeholderIntelligenceView({
+  content,
+}: {
+  content: StakeholderIntelligenceContent | null;
+}) {
+  if (!content) return <MissingContent />;
+  return (
+    <div className="mt-5">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            Stakeholder summary
+          </h4>
+          <p className="text-xs font-medium text-slate-600">
+            Current meeting evidence · {formatConfidence(content.confidence)}
+            confidence
+          </p>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-slate-800">
+          {content.stakeholderSummary}
+        </p>
+      </div>
+
+      <section
+        className="mt-6"
+        aria-labelledby="stakeholder-role-coverage-heading"
+      >
+        <h4
+          id="stakeholder-role-coverage-heading"
+          className="text-sm font-bold text-slate-950"
+        >
+          Role Coverage
+        </h4>
+        <dl className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {stakeholderCoverageFields.map(([field, label]) => (
+            <div
+              key={field}
+              className="rounded-lg border border-slate-200 bg-white p-3"
+            >
+              <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                {label}
+              </dt>
+              <dd className="mt-1 text-sm text-slate-800">
+                {stakeholderCoverageLabel(content.roleCoverage[field])}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      {content.stakeholders.length > 0 ? (
+        <section className="mt-7" aria-labelledby="stakeholder-list-heading">
+          <h4
+            id="stakeholder-list-heading"
+            className="text-sm font-bold text-slate-950"
+          >
+            Stakeholders
+          </h4>
+          <ol className="mt-2 divide-y divide-slate-100">
+            {content.stakeholders.map((stakeholder, index) => (
+              <li
+                key={`${index}-${stakeholder.name}`}
+                className="py-5 first:pt-3 last:pb-0"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold leading-6 text-slate-950">
+                      {stakeholder.name}
+                    </p>
+                    {stakeholder.organisation ? (
+                      <p className="mt-1 text-sm text-slate-600">
+                        {stakeholder.organisation}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800">
+                    {stakeholderRoleLabel(stakeholder.role)}
+                  </span>
+                </div>
+                <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <Detail label="Influence">
+                    {humanise(stakeholder.influence)}
+                  </Detail>
+                  <Detail label="Stance">{humanise(stakeholder.stance)}</Detail>
+                  <Detail label="Engagement">
+                    {humanise(stakeholder.engagement)}
+                  </Detail>
+                  <Detail label="Confidence">
+                    {formatConfidence(stakeholder.confidence)}
+                  </Detail>
+                </dl>
+                <Evidence>{stakeholder.evidence}</Evidence>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function stakeholderCoverageLabel(
+  state: StakeholderIntelligenceContent["roleCoverage"][keyof StakeholderIntelligenceContent["roleCoverage"]],
+) {
+  if (state === "identified") return "Identified in current meeting";
+  if (state === "not_identified") return "Not identified";
+  if (state === "not_discussed") return "Role not discussed";
+  return "Unclear from current meeting";
+}
+
+function stakeholderRoleLabel(
+  role: StakeholderIntelligenceContent["stakeholders"][number]["role"],
+) {
+  if (role === "participant" || role === "unknown") return humanise(role);
+  return `Likely ${humanise(role)}`;
+}
 
 function DecisionsView({ content }: { content: DecisionsContent | null }) {
   if (!content) return <MissingContent />;

@@ -11,16 +11,16 @@ The provider-neutral seam supports two implementations:
 
 Together they support the existing `infrastructure_test`, `executive_summary`,
 `decisions`, `action_items`, `risks_blockers`, `open_questions`, `buying_signals`,
-`objections_competitive_signals` and
+`objections_competitive_signals`, `stakeholder_intelligence` and
 `follow_up_email` contracts where explicitly allowed. Executive Summary,
-Buying Signals, Objections & Competitive Signals, Decisions, Action Items,
+Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions, Action Items,
 Risks & Blockers, Open Questions and Follow-up Email
 are the only customer-facing AI capabilities. There is no provider UI, tenant-
 managed credential, additional vendor, tool use, streaming or automatic
 provider fallback.
 
 Selecting OpenAI sends the rendered Executive Summary, Buying Signals,
-Objections & Competitive Signals, Decisions, Action Items,
+Objections & Competitive Signals, Stakeholder Intelligence, Decisions, Action Items,
 Risks & Blockers or Open Questions prompt and bounded meeting transcript to
 OpenAI. Follow-up Email sends only the validated Executive Summary, Decisions,
 Action Items and Open Questions projection plus tone; its typed provider input
@@ -98,6 +98,11 @@ For Objections & Competitive Signals the mock recognises bounded resistance and
 competitor markers, distinguishes question/risk/politeness-only fixtures,
 normalises handling state and competitive position, and returns empty lists
 when unsupported. It makes no prediction, ranking or scoring claim.
+
+For Stakeholder Intelligence the mock recognises bounded named or anonymous
+people, evidence-backed roles, influence, stance, current-meeting engagement and
+independent fixed-role coverage. It returns a cautious insufficient-evidence
+result when unsupported and never creates a graph, identity match or score.
 
 For Follow-up Email the mock copies the validated customer-safe source fields
 exactly, applies stable generic framing for each of the three tones and never

@@ -591,7 +591,7 @@ def test_api_queues_idempotently_persists_and_aggregates_results(
     assert "providerRequestId" not in completed.text
 
     aggregate = client.get(base).json()
-    assert aggregate["progress"]["total"] == 8
+    assert aggregate["progress"]["total"] == 9
     assert aggregate["progress"]["ready"] == 1
     assert aggregate["objectionsCompetitiveSignals"]["state"] == "completed"
     assert aggregate["objectionsCompetitiveSignals"]["content"] == content

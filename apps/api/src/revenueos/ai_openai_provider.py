@@ -27,6 +27,7 @@ from revenueos.ai_provider_contracts import (
     ProviderRequest,
     ProviderResponse,
     RisksBlockersProviderInput,
+    StakeholderIntelligenceProviderInput,
 )
 from revenueos.ai_provider_errors import (
     InvalidProviderRequestError,
@@ -120,6 +121,7 @@ class OpenAIProvider:
             | type[OpenQuestionsProviderInput]
             | type[BuyingSignalsProviderInput]
             | type[ObjectionsCompetitiveSignalsProviderInput]
+            | type[StakeholderIntelligenceProviderInput]
             | type[FollowUpEmailProviderInput],
         ] = {
             "executive_summary": ExecutiveSummaryProviderInput,
@@ -129,6 +131,7 @@ class OpenAIProvider:
             "open_questions": OpenQuestionsProviderInput,
             "buying_signals": BuyingSignalsProviderInput,
             "objections_competitive_signals": ObjectionsCompetitiveSignalsProviderInput,
+            "stakeholder_intelligence": StakeholderIntelligenceProviderInput,
             "follow_up_email": FollowUpEmailProviderInput,
         }
         expected_input = supported_inputs.get(request.job_type)

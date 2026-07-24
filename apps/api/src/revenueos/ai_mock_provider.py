@@ -36,6 +36,9 @@ from revenueos.ai_contracts import (
     RISK_MAX_LENGTH,
     RISKS_BLOCKERS_MAX_COUNT,
     RISKS_BLOCKERS_SCHEMA_VERSION,
+    STAKEHOLDER_EVIDENCE_MAX_LENGTH,
+    STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+    STAKEHOLDERS_MAX_COUNT,
 )
 from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
@@ -48,6 +51,7 @@ from revenueos.ai_provider_contracts import (
     ProviderRequest,
     ProviderResponse,
     RisksBlockersProviderInput,
+    StakeholderIntelligenceProviderInput,
 )
 from revenueos.ai_provider_errors import (
     InvalidProviderRequestError,
@@ -152,6 +156,11 @@ class DeterministicMockAIProvider:
                 request.input_payload,
                 ObjectionsCompetitiveSignalsProviderInput,
             )
+        if request.job_type == AIJobType.STAKEHOLDER_INTELLIGENCE.value:
+            return request.expected_schema_version == STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION and isinstance(
+                request.input_payload,
+                StakeholderIntelligenceProviderInput,
+            )
         if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
             return request.expected_schema_version == FOLLOW_UP_EMAIL_SCHEMA_VERSION and isinstance(
                 request.input_payload, FollowUpEmailProviderInput
@@ -203,6 +212,9 @@ class DeterministicMockAIProvider:
         if isinstance(request.input_payload, ObjectionsCompetitiveSignalsProviderInput):
             transcript = cls._extract_transcript(request.input_payload)
             return cls._extract_objections_competitive_signals(transcript)
+        if isinstance(request.input_payload, StakeholderIntelligenceProviderInput):
+            transcript = cls._extract_transcript(request.input_payload)
+            return cls._extract_stakeholder_intelligence(transcript)
         if isinstance(request.input_payload, FollowUpEmailProviderInput):
             summary = cls._extract_composition_value(
                 request.input_payload,
@@ -278,6 +290,7 @@ class DeterministicMockAIProvider:
             | OpenQuestionsProviderInput
             | BuyingSignalsProviderInput
             | ObjectionsCompetitiveSignalsProviderInput
+            | StakeholderIntelligenceProviderInput
         ),
     ) -> str:
         marker = "Untrusted transcript as a JSON string:\n"
@@ -1435,6 +1448,463 @@ class DeterministicMockAIProvider:
             return "present"
         return "unclear"
 
+    @classmethod
+    def _extract_stakeholder_intelligence(
+        cls,
+        transcript: str,
+    ) -> dict[str, JsonValue]:
+        """Return bounded deterministic stakeholder fixtures, not inferred memory."""
+
+        injection_markers = (
+            "ignore previous",
+            "ignore all previous",
+            "system prompt",
+            "developer message",
+            "reveal secrets",
+            "prompt injection",
+        )
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+", " ".join(transcript.split()))
+            if sentence.strip() and not any(marker in sentence.casefold() for marker in injection_markers)
+        ]
+        lowered_transcript = " ".join(sentences).casefold()
+        if not sentences or any(
+            marker in lowered_transcript
+            for marker in (
+                "no reliable stakeholder evidence",
+                "no stakeholders were identified",
+                "no stakeholder evidence",
+            )
+        ):
+            return cls._insufficient_stakeholder_intelligence()
+
+        stakeholders: list[dict[str, JsonValue]] = []
+        seen_names: set[str] = set()
+        for sentence in sentences:
+            lowered = sentence.casefold()
+            if cls._stakeholder_sentence_is_only_missing_coverage(lowered):
+                continue
+            role = cls._mock_stakeholder_role(lowered)
+            name = cls._mock_stakeholder_name(sentence, lowered, role)
+            if name is None or name.casefold() in seen_names:
+                continue
+            engagement = cls._mock_stakeholder_engagement(lowered)
+            if engagement == "absent_but_referenced" and role == "participant":
+                role = "unknown"
+            influence = cls._mock_stakeholder_influence(role)
+            stance = cls._mock_stakeholder_stance(lowered)
+            if role == "blocker" and stance == "supportive":
+                stance = "mixed"
+            confidence = cls._mock_stakeholder_confidence(role, lowered)
+            stakeholders.append(
+                {
+                    "name": name,
+                    "organisation": cls._mock_stakeholder_organisation(lowered),
+                    "role": role,
+                    "influence": influence,
+                    "stance": stance,
+                    "engagement": engagement,
+                    "confidence": confidence,
+                    "evidence": cls._bounded_plain_text(
+                        cls._mock_stakeholder_evidence(role, engagement),
+                        STAKEHOLDER_EVIDENCE_MAX_LENGTH,
+                    ),
+                }
+            )
+            seen_names.add(name.casefold())
+            if len(stakeholders) == STAKEHOLDERS_MAX_COUNT:
+                break
+
+        if not stakeholders:
+            return cls._insufficient_stakeholder_intelligence()
+
+        roles = {str(item["role"]) for item in stakeholders}
+        role_coverage = {
+            "economic_buyer": cls._mock_role_coverage(
+                roles,
+                {"economic_buyer"},
+                lowered_transcript,
+                ("economic buyer", "budget approval", "final budget", "cfo", "finance"),
+            ),
+            "decision_maker": cls._mock_role_coverage(
+                roles,
+                {"decision_maker"},
+                lowered_transcript,
+                ("decision maker", "final decision", "final selection", "approve or reject"),
+            ),
+            "champion": cls._mock_role_coverage(
+                roles,
+                {"champion"},
+                lowered_transcript,
+                ("champion", "advocate", "internal support", "present internally"),
+            ),
+            "technical_buyer": cls._mock_role_coverage(
+                roles,
+                {"technical_buyer"},
+                lowered_transcript,
+                ("technical buyer", "technical approval", "architecture approval", "cto"),
+            ),
+            "procurement": cls._mock_role_coverage(
+                roles,
+                {"procurement"},
+                lowered_transcript,
+                ("procurement",),
+            ),
+            "legal_security": cls._mock_role_coverage(
+                roles,
+                {"legal", "security"},
+                lowered_transcript,
+                ("legal", "security"),
+            ),
+        }
+        identified = [key.replace("_", " ") for key, value in role_coverage.items() if value == "identified"]
+        unresolved = [
+            key.replace("_", " ") for key, value in role_coverage.items() if value in {"not_identified", "unclear"}
+        ]
+        if identified:
+            summary = f"Current meeting evidence identifies {', '.join(identified)} involvement."
+        else:
+            summary = "Current meeting evidence identifies relevant participants without a stronger buying role."
+        if unresolved:
+            summary += f" The {', '.join(unresolved)} coverage remains unclear or not identified."
+        confidence_values = [cast(float, item["confidence"]) for item in stakeholders]
+        confidence = round(sum(confidence_values) / len(confidence_values), 2)
+        return {
+            "stakeholders": cast(JsonValue, stakeholders),
+            "role_coverage": cast(JsonValue, role_coverage),
+            "stakeholder_summary": summary,
+            "confidence": confidence,
+        }
+
+    @staticmethod
+    def _stakeholder_sentence_is_only_missing_coverage(content: str) -> bool:
+        missing_markers = (
+            "not identified",
+            "not yet identified",
+            "still need to identify",
+            "do not know who",
+            "don't know who",
+            "unknown who",
+            "unclear who",
+            "not discussed",
+        )
+        if any(marker in content for marker in missing_markers):
+            return True
+        coverage_subjects = (
+            "economic buyer",
+            "decision maker",
+            "champion",
+            "technical buyer",
+            "procurement path",
+            "legal path",
+            "security path",
+        )
+        return any(subject in content for subject in coverage_subjects) and any(
+            marker in content for marker in ("is unclear", "remains unclear", "was unclear")
+        )
+
+    @staticmethod
+    def _mock_stakeholder_role(content: str) -> str:
+        role_markers: tuple[tuple[str, tuple[str, ...]], ...] = (
+            (
+                "economic_buyer",
+                (
+                    "controls final budget",
+                    "controls the final budget",
+                    "final budget approval",
+                    "financial approval authority",
+                    "owns final financial approval",
+                ),
+            ),
+            (
+                "decision_maker",
+                (
+                    "make the final selection",
+                    "makes the final selection",
+                    "will make the final decision",
+                    "has final decision authority",
+                    "can approve or reject",
+                ),
+            ),
+            (
+                "champion",
+                (
+                    "present the proposal internally",
+                    "present it internally",
+                    "secure internal support",
+                    "build internal support",
+                    "advocate internally",
+                    "advocated for the solution",
+                    "acting as champion",
+                ),
+            ),
+            (
+                "blocker",
+                (
+                    "cannot proceed",
+                    "can't proceed",
+                    "could not proceed",
+                    "would prevent",
+                    "will prevent",
+                    "actively blocked",
+                    "deal-breaker",
+                    "deal breaker",
+                ),
+            ),
+            (
+                "technical_buyer",
+                (
+                    "must approve the technical",
+                    "controls technical approval",
+                    "technical architecture approval",
+                    "approve the technical architecture",
+                ),
+            ),
+            (
+                "technical_evaluator",
+                (
+                    "reviewing compatibility",
+                    "review compatibility",
+                    "assess technical fit",
+                    "assessing technical fit",
+                    "technical evaluation",
+                ),
+            ),
+            ("procurement", ("procurement",)),
+            ("legal", ("legal counsel", "legal representative", "legal team")),
+            ("security", ("security director", "security representative", "security team")),
+            ("finance", ("finance representative", "finance team")),
+            ("executive_sponsor", ("executive sponsor",)),
+            ("implementation_owner", ("implementation owner", "owns implementation")),
+            ("vendor_representative", ("vendor representative", "our account executive")),
+            ("end_user", ("end user", "daily user")),
+            (
+                "influencer",
+                (
+                    "provided evaluation feedback",
+                    "shapes the evaluation",
+                    "influences the evaluation",
+                    "influencer",
+                ),
+            ),
+            (
+                "participant",
+                (
+                    "attended",
+                    "asked a feature question",
+                    "asked whether",
+                    "thanked us",
+                    "praised the feature",
+                    "receive a proposal",
+                    "joined the meeting",
+                ),
+            ),
+        )
+        for role, markers in role_markers:
+            if any(marker in content for marker in markers):
+                return role
+        return "unknown"
+
+    @staticmethod
+    def _mock_stakeholder_name(sentence: str, content: str, role: str) -> str | None:
+        named = re.search(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", sentence)
+        if named is not None:
+            candidate = named.group(0)
+            if candidate.casefold() not in {
+                "current meeting",
+                "customer procurement",
+                "customer security",
+                "customer legal",
+            }:
+                return candidate
+        role_labels = (
+            ("chief financial officer", "Customer CFO"),
+            ("cfo", "Customer CFO"),
+            ("chief operating officer", "Customer COO"),
+            ("coo", "Customer COO"),
+            ("chief technology officer", "Customer CTO"),
+            ("cto", "Customer CTO"),
+            ("security director", "Customer security director"),
+            ("architect", "Customer architect"),
+            ("procurement", "Customer procurement representative"),
+            ("legal", "Customer legal representative"),
+            ("security", "Customer security representative"),
+            ("finance", "Customer finance representative"),
+            ("unnamed it", "Unnamed IT stakeholder"),
+            ("it stakeholder", "Unnamed IT stakeholder"),
+        )
+        for marker, label in role_labels:
+            if marker in content:
+                return label
+        if role != "unknown" and any(marker in content for marker in ("customer", "stakeholder", "representative")):
+            return f"Customer {role.replace('_', ' ')}"
+        return None
+
+    @staticmethod
+    def _mock_stakeholder_organisation(content: str) -> str | None:
+        if any(marker in content for marker in ("our account executive", "our vendor", "vendor representative")):
+            return "RevenueOS"
+        if any(marker in content for marker in ("customer", "their ", "cfo", "coo", "cto", "procurement")):
+            return "Customer"
+        return None
+
+    @staticmethod
+    def _mock_stakeholder_engagement(content: str) -> str:
+        if any(
+            marker in content
+            for marker in (
+                "not present",
+                "wasn't present",
+                "was not present",
+                "not in the meeting",
+                "could not attend",
+                "couldn't attend",
+                "absent",
+                "will review later",
+            )
+        ):
+            return "absent_but_referenced"
+        if any(marker in content for marker in ("listened", "observed", "attended quietly", "passive")):
+            return "passive"
+        if any(
+            marker in content
+            for marker in (
+                "said",
+                "stated",
+                "confirmed",
+                "asked",
+                "advocated",
+                "committed",
+                "objected",
+                "presented",
+                "provided",
+            )
+        ):
+            return "active"
+        return "unclear"
+
+    @staticmethod
+    def _mock_stakeholder_stance(content: str) -> str:
+        if any(marker in content for marker in ("mixed stance", "mixed view", "both supported and opposed")):
+            return "mixed"
+        if any(
+            marker in content
+            for marker in (
+                "cannot proceed",
+                "can't proceed",
+                "would prevent",
+                "will prevent",
+                "opposed",
+                "resistant",
+                "rejected",
+                "deal-breaker",
+            )
+        ):
+            return "resistant"
+        if any(
+            marker in content
+            for marker in (
+                "advocated",
+                "secure internal support",
+                "build internal support",
+                "supported the solution",
+                "recommended the solution",
+            )
+        ):
+            return "supportive"
+        if any(marker in content for marker in ("neutral", "provided evaluation feedback", "reviewing")):
+            return "neutral"
+        return "unclear"
+
+    @staticmethod
+    def _mock_stakeholder_influence(role: str) -> str:
+        if role in {"economic_buyer", "decision_maker", "champion", "blocker", "technical_buyer"}:
+            return "high"
+        if role in {
+            "influencer",
+            "technical_evaluator",
+            "procurement",
+            "legal",
+            "security",
+            "finance",
+            "executive_sponsor",
+            "implementation_owner",
+        }:
+            return "medium"
+        if role in {"end_user", "vendor_representative", "participant"}:
+            return "low"
+        return "unclear"
+
+    @staticmethod
+    def _mock_stakeholder_confidence(role: str, content: str) -> float:
+        if role == "unknown":
+            return 0.5
+        if any(marker in content for marker in ("may be", "might be", "possibly", "ambiguous")):
+            return 0.6
+        if role == "participant":
+            return 0.72
+        return 0.9
+
+    @staticmethod
+    def _mock_stakeholder_evidence(role: str, engagement: str) -> str:
+        role_label = role.replace("_", " ")
+        if engagement == "absent_but_referenced":
+            return f"The transcript explicitly references an absent stakeholder with {role_label} evidence."
+        if role == "participant":
+            return "The person participated, but the transcript does not support a stronger buying role."
+        if role == "unknown":
+            return "The person was explicitly referenced, but the transcript does not establish a reliable role."
+        return f"The transcript contains explicit current-meeting evidence supporting the {role_label} classification."
+
+    @staticmethod
+    def _mock_role_coverage(
+        roles: set[str],
+        supported_roles: set[str],
+        transcript: str,
+        markers: tuple[str, ...],
+    ) -> str:
+        if not roles.isdisjoint(supported_roles):
+            return "identified"
+        relevant_fragments = tuple(
+            fragment
+            for fragment in re.split(r"(?<=[.!?])\s+", transcript)
+            if any(marker in fragment for marker in markers)
+        )
+        if not relevant_fragments:
+            return "not_discussed"
+        if any(
+            missing_marker in fragment
+            for fragment in relevant_fragments
+            for missing_marker in (
+                "not identified",
+                "not yet identified",
+                "still need to identify",
+                "do not know who",
+                "don't know who",
+                "unknown who",
+                "missing",
+            )
+        ):
+            return "not_identified"
+        return "unclear"
+
+    @staticmethod
+    def _insufficient_stakeholder_intelligence() -> dict[str, JsonValue]:
+        return {
+            "stakeholders": [],
+            "role_coverage": {
+                "economic_buyer": "not_discussed",
+                "decision_maker": "not_discussed",
+                "champion": "not_discussed",
+                "technical_buyer": "not_discussed",
+                "procurement": "not_discussed",
+                "legal_security": "not_discussed",
+            },
+            "stakeholder_summary": "There was not enough evidence to identify stakeholder roles reliably.",
+            "confidence": 0.3,
+        }
+
     @staticmethod
     def _is_action_request_question(content: str) -> bool:
         if re.match(r"^(?:can|could|would|will)\s+(?:you|we|they)\b", content) is None:
@@ -1760,6 +2230,34 @@ class DeterministicMockAIProvider:
                 "overall_objection_pressure": "certain_loss",
                 "summary": "Too short.",
                 "deal_score": 99,
+            }
+        if request.job_type == AIJobType.STAKEHOLDER_INTELLIGENCE.value:
+            return {
+                "stakeholders": [
+                    {
+                        "name": "",
+                        "organisation": "",
+                        "role": "guru",
+                        "influence": "certain",
+                        "stance": "winning",
+                        "engagement": "always",
+                        "confidence": 2,
+                        "evidence": "",
+                        "deal_score": 99,
+                    }
+                ],
+                "role_coverage": {
+                    "economic_buyer": "certain",
+                    "decision_maker": "identified",
+                    "champion": "identified",
+                    "technical_buyer": "identified",
+                    "procurement": "identified",
+                    "legal_security": "identified",
+                    "forecast": "commit",
+                },
+                "stakeholder_summary": "Too short.",
+                "confidence": 2,
+                "close_probability": 0.9,
             }
         if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
             return {

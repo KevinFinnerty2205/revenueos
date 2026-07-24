@@ -26,6 +26,11 @@ from revenueos.domain import (
     OverallObjectionPressure,
     RiskCategory,
     RiskSeverity,
+    StakeholderCoverageState,
+    StakeholderEngagement,
+    StakeholderInfluence,
+    StakeholderRole,
+    StakeholderStance,
 )
 
 ExecutiveSummaryState = Literal[
@@ -171,6 +176,66 @@ class ObjectionsCompetitiveSignalsResponse(APIModel):
     generated_at: datetime | None
     safe_message: str | None
     objections_competitive_signals: ObjectionsCompetitiveSignalsContentResponse | None
+
+
+StakeholderIntelligenceState = Literal[
+    "empty",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+]
+
+
+class StakeholderItemResponse(APIModel):
+    name: str
+    organisation: str | None
+    role: StakeholderRole
+    influence: StakeholderInfluence
+    stance: StakeholderStance
+    engagement: StakeholderEngagement
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    evidence: str
+
+
+class StakeholderRoleCoverageResponse(APIModel):
+    economic_buyer: StakeholderCoverageState
+    decision_maker: StakeholderCoverageState
+    champion: StakeholderCoverageState
+    technical_buyer: StakeholderCoverageState
+    procurement: StakeholderCoverageState
+    legal_security: StakeholderCoverageState
+
+
+class StakeholderIntelligenceContentResponse(APIModel):
+    stakeholders: list[StakeholderItemResponse]
+    role_coverage: StakeholderRoleCoverageResponse
+    stakeholder_summary: str
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class StakeholderIntelligenceRequestResponse(APIModel):
+    job_id: UUID
+    status: Literal["queued", "running", "completed"]
+    created: bool
+    transcript_version: int = Field(ge=1)
+    requested_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class StakeholderIntelligenceResponse(APIModel):
+    state: StakeholderIntelligenceState
+    generation_available: bool
+    unavailable_reason: str | None
+    job_id: UUID | None
+    transcript_version: int | None = Field(default=None, ge=1)
+    requested_at: datetime | None
+    started_at: datetime | None
+    generated_at: datetime | None
+    safe_message: str | None
+    stakeholder_intelligence: StakeholderIntelligenceContentResponse | None
 
 
 DecisionsState = Literal[
@@ -411,6 +476,7 @@ MeetingIntelligenceCapabilityName = Literal[
     "executive_summary",
     "buying_signals",
     "objections_competitive_signals",
+    "stakeholder_intelligence",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -465,6 +531,12 @@ class MeetingIntelligenceObjectionsCompetitiveSignalsResponse(
     content: ObjectionsCompetitiveSignalsContentResponse | None
 
 
+class MeetingIntelligenceStakeholderIntelligenceResponse(
+    MeetingIntelligenceCapabilityResponse,
+):
+    content: StakeholderIntelligenceContentResponse | None
+
+
 class MeetingIntelligenceDecisionsResponse(MeetingIntelligenceCapabilityResponse):
     content: DecisionsContentResponse | None
 
@@ -495,12 +567,12 @@ class MeetingIntelligenceFollowUpEmailResponse(
 
 
 class MeetingIntelligenceProgressResponse(APIModel):
-    ready: int = Field(ge=0, le=8)
-    queued: int = Field(ge=0, le=8)
-    processing: int = Field(ge=0, le=8)
-    failed: int = Field(ge=0, le=8)
-    not_generated: int = Field(ge=0, le=8)
-    total: Literal[8] = 8
+    ready: int = Field(ge=0, le=9)
+    queued: int = Field(ge=0, le=9)
+    processing: int = Field(ge=0, le=9)
+    failed: int = Field(ge=0, le=9)
+    not_generated: int = Field(ge=0, le=9)
+    total: Literal[9] = 9
     summary: str
 
 
@@ -513,6 +585,7 @@ class MeetingIntelligenceResponse(APIModel):
     executive_summary: MeetingIntelligenceExecutiveSummaryResponse
     buying_signals: MeetingIntelligenceBuyingSignalsResponse
     objections_competitive_signals: MeetingIntelligenceObjectionsCompetitiveSignalsResponse
+    stakeholder_intelligence: MeetingIntelligenceStakeholderIntelligenceResponse
     decisions: MeetingIntelligenceDecisionsResponse
     action_items: MeetingIntelligenceActionItemsResponse
     risks_blockers: MeetingIntelligenceRisksBlockersResponse

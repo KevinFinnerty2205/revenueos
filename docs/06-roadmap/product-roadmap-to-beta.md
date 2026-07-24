@@ -163,7 +163,16 @@ intelligence.
 - **Security gates:** Trusted tenant context, forced RLS, exact current transcript version, no truncation, prompt-injection-as-data, strict cross-field validation, content-redacted telemetry/audits and explicit OpenAI external-data warning.
 - **Demonstration:** Generate from a synthetic authorised transcript, review objection handling and competitor evidence, verify question/risk/politeness-only content yields an empty result, and retain the result on refresh.
 
-WO-006B extends the implemented eight-capability Meeting Intelligence workspace;
+### WO-006C — Stakeholder Intelligence — Complete
+
+- **Objective:** Add an eighth independent transcript-grounded extraction for evidence-backed people, buying roles, influence, stance, meeting engagement and fixed role coverage without relationship or outcome prediction.
+- **Major deliverables:** Strict bounded stakeholder/coverage schema and closed taxonomies; prompt v1; named, anonymous, empty, uncertainty, injection and malformed mock fixtures; explicit OpenAI strict-schema allowlist extension; transcript-pinned durable job; append-only artefact; migration `0015_stakeholders`; POST/GET API; aggregate/orchestration integration; accessible textual UI; and metadata-only telemetry.
+- **Dependencies:** Existing AI infrastructure, seven earlier extractors, Follow-up Email and the unified workspace. Stakeholder Intelligence remains independent and is not a Follow-up Email prerequisite or input.
+- **Out of scope:** Relationship/organisation graph, cross-meeting stakeholder history, account memory, contact enrichment, CRM identity resolution/mutation, outreach recommendations, MEDDICC/BANT, predictive scoring, recording, transcription, streaming and automation.
+- **Security gates:** Trusted tenant context, forced RLS, exact current transcript version, no truncation, prompt-injection-as-data, strict name/role/coverage consistency, content-redacted telemetry/audits and explicit OpenAI external-data warning.
+- **Demonstration:** Generate from a synthetic authorised transcript, review cautious role coverage and stakeholder evidence, observe the successful insufficient-evidence result when unsupported, verify no graph/score/CRM action, refresh and retain all nine sections.
+
+WO-006C extends the implemented nine-capability Meeting Intelligence workspace;
 it does not change the separately proposed production-readiness sequence below
 or authorise production customer data.
 

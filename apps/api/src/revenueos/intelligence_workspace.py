@@ -25,6 +25,8 @@ from revenueos.ai_contracts import (
     OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_SCHEMA_VERSION,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
+    STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+    STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH,
     ActionItemsArtifactContent,
     BuyingSignalsArtifactContent,
     DecisionsArtifactContent,
@@ -33,6 +35,7 @@ from revenueos.ai_contracts import (
     ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
+    StakeholderIntelligenceArtifactContent,
 )
 from revenueos.ai_prompt_registry import (
     ACTION_ITEMS_PROMPT_KEY,
@@ -51,6 +54,8 @@ from revenueos.ai_prompt_registry import (
     OPEN_QUESTIONS_PROMPT_VERSION,
     RISKS_BLOCKERS_PROMPT_KEY,
     RISKS_BLOCKERS_PROMPT_VERSION,
+    STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+    STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
 )
 from revenueos.ai_repositories import AIArtifactRepository, AIJobRepository
 from revenueos.ai_services import AIJobRequestResult, AIJobService
@@ -75,9 +80,11 @@ from revenueos.intelligence_contracts import (
     MeetingIntelligenceProgressResponse,
     MeetingIntelligenceResponse,
     MeetingIntelligenceRisksBlockersResponse,
+    MeetingIntelligenceStakeholderIntelligenceResponse,
     ObjectionsCompetitiveSignalsContentResponse,
     OpenQuestionsContentResponse,
     RisksBlockersContentResponse,
+    StakeholderIntelligenceContentResponse,
 )
 from revenueos.models import AIArtifact, AIJob, Transcript
 from revenueos.tenant import TenantContext
@@ -88,6 +95,7 @@ CapabilityName = Literal[
     "executive_summary",
     "buying_signals",
     "objections_competitive_signals",
+    "stakeholder_intelligence",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -167,6 +175,16 @@ CAPABILITIES = (
         OBJECTIONS_COMPETITIVE_SIGNALS_TRANSCRIPT_MAX_LENGTH,
     ),
     CapabilityConfiguration(
+        "stakeholder_intelligence",
+        AIJobType.STAKEHOLDER_INTELLIGENCE.value,
+        AIArtifactType.STAKEHOLDER_INTELLIGENCE.value,
+        STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+        STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
+        STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+        "Stakeholder Intelligence",
+        STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH,
+    ),
+    CapabilityConfiguration(
         "decisions",
         AIJobType.DECISIONS.value,
         AIArtifactType.DECISIONS.value,
@@ -222,6 +240,7 @@ EXTRACTION_NAMES: tuple[CapabilityName, ...] = (
     "executive_summary",
     "buying_signals",
     "objections_competitive_signals",
+    "stakeholder_intelligence",
     "decisions",
     "action_items",
     "risks_blockers",
@@ -297,6 +316,7 @@ class MeetingIntelligenceService:
             "executive_summary": self.capabilities.request_executive_summary,
             "buying_signals": self.capabilities.request_buying_signals,
             "objections_competitive_signals": self.capabilities.request_objections_competitive_signals,
+            "stakeholder_intelligence": self.capabilities.request_stakeholder_intelligence,
             "decisions": self.capabilities.request_decisions,
             "action_items": self.capabilities.request_action_items,
             "risks_blockers": self.capabilities.request_risks_blockers,
@@ -536,6 +556,12 @@ class MeetingIntelligenceService:
                 ObjectionsCompetitiveSignalsContentResponse.model_validate(objection_signals),
                 len(objection_signals.objections) == 0 and len(objection_signals.competitors) == 0,
             )
+        if name == "stakeholder_intelligence":
+            stakeholders = StakeholderIntelligenceArtifactContent.model_validate(artifact.content_json)
+            return (
+                StakeholderIntelligenceContentResponse.model_validate(stakeholders),
+                len(stakeholders.stakeholders) == 0,
+            )
         if name == "decisions":
             decisions = DecisionsArtifactContent.model_validate(artifact.content_json)
             return DecisionsContentResponse.model_validate(decisions), len(decisions.decisions) == 0
@@ -632,6 +658,12 @@ class MeetingIntelligenceService:
                         "content": snapshots["objections_competitive_signals"].content,
                     }
                 )
+            ),
+            stakeholder_intelligence=MeetingIntelligenceStakeholderIntelligenceResponse.model_validate(
+                {
+                    **self._capability_fields(snapshots["stakeholder_intelligence"]),
+                    "content": snapshots["stakeholder_intelligence"].content,
+                }
             ),
             decisions=MeetingIntelligenceDecisionsResponse.model_validate(
                 {

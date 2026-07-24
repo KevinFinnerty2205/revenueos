@@ -84,12 +84,7 @@ export type ExecutiveSummaryMeetingType =
 export type ExecutiveSummarySentiment =
   "positive" | "neutral" | "negative" | "mixed";
 export type BuyingSignalsState =
-  | "empty"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type BuyingSignalType =
   | "budget_confirmed"
   | "budget_unconfirmed"
@@ -126,12 +121,7 @@ export type DealMomentum =
   | "strong_negative"
   | "insufficient_evidence";
 export type ObjectionsCompetitiveSignalsState =
-  | "empty"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type ObjectionCategory =
   | "pricing"
   | "budget"
@@ -152,52 +142,49 @@ export type ObjectionCategory =
   | "trust"
   | "other";
 export type ObjectionStatus =
-  | "resolved"
-  | "partially_addressed"
-  | "deferred"
-  | "unresolved";
+  "resolved" | "partially_addressed" | "deferred" | "unresolved";
 export type ObjectionStrength = "strong" | "moderate" | "weak";
 export type CompetitorPosition =
-  | "stronger"
-  | "weaker"
-  | "neutral"
-  | "present"
-  | "unclear";
+  "stronger" | "weaker" | "neutral" | "present" | "unclear";
 export type OverallObjectionPressure =
-  | "none"
-  | "low"
-  | "medium"
-  | "high"
-  | "severe"
-  | "insufficient_evidence";
+  "none" | "low" | "medium" | "high" | "severe" | "insufficient_evidence";
+export type StakeholderIntelligenceState =
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
+export type StakeholderRole =
+  | "economic_buyer"
+  | "decision_maker"
+  | "champion"
+  | "influencer"
+  | "blocker"
+  | "technical_buyer"
+  | "technical_evaluator"
+  | "end_user"
+  | "procurement"
+  | "legal"
+  | "security"
+  | "finance"
+  | "executive_sponsor"
+  | "implementation_owner"
+  | "vendor_representative"
+  | "participant"
+  | "unknown";
+export type StakeholderInfluence = "high" | "medium" | "low" | "unclear";
+export type StakeholderStance =
+  "supportive" | "neutral" | "resistant" | "mixed" | "unclear";
+export type StakeholderEngagement =
+  "active" | "passive" | "absent_but_referenced" | "unclear";
+export type StakeholderCoverageState =
+  "identified" | "not_identified" | "unclear" | "not_discussed";
 export type DecisionsState =
-  | "empty"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type DecisionStatus =
-  | "confirmed"
-  | "tentative"
-  | "rejected"
-  | "deferred";
+  "confirmed" | "tentative" | "rejected" | "deferred";
 export type ActionItemsState =
-  | "empty"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type ActionItemPriority = "high" | "medium" | "low";
 export type ActionItemStatus = "open";
 export type RisksBlockersState =
-  | "empty"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RiskCategory =
   | "budget"
   | "procurement"
@@ -215,25 +202,16 @@ export type RiskCategory =
   | "other";
 export type RiskSeverity = "high" | "medium" | "low";
 export type OpenQuestionsState =
-  | "empty"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type OpenQuestionImportance = "high" | "medium" | "low";
 export type FollowUpEmailState =
-  | "empty"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+  "empty" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type FollowUpEmailTone = "professional" | "friendly" | "executive";
 export type MeetingIntelligenceCapabilityName =
   | "executive_summary"
   | "buying_signals"
   | "objections_competitive_signals"
+  | "stakeholder_intelligence"
   | "decisions"
   | "action_items"
   | "risks_blockers"
@@ -476,6 +454,56 @@ export interface ObjectionsCompetitiveSignalsRequestResponse {
   completedAt: string | null;
 }
 
+export interface StakeholderItem {
+  name: string;
+  organisation: string | null;
+  role: StakeholderRole;
+  influence: StakeholderInfluence;
+  stance: StakeholderStance;
+  engagement: StakeholderEngagement;
+  confidence: number;
+  evidence: string;
+}
+
+export interface StakeholderRoleCoverage {
+  economicBuyer: StakeholderCoverageState;
+  decisionMaker: StakeholderCoverageState;
+  champion: StakeholderCoverageState;
+  technicalBuyer: StakeholderCoverageState;
+  procurement: StakeholderCoverageState;
+  legalSecurity: StakeholderCoverageState;
+}
+
+export interface StakeholderIntelligenceContent {
+  stakeholders: StakeholderItem[];
+  roleCoverage: StakeholderRoleCoverage;
+  stakeholderSummary: string;
+  confidence: number;
+}
+
+export interface StakeholderIntelligenceResponse {
+  state: StakeholderIntelligenceState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  jobId: string | null;
+  transcriptVersion: number | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  generatedAt: string | null;
+  safeMessage: string | null;
+  stakeholderIntelligence: StakeholderIntelligenceContent | null;
+}
+
+export interface StakeholderIntelligenceRequestResponse {
+  jobId: string;
+  status: "queued" | "running" | "completed";
+  created: boolean;
+  transcriptVersion: number;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
 export interface DecisionItem {
   decision: string;
   owner: string | null;
@@ -665,8 +693,7 @@ export interface MeetingIntelligenceCapability<TContent> {
   content: TContent | null;
 }
 
-export interface MeetingIntelligenceFollowUpEmailCapability
-  extends MeetingIntelligenceCapability<FollowUpEmailContent> {
+export interface MeetingIntelligenceFollowUpEmailCapability extends MeetingIntelligenceCapability<FollowUpEmailContent> {
   tone: FollowUpEmailTone | null;
 }
 
@@ -676,7 +703,7 @@ export interface MeetingIntelligenceProgress {
   processing: number;
   failed: number;
   notGenerated: number;
-  total: 8;
+  total: 9;
   summary: string;
 }
 
@@ -689,6 +716,7 @@ export interface MeetingIntelligenceResponse {
   executiveSummary: MeetingIntelligenceCapability<ExecutiveSummaryContent>;
   buyingSignals: MeetingIntelligenceCapability<BuyingSignalsContent>;
   objectionsCompetitiveSignals: MeetingIntelligenceCapability<ObjectionsCompetitiveSignalsContent>;
+  stakeholderIntelligence: MeetingIntelligenceCapability<StakeholderIntelligenceContent>;
   decisions: MeetingIntelligenceCapability<DecisionsContent>;
   actionItems: MeetingIntelligenceCapability<ActionItemsContent>;
   risksBlockers: MeetingIntelligenceCapability<RisksBlockersContent>;
@@ -696,8 +724,7 @@ export interface MeetingIntelligenceResponse {
   followUpEmail: MeetingIntelligenceFollowUpEmailCapability;
 }
 
-export interface MeetingIntelligenceGenerationResponse
-  extends MeetingIntelligenceResponse {
+export interface MeetingIntelligenceGenerationResponse extends MeetingIntelligenceResponse {
   createdCapabilities: MeetingIntelligenceCapabilityName[];
   reusedCapabilities: MeetingIntelligenceCapabilityName[];
 }

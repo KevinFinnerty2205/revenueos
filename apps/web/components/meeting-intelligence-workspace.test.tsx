@@ -17,6 +17,7 @@ import type {
   ObjectionsCompetitiveSignalsContent,
   OpenQuestionsContent,
   RisksBlockersContent,
+  StakeholderIntelligenceContent,
 } from "@revenueos/shared";
 import { MeetingIntelligenceWorkspace } from "@/components/meeting-intelligence-workspace";
 
@@ -115,6 +116,43 @@ const objectionsContent: ObjectionsCompetitiveSignalsContent = {
   summary:
     "Implementation capacity and Competitor X create meaningful pressure.",
 };
+const stakeholderContent: StakeholderIntelligenceContent = {
+  stakeholders: [
+    {
+      name: "Jane Smith",
+      organisation: "Customer",
+      role: "champion",
+      influence: "high",
+      stance: "supportive",
+      engagement: "active",
+      confidence: 0.93,
+      evidence:
+        "Jane advocated for the solution and committed to presenting it internally.",
+    },
+    {
+      name: "Customer procurement representative",
+      organisation: null,
+      role: "procurement",
+      influence: "medium",
+      stance: "neutral",
+      engagement: "absent_but_referenced",
+      confidence: 0.82,
+      evidence:
+        "The procurement representative was referenced as part of the approval process.",
+    },
+  ],
+  roleCoverage: {
+    economicBuyer: "not_identified",
+    decisionMaker: "unclear",
+    champion: "identified",
+    technicalBuyer: "not_discussed",
+    procurement: "identified",
+    legalSecurity: "not_discussed",
+  },
+  stakeholderSummary:
+    "A likely champion and procurement involvement are present, but the economic buyer remains unidentified.",
+  confidence: 0.89,
+};
 const actionItemsContent = {
   actionItems: [
     {
@@ -174,13 +212,14 @@ function notStartedWorkspace(): MeetingIntelligenceResponse {
       queued: 0,
       processing: 0,
       failed: 0,
-      notGenerated: 8,
-      total: 8,
-      summary: "0 of 8 ready",
+      notGenerated: 9,
+      total: 9,
+      summary: "0 of 9 ready",
     },
     executiveSummary: capability("not_generated"),
     buyingSignals: capability("not_generated"),
     objectionsCompetitiveSignals: capability("not_generated"),
+    stakeholderIntelligence: capability("not_generated"),
     decisions: capability("not_generated"),
     actionItems: capability("not_generated"),
     risksBlockers: capability("not_generated"),
@@ -200,12 +239,12 @@ function queuedWorkspace(): MeetingIntelligenceResponse {
     lastUpdatedAt: "2026-07-20T00:00:00Z",
     progress: {
       ready: 0,
-      queued: 7,
+      queued: 8,
       processing: 0,
       failed: 0,
       notGenerated: 1,
-      total: 8,
-      summary: "7 sections queued",
+      total: 9,
+      summary: "8 sections queued",
     },
     executiveSummary: capability<ExecutiveSummaryContent>("queued", null, {
       generationAvailable: false,
@@ -217,6 +256,11 @@ function queuedWorkspace(): MeetingIntelligenceResponse {
       capability<ObjectionsCompetitiveSignalsContent>("queued", null, {
         generationAvailable: false,
       }),
+    stakeholderIntelligence: capability<StakeholderIntelligenceContent>(
+      "queued",
+      null,
+      { generationAvailable: false },
+    ),
     decisions: capability<DecisionsContent>("queued", null, {
       generationAvailable: false,
     }),
@@ -239,17 +283,18 @@ function completedWorkspace(): MeetingIntelligenceResponse {
     retryAvailable: false,
     lastUpdatedAt: "2026-07-20T01:00:00Z",
     progress: {
-      ready: 8,
+      ready: 9,
       queued: 0,
       processing: 0,
       failed: 0,
       notGenerated: 0,
-      total: 8,
-      summary: "8 of 8 ready",
+      total: 9,
+      summary: "9 of 9 ready",
     },
     executiveSummary: capability("completed", summaryContent),
     buyingSignals: capability("completed", buyingSignalsContent),
     objectionsCompetitiveSignals: capability("completed", objectionsContent),
+    stakeholderIntelligence: capability("completed", stakeholderContent),
     decisions: capability("completed", decisionsContent),
     actionItems: capability("completed", actionItemsContent),
     risksBlockers: capability("completed", risksContent),
@@ -274,6 +319,7 @@ describe("MeetingIntelligenceWorkspace", () => {
         "executive_summary",
         "buying_signals",
         "objections_competitive_signals",
+        "stakeholder_intelligence",
         "decisions",
         "action_items",
         "risks_blockers",
@@ -292,7 +338,7 @@ describe("MeetingIntelligenceWorkspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Meeting Intelligence" }),
     ).toBeVisible();
-    expect(screen.getByText("0 of 8 ready")).toBeVisible();
+    expect(screen.getByText("0 of 9 ready")).toBeVisible();
     const sectionNames = screen
       .getAllByRole("heading", { level: 3 })
       .map((heading) => heading.textContent);
@@ -300,6 +346,7 @@ describe("MeetingIntelligenceWorkspace", () => {
       "Executive Summary",
       "Buying Signals & Deal Momentum",
       "Objections & Competitive Signals",
+      "Stakeholders",
       "Key Decisions",
       "Action Items",
       "Risks & Blockers",
@@ -327,9 +374,9 @@ describe("MeetingIntelligenceWorkspace", () => {
       overallState: "processing" as const,
       progress: {
         ...queuedWorkspace().progress,
-        queued: 6,
+        queued: 7,
         processing: 1,
-        summary: "Generating 7 sections",
+        summary: "Generating 8 sections",
       },
       executiveSummary: capability("processing", null, {
         generationAvailable: false,
@@ -347,12 +394,12 @@ describe("MeetingIntelligenceWorkspace", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(screen.getByText("7 sections queued")).toBeVisible();
+    expect(screen.getByText("8 sections queued")).toBeVisible();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3_000);
     });
-    expect(screen.getByText("Generating 7 sections")).toBeVisible();
+    expect(screen.getByText("Generating 8 sections")).toBeVisible();
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
       "previousOverallState=queued",
     );
@@ -362,7 +409,7 @@ describe("MeetingIntelligenceWorkspace", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3_000);
     });
-    expect(screen.getByText("8 of 8 ready")).toBeVisible();
+    expect(screen.getByText("9 of 9 ready")).toBeVisible();
     expect(String(fetchMock.mock.calls[2]?.[0])).toContain(
       "previousOverallState=processing",
     );
@@ -487,6 +534,146 @@ describe("MeetingIntelligenceWorkspace", () => {
     });
   });
 
+  it("renders cautious stakeholder evidence and requests it through the unified workspace", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(completedWorkspace()))
+      .mockResolvedValueOnce(jsonResponse(notStartedWorkspace()))
+      .mockResolvedValueOnce(jsonResponse({ status: "queued" }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <MeetingIntelligenceWorkspace meetingId="meeting-completed" />,
+    );
+    const section = await screen.findByRole("article", {
+      name: "Stakeholders",
+    });
+    expect(section).toHaveTextContent("Stakeholder summary");
+    expect(section).toHaveTextContent("Current meeting evidence");
+    expect(section).toHaveTextContent("Likely Champion");
+    expect(section).toHaveTextContent("Jane Smith");
+    expect(section).toHaveTextContent("Customer");
+    expect(section).toHaveTextContent("High");
+    expect(section).toHaveTextContent("Supportive");
+    expect(section).toHaveTextContent("Active");
+    expect(section).toHaveTextContent("93%");
+    expect(section).toHaveTextContent("Role not discussed");
+    expect(section).not.toHaveTextContent(/deal score/i);
+    expect(section).not.toHaveTextContent(/relationship graph/i);
+    expect(section).not.toHaveTextContent(/crm/i);
+
+    rerender(<MeetingIntelligenceWorkspace meetingId="meeting-not-started" />);
+    expect(
+      await screen.findByText(
+        "Stakeholder roles have not been analysed for this meeting.",
+      ),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Generate Stakeholders" }),
+    );
+    await waitFor(() => {
+      expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("POST");
+      expect(String(fetchMock.mock.calls[2]?.[0])).toContain(
+        "/intelligence/stakeholders",
+      );
+    });
+  });
+
+  it("renders every stakeholder generation state with a safe message", async () => {
+    const stakeholderState = (
+      state: "queued" | "processing" | "failed" | "cancelled" | "unavailable",
+      message: string | null,
+    ): MeetingIntelligenceResponse => ({
+      ...notStartedWorkspace(),
+      overallState:
+        state === "processing"
+          ? "processing"
+          : state === "queued"
+            ? "queued"
+            : state === "unavailable"
+              ? "unavailable"
+              : "partially_failed",
+      generationAvailable: false,
+      retryAvailable: state === "failed" || state === "cancelled",
+      stakeholderIntelligence: capability<StakeholderIntelligenceContent>(
+        state,
+        null,
+        {
+          generationAvailable: state === "failed" || state === "cancelled",
+          message,
+        },
+      ),
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(stakeholderState("queued", null)))
+      .mockResolvedValueOnce(jsonResponse(stakeholderState("processing", null)))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          stakeholderState(
+            "failed",
+            "Stakeholder Intelligence could not be completed.",
+          ),
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          stakeholderState(
+            "cancelled",
+            "Stakeholder Intelligence generation was cancelled.",
+          ),
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          stakeholderState(
+            "unavailable",
+            "Add a usable transcript before generating Stakeholder Intelligence.",
+          ),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <MeetingIntelligenceWorkspace meetingId="meeting-queued" />,
+    );
+    let section = (
+      await screen.findByRole("heading", { name: "Stakeholders" })
+    ).closest("article");
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText("This section is queued.")).toBeVisible();
+
+    rerender(<MeetingIntelligenceWorkspace meetingId="meeting-processing" />);
+    section = (
+      await screen.findByText("This section is being generated…")
+    ).closest("article");
+    expect(section).not.toBeNull();
+
+    rerender(<MeetingIntelligenceWorkspace meetingId="meeting-failed" />);
+    expect(
+      await screen.findByText(
+        "Stakeholder Intelligence could not be completed.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Retry Stakeholders" }),
+    ).toBeVisible();
+
+    rerender(<MeetingIntelligenceWorkspace meetingId="meeting-cancelled" />);
+    expect(
+      await screen.findByText(
+        "Stakeholder Intelligence generation was cancelled.",
+      ),
+    ).toBeVisible();
+
+    rerender(<MeetingIntelligenceWorkspace meetingId="meeting-unavailable" />);
+    expect(
+      await screen.findByText(
+        "Add a usable transcript before generating Stakeholder Intelligence.",
+      ),
+    ).toBeVisible();
+  });
+
   it("renders every active and terminal objection capability state accessibly", async () => {
     const unavailable = {
       ...notStartedWorkspace(),
@@ -504,11 +691,11 @@ describe("MeetingIntelligenceWorkspace", () => {
       overallState: "processing" as const,
       progress: {
         ready: 0,
-        queued: 6,
+        queued: 7,
         processing: 1,
         failed: 0,
         notGenerated: 1,
-        total: 8 as const,
+        total: 9 as const,
         summary: "Generating 1 section",
       },
       objectionsCompetitiveSignals:
@@ -589,13 +776,13 @@ describe("MeetingIntelligenceWorkspace", () => {
       overallState: "partially_generated" as const,
       generationAvailable: true,
       progress: {
-        ready: 7,
+        ready: 8,
         queued: 0,
         processing: 0,
         failed: 0,
         notGenerated: 1,
-        total: 8 as const,
-        summary: "7 of 8 ready",
+        total: 9 as const,
+        summary: "8 of 9 ready",
       },
       followUpEmail: {
         ...capability("not_generated", null, { generationAvailable: true }),
@@ -607,12 +794,12 @@ describe("MeetingIntelligenceWorkspace", () => {
       overallState: "queued" as const,
       generationAvailable: false,
       progress: {
-        ready: 7,
+        ready: 8,
         queued: 1,
         processing: 0,
         failed: 0,
         notGenerated: 0,
-        total: 8 as const,
+        total: 9 as const,
         summary: "1 section queued",
       },
       followUpEmail: {
@@ -624,6 +811,7 @@ describe("MeetingIntelligenceWorkspace", () => {
         "executive_summary",
         "buying_signals",
         "objections_competitive_signals",
+        "stakeholder_intelligence",
         "decisions",
         "action_items",
         "risks_blockers",
@@ -653,13 +841,13 @@ describe("MeetingIntelligenceWorkspace", () => {
       generationAvailable: true,
       retryAvailable: true,
       progress: {
-        ready: 7,
+        ready: 8,
         queued: 0,
         processing: 0,
         failed: 1,
         notGenerated: 0,
-        total: 8 as const,
-        summary: "7 ready · 1 failed",
+        total: 9 as const,
+        summary: "8 ready · 1 failed",
       },
       risksBlockers: capability("failed", null, {
         generationAvailable: true,
@@ -740,6 +928,24 @@ describe("MeetingIntelligenceWorkspace", () => {
         },
         { emptyResult: true },
       ),
+      stakeholderIntelligence: capability(
+        "completed",
+        {
+          stakeholders: [],
+          roleCoverage: {
+            economicBuyer: "not_discussed" as const,
+            decisionMaker: "not_discussed" as const,
+            champion: "not_discussed" as const,
+            technicalBuyer: "not_discussed" as const,
+            procurement: "not_discussed" as const,
+            legalSecurity: "not_discussed" as const,
+          },
+          stakeholderSummary:
+            "There was not enough evidence to identify stakeholder roles reliably.",
+          confidence: 0.3,
+        },
+        { emptyResult: true },
+      ),
     };
     const fetchMock = vi
       .fn()
@@ -780,6 +986,11 @@ describe("MeetingIntelligenceWorkspace", () => {
         "No objections or competitive signals were identified in this meeting.",
       ),
     ).toBeVisible();
+    expect(
+      screen.getByText(
+        "There was not enough evidence to identify stakeholder roles reliably.",
+      ),
+    ).toBeVisible();
   });
 
   it("prevents an aborted stale meeting response from replacing newer state", async () => {
@@ -799,13 +1010,13 @@ describe("MeetingIntelligenceWorkspace", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     rerender(<MeetingIntelligenceWorkspace meetingId="meeting-2" />);
 
-    expect(await screen.findByText("8 of 8 ready")).toBeVisible();
+    expect(await screen.findByText("9 of 9 ready")).toBeVisible();
     await act(async () => {
       resolveFirst?.(jsonResponse(queuedWorkspace()));
       await Promise.resolve();
     });
-    expect(screen.getByText("8 of 8 ready")).toBeVisible();
-    expect(screen.queryByText("7 sections queued")).not.toBeInTheDocument();
+    expect(screen.getByText("9 of 9 ready")).toBeVisible();
+    expect(screen.queryByText("8 sections queued")).not.toBeInTheDocument();
   });
 
   it("copies the rendered Follow-up Email and never exposes a Send action", async () => {

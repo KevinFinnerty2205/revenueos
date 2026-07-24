@@ -18,7 +18,10 @@ meeting Deal Momentum assessment with explicit evidence and uncertainty. It
 does not estimate win probability, forecast or score the deal. WO-006B adds
 transcript-grounded objections, handling state and competitor-position signals,
 plus qualitative current-meeting objection pressure without predictive scoring.
-No later intelligence capability, send integration, Anthropic/Gemini provider,
+WO-006C adds evidence-bound Stakeholder Intelligence with one primary role per
+person, qualitative influence/stance/current-meeting engagement and fixed role
+coverage. It does not create relationship history, a graph, CRM identity or a
+predictive score. No later intelligence capability, send integration, Anthropic/Gemini provider,
 embedding, tool use or agent is active.
 
 See [AI domain services](../03-engineering/ai-domain-services.md), the
@@ -37,6 +40,7 @@ The [Executive Summary guide](../03-engineering/executive-summary-intelligence.m
 [Meeting Open Questions guide](../03-engineering/meeting-open-questions-intelligence.md),
 the [Buying Signals & Deal Momentum guide](../03-engineering/buying-signals-intelligence.md),
 the [Objections & Competitive Signals guide](../03-engineering/objections-competitive-signals-intelligence.md),
+the [Stakeholder Intelligence guide](../03-engineering/stakeholder-intelligence.md),
 and [Follow-up Email Composer guide](../03-engineering/follow-up-email-composer.md)
 document the current Meeting Intelligence capabilities. The
 [Unified Meeting Intelligence guide](../03-engineering/unified-meeting-intelligence.md)
@@ -47,7 +51,7 @@ Future AI work must use the typed provider port, schema validation, authorised
 minimum evidence, content-redacted logs, explicit model/prompt versions and
 human approval for consequential output.
 
-For the seven transcript-grounded capabilities, OpenAI selection sends the
+For the eight transcript-grounded capabilities, OpenAI selection sends the
 bounded selected meeting transcript to OpenAI. For Follow-up Email, it sends
 only the validated customer-safe four-artefact projection and tone; the
 composer never transmits transcript text. Production customer data remains

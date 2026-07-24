@@ -13,6 +13,7 @@ from revenueos.ai_contracts import (
     ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
+    StakeholderIntelligenceArtifactContent,
 )
 from revenueos.ai_services import (
     ActionItemsStateResult,
@@ -25,6 +26,7 @@ from revenueos.ai_services import (
     ObjectionsCompetitiveSignalsStateResult,
     OpenQuestionsStateResult,
     RisksBlockersStateResult,
+    StakeholderIntelligenceStateResult,
 )
 from revenueos.business_contracts import Page
 from revenueos.domain import AIJobStatus, FollowUpEmailTone, MeetingStatus, MeetingType
@@ -66,6 +68,10 @@ from revenueos.intelligence_contracts import (
     RisksBlockersRequestResponse,
     RisksBlockersResponse,
     RisksBlockersState,
+    StakeholderIntelligenceContentResponse,
+    StakeholderIntelligenceRequestResponse,
+    StakeholderIntelligenceResponse,
+    StakeholderIntelligenceState,
 )
 from revenueos.intelligence_workspace import MeetingIntelligenceService
 from revenueos.meeting_contracts import (
@@ -271,6 +277,33 @@ async def get_objections_competitive_signals(
     service: Intelligence,
 ) -> ObjectionsCompetitiveSignalsResponse:
     return _objections_competitive_signals_response(await service.get_objections_competitive_signals_state(meeting_id))
+
+
+@router.post(
+    "/{meeting_id}/intelligence/stakeholders",
+    response_model=StakeholderIntelligenceRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_stakeholder_intelligence(
+    meeting_id: UUID,
+    response: Response,
+    service: Intelligence,
+) -> StakeholderIntelligenceRequestResponse:
+    result = await service.request_stakeholder_intelligence(meeting_id)
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return _stakeholder_intelligence_request_response(result)
+
+
+@router.get(
+    "/{meeting_id}/intelligence/stakeholders",
+    response_model=StakeholderIntelligenceResponse,
+)
+async def get_stakeholder_intelligence(
+    meeting_id: UUID,
+    service: Intelligence,
+) -> StakeholderIntelligenceResponse:
+    return _stakeholder_intelligence_response(await service.get_stakeholder_intelligence_state(meeting_id))
 
 
 @router.post(
@@ -724,6 +757,68 @@ def _objections_competitive_signals_response(
         ),
         safe_message=safe_message,
         objections_competitive_signals=content,
+    )
+
+
+def _stakeholder_intelligence_request_response(
+    result: AIJobRequestResult,
+) -> StakeholderIntelligenceRequestResponse:
+    job = result.job
+    job_status = cast(
+        Literal["queued", "running", "completed"] | None,
+        {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+        }.get(job.status),
+    )
+    if job_status is None:
+        raise PublicAPIError(
+            "invalid_intelligence_state",
+            "The Stakeholder Intelligence request could not be represented safely.",
+            500,
+        )
+    return StakeholderIntelligenceRequestResponse(
+        job_id=job.id,
+        status=job_status,
+        created=result.created,
+        transcript_version=job.transcript_version,
+        requested_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+def _stakeholder_intelligence_response(
+    result: StakeholderIntelligenceStateResult,
+) -> StakeholderIntelligenceResponse:
+    job = result.job
+    content = None
+    if result.artifact is not None:
+        validated = StakeholderIntelligenceArtifactContent.model_validate(result.artifact.content_json)
+        content = StakeholderIntelligenceContentResponse.model_validate(validated)
+    safe_message = job.last_error_message_safe if job is not None and result.state in {"failed", "cancelled"} else None
+    if result.state == "cancelled" and safe_message is None:
+        safe_message = "Stakeholder Intelligence generation was cancelled."
+    if result.state == "failed" and safe_message is None:
+        safe_message = "Stakeholder Intelligence generation could not be completed."
+    return StakeholderIntelligenceResponse(
+        state=cast(StakeholderIntelligenceState, result.state),
+        generation_available=result.generation_available,
+        unavailable_reason=result.unavailable_reason,
+        job_id=job.id if job is not None else None,
+        transcript_version=job.transcript_version if job is not None else None,
+        requested_at=job.created_at if job is not None else None,
+        started_at=job.started_at if job is not None else None,
+        generated_at=(
+            result.artifact.created_at
+            if result.artifact is not None
+            else job.completed_at
+            if job is not None and result.state == "completed"
+            else None
+        ),
+        safe_message=safe_message,
+        stakeholder_intelligence=content,
     )
 
 

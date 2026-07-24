@@ -96,6 +96,7 @@ class AIJobType(StrEnum):
     OPEN_QUESTIONS = "open_questions"
     BUYING_SIGNALS = "buying_signals"
     OBJECTIONS_COMPETITIVE_SIGNALS = "objections_competitive_signals"
+    STAKEHOLDER_INTELLIGENCE = "stakeholder_intelligence"
     FOLLOW_UP_EMAIL = "follow_up_email"
 
 
@@ -108,6 +109,7 @@ class AIArtifactType(StrEnum):
     OPEN_QUESTIONS = "open_questions"
     BUYING_SIGNALS = "buying_signals"
     OBJECTIONS_COMPETITIVE_SIGNALS = "objections_competitive_signals"
+    STAKEHOLDER_INTELLIGENCE = "stakeholder_intelligence"
     FOLLOW_UP_EMAIL = "follow_up_email"
 
 
@@ -215,6 +217,55 @@ class OverallObjectionPressure(StrEnum):
     HIGH = "high"
     SEVERE = "severe"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+
+
+class StakeholderRole(StrEnum):
+    ECONOMIC_BUYER = "economic_buyer"
+    DECISION_MAKER = "decision_maker"
+    CHAMPION = "champion"
+    INFLUENCER = "influencer"
+    BLOCKER = "blocker"
+    TECHNICAL_BUYER = "technical_buyer"
+    TECHNICAL_EVALUATOR = "technical_evaluator"
+    END_USER = "end_user"
+    PROCUREMENT = "procurement"
+    LEGAL = "legal"
+    SECURITY = "security"
+    FINANCE = "finance"
+    EXECUTIVE_SPONSOR = "executive_sponsor"
+    IMPLEMENTATION_OWNER = "implementation_owner"
+    VENDOR_REPRESENTATIVE = "vendor_representative"
+    PARTICIPANT = "participant"
+    UNKNOWN = "unknown"
+
+
+class StakeholderInfluence(StrEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    UNCLEAR = "unclear"
+
+
+class StakeholderStance(StrEnum):
+    SUPPORTIVE = "supportive"
+    NEUTRAL = "neutral"
+    RESISTANT = "resistant"
+    MIXED = "mixed"
+    UNCLEAR = "unclear"
+
+
+class StakeholderEngagement(StrEnum):
+    ACTIVE = "active"
+    PASSIVE = "passive"
+    ABSENT_BUT_REFERENCED = "absent_but_referenced"
+    UNCLEAR = "unclear"
+
+
+class StakeholderCoverageState(StrEnum):
+    IDENTIFIED = "identified"
+    NOT_IDENTIFIED = "not_identified"
+    UNCLEAR = "unclear"
+    NOT_DISCUSSED = "not_discussed"
 
 
 class RiskCategory(StrEnum):

@@ -21,6 +21,9 @@ both Risks & Blockers and Objections only when the transcript supports both an
 operational threat and expressed buyer resistance. Buying Signals describes
 commercial progress or its absence; Objections captures expressed resistance
 and does not mechanically copy Buying Signals.
+Stakeholder Intelligence separately classifies explicitly supported people and
+buying roles; an objection with a person attached does not by itself establish
+that person's primary stakeholder role or influence.
 
 ## Schema v1
 
@@ -167,13 +170,13 @@ internal error codes, prompt/schema/provider configuration, transcripts and raw
 output.
 
 The aggregate response includes `objectionsCompetitiveSignals`. Generate
-Meeting Intelligence now creates or reuses seven independent transcript
+Meeting Intelligence now creates or reuses eight independent transcript
 extractions: Executive Summary, Buying Signals, Objections & Competitive
-Signals, Decisions, Action Items, Risks & Blockers and Open Questions.
-Follow-up Email remains the eighth capability and a separate composition. Its
+Signals, Stakeholder Intelligence, Decisions, Action Items, Risks & Blockers and Open Questions.
+Follow-up Email remains the ninth capability and a separate composition. Its
 four prerequisites and validated artefact-only input are unchanged; objections
 are neither a prerequisite nor an email input. Progress therefore uses
-`total=8`, and the aggregate read retains its bounded four-query path.
+`total=9`, and the aggregate read retains its bounded four-query path.
 
 The UI section appears after Buying Signals and before Decisions. It shows a
 textual current-meeting pressure label, summary, objection cards and competitor

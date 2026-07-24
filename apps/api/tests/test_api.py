@@ -135,6 +135,7 @@ def test_openapi_contains_sprint_three_domain_endpoints(client: TestClient) -> N
         "/api/v1/meetings/{meeting_id}/intelligence/executive-summary",
         "/api/v1/meetings/{meeting_id}/intelligence/buying-signals",
         "/api/v1/meetings/{meeting_id}/intelligence/objections-competitive-signals",
+        "/api/v1/meetings/{meeting_id}/intelligence/stakeholders",
         "/api/v1/meetings/{meeting_id}/intelligence/decisions",
         "/api/v1/meetings/{meeting_id}/intelligence/action-items",
         "/api/v1/meetings/{meeting_id}/intelligence/risks-blockers",

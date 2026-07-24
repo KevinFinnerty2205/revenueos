@@ -202,15 +202,15 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await expect(
     page.getByRole("heading", { name: "Meeting Intelligence" }),
   ).toBeVisible();
-  await expect(page.getByText("0 of 8 ready")).toBeVisible();
+  await expect(page.getByText("0 of 9 ready")).toBeVisible();
 
   await page
     .getByRole("button", { name: "Generate Meeting Intelligence" })
     .click();
   await expect(
-    page.getByText(/Generating 7 sections|7 sections queued/),
+    page.getByText(/Generating 8 sections|8 sections queued/),
   ).toBeVisible();
-  await expect(page.getByText("8 of 8 ready")).toBeVisible({ timeout: 12_000 });
+  await expect(page.getByText("9 of 9 ready")).toBeVisible({ timeout: 12_000 });
   await expect(
     page
       .getByRole("article", { name: "Buying Signals & Deal Momentum" })
@@ -228,6 +228,18 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
       .getByRole("article", { name: "Objections & Competitive Signals" })
       .getByText("Current meeting objection pressure"),
   ).toBeVisible();
+  await expect(
+    page
+      .getByRole("article", { name: "Stakeholders" })
+      .getByText("Jane Smith", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("article", { name: "Stakeholders" })
+      .getByText("Likely Champion", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/relationship graph/i)).toHaveCount(0);
+  await expect(page.getByText(/crm action/i)).toHaveCount(0);
   await expect(
     page
       .getByRole("article", { name: "Key Decisions" })
@@ -258,7 +270,12 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   await page.getByRole("button", { name: "Copy" }).click();
   await expect(page.getByText("Email copied to clipboard.")).toBeVisible();
   await expect(page.getByRole("button", { name: /send/i })).toHaveCount(0);
-  if (process.env.CAPTURE_WO_006B_SCREENSHOT === "1") {
+  if (process.env.CAPTURE_WO_006C_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-006c-stakeholder-intelligence.png",
+      fullPage: true,
+    });
+  } else if (process.env.CAPTURE_WO_006B_SCREENSHOT === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-006b-objections-competitive-signals.png",
       fullPage: true,
@@ -277,7 +294,7 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
 
   await page.reload();
   await page.getByRole("tab", { name: "Intelligence" }).click();
-  await expect(page.getByText("8 of 8 ready")).toBeVisible();
+  await expect(page.getByText("9 of 9 ready")).toBeVisible();
   await expect(
     page
       .getByRole("article", { name: "Key Decisions" })
@@ -339,8 +356,8 @@ function workspace(
       : stage === "email"
         ? "queued"
         : "unavailable";
-  const ready = stage === "completed" ? 8 : contentReady ? 7 : 0;
-  const processing = stage === "extractions" ? 7 : 0;
+  const ready = stage === "completed" ? 9 : contentReady ? 8 : 0;
+  const processing = stage === "extractions" ? 8 : 0;
   const queued = stage === "email" ? 1 : 0;
   return {
     overallState:
@@ -361,18 +378,18 @@ function workspace(
       queued,
       processing,
       failed: 0,
-      notGenerated: 8 - ready - queued - processing,
-      total: 8,
+      notGenerated: 9 - ready - queued - processing,
+      total: 9,
       summary:
         stage === "not_started"
-          ? "0 of 8 ready"
+          ? "0 of 9 ready"
           : stage === "extractions"
-            ? "Generating 7 sections"
+            ? "Generating 8 sections"
             : stage === "prerequisites"
-              ? "7 of 8 ready"
+              ? "8 of 9 ready"
               : stage === "email"
                 ? "1 section queued"
-                : "8 of 8 ready",
+                : "9 of 9 ready",
     },
     executiveSummary: capability(
       extractionState,
@@ -435,6 +452,37 @@ function workspace(
             overallObjectionPressure: "high",
             summary:
               "Implementation capacity and Competitor X create meaningful pressure.",
+          }
+        : null,
+    ),
+    stakeholderIntelligence: capability(
+      extractionState,
+      contentReady
+        ? {
+            stakeholders: [
+              {
+                name: "Jane Smith",
+                organisation: "Customer",
+                role: "champion",
+                influence: "high",
+                stance: "supportive",
+                engagement: "active",
+                confidence: 0.93,
+                evidence:
+                  "Jane advocated for the solution and committed to presenting it internally.",
+              },
+            ],
+            roleCoverage: {
+              economicBuyer: "not_identified",
+              decisionMaker: "unclear",
+              champion: "identified",
+              technicalBuyer: "not_discussed",
+              procurement: "not_discussed",
+              legalSecurity: "not_discussed",
+            },
+            stakeholderSummary:
+              "A likely champion is present, but the economic buyer remains unidentified.",
+            confidence: 0.89,
           }
         : null,
     ),
@@ -543,6 +591,7 @@ function generationWorkspace(
             "executive_summary",
             "buying_signals",
             "objections_competitive_signals",
+            "stakeholder_intelligence",
             "decisions",
             "action_items",
             "risks_blockers",

@@ -89,8 +89,8 @@ def _count_jobs() -> int:
         (True, 1, 1, 1, 1, False, "processing"),
         (True, 2, 0, 0, 1, False, "partially_failed"),
         (True, 0, 0, 0, 1, False, "failed"),
-        (True, 8, 0, 0, 0, False, "completed"),
-        (True, 8, 0, 0, 0, True, "completed_with_empty_results"),
+        (True, 9, 0, 0, 0, False, "completed"),
+        (True, 9, 0, 0, 0, True, "completed_with_empty_results"),
     ),
 )
 def test_overall_state_precedence_is_deterministic(
@@ -132,13 +132,14 @@ def test_aggregate_read_is_product_safe_and_unavailable_without_transcript(
         "queued": 0,
         "processing": 0,
         "failed": 0,
-        "notGenerated": 8,
-        "total": 8,
-        "summary": "0 of 8 ready",
+        "notGenerated": 9,
+        "total": 9,
+        "summary": "0 of 9 ready",
     }
     assert body["executiveSummary"]["state"] == "unavailable"
     assert body["buyingSignals"]["state"] == "unavailable"
     assert body["objectionsCompetitiveSignals"]["state"] == "unavailable"
+    assert body["stakeholderIntelligence"]["state"] == "unavailable"
     assert body["followUpEmail"]["state"] == "unavailable"
     for internal_field in (
         "jobId",
@@ -201,7 +202,7 @@ def test_aggregate_read_remains_bounded_to_four_queries(client: TestClient) -> N
 
     query_count, total = asyncio.run(read_workspace())
     assert query_count == 4
-    assert total == 8
+    assert total == 9
 
 
 def test_aggregate_read_emits_metadata_only_polling_and_transition_telemetry(
@@ -282,40 +283,42 @@ def test_generation_orchestrates_missing_work_and_composer_dependencies(
         "executive_summary",
         "buying_signals",
         "objections_competitive_signals",
+        "stakeholder_intelligence",
         "decisions",
         "action_items",
         "risks_blockers",
         "open_questions",
     ]
     assert first.json()["followUpEmail"]["state"] == "unavailable"
-    assert _count_jobs() == 7
+    assert _count_jobs() == 8
 
     repeated = client.post(f"{base}/generate")
     assert repeated.status_code == 200
     assert repeated.json()["createdCapabilities"] == []
-    assert len(repeated.json()["reusedCapabilities"]) == 7
-    assert _count_jobs() == 7
+    assert len(repeated.json()["reusedCapabilities"]) == 8
+    assert _count_jobs() == 8
 
-    for _ in range(7):
+    for _ in range(8):
         _run_worker_once()
     prerequisites_ready = client.get(base)
     assert prerequisites_ready.json()["overallState"] == "partially_generated"
-    assert prerequisites_ready.json()["progress"]["ready"] == 7
+    assert prerequisites_ready.json()["progress"]["ready"] == 8
     assert prerequisites_ready.json()["followUpEmail"]["state"] == "not_generated"
 
     composer = client.post(f"{base}/generate")
     assert composer.status_code == 202
     assert composer.json()["createdCapabilities"] == ["follow_up_email"]
     assert composer.json()["followUpEmail"]["state"] == "queued"
-    assert _count_jobs() == 8
+    assert _count_jobs() == 9
 
     _run_worker_once()
     completed = client.get(base)
     body = completed.json()
     assert body["overallState"] in {"completed", "completed_with_empty_results"}
-    assert body["progress"]["ready"] == 8
+    assert body["progress"]["ready"] == 9
     assert body["buyingSignals"]["state"] == "completed"
     assert body["objectionsCompetitiveSignals"]["state"] == "completed"
+    assert body["stakeholderIntelligence"]["state"] == "completed"
     assert body["followUpEmail"]["content"]["summary"] == body["executiveSummary"]["content"]["executiveSummary"]
     assert "risksBlockers" not in body["followUpEmail"]["content"]
     assert "rawText" not in completed.text
@@ -323,7 +326,7 @@ def test_generation_orchestrates_missing_work_and_composer_dependencies(
     final_repeat = client.post(f"{base}/generate")
     assert final_repeat.status_code == 200
     assert final_repeat.json()["createdCapabilities"] == []
-    assert _count_jobs() == 8
+    assert _count_jobs() == 9
 
 
 def test_concurrent_generate_requests_do_not_duplicate_equivalent_jobs(
@@ -343,15 +346,15 @@ def test_concurrent_generate_requests_do_not_duplicate_equivalent_jobs(
         responses = list(executor.map(lambda _: client.post(endpoint), range(2)))
 
     assert {response.status_code for response in responses} <= {200, 202}
-    assert _count_jobs() == 7
+    assert _count_jobs() == 8
 
-    for _ in range(7):
+    for _ in range(8):
         _run_worker_once()
     with ThreadPoolExecutor(max_workers=2) as executor:
         composer_responses = list(executor.map(lambda _: client.post(endpoint), range(2)))
 
     assert {response.status_code for response in composer_responses} <= {200, 202}
-    assert _count_jobs() == 8
+    assert _count_jobs() == 9
 
 
 def test_transcript_version_change_queues_new_extraction_jobs(client: TestClient) -> None:
@@ -365,7 +368,7 @@ def test_transcript_version_change_queues_new_extraction_jobs(client: TestClient
     )
     base = f"/api/v1/meetings/{meeting['id']}"
     assert client.post(f"{base}/intelligence/generate").status_code == 202
-    assert _count_jobs() == 7
+    assert _count_jobs() == 8
 
     update = client.patch(
         f"{base}/transcript",
@@ -377,8 +380,8 @@ def test_transcript_version_change_queues_new_extraction_jobs(client: TestClient
     assert update.status_code == 200
     second = client.post(f"{base}/intelligence/generate")
     assert second.status_code == 202
-    assert len(second.json()["createdCapabilities"]) == 7
-    assert _count_jobs() == 14
+    assert len(second.json()["createdCapabilities"]) == 8
+    assert _count_jobs() == 16
 
 
 def test_cancelled_capability_is_not_ready_and_uses_failure_precedence(
@@ -417,7 +420,7 @@ def test_cancelled_capability_is_not_ready_and_uses_failure_precedence(
     retry = client.post(f"{base}/generate")
     assert retry.status_code == 202
     assert retry.json()["createdCapabilities"] == ["risks_blockers"]
-    assert _count_jobs() == 8
+    assert _count_jobs() == 9
 
 
 def test_valid_empty_sections_count_as_ready_and_complete_with_empty_results(
@@ -434,7 +437,7 @@ def test_valid_empty_sections_count_as_ready_and_complete_with_empty_results(
     )
     base = f"/api/v1/meetings/{meeting['id']}/intelligence"
     assert client.post(f"{base}/generate").status_code == 202
-    for _ in range(7):
+    for _ in range(8):
         _run_worker_once()
     assert client.post(f"{base}/generate").status_code == 202
     _run_worker_once()
@@ -442,13 +445,14 @@ def test_valid_empty_sections_count_as_ready_and_complete_with_empty_results(
     response = client.get(base)
     body = response.json()
     assert body["overallState"] == "completed_with_empty_results"
-    assert body["progress"]["ready"] == 8
+    assert body["progress"]["ready"] == 9
     assert body["decisions"]["emptyResult"] is True
     assert body["actionItems"]["emptyResult"] is True
     assert body["risksBlockers"]["emptyResult"] is True
     assert body["openQuestions"]["emptyResult"] is True
     assert body["buyingSignals"]["emptyResult"] is True
     assert body["objectionsCompetitiveSignals"]["emptyResult"] is True
+    assert body["stakeholderIntelligence"]["emptyResult"] is True
 
 
 def test_aggregate_and_generation_are_tenant_scoped(

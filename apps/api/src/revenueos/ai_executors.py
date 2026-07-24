@@ -20,6 +20,7 @@ from revenueos.ai_contracts import (
     ObjectionsCompetitiveSignalsSource,
     OpenQuestionsSource,
     RisksBlockersSource,
+    StakeholderIntelligenceSource,
 )
 from revenueos.ai_follow_up_email import output_is_grounded
 from revenueos.ai_output_schema_contracts import OutputSchemaDefinition
@@ -52,6 +53,8 @@ from revenueos.ai_prompt_registry import (
     OPEN_QUESTIONS_PROMPT_VERSION,
     RISKS_BLOCKERS_PROMPT_KEY,
     RISKS_BLOCKERS_PROMPT_VERSION,
+    STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+    STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
     PromptRegistry,
     create_default_prompt_registry,
 )
@@ -72,6 +75,7 @@ from revenueos.ai_provider_contracts import (
     ProviderRequest,
     ProviderResponse,
     RisksBlockersProviderInput,
+    StakeholderIntelligenceProviderInput,
 )
 from revenueos.ai_provider_errors import ProviderError
 from revenueos.ai_provider_registry import AIProviderRegistry
@@ -167,6 +171,10 @@ ObjectionsCompetitiveSignalsSourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[ObjectionsCompetitiveSignalsSource],
 ]
+StakeholderIntelligenceSourceLoader = Callable[
+    [ClaimedAIJob],
+    Awaitable[StakeholderIntelligenceSource],
+]
 FollowUpEmailSourceLoader = Callable[
     [ClaimedAIJob],
     Awaitable[FollowUpEmailSource],
@@ -186,7 +194,8 @@ class AIJobExecutor(Protocol):
         risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
-        objections_competitive_signals_source_loader: (ObjectionsCompetitiveSignalsSourceLoader | None) = None,
+        objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult: ...
 
@@ -572,6 +581,7 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -582,6 +592,7 @@ class InfrastructureTestExecutor(_StructuredOutputExecutor):
             open_questions_source_loader,
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
+            stakeholder_intelligence_source_loader,
             follow_up_email_source_loader,
         )
         return await self._execute_structured(
@@ -619,6 +630,7 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -628,6 +640,7 @@ class ExecutiveSummaryExecutor(_StructuredOutputExecutor):
             open_questions_source_loader,
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
+            stakeholder_intelligence_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.EXECUTIVE_SUMMARY.value:
@@ -701,6 +714,7 @@ class DecisionsExecutor(_StructuredOutputExecutor):
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -710,6 +724,7 @@ class DecisionsExecutor(_StructuredOutputExecutor):
             open_questions_source_loader,
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
+            stakeholder_intelligence_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.DECISIONS.value:
@@ -784,6 +799,7 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -793,6 +809,7 @@ class ActionItemsExecutor(_StructuredOutputExecutor):
             open_questions_source_loader,
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
+            stakeholder_intelligence_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.ACTION_ITEMS.value:
@@ -874,6 +891,7 @@ class RisksBlockersExecutor(_StructuredOutputExecutor):
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -883,6 +901,7 @@ class RisksBlockersExecutor(_StructuredOutputExecutor):
             open_questions_source_loader,
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
+            stakeholder_intelligence_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.RISKS_BLOCKERS.value:
@@ -971,6 +990,7 @@ class OpenQuestionsExecutor(_StructuredOutputExecutor):
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -980,6 +1000,7 @@ class OpenQuestionsExecutor(_StructuredOutputExecutor):
             risks_blockers_source_loader,
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
+            stakeholder_intelligence_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.OPEN_QUESTIONS.value:
@@ -1067,6 +1088,7 @@ class BuyingSignalsExecutor(_StructuredOutputExecutor):
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -1076,6 +1098,7 @@ class BuyingSignalsExecutor(_StructuredOutputExecutor):
             risks_blockers_source_loader,
             open_questions_source_loader,
             objections_competitive_signals_source_loader,
+            stakeholder_intelligence_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.BUYING_SIGNALS.value:
@@ -1167,6 +1190,7 @@ class ObjectionsCompetitiveSignalsExecutor(_StructuredOutputExecutor):
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -1176,6 +1200,7 @@ class ObjectionsCompetitiveSignalsExecutor(_StructuredOutputExecutor):
             risks_blockers_source_loader,
             open_questions_source_loader,
             buying_signals_source_loader,
+            stakeholder_intelligence_source_loader,
             follow_up_email_source_loader,
         )
         if job.job_type != AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value:
@@ -1265,6 +1290,116 @@ class ObjectionsCompetitiveSignalsExecutor(_StructuredOutputExecutor):
         return result
 
 
+class StakeholderIntelligenceExecutor(_StructuredOutputExecutor):
+    """Current-transcript Stakeholder Intelligence execution."""
+
+    async def execute(
+        self,
+        job: ClaimedAIJob,
+        *,
+        cancellation_check: CancellationCheck | None = None,
+        executive_summary_source_loader: ExecutiveSummarySourceLoader | None = None,
+        decisions_source_loader: DecisionsSourceLoader | None = None,
+        action_items_source_loader: ActionItemsSourceLoader | None = None,
+        risks_blockers_source_loader: RisksBlockersSourceLoader | None = None,
+        open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
+        buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
+        objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
+        follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
+    ) -> ExecutionResult:
+        del (
+            executive_summary_source_loader,
+            decisions_source_loader,
+            action_items_source_loader,
+            risks_blockers_source_loader,
+            open_questions_source_loader,
+            buying_signals_source_loader,
+            objections_competitive_signals_source_loader,
+            follow_up_email_source_loader,
+        )
+        if job.job_type != AIJobType.STAKEHOLDER_INTELLIGENCE.value:
+            raise WorkerExecutionError(
+                "invalid_stakeholder_intelligence_job",
+                "The queued job is not a Stakeholder Intelligence job.",
+                retryable=False,
+            )
+        if (
+            job.prompt_key != STAKEHOLDER_INTELLIGENCE_PROMPT_KEY
+            or job.prompt_version != STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION
+        ):
+            raise WorkerExecutionError(
+                "invalid_prompt_configuration",
+                "The Stakeholder Intelligence prompt configuration is invalid.",
+                retryable=False,
+            )
+        if stakeholder_intelligence_source_loader is None:
+            raise WorkerExecutionError(
+                "stakeholder_intelligence_source_unavailable",
+                "The Stakeholder Intelligence source loader is unavailable.",
+                retryable=False,
+            )
+
+        logger.info("stakeholder_intelligence_execution_started", extra=self._log_context(job))
+        source = await stakeholder_intelligence_source_loader(job)
+        logger.info(
+            "stakeholder_intelligence_transcript_loaded",
+            extra={
+                **self._log_context(job),
+                "transcript_version": job.transcript_version,
+                "transcript_character_count": len(source.transcript_text),
+                "meeting_date_available": True,
+            },
+        )
+        result = await self._execute_structured(
+            job,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            variables=PromptVariables(
+                values={
+                    "meeting_title": json.dumps(source.meeting_title, ensure_ascii=False),
+                    "meeting_date": json.dumps(source.meeting_date.isoformat(), ensure_ascii=False),
+                    "transcript_text": json.dumps(source.transcript_text, ensure_ascii=False),
+                }
+            ),
+            input_factory=lambda messages: StakeholderIntelligenceProviderInput(messages=messages),
+            cancellation_check=cancellation_check,
+        )
+        stakeholder_values = result.content.get("stakeholders")
+        stakeholders = stakeholder_values if isinstance(stakeholder_values, list) else []
+        role_counts: dict[str, int] = {}
+        stance_counts = {stance: 0 for stance in ("supportive", "neutral", "resistant", "mixed", "unclear")}
+        engagement_counts = {engagement: 0 for engagement in ("active", "passive", "absent_but_referenced", "unclear")}
+        for item in stakeholders:
+            if not isinstance(item, dict):
+                continue
+            role = item.get("role")
+            stance = item.get("stance")
+            engagement = item.get("engagement")
+            if isinstance(role, str):
+                role_counts[role] = role_counts.get(role, 0) + 1
+            if isinstance(stance, str) and stance in stance_counts:
+                stance_counts[stance] += 1
+            if isinstance(engagement, str) and engagement in engagement_counts:
+                engagement_counts[engagement] += 1
+        coverage = result.content.get("role_coverage")
+        coverage_states = coverage if isinstance(coverage, dict) else {}
+        logger.info(
+            "stakeholder_intelligence_output_validation_completed",
+            extra={
+                **self._log_context(job),
+                "stakeholder_count": len(stakeholders),
+                "role_counts": role_counts,
+                "stance_counts": stance_counts,
+                "engagement_counts": engagement_counts,
+                "role_coverage_states": coverage_states,
+                "empty_result": len(stakeholders) == 0,
+                "structured_output_attempt_count": result.structured_output_attempt_count,
+            },
+        )
+        return result
+
+
 class FollowUpEmailComposer(_StructuredOutputExecutor):
     """Compose customer-ready email content from validated artefacts only."""
 
@@ -1280,6 +1415,7 @@ class FollowUpEmailComposer(_StructuredOutputExecutor):
         open_questions_source_loader: OpenQuestionsSourceLoader | None = None,
         buying_signals_source_loader: BuyingSignalsSourceLoader | None = None,
         objections_competitive_signals_source_loader: ObjectionsCompetitiveSignalsSourceLoader | None = None,
+        stakeholder_intelligence_source_loader: StakeholderIntelligenceSourceLoader | None = None,
         follow_up_email_source_loader: FollowUpEmailSourceLoader | None = None,
     ) -> ExecutionResult:
         del (
@@ -1290,6 +1426,7 @@ class FollowUpEmailComposer(_StructuredOutputExecutor):
             open_questions_source_loader,
             buying_signals_source_loader,
             objections_competitive_signals_source_loader,
+            stakeholder_intelligence_source_loader,
         )
         if job.job_type != AIJobType.FOLLOW_UP_EMAIL.value:
             raise WorkerExecutionError(
@@ -1429,6 +1566,12 @@ class AIExecutorRegistry:
                 schemas,
             ),
             AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value: ObjectionsCompetitiveSignalsExecutor(
+                configuration,
+                providers,
+                prompts,
+                schemas,
+            ),
+            AIJobType.STAKEHOLDER_INTELLIGENCE.value: StakeholderIntelligenceExecutor(
                 configuration,
                 providers,
                 prompts,

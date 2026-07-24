@@ -105,6 +105,14 @@ are allowed. Strict validation rejects predictive fields and contradictory
 pressure/summary output. OpenAI receives the same bounded transcript only when
 explicitly selected.
 
+WO-006C Stakeholder Intelligence retains the same tenant, transcript-version,
+worker and persistence checks. Stakeholder names, organisations, summary and
+evidence are excluded from logs and audits; only bounded counts by role,
+influence, stance, meeting engagement and coverage state plus an empty flag are
+allowed. Strict validation rejects invented names/roles/relationships, graphs,
+CRM fields and predictive scores. OpenAI receives the same bounded transcript
+only when explicitly selected.
+
 WO-004C1A changes only provider execution after the tenant-bound source
 transaction closes. OpenAI selection does not receive a client-supplied tenant
 identifier and does not change repository predicates, worker ownership,
@@ -142,7 +150,7 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - AI job, lifecycle and artefact writes commit atomically with metadata-only audit events.
 - AI audits may identify job/artefact/type/status/version, prompt/schema/provider/model labels and structured-output attempt count, but exclude transcript/artefact bodies, prompt templates/rendered messages, raw/invalid output, provider secrets, participant-sensitive values and raw exceptions.
 - Infrastructure-test, Executive Summary, Buying Signals, Objections &
-  Competitive Signals, Decisions, Action
+  Competitive Signals, Stakeholder Intelligence, Decisions, Action
   Items, Risks & Blockers, Open Questions and Follow-up Email JSON are strict, versioned and
   rejected before persistence when malformed or extended unexpectedly.
 - Worker claims use PostgreSQL row locks, bounded leases and exact worker ownership; no in-memory queue can override persisted state.
@@ -172,7 +180,7 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
   registered strict Pydantic schema; markdown extraction, `eval` and broad
   repair are prohibited.
 - Executive Summary, Buying Signals, Objections & Competitive Signals,
-  Decisions, Action Items, Risks & Blockers and Open Questions input is limited
+  Stakeholder Intelligence, Decisions, Action Items, Risks & Blockers and Open Questions input is limited
   to 50,000 trimmed characters, is never
   silently truncated, and is excluded from logs, audits, safe errors and
   product-status responses. Prompt-injection instructions in transcript data

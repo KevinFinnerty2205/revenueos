@@ -31,6 +31,8 @@ from revenueos.ai_contracts import (
     OPEN_QUESTIONS_TRANSCRIPT_MAX_LENGTH,
     RISKS_BLOCKERS_SCHEMA_VERSION,
     RISKS_BLOCKERS_TRANSCRIPT_MAX_LENGTH,
+    STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+    STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH,
     ActionItemsArtifactContent,
     BuyingSignalsArtifactContent,
     DecisionsArtifactContent,
@@ -41,6 +43,7 @@ from revenueos.ai_contracts import (
     ObjectionsCompetitiveSignalsArtifactContent,
     OpenQuestionsArtifactContent,
     RisksBlockersArtifactContent,
+    StakeholderIntelligenceArtifactContent,
 )
 from revenueos.ai_follow_up_email import (
     FOLLOW_UP_EMAIL_SOURCE_ARTIFACT_TYPES,
@@ -64,6 +67,8 @@ from revenueos.ai_prompt_registry import (
     OPEN_QUESTIONS_PROMPT_VERSION,
     RISKS_BLOCKERS_PROMPT_KEY,
     RISKS_BLOCKERS_PROMPT_VERSION,
+    STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+    STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
 )
 from revenueos.ai_repositories import (
     AIArtifactRepository,
@@ -148,6 +153,15 @@ class BuyingSignalsStateResult:
 
 @dataclass(frozen=True)
 class ObjectionsCompetitiveSignalsStateResult:
+    state: str
+    generation_available: bool
+    unavailable_reason: str | None
+    job: AIJob | None
+    artifact: AIArtifact | None
+
+
+@dataclass(frozen=True)
+class StakeholderIntelligenceStateResult:
     state: str
     generation_available: bool
     unavailable_reason: str | None
@@ -1872,6 +1886,233 @@ class AIJobService(_AIDomainService):
         )
         raise PublicAPIError(code, reason, 422)
 
+    async def request_stakeholder_intelligence(
+        self,
+        meeting_id: UUID,
+    ) -> AIJobRequestResult:
+        logger.info(
+            "stakeholder_intelligence_requested",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "meeting_id": str(meeting_id),
+                "job_type": AIJobType.STAKEHOLDER_INTELLIGENCE.value,
+            },
+        )
+        meeting = await self.repository.lock_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        transcript = await self.repository.get_transcript_for_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        self._require_usable_stakeholder_intelligence_transcript(transcript)
+        assert transcript is not None
+        transcript_version = transcript.version
+
+        existing = await self._latest_stakeholder_intelligence_job(
+            meeting_id,
+            transcript.version,
+        )
+        if existing is not None and existing.status in {
+            AIJobStatus.PENDING.value,
+            AIJobStatus.RUNNING.value,
+            AIJobStatus.COMPLETED.value,
+        }:
+            await self._audit_intelligence_request(existing)
+            logger.info(
+                "stakeholder_intelligence_existing_job_returned",
+                extra={**self._job_log_context(existing), "existing_job_reused": True},
+            )
+            return AIJobRequestResult(job=existing, created=False)
+
+        retry_number = (
+            await self.repository.count_equivalent_jobs(
+                self.tenant.organisation_id,
+                meeting_id,
+                transcript.version,
+                job_type=AIJobType.STAKEHOLDER_INTELLIGENCE.value,
+                prompt_key=STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+                prompt_version=STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
+                schema_version=STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+            )
+            + 1
+        )
+        idempotency_key = (
+            "stakeholder_intelligence:"
+            f"p{STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION}:"
+            f"s{STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION}:r{retry_number}"
+        )
+        job = AIJob(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript.id,
+            transcript_version=transcript.version,
+            job_type=AIJobType.STAKEHOLDER_INTELLIGENCE.value,
+            status=AIJobStatus.PENDING.value,
+            prompt_key=STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+            prompt_version=STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
+            schema_version=STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+            idempotency_key=idempotency_key,
+            requested_by_user_id=self.tenant.user_id,
+        )
+        self.repository.create_job(job)
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.INTELLIGENCE_REQUESTED))
+        self.repository.add_audit_event(self._job_audit(job, MeetingAuditAction.AI_JOB_CREATED))
+        try:
+            await self.repository.flush()
+            await self.repository.refresh(job)
+            await self.repository.commit()
+        except IntegrityError as exc:
+            await self.repository.rollback()
+            await set_tenant_database_context(
+                self.repository.session,
+                self.tenant.organisation_id,
+            )
+            concurrent = await self._latest_stakeholder_intelligence_job(
+                meeting_id,
+                transcript_version,
+            )
+            if concurrent is None or concurrent.status not in {
+                AIJobStatus.PENDING.value,
+                AIJobStatus.RUNNING.value,
+                AIJobStatus.COMPLETED.value,
+            }:
+                raise PublicAPIError(
+                    "persistence_conflict",
+                    "The Stakeholder Intelligence request conflicts with existing work.",
+                    409,
+                ) from exc
+            await self._audit_intelligence_request(concurrent)
+            logger.info(
+                "stakeholder_intelligence_existing_job_returned",
+                extra={**self._job_log_context(concurrent), "existing_job_reused": True},
+            )
+            return AIJobRequestResult(job=concurrent, created=False)
+        except SQLAlchemyError as exc:
+            await self.repository.rollback()
+            raise PublicAPIError(
+                "internal_persistence_failure",
+                "The Stakeholder Intelligence request could not be queued.",
+                500,
+            ) from exc
+
+        logger.info("stakeholder_intelligence_job_queued", extra=self._job_log_context(job))
+        return AIJobRequestResult(job=job, created=True)
+
+    async def get_stakeholder_intelligence_state(
+        self,
+        meeting_id: UUID,
+    ) -> StakeholderIntelligenceStateResult:
+        meeting = await self.repository.get_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        if meeting is None:
+            raise PublicAPIError(
+                "meeting_not_found",
+                "The requested meeting was not found.",
+                404,
+            )
+        transcript = await self.repository.get_transcript_for_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+        )
+        unavailable_reason = self._stakeholder_intelligence_unavailable_reason(transcript)
+        if unavailable_reason is not None:
+            return StakeholderIntelligenceStateResult(
+                state="empty",
+                generation_available=False,
+                unavailable_reason=unavailable_reason,
+                job=None,
+                artifact=None,
+            )
+        assert transcript is not None
+        job = await self._latest_stakeholder_intelligence_job(
+            meeting_id,
+            transcript.version,
+        )
+        if job is None:
+            return StakeholderIntelligenceStateResult(
+                state="empty",
+                generation_available=True,
+                unavailable_reason=None,
+                job=None,
+                artifact=None,
+            )
+        state = {
+            AIJobStatus.PENDING.value: "queued",
+            AIJobStatus.RUNNING.value: "running",
+            AIJobStatus.COMPLETED.value: "completed",
+            AIJobStatus.FAILED.value: "failed",
+            AIJobStatus.CANCELLED.value: "cancelled",
+        }[job.status]
+        artifact = (
+            await AIArtifactRepository(self.repository.session).get_latest_artifact_for_job(
+                self.tenant.organisation_id,
+                job.id,
+                AIArtifactType.STAKEHOLDER_INTELLIGENCE.value,
+            )
+            if state == "completed"
+            else None
+        )
+        if state == "completed" and artifact is None:
+            state = "failed"
+        return StakeholderIntelligenceStateResult(
+            state=state,
+            generation_available=state in {"failed", "cancelled"},
+            unavailable_reason=None,
+            job=job,
+            artifact=artifact,
+        )
+
+    async def _latest_stakeholder_intelligence_job(
+        self,
+        meeting_id: UUID,
+        transcript_version: int,
+    ) -> AIJob | None:
+        return await self.repository.get_latest_equivalent_job(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_version,
+            job_type=AIJobType.STAKEHOLDER_INTELLIGENCE.value,
+            prompt_key=STAKEHOLDER_INTELLIGENCE_PROMPT_KEY,
+            prompt_version=STAKEHOLDER_INTELLIGENCE_PROMPT_VERSION,
+            schema_version=STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION,
+        )
+
+    @staticmethod
+    def _stakeholder_intelligence_unavailable_reason(
+        transcript: Transcript | None,
+    ) -> str | None:
+        if transcript is None or not transcript.raw_text.strip():
+            return "Add a usable transcript before generating Stakeholder Intelligence."
+        if len(transcript.raw_text.strip()) > STAKEHOLDER_INTELLIGENCE_TRANSCRIPT_MAX_LENGTH:
+            return "This transcript exceeds the 50,000-character Stakeholder Intelligence processing limit."
+        return None
+
+    @classmethod
+    def _require_usable_stakeholder_intelligence_transcript(
+        cls,
+        transcript: Transcript | None,
+    ) -> None:
+        reason = cls._stakeholder_intelligence_unavailable_reason(transcript)
+        if reason is None:
+            return
+        code = (
+            "stakeholder_intelligence_transcript_required"
+            if transcript is None or not transcript.raw_text.strip()
+            else "stakeholder_intelligence_transcript_too_large"
+        )
+        raise PublicAPIError(code, reason, 422)
+
     async def request_follow_up_email(
         self,
         meeting_id: UUID,
@@ -3299,6 +3540,143 @@ class AIArtifactService(_AIDomainService):
         )
         return artifact
 
+    async def prepare_stakeholder_intelligence_artifact(
+        self,
+        *,
+        job_id: UUID,
+        meeting_id: UUID,
+        transcript_id: UUID,
+        transcript_version: int,
+        schema_version: int,
+        content: Mapping[str, object],
+    ) -> AIArtifact:
+        """Add validated stakeholder output and metadata-only audit without committing."""
+
+        if schema_version != STAKEHOLDER_INTELLIGENCE_SCHEMA_VERSION:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Stakeholder Intelligence schema version is not supported.",
+                422,
+            )
+        validated_content = self._validate_stakeholder_intelligence_content(content)
+        job = await self._get_job(job_id)
+        await self._validate_trace(
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+        )
+        self._validate_artifact_trace(
+            job,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            schema_version=schema_version,
+            expected_job_type=AIJobType.STAKEHOLDER_INTELLIGENCE,
+        )
+        artifact_version = await self.artifacts.next_artifact_version(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_id,
+            transcript_version,
+            AIArtifactType.STAKEHOLDER_INTELLIGENCE.value,
+        )
+        artifact = AIArtifact(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            meeting_id=meeting_id,
+            transcript_id=transcript_id,
+            transcript_version=transcript_version,
+            job_id=job.id,
+            artifact_type=AIArtifactType.STAKEHOLDER_INTELLIGENCE.value,
+            artifact_version=artifact_version,
+            schema_version=schema_version,
+            prompt_key=job.prompt_key,
+            prompt_version=job.prompt_version,
+            provider_key=job.provider_key,
+            model_name=job.model_name,
+            content_json=validated_content,
+        )
+        self.artifacts.create_artifact(artifact)
+        stakeholder_values = validated_content["stakeholders"]
+        coverage_values = validated_content["role_coverage"]
+        if not isinstance(stakeholder_values, list) or not isinstance(coverage_values, dict):
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Stakeholder Intelligence artefact content is invalid.",
+                422,
+            )
+        role_counts: dict[str, int] = {}
+        stance_counts = {stance: 0 for stance in ("supportive", "neutral", "resistant", "mixed", "unclear")}
+        engagement_counts = {engagement: 0 for engagement in ("active", "passive", "absent_but_referenced", "unclear")}
+        for item in stakeholder_values:
+            if not isinstance(item, dict):
+                continue
+            role = item.get("role")
+            stance = item.get("stance")
+            engagement = item.get("engagement")
+            if isinstance(role, str):
+                role_counts[role] = role_counts.get(role, 0) + 1
+            if isinstance(stance, str) and stance in stance_counts:
+                stance_counts[stance] += 1
+            if isinstance(engagement, str) and engagement in engagement_counts:
+                engagement_counts[engagement] += 1
+        role_coverage_states = {
+            key: value for key, value in coverage_values.items() if isinstance(key, str) and isinstance(value, str)
+        }
+        safe_metadata = {
+            "job_id": job.id,
+            "artifact_id": artifact.id,
+            "job_type": job.job_type,
+            "transcript_version": transcript_version,
+            "artifact_type": artifact.artifact_type,
+            "artifact_version": artifact.artifact_version,
+            "schema_version": artifact.schema_version,
+            "prompt_key": artifact.prompt_key,
+            "prompt_version": artifact.prompt_version,
+            "provider_key": artifact.provider_key,
+            "model_name": artifact.model_name,
+            "stakeholder_count": len(stakeholder_values),
+            "role_counts": role_counts,
+            "stance_counts": stance_counts,
+            "engagement_counts": engagement_counts,
+            "role_coverage_states": role_coverage_states,
+            "empty_result": not stakeholder_values,
+        }
+        self.repository.add_audit_event(
+            self._audit(
+                meeting_id=meeting_id,
+                entity_id=artifact.id,
+                action=MeetingAuditAction.AI_ARTIFACT_CREATED,
+                entity_type=MeetingAuditEntityType.AI_ARTIFACT,
+                transcript_version=transcript_version,
+                metadata=safe_metadata,
+            )
+        )
+        logger.info(
+            "stakeholder_intelligence_artifact_created",
+            extra={
+                "organisation_id": str(artifact.organisation_id),
+                "meeting_id": str(artifact.meeting_id),
+                "job_id": str(artifact.job_id),
+                "artifact_id": str(artifact.id),
+                "artifact_type": artifact.artifact_type,
+                "artifact_version": artifact.artifact_version,
+                "transcript_version": artifact.transcript_version,
+                "prompt_key": artifact.prompt_key,
+                "prompt_version": artifact.prompt_version,
+                "schema_version": artifact.schema_version,
+                "provider_name": artifact.provider_key,
+                "model_identifier": artifact.model_name,
+                "stakeholder_count": len(stakeholder_values),
+                "role_counts": role_counts,
+                "stance_counts": stance_counts,
+                "engagement_counts": engagement_counts,
+                "role_coverage_states": role_coverage_states,
+                "empty_result": not stakeholder_values,
+            },
+        )
+        return artifact
+
     async def prepare_follow_up_email_artifact(
         self,
         *,
@@ -3554,6 +3932,19 @@ class AIArtifactService(_AIDomainService):
             raise PublicAPIError(
                 "invalid_artifact_content",
                 "The Objections & Competitive Signals artefact content is invalid.",
+                422,
+            ) from exc
+
+    @staticmethod
+    def _validate_stakeholder_intelligence_content(
+        content: Mapping[str, object],
+    ) -> dict[str, object]:
+        try:
+            return StakeholderIntelligenceArtifactContent.model_validate(content).as_json()
+        except ValidationError as exc:
+            raise PublicAPIError(
+                "invalid_artifact_content",
+                "The Stakeholder Intelligence artefact content is invalid.",
                 422,
             ) from exc
 
