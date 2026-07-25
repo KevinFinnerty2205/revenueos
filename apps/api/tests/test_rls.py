@@ -441,9 +441,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
                     {"organisation_id": str(tenant_a["organisation_id"])},
                 )
-                for table in tenant_tables:
-                    count = await connection.scalar(text(f"SELECT count(*) FROM {table}"))
-                    assert count == (2 if table == "revenue_brain_snapshots" else 1)
+                tenant_a_counts = {
+                    table: await connection.scalar(text(f"SELECT count(*) FROM {table}")) for table in tenant_tables
+                }
+                expected_tenant_a_counts = {
+                    table: 2 if table == "revenue_brain_snapshots" else 1 for table in tenant_tables
+                }
+                assert tenant_a_counts == expected_tenant_a_counts
                 company_update = await connection.execute(
                     text("UPDATE companies SET name = 'Blocked' WHERE id = :id"),
                     {"id": tenant_b["company_id"]},
