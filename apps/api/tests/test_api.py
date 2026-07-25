@@ -110,7 +110,7 @@ def test_production_rejects_mock_authentication() -> None:
         )
 
 
-def test_openapi_contains_sprint_three_domain_endpoints(client: TestClient) -> None:
+def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
@@ -119,6 +119,7 @@ def test_openapi_contains_sprint_three_domain_endpoints(client: TestClient) -> N
         "/health",
         "/ready",
         "/api/v1/me",
+        "/api/v1/accounts/{account_id}/brain",
         "/api/v1/companies",
         "/api/v1/companies/{company_id}",
         "/api/v1/contacts",

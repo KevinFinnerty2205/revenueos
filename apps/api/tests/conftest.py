@@ -28,6 +28,7 @@ from revenueos.models import (
     OpportunityAuditEvent,
     Organisation,
     OrganisationMembership,
+    RevenueBrainSnapshot,
     Task,
     Transcript,
     User,
@@ -119,6 +120,7 @@ def clean_business_entities() -> Iterator[None]:
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         async with session_factory() as session:
             for model in (
+                RevenueBrainSnapshot,
                 AIArtifact,
                 AIJob,
                 OpportunityAuditEvent,

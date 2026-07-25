@@ -163,6 +163,13 @@ removes all opportunity audits and meeting associations and may delete
 company-less opportunities after dependent links are cleared. Always back up
 and obtain an explicit data-loss decision before downgrade.
 
+Migration `0018_revenue_brain` follows the Opportunity Workspace migration and
+adds the tenant-owned Revenue Brain composition table. It enables and forces
+PostgreSQL RLS, uses composite tenant foreign keys for account, opportunity,
+meeting and artefact references, and installs update/delete rejection triggers.
+Its downgrade removes only snapshot compositions and must run before
+`0017_opportunity_workspace`.
+
 WO-004C1A requires no migration because the existing trace fields already
 represent provider, model, request ID, usage and cost/currency metadata.
 

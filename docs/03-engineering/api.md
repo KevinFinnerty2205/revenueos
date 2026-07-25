@@ -16,24 +16,37 @@ FastAPI's generated OpenAPI document at `/openapi.json` is canonical. Swagger UI
 
 ## Companies
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/companies` | List companies |
-| `POST` | `/api/v1/companies` | Create a company |
-| `GET` | `/api/v1/companies/{companyId}` | Read a company |
-| `PATCH` | `/api/v1/companies/{companyId}` | Update a company |
+| Method   | Path                            | Purpose                  |
+| -------- | ------------------------------- | ------------------------ |
+| `GET`    | `/api/v1/companies`             | List companies           |
+| `POST`   | `/api/v1/companies`             | Create a company         |
+| `GET`    | `/api/v1/companies/{companyId}` | Read a company           |
+| `PATCH`  | `/api/v1/companies/{companyId}` | Update a company         |
 | `DELETE` | `/api/v1/companies/{companyId}` | Delete an unused company |
 
 List parameters: `search`, `status`, `industry`, `sortBy` (`name`, `created_at`, `updated_at`) and `sortOrder`.
 
+## Revenue Brain
+
+| Method | Path                                 | Purpose                                                          |
+| ------ | ------------------------------------ | ---------------------------------------------------------------- |
+| `GET`  | `/api/v1/accounts/{accountId}/brain` | List the account's immutable Revenue Brain snapshot compositions |
+
+The response is a JSON array ordered by meeting date descending, then snapshot
+creation and ID descending. Each item contains the snapshot ownership/trace,
+meeting date, schema version and nine artefact IDs. It contains no artefact
+content, transcript, prompt, provider/model payload, job/worker state,
+comparison, reasoning, prediction or forecast. A cross-tenant or unknown
+account returns the same safe `404` response.
+
 ## Contacts
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/contacts` | List contacts |
-| `POST` | `/api/v1/contacts` | Create a contact |
-| `GET` | `/api/v1/contacts/{contactId}` | Read a contact |
-| `PATCH` | `/api/v1/contacts/{contactId}` | Update a contact |
+| Method   | Path                           | Purpose                  |
+| -------- | ------------------------------ | ------------------------ |
+| `GET`    | `/api/v1/contacts`             | List contacts            |
+| `POST`   | `/api/v1/contacts`             | Create a contact         |
+| `GET`    | `/api/v1/contacts/{contactId}` | Read a contact           |
+| `PATCH`  | `/api/v1/contacts/{contactId}` | Update a contact         |
 | `DELETE` | `/api/v1/contacts/{contactId}` | Delete an unused contact |
 
 List parameters: `search` across name/email, `companyId`, `sortBy` (`last_name`, `first_name`, `created_at`, `updated_at`) and `sortOrder`.
@@ -42,12 +55,12 @@ A contact requires a company in the same organisation and a syntactically valid 
 
 ## Opportunities
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/opportunities` | List opportunities |
-| `POST` | `/api/v1/opportunities` | Create an opportunity |
-| `GET` | `/api/v1/opportunities/{opportunityId}` | Read an opportunity |
-| `PATCH` | `/api/v1/opportunities/{opportunityId}` | Update an opportunity |
+| Method   | Path                                    | Purpose                      |
+| -------- | --------------------------------------- | ---------------------------- |
+| `GET`    | `/api/v1/opportunities`                 | List opportunities           |
+| `POST`   | `/api/v1/opportunities`                 | Create an opportunity        |
+| `GET`    | `/api/v1/opportunities/{opportunityId}` | Read an opportunity          |
+| `PATCH`  | `/api/v1/opportunities/{opportunityId}` | Update an opportunity        |
 | `DELETE` | `/api/v1/opportunities/{opportunityId}` | Delete an unused opportunity |
 | `GET` | `/api/v1/opportunities/{opportunityId}/workspace` | Read the latest-meeting Opportunity Workspace |
 | `POST` | `/api/v1/opportunities/{opportunityId}/workspace/latest-meeting-navigation` | Record metadata-only navigation to the selected latest meeting |
@@ -60,12 +73,12 @@ The workspace returns display metadata, the deterministic latest associated meet
 
 ## Tasks
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/tasks` | List tasks |
-| `POST` | `/api/v1/tasks` | Create a task |
-| `GET` | `/api/v1/tasks/{taskId}` | Read a task |
-| `PATCH` | `/api/v1/tasks/{taskId}` | Update a task |
+| Method   | Path                     | Purpose       |
+| -------- | ------------------------ | ------------- |
+| `GET`    | `/api/v1/tasks`          | List tasks    |
+| `POST`   | `/api/v1/tasks`          | Create a task |
+| `GET`    | `/api/v1/tasks/{taskId}` | Read a task   |
+| `PATCH`  | `/api/v1/tasks/{taskId}` | Update a task |
 | `DELETE` | `/api/v1/tasks/{taskId}` | Delete a task |
 
 List parameters: `search`, `companyId`, `contactId`, `opportunityId`, `assignedUserId`, `status`, `priority`, `sortBy` (`due_at`, `title`, `priority`, `created_at`, `updated_at`) and `sortOrder`.
@@ -74,15 +87,15 @@ A task may be general or linked to records. If company, contact or opportunity l
 
 ## Meetings
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/meetings` | List active meetings |
-| `POST` | `/api/v1/meetings` | Create a meeting, optionally with initial participants and transcript |
-| `GET` | `/api/v1/meetings/{meetingId}` | Read an active meeting |
-| `PATCH` | `/api/v1/meetings/{meetingId}` | Update meeting metadata |
-| `PATCH` | `/api/v1/meetings/{meetingId}/opportunity` | Associate or disassociate one same-tenant opportunity |
-| `DELETE` | `/api/v1/meetings/{meetingId}` | Soft-delete a meeting and its active children |
-| `GET` | `/api/v1/meetings/{meetingId}/history` | List content-minimised audit events |
+| Method   | Path                                               | Purpose                                                               |
+| -------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| `GET`    | `/api/v1/meetings`                                 | List active meetings                                                  |
+| `POST`   | `/api/v1/meetings`                                 | Create a meeting, optionally with initial participants and transcript |
+| `GET`    | `/api/v1/meetings/{meetingId}`                     | Read an active meeting                                                |
+| `PATCH`  | `/api/v1/meetings/{meetingId}`                     | Update meeting metadata                                               |
+| `PATCH`  | `/api/v1/meetings/{meetingId}/opportunity`         | Associate or disassociate one same-tenant opportunity                 |
+| `DELETE` | `/api/v1/meetings/{meetingId}`                     | Soft-delete a meeting and its active children                         |
+| `GET`    | `/api/v1/meetings/{meetingId}/history`             | List content-minimised audit events                                   |
 
 List parameters: `search`, `companyId`, `status`, `meetingType`, `dateFrom`, `dateTo`, `sortBy` (`meeting_date`, `title`, `created_at`, `updated_at`) and `sortOrder`. Dates must include a timezone. `meetingType` is `remote`, `phone`, `in_person` or `other`; status is `scheduled`, `completed` or `cancelled`.
 
@@ -90,33 +103,33 @@ Company and owner are optional/defaulted as documented by the schema, but any su
 
 ## Meeting participants
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/meetings/{meetingId}/participants` | List active participants |
-| `POST` | `/api/v1/meetings/{meetingId}/participants` | Add a participant |
-| `GET` | `/api/v1/meetings/{meetingId}/participants/{participantId}` | Read a participant |
-| `PATCH` | `/api/v1/meetings/{meetingId}/participants/{participantId}` | Update a participant |
+| Method   | Path                                                        | Purpose                   |
+| -------- | ----------------------------------------------------------- | ------------------------- |
+| `GET`    | `/api/v1/meetings/{meetingId}/participants`                 | List active participants  |
+| `POST`   | `/api/v1/meetings/{meetingId}/participants`                 | Add a participant         |
+| `GET`    | `/api/v1/meetings/{meetingId}/participants/{participantId}` | Read a participant        |
+| `PATCH`  | `/api/v1/meetings/{meetingId}/participants/{participantId}` | Update a participant      |
 | `DELETE` | `/api/v1/meetings/{meetingId}/participants/{participantId}` | Soft-delete a participant |
 
 A participant requires at least one of a same-tenant contact, display name or valid email. Attendance is `invited`, `attended`, `absent` or `unknown`; role is `host` or `attendee`.
 
 ## Meeting transcript
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/meetings/{meetingId}/transcript` | Read the active transcript |
-| `POST` | `/api/v1/meetings/{meetingId}/transcript` | Create or restore a transcript |
-| `PATCH` | `/api/v1/meetings/{meetingId}/transcript` | Correct transcript text/language |
-| `DELETE` | `/api/v1/meetings/{meetingId}/transcript` | Soft-delete the transcript |
+| Method   | Path                                      | Purpose                          |
+| -------- | ----------------------------------------- | -------------------------------- |
+| `GET`    | `/api/v1/meetings/{meetingId}/transcript` | Read the active transcript       |
+| `POST`   | `/api/v1/meetings/{meetingId}/transcript` | Create or restore a transcript   |
+| `PATCH`  | `/api/v1/meetings/{meetingId}/transcript` | Correct transcript text/language |
+| `DELETE` | `/api/v1/meetings/{meetingId}/transcript` | Soft-delete the transcript       |
 
 There is at most one transcript row per meeting. Plain text is required and limited to one million characters. Source is `manual` or `upload`; `upload` means the web form read a user-selected `.txt` file, not that RevenueOS stored a file. `PATCH` requires the current positive `version`, increments it on success and returns `409 transcript_version_conflict` for stale writes. Transcript permissions are inherited from the active tenant-scoped meeting.
 
 ## Unified Meeting Intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence` | Read all ten current-version capability states and content through one product-safe view |
-| `POST` | `/api/v1/meetings/{meetingId}/intelligence/generate` | Create or reuse missing extraction work and conditionally queue both composers |
+| Method | Path                                                 | Purpose                                                                                  |
+| ------ | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence`          | Read all ten current-version capability states and content through one product-safe view |
+| `POST` | `/api/v1/meetings/{meetingId}/intelligence/generate` | Create or reuse missing extraction work and conditionally queue both composers           |
 
 GET returns a derived overall state, generation/retry availability, last activity
 time, deterministic progress counts and the ten ordered capability views. Valid
@@ -141,10 +154,10 @@ precedence, idempotency, polling and privacy rules.
 
 ## Executive Summary intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                          | Purpose                               |
+| ------ | ------------------------------------------------------------- | ------------------------------------- |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/executive-summary` | Queue or return equivalent generation |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/executive-summary` | Read current safe state/result |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/executive-summary` | Read current safe state/result        |
 
 POST verifies the trusted tenant meeting and a non-empty current transcript of
 at most 50,000 trimmed characters. It never generates inline. A newly queued job
@@ -160,10 +173,10 @@ payload, raw errors or transcript text.
 
 ## Buying Signals and Deal Momentum intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                       | Purpose                                              |
+| ------ | ---------------------------------------------------------- | ---------------------------------------------------- |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/buying-signals` | Queue or return equivalent Buying Signals generation |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/buying-signals` | Read current safe state/result |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/buying-signals` | Read current safe state/result                       |
 
 POST requires trusted tenant access and a non-empty current transcript of at
 most 50,000 trimmed characters. New asynchronous work returns `202`; an
@@ -181,10 +194,10 @@ score, and excludes all internal/provider/worker/prompt/transcript fields. See
 
 ## Objections & Competitive Signals intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                                       | Purpose                                                            |
+| ------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/objections-competitive-signals` | Queue or return equivalent objection/competitive-signal generation |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/objections-competitive-signals` | Read current safe state/result |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/objections-competitive-signals` | Read current safe state/result                                     |
 
 POST requires trusted tenant access and the non-empty current transcript, capped
 at 50,000 trimmed characters without truncation. New asynchronous work returns
@@ -201,10 +214,10 @@ See [Objections & Competitive Signals intelligence](objections-competitive-signa
 
 ## Stakeholder Intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                     | Purpose                                                        |
+| ------ | -------------------------------------------------------- | -------------------------------------------------------------- |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/stakeholders` | Queue or return equivalent Stakeholder Intelligence generation |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/stakeholders` | Read current safe stakeholder state/result |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/stakeholders` | Read current safe stakeholder state/result                     |
 
 POST requires trusted tenant access and the non-empty current transcript, capped
 at 50,000 trimmed characters without truncation. New asynchronous work returns
@@ -222,10 +235,10 @@ transcript fields. See [Stakeholder Intelligence](stakeholder-intelligence.md).
 
 ## Next Best Action Intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                         | Purpose                                                       |
+| ------ | ------------------------------------------------------------ | ------------------------------------------------------------- |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/next-best-action` | Queue or return equivalent validated-intelligence composition |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/next-best-action` | Read current safe recommendation state/result |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/next-best-action` | Read current safe recommendation state/result                 |
 
 POST requires all eight validated extraction artefacts for the current trusted
 tenant, meeting and transcript trace. It queues durable work with
@@ -243,10 +256,10 @@ or operational control. See
 
 ## Decisions intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                  | Purpose                                         |
+| ------ | ----------------------------------------------------- | ----------------------------------------------- |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/decisions` | Queue or return equivalent Decisions generation |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/decisions` | Read current safe state/result |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/decisions` | Read current safe state/result                  |
 
 POST authenticates, derives the active organisation and requires the current
 same-tenant transcript to be non-empty and at most 50,000 trimmed characters.
@@ -266,10 +279,10 @@ v1, polling, idempotency and privacy details.
 
 ## Action Items intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                     | Purpose                                            |
+| ------ | -------------------------------------------------------- | -------------------------------------------------- |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/action-items` | Queue or return equivalent Action Items generation |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/action-items` | Read current safe state/result |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/action-items` | Read current safe state/result                     |
 
 POST derives the tenant from authentication, requires the current same-tenant
 transcript to be non-empty and at most 50,000 trimmed characters, and never
@@ -288,10 +301,10 @@ schema, date, polling, idempotency and privacy rules.
 
 ## Risks & Blockers intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                       | Purpose                                                |
+| ------ | ---------------------------------------------------------- | ------------------------------------------------------ |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/risks-blockers` | Queue or return equivalent Risks & Blockers generation |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/risks-blockers` | Read current safe state/result |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/risks-blockers` | Read current safe state/result                         |
 
 POST derives the tenant from authentication, requires the current same-tenant
 transcript to be non-empty and at most 50,000 trimmed characters, and never
@@ -308,10 +321,10 @@ provider responses and internal configuration are excluded. See
 
 ## Open Questions intelligence
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                       | Purpose                                              |
+| ------ | ---------------------------------------------------------- | ---------------------------------------------------- |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/open-questions` | Queue or return equivalent Open Questions generation |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/open-questions` | Read current safe state/result |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/open-questions` | Read current safe state/result                       |
 
 POST derives the tenant from authentication, requires the current same-tenant
 transcript to be non-empty and at most 50,000 trimmed characters, and never
@@ -328,10 +341,10 @@ responses and internal configuration are excluded. See
 
 ## Follow-up Email Composer
 
-| Method | Path | Purpose |
-| --- | --- | --- |
+| Method | Path                                                        | Purpose                                                        |
+| ------ | ----------------------------------------------------------- | -------------------------------------------------------------- |
 | `POST` | `/api/v1/meetings/{meetingId}/intelligence/follow-up-email` | Queue, reuse or regenerate a validated-artefact-grounded draft |
-| `GET` | `/api/v1/meetings/{meetingId}/intelligence/follow-up-email` | Read current safe state/draft |
+| `GET`  | `/api/v1/meetings/{meetingId}/intelligence/follow-up-email` | Read current safe state/draft                                  |
 
 POST accepts `tone` as exactly `professional`, `friendly` or `executive`
 (`professional` by default). Generation is available only when validated

@@ -88,6 +88,7 @@ from revenueos.domain import (
 )
 from revenueos.errors import PublicAPIError
 from revenueos.models import AIJob, MeetingAuditEvent
+from revenueos.revenue_brain import REQUIRED_ARTIFACT_TYPES, RevenueBrainService
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.ai_worker")
@@ -1402,6 +1403,26 @@ class AIWorkerService:
                 },
             )
             await session.flush()
+            if job.job_type in REQUIRED_ARTIFACT_TYPES:
+                snapshot_result = await RevenueBrainService(
+                    session,
+                    tenant,
+                ).prepare_snapshot_if_ready(
+                    job.meeting_id,
+                    job.transcript_id,
+                    job.transcript_version,
+                )
+                if snapshot_result.created and snapshot_result.snapshot is not None:
+                    logger.info(
+                        "revenue_brain_snapshot_created",
+                        extra={
+                            "organisation_id": str(job.organisation_id),
+                            "meeting_id": str(job.meeting_id),
+                            "transcript_version_id": str(snapshot_result.snapshot.transcript_version_id),
+                            "snapshot_id": str(snapshot_result.snapshot.id),
+                        },
+                    )
+                await session.flush()
             return True
 
     async def _record_failure(

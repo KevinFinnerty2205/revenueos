@@ -332,6 +332,27 @@ export interface Meeting extends TenantEntity {
   updatedBy: string;
 }
 
+export interface RevenueBrainSnapshot {
+  id: string;
+  organisationId: string;
+  companyId: string;
+  opportunityId: string | null;
+  meetingId: string;
+  transcriptVersionId: string;
+  createdAt: string;
+  meetingDate: string;
+  summaryReference: string;
+  buyingSignalsReference: string;
+  objectionsReference: string;
+  stakeholdersReference: string;
+  decisionsReference: string;
+  actionsReference: string;
+  risksReference: string;
+  questionsReference: string;
+  nextBestActionReference: string;
+  version: number;
+}
+
 export interface MeetingParticipant {
   id: string;
   organisationId: string;
