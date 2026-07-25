@@ -29,6 +29,13 @@ uses all eight current-version extraction artefacts, never reads transcript
 text, excludes Follow-up Email as a source and returns at most five grounded
 recommendations without CRM, email, task or automation authority.
 
+WO-008A composes nine validated artefact references into immutable Revenue
+Brain snapshots. WO-008B adds a narrow deterministic reasoning slice over
+adjacent snapshots. It revalidates the referenced artefacts, emits a controlled
+evidence-backed change set and makes no model or provider call. It is not the
+future free-form AI Reasoning Engine, a prediction model, a relationship graph
+or an agent.
+
 See [AI domain services](../03-engineering/ai-domain-services.md), the
 [AI worker queue](../03-engineering/ai-worker-queue.md) and
 [AI provider abstraction](../03-engineering/ai-provider-abstraction.md) for the
@@ -49,6 +56,8 @@ the [Stakeholder Intelligence guide](../03-engineering/stakeholder-intelligence.
 the [Next Best Action guide](../03-engineering/next-best-action-intelligence.md),
 and [Follow-up Email Composer guide](../03-engineering/follow-up-email-composer.md)
 document the current Meeting Intelligence capabilities. The
+[Revenue Brain longitudinal reasoning guide](../03-engineering/revenue-brain-reasoning.md)
+documents the deterministic cross-meeting boundary. The
 [Unified Meeting Intelligence guide](../03-engineering/unified-meeting-intelligence.md)
 documents their aggregate product state and orchestration without changing
 prompt, schema, provider or artefact boundaries.
@@ -61,7 +70,8 @@ For the eight transcript-grounded capabilities, OpenAI selection sends the
 bounded selected meeting transcript to OpenAI. For Follow-up Email, it sends
 only the validated customer-safe four-artefact projection and tone. Next Best
 Action sends only the eight validated extraction artefacts. Neither composer
-transmits transcript text. Production customer data remains
+transmits transcript text. Revenue Brain reasoning remains entirely in-process
+and transmits nothing to a provider. Production customer data remains
 prohibited until production identity, consent, provider privacy/retention,
 deletion and operational gates are approved.
 

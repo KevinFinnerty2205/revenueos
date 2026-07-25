@@ -34,6 +34,8 @@ from revenueos.opportunity_repositories import (
     OpportunityDisplayRecord,
     OpportunityWorkspaceRepository,
 )
+from revenueos.revenue_brain_reasoning import RevenueBrainReasoningService
+from revenueos.revenue_brain_reasoning_contracts import RevenueBrainReasoningResponse
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.opportunity_workspace")
@@ -47,6 +49,7 @@ class OpportunityWorkspaceService:
         self.tenant = tenant
         self.repository = OpportunityWorkspaceRepository(session)
         self.intelligence = MeetingIntelligenceService(session, tenant)
+        self.reasoning = RevenueBrainReasoningService(session, tenant)
 
     async def list_opportunities(
         self,
@@ -141,9 +144,21 @@ class OpportunityWorkspaceService:
                 latest.meeting.id,
                 latest.transcript_version,
             )
+        if record.opportunity.company_id is None:
+            reasoning = RevenueBrainReasoningResponse(
+                state="insufficient_history",
+                message=(
+                    "Revenue Brain needs at least two completed meeting snapshots before it can identify changes."
+                ),
+                latest=None,
+                history=[],
+            )
+        else:
+            reasoning = await self.reasoning.read_for_opportunity(opportunity_id)
         available_count = intelligence.progress.ready if intelligence is not None else 0
         response = OpportunityWorkspaceResponse(
             opportunity=self._workspace_opportunity(record),
+            reasoning=reasoning,
             latest_meeting=meeting_summaries[0] if meeting_summaries else None,
             recent_meetings=meeting_summaries,
             intelligence=intelligence,

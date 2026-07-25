@@ -157,9 +157,11 @@ class RevenueBrainRepository:
             )
             .order_by(
                 Meeting.meeting_date.desc(),
+                RevenueBrainSnapshot.version.desc(),
                 RevenueBrainSnapshot.created_at.desc(),
                 RevenueBrainSnapshot.id.desc(),
             )
+            .limit(20)
         )
         return [
             RevenueBrainTimelineItem(snapshot=snapshot, meeting_date=meeting_date)

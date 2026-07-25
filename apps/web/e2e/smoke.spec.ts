@@ -336,6 +336,7 @@ test("opportunity workspace persists an associated meeting and composes stored i
   page,
 }) => {
   let associated = false;
+  let reasoningGenerated = false;
 
   await page.route(
     "http://localhost:8000/api/v1/opportunities**",
@@ -343,7 +344,19 @@ test("opportunity workspace persists an associated meeting and composes stored i
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (path.endsWith("/workspace")) {
-        await route.fulfill({ json: opportunityWorkspace(associated) });
+        await route.fulfill({
+          json: opportunityWorkspace(associated, reasoningGenerated),
+        });
+        return;
+      }
+      if (path.endsWith("/brain/reasoning") && request.method() === "POST") {
+        reasoningGenerated = true;
+        await route.fulfill({
+          json: {
+            ...opportunityReasoning("completed"),
+            created: true,
+          },
+        });
         return;
       }
       if (path.endsWith("/opportunity-1")) {
@@ -464,6 +477,22 @@ test("opportunity workspace persists an associated meeting and composes stored i
   await expect(
     page.getByRole("link", { name: "Expansion review" }),
   ).toHaveAttribute("href", "/meetings/meeting-1");
+  await expect(
+    page.getByRole("heading", { name: "Longitudinal Changes" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Generate changes" }).click();
+  await expect(
+    page.getByText("Champion influence strengthened.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "15 July 2026" }),
+  ).toHaveAttribute("href", "/meetings/meeting-previous");
+  if (process.env.CAPTURE_WO_008B_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-008b-revenue-brain-reasoning.png",
+      fullPage: true,
+    });
+  }
 
   await page.getByRole("button", { name: "Refresh workspace" }).click();
   await expect(
@@ -536,7 +565,10 @@ function opportunityMeeting() {
   };
 }
 
-function opportunityWorkspace(hasMeeting: boolean) {
+function opportunityWorkspace(
+  hasMeeting: boolean,
+  reasoningGenerated: boolean,
+) {
   const summary = {
     id: "meeting-1",
     title: "Expansion review",
@@ -561,8 +593,70 @@ function opportunityWorkspace(hasMeeting: boolean) {
     recentMeetings: hasMeeting ? [summary] : [],
     intelligence: hasMeeting ? workspace("completed") : null,
     intelligenceSectionsAvailable: hasMeeting ? 10 : 0,
+    reasoning: hasMeeting
+      ? opportunityReasoning(reasoningGenerated ? "completed" : "not_generated")
+      : opportunityReasoning("insufficient_history"),
     partialData: false,
     generatedAt: "2026-07-24T00:00:08Z",
+  };
+}
+
+function opportunityReasoning(
+  state: "insufficient_history" | "not_generated" | "completed",
+) {
+  const latest =
+    state === "completed"
+      ? {
+          id: "reasoning-1",
+          companyId: "company-1",
+          opportunityId: "opportunity-1",
+          reasoningVersion: 1,
+          createdAt: "2026-07-24T00:00:08Z",
+          content: {
+            scope: "opportunity",
+            fromSnapshotId: "snapshot-previous",
+            toSnapshotId: "snapshot-latest",
+            fromMeetingId: "meeting-previous",
+            toMeetingId: "meeting-1",
+            fromMeetingDate: "2026-07-15",
+            toMeetingDate: "2026-07-20",
+            changes: [
+              {
+                changeType: "champion_strengthened",
+                direction: "positive",
+                importance: "high",
+                title: "Champion influence strengthened",
+                description:
+                  "The identified champion moved from medium to high influence.",
+                confidence: 0.91,
+                sourceCapabilities: ["stakeholder_intelligence"],
+                evidence: [
+                  {
+                    snapshotId: "snapshot-latest",
+                    artefactId: "stakeholder-artefact-latest",
+                    artefactType: "stakeholder_intelligence",
+                    entityKey: "stakeholder:fixture",
+                    field: "influence",
+                    value: "high",
+                  },
+                ],
+              },
+            ],
+            summary: "Champion influence strengthened.",
+            confidence: 0.91,
+          },
+        }
+      : null;
+  return {
+    state,
+    message:
+      state === "insufficient_history"
+        ? "Revenue Brain needs at least two completed meeting snapshots before it can identify changes."
+        : state === "not_generated"
+          ? "Longitudinal reasoning has not been generated for the latest snapshots."
+          : "Longitudinal reasoning is available.",
+    latest,
+    history: latest ? [latest] : [],
   };
 }
 

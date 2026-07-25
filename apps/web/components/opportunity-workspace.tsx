@@ -7,6 +7,7 @@ import type {
   MeetingIntelligenceCapability,
   OpportunityMeetingSummary,
   OpportunityWorkspaceResponse,
+  RevenueBrainReasoningRequestResponse,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
@@ -24,6 +25,7 @@ import {
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatMeetingDate } from "@/lib/meetings";
+import { RevenueBrainInsightPanel } from "@/components/revenue-brain-insight";
 
 export function OpportunityWorkspace({
   opportunityId,
@@ -43,6 +45,8 @@ export function OpportunityWorkspace({
   const [savingMeetingId, setSavingMeetingId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [reasoningRequesting, setReasoningRequesting] = useState(false);
+  const [reasoningError, setReasoningError] = useState<string | null>(null);
 
   const loadWorkspace = useCallback(
     async (signal: AbortSignal) => {
@@ -147,6 +151,27 @@ export function OpportunityWorkspace({
       setCopyStatus(
         "The email could not be copied. Select the text and copy it manually.",
       );
+    }
+  }
+
+  async function requestReasoning() {
+    setReasoningRequesting(true);
+    setReasoningError(null);
+    try {
+      await apiRequest<RevenueBrainReasoningRequestResponse>(
+        `/api/v1/opportunities/${opportunityId}/brain/reasoning`,
+        { method: "POST" },
+      );
+      setLoading(true);
+      setRefreshKey((value) => value + 1);
+    } catch (requestError: unknown) {
+      setReasoningError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Longitudinal reasoning could not be generated.",
+      );
+    } finally {
+      setReasoningRequesting(false);
     }
   }
 
@@ -260,6 +285,15 @@ export function OpportunityWorkspace({
         message={associationMessage}
         onSelect={setSelectedMeetingId}
         onAssociate={() => void associateSelected()}
+      />
+
+      <RevenueBrainInsightPanel
+        reasoning={workspace.reasoning}
+        requesting={reasoningRequesting}
+        requestError={reasoningError}
+        onRequest={
+          opportunity.companyId ? () => void requestReasoning() : undefined
+        }
       />
 
       {!workspace.latestMeeting || !intelligence ? (

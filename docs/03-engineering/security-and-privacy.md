@@ -1,6 +1,7 @@
 # Security and privacy
 
-This is the WO-004C6 engineering baseline, not legal advice or a certification claim.
+This is the engineering baseline through WO-008B, not legal advice or a
+certification claim.
 
 ## Authentication and authorisation
 
@@ -12,14 +13,22 @@ Every request derives its user and organisation from the auth adapter. Client-su
 
 - Organisation-owned queries include explicit organisation predicates.
 - PostgreSQL RLS policies use transaction-local trusted organisation context.
-- Companies, contacts, opportunities, tasks, meetings, participants, transcripts, meeting audit events, AI jobs and AI artefacts have non-null organisation ownership and forced RLS.
+- Companies, contacts, opportunities, tasks, meetings, participants,
+  transcripts, meeting audit events, AI jobs, AI artefacts, Revenue Brain
+  snapshots and Revenue Brain insights have non-null organisation ownership and
+  forced RLS.
 - Composite foreign keys prevent cross-tenant company, contact, opportunity, meeting, owner, assignee, creator, audit-actor, AI requester, transcript trace and job/artefact references.
 - Services validate every referenced record in the trusted tenant before writing.
 - Runtime application roles must not bypass RLS.
 - Migration/admin credentials are separate from web/API runtime credentials.
 - Missing membership or tenant context fails closed.
 
-API tests exercise cross-tenant list, read, update, delete and relationship denial, including nested participants and inherited transcript permissions. PostgreSQL 16 integration tests assume a restricted role and prove RLS visibility and write checks across every tenant table, including AI jobs and artefacts. Database tests separately prove cross-tenant and mismatched AI trace relationships fail.
+API tests exercise cross-tenant list, read, update, delete and relationship
+denial, including nested participants, inherited transcript permissions and
+both Revenue Brain scopes. PostgreSQL 16 integration tests assume a restricted
+role and prove RLS visibility and write checks across every tenant table,
+including AI jobs, artefacts, snapshots and insights. Database tests separately
+prove cross-tenant and mismatched AI trace relationships fail.
 
 WO-004A2 repositories retain an explicit organisation predicate even under RLS. Services accept only trusted `TenantContext`, validate meeting/transcript/job trace ownership and map foreign identifiers to safe not-found errors so another tenant's record existence is not disclosed. Restricted-role PostgreSQL tests execute the new repositories and services while forced RLS is active.
 
@@ -145,6 +154,27 @@ content, transcript content, prompts or provider output. The aggregate response
 also excludes prompt/schema/provider/model labels and operational job fields.
 See [Opportunity Workspace](opportunity-workspace.md).
 
+WO-008A snapshots contain ownership and exact artefact references only.
+WO-008B reasoning loads only those same-tenant snapshots, their nine exact
+referenced artefacts and completed, non-deleted meeting metadata. Its repository
+has no transcript dependency and never selects `raw_text`, re-runs extraction,
+renders a prompt or calls a provider. Opportunity scope requires the exact
+opportunity association on both snapshots and both meetings; account scope
+requires the exact company. Malformed or mixed-trace compositions fail closed.
+
+Every generated change uses a controlled taxonomy and evidence tuple validated
+against the selected pair before persistence. Stable entity keys hash
+stakeholder names and free-text identities. Missing later content never proves
+resolution, disappearance, completion or deterioration. Insight idempotency is
+tenant- and scope-bound; composite keys, forced RLS and database triggers
+prevent cross-tenant relationships, updates and deletes.
+
+Reasoning logs and audit events contain only tenant/scope IDs, version, bounded
+counts and controlled enums. They exclude summaries, descriptions, evidence
+values, names, raw artefact content and transcript content. The UI renders
+meeting links and capability labels but no raw evidence IDs. See
+[Revenue Brain longitudinal reasoning](revenue-brain-reasoning.md).
+
 ## Secrets
 
 Environment examples contain names and local-only placeholders. Real credentials belong in environment-specific managed secret stores. Production startup rejects mock auth or incomplete Clerk verification configuration.
@@ -172,6 +202,10 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 - Meeting audit events contain changed field names and identifiers only, not transcript or participant content.
 - AI jobs contain bounded safe failure metadata, prompt/schema trace, usage counts and integer minor-unit cost estimates; they contain no raw transcript, rendered prompt, secret or full provider response.
 - AI artefact content is validated-data storage for future use, protected from overwrite by a database trigger and separated from the supplied transcript.
+- Revenue Brain insights are strict, versioned, append-only deterministic
+  derivatives; they contain controlled changes and evidence references but no
+  transcript body, prompt, provider output, probability, forecast or deal
+  score.
 - AI job, lifecycle and artefact writes commit atomically with metadata-only audit events.
 - AI audits may identify job/artefact/type/status/version, prompt/schema/provider/model labels and structured-output attempt count, but exclude transcript/artefact bodies, prompt templates/rendered messages, raw/invalid output, provider secrets, participant-sensitive values and raw exceptions.
 - Infrastructure-test, Executive Summary, Buying Signals, Objections &

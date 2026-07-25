@@ -2,16 +2,18 @@
 
 ## Purpose and current boundary
 
-WO-007 adds the first opportunity-centred product read model. It combines
+WO-007 adds the first opportunity-centred product read model. WO-008B extends
+that surface with a separate longitudinal comparison. The workspace combines
 manually managed opportunity metadata with stored, validated intelligence from
 the latest associated meeting so a salesperson can understand the current
 commercial context quickly.
 
-The workspace does not create intelligence. Opening or refreshing it performs
-tenant-scoped database reads only: it does not read transcript text, render a
-prompt, create an AI job or call a provider. All intelligence wording is
-explicitly scoped to the latest meeting; it is not longitudinal opportunity
-reasoning.
+Opening or refreshing the workspace does not create intelligence or reasoning.
+It performs tenant-scoped database reads only: it does not read transcript
+text, render a prompt, create an AI job or call a provider. All Meeting
+Intelligence wording is explicitly scoped to the latest meeting. The separate
+**Longitudinal Changes** section reads a current immutable WO-008B comparison
+when present and offers one explicit deterministic generation action.
 
 ## Opportunity domain
 
@@ -102,9 +104,26 @@ Capabilities are never mixed across meetings or transcript versions.
 The list read model uses four bounded query groups: opportunity rows, total,
 latest meeting per opportunity through a window function, and current Buying
 Signals/Next Best Action preview artefacts. The workspace uses a fixed set of
-bounded reads for opportunity metadata, recent meetings, readiness artefacts
-and the latest meeting's existing jobs/artefacts. Query count does not grow per
+bounded reads for opportunity metadata, recent meetings, readiness artefacts,
+the latest meeting's existing jobs/artefacts and the safe current reasoning
+state. Query count does not grow per
 opportunity, meeting, participant or capability; there is no N+1 loop.
+
+## Longitudinal reasoning
+
+The aggregate's reasoning field is read-only. It selects only immutable
+snapshots explicitly associated with the opportunity and their nine referenced
+strict validated artefacts. The latest eligible pair must match the stored
+insight before the workspace reports `completed`; otherwise it reports
+`insufficient_history` or `not_generated` while older insights remain
+immutable.
+
+`POST /api/v1/opportunities/{opportunityId}/brain/reasoning` performs the
+explicit bounded comparison. The default `latest_change` mode creates or reuses
+one pair; `recent_history` handles adjacent pairs among the latest 10 eligible
+snapshots. It does not load transcripts, call a provider or generate new
+Meeting Intelligence. See
+[Revenue Brain longitudinal reasoning](revenue-brain-reasoning.md).
 
 ## API contracts
 
@@ -118,7 +137,11 @@ opportunity, meeting, participant or capability; there is no N+1 loop.
 - `GET /api/v1/opportunities/{opportunityId}/workspace` returns opportunity
   display metadata, latest meeting, up to 20 recent meetings, the latest
   product-safe Meeting Intelligence view, available-section count, partial
-  state and a generated timestamp.
+  state, current safe Revenue Brain reasoning and a generated timestamp.
+- `POST /api/v1/opportunities/{opportunityId}/brain/reasoning` creates or
+  reuses deterministic `latest_change` or `recent_history` comparisons.
+- `GET /api/v1/opportunities/{opportunityId}/brain/reasoning` reads the current
+  latest comparison and bounded immutable history.
 - `POST /api/v1/opportunities/{opportunityId}/workspace/latest-meeting-navigation`
   validates the current latest active meeting and records the content-free
   navigation telemetry event.
@@ -138,13 +161,20 @@ Cross-tenant identifiers use the established safe `404` behaviour.
   protection; and
 - `/opportunities/{opportunityId}` — Opportunity Workspace.
 
-The workspace presents the opportunity header, prominent **Latest Next Best
-Action**, latest-meeting momentum and buying signals, objections and competitive
+The workspace presents the opportunity header, **Longitudinal Changes**,
+prominent **Latest Next Best Action**, latest-meeting momentum and buying signals, objections and competitive
 signals, latest-meeting stakeholders, risks, open questions, action items, key
 decisions, latest Executive Summary, read-only Follow-up Email with Copy and
 recent meetings. Existing product-safe content renderers are reused without
 meeting generation controls. **Open latest meeting intelligence** takes the user
 to the established Meeting experience when generation or retry is needed.
+
+Longitudinal Changes appears before the current-meeting intelligence sections.
+It shows comparison dates as meeting links, a concise summary, up to six
+important changes, textual direction/importance, confidence and source
+capability labels. It includes explicit generation, insufficient-history,
+not-generated, no-material-change and safe unavailable states. No raw evidence
+identifier, gauge, forecast or score is rendered.
 
 No-meeting, no-company, no-value, no-close-date, no-transcript, not-generated,
 valid-empty and partial-capability states leave the metadata usable. Completed
@@ -183,6 +213,10 @@ represented and are deleted after dependent links are cleared, and the newer
 stage/status/value shape is mapped back to the earlier Sprint 2 contract. A
 downgrade therefore requires an explicit backup and data-loss decision.
 
+WO-008B migration `0019_revenue_brain_reasoning` adds the separate immutable
+reasoning table; it does not change Opportunity ownership or the WO-007
+migration rollback.
+
 Tests cover contracts and validation, tenant/company boundaries, CRUD and stale
 writes, association/disassociation/audits, deterministic latest selection,
 cancelled exclusion, product-safe aggregation, current transcript selection,
@@ -191,17 +225,18 @@ mock-only create–associate–refresh browser flow.
 
 ## Known limitations and future boundary
 
-The workspace shows latest associated meeting intelligence only. It has no
-cross-meeting reasoning, opportunity health, trend analysis, historical
-stakeholder tracking, relationship graph, Revenue Brain, forecast, probability,
+The workspace still shows current Meeting Intelligence for only the latest
+associated meeting, while the separate deterministic section reports supported
+adjacent-snapshot changes. It has no opportunity health score, relationship
+graph, forecast, probability,
 automatic matching, CRM integration, line items, quotes, contracts, generated
 content editing, email sending, task/calendar integration or next-action
 execution. These require separately approved work. Production customer data
 remains prohibited while production identity, consent, retention, export and
 erasure controls are incomplete.
 
-Future Revenue Brain work may introduce evidence-backed longitudinal reasoning,
-but it must use a separately reviewed source and provenance model. It must not
+Future Revenue Brain work may extend explicit schemas or explanation, but it
+must preserve the separately reviewed snapshot/evidence boundary and must not
 silently reinterpret this latest-meeting read model as historical intelligence.
 
 ## Related decisions
@@ -209,3 +244,4 @@ silently reinterpret this latest-meeting read model as historical intelligence.
 - [ADR 0002: tenant-owned business entities](../08-decisions/0002-tenant-business-entities.md)
 - [ADR 0017: derived Meeting Intelligence workspace](../08-decisions/0017-derived-meeting-intelligence-workspace.md)
 - [ADR 0022: opportunity ownership and latest-meeting read model](../08-decisions/0022-opportunity-ownership-latest-meeting-read-model.md)
+- [ADR 0024: deterministic Revenue Brain longitudinal reasoning](../08-decisions/0024-deterministic-revenue-brain-longitudinal-reasoning.md)

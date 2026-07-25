@@ -22,7 +22,8 @@ The required references are:
 
 Follow-up Email is not part of a Revenue Brain snapshot. A snapshot contains no
 transcript or artefact content. It does not summarise, compare, reason, predict,
-forecast or detect a trend.
+forecast or detect a trend. WO-008B builds a separate immutable comparison over
+these references; it does not change snapshot composition.
 
 ## Persistence and idempotency
 
@@ -69,10 +70,10 @@ date descending, then snapshot creation and ID descending. Each item contains
 the immutable composition fields and `meetingDate` for presentation. It returns
 no artefact content, transcript, prompt, model, provider, job or worker state.
 
-The company account page at `/companies/{accountId}` shows **Revenue Brain**, a
-snapshot timeline and meeting dates. It includes loading, empty and recoverable
-error states. It does not display generated content or perform comparison or
-reasoning.
+The company account page at `/companies/{accountId}` shows **Revenue Brain**,
+the bounded snapshot timeline and any separately generated adjacent WO-008B
+comparison summaries. Snapshot API items remain reference-only. See
+[Revenue Brain longitudinal reasoning](revenue-brain-reasoning.md).
 
 ## Failure and exclusion behaviour
 
@@ -84,6 +85,7 @@ without changing earlier rows.
 
 ## Out of scope
 
-Revenue Brain reasoning, opportunity health, CRM behaviour, automation,
-forecasting, trend detection, relationship graphs, embeddings, vector search,
-new prompts, provider calls and transcript analysis are not included.
+WO-008A itself includes no reasoning. The separately implemented WO-008B
+comparison still excludes opportunity health, CRM behaviour, automation,
+forecasting, predictive trend scoring, relationship graphs, embeddings, vector
+search, new prompts, provider calls and transcript analysis.

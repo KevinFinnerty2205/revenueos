@@ -8,6 +8,7 @@ from uuid import UUID
 from revenueos.contracts import APIModel
 from revenueos.domain import MeetingStatus, OpportunityStage, OpportunityStatus
 from revenueos.intelligence_contracts import MeetingIntelligenceResponse
+from revenueos.revenue_brain_reasoning_contracts import RevenueBrainReasoningResponse
 
 IntelligenceReadiness = Literal["unavailable", "not_generated", "partial", "ready"]
 
@@ -68,6 +69,7 @@ class OpportunityMeetingSummaryResponse(APIModel):
 
 class OpportunityWorkspaceResponse(APIModel):
     opportunity: OpportunityWorkspaceOpportunityResponse
+    reasoning: RevenueBrainReasoningResponse
     latest_meeting: OpportunityMeetingSummaryResponse | None
     recent_meetings: list[OpportunityMeetingSummaryResponse]
     intelligence: MeetingIntelligenceResponse | None

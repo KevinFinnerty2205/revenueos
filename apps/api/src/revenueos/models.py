@@ -1211,3 +1211,105 @@ class RevenueBrainSnapshot(Base):
     questions_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     next_best_action_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class RevenueBrainInsight(Base):
+    __tablename__ = "revenue_brain_insights"
+    __table_args__ = (
+        CheckConstraint(
+            "scope IN ('account', 'opportunity')",
+            name="ck_revenue_brain_insights_scope",
+        ),
+        CheckConstraint(
+            "status = 'completed'",
+            name="ck_revenue_brain_insights_status",
+        ),
+        CheckConstraint(
+            "reasoning_version > 0",
+            name="ck_revenue_brain_insights_reasoning_version",
+        ),
+        CheckConstraint(
+            "from_snapshot_id <> to_snapshot_id",
+            name="ck_revenue_brain_insights_distinct_snapshots",
+        ),
+        CheckConstraint(
+            "(scope = 'account' AND opportunity_id IS NULL AND scope_target_id = company_id) "
+            "OR (scope = 'opportunity' AND opportunity_id IS NOT NULL "
+            "AND scope_target_id = opportunity_id)",
+            name="ck_revenue_brain_insights_scope_target",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_revenue_brain_insights_company_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_revenue_brain_insights_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "from_snapshot_id"],
+            ["revenue_brain_snapshots.organisation_id", "revenue_brain_snapshots.id"],
+            name="fk_revenue_brain_insights_from_snapshot_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "to_snapshot_id"],
+            ["revenue_brain_snapshots.organisation_id", "revenue_brain_snapshots.id"],
+            name="fk_revenue_brain_insights_to_snapshot_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            name="uq_revenue_brain_insights_organisation_id_id",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "scope",
+            "scope_target_id",
+            "from_snapshot_id",
+            "to_snapshot_id",
+            "reasoning_version",
+            name="uq_revenue_brain_insights_comparison_version",
+        ),
+        Index(
+            "ix_revenue_brain_insights_organisation_company_created",
+            "organisation_id",
+            "company_id",
+            "created_at",
+        ),
+        Index(
+            "ix_revenue_brain_insights_organisation_opportunity_created",
+            "organisation_id",
+            "opportunity_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope_target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    from_snapshot_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    to_snapshot_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    reasoning_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="completed", server_default="completed")
+    content_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )

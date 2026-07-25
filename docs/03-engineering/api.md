@@ -28,16 +28,34 @@ List parameters: `search`, `status`, `industry`, `sortBy` (`name`, `created_at`,
 
 ## Revenue Brain
 
-| Method | Path                                 | Purpose                                                          |
-| ------ | ------------------------------------ | ---------------------------------------------------------------- |
-| `GET`  | `/api/v1/accounts/{accountId}/brain` | List the account's immutable Revenue Brain snapshot compositions |
+| Method | Path                                           | Purpose                                                          |
+| ------ | ---------------------------------------------- | ---------------------------------------------------------------- |
+| `GET`  | `/api/v1/accounts/{accountId}/brain`           | List the account's immutable Revenue Brain snapshot compositions |
+| `POST` | `/api/v1/accounts/{accountId}/brain/reasoning` | Create or reuse deterministic account comparisons                |
+| `GET`  | `/api/v1/accounts/{accountId}/brain/reasoning` | Read the latest account comparison and bounded history           |
 
 The response is a JSON array ordered by meeting date descending, then snapshot
 creation and ID descending. Each item contains the snapshot ownership/trace,
 meeting date, schema version and nine artefact IDs. It contains no artefact
 content, transcript, prompt, provider/model payload, job/worker state,
-comparison, reasoning, prediction or forecast. A cross-tenant or unknown
-account returns the same safe `404` response.
+comparison or generated reasoning. A cross-tenant or unknown account returns
+the same safe `404` response.
+
+Reasoning POST accepts `mode=latest_change` by default or
+`mode=recent_history`. It synchronously compares the latest eligible pair or
+the adjacent pairs among at most 10 eligible snapshots and reuses an equivalent
+immutable insight. GET is read-only and returns `insufficient_history`,
+`not_generated` or the current `completed` insight plus up to 10 historical
+insights. The stable state enum also reserves `queued`, `running`, `failed` and
+`cancelled`.
+
+Reasoning reads only snapshot references, their strict validated artefacts and
+safe meeting metadata. It never reads transcript text, re-runs extraction or
+calls a provider. The controlled change response includes comparison dates,
+qualitative direction and importance, confidence as evidence support, source
+capability labels and structured evidence. It contains no outcome score,
+probability, forecast, prompt/provider/job fields or raw source content. See
+[Revenue Brain longitudinal reasoning](revenue-brain-reasoning.md).
 
 ## Contacts
 
@@ -64,12 +82,27 @@ A contact requires a company in the same organisation and a syntactically valid 
 | `DELETE` | `/api/v1/opportunities/{opportunityId}` | Delete an unused opportunity |
 | `GET` | `/api/v1/opportunities/{opportunityId}/workspace` | Read the latest-meeting Opportunity Workspace |
 | `POST` | `/api/v1/opportunities/{opportunityId}/workspace/latest-meeting-navigation` | Record metadata-only navigation to the selected latest meeting |
+| `POST` | `/api/v1/opportunities/{opportunityId}/brain/reasoning` | Create or reuse deterministic opportunity comparisons |
+| `GET` | `/api/v1/opportunities/{opportunityId}/brain/reasoning` | Read the latest opportunity comparison and bounded history |
 
 List parameters: `search`, `companyId`, `stage`, `status`, `sortBy` (`name`, `estimated_value`, `expected_close_date`, `created_at`, `updated_at`) and `sortOrder`. Items include company display name, deterministic latest active meeting date, current qualitative momentum and a bounded Next Best Action preview when valid. The web list defaults to `updated_at DESC`.
 
 Company is optional. Estimated value and currency must either both be null or both be supplied; value is a non-negative fixed-precision decimal and currency is a three-letter uppercase code. Expected close is an optional user-managed date. Updates accept optional `expectedUpdatedAt` and return `409 stale_write` when the record changed. Stages are `qualification`, `discovery`, `evaluation`, `proposal`, `negotiation`, `procurement`, `closed_won`, `closed_lost` and `other`; statuses are `open`, `won`, `lost` and `on_hold`. Probability and forecast categories do not exist.
 
-The workspace returns display metadata, the deterministic latest associated meeting, at most 20 newest recent associated meetings, product-safe readiness and the ten existing capability states/results for the latest meeting's current transcript version. Cancelled and soft-deleted meetings are excluded; ordering is `meeting_date DESC, meeting UUID DESC`. It never returns transcript text or AI infrastructure trace and never starts generation. See [Opportunity Workspace](opportunity-workspace.md) for trace and empty-state rules.
+The workspace returns display metadata, the deterministic latest associated
+meeting, at most 20 newest recent associated meetings, product-safe readiness,
+the ten existing capability states/results for the latest meeting's current
+transcript version and the current read-only Revenue Brain reasoning state.
+Cancelled and soft-deleted meetings are excluded; ordering is
+`meeting_date DESC, meeting UUID DESC`. It never returns transcript text or AI
+infrastructure trace and never starts intelligence or reasoning generation. See
+[Opportunity Workspace](opportunity-workspace.md) for trace and empty-state
+rules.
+
+Opportunity reasoning uses the same modes, strict contract and source boundary
+as account reasoning, but both selected snapshots and their meetings must carry
+the exact opportunity association. Account and opportunity idempotency scopes
+are separate.
 
 ## Tasks
 
