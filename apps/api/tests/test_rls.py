@@ -47,6 +47,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "company_id": uuid.uuid4(),
         "contact_id": uuid.uuid4(),
         "opportunity_id": uuid.uuid4(),
+        "opportunity_audit_id": uuid.uuid4(),
         "task_id": uuid.uuid4(),
         "meeting_id": uuid.uuid4(),
         "participant_id": uuid.uuid4(),
@@ -67,6 +68,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "company_id": uuid.uuid4(),
         "contact_id": uuid.uuid4(),
         "opportunity_id": uuid.uuid4(),
+        "opportunity_audit_id": uuid.uuid4(),
         "task_id": uuid.uuid4(),
         "meeting_id": uuid.uuid4(),
         "participant_id": uuid.uuid4(),
@@ -183,6 +185,19 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             "opportunity_name": f"RLS Opportunity {suffix}",
                             "value": Decimal("1000.00"),
                         },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO opportunity_audit_events
+                                (id, organisation_id, opportunity_id, actor_user_id,
+                                 action, changed_fields)
+                            VALUES
+                                (:opportunity_audit_id, :organisation_id,
+                                 :opportunity_id, :user_id, 'created', '[]'::json)
+                            """
+                        ),
+                        identity_parameters,
                     )
                     await connection.execute(
                         text(
