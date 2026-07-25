@@ -1,3 +1,4 @@
+import { BetaFeatureGate } from "@/components/beta-feature-gate";
 import { OpportunityWorkspace } from "@/components/opportunity-workspace";
 
 export default async function OpportunityWorkspacePage({
@@ -6,5 +7,9 @@ export default async function OpportunityWorkspacePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <OpportunityWorkspace opportunityId={id} />;
+  return (
+    <BetaFeatureGate feature="opportunityWorkspace">
+      <OpportunityWorkspace opportunityId={id} />
+    </BetaFeatureGate>
+  );
 }

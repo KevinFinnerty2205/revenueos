@@ -168,6 +168,7 @@ retain their original provider/model trace.
 - The current transcript body is not an immutable historical snapshot.
 - Provider privacy, residency, retention and contractual settings are
   deployment responsibilities and not proven by configuration alone.
-- Production Clerk verification, consent evidence, deletion/export and
-  operational controls remain incomplete; production customer data is
-  prohibited.
+- Technical Clerk verification, versioned notice and beta deletion/export/
+  operational controls are implemented by WO-009. Provider privacy/residency,
+  target-environment launch evidence and production customer-data approval
+  remain outstanding; production customer data is prohibited.

@@ -244,8 +244,9 @@ artefacts and make no OpenAI call.
 - There are no embeddings, semantic vectors, CRM context, opportunity health,
   close probability, forecast, scoring, chat, relationship graph, automatic
   action execution or cross-account benchmarking.
-- Production customer data remains prohibited until production identity,
-  consent, retention, export, erasure and operational controls are complete.
+- Production customer data remains prohibited unless separately approved.
+  WO-009 feature-gates Revenue Brain and its approved retention/deletion path
+  removes dependent immutable insights/snapshots before source records.
 
 Revenue Brain v2 may add separately approved explicit lifecycle states or an
 optional provider summary composer. It must preserve deterministic changes as

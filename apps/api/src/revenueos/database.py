@@ -68,6 +68,17 @@ async def database_is_ready(engine: AsyncEngine | None) -> bool:
     return True
 
 
+async def database_migration_version(engine: AsyncEngine | None) -> str | None:
+    if engine is None:
+        return None
+    try:
+        async with engine.connect() as connection:
+            value = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+    except (OSError, SQLAlchemyError):
+        return None
+    return str(value) if value is not None else None
+
+
 async def set_tenant_database_context(session: AsyncSession, organisation_id: UUID) -> None:
     """Set the transaction-local PostgreSQL RLS context from trusted auth."""
 

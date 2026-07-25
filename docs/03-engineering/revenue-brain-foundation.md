@@ -75,6 +75,14 @@ the bounded snapshot timeline and any separately generated adjacent WO-008B
 comparison summaries. Snapshot API items remain reference-only. See
 [Revenue Brain longitudinal reasoning](revenue-brain-reasoning.md).
 
+WO-009 places this surface behind the server-authoritative
+`API_FEATURE_REVENUE_BRAIN_ENABLED` capability. Disabled API routes fail
+closed and the web surface stays hidden; client input cannot enable it. The
+deterministic demo-data command supplies two synthetic meeting transcripts.
+Running the existing unified mock generation for both meetings is the supported
+demo path for composing snapshots and the adjacent reasoning result—no new AI
+capability or real provider request is involved.
+
 ## Failure and exclusion behaviour
 
 No snapshot is created for a scheduled, cancelled, deleted or unlinked meeting;
@@ -82,6 +90,11 @@ an absent, failed, cancelled, superseded, wrong-version, wrong-schema or invalid
 required artefact; or a stale/deleted transcript revision. Completion remains
 idempotent and a later eligible transcript revision appends a new snapshot
 without changing earlier rows.
+
+Ordinary application code still cannot update or delete snapshots. The WO-009
+retention and organisation-deletion maintenance services use the narrow,
+tenant-scoped approved database deletion path added in migration 0020 so policy
+expiry cannot leave stale Revenue Brain references visible.
 
 ## Out of scope
 

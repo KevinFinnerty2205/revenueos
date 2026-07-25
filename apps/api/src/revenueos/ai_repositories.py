@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -46,8 +46,25 @@ class AIJobLifecycleMetadata:
 class AIJobRepository:
     """Tenant-scoped AI job persistence and shared AI transaction boundary."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        generation_limiter: Callable[[], Awaitable[None]] | None = None,
+        default_max_attempts: int | None = None,
+    ) -> None:
         self.session = session
+        self._generation_limiter = generation_limiter
+        self._unreserved_job_count = 0
+        self._default_max_attempts = default_max_attempts
+
+    def set_generation_limiter(
+        self,
+        generation_limiter: Callable[[], Awaitable[None]] | None,
+    ) -> None:
+        self._generation_limiter = generation_limiter
+
+    def set_default_max_attempts(self, value: int | None) -> None:
+        self._default_max_attempts = value
 
     async def get_meeting(
         self,
@@ -108,7 +125,10 @@ class AIJobRepository:
         return result.scalar_one_or_none()
 
     def create_job(self, job: AIJob) -> None:
+        if self._default_max_attempts is not None:
+            job.max_attempts = self._default_max_attempts
         self.session.add(job)
+        self._unreserved_job_count += 1
 
     async def get_job(
         self,
@@ -406,6 +426,10 @@ class AIJobRepository:
         self.session.add(event)
 
     async def flush(self) -> None:
+        if self._generation_limiter is not None:
+            while self._unreserved_job_count > 0:
+                await self._generation_limiter()
+                self._unreserved_job_count -= 1
         await self.session.flush()
 
     async def refresh(self, entity: Base) -> None:
@@ -415,6 +439,7 @@ class AIJobRepository:
         await self.session.commit()
 
     async def rollback(self) -> None:
+        self._unreserved_job_count = 0
         await self.session.rollback()
 
 

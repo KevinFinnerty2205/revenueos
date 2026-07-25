@@ -72,8 +72,9 @@ API, service, repository and worker reads use the trusted organisation context a
 With mock, customer content stays inside the application. With OpenAI enabled,
 the selected meeting transcript and rendered instructions are sent to OpenAI.
 No production customer data may be used. Production Clerk verification,
-consent evidence, retention/export/erasure, provider privacy review, deployment
-monitoring and incident controls remain incomplete.
+consent and beta-grade retention/export/erasure and operational controls are
+implemented by WO-009. Provider privacy/legal approval and environment-specific
+launch evidence remain incomplete.
 
 ## Local development and testing
 

@@ -33,6 +33,7 @@ from revenueos.ai_provider_registry import AIProviderRegistry
 from revenueos.ai_worker_services import AIWorkerService, calculate_retry_delay_seconds
 from revenueos.config import Settings
 from revenueos.domain import AIJobStatus, AIJobType
+from revenueos.errors import PublicAPIError
 from revenueos.models import AIArtifact, AIJob, Meeting, MeetingAuditEvent, Transcript
 from revenueos.observability import JSONFormatter
 from revenueos.worker import AIWorker, run_worker
@@ -479,6 +480,41 @@ def test_retryable_provider_failure_uses_durable_retry_and_safe_error() -> None:
         assert stored.last_error_message_safe == ("The configured AI provider is temporarily unavailable.")
         assert stored.next_attempt_at == (NOW + timedelta(seconds=5)).replace(tzinfo=None)
         assert artifact_count == 0
+
+    _run(scenario)
+
+
+def test_daily_provider_limit_fails_without_calling_provider_or_retrying() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        (job,) = await _seed_jobs(session_factory)
+        settings = _settings()
+
+        async def reject_provider_request(claim: ClaimedAIJob) -> None:
+            assert claim.job_id == job.id
+            raise PublicAPIError(
+                "daily_provider_limit_exceeded",
+                "This organisation has reached today’s external AI request limit. Try again tomorrow.",
+                429,
+            )
+
+        executor = InfrastructureTestExecutor(
+            settings,
+            AIProviderRegistry({MOCK_PROVIDER_NAME: _ExplodingProvider()}),
+            provider_request_limiter=reject_provider_request,
+        )
+        service = AIWorkerService(
+            session_factory,
+            settings,
+            executors=AIExecutorRegistry({AIJobType.INFRASTRUCTURE_TEST.value: executor}),
+            clock=lambda: NOW,
+        )
+        worker = AIWorker(service, settings, worker_id="quota-worker")
+
+        assert await worker.run_once() is True
+        stored = await _stored_job(session_factory, job.id)
+        assert stored.status == AIJobStatus.FAILED.value
+        assert stored.last_error_code == "daily_provider_limit_exceeded"
+        assert stored.next_attempt_at is None
 
     _run(scenario)
 

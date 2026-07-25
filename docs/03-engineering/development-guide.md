@@ -47,7 +47,8 @@ Provider selection defaults to `AI_PROVIDER=mock`, with
 `API_AI_PROVIDER_MODEL_IDENTIFIER=mock-infrastructure-v1` and
 `API_AI_PROVIDER_TIMEOUT_SECONDS=10` for the mock. OpenAI selection requires
 server-only `OPENAI_API_KEY` and `OPENAI_MODEL`; timeout and output ceilings use
-`OPENAI_TIMEOUT_SECONDS` and `OPENAI_MAX_OUTPUT_TOKENS`. Unknown names/models
+`OPENAI_TIMEOUT_SECONDS` and `OPENAI_MAX_OUTPUT_TOKENS`, and the explicit
+`API_FEATURE_OPENAI_PROVIDER_ENABLED=true` flag. Unknown names/models
 fail safely and never fall back. Prompt/output defaults are
 `API_AI_PROMPT_KEY=infrastructure_test` and
 `API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS=3`. The latter is the total number of
@@ -74,6 +75,15 @@ synthetic non-sensitive data and follow
 the [manual smoke procedure](openai-provider-integration.md#manual-non-production-smoke-test);
 never put an actual key value in shell history, screenshots or repository files.
 
+WO-009 adds an API-enforced notice before transcript writes/generation. The
+fixture acknowledges version 1 for deterministic tests; the browser onboarding
+performs the real product action. To exercise the synthetic beta dataset, run
+`revenueos-demo-data seed` with explicit tenant/user UUIDs, generate both
+meetings with the existing mock workflow and reset with the tenant-scoped
+command. Retention, exports, deletion and expired-export purge use
+`revenueos-beta-maintenance`. Exact commands and safety boundaries are in the
+[private beta readiness guide](private-beta-readiness.md).
+
 To exercise WO-007, create an opportunity, open its workspace and explicitly
 associate a same-organisation meeting. The opportunity list and workspace read
 the latest stored current-version artefacts without contacting the provider or
@@ -89,6 +99,10 @@ aggregate API testing uses
 `GET /api/v1/meetings/{meetingId}/intelligence`; orchestration uses POST on the
 same path plus `/generate`. See
 [Unified Meeting Intelligence](unified-meeting-intelligence.md).
+
+WO-009 migration `0020_private_beta_readiness` follows `0019` as the single
+head. Migration tests upgrade, downgrade and re-upgrade it; PostgreSQL CI also
+verifies forced RLS for every new tenant table.
 
 ## Database workflow
 
@@ -216,6 +230,8 @@ pnpm build:api
 
 - `/ready` returning `503` is correct when PostgreSQL or authentication is unavailable.
 - Mock auth is rejected in production and must remain visibly labelled locally.
-- Empty Clerk values do not enable Clerk; the provider path remains unavailable until verified session/token handling is implemented.
+- Empty Clerk values do not enable Clerk. The verified path requires the
+  publishable/secret web configuration plus the API JWKS URL, exact issuer and
+  audience; incomplete production configuration fails closed.
 - If a web build uses unexpected auth behaviour, check `AUTH_MODE` and `MOCK_AUTH_ENABLED` in `apps/web/.env.local`.
 - Never paste real tokens into logs, issues, fixtures or documentation.

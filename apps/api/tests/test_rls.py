@@ -14,9 +14,72 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from revenueos.ai_repositories import AIJobRepository
 from revenueos.ai_services import AIArtifactService, AIJobService
 from revenueos.ai_worker_repositories import AIWorkerRepository
+from revenueos.auth import VerifiedIdentity, _resolve_identity
+from revenueos.beta_services import BetaService
+from revenueos.config import Settings
+from revenueos.database import set_tenant_database_context
 from revenueos.domain import AIJobStatus
 from revenueos.errors import PublicAPIError
 from revenueos.tenant import TenantContext
+
+
+def test_postgresql_clerk_identity_reconciliation_uses_deterministic_rls_context() -> None:
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith(("postgresql", "postgres")):
+        pytest.skip("A PostgreSQL DATABASE_URL is required for the identity RLS integration test.")
+
+    suffix = uuid.uuid4().hex
+    identity = VerifiedIdentity(
+        external_auth_id=f"user_clerk_rls_{suffix}",
+        external_organisation_id=f"org_clerk_rls_{suffix}",
+        display_name="Synthetic Clerk RLS user",
+        email=f"clerk-rls-{suffix}@example.test",
+        organisation_name="Synthetic Clerk RLS organisation",
+        role="admin",
+        auth_mode="clerk",
+    )
+
+    async def scenario() -> None:
+        engine = create_async_engine(database_url)
+        organisation_id: uuid.UUID | None = None
+        user_id: uuid.UUID | None = None
+        try:
+            async with AsyncSession(engine, expire_on_commit=False) as session:
+                first = await _resolve_identity(session, identity)
+                second = await _resolve_identity(session, identity)
+                assert first.organisation_id == second.organisation_id
+                assert first.user_id == second.user_id
+                assert second.role == "admin"
+                organisation_id = first.organisation_id
+                user_id = first.user_id
+        finally:
+            if organisation_id is not None and user_id is not None:
+                async with engine.begin() as connection:
+                    await connection.execute(
+                        text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
+                        {"organisation_id": str(organisation_id)},
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            DELETE FROM organisation_memberships
+                            WHERE organisation_id = :organisation_id
+                              AND user_id = :user_id
+                            """
+                        ),
+                        {"organisation_id": organisation_id, "user_id": user_id},
+                    )
+                    await connection.execute(
+                        text("DELETE FROM organisations WHERE id = :organisation_id"),
+                        {"organisation_id": organisation_id},
+                    )
+                    await connection.execute(
+                        text("DELETE FROM users WHERE id = :user_id"),
+                        {"user_id": user_id},
+                    )
+            await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_postgresql_rls_isolates_every_tenant_table() -> None:
@@ -39,6 +102,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "ai_artifacts",
         "revenue_brain_snapshots",
         "revenue_brain_insights",
+        "organisation_beta_settings",
+        "data_notice_acknowledgements",
+        "onboarding_progress",
+        "ai_usage_counters",
+        "beta_feedback",
+        "beta_data_requests",
+        "beta_system_events",
     )
     tenant_a = {
         "suffix": "A",
@@ -60,6 +130,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "insight_id": uuid.uuid4(),
         "transcript_version_id": uuid.uuid4(),
         "previous_transcript_version_id": uuid.uuid4(),
+        "acknowledgement_id": uuid.uuid4(),
+        "feedback_id": uuid.uuid4(),
+        "data_request_id": uuid.uuid4(),
+        "system_event_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -81,6 +155,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "insight_id": uuid.uuid4(),
         "transcript_version_id": uuid.uuid4(),
         "previous_transcript_version_id": uuid.uuid4(),
+        "acknowledgement_id": uuid.uuid4(),
+        "feedback_id": uuid.uuid4(),
+        "data_request_id": uuid.uuid4(),
+        "system_event_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -375,6 +453,87 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         ),
                         identity_parameters,
                     )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO organisation_beta_settings
+                                (organisation_id, retention_days)
+                            VALUES (:organisation_id, 90)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO data_notice_acknowledgements
+                                (id, organisation_id, user_id, notice_version)
+                            VALUES
+                                (:acknowledgement_id, :organisation_id, :user_id, 1)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO onboarding_progress
+                                (organisation_id, user_id, current_step)
+                            VALUES (:organisation_id, :user_id, 2)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO ai_usage_counters
+                                (organisation_id, usage_date, generation_count,
+                                 provider_request_count)
+                            VALUES (:organisation_id, CURRENT_DATE, 1, 0)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO beta_feedback
+                                (id, organisation_id, user_id, category, rating,
+                                 message, current_route)
+                            VALUES
+                                (:feedback_id, :organisation_id, :user_id,
+                                 'confusing', 4, 'Synthetic RLS feedback.', '/feedback')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO beta_data_requests
+                                (id, organisation_id, requested_by_user_id,
+                                 request_type, status, confirmed_at)
+                            VALUES
+                                (:data_request_id, :organisation_id, :user_id,
+                                 'export', 'pending', now())
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO beta_system_events
+                                (id, organisation_id, actor_user_id, event_type,
+                                 subject_id, metadata_json)
+                            VALUES
+                                (:system_event_id, :organisation_id, :user_id,
+                                 'rls_test_event', :data_request_id, '{}'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
 
                 savepoint = await connection.begin_nested()
                 with pytest.raises(DBAPIError):
@@ -432,22 +591,33 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                 SELECT relname, relrowsecurity, relforcerowsecurity
                                 FROM pg_class
                                 WHERE relname IN (
+                                    'companies',
+                                    'contacts',
+                                    'opportunities',
+                                    'opportunity_audit_events',
+                                    'tasks',
+                                    'meetings',
+                                    'meeting_participants',
+                                    'transcripts',
+                                    'meeting_audit_events',
                                     'ai_jobs',
                                     'ai_artifacts',
                                     'revenue_brain_snapshots',
-                                    'revenue_brain_insights'
+                                    'revenue_brain_insights',
+                                    'organisation_beta_settings',
+                                    'data_notice_acknowledgements',
+                                    'onboarding_progress',
+                                    'ai_usage_counters',
+                                    'beta_feedback',
+                                    'beta_data_requests',
+                                    'beta_system_events'
                                 )
                                 """
                             )
                         )
                     )
                 }
-                assert rls_state == {
-                    "ai_jobs": (True, True),
-                    "ai_artifacts": (True, True),
-                    "revenue_brain_snapshots": (True, True),
-                    "revenue_brain_insights": (True, True),
-                }
+                assert rls_state == {table: (True, True) for table in tenant_tables}
 
             async with engine.connect() as connection:
                 transaction = await connection.begin()
@@ -558,6 +728,45 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     assert service_artifact.artifact_version == 1
                 await transaction.commit()
 
+                quota_settings = Settings(
+                    environment="test",
+                    auth_mode="mock",
+                    mock_auth_enabled=True,
+                    database_url=database_url,
+                    private_beta_max_generations_per_day=2,
+                )
+                quota_tenant = TenantContext(
+                    organisation_id=tenant_a["organisation_id"],
+                    user_id=tenant_a["user_id"],
+                    role="admin",
+                )
+
+                async def reserve_concurrently() -> str:
+                    async with AsyncSession(engine, expire_on_commit=False) as session, session.begin():
+                        await set_tenant_database_context(session, tenant_a["organisation_id"])
+                        try:
+                            await BetaService(session, quota_tenant, quota_settings).reserve_generation()
+                        except PublicAPIError as error:
+                            return error.code
+                    return "reserved"
+
+                quota_results = await asyncio.gather(reserve_concurrently(), reserve_concurrently())
+                assert sorted(quota_results) == ["daily_generation_limit_exceeded", "reserved"]
+                async with AsyncSession(engine, expire_on_commit=False) as session, session.begin():
+                    await set_tenant_database_context(session, tenant_a["organisation_id"])
+                    generation_count = await session.scalar(
+                        text(
+                            """
+                            SELECT generation_count
+                            FROM ai_usage_counters
+                            WHERE organisation_id = :organisation_id
+                              AND usage_date = CURRENT_DATE
+                            """
+                        ),
+                        {"organisation_id": tenant_a["organisation_id"]},
+                    )
+                assert generation_count == 2
+
                 cross_tenant_inserts = (
                     (
                         """
@@ -630,6 +839,18 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             "job_id": tenant_b["ai_job_id"],
                         },
                     ),
+                    (
+                        """
+                        INSERT INTO organisation_beta_settings
+                            (organisation_id, retention_days)
+                        VALUES (:organisation_id, 30)
+                        ON CONFLICT (organisation_id)
+                        DO UPDATE SET retention_days = EXCLUDED.retention_days
+                        """,
+                        {
+                            "organisation_id": tenant_b["organisation_id"],
+                        },
+                    ),
                 )
                 for statement, parameters in cross_tenant_inserts:
                     transaction = await connection.begin()
@@ -650,6 +871,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     text("ALTER TABLE revenue_brain_snapshots DISABLE TRIGGER revenue_brain_snapshots_append_only")
                 )
                 for table in (
+                    "beta_system_events",
+                    "beta_data_requests",
+                    "beta_feedback",
+                    "ai_usage_counters",
+                    "onboarding_progress",
+                    "data_notice_acknowledgements",
+                    "organisation_beta_settings",
                     "revenue_brain_insights",
                     "revenue_brain_snapshots",
                     "ai_artifacts",

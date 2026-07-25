@@ -3,18 +3,21 @@
 ## Current status
 
 RevenueOS has no selected production hosting platform and this repository does
-not deploy automatically. This guide records the minimum process boundary and
-configuration expectations for the current web, API and worker components; it
-is not production approval.
+not deploy automatically. WO-009 defines one supported private-beta topology
+and operating boundary for the current web, API, worker and PostgreSQL
+components; it is not production-data approval.
 
-Do not use production customer data. Clerk verification, consent evidence,
-retention/export/erasure, provider privacy review, monitoring, backup/restore
-and incident controls remain production gates.
+Do not use production customer data unless separately approved. Technical Clerk
+verification, versioned notice, beta retention/export/deletion, bounded health,
+usage and runbooks now exist. Target-environment Clerk governance, provider
+privacy approval, secret/log/backup infrastructure, restore evidence and every
+unchecked launch item remain gates.
 
 ## Process topology
 
 - Deploy the Next.js web application without database or OpenAI service
-  credentials.
+  credentials. It uses Clerk middleware and may receive only the server-side
+  Clerk secret plus public publishable/template names.
 - Deploy FastAPI as a long-running ASGI process.
 - Deploy `revenueos-ai-worker` as an independently supervised long-running
   process from the same immutable release as the API.
@@ -50,7 +53,7 @@ variables, data flow, smoke test and rollback.
 2. Back up and verify recovery expectations for PostgreSQL.
 3. Apply Alembic with the guarded migration role.
 4. Confirm migration drift checks are clean.
-5. Start/update the API and verify `/health` and `/ready`.
+5. Start/update the API and verify `/health/live` and `/health/ready`.
 6. Start/update the worker and verify content-free worker/provider telemetry.
 7. Start/update the web application and exercise a synthetic smoke journey.
 8. Monitor safe failure, lease, retry, rate-limit and latency signals.
@@ -74,7 +77,20 @@ not require provider configuration or worker capacity. Deploy API, worker and we
 from the same immutable release so aggregate prompt/schema selection and worker
 source validation agree.
 
+WO-009 requires head `0020_private_beta_readiness`. It adds deterministic Clerk
+organisation mapping/status, admin/member membership status and seven focused
+forced-RLS beta tables. It also permits Revenue Brain deletion only under the
+trusted tenant plus approved maintenance context. Run migration exactly once,
+then start the matching API/worker. Schedule tenant retention and expired-export
+purge commands. The complete process, backup/restore drill and launch evidence
+are in [private-beta deployment and recovery](private-beta-deployment-and-recovery.md).
+
 ## Rollback
+
+Downgrading `0020_private_beta_readiness` deletes all beta consent, settings,
+onboarding, usage, feedback, request and safe-event metadata and cannot restore
+historical `manager` roles. Prefer application rollback with the forward
+schema; downgrade only with backup and explicit data-loss approval.
 
 Roll back API, worker and web to the same previously validated release. For an
 OpenAI-specific operational issue, select `AI_PROVIDER=mock`, restart the

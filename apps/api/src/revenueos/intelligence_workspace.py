@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, cast
@@ -284,12 +285,24 @@ NEXT_BEST_ACTION_PREREQUISITES: tuple[CapabilityName, ...] = (
 class MeetingIntelligenceService:
     """Tenant-scoped aggregate read model and small generation orchestrator."""
 
-    def __init__(self, session: AsyncSession, tenant: TenantContext) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        tenant: TenantContext,
+        generation_limiter: Callable[[], Awaitable[None]] | None = None,
+        default_max_attempts: int | None = None,
+    ) -> None:
         self.session = session
         self.tenant = tenant
         self.jobs = AIJobRepository(session)
         self.artifacts = AIArtifactRepository(session)
-        self.capabilities = AIJobService(session, tenant, job_repository=self.jobs)
+        self.capabilities = AIJobService(
+            session,
+            tenant,
+            job_repository=self.jobs,
+            generation_limiter=generation_limiter,
+            default_max_attempts=default_max_attempts,
+        )
 
     async def get_workspace(
         self,

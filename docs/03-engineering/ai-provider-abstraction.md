@@ -68,6 +68,10 @@ models fail closed; there is no model fallback.
 | `OPENAI_MODEL` | empty | Required for `openai`; 1–200 safe identifier characters |
 | `OPENAI_TIMEOUT_SECONDS` | `30` | Greater than zero, at most 300 |
 | `OPENAI_MAX_OUTPUT_TOKENS` | `4096` | 256–32,768 |
+| `API_FEATURE_OPENAI_PROVIDER_ENABLED` | `false` | Must also be true before OpenAI may be selected |
+| `API_PRIVATE_BETA_MAX_GENERATIONS_PER_DAY` | `100` | Per-organisation UTC-day generation ceiling |
+| `API_PRIVATE_BETA_MAX_OPENAI_REQUESTS_PER_DAY` | `150` | Per-organisation UTC-day provider-attempt ceiling |
+| `API_PRIVATE_BETA_MAX_TRANSCRIPT_CHARACTERS` | `200000` | Server-enforced transcript input ceiling |
 
 `Settings.safe_ai_configuration()` contains only provider/model/bounds and an
 external-transmission flag. It never returns the key.
@@ -178,6 +182,16 @@ query persistence. Every worker database transaction resets the trusted tenant
 context and retains explicit organisation predicates, composite tenant keys and
 forced RLS. Provider selection does not change these boundaries.
 
+WO-009 adds PostgreSQL-backed, tenant-scoped UTC-day counters at two distinct
+boundaries. A newly created intelligence job consumes one generation; an
+idempotent reuse does not. Every actual OpenAI adapter attempt, including the
+existing bounded structured-output retry, consumes one OpenAI request. Mock
+execution never consumes the external-provider counter, but generation remains
+bounded. Counter increments use a single atomic upsert, so concurrent requests
+cannot pass the configured ceiling through an in-memory race. A request stopped
+at the ceiling does not reach the provider and is failed safely without
+spending durable retry attempts against the same daily limit.
+
 Logs may contain opaque organisation/job IDs, provider/model/schema labels,
 provider request ID, latency, tokens, finish status and safe error
 classification. They exclude API keys, headers, prompt/transcript/participant
@@ -194,6 +208,8 @@ response/usage mapping, safe errors, durable worker
 retry behaviour, trace persistence and content/secret redaction. Mock
 regressions, tenant/API/RLS, migration, UI and browser gates remain unchanged.
 
-Production customer data is prohibited. Production identity, consent,
-retention/deletion, provider privacy/residency, cost controls and operational
-readiness remain incomplete.
+Production customer data remains prohibited. WO-009 provides beta-grade
+identity, consent, retention/deletion, feature-switch and usage-limit controls,
+but does not constitute privacy/legal/provider-residency approval or a claim of
+regulated-industry readiness. OpenAI remains unavailable unless both provider
+selection and the explicit server-side feature flag are configured.

@@ -35,6 +35,21 @@ class Settings(BaseSettings):
     clerk_jwks_url: str | None = None
     clerk_issuer: str | None = None
     clerk_audience: str | None = None
+    clerk_jwks_timeout_seconds: float = Field(default=5.0, gt=0, le=15)
+    clerk_jwt_leeway_seconds: int = Field(default=30, ge=0, le=120)
+    private_beta_data_notice_version: int = Field(default=1, ge=1)
+    private_beta_default_retention_days: int = Field(default=90)
+    private_beta_max_generations_per_day: int = Field(default=100, ge=1, le=10_000)
+    private_beta_max_openai_requests_per_day: int = Field(default=150, ge=1, le=10_000)
+    private_beta_max_transcript_characters: int = Field(default=200_000, ge=1_000, le=1_000_000)
+    private_beta_feedback_per_user_per_day: int = Field(default=20, ge=1, le=1_000)
+    private_beta_retention_batch_size: int = Field(default=100, ge=1, le=1_000)
+    private_beta_export_directory: str = Field(default="/tmp/revenueos-private-beta-exports", min_length=1)
+    feature_openai_provider_enabled: bool = False
+    feature_revenue_brain_enabled: bool = True
+    feature_opportunity_workspace_enabled: bool = True
+    feature_data_export_enabled: bool = True
+    feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
     worker_lease_duration_seconds: int = Field(default=60, ge=10, le=3600)
     worker_heartbeat_interval_seconds: int = Field(default=20, ge=1, le=1200)
@@ -117,10 +132,14 @@ class Settings(BaseSettings):
                 raise ValueError("Production requires complete Clerk verification configuration.")
             if "*" in self.cors_origin_list:
                 raise ValueError("Production CORS origins must be explicit.")
+            if self.database_url is None or not self.database_url.startswith(("postgresql", "postgres")):
+                raise ValueError("Production requires PostgreSQL persistence.")
         if self.worker_heartbeat_interval_seconds >= self.worker_lease_duration_seconds:
             raise ValueError("Worker heartbeat interval must be shorter than the lease duration.")
         if self.worker_base_retry_delay_seconds > self.worker_max_retry_delay_seconds:
             raise ValueError("Worker base retry delay cannot exceed the maximum retry delay.")
+        if self.private_beta_default_retention_days not in {30, 90, 180}:
+            raise ValueError("Private beta default retention must be 30, 90 or 180 days.")
         if self.ai_provider_name == "openai":
             if self.openai_api_key is None:
                 raise ValueError("OPENAI_API_KEY is required when AI_PROVIDER=openai.")
@@ -129,6 +148,8 @@ class Settings(BaseSettings):
                 raise ValueError("OPENAI_API_KEY is malformed.")
             if self.openai_model is None:
                 raise ValueError("OPENAI_MODEL is required when AI_PROVIDER=openai.")
+            if not self.feature_openai_provider_enabled:
+                raise ValueError("OpenAI requires the server-side beta feature flag.")
         return self
 
     @property
@@ -161,6 +182,17 @@ class Settings(BaseSettings):
             "timeout_seconds": self.selected_ai_timeout_seconds,
             "max_output_tokens": (self.openai_max_output_tokens if self.ai_provider_name == "openai" else None),
             "external_content_transmission": self.ai_provider_name == "openai",
+        }
+
+    def safe_feature_flags(self) -> dict[str, bool]:
+        """Return the complete, product-safe server-authoritative flag set."""
+
+        return {
+            "openaiProvider": self.feature_openai_provider_enabled,
+            "revenueBrain": self.feature_revenue_brain_enabled,
+            "opportunityWorkspace": self.feature_opportunity_workspace_enabled,
+            "dataExport": self.feature_data_export_enabled,
+            "organisationDeletion": self.feature_organisation_deletion_enabled,
         }
 
 

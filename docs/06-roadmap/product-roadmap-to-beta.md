@@ -247,6 +247,38 @@ WO-008B adds deterministic qualitative comparison only. It does not alter the
 proposed production-readiness sequence below or authorise production customer
 data.
 
+### WO-009 — Private Beta Readiness — Complete
+
+- **Objective:** Make the existing product safe and operable enough for a
+  controlled beta with approximately 5–10 trusted design partners, without
+  expanding the intelligence surface.
+- **Major deliverables:** Verified Clerk identity and organisation membership,
+  `admin`/`member` roles, versioned data-notice acknowledgement, beta retention,
+  export and deletion maintenance paths, bounded usage counters, server-side
+  feature flags, health endpoints, first-run onboarding, deterministic demo
+  data, feedback capture, a tenant-scoped admin view, deployment/recovery
+  guidance, operational runbooks and migration
+  `0020_private_beta_readiness`.
+- **Dependencies:** The completed Opportunity Workspace, Revenue Brain,
+  Unified Meeting Intelligence, provider abstraction, tenant isolation and
+  migration `0019_revenue_brain_reasoning` baseline.
+- **Out of scope:** New prompts, schemas, AI job types, providers or reasoning;
+  recording, transcription, integrations, billing, complex RBAC, SSO/SCIM,
+  legal hold, mobile, forecasting and autonomous action.
+- **Security gates:** Server-derived organisation context, production
+  fail-closed identity/configuration, forced RLS and composite tenant keys,
+  API-enforced acknowledgement, tenant-bounded destructive maintenance,
+  content-free logs/audits and explicit external-provider enablement.
+- **Demonstration:** A beta user acknowledges the notice, resumes or skips
+  onboarding, uses synthetic demo data through the existing deterministic
+  intelligence path, opens Opportunity Workspace and Revenue Brain, submits
+  feedback, and an admin inspects safe retention/usage/capability/status data.
+
+WO-009 supplies a deliberately narrow operational baseline. It does not
+authorise production customer data: privacy/legal/provider approval, an
+environment-specific launch checklist and explicit organisational approval are
+still required.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.
@@ -529,7 +561,13 @@ Not every listed integration is a prerequisite for the first pilot or private be
 
 ## Next sequencing decision
 
-Sprint 3 is complete. This roadmap currently sequences Sprint 4 as Production Identity and Organisation Administration before production customer-content use. WO-003 identifies technical extension seams for future Meeting Intelligence, but does not authorise that work or resolve a different sprint sequence. A separate approved work order is required before any Sprint 4 implementation begins.
+WO-009 is the current implemented baseline. It supplies the smallest verified
+identity, organisation-administration and operational controls needed for a
+controlled beta, so the older Sprint 4 description below is retained as target
+roadmap history rather than an instruction to rebuild that surface. Production
+customer-content use remains prohibited until the unchecked launch gates and
+separate privacy/legal/provider approvals are complete. Any further roadmap
+scope still requires a separately approved work order.
 
 ## Related documents
 

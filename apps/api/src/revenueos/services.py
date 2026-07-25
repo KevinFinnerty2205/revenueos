@@ -23,11 +23,11 @@ class OrganisationAccessService:
         await set_tenant_database_context(self.session, authenticated_user.organisation_id)
         organisation = await self.repository.get_organisation(authenticated_user.organisation_id)
         user = await self.repository.get_user_by_external_auth_id(authenticated_user.external_auth_id)
-        if organisation is None or user is None:
+        if organisation is None or user is None or user.status != "active":
             raise OrganisationAccessError("The authenticated identity has not been provisioned.")
 
         membership = await self.repository.get_membership(organisation.id, user.id)
-        if membership is None or membership.role not in {"admin", "manager", "member"}:
+        if membership is None or membership.status != "active" or membership.role not in {"admin", "member"}:
             raise OrganisationAccessError("The authenticated identity has no active membership.")
 
         return TenantContext(

@@ -214,15 +214,21 @@ No production customer content until all applicable gates pass:
 
 ## Current high-priority gaps
 
-- Production Clerk session verification is not implemented.
-- Current persistence can run without the full production Supabase role/RLS deployment.
-- Storage, ingestion, connector, approval, complete audit, deletion/export and
-  production worker-operations controls are not implemented. A server-side
-  OpenAI adapter exists for Executive Summary, Decisions, Action Items and Risks & Blockers, but production provider
-  privacy/retention/residency, consent, evaluation, budget and operational
-  enablement gates are incomplete. Selecting it sends the chosen transcript to
-  OpenAI; production customer data remains prohibited.
-- Sprint 2 core-entity permissions are coarse.
+- WO-009 implements Clerk JWT verification and production fails closed, but the
+  target Clerk tenant, invitation policy and launch identity evidence remain
+  environment-owned checklist items.
+- Production requires PostgreSQL and all tenant tables have forced RLS, but the
+  deployed least-privilege runtime role, backup and restore evidence still need
+  environment-specific validation.
+- Storage, media ingestion, connectors, approval workflows and complete product
+  audit coverage are not implemented. WO-009 adds beta-grade deletion/export,
+  retention and worker operations, not regulated-industry certification.
+- The existing server-side OpenAI adapter is explicitly flag- and usage-gated;
+  production provider privacy/retention/residency, evaluation and legal
+  approvals remain incomplete. Selecting it sends the documented bounded
+  source content to OpenAI; production customer data remains prohibited.
+- Core-entity permissions deliberately remain the minimum `admin`/`member`
+  model rather than advanced RBAC.
 
 These are expected current limitations, not defects hidden by this target document.
 

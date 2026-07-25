@@ -1,7 +1,7 @@
 [project]
 name = "revenueos-api"
-version = "0.3.0"
-description = "RevenueOS AI tenant-isolated core business and Meeting Domain API"
+version = "0.4.0"
+description = "RevenueOS AI tenant-isolated private beta API"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.15.0,<2.0.0",
@@ -11,6 +11,7 @@ dependencies = [
   "openai>=2.30.0,<3.0.0",
   "pydantic>=2.10.0,<3.0.0",
   "pydantic-settings>=2.7.0,<3.0.0",
+  "pyjwt[crypto]>=2.10.1,<3.0.0",
   "python-dotenv>=1.0.0,<2.0.0",
   "sqlalchemy[asyncio]>=2.0.36,<3.0.0",
   "uvicorn[standard]>=0.34.0,<1.0.0",
@@ -18,6 +19,8 @@ dependencies = [
 
 [project.scripts]
 revenueos-ai-worker = "revenueos.worker:main"
+revenueos-beta-maintenance = "revenueos.beta_maintenance:main"
+revenueos-demo-data = "revenueos.demo_data:main"
 
 [build-system]
 requires = ["hatchling>=1.27.0,<2.0.0"]

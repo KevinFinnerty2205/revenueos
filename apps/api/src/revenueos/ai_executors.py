@@ -90,6 +90,7 @@ from revenueos.ai_provider_registry import AIProviderRegistry
 from revenueos.ai_structured_output import parse_and_validate_structured_output
 from revenueos.config import Settings
 from revenueos.domain import AIJobType
+from revenueos.errors import PublicAPIError
 
 logger = logging.getLogger("revenueos.ai_executor")
 
@@ -192,6 +193,7 @@ NextBestActionSourceLoader = Callable[
     Awaitable[NextBestActionSource],
 ]
 ProviderInputFactory = Callable[[tuple[ProviderMessage, ...]], ProviderInput]
+ProviderRequestLimiter = Callable[[ClaimedAIJob], Awaitable[None]]
 
 
 class AIJobExecutor(Protocol):
@@ -220,6 +222,7 @@ class _StructuredOutputExecutor:
         provider_registry: AIProviderRegistry | None = None,
         prompt_registry: PromptRegistry | None = None,
         schema_registry: OutputSchemaRegistry | None = None,
+        provider_request_limiter: ProviderRequestLimiter | None = None,
     ) -> None:
         self._settings = settings
         self._providers = provider_registry if provider_registry is not None else AIProviderRegistry(settings=settings)
@@ -227,6 +230,7 @@ class _StructuredOutputExecutor:
         self._prompts = (
             prompt_registry if prompt_registry is not None else create_default_prompt_registry(self._schemas)
         )
+        self._provider_request_limiter = provider_request_limiter
 
     async def _execute_structured(
         self,
@@ -354,7 +358,11 @@ class _StructuredOutputExecutor:
                 },
             )
             try:
+                if self._provider_request_limiter is not None:
+                    await self._provider_request_limiter(job)
                 response = await execute_provider_request(provider, request)
+            except PublicAPIError as exc:
+                raise WorkerExecutionError(exc.code, exc.message, retryable=False) from exc
             except ProviderError as exc:
                 raise WorkerExecutionError(
                     exc.code,
@@ -1649,6 +1657,7 @@ class AIExecutorRegistry:
         executors: dict[str, AIJobExecutor] | None = None,
         *,
         settings: Settings | None = None,
+        provider_request_limiter: ProviderRequestLimiter | None = None,
     ) -> None:
         if executors is not None:
             self._executors = executors
@@ -1663,66 +1672,77 @@ class AIExecutorRegistry:
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.EXECUTIVE_SUMMARY.value: ExecutiveSummaryExecutor(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.DECISIONS.value: DecisionsExecutor(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.ACTION_ITEMS.value: ActionItemsExecutor(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.RISKS_BLOCKERS.value: RisksBlockersExecutor(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.OPEN_QUESTIONS.value: OpenQuestionsExecutor(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.BUYING_SIGNALS.value: BuyingSignalsExecutor(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.OBJECTIONS_COMPETITIVE_SIGNALS.value: ObjectionsCompetitiveSignalsExecutor(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.STAKEHOLDER_INTELLIGENCE.value: StakeholderIntelligenceExecutor(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.NEXT_BEST_ACTION.value: NextBestActionComposer(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
             AIJobType.FOLLOW_UP_EMAIL.value: FollowUpEmailComposer(
                 configuration,
                 providers,
                 prompts,
                 schemas,
+                provider_request_limiter,
             ),
         }
 

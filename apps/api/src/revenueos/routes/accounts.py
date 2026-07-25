@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
+from revenueos.beta_dependencies import require_revenue_brain_feature
 from revenueos.revenue_brain import RevenueBrainService
 from revenueos.revenue_brain_contracts import RevenueBrainSnapshotResponse
 from revenueos.revenue_brain_dependencies import (
@@ -26,6 +27,7 @@ ReasoningService = Annotated[
 @router.get(
     "/{account_id}/brain",
     response_model=list[RevenueBrainSnapshotResponse],
+    dependencies=[Depends(require_revenue_brain_feature)],
 )
 async def get_revenue_brain(
     account_id: UUID,
@@ -40,6 +42,7 @@ async def get_revenue_brain(
 @router.post(
     "/{account_id}/brain/reasoning",
     response_model=RevenueBrainReasoningRequestResponse,
+    dependencies=[Depends(require_revenue_brain_feature)],
 )
 async def generate_revenue_brain_reasoning(
     account_id: UUID,
@@ -55,6 +58,7 @@ async def generate_revenue_brain_reasoning(
 @router.get(
     "/{account_id}/brain/reasoning",
     response_model=RevenueBrainReasoningResponse,
+    dependencies=[Depends(require_revenue_brain_feature)],
 )
 async def get_revenue_brain_reasoning(
     account_id: UUID,

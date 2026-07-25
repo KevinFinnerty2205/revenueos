@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { SignOutButton } from "@clerk/nextjs";
 import { getAuthState } from "@/lib/auth";
 
 export default function SignOutPage() {
   const auth = getAuthState();
+  const clerkConfigured =
+    auth.mode === "clerk" &&
+    Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#f5f7f4] px-5 py-12">
@@ -22,14 +26,22 @@ export default function SignOutPage() {
         <p className="mt-4 text-sm leading-7 text-slate-600">
           {auth.mode === "mock"
             ? "Development authentication does not create a persistent session. Closing the local application ends your work."
-            : "Clerk session termination will be connected when production authentication is implemented."}
+            : "Signing out ends the current Clerk session on this device."}
         </p>
-        <Link
-          href="/"
-          className="mt-8 inline-flex rounded-full bg-slate-950 px-5 py-3 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
-        >
-          Return to RevenueOS
-        </Link>
+        {clerkConfigured ? (
+          <SignOutButton redirectUrl="/">
+            <button className="mt-8 inline-flex rounded-full bg-slate-950 px-5 py-3 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2">
+              Sign out securely
+            </button>
+          </SignOutButton>
+        ) : (
+          <Link
+            href="/"
+            className="mt-8 inline-flex rounded-full bg-slate-950 px-5 py-3 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+          >
+            Return to RevenueOS
+          </Link>
+        )}
       </section>
     </main>
   );

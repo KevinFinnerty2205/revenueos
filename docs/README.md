@@ -57,6 +57,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
 - [Deployment guide](03-engineering/deployment-guide.md)
+- [Private beta readiness guide](03-engineering/private-beta-readiness.md)
+- [Private beta deployment, backup, restore and rollback](03-engineering/private-beta-deployment-and-recovery.md)
+- [Private beta operational and incident runbooks](03-engineering/private-beta-runbooks.md)
+- [Private beta security review](03-engineering/private-beta-security-review.md)
+- [Private beta launch checklist](03-engineering/private-beta-launch-checklist.md)
 
 ### Target through beta
 
@@ -104,6 +109,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-007: Opportunity Workspace Foundation](07-sprints/wo-007-opportunity-workspace.md)
 - [WO-008A: Revenue Brain Foundation](07-sprints/wo-008a-revenue-brain-foundation.md)
 - [WO-008B: Revenue Brain Longitudinal Reasoning](07-sprints/wo-008b-revenue-brain-longitudinal-reasoning.md)
+- [WO-009: Private Beta Readiness](07-sprints/wo-009-private-beta-readiness.md)
 
 ## 08 — Decision records
 
@@ -131,10 +137,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0022: own meeting association and derive the latest-meeting Opportunity Workspace](08-decisions/0022-opportunity-ownership-latest-meeting-read-model.md)
 - [ADR 0023: persist Revenue Brain as immutable artefact compositions](08-decisions/0023-immutable-revenue-brain-compositions.md)
 - [ADR 0024: derive Revenue Brain changes deterministically from snapshots](08-decisions/0024-deterministic-revenue-brain-longitudinal-reasoning.md)
+- [ADR 0025: keep private beta controls in the modular monolith](08-decisions/0025-private-beta-operational-controls.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B are complete.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009 are complete.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -154,11 +161,16 @@ deterministic, on-demand account and opportunity comparisons over immutable
 snapshots and their referenced artefacts. It performs no transcript read,
 extraction, provider call, prediction or forecast. There is no send,
 editing, approval, question answering, provider UI, recording, media storage,
-transcription, external integration, production Clerk verification, billing or
-mobile application. Completed account-linked meetings can now append one
+transcription, external integration, billing or mobile application. WO-009
+adds verified Clerk organisation sessions, versioned acknowledgement,
+retention/export/deletion maintenance, quotas, flags, onboarding, feedback and
+safe beta administration. Completed account-linked meetings can now append one
 reference-only Revenue Brain snapshot per validated transcript revision. The
 account timeline and Opportunity Workspace now show explainable supported
 changes with meeting links and qualitative labels; no deal score, probability
 or forecast exists. Assistant remains a placeholder.
 
-Do not use production customer data. Production identity, consent evidence, retention/export/erasure and operational controls are incomplete. Future sprints remain unauthorised until a separate work order is approved.
+Do not use production customer data unless separately approved. Target
+environment launch evidence, provider/privacy approval and every unchecked
+launch item remain mandatory. Future sprints remain unauthorised until a
+separate work order is approved.

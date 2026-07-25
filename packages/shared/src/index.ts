@@ -1,6 +1,6 @@
 /** FastAPI Pydantic models and the generated OpenAPI document are canonical. */
 export type AuthMode = "mock" | "clerk";
-export type OrganisationRole = "admin" | "manager" | "member";
+export type OrganisationRole = "admin" | "member";
 
 export interface UserSummary {
   id: string;

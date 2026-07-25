@@ -1,6 +1,13 @@
 import type { ApiError } from "@revenueos/shared";
 
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
+let tokenProvider: (() => Promise<string | null>) | null = null;
+
+export function configureApiTokenProvider(
+  provider: (() => Promise<string | null>) | null,
+): void {
+  tokenProvider = provider;
+}
 
 export class ApiClientError extends Error {
   constructor(
@@ -21,11 +28,13 @@ export async function apiRequest<T>(
   const baseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
     DEFAULT_API_BASE_URL;
+  const token = tokenProvider ? await tokenProvider() : null;
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
   });

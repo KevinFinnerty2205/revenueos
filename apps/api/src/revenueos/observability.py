@@ -22,6 +22,7 @@ class JSONFormatter(logging.Formatter):
             "duration_ms",
             "error_type",
             "organisation_id",
+            "user_id",
             "meeting_id",
             "transcript_version",
             "transcript_character_count",

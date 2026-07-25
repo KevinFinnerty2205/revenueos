@@ -1,6 +1,8 @@
 # API reference
 
-FastAPI's generated OpenAPI document at `/openapi.json` is canonical. Swagger UI is available at `/docs` in the current application configuration. JSON fields use camel case; database and Python fields use snake case.
+FastAPI's generated OpenAPI document at `/openapi.json` is canonical. Swagger
+UI is available at `/docs` outside production; production disables Swagger and
+ReDoc. JSON fields use camel case; database and Python fields use snake case.
 
 ## Common behaviour
 
@@ -13,6 +15,31 @@ FastAPI's generated OpenAPI document at `/openapi.json` is canonical. Swagger UI
 - Updates use `PATCH`, require at least one field and reject null for required fields.
 - Errors contain a safe `code`, `message` and `requestId`. Validation errors do not echo customer input.
 - Every response includes `X-Request-ID`; a supplied `X-Request-ID` is propagated.
+- Transcript writes and every intelligence POST require acknowledgement of the
+  current server-owned private-beta notice version.
+
+## Private beta controls
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/beta/capabilities` | Safe server feature flags, notice version and transcript bound |
+| `GET` | `/api/v1/beta/data-notice` | Read current notice/acknowledgement state |
+| `POST` | `/api/v1/beta/data-notice/acknowledgements` | Acknowledge the current server version |
+| `GET/PATCH` | `/api/v1/beta/onboarding` | Read/advance/skip persisted user journey |
+| `POST` | `/api/v1/beta/feedback` | Submit bounded feedback without automatic content attachment |
+| `GET` | `/api/v1/beta/admin` | Admin-only safe organisation overview |
+| `PATCH` | `/api/v1/beta/admin/retention` | Admin-only 30/90/180/manual setting |
+| `GET` | `/api/v1/beta/admin/feedback` | Admin-only bounded feedback retrieval |
+| `PATCH` | `/api/v1/beta/admin/members/{userId}` | Admin-only enable/disable membership |
+| `POST` | `/api/v1/beta/admin/exports` | Queue tenant export request |
+| `GET` | `/api/v1/beta/admin/data-requests` | Read export/deletion status |
+| `GET` | `/api/v1/beta/admin/exports/{requestId}/download` | Download non-expired restricted export |
+| `POST` | `/api/v1/beta/admin/organisation-deletion` | Queue exact-phrase-confirmed deletion |
+
+`GET /health/live` is process liveness. `GET /health/ready` performs bounded
+database, migration-head, auth, selected-provider and worker-configuration
+checks without an external provider request. See
+[private beta readiness](private-beta-readiness.md).
 
 ## Companies
 
@@ -401,5 +428,6 @@ There are no generic AI job/artefact, provider configuration/model listing,
 cancellation, recording, media upload/storage, transcription, later
 intelligence, question-answering, email sending, calendar, CRM, billing,
 worker-control or automation
-endpoints. Mock/OpenAI selection is server-side worker configuration and does not
-change this API contract. Clerk token verification is not connected.
+endpoints. Mock/OpenAI selection and beta flags are server-side configuration
+and do not create generic provider control endpoints. Clerk tokens are verified
+by the API; production fails closed without complete configuration.

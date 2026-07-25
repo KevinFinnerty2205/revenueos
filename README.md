@@ -8,7 +8,7 @@ infrastructure, WO-004C1–C6 capabilities, WO-005 unified Meeting Intelligence,
 WO-006A Buying Signals & Deal Momentum, WO-006B Objections & Competitive
 Signals, WO-006C Stakeholder Intelligence, WO-006D Next Best Action, WO-007
 Opportunity Workspace, WO-008A Revenue Brain Foundation and WO-008B Revenue
-Brain Longitudinal Reasoning. Meetings,
+Brain Longitudinal Reasoning, plus WO-009 Private Beta Readiness. Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -24,9 +24,11 @@ intelligence appends one immutable, reference-only Revenue Brain snapshot per
 transcript revision. Deterministic, on-demand Revenue Brain reasoning compares
 only those snapshots and their referenced validated artefacts for account and
 opportunity change views; it never reads transcript text or calls a provider.
-No predictive scoring, forecasting, browser credentials, recording, media
-storage, transcription, sending/integration, production Clerk verification or
-billing is implemented.
+WO-009 adds production Clerk verification, versioned consent, beta retention,
+export/deletion requests, usage guardrails, feature flags, onboarding,
+synthetic demo data, feedback and safe administration/operations. No predictive
+scoring, forecasting, privileged browser database access, recording, media
+storage, transcription, sending/integration or billing is implemented.
 
 ## Product blueprint
 
@@ -35,7 +37,7 @@ The [RevenueOS master product blueprint](docs/01-product/master-product-blueprin
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
-WO-006B, WO-006C, WO-006D, WO-007, WO-008A and WO-008B.
+WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B and WO-009.
 
 ## Prerequisites
 
@@ -109,6 +111,8 @@ Public web routes:
 Protected routes:
 
 - `/dashboard`
+- `/onboarding`
+- `/select-organisation`
 - `/companies`
 - `/companies/new`
 - `/companies/{id}/edit`
@@ -127,6 +131,7 @@ Protected routes:
 - `/tasks/new`
 - `/tasks/{id}/edit`
 - `/assistant`
+- `/feedback`
 - `/settings`
 
 Assistant remains an honest placeholder. Company, contact and task pages use
@@ -145,8 +150,12 @@ summaries. Opportunity Workspace includes the same safe latest comparison.
 API routes:
 
 - `GET /health` — process health
+- `GET /health/live` — canonical process liveness
 - `GET /ready` — configured dependency readiness
+- `GET /health/ready` — canonical configured dependency readiness
 - `GET /api/v1/me` — trusted authenticated user and organisation context
+- beta notice, onboarding, feedback and tenant-admin operations under
+  `/api/v1/beta`
 - CRUD under `/api/v1/companies`
 - CRUD under `/api/v1/contacts`
 - CRUD under `/api/v1/opportunities`
@@ -206,21 +215,26 @@ CI runs the same checks, applies Alembic to PostgreSQL and performs the producti
 
 ## Authentication configuration
 
-The current authentication foundation provides:
+The current authentication path provides:
 
 - an explicit web/API authentication adapter boundary;
 - server-side protected-route checks;
-- a Clerk configuration path;
+- Clerk middleware/session handling and API RS256 JWT verification;
+- deterministic active organisation/user projection and admin/member roles;
 - a clearly labelled development mock;
 - fail-closed production configuration.
 
-Clerk token/session verification is not connected yet. Supplying placeholder keys does not make Clerk live, and the readiness endpoint reports that honestly. Do not use this repository with production customer data.
+Production fails closed unless Clerk issuer, audience and JWKS, PostgreSQL and
+explicit production settings are complete. Placeholder keys do not make Clerk
+live. See the [private beta readiness guide](docs/03-engineering/private-beta-readiness.md).
+Production customer data remains prohibited unless separately approved.
 
 ## AI provider configuration
 
 `AI_PROVIDER=mock` is the default and requires no network or OpenAI key. To
 exercise the optional real adapter with synthetic non-sensitive content,
-configure server-only `OPENAI_API_KEY`, `OPENAI_MODEL`,
+configure server-only `OPENAI_API_KEY`, `OPENAI_MODEL`, set
+`API_FEATURE_OPENAI_PROVIDER_ENABLED=true`, and configure
 `OPENAI_TIMEOUT_SECONDS` and `OPENAI_MAX_OUTPUT_TOKENS`.
 
 > Setting `AI_PROVIDER=openai` sends the rendered extractor instructions and
@@ -234,6 +248,14 @@ configure server-only `OPENAI_API_KEY`, `OPENAI_MODEL`,
 
 See the [OpenAI provider integration guide](docs/03-engineering/openai-provider-integration.md)
 for strict output, error/retry behaviour, smoke testing and rollback.
+
+## Private beta operations
+
+WO-009's onboarding, notice, retention, export/deletion, quotas, feature flags,
+health endpoints, feedback, demo data, admin surface and runbooks are documented
+in the [private beta readiness guide](docs/03-engineering/private-beta-readiness.md).
+The [launch checklist](docs/03-engineering/private-beta-launch-checklist.md) is
+environment-specific and intentionally unchecked in source.
 
 ## Database migrations
 

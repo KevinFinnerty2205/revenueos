@@ -8,7 +8,7 @@ from uuid import UUID
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, event
+from sqlalchemy import delete, event, update
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import ConnectionPoolEntry
@@ -18,15 +18,22 @@ from revenueos.main import create_app
 from revenueos.models import (
     AIArtifact,
     AIJob,
+    AIUsageCounter,
     Base,
+    BetaDataRequest,
+    BetaFeedback,
+    BetaSystemEvent,
     Company,
     Contact,
+    DataNoticeAcknowledgement,
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
+    OnboardingProgress,
     Opportunity,
     OpportunityAuditEvent,
     Organisation,
+    OrganisationBetaSettings,
     OrganisationMembership,
     RevenueBrainInsight,
     RevenueBrainSnapshot,
@@ -69,6 +76,7 @@ def database() -> Iterator[None]:
                 [
                     Organisation(
                         id=PRIMARY_ORGANISATION_ID,
+                        external_auth_id="org_dev_001",
                         name="Example Revenue Team",
                         slug="example-revenue-team",
                     ),
@@ -85,6 +93,7 @@ def database() -> Iterator[None]:
                     ),
                     Organisation(
                         id=SECONDARY_ORGANISATION_ID,
+                        external_auth_id="org_other_001",
                         name="Other Revenue Team",
                         slug="other-revenue-team",
                     ),
@@ -98,6 +107,23 @@ def database() -> Iterator[None]:
                         organisation_id=SECONDARY_ORGANISATION_ID,
                         user_id=SECONDARY_USER_ID,
                         role="admin",
+                    ),
+                ]
+            )
+            await session.commit()
+            session.add_all(
+                [
+                    DataNoticeAcknowledgement(
+                        id=UUID("00000000-0000-4000-8000-000000000003"),
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        user_id=PRIMARY_USER_ID,
+                        notice_version=1,
+                    ),
+                    DataNoticeAcknowledgement(
+                        id=UUID("00000000-0000-4000-8000-000000000013"),
+                        organisation_id=SECONDARY_ORGANISATION_ID,
+                        user_id=SECONDARY_USER_ID,
+                        notice_version=1,
                     ),
                 ]
             )
@@ -121,6 +147,12 @@ def clean_business_entities() -> Iterator[None]:
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         async with session_factory() as session:
             for model in (
+                BetaFeedback,
+                BetaSystemEvent,
+                BetaDataRequest,
+                AIUsageCounter,
+                OnboardingProgress,
+                OrganisationBetaSettings,
                 RevenueBrainInsight,
                 RevenueBrainSnapshot,
                 AIArtifact,
@@ -136,6 +168,11 @@ def clean_business_entities() -> Iterator[None]:
                 Company,
             ):
                 await session.execute(delete(model))
+            await session.execute(
+                delete(DataNoticeAcknowledgement).where(DataNoticeAcknowledgement.notice_version != 1)
+            )
+            await session.execute(update(User).values(status="active"))
+            await session.execute(update(OrganisationMembership).values(status="active"))
             await session.commit()
 
     asyncio.run(clean())

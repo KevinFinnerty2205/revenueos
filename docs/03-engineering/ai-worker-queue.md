@@ -232,11 +232,15 @@ Automated audit events use the original requesting user as the actor because the
 - There is no immutable transcript snapshot, accurate cost estimate,
   notification or external action.
 - The current transcript version pin does not preserve a historical transcript body.
-- Production identity, consent evidence, retention/export/erasure, deployment monitoring and incident controls remain incomplete. Production customer data is prohibited.
+- WO-009 supplies verified identity, versioned data-notice acknowledgement,
+  beta-grade retention/export/erasure and operator monitoring/incident
+  procedures. Environment-specific approval and launch evidence remain
+  incomplete. Production customer data is prohibited.
 
 OpenAI transport retries are disabled so this durable queue remains the only
-retry authority. Production OpenAI use requires a separate privacy/identity/
-consent/retention operations gate. See
+retry authority. OpenAI use also requires the WO-009 server feature flag and
+daily provider-attempt counter. Production OpenAI use still requires separate
+privacy/legal/provider approval and completed launch evidence. See
 [OpenAI provider integration](openai-provider-integration.md),
 [Executive Summary intelligence](executive-summary-intelligence.md),
 [Meeting Decisions intelligence](meeting-decisions-intelligence.md),

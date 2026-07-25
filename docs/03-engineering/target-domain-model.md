@@ -10,6 +10,12 @@ the existing modular-monolith, PostgreSQL, SQLAlchemy/Alembic and
 tenant-isolation decisions. Candidate entities are introduced only by their
 named implementation sprint after a schema/API decision and migration review.
 
+WO-009 also persists the current private-beta operational surface:
+`OrganisationBetaSettings`, `DataNoticeAcknowledgement`, `OnboardingProgress`,
+`AIUsageCounter`, `BetaFeedback`, `BetaDataRequest` and `BetaSystemEvent`.
+These are focused tenant-owned models with forced RLS rather than one generic
+settings table.
+
 ## Modelling rules
 
 - Every tenant-owned row has a non-null `organisation_id`.
@@ -23,9 +29,9 @@ named implementation sprint after a schema/API decision and migration review.
 
 | Entity | Purpose and key relationships | Tenant and source of truth | Lifecycle and retention | Current / expected sprint |
 | --- | --- | --- | --- | --- |
-| Organisation | Tenant and policy boundary; has memberships and all tenant data | Organisation-scoped root; Clerk is authoritative for authenticated organisation identity once connected | Active → suspended/deletion-pending → deleted; deletion policy governs descendants | **Current — Sprint 1** |
-| User | Local identity projection referenced by memberships/ownership | Global identity projection; Clerk is future production identity source | Active projection while required; retain minimal audit linkage after removal | **Current — Sprint 1** |
-| OrganisationMembership | Links user to organisation and role | Tenant-owned; verified Clerk membership plus application policy must agree | Invited/active/removed; access ends immediately, metadata retained per audit policy | **Current — Sprint 1** |
+| Organisation | Tenant and policy boundary; has memberships and all tenant data | Organisation-scoped root; verified Clerk organisation is authoritative in production | Active → deletion-requested → deleted through reviewed maintenance | **Current — Sprint 1, expanded WO-009** |
+| User | Local identity projection referenced by memberships/ownership | Global projection of verified Clerk user identity | Active/disabled; retained while another authorised membership exists | **Current — Sprint 1, expanded WO-009** |
+| OrganisationMembership | Links user to organisation and `admin`/`member` role | Tenant-owned; verified Clerk membership plus application status must agree | Active/disabled; access ends on the next verified request | **Current — Sprint 1, expanded WO-009** |
 | Company | Relationship account; has contacts, opportunities, meetings, events and memory | Tenant-owned; manual now, CRM may become authoritative for mapped fields | Active/inactive; delete or archive according to relationship/source dependencies | **Current — Sprint 2** |
 | Contact | Person linked to a company and meetings | Tenant-owned; manual now, CRM/provider identity may be authoritative by field | Active/merged/deleted; personal data follows deletion and source policy | **Current — Sprint 2** |
 | Opportunity | Commercial context with optional company, manual value/date, owner, tasks and associated meetings; its workspace derives the latest meeting view | Tenant-owned; manual now, supported CRM may later become authoritative for explicitly mapped fields | `open`, `won`, `lost` or `on_hold`; stage remains independently user-managed | **Current — Sprint 2, expanded WO-007** |
@@ -48,7 +54,7 @@ named implementation sprint after a schema/API decision and migration review.
 | Meeting | Conversation aggregate linking participants, optional company, optional same-tenant opportunity and supplied transcript | Tenant-owned; RevenueOS is authoritative for manually entered metadata and explicit opportunity association | Scheduled/completed/cancelled; soft-deleted with active children and hidden from normal reads | **Current — Sprint 3, expanded WO-007** |
 | MeetingParticipant | A meeting-specific attendee and optional confirmed contact link | Tenant-owned; user-entered identity or same-tenant contact reference | Invited/attended/absent/unknown; active or soft-deleted with meeting | **Current — Sprint 3** |
 | Transcript | One versioned plain-text representation supplied for a meeting | Tenant-owned; pasted or browser-read `.txt`, with user correction authoritative | Created/restored → corrected by optimistic version → soft-deleted; no snapshot history yet | **Current — Sprint 3** |
-| MeetingAuditEvent | Content-minimised activity metadata for meeting, participant and transcript mutations | Tenant-owned; RevenueOS service transaction is authoritative | Append-only metadata retained with meeting; retention/export policy is not implemented | **Current — Sprint 3** |
+| MeetingAuditEvent | Content-minimised activity metadata for meeting, participant and transcript mutations | Tenant-owned; RevenueOS service transaction is authoritative | Append-only normally; removed with its meeting only by approved tenant retention/deletion | **Current — Sprint 3, expanded WO-009** |
 | TranscriptSegment | Timestamped/speaker-linked transcript evidence used for citations | Tenant-owned child of transcript | Immutable per transcript version; deleted with transcript/source | **Not current — Sprint 6** |
 | IngestionJob | Durable, leased, idempotent processing state for an explicitly supplied source | Tenant-owned; RevenueOS job system authoritative | Queued/running/retry/complete/failed/cancelled; operational metadata retained, payload minimised | **Not current — Sprint 5** |
 

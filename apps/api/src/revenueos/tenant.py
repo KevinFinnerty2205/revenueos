@@ -7,7 +7,7 @@ from fastapi import Depends
 from revenueos.auth import AuthenticatedUser, get_current_user
 from revenueos.errors import PublicAPIError
 
-Role = Literal["admin", "manager", "member"]
+Role = Literal["admin", "member"]
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class TenantContext:
         )
 
     def can_manage(self) -> bool:
-        return self.role in {"admin", "manager"}
+        return self.role == "admin"
 
 
 def get_tenant_context(
@@ -36,7 +36,7 @@ def get_tenant_context(
     return TenantContext.from_authenticated_user(authenticated_user)
 
 
-def require_manager(
+def require_admin(
     context: TenantContext = Depends(get_tenant_context),
 ) -> TenantContext:
     if not context.can_manage():
