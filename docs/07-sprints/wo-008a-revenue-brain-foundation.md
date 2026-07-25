@@ -17,6 +17,8 @@ best-effort and does not change implementation status.
   cancelled, stale, superseded, wrong-schema or invalid artefacts;
 - deterministic transcript-revision identity and append-only later-version
   snapshots;
+- preservation of a meeting's explicit WO-007 opportunity association without
+  account-level inference;
 - composite tenant foreign keys, forced RLS, explicit organisation predicates,
   unique idempotency enforcement and update/delete prevention triggers;
 - reference-only `GET /api/v1/accounts/{accountId}/brain`, ordered by meeting
@@ -47,8 +49,8 @@ introduced.
 
 ## Rollback
 
-Deploy the WO-006D application and worker first, then downgrade migration
-`0017_revenue_brain`. The downgrade drops only the snapshot table and its
+Deploy the WO-007 application and worker first, then downgrade migration
+`0018_revenue_brain`. The downgrade drops only the snapshot table and its
 immutability/RLS objects. Because snapshots are deliberately append-only,
 rollback discards their composition history and requires explicit approval in a
 real environment.
@@ -56,4 +58,4 @@ real environment.
 ## Detailed reference
 
 See [Revenue Brain foundation](../03-engineering/revenue-brain-foundation.md)
-and [ADR 0022](../08-decisions/0022-immutable-revenue-brain-compositions.md).
+and [ADR 0023](../08-decisions/0023-immutable-revenue-brain-compositions.md).

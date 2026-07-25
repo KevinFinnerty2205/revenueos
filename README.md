@@ -6,10 +6,12 @@ This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated
 business entities, Sprint 3 Meeting Domain, WO-004A1/A2/B1/B2/B3 AI
 infrastructure, WO-004C1–C6 capabilities, WO-005 unified Meeting Intelligence,
 WO-006A Buying Signals & Deal Momentum, WO-006B Objections & Competitive
-Signals, WO-006C Stakeholder Intelligence, WO-006D Next Best Action and WO-008A
-Revenue Brain Foundation. Meetings,
+Signals, WO-006C Stakeholder Intelligence, WO-006D Next Best Action, WO-007
+Opportunity Workspace and WO-008A Revenue Brain Foundation. Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
-and a separate durable worker are implemented. The
+and a separate durable worker are implemented. The Opportunity Workspace adds
+a tenant-isolated opportunity list and latest-meeting view over stored,
+validated intelligence, with no transcript read or new AI execution. The
 Meeting Detail Intelligence tab presents independently persisted Executive
 Summary, Buying Signals & Deal Momentum, Objections & Competitive Signals,
 Stakeholders, Next Best Action, Key Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email
@@ -29,7 +31,8 @@ The [RevenueOS master product blueprint](docs/01-product/master-product-blueprin
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
-plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A, WO-006B, WO-006C, WO-006D and WO-008A.
+plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
+WO-006B, WO-006C, WO-006D, WO-007 and WO-008A.
 
 ## Prerequisites
 
@@ -111,6 +114,7 @@ Protected routes:
 - `/contacts/{id}/edit`
 - `/opportunities`
 - `/opportunities/new`
+- `/opportunities/{id}`
 - `/opportunities/{id}/edit`
 - `/meetings`
 - `/meetings/new`
@@ -122,8 +126,10 @@ Protected routes:
 - `/assistant`
 - `/settings`
 
-Assistant remains an honest placeholder. Company, contact, opportunity and task
-pages use the versioned API and provide list/create/edit states. Meeting pages
+Assistant remains an honest placeholder. Company, contact and task pages use
+the versioned API and provide list/create/edit states. Opportunities add an
+enriched list, create/edit flows, audited meeting association and a latest-
+meeting workspace. Meeting pages
 provide list/search/filter/pagination, create/edit, participant management,
 deliberate plain-text transcript input and Overview/Intelligence/Transcript/History
 detail tabs. Intelligence is one unified workspace over eight independent
@@ -140,6 +146,8 @@ API routes:
 - CRUD under `/api/v1/companies`
 - CRUD under `/api/v1/contacts`
 - CRUD under `/api/v1/opportunities`
+- `GET /api/v1/opportunities/{opportunityId}/workspace` — latest associated meeting and stored product-safe intelligence
+- `PATCH /api/v1/meetings/{meetingId}/opportunity` — stale-write-safe association or disassociation
 - CRUD under `/api/v1/tasks`
 - CRUD under `/api/v1/meetings`
 - `GET /api/v1/accounts/{accountId}/brain` — retrieve ordered immutable snapshot compositions without content
@@ -263,6 +271,7 @@ See the [documentation index](docs/README.md),
 [Stakeholder Intelligence architecture](docs/03-engineering/stakeholder-intelligence.md),
 [Next Best Action Intelligence](docs/03-engineering/next-best-action-intelligence.md),
 [Revenue Brain foundation](docs/03-engineering/revenue-brain-foundation.md),
+[Opportunity Workspace](docs/03-engineering/opportunity-workspace.md),
 [Follow-up Email Composer](docs/03-engineering/follow-up-email-composer.md),
 [Unified Meeting Intelligence workspace](docs/03-engineering/unified-meeting-intelligence.md),
 [OpenAI provider guide](docs/03-engineering/openai-provider-integration.md),
@@ -270,5 +279,6 @@ See the [documentation index](docs/README.md),
 [WO-006A record](docs/07-sprints/wo-006a-buying-signals-deal-momentum.md),
 [WO-006B record](docs/07-sprints/wo-006b-objections-competitive-signals.md),
 [WO-006C record](docs/07-sprints/wo-006c-stakeholder-intelligence.md),
-[WO-006D record](docs/07-sprints/wo-006d-next-best-action-intelligence.md)
+[WO-006D record](docs/07-sprints/wo-006d-next-best-action-intelligence.md),
+[WO-007 record](docs/07-sprints/wo-007-opportunity-workspace.md)
 and [WO-008A record](docs/07-sprints/wo-008a-revenue-brain-foundation.md).

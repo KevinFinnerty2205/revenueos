@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, ClassVar
 from uuid import UUID
 
@@ -110,6 +110,7 @@ class MeetingCreate(APIModel):
     meeting_type: MeetingType = MeetingType.OTHER
     status: MeetingStatus = MeetingStatus.SCHEDULED
     company_id: UUID | None = None
+    opportunity_id: UUID | None = None
     owner_user_id: UUID | None = None
     participants: list[MeetingParticipantCreate] = Field(default_factory=list, max_length=100)
     transcript: TranscriptCreate | None = None
@@ -128,6 +129,7 @@ class MeetingUpdate(UpdateRequest):
     meeting_type: MeetingType | None = None
     status: MeetingStatus | None = None
     company_id: UUID | None = None
+    opportunity_id: UUID | None = None
     owner_user_id: UUID | None = None
 
     @field_validator("meeting_date")
@@ -145,11 +147,24 @@ class MeetingResponse(APIModel):
     meeting_type: MeetingType
     status: MeetingStatus
     company_id: UUID | None
+    opportunity_id: UUID | None
     owner_user_id: UUID
     created_by: UUID
     updated_by: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class MeetingOpportunityUpdate(APIModel):
+    opportunity_id: UUID | None
+    expected_updated_at: datetime
+
+    @field_validator("expected_updated_at")
+    @classmethod
+    def expected_updated_at_must_include_timezone(cls, value: datetime) -> datetime:
+        if value.utcoffset() is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
 
 class MeetingAuditEventResponse(APIModel):

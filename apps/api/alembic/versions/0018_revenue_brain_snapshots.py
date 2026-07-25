@@ -1,7 +1,7 @@
 """Add immutable tenant-owned Revenue Brain snapshots.
 
-Revision ID: 0017_revenue_brain
-Revises: 0016_next_best_action
+Revision ID: 0018_revenue_brain
+Revises: 0017_opportunity_workspace
 """
 
 from collections.abc import Sequence
@@ -9,8 +9,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0017_revenue_brain"
-down_revision: str | None = "0016_next_best_action"
+revision: str = "0018_revenue_brain"
+down_revision: str | None = "0017_opportunity_workspace"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

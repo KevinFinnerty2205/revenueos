@@ -58,9 +58,9 @@ PostgreSQL RLS is enabled and forced. Database triggers reject every snapshot
 update and delete, making the table append-only rather than relying on the
 service surface alone.
 
-Meetings currently link to companies but do not link directly to opportunities.
-`opportunity_id` is therefore nullable and remains null in WO-008A; no
-opportunity is inferred from account data.
+Meetings link to companies and may carry one explicit, audited opportunity
+association. A snapshot preserves that `opportunity_id` when present and keeps
+it null otherwise; no opportunity is inferred from account data.
 
 ## API and web surface
 

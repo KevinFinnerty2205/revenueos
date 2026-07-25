@@ -608,7 +608,7 @@ function StateMessage({
   );
 }
 
-function ExecutiveSummaryView({
+export function ExecutiveSummaryView({
   content,
 }: {
   content: ExecutiveSummaryContent | null;
@@ -630,7 +630,7 @@ function ExecutiveSummaryView({
   );
 }
 
-function BuyingSignalsView({
+export function BuyingSignalsView({
   content,
 }: {
   content: BuyingSignalsContent | null;
@@ -692,7 +692,7 @@ function BuyingSignalsView({
   );
 }
 
-function ObjectionsCompetitiveSignalsView({
+export function ObjectionsCompetitiveSignalsView({
   content,
 }: {
   content: ObjectionsCompetitiveSignalsContent | null;
@@ -823,7 +823,7 @@ const stakeholderCoverageFields = [
   ["legalSecurity", "Legal / Security"],
 ] as const;
 
-function StakeholderIntelligenceView({
+export function StakeholderIntelligenceView({
   content,
 }: {
   content: StakeholderIntelligenceContent | null;
@@ -940,7 +940,7 @@ function stakeholderRoleLabel(
   return `Likely ${humanise(role)}`;
 }
 
-function NextBestActionView({
+export function NextBestActionView({
   content,
 }: {
   content: NextBestActionContent | null;
@@ -1019,7 +1019,11 @@ function NextBestActionView({
   );
 }
 
-function DecisionsView({ content }: { content: DecisionsContent | null }) {
+export function DecisionsView({
+  content,
+}: {
+  content: DecisionsContent | null;
+}) {
   if (!content) return <MissingContent />;
   if (content.decisions.length === 0)
     return (
@@ -1049,7 +1053,11 @@ function DecisionsView({ content }: { content: DecisionsContent | null }) {
   );
 }
 
-function ActionItemsView({ content }: { content: ActionItemsContent | null }) {
+export function ActionItemsView({
+  content,
+}: {
+  content: ActionItemsContent | null;
+}) {
   if (!content) return <MissingContent />;
   if (content.actionItems.length === 0)
     return (
@@ -1082,7 +1090,7 @@ function ActionItemsView({ content }: { content: ActionItemsContent | null }) {
   );
 }
 
-function RisksBlockersView({
+export function RisksBlockersView({
   content,
 }: {
   content: RisksBlockersContent | null;
@@ -1120,7 +1128,7 @@ function RisksBlockersView({
   );
 }
 
-function OpenQuestionsView({
+export function OpenQuestionsView({
   content,
 }: {
   content: OpenQuestionsContent | null;

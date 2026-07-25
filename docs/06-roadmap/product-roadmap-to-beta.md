@@ -172,9 +172,25 @@ intelligence.
 - **Security gates:** Trusted tenant context, forced RLS, exact current transcript version, no truncation, prompt-injection-as-data, strict name/role/coverage consistency, content-redacted telemetry/audits and explicit OpenAI external-data warning.
 - **Demonstration:** Generate from a synthetic authorised transcript, review cautious role coverage and stakeholder evidence, observe the successful insufficient-evidence result when unsupported, verify no graph/score/CRM action, refresh and retain all nine sections.
 
-WO-006C extends the implemented nine-capability Meeting Intelligence workspace;
-it does not change the separately proposed production-readiness sequence below
-or authorise production customer data.
+### WO-006D — Next Best Action Intelligence — Complete
+
+- **Objective:** Compose one grounded, read-only recommendation from all eight validated current-meeting extraction artefacts.
+- **Major deliverables:** Strict bounded recommendation schema, exact-source grounding, transcript-free composer, durable job/artefact, migration `0016_next_best_action`, individual and aggregate API integration and accessible read-only presentation.
+- **Out of scope:** Action execution, CRM/email/task mutation, transcript reread, account memory, prediction and scoring.
+- **Security gates:** Same-tenant current-version eight-artefact trace, no transcript input, strict validation and content-redacted telemetry/audits.
+
+### WO-007 — Opportunity Workspace Foundation — Complete
+
+- **Objective:** Add a coherent opportunity-centred experience over manual commercial metadata and the latest associated meeting's existing validated intelligence.
+- **Major deliverables:** Normalised Opportunity metadata, audited same-tenant Meeting association, enriched paginated list, bounded product-safe workspace API, prominent Latest Next Best Action, latest-meeting capability views, recent meetings, accessible responsive routes and migration `0017_opportunity_workspace`.
+- **Dependencies:** Sprint 2 Opportunity, Sprint 3 Meeting Domain and the completed ten-capability Meeting Intelligence workspace.
+- **Out of scope:** New AI work, transcript analysis, cross-meeting reasoning, Opportunity Health, Revenue Brain, probability, forecast, automatic matching, CRM/integrations, line items and action execution.
+- **Security gates:** Trusted tenant context, composite organisation keys, forced RLS, explicit repository predicates, stale-write protection, current-transcript artefact selection, no transcript body and metadata-only audit/telemetry.
+- **Demonstration:** Create an opportunity, associate a transcript-backed meeting, review latest stored intelligence, refresh for persistence and navigate directly between opportunity and meeting.
+
+WO-007 extends the implemented product surface without changing the separately
+proposed production-readiness sequence below or authorising production customer
+data. Its latest-meeting view is not a longitudinal Revenue Brain.
 
 ### WO-008A — Revenue Brain Foundation — Complete
 
@@ -186,7 +202,8 @@ or authorise production customer data.
   database guards, forced RLS, ordered account-brain GET API and a meeting-date
   snapshot timeline on the account page.
 - **Dependencies:** Completed Meeting Intelligence capabilities through
-  WO-006D, the tenant-owned meeting/company foundation and the durable worker.
+  WO-006D, the WO-007 meeting opportunity association, the tenant-owned
+  meeting/company foundation and the durable worker.
 - **Out of scope:** New prompts/provider calls, transcript analysis, Revenue
   Brain reasoning, comparison, opportunity health, prediction, forecasting,
   trend detection, CRM/action automation, relationship graph, embeddings and

@@ -329,6 +329,41 @@ class MeetingIntelligenceService:
             logger.info("meeting_intelligence_all_completed", extra=context)
         return response
 
+    async def get_existing_workspace(
+        self,
+        meeting_id: UUID,
+        transcript_version: int | None,
+    ) -> MeetingIntelligenceResponse:
+        """Compose stored current-version artefacts without loading transcript text."""
+
+        if transcript_version is None:
+            unavailable = self._unavailable_snapshots(None)
+            return self._response(unavailable, transcript_usable=False)
+        jobs = await self.jobs.list_intelligence_jobs_for_meeting(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_version,
+            [configuration.job_type for configuration in CAPABILITIES],
+        )
+        artifacts = await self.artifacts.list_intelligence_artifacts_for_jobs(
+            self.tenant.organisation_id,
+            meeting_id,
+            transcript_version,
+            [job.id for job in jobs],
+        )
+        artifacts_by_job = self._latest_artifacts_by_job(artifacts)
+        selected_jobs = {
+            configuration.name: self._latest_completed_equivalent_job(
+                jobs,
+                configuration,
+                artifacts_by_job,
+            )
+            or self._latest_equivalent_job(jobs, configuration)
+            for configuration in CAPABILITIES
+        }
+        snapshots = self._snapshots_for_selection(selected_jobs, artifacts_by_job)
+        return self._response(snapshots, transcript_usable=True)
+
     async def generate(self, meeting_id: UUID) -> GenerationResult:
         logger.info(
             "meeting_intelligence_generation_requested",
@@ -491,6 +526,14 @@ class MeetingIntelligenceService:
             unavailable = self._unavailable_snapshots(transcript)
             return self._response(unavailable, transcript_usable=False), unavailable
 
+        snapshots = self._snapshots_for_selection(selected_jobs, artifacts_by_job)
+        return self._response(snapshots, transcript_usable=True), snapshots
+
+    def _snapshots_for_selection(
+        self,
+        selected_jobs: dict[CapabilityName, AIJob | None],
+        artifacts_by_job: dict[tuple[UUID, str], AIArtifact],
+    ) -> dict[CapabilityName, CapabilitySnapshot]:
         snapshots: dict[CapabilityName, CapabilitySnapshot] = {}
         for name in EXTRACTION_NAMES:
             configuration = CONFIG_BY_NAME[name]
@@ -547,7 +590,7 @@ class MeetingIntelligenceService:
                 artifacts_by_job,
                 generation_available_when_empty=prerequisites_ready,
             )
-        return self._response(snapshots, transcript_usable=True), snapshots
+        return snapshots
 
     def _snapshot(
         self,
@@ -942,6 +985,26 @@ class MeetingIntelligenceService:
                 str(job.id),
             ),
         )
+
+    @staticmethod
+    def _latest_completed_equivalent_job(
+        jobs: list[AIJob],
+        configuration: CapabilityConfiguration,
+        artifacts_by_job: dict[tuple[UUID, str], AIArtifact],
+    ) -> AIJob | None:
+        candidates = [
+            job
+            for job in jobs
+            if job.status == AIJobStatus.COMPLETED.value
+            and job.job_type == configuration.job_type
+            and job.prompt_key == configuration.prompt_key
+            and job.prompt_version == configuration.prompt_version
+            and job.schema_version == configuration.schema_version
+            and (job.id, configuration.artifact_type) in artifacts_by_job
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda job: (job.completed_at or job.created_at, str(job.id)))
 
     @staticmethod
     def _latest_artifacts_by_job(

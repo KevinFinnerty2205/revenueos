@@ -31,7 +31,9 @@ from revenueos.domain import (
     CompanyStatus,
     MeetingStatus,
     MeetingType,
+    OpportunityAuditAction,
     OpportunityStage,
+    OpportunityStatus,
     ParticipantRole,
     TaskPriority,
     TaskStatus,
@@ -220,12 +222,23 @@ class Opportunity(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("length(trim(name)) > 0", name="ck_opportunities_name"),
         CheckConstraint(
-            "stage IN ('discovery', 'qualification', 'proposal', 'negotiation', 'closed_won', 'closed_lost')",
+            "stage IN ('qualification', 'discovery', 'evaluation', 'proposal', "
+            "'negotiation', 'procurement', 'closed_won', 'closed_lost', 'other')",
             name="ck_opportunities_stage",
         ),
-        CheckConstraint("value >= 0", name="ck_opportunities_value"),
-        CheckConstraint("probability >= 0 AND probability <= 100", name="ck_opportunities_probability"),
-        CheckConstraint("length(currency) = 3 AND currency = upper(currency)", name="ck_opportunities_currency"),
+        CheckConstraint(
+            "status IN ('open', 'won', 'lost', 'on_hold')",
+            name="ck_opportunities_status",
+        ),
+        CheckConstraint(
+            "(estimated_value IS NULL AND currency IS NULL) OR "
+            "(estimated_value IS NOT NULL AND estimated_value >= 0 AND currency IS NOT NULL)",
+            name="ck_opportunities_value_currency",
+        ),
+        CheckConstraint(
+            "currency IS NULL OR (length(currency) = 3 AND currency = upper(currency))",
+            name="ck_opportunities_currency",
+        ),
         ForeignKeyConstraint(
             ["organisation_id", "company_id"],
             ["companies.organisation_id", "companies.id"],
@@ -245,7 +258,9 @@ class Opportunity(TimestampMixin, Base):
         Index("ix_opportunities_organisation_name", "organisation_id", "name"),
         Index("ix_opportunities_organisation_company", "organisation_id", "company_id"),
         Index("ix_opportunities_organisation_stage", "organisation_id", "stage"),
+        Index("ix_opportunities_organisation_status", "organisation_id", "status"),
         Index("ix_opportunities_organisation_close", "organisation_id", "expected_close_date"),
+        Index("ix_opportunities_organisation_updated", "organisation_id", "updated_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -254,7 +269,7 @@ class Opportunity(TimestampMixin, Base):
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
     )
-    company_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     stage: Mapped[str] = mapped_column(
         String(30),
@@ -262,16 +277,71 @@ class Opportunity(TimestampMixin, Base):
         default=OpportunityStage.DISCOVERY.value,
         server_default=OpportunityStage.DISCOVERY.value,
     )
-    value: Mapped[Decimal] = mapped_column(
-        Numeric(18, 2),
+    status: Mapped[str] = mapped_column(
+        String(20),
         nullable=False,
-        default=Decimal("0"),
-        server_default="0",
+        default=OpportunityStatus.OPEN.value,
+        server_default=OpportunityStatus.OPEN.value,
     )
-    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="AUD", server_default="AUD")
-    probability: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    estimated_value: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 2),
+        nullable=True,
+    )
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     expected_close_date: Mapped[date | None] = mapped_column(Date)
     owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+
+
+class OpportunityAuditEvent(Base):
+    __tablename__ = "opportunity_audit_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('created', 'updated', 'deleted', 'meeting_associated', 'meeting_disassociated')",
+            name="ck_opportunity_audit_events_action",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "actor_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_opportunity_audit_events_actor_membership",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_opportunity_audit_events_organisation_entity_created",
+            "organisation_id",
+            "opportunity_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default=OpportunityAuditAction.UPDATED.value,
+    )
+    changed_fields: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True),
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
 
 
 class Task(TimestampMixin, Base):
@@ -379,6 +449,12 @@ class Meeting(TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_meetings_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["organisation_id", "owner_user_id"],
             [
                 "organisation_memberships.organisation_id",
@@ -410,6 +486,7 @@ class Meeting(TimestampMixin, Base):
         Index("ix_meetings_organisation_status", "organisation_id", "status"),
         Index("ix_meetings_organisation_type", "organisation_id", "meeting_type"),
         Index("ix_meetings_organisation_company", "organisation_id", "company_id"),
+        Index("ix_meetings_organisation_opportunity_date", "organisation_id", "opportunity_id", "meeting_date"),
         Index("ix_meetings_organisation_deleted", "organisation_id", "deleted_at"),
     )
 
@@ -435,6 +512,7 @@ class Meeting(TimestampMixin, Base):
         server_default=MeetingStatus.SCHEDULED.value,
     )
     company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     updated_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)

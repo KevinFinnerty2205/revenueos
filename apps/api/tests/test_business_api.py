@@ -67,10 +67,11 @@ def create_opportunity(
             "companyId": company_id,
             "name": name,
             "stage": "proposal",
-            "value": "125000.50",
+            "status": "open",
+            "estimatedValue": "125000.50",
             "currency": "AUD",
-            "probability": 65,
             "expectedCloseDate": "2026-09-30",
+            "description": "Customer expansion programme.",
         },
     )
     assert response.status_code == 201, response.text
@@ -148,17 +149,39 @@ def test_opportunity_crud(client: TestClient) -> None:
     opportunity = create_opportunity(client, company_id)
     opportunity_id = str(opportunity["id"])
     assert opportunity["currency"] == "AUD"
-    assert opportunity["value"] == "125000.50"
+    assert opportunity["estimatedValue"] == "125000.50"
+    assert opportunity["status"] == "open"
+    assert "probability" not in opportunity
 
     response = client.patch(
         f"/api/v1/opportunities/{opportunity_id}",
-        json={"stage": "negotiation", "probability": 80},
+        json={
+            "stage": "negotiation",
+            "status": "on_hold",
+            "expectedUpdatedAt": opportunity["updatedAt"],
+        },
     )
     assert response.status_code == 200
     assert response.json()["stage"] == "negotiation"
-    assert response.json()["probability"] == 80
+    assert response.json()["status"] == "on_hold"
 
     assert client.delete(f"/api/v1/opportunities/{opportunity_id}").status_code == 204
+
+
+def test_opportunity_can_be_created_without_company_or_value(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/opportunities",
+        json={
+            "name": "Unassigned discovery",
+            "stage": "qualification",
+            "status": "open",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["companyId"] is None
+    assert response.json()["estimatedValue"] is None
+    assert response.json()["currency"] is None
 
 
 def test_task_crud_and_relationship_derivation(client: TestClient) -> None:
@@ -267,8 +290,8 @@ def test_invalid_input_and_empty_updates_are_rejected_safely(client: TestClient)
             {
                 "companyId": "00000000-0000-4000-8000-000000000099",
                 "name": "Bad",
-                "value": -1,
-                "probability": 101,
+                "estimatedValue": -1,
+                "currency": "AUD",
             },
         ),
         ("/api/v1/tasks", {"title": "Bad timezone", "dueAt": "2026-01-01T10:00:00"}),

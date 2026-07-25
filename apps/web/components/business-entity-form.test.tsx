@@ -76,10 +76,12 @@ describe("BusinessEntityForm", () => {
           companyId: "company-1",
           name: "Expansion",
           stage: "proposal",
-          value: "50000.00",
+          status: "open",
+          estimatedValue: "50000.00",
           currency: "AUD",
-          probability: 70,
           expectedCloseDate: "2026-10-01",
+          description: "Commercial expansion",
+          updatedAt: "2026-07-24T10:00:00Z",
         }),
       );
     vi.stubGlobal("fetch", fetchMock);
@@ -90,7 +92,9 @@ describe("BusinessEntityForm", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Loading form");
     expect(await screen.findByDisplayValue("Expansion")).toBeVisible();
     expect(screen.getByLabelText(/company/i)).toHaveValue("company-1");
-    expect(screen.getByLabelText(/probability/i)).toHaveValue(70);
+    expect(screen.getByLabelText(/company/i)).not.toBeRequired();
+    expect(screen.getByLabelText(/estimated value/i)).toHaveValue(50000);
+    expect(screen.queryByLabelText(/probability/i)).not.toBeInTheDocument();
   });
 
   it("shows safe API validation errors without navigating", async () => {

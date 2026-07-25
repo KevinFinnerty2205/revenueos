@@ -20,11 +20,15 @@ Sprints 1–3 provide:
 - Dashboard, Companies, Contacts, Opportunities, Meetings, Tasks, Assistant and Settings navigation;
 - a dashboard with polished empty sections;
 - tenant-isolated list/create/edit/delete workflows for companies, contacts, opportunities and tasks;
-- tenant-isolated meeting, participant and deliberately supplied plain-text transcript workflows with local audit history; and
+- tenant-isolated meeting, participant and deliberately supplied plain-text transcript workflows with local audit history;
 - a unified Meeting Detail Intelligence workspace that derives safe overall state and progress while independently persisting a transcript-grounded Executive Summary, Buying Signals & Deal Momentum, Objections & Competitive Signals, cautious Stakeholder Intelligence, strict Key Decisions, concrete Action Items, structured Risks & Blockers, genuinely unresolved Open Questions and an artefact-only Follow-up Email;
+- an [Opportunity Workspace](../03-engineering/opportunity-workspace.md) with
+  tenant-safe metadata, meeting association, enriched list previews and the
+  latest associated meeting's stored validated intelligence, clearly labelled
+  as latest-meeting evidence rather than opportunity trend; and
 - an Assistant placeholder that states its capability is not implemented.
 
-The current product accepts only deliberately entered meeting metadata and plain-text transcripts. The default provider is a deterministic no-network mock; an explicitly configured server-side OpenAI adapter can process Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions, Action Items, Risks & Blockers and Open Questions and sends the selected transcript externally. Buying Signals reports qualitative current-meeting momentum, Objections reports qualitative current-meeting pressure and Stakeholder Intelligence reports cautious roles and coverage from one meeting; none is a win probability, forecast, relationship history or deal score. The application does not answer or assign questions, record, store media, transcribe, connect external systems, verify production Clerk sessions or process payments. Production customer data must not be used.
+The current product accepts only deliberately entered meeting metadata and plain-text transcripts. The default provider is a deterministic no-network mock; an explicitly configured server-side OpenAI adapter can process Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Decisions, Action Items, Risks & Blockers and Open Questions and sends the selected transcript externally. Buying Signals reports qualitative current-meeting momentum, Objections reports qualitative current-meeting pressure and Stakeholder Intelligence reports cautious roles and coverage from one meeting; none is a win probability, forecast, relationship history or deal score. The Opportunity Workspace reads stored artefacts only and neither reads transcripts nor triggers generation. The application does not answer or assign questions, record, store media, transcribe, connect external systems, verify production Clerk sessions or process payments. Production customer data must not be used.
 
 ## Product principles
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -17,9 +19,12 @@ from revenueos.business_contracts import (
     TaskUpdate,
 )
 from revenueos.business_repositories import BusinessRepository, PageResult
+from revenueos.domain import OpportunityAuditAction
 from revenueos.errors import PublicAPIError
-from revenueos.models import Company, Contact, Opportunity, Task
+from revenueos.models import Company, Contact, Opportunity, OpportunityAuditEvent, Task
 from revenueos.tenant import TenantContext
+
+logger = logging.getLogger("revenueos.opportunities")
 
 
 class BusinessService:
@@ -169,8 +174,28 @@ class BusinessService:
             raise self._not_found("opportunity")
         return opportunity
 
+    def record_opportunity_view(self, opportunity_id: UUID) -> None:
+        logger.info(
+            "opportunity_viewed",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "opportunity_id": str(opportunity_id),
+            },
+        )
+
+    async def _get_opportunity_for_update(self, opportunity_id: UUID) -> Opportunity:
+        opportunity = await self.repository.get_opportunity(
+            self.tenant.organisation_id,
+            opportunity_id,
+            for_update=True,
+        )
+        if opportunity is None:
+            raise self._not_found("opportunity")
+        return opportunity
+
     async def create_opportunity(self, request: OpportunityCreate) -> Opportunity:
-        await self.get_company(request.company_id)
+        if request.company_id is not None:
+            await self.get_company(request.company_id)
         owner_user_id = request.owner_user_id or self.tenant.user_id
         await self._require_member(owner_user_id, "ownerUserId")
         opportunity = Opportunity(
@@ -178,30 +203,104 @@ class BusinessService:
             company_id=request.company_id,
             name=request.name,
             stage=request.stage.value,
-            value=request.value,
+            status=request.status.value,
+            estimated_value=request.estimated_value,
             currency=request.currency,
-            probability=request.probability,
             expected_close_date=request.expected_close_date,
             owner_user_id=owner_user_id,
+            description=request.description,
         )
-        return await self._save(opportunity)
+        self.repository.add(opportunity)
+        try:
+            await self.repository.flush()
+            self.repository.add(
+                self._opportunity_audit(
+                    opportunity.id,
+                    OpportunityAuditAction.CREATED,
+                    [
+                        "company_id",
+                        "name",
+                        "stage",
+                        "status",
+                        "estimated_value",
+                        "currency",
+                        "expected_close_date",
+                        "owner_user_id",
+                        "description",
+                    ],
+                )
+            )
+            await self.repository.flush()
+            await self.repository.refresh(opportunity)
+            await self.repository.commit()
+        except IntegrityError as exc:
+            await self.repository.rollback()
+            raise PublicAPIError(
+                "conflict",
+                "The record conflicts with existing or related data.",
+                409,
+            ) from exc
+        logger.info(
+            "opportunity_created",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "opportunity_id": str(opportunity.id),
+            },
+        )
+        return opportunity
 
     async def update_opportunity(
         self,
         opportunity_id: UUID,
         request: OpportunityUpdate,
     ) -> Opportunity:
-        opportunity = await self.get_opportunity(opportunity_id)
+        opportunity = await self._get_opportunity_for_update(opportunity_id)
         values = request.model_dump(exclude_unset=True)
+        expected_updated_at = values.pop("expected_updated_at", None)
+        if expected_updated_at is not None and not self._same_instant(
+            opportunity.updated_at,
+            expected_updated_at,
+        ):
+            raise PublicAPIError(
+                "stale_write",
+                "This opportunity changed after it was loaded. Refresh and try again.",
+                409,
+            )
         if "company_id" in values:
-            await self.get_company(values["company_id"])
+            if values["company_id"] is not None:
+                await self.get_company(values["company_id"])
         if "owner_user_id" in values:
             await self._require_member(values["owner_user_id"], "ownerUserId")
         self._apply_values(opportunity, values)
-        return await self._save(opportunity)
+        opportunity.updated_at = datetime.now(UTC)
+        self.repository.add(
+            self._opportunity_audit(
+                opportunity.id,
+                OpportunityAuditAction.UPDATED,
+                list(values),
+            )
+        )
+        saved = await self._save(opportunity)
+        logger.info(
+            "opportunity_updated",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "opportunity_id": str(opportunity.id),
+                "changed_field_count": len(values),
+            },
+        )
+        return saved
 
     async def delete_opportunity(self, opportunity_id: UUID) -> None:
-        await self._delete(await self.get_opportunity(opportunity_id), "opportunity")
+        opportunity = await self._get_opportunity_for_update(opportunity_id)
+        self.repository.add(
+            self._opportunity_audit(
+                opportunity.id,
+                OpportunityAuditAction.DELETED,
+                ["deleted"],
+            )
+        )
+        await self._delete(opportunity, "opportunity")
 
     async def list_tasks(
         self,
@@ -294,7 +393,9 @@ class BusinessService:
         if contact_id is not None:
             related_company_ids.add((await self.get_contact(contact_id)).company_id)
         if opportunity_id is not None:
-            related_company_ids.add((await self.get_opportunity(opportunity_id)).company_id)
+            opportunity_company_id = (await self.get_opportunity(opportunity_id)).company_id
+            if opportunity_company_id is not None:
+                related_company_ids.add(opportunity_company_id)
         if len(related_company_ids) > 1:
             raise PublicAPIError(
                 "inconsistent_relationship",
@@ -353,6 +454,32 @@ class BusinessService:
             elif field_name in {"website", "linkedin_url", "email"} and value is not None:
                 value = str(value)
             setattr(entity, field_name, value)
+
+    def _opportunity_audit(
+        self,
+        opportunity_id: UUID,
+        action: OpportunityAuditAction,
+        changed_fields: list[str],
+        *,
+        metadata: dict[str, object] | None = None,
+    ) -> OpportunityAuditEvent:
+        return OpportunityAuditEvent(
+            organisation_id=self.tenant.organisation_id,
+            opportunity_id=opportunity_id,
+            actor_user_id=self.tenant.user_id,
+            action=action.value,
+            changed_fields=sorted(changed_fields),
+            metadata_json=metadata or {},
+        )
+
+    @staticmethod
+    def _same_instant(first: datetime, second: datetime) -> bool:
+        def normalise(value: datetime) -> datetime:
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=UTC)
+            return value.astimezone(UTC)
+
+        return normalise(first) == normalise(second)
 
     @staticmethod
     def _not_found(entity_name: str) -> PublicAPIError:

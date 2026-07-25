@@ -61,9 +61,13 @@ checks. WO-004C6 requires `0012_follow_up_email`, which also adds the guarded
 nullable job tone column. The current trace fields already hold provider/model/
 request/token metadata. WO-005 requires no migration. WO-006A requires
 `0013_buying_signals`; WO-006B requires `0014_objections`; WO-006C requires
-`0015_stakeholders`; and WO-006D requires the head migration
-`0016_next_best_action`. All four widen only the existing job/artefact type checks without adding a table or
-column. Deploy API, worker and web
+`0015_stakeholders`; and WO-006D requires `0016_next_best_action`. All four
+widen only the existing job/artefact type checks without adding a table or
+column. WO-007 requires migration `0017_opportunity_workspace`, which
+changes Opportunity metadata, adds the Meeting association and creates the
+forced-RLS Opportunity audit table. WO-008A requires the head migration
+`0018_revenue_brain`, which adds the immutable, forced-RLS Revenue Brain
+composition table and append-only guards. Deploy API, worker and web
 from the same immutable release so aggregate prompt/schema selection and worker
 source validation agree.
 
@@ -73,7 +77,13 @@ Roll back API, worker and web to the same previously validated release. For an
 OpenAI-specific operational issue, select `AI_PROVIDER=mock`, restart the
 worker, verify new work uses the mock, and revoke/remove the unused OpenAI key.
 Do not rewrite completed artefact trace. Database downgrade is unnecessary for
-an OpenAI rollback. Downgrading `0016_next_best_action` is destructive to Next
+an OpenAI rollback. Downgrade `0018_revenue_brain` before
+`0017_opportunity_workspace`; it removes only immutable snapshot compositions.
+Downgrading `0017_opportunity_workspace` removes all
+Opportunity audit events and Meeting associations, maps the expanded metadata
+back to the earlier contract and may delete company-less opportunities after
+dependent links are cleared. Back up and obtain an explicit data-loss decision
+first. Downgrading `0016_next_best_action` is destructive to Next
 Best Action jobs/artefacts; downgrading `0015_stakeholders` is destructive to Stakeholder
 Intelligence jobs/artefacts; downgrading `0014_objections` is destructive to Objections &
 Competitive Signals jobs/artefacts; downgrading `0013_buying_signals` is destructive to Buying

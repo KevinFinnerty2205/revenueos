@@ -1,4 +1,4 @@
-# ADR 0022: Persist Revenue Brain as immutable artefact compositions
+# ADR 0023: Persist Revenue Brain as immutable artefact compositions
 
 - **Status:** Accepted
 - **Date:** 2026-07-25
@@ -13,7 +13,8 @@ would also introduce reasoning that WO-008A does not authorise.
 
 The current transcript model has one stable transcript UUID and a mutable
 positive version counter, rather than an immutable transcript-version row with
-its own UUID. Meetings link to companies but not directly to opportunities.
+its own UUID. WO-007 gives each meeting one optional, audited, tenant-safe
+opportunity association.
 
 ## Decision
 
@@ -36,8 +37,9 @@ its own UUID. Meetings link to companies but not directly to opportunities.
   forced PostgreSQL RLS for defence in depth.
 - Reject all snapshot updates and deletes with database triggers. Earlier
   snapshots remain append-only when a later transcript version becomes ready.
-- Keep `opportunity_id` nullable because there is no authorised meeting-to-
-  opportunity relationship. Do not infer one.
+- Copy the meeting's explicit `opportunity_id` reference into the composition
+  when present. Keep it nullable and never infer an opportunity from account
+  data.
 - Expose a reference-only ordered array at
   `GET /api/v1/accounts/{accountId}/brain` and a meeting-date-only account
   timeline.
@@ -50,8 +52,9 @@ its own UUID. Meetings link to companies but not directly to opportunities.
   authorises persistence composition only, not new reasoning or provider use.
 - **Create a new queue or worker:** rejected because snapshot readiness is a
   small transactional extension of existing completion.
-- **Choose an opportunity from the account:** rejected because selection would
-  be ungrounded inference and meetings do not carry that relationship.
+- **Choose another opportunity from the account:** rejected because selection
+  would be ungrounded inference; only the meeting's audited association is
+  eligible.
 - **Store only the transcript UUID:** rejected because transcript corrections
   reuse that UUID and must be independently idempotent.
 - **Allow snapshot correction in place:** rejected because it would erase the
@@ -68,5 +71,5 @@ composition while existing snapshots cannot be rewritten or deleted.
 The derived transcript-version UUID is an application identity rather than a
 foreign key to a transcript-version table. If a future authorised sprint adds
 immutable transcript-version rows, it must provide an explicit migration and
-compatibility decision. Revenue Brain reasoning, cross-snapshot comparison and
-opportunity linkage also remain separate decisions.
+compatibility decision. Revenue Brain reasoning and cross-snapshot comparison
+remain separate decisions.

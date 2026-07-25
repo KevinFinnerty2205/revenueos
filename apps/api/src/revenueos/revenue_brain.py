@@ -181,7 +181,7 @@ class RevenueBrainService:
         snapshot = RevenueBrainSnapshot(
             organisation_id=self.tenant.organisation_id,
             company_id=meeting.company_id,
-            opportunity_id=None,
+            opportunity_id=meeting.opportunity_id,
             meeting_id=meeting.id,
             transcript_version_id=transcript_version_id,
             summary_reference=latest_by_type[AIArtifactType.EXECUTIVE_SUMMARY.value].id,

@@ -1,5 +1,5 @@
-import { BusinessEntityList } from "@/components/business-entity-list";
+import { OpportunityList } from "@/components/opportunity-list";
 
 export default function OpportunitiesPage() {
-  return <BusinessEntityList entity="opportunities" />;
+  return <OpportunityList />;
 }

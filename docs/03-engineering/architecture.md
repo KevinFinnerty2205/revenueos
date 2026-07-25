@@ -2,7 +2,7 @@
 
 ## Current scope
 
-WO-006A/WO-006B/WO-006C/WO-006D/WO-008A keep the Sprint 3 modular monolith and
+WO-006A/WO-006B/WO-006C/WO-006D/WO-007/WO-008A keep the Sprint 3 modular monolith and
 WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 and WO-005 baseline. The durable worker runs
 its infrastructure test plus current-transcript Executive Summary, Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
@@ -23,7 +23,12 @@ After a completed account-linked meeting has all nine validated current-
 revision artefacts, the same worker atomically appends one Revenue Brain
 composition that stores their IDs only. The account page exposes an ordered
 meeting-date snapshot timeline without content, comparison or reasoning.
-There is no email-send integration, later intelligence schema, question-
+WO-007 derives an Opportunity Workspace from manually managed opportunity
+metadata and the latest associated meeting's stored current-version artefacts.
+That path selects transcript identity/version metadata only, performs no AI
+work and labels every result as latest-meeting evidence. Revenue Brain records
+the meeting's explicit opportunity association when present and never infers
+one. There is no email-send integration, later intelligence schema, question-
 answering workflow, recording/media pipeline, connector, billing service or
 mobile application.
 
@@ -71,7 +76,7 @@ Next.js App Router, strict TypeScript and Tailwind CSS provide the responsive we
 
 Development auth returns one fixed example user/organisation, provisions that identity only in a migrated development database, and displays a warning banner. Production never provisions or falls back to the mock identity. The Clerk adapter boundary and environment path exist, but Clerk sessions are not connected.
 
-Companies, contacts, opportunities and tasks share list and form components. A company account page exposes the Revenue Brain snapshot timeline with meeting dates only. Meetings use focused list, aggregate form and detail components because participant and transcript state is nested. The detail view exposes accessible Overview, Intelligence, Transcript and History tabs. Intelligence is one ordered, responsive workspace over Executive Summary, Buying Signals & Deal Momentum, Objections & Competitive Signals, Stakeholders, Next Best Action, Key Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email. One non-overlapping three-second aggregate polling chain terminates when idle or on unmount, resumes after generation/retry and uses sequence guards against stale responses. Shared section treatment covers unavailable, not-generated, queued, processing, completed/valid-empty, failed and cancelled states while preserving completed content during partial failures. Stakeholders uses textual coverage and cautious role labels, with no graph or score. Next Best Action is read-only; Follow-up Email retains tone, plain-text Copy and deliberate Regenerate, but no Send. The browser reads an explicitly selected `.txt` file into the form; no file is uploaded to object storage and no recording or transcription occurs. Components provide loading, empty, safe error and responsive mobile/desktop states. Business validation remains server-side even when HTML constraints improve feedback.
+Companies, contacts, opportunities and tasks share form conventions. Opportunities use a focused enriched list and workspace that reuse product-safe intelligence renderers without generation controls; Meeting Detail links back to its associated opportunity. A company account page exposes the Revenue Brain snapshot timeline with meeting dates only. Meetings use focused list, aggregate form and detail components because participant and transcript state is nested. The detail view exposes accessible Overview, Intelligence, Transcript and History tabs. Intelligence is one ordered, responsive workspace over Executive Summary, Buying Signals & Deal Momentum, Objections & Competitive Signals, Stakeholders, Next Best Action, Key Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email. One non-overlapping three-second aggregate polling chain terminates when idle or on unmount, resumes after generation/retry and uses sequence guards against stale responses. Shared section treatment covers unavailable, not-generated, queued, processing, completed/valid-empty, failed and cancelled states while preserving completed content during partial failures. Stakeholders uses textual coverage and cautious role labels, with no graph or score. Next Best Action is read-only; Follow-up Email retains tone, plain-text Copy and deliberate Regenerate, but no Send. The browser reads an explicitly selected `.txt` file into the form; no file is uploaded to object storage and no recording or transcription occurs. Components provide loading, empty, safe error and responsive mobile/desktop states. Business validation remains server-side even when HTML constraints improve feedback.
 
 ## API architecture
 
@@ -81,6 +86,7 @@ FastAPI exposes:
 - `GET /ready` for honest configured-dependency readiness;
 - `GET /api/v1/me` for the authenticated identity and active organisation context;
 - CRUD collections and resources under `/api/v1/companies`, `/api/v1/contacts`, `/api/v1/opportunities` and `/api/v1/tasks`;
+- an enriched opportunity list, aggregate read at `/api/v1/opportunities/{opportunityId}/workspace` and stale-write-safe meeting association at `/api/v1/meetings/{meetingId}/opportunity`;
 - meeting, nested participant, singular transcript and audit-history resources under `/api/v1/meetings`;
 - meeting-scoped POST/GET for Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email;
 - aggregate current-version GET at `/api/v1/meetings/{meetingId}/intelligence`; and
@@ -93,9 +99,9 @@ The intelligence endpoints expose only normalised product state, safe timestamps
 
 ## Persistence and tenancy
 
-SQLAlchemy 2 models Organisation, User, OrganisationMembership, Company, Contact, Opportunity, Task, Meeting, MeetingParticipant, Transcript, MeetingAuditEvent, AIJob, AIArtifact and RevenueBrainSnapshot. UUIDs, UTC timestamps, allowed enum values, bounded numeric values, unique organisation slugs, unique external auth IDs and membership uniqueness are enforced in schema and migrations.
+SQLAlchemy 2 models Organisation, User, OrganisationMembership, Company, Contact, Opportunity, OpportunityAuditEvent, Task, Meeting, MeetingParticipant, Transcript, MeetingAuditEvent, AIJob, AIArtifact and RevenueBrainSnapshot. UUIDs, UTC timestamps, allowed enum values, bounded numeric values, unique organisation slugs, unique external auth IDs and membership uniqueness are enforced in schema and migrations.
 
-Every tenant-owned row, including meeting children and audit events, has a non-null `organisation_id`. Composite foreign keys include the organisation for company/contact/meeting/participant relationships and membership-owned user fields, so the database cannot attach a record to another tenant even if application validation regresses. Business parent deletes remain restrictive. Meetings, participants and transcripts use `deleted_at`; deleting a meeting soft-deletes its active children in one transaction.
+Every tenant-owned row, including meeting children and audit events, has a non-null `organisation_id`. Composite foreign keys include the organisation for company/contact/meeting/participant/opportunity relationships and membership-owned user fields, so the database cannot attach a record to another tenant even if application validation regresses. A meeting has one nullable `opportunity_id`; association writes lock the row, compare its timestamp and audit both aggregates. Business parent deletes remain restrictive. Meetings, participants and transcripts use `deleted_at`; deleting a meeting soft-deletes its active children in one transaction.
 
 The active organisation originates in the trusted auth adapter, never a body, path or query tenant identifier. Each request sets PostgreSQL's transaction-local `app.organisation_id`; repositories also apply an explicit organisation predicate. Companies, contacts, opportunities, tasks, all four Meeting Domain tables, AI jobs, AI artefacts and Revenue Brain snapshots enable and force RLS. Composite tenant foreign keys reject cross-tenant meeting, transcript, requester, job, artefact and snapshot references. Runtime deployment must use a non-bypass application role; migration credentials remain separate.
 
@@ -159,9 +165,13 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0017_revenue_brain` is the head migration. It adds
-the immutable, forced-RLS Revenue Brain composition table and its append-only
-guards. `0016_next_best_action` widened job/artefact type checks for Next Best Action; `0015_stakeholders` added
+source exists. Migration `0018_revenue_brain` is the head migration. It follows
+`0017_opportunity_workspace`, which expands Opportunity metadata and indexes,
+adds the nullable organisation-safe meeting association and creates metadata-
+only Opportunity audit events with forced RLS. `0018_revenue_brain` adds the
+immutable, forced-RLS Revenue Brain composition table and its append-only
+guards. `0016_next_best_action` widened job/artefact type checks for Next Best
+Action; `0015_stakeholders` added
 Stakeholder Intelligence, and `0014_objections` added
 Objections & Competitive Signals, `0013_buying_signals` added Buying Signals and `0012_follow_up_email` added the
 guarded nullable composition-tone column.
@@ -210,4 +220,5 @@ See [AI database foundation](ai-database-foundation.md),
 [Next Best Action Intelligence](next-best-action-intelligence.md),
 [Revenue Brain foundation](revenue-brain-foundation.md)
 and [Follow-up Email Composer](follow-up-email-composer.md), plus the
-[Unified Meeting Intelligence workspace](unified-meeting-intelligence.md).
+[Unified Meeting Intelligence workspace](unified-meeting-intelligence.md) and
+[Opportunity Workspace](opportunity-workspace.md).

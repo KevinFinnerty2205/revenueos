@@ -29,6 +29,7 @@ from revenueos.models import (
     AIJob,
     Company,
     Meeting,
+    Opportunity,
     RevenueBrainSnapshot,
     Transcript,
 )
@@ -54,6 +55,7 @@ Scenario = Callable[[async_sessionmaker[AsyncSession]], Awaitable[None]]
 @dataclass(frozen=True)
 class SeededMeeting:
     company_id: uuid.UUID
+    opportunity_id: uuid.UUID | None
     meeting_id: uuid.UUID
     transcript_id: uuid.UUID
     artifacts: dict[str, uuid.UUID]
@@ -206,6 +208,7 @@ async def _seed_ready_meeting(
     status_override: tuple[str, str] | None = None,
     pending_next_best_action: bool = False,
     invalid_type: str | None = None,
+    link_opportunity: bool = False,
 ) -> SeededMeeting:
     resolved_company_id = company_id or uuid.uuid4()
     if company_id is None:
@@ -218,6 +221,19 @@ async def _seed_ready_meeting(
             )
         )
         await session.flush()
+    opportunity_id: uuid.UUID | None = None
+    if link_opportunity:
+        opportunity_id = uuid.uuid4()
+        session.add(
+            Opportunity(
+                id=opportunity_id,
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                company_id=resolved_company_id,
+                name="Revenue Brain opportunity",
+                owner_user_id=PRIMARY_USER_ID,
+            )
+        )
+        await session.flush()
     meeting = Meeting(
         id=uuid.uuid4(),
         organisation_id=PRIMARY_ORGANISATION_ID,
@@ -225,6 +241,7 @@ async def _seed_ready_meeting(
         meeting_date=meeting_date,
         status=meeting_status,
         company_id=resolved_company_id,
+        opportunity_id=opportunity_id,
         owner_user_id=PRIMARY_USER_ID,
         created_by=PRIMARY_USER_ID,
         updated_by=PRIMARY_USER_ID,
@@ -242,6 +259,7 @@ async def _seed_ready_meeting(
     await session.flush()
     seeded = SeededMeeting(
         company_id=resolved_company_id,
+        opportunity_id=opportunity_id,
         meeting_id=meeting.id,
         transcript_id=transcript.id,
         artifacts={},
@@ -257,6 +275,7 @@ async def _seed_ready_meeting(
     )
     return SeededMeeting(
         company_id=seeded.company_id,
+        opportunity_id=seeded.opportunity_id,
         meeting_id=seeded.meeting_id,
         transcript_id=seeded.transcript_id,
         artifacts=artifacts,
@@ -308,6 +327,19 @@ def test_snapshot_creation_references_validated_artifacts_without_content() -> N
             assert "raw_text" not in RevenueBrainSnapshot.__table__.columns
             assert "content_json" not in RevenueBrainSnapshot.__table__.columns
             assert "updated_at" not in RevenueBrainSnapshot.__table__.columns
+
+    _run(scenario)
+
+
+def test_snapshot_preserves_the_meetings_explicit_opportunity_association() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        async with session_factory() as session, session.begin():
+            seeded = await _seed_ready_meeting(session, link_opportunity=True)
+            snapshot = await _create_snapshot(session, seeded)
+
+            assert seeded.opportunity_id is not None
+            assert snapshot is not None
+            assert snapshot.opportunity_id == seeded.opportunity_id
 
     _run(scenario)
 
