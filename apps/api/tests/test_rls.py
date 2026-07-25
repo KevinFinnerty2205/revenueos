@@ -36,6 +36,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "meeting_audit_events",
         "ai_jobs",
         "ai_artifacts",
+        "revenue_brain_snapshots",
     )
     tenant_a = {
         "suffix": "A",
@@ -51,6 +52,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "audit_id": uuid.uuid4(),
         "ai_job_id": uuid.uuid4(),
         "ai_artifact_id": uuid.uuid4(),
+        "snapshot_id": uuid.uuid4(),
+        "transcript_version_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -66,6 +69,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "audit_id": uuid.uuid4(),
         "ai_job_id": uuid.uuid4(),
         "ai_artifact_id": uuid.uuid4(),
+        "snapshot_id": uuid.uuid4(),
+        "transcript_version_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -284,6 +289,29 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         ),
                         identity_parameters,
                     )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO revenue_brain_snapshots
+                                (id, organisation_id, company_id, opportunity_id,
+                                 meeting_id, transcript_version_id,
+                                 summary_reference, buying_signals_reference,
+                                 objections_reference, stakeholders_reference,
+                                 decisions_reference, actions_reference,
+                                 risks_reference, questions_reference,
+                                 next_best_action_reference)
+                            VALUES
+                                (:snapshot_id, :organisation_id, :company_id,
+                                 :opportunity_id, :meeting_id,
+                                 :transcript_version_id, :ai_artifact_id,
+                                 :ai_artifact_id, :ai_artifact_id,
+                                 :ai_artifact_id, :ai_artifact_id,
+                                 :ai_artifact_id, :ai_artifact_id,
+                                 :ai_artifact_id, :ai_artifact_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
 
                 savepoint = await connection.begin_nested()
                 with pytest.raises(DBAPIError):
@@ -340,7 +368,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                 """
                                 SELECT relname, relrowsecurity, relforcerowsecurity
                                 FROM pg_class
-                                WHERE relname IN ('ai_jobs', 'ai_artifacts')
+                                WHERE relname IN (
+                                    'ai_jobs',
+                                    'ai_artifacts',
+                                    'revenue_brain_snapshots'
+                                )
                                 """
                             )
                         )
@@ -349,6 +381,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 assert rls_state == {
                     "ai_jobs": (True, True),
                     "ai_artifacts": (True, True),
+                    "revenue_brain_snapshots": (True, True),
                 }
 
             async with engine.connect() as connection:
@@ -376,6 +409,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["ai_artifact_id"]},
                 )
                 assert artifact_update.rowcount == 0
+                snapshot_update = await connection.execute(
+                    text("UPDATE revenue_brain_snapshots SET version = 2 WHERE id = :id"),
+                    {"id": tenant_b["snapshot_id"]},
+                )
+                assert snapshot_update.rowcount == 0
 
                 tenant_context = TenantContext(
                     organisation_id=tenant_a["organisation_id"],
@@ -510,7 +548,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await transaction.rollback()
         finally:
             async with engine.begin() as connection:
+                await connection.execute(
+                    text("ALTER TABLE revenue_brain_snapshots DISABLE TRIGGER revenue_brain_snapshots_append_only")
+                )
                 for table in (
+                    "revenue_brain_snapshots",
                     "ai_artifacts",
                     "ai_jobs",
                     "meeting_audit_events",
@@ -529,6 +571,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             "organisation_b": tenant_b["organisation_id"],
                         },
                     )
+                await connection.execute(
+                    text("ALTER TABLE revenue_brain_snapshots ENABLE TRIGGER revenue_brain_snapshots_append_only")
+                )
                 cleanup_parameters = {
                     "organisation_a": tenant_a["organisation_id"],
                     "organisation_b": tenant_b["organisation_id"],

@@ -328,7 +328,17 @@ function displayCells(
   if (entity === "companies") {
     const company = item as Company;
     return [
-      { label: "Name", value: company.name },
+      {
+        label: "Name",
+        value: (
+          <Link
+            href={`/companies/${company.id}`}
+            className="font-bold text-teal-700 hover:text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+          >
+            {company.name}
+          </Link>
+        ),
+      },
       { label: "Industry", value: company.industry ?? "—" },
       { label: "Status", value: humanise(company.status) },
       {

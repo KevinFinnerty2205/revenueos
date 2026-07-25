@@ -176,6 +176,32 @@ WO-006C extends the implemented nine-capability Meeting Intelligence workspace;
 it does not change the separately proposed production-readiness sequence below
 or authorise production customer data.
 
+### WO-008A — Revenue Brain Foundation — Complete
+
+- **Objective:** Preserve one immutable account-level composition after a
+  completed meeting's current transcript revision has all nine validated
+  intelligence artefacts.
+- **Major deliverables:** Reference-only snapshot model, deterministic
+  transcript-revision identity, existing-worker completion hook, append-only
+  database guards, forced RLS, ordered account-brain GET API and a meeting-date
+  snapshot timeline on the account page.
+- **Dependencies:** Completed Meeting Intelligence capabilities through
+  WO-006D, the tenant-owned meeting/company foundation and the durable worker.
+- **Out of scope:** New prompts/provider calls, transcript analysis, Revenue
+  Brain reasoning, comparison, opportunity health, prediction, forecasting,
+  trend detection, CRM/action automation, relationship graph, embeddings and
+  vector search.
+- **Security gates:** Explicit organisation predicates, composite tenant
+  foreign keys, forced RLS, strict artefact revalidation, current transcript
+  trace, content-free snapshots/API and database-enforced append-only rows.
+- **Demonstration:** Complete synthetic meeting intelligence, observe exactly
+  one account timeline entry for that transcript revision, retry idempotently,
+  correct the transcript and append a distinct later snapshot without changing
+  the first.
+
+WO-008A adds persistence composition only. It does not alter the proposed
+production-readiness sequence below or authorise production customer data.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.
@@ -439,11 +465,11 @@ or authorise production customer data.
 
 ## Integration coverage at launch stages
 
-| Stage | Calendar/mail | CRM | Meeting source |
-| --- | --- | --- | --- |
-| Design-partner pilot | One selected ecosystem | One selected CRM | Manual upload/paste; connected source only if safely available |
-| Private beta entry | Google and Microsoft calendar/mail | Salesforce and HubSpot read/approved write | Manual fallback plus one priority provider import |
-| Later beta increments | Provider-specific improvements | Additional objects/fields by evidence | Remaining Zoom/Teams/Meet imports in focused sprints |
+| Stage                 | Calendar/mail                      | CRM                                        | Meeting source                                                 |
+| --------------------- | ---------------------------------- | ------------------------------------------ | -------------------------------------------------------------- |
+| Design-partner pilot  | One selected ecosystem             | One selected CRM                           | Manual upload/paste; connected source only if safely available |
+| Private beta entry    | Google and Microsoft calendar/mail | Salesforce and HubSpot read/approved write | Manual fallback plus one priority provider import              |
+| Later beta increments | Provider-specific improvements     | Additional objects/fields by evidence      | Remaining Zoom/Teams/Meet imports in focused sprints           |
 
 Not every listed integration is a prerequisite for the first pilot or private beta entry. Availability must be labelled by provider, edition, capability and region.
 

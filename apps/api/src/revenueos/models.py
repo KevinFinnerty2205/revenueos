@@ -1006,3 +1006,130 @@ class AIArtifact(Base):
             transcript_version,
         ],
     )
+
+
+class RevenueBrainSnapshot(Base):
+    __tablename__ = "revenue_brain_snapshots"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_revenue_brain_snapshots_version"),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_revenue_brain_snapshots_company_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_revenue_brain_snapshots_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"],
+            ["meetings.organisation_id", "meetings.id"],
+            name="fk_revenue_brain_snapshots_meeting_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "summary_reference"],
+            ["ai_artifacts.organisation_id", "ai_artifacts.id"],
+            name="fk_revenue_brain_snapshots_summary_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "buying_signals_reference"],
+            ["ai_artifacts.organisation_id", "ai_artifacts.id"],
+            name="fk_revenue_brain_snapshots_buying_signals_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "objections_reference"],
+            ["ai_artifacts.organisation_id", "ai_artifacts.id"],
+            name="fk_revenue_brain_snapshots_objections_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "stakeholders_reference"],
+            ["ai_artifacts.organisation_id", "ai_artifacts.id"],
+            name="fk_revenue_brain_snapshots_stakeholders_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "decisions_reference"],
+            ["ai_artifacts.organisation_id", "ai_artifacts.id"],
+            name="fk_revenue_brain_snapshots_decisions_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "actions_reference"],
+            ["ai_artifacts.organisation_id", "ai_artifacts.id"],
+            name="fk_revenue_brain_snapshots_actions_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "risks_reference"],
+            ["ai_artifacts.organisation_id", "ai_artifacts.id"],
+            name="fk_revenue_brain_snapshots_risks_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "questions_reference"],
+            ["ai_artifacts.organisation_id", "ai_artifacts.id"],
+            name="fk_revenue_brain_snapshots_questions_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "next_best_action_reference"],
+            ["ai_artifacts.organisation_id", "ai_artifacts.id"],
+            name="fk_revenue_brain_snapshots_next_best_action_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            name="uq_revenue_brain_snapshots_organisation_id_id",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "meeting_id",
+            "transcript_version_id",
+            name="uq_revenue_brain_snapshots_meeting_transcript_version",
+        ),
+        Index(
+            "ix_revenue_brain_snapshots_organisation_company_created",
+            "organisation_id",
+            "company_id",
+            "created_at",
+        ),
+        Index(
+            "ix_revenue_brain_snapshots_organisation_meeting",
+            "organisation_id",
+            "meeting_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    meeting_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    summary_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    buying_signals_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    objections_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    stakeholders_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    decisions_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    actions_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    risks_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    questions_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    next_best_action_reference: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")

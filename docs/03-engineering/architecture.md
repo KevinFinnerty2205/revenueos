@@ -2,7 +2,7 @@
 
 ## Current scope
 
-WO-006A/WO-006B/WO-006C/WO-006D keep the Sprint 3 modular monolith and
+WO-006A/WO-006B/WO-006C/WO-006D/WO-008A keep the Sprint 3 modular monolith and
 WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 and WO-005 baseline. The durable worker runs
 its infrastructure test plus current-transcript Executive Summary, Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
@@ -19,6 +19,10 @@ derives evidence-backed qualitative momentum, Objections derives qualitative
 pressure and Stakeholder Intelligence derives cautious roles and coverage for
 the current meeting only. Next Best Action adds grounded recommendations
 without operational authority; none predicts outcomes or scores the deal.
+After a completed account-linked meeting has all nine validated current-
+revision artefacts, the same worker atomically appends one Revenue Brain
+composition that stores their IDs only. The account page exposes an ordered
+meeting-date snapshot timeline without content, comparison or reasoning.
 There is no email-send integration, later intelligence schema, question-
 answering workflow, recording/media pipeline, connector, billing service or
 mobile application.
@@ -48,7 +52,8 @@ Browser
               ▼
        PostgreSQL / Supabase later
        identity · business records · meetings
-       AI jobs/artefacts · audit metadata · RLS
+       AI jobs/artefacts · Revenue Brain snapshots
+       audit metadata · RLS
 ```
 
 ## Repository boundaries
@@ -66,7 +71,7 @@ Next.js App Router, strict TypeScript and Tailwind CSS provide the responsive we
 
 Development auth returns one fixed example user/organisation, provisions that identity only in a migrated development database, and displays a warning banner. Production never provisions or falls back to the mock identity. The Clerk adapter boundary and environment path exist, but Clerk sessions are not connected.
 
-Companies, contacts, opportunities and tasks share list and form components. Meetings use focused list, aggregate form and detail components because participant and transcript state is nested. The detail view exposes accessible Overview, Intelligence, Transcript and History tabs. Intelligence is one ordered, responsive workspace over Executive Summary, Buying Signals & Deal Momentum, Objections & Competitive Signals, Stakeholders, Next Best Action, Key Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email. One non-overlapping three-second aggregate polling chain terminates when idle or on unmount, resumes after generation/retry and uses sequence guards against stale responses. Shared section treatment covers unavailable, not-generated, queued, processing, completed/valid-empty, failed and cancelled states while preserving completed content during partial failures. Stakeholders uses textual coverage and cautious role labels, with no graph or score. Next Best Action is read-only; Follow-up Email retains tone, plain-text Copy and deliberate Regenerate, but no Send. The browser reads an explicitly selected `.txt` file into the form; no file is uploaded to object storage and no recording or transcription occurs. Components provide loading, empty, safe error and responsive mobile/desktop states. Business validation remains server-side even when HTML constraints improve feedback.
+Companies, contacts, opportunities and tasks share list and form components. A company account page exposes the Revenue Brain snapshot timeline with meeting dates only. Meetings use focused list, aggregate form and detail components because participant and transcript state is nested. The detail view exposes accessible Overview, Intelligence, Transcript and History tabs. Intelligence is one ordered, responsive workspace over Executive Summary, Buying Signals & Deal Momentum, Objections & Competitive Signals, Stakeholders, Next Best Action, Key Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email. One non-overlapping three-second aggregate polling chain terminates when idle or on unmount, resumes after generation/retry and uses sequence guards against stale responses. Shared section treatment covers unavailable, not-generated, queued, processing, completed/valid-empty, failed and cancelled states while preserving completed content during partial failures. Stakeholders uses textual coverage and cautious role labels, with no graph or score. Next Best Action is read-only; Follow-up Email retains tone, plain-text Copy and deliberate Regenerate, but no Send. The browser reads an explicitly selected `.txt` file into the form; no file is uploaded to object storage and no recording or transcription occurs. Components provide loading, empty, safe error and responsive mobile/desktop states. Business validation remains server-side even when HTML constraints improve feedback.
 
 ## API architecture
 
@@ -79,7 +84,8 @@ FastAPI exposes:
 - meeting, nested participant, singular transcript and audit-history resources under `/api/v1/meetings`;
 - meeting-scoped POST/GET for Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email;
 - aggregate current-version GET at `/api/v1/meetings/{meetingId}/intelligence`; and
-- idempotent generation orchestration POST at `/api/v1/meetings/{meetingId}/intelligence/generate`.
+- idempotent generation orchestration POST at `/api/v1/meetings/{meetingId}/intelligence/generate`; and
+- reference-only Revenue Brain timeline GET at `/api/v1/accounts/{accountId}/brain`.
 
 Routes use Pydantic request/response models, camel-case JSON, bounded pagination, explicit filters/sorts, request IDs, structured content-redacted logs, explicit CORS and central safe error handlers. Route handlers delegate business rules to services and all SQL to repositories. Meeting, participant and transcript services share one tenant-aware repository without introducing a new persistence pattern.
 
@@ -87,11 +93,11 @@ The intelligence endpoints expose only normalised product state, safe timestamps
 
 ## Persistence and tenancy
 
-SQLAlchemy 2 models Organisation, User, OrganisationMembership, Company, Contact, Opportunity, Task, Meeting, MeetingParticipant, Transcript, MeetingAuditEvent, AIJob and AIArtifact. UUIDs, UTC timestamps, allowed enum values, bounded numeric values, unique organisation slugs, unique external auth IDs and membership uniqueness are enforced in schema and migrations.
+SQLAlchemy 2 models Organisation, User, OrganisationMembership, Company, Contact, Opportunity, Task, Meeting, MeetingParticipant, Transcript, MeetingAuditEvent, AIJob, AIArtifact and RevenueBrainSnapshot. UUIDs, UTC timestamps, allowed enum values, bounded numeric values, unique organisation slugs, unique external auth IDs and membership uniqueness are enforced in schema and migrations.
 
 Every tenant-owned row, including meeting children and audit events, has a non-null `organisation_id`. Composite foreign keys include the organisation for company/contact/meeting/participant relationships and membership-owned user fields, so the database cannot attach a record to another tenant even if application validation regresses. Business parent deletes remain restrictive. Meetings, participants and transcripts use `deleted_at`; deleting a meeting soft-deletes its active children in one transaction.
 
-The active organisation originates in the trusted auth adapter, never a body, path or query tenant identifier. Each request sets PostgreSQL's transaction-local `app.organisation_id`; repositories also apply an explicit organisation predicate. Companies, contacts, opportunities, tasks, all four Meeting Domain tables, AI jobs and AI artefacts enable and force RLS. Composite tenant foreign keys reject cross-tenant meeting, transcript, requester, job and artefact references. Runtime deployment must use a non-bypass application role; migration credentials remain separate.
+The active organisation originates in the trusted auth adapter, never a body, path or query tenant identifier. Each request sets PostgreSQL's transaction-local `app.organisation_id`; repositories also apply an explicit organisation predicate. Companies, contacts, opportunities, tasks, all four Meeting Domain tables, AI jobs, AI artefacts and Revenue Brain snapshots enable and force RLS. Composite tenant foreign keys reject cross-tenant meeting, transcript, requester, job, artefact and snapshot references. Runtime deployment must use a non-bypass application role; migration credentials remain separate.
 
 All authenticated organisation members currently have the same entity and meeting CRUD access. Every Meeting Domain request also verifies an active local membership. This is the safest simple interpretation because no entity-level role matrix is specified. A future authorisation change requires an explicit product decision and policy tests.
 
@@ -111,7 +117,7 @@ workflow engine or synchronous provider path is introduced.
 
 `AIArtifactService` accepts only registered strict schema-version-1 infrastructure-test, Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions, Action Items, Risks & Blockers, Open Questions or Follow-up Email content, proves its trace matches the tenant-scoped job and assigns the next append-only logical version. Job creation, lifecycle changes and artefact creation commit atomically with content-minimised audit events. Audit metadata contains identifiers/type/status/version, optional prompt/schema/provider/model/tone labels and content-free item/count flags, never supplied transcript text, generated recommendation/reasoning/signal/objection/competitor/stakeholder/email/question/risk/task/owner/evidence content, artefact content, prompt/model bodies, secrets or raw exceptions.
 
-`AIWorkerService` discovers only opaque organisation IDs through a fixed PostgreSQL scheduler function, then sets one transaction-local tenant context for every queue transaction. Claims and recovery use `FOR UPDATE SKIP LOCKED`; heartbeat updates require exact worker ownership. Execution occurs without an open database transaction. The completion transaction locks the owned running job, rechecks cancellation, stages the validated artefact and commits artefact/audits/completed state atomically. Retries use persisted attempts, bounded exponential backoff and `next_attempt_at`.
+`AIWorkerService` discovers only opaque organisation IDs through a fixed PostgreSQL scheduler function, then sets one transaction-local tenant context for every queue transaction. Claims and recovery use `FOR UPDATE SKIP LOCKED`; heartbeat updates require exact worker ownership. Execution occurs without an open database transaction. The completion transaction locks the owned running job, rechecks cancellation, stages the validated artefact and commits artefact/audits/completed state atomically. Required intelligence completions also lock the meeting and attempt one Revenue Brain composition in that transaction; missing/invalid/failed/cancelled prerequisites create nothing. Retries use persisted attempts, bounded exponential backoff and `next_attempt_at`.
 
 `InfrastructureTestExecutor`, `ExecutiveSummaryExecutor`, `DecisionsExecutor`,
 `ActionItemsExecutor`, `RisksBlockersExecutor`, `OpenQuestionsExecutor`,
@@ -153,8 +159,9 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0016_next_best_action` is the head migration. It
-widens job/artefact type checks for Next Best Action; `0015_stakeholders` added
+source exists. Migration `0017_revenue_brain` is the head migration. It adds
+the immutable, forced-RLS Revenue Brain composition table and its append-only
+guards. `0016_next_best_action` widened job/artefact type checks for Next Best Action; `0015_stakeholders` added
 Stakeholder Intelligence, and `0014_objections` added
 Objections & Competitive Signals, `0013_buying_signals` added Buying Signals and `0012_follow_up_email` added the
 guarded nullable composition-tone column.
@@ -200,6 +207,7 @@ See [AI database foundation](ai-database-foundation.md),
 [Buying Signals & Deal Momentum intelligence](buying-signals-intelligence.md),
 [Objections & Competitive Signals intelligence](objections-competitive-signals-intelligence.md),
 [Stakeholder Intelligence](stakeholder-intelligence.md),
-[Next Best Action Intelligence](next-best-action-intelligence.md)
+[Next Best Action Intelligence](next-best-action-intelligence.md),
+[Revenue Brain foundation](revenue-brain-foundation.md)
 and [Follow-up Email Composer](follow-up-email-composer.md), plus the
 [Unified Meeting Intelligence workspace](unified-meeting-intelligence.md).

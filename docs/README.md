@@ -50,6 +50,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Objections & Competitive Signals intelligence](03-engineering/objections-competitive-signals-intelligence.md)
 - [Stakeholder Intelligence](03-engineering/stakeholder-intelligence.md)
 - [Next Best Action Intelligence](03-engineering/next-best-action-intelligence.md)
+- [Revenue Brain foundation](03-engineering/revenue-brain-foundation.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -98,6 +99,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-006B: Objections & Competitive Signals](07-sprints/wo-006b-objections-competitive-signals.md)
 - [WO-006C: Stakeholder Intelligence](07-sprints/wo-006c-stakeholder-intelligence.md)
 - [WO-006D: Next Best Action Intelligence](07-sprints/wo-006d-next-best-action-intelligence.md)
+- [WO-008A: Revenue Brain Foundation](07-sprints/wo-008a-revenue-brain-foundation.md)
 
 ## 08 — Decision records
 
@@ -122,10 +124,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0019: derive qualitative objection pressure from current-meeting evidence](08-decisions/0019-current-meeting-qualitative-objection-pressure.md)
 - [ADR 0020: model stakeholders as cautious current-meeting evidence](08-decisions/0020-current-meeting-stakeholder-intelligence.md)
 - [ADR 0021: ground Next Best Action in validated intelligence only](08-decisions/0021-validated-intelligence-next-best-action.md)
+- [ADR 0022: persist Revenue Brain as immutable artefact compositions](08-decisions/0022-immutable-revenue-brain-compositions.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D are complete.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/008A are complete.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -142,6 +145,10 @@ sends only its eight validated artefacts and likewise never reads transcript
 text. There is no send,
 editing, approval, question answering, provider UI, recording, media storage,
 transcription, external integration, production Clerk verification, billing or
-mobile application. Assistant remains a placeholder.
+mobile application. Completed account-linked meetings can now append one
+reference-only Revenue Brain snapshot per validated transcript revision. The
+account UI shows only an ordered meeting-date timeline; no Revenue Brain
+reasoning, comparison, prediction or forecast exists. Assistant remains a
+placeholder.
 
 Do not use production customer data. Production identity, consent evidence, retention/export/erasure and operational controls are incomplete. Future sprints remain unauthorised until a separate work order is approved.

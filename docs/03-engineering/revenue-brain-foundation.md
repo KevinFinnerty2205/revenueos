@@ -1,0 +1,89 @@
+# Revenue Brain foundation
+
+## Product behaviour
+
+WO-008A adds an append-only account timeline of immutable meeting-intelligence
+compositions. A snapshot is attempted by the existing worker after any required
+capability completes. It is created only when the meeting is completed, has an
+account, the selected transcript revision is still current and all nine required
+artefacts are complete and valid.
+
+The required references are:
+
+- Executive Summary;
+- Buying Signals;
+- Objections & Competitive Signals;
+- Stakeholder Intelligence;
+- Decisions;
+- Action Items;
+- Risks & Blockers;
+- Open Questions; and
+- Next Best Action.
+
+Follow-up Email is not part of a Revenue Brain snapshot. A snapshot contains no
+transcript or artefact content. It does not summarise, compare, reason, predict,
+forecast or detect a trend.
+
+## Persistence and idempotency
+
+`RevenueBrainSnapshot` stores the organisation, company, optional opportunity,
+meeting, stable transcript-revision identity, creation time, nine artefact IDs
+and snapshot schema version. Snapshot schema version is currently `1`.
+
+The existing transcript table identifies revisions with one transcript UUID and
+a positive integer version. WO-008A derives `transcript_version_id`
+deterministically from both values without copying transcript text or introducing
+a second transcript store. A transcript correction therefore receives a distinct
+revision identity while a retry of the same revision resolves to the same
+identity.
+
+The unique key `(organisation_id, meeting_id, transcript_version_id)` enforces
+one composition for one meeting revision. The worker completion transaction
+locks the meeting before its readiness check. Concurrent capability completions
+therefore serialize at the meeting boundary, so the final completion observes
+the preceding committed artefacts and creates at most one snapshot.
+
+Every artefact candidate must:
+
+- belong to the trusted organisation, meeting, transcript and transcript
+  version;
+- be the latest non-superseded artefact of its required type;
+- belong to a completed matching job;
+- use the code-deployed schema version; and
+- pass its existing strict Pydantic artefact model again.
+
+The composition stores only IDs. Composite tenant foreign keys prevent
+cross-organisation account, opportunity, meeting or artefact references.
+PostgreSQL RLS is enabled and forced. Database triggers reject every snapshot
+update and delete, making the table append-only rather than relying on the
+service surface alone.
+
+Meetings currently link to companies but do not link directly to opportunities.
+`opportunity_id` is therefore nullable and remains null in WO-008A; no
+opportunity is inferred from account data.
+
+## API and web surface
+
+`GET /api/v1/accounts/{accountId}/brain` returns a JSON array ordered by meeting
+date descending, then snapshot creation and ID descending. Each item contains
+the immutable composition fields and `meetingDate` for presentation. It returns
+no artefact content, transcript, prompt, model, provider, job or worker state.
+
+The company account page at `/companies/{accountId}` shows **Revenue Brain**, a
+snapshot timeline and meeting dates. It includes loading, empty and recoverable
+error states. It does not display generated content or perform comparison or
+reasoning.
+
+## Failure and exclusion behaviour
+
+No snapshot is created for a scheduled, cancelled, deleted or unlinked meeting;
+an absent, failed, cancelled, superseded, wrong-version, wrong-schema or invalid
+required artefact; or a stale/deleted transcript revision. Completion remains
+idempotent and a later eligible transcript revision appends a new snapshot
+without changing earlier rows.
+
+## Out of scope
+
+Revenue Brain reasoning, opportunity health, CRM behaviour, automation,
+forecasting, trend detection, relationship graphs, embeddings, vector search,
+new prompts, provider calls and transcript analysis are not included.
