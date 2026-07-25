@@ -209,6 +209,46 @@ const meeting: Meeting = {
 function workspace(
   overrides: Partial<OpportunityWorkspaceResponse> = {},
 ): OpportunityWorkspaceResponse {
+  const insight = {
+    id: "insight-1",
+    companyId: "company-1",
+    opportunityId: "opportunity-1",
+    reasoningVersion: 1,
+    createdAt: "2026-08-01T02:00:00Z",
+    content: {
+      scope: "opportunity" as const,
+      fromSnapshotId: "snapshot-1",
+      toSnapshotId: "snapshot-2",
+      fromMeetingId: "meeting-0",
+      toMeetingId: "meeting-1",
+      fromMeetingDate: "2026-07-20",
+      toMeetingDate: "2026-08-01",
+      changes: [
+        {
+          changeType: "champion_strengthened" as const,
+          direction: "improved" as const,
+          importance: "high" as const,
+          title: "Champion evidence strengthened",
+          description: "The matched champion's explicit influence changed.",
+          confidence: 0.9,
+          sourceCapabilities: ["stakeholder_intelligence" as const],
+          evidence: [
+            {
+              snapshotId: "snapshot-2",
+              artefactId: "stakeholders-2",
+              artefactType: "stakeholder_intelligence" as const,
+              entityKey: "stakeholder:abc",
+              field: "influence",
+              value: "high",
+            },
+          ],
+        },
+      ],
+      summary:
+        "The most important supported change was: Champion evidence strengthened. 1 material supported change was identified.",
+      confidence: 0.9,
+    },
+  };
   return {
     opportunity: {
       id: "opportunity-1",
@@ -256,6 +296,12 @@ function workspace(
         updatedAt: "2026-07-24T00:00:00Z",
       },
     ],
+    reasoning: {
+      state: "completed",
+      message: "Longitudinal reasoning is available.",
+      latest: insight,
+      history: [insight],
+    },
     intelligence: completedIntelligence(),
     intelligenceSectionsAvailable: 10,
     partialData: false,
@@ -293,6 +339,15 @@ describe("OpportunityWorkspace", () => {
     expect(
       screen.getByRole("heading", { name: "Latest Next Best Action" }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Longitudinal Changes" }),
+    ).toBeVisible();
+    expect(screen.getByText("Champion evidence strengthened")).toBeVisible();
+    expect(screen.getByRole("link", { name: "20 July 2026" })).toHaveAttribute(
+      "href",
+      "/meetings/meeting-0",
+    );
+    expect(screen.queryByText(/snapshot-1|stakeholders-2/i)).toBeNull();
     expect(
       screen.getByText("Confirm the economic buyer and procurement owner."),
     ).toBeVisible();
@@ -434,5 +489,43 @@ describe("OpportunityWorkspace", () => {
     expect(
       screen.getByText(/Some latest-meeting intelligence is not available/),
     ).toBeInTheDocument();
+  });
+
+  it("generates longitudinal reasoning on demand and keeps the result after refresh", async () => {
+    const notGenerated = workspace({
+      reasoning: {
+        state: "not_generated",
+        message:
+          "Longitudinal reasoning has not been generated for the latest snapshots.",
+        latest: null,
+        history: [],
+      },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(notGenerated))
+      .mockResolvedValueOnce(response(meetingPage()))
+      .mockResolvedValueOnce(
+        response({
+          ...workspace().reasoning,
+          created: true,
+        }),
+      )
+      .mockResolvedValueOnce(response(workspace()))
+      .mockResolvedValueOnce(response(meetingPage()));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<OpportunityWorkspace opportunityId="opportunity-1" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Generate changes" }),
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain(
+      "/api/v1/opportunities/opportunity-1/brain/reasoning",
+    );
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: "POST" });
+    expect(
+      await screen.findByText("Champion evidence strengthened"),
+    ).toBeVisible();
   });
 });

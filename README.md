@@ -7,7 +7,8 @@ business entities, Sprint 3 Meeting Domain, WO-004A1/A2/B1/B2/B3 AI
 infrastructure, WO-004C1–C6 capabilities, WO-005 unified Meeting Intelligence,
 WO-006A Buying Signals & Deal Momentum, WO-006B Objections & Competitive
 Signals, WO-006C Stakeholder Intelligence, WO-006D Next Best Action, WO-007
-Opportunity Workspace and WO-008A Revenue Brain Foundation. Meetings,
+Opportunity Workspace, WO-008A Revenue Brain Foundation and WO-008B Revenue
+Brain Longitudinal Reasoning. Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -20,10 +21,12 @@ workspace. The default provider is a deterministic no-network mock; an optional
 server-side OpenAI Responses API
 adapter is configuration-selectable. Completed account-linked meeting
 intelligence appends one immutable, reference-only Revenue Brain snapshot per
-transcript revision and the account page shows its meeting-date timeline. No
-Revenue Brain reasoning, comparison, predictive scoring, forecasting,
-browser credentials, recording, media storage, transcription, sending/integration,
-production Clerk verification or billing is implemented.
+transcript revision. Deterministic, on-demand Revenue Brain reasoning compares
+only those snapshots and their referenced validated artefacts for account and
+opportunity change views; it never reads transcript text or calls a provider.
+No predictive scoring, forecasting, browser credentials, recording, media
+storage, transcription, sending/integration, production Clerk verification or
+billing is implemented.
 
 ## Product blueprint
 
@@ -32,7 +35,7 @@ The [RevenueOS master product blueprint](docs/01-product/master-product-blueprin
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
-WO-006B, WO-006C, WO-006D, WO-007 and WO-008A.
+WO-006B, WO-006C, WO-006D, WO-007, WO-008A and WO-008B.
 
 ## Prerequisites
 
@@ -136,7 +139,8 @@ detail tabs. Intelligence is one unified workspace over eight independent
 transcript extractions and two composed outputs. All use the mock by default and
 need no frontend change when the
 worker selects OpenAI. Company names open an account page with the reference-
-only Revenue Brain meeting-date timeline.
+only Revenue Brain snapshot timeline and deterministic adjacent comparison
+summaries. Opportunity Workspace includes the same safe latest comparison.
 
 API routes:
 
@@ -151,6 +155,7 @@ API routes:
 - CRUD under `/api/v1/tasks`
 - CRUD under `/api/v1/meetings`
 - `GET /api/v1/accounts/{accountId}/brain` — retrieve ordered immutable snapshot compositions without content
+- account and opportunity `POST/GET .../brain/reasoning` — create/reuse and read deterministic longitudinal comparisons
 - nested participant CRUD under `/api/v1/meetings/{meetingId}/participants`
 - singular transcript CRUD under `/api/v1/meetings/{meetingId}/transcript`
 - `GET /api/v1/meetings/{meetingId}/history` — content-minimised audit activity
@@ -192,6 +197,7 @@ pnpm api:lint
 pnpm api:format
 pnpm api:typecheck
 pnpm api:test
+pnpm api:migrate
 pnpm build:api
 pnpm api:migration:check
 ```
@@ -271,6 +277,7 @@ See the [documentation index](docs/README.md),
 [Stakeholder Intelligence architecture](docs/03-engineering/stakeholder-intelligence.md),
 [Next Best Action Intelligence](docs/03-engineering/next-best-action-intelligence.md),
 [Revenue Brain foundation](docs/03-engineering/revenue-brain-foundation.md),
+[Revenue Brain longitudinal reasoning](docs/03-engineering/revenue-brain-reasoning.md),
 [Opportunity Workspace](docs/03-engineering/opportunity-workspace.md),
 [Follow-up Email Composer](docs/03-engineering/follow-up-email-composer.md),
 [Unified Meeting Intelligence workspace](docs/03-engineering/unified-meeting-intelligence.md),
@@ -280,5 +287,6 @@ See the [documentation index](docs/README.md),
 [WO-006B record](docs/07-sprints/wo-006b-objections-competitive-signals.md),
 [WO-006C record](docs/07-sprints/wo-006c-stakeholder-intelligence.md),
 [WO-006D record](docs/07-sprints/wo-006d-next-best-action-intelligence.md),
-[WO-007 record](docs/07-sprints/wo-007-opportunity-workspace.md)
-and [WO-008A record](docs/07-sprints/wo-008a-revenue-brain-foundation.md).
+[WO-007 record](docs/07-sprints/wo-007-opportunity-workspace.md),
+[WO-008A record](docs/07-sprints/wo-008a-revenue-brain-foundation.md)
+and [WO-008B record](docs/07-sprints/wo-008b-revenue-brain-longitudinal-reasoning.md).

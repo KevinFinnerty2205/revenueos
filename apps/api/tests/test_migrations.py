@@ -37,9 +37,12 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "ai_jobs",
             "ai_artifacts",
             "revenue_brain_snapshots",
+            "revenue_brain_insights",
             "opportunity_audit_events",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018_revenue_brain",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0019_revenue_brain_reasoning",
+        )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
         }
@@ -101,6 +104,23 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "next_best_action_reference": 1,
             "version": 1,
         }
+        insight_columns = {
+            row[1]: row[3] for row in connection.execute("PRAGMA table_info(revenue_brain_insights)").fetchall()
+        }
+        assert insight_columns == {
+            "id": 1,
+            "organisation_id": 1,
+            "company_id": 1,
+            "opportunity_id": 0,
+            "scope": 1,
+            "scope_target_id": 1,
+            "from_snapshot_id": 1,
+            "to_snapshot_id": 1,
+            "reasoning_version": 1,
+            "status": 1,
+            "content_json": 1,
+            "created_at": 1,
+        }
         audit_columns = {
             row[1]: (row[2], row[3]) for row in connection.execute("PRAGMA table_info(meeting_audit_events)").fetchall()
         }
@@ -159,6 +179,21 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert snapshot_triggers == {
             "revenue_brain_snapshots_prevent_update",
             "revenue_brain_snapshots_prevent_delete",
+        }
+        insight_indexes = {row[1] for row in connection.execute("PRAGMA index_list(revenue_brain_insights)").fetchall()}
+        assert {
+            "ix_revenue_brain_insights_organisation_company_created",
+            "ix_revenue_brain_insights_organisation_opportunity_created",
+        }.issubset(insight_indexes)
+        insight_triggers = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'revenue_brain_insights'"
+            ).fetchall()
+        }
+        assert insight_triggers == {
+            "revenue_brain_insights_prevent_update",
+            "revenue_brain_insights_prevent_delete",
         }
 
         connection.execute(
@@ -297,6 +332,60 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
                      'meeting-1', 'transcript-version-1', 'artifact-1',
                      'artifact-1', 'artifact-1', 'artifact-1', 'artifact-1',
                      'artifact-1', 'artifact-1', 'artifact-1', 'artifact-1')
+                """
+            )
+        connection.execute(
+            """
+            INSERT INTO revenue_brain_snapshots
+                (id, organisation_id, company_id, meeting_id,
+                 transcript_version_id, summary_reference,
+                 buying_signals_reference, objections_reference,
+                 stakeholders_reference, decisions_reference,
+                 actions_reference, risks_reference, questions_reference,
+                 next_best_action_reference)
+            VALUES
+                ('snapshot-2', 'organisation-1', 'company-1', 'meeting-1',
+                 'transcript-version-2', 'artifact-1', 'artifact-1',
+                 'artifact-1', 'artifact-1', 'artifact-1', 'artifact-1',
+                 'artifact-1', 'artifact-1', 'artifact-1')
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO revenue_brain_insights
+                (id, organisation_id, company_id, scope, scope_target_id,
+                 from_snapshot_id, to_snapshot_id, content_json)
+            VALUES
+                ('insight-1', 'organisation-1', 'company-1', 'account',
+                 'company-1', 'snapshot-1', 'snapshot-2',
+                 '{"scope":"account","changes":[]}')
+            """
+        )
+        with pytest.raises(IntegrityError, match="append only"):
+            connection.execute(
+                """
+                UPDATE revenue_brain_insights
+                SET reasoning_version = 2
+                WHERE id = 'insight-1'
+                """
+            )
+        with pytest.raises(IntegrityError, match="append only"):
+            connection.execute(
+                """
+                DELETE FROM revenue_brain_insights
+                WHERE id = 'insight-1'
+                """
+            )
+        with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
+            connection.execute(
+                """
+                INSERT INTO revenue_brain_insights
+                    (id, organisation_id, company_id, scope, scope_target_id,
+                     from_snapshot_id, to_snapshot_id, content_json)
+                VALUES
+                    ('insight-duplicate', 'organisation-1', 'company-1',
+                     'account', 'company-1', 'snapshot-1', 'snapshot-2',
+                     '{"scope":"account","changes":[]}')
                 """
             )
 
@@ -558,7 +647,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018_revenue_brain",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0019_revenue_brain_reasoning",
+        )
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -610,7 +701,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018_revenue_brain",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0019_revenue_brain_reasoning",
+        )
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -654,7 +747,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018_revenue_brain",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0019_revenue_brain_reasoning",
+        )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
     with connect(database_path) as connection:
@@ -668,7 +763,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018_revenue_brain",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0019_revenue_brain_reasoning",
+        )
 
     command.downgrade(configuration, "0003_meeting_domain")
     with connect(database_path) as connection:
@@ -686,6 +783,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
                 "ai_jobs",
                 "ai_artifacts",
                 "revenue_brain_snapshots",
+                "revenue_brain_insights",
             }
             & tables_after_downgrade
         )
@@ -700,9 +798,12 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "ai_jobs",
             "ai_artifacts",
             "revenue_brain_snapshots",
+            "revenue_brain_insights",
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018_revenue_brain",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0019_revenue_brain_reasoning",
+        )
 
     command.downgrade(configuration, "0002_core_business_entities")
     with connect(database_path) as connection:
@@ -736,7 +837,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     )
 
 
-def test_revenue_brain_is_the_single_head_after_opportunity_workspace(
+def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
     tmp_path: Path,
     monkeypatch: object,
 ) -> None:
@@ -747,34 +848,49 @@ def test_revenue_brain_is_the_single_head_after_opportunity_workspace(
     )
     configuration = Config("alembic.ini")
 
-    command.upgrade(configuration, "0017_opportunity_workspace")
+    command.upgrade(configuration, "0018_revenue_brain")
     with connect(database_path) as connection:
         tables = {
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert "opportunity_audit_events" in tables
-        assert "revenue_brain_snapshots" not in tables
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0017_opportunity_workspace",
-        )
+        assert "revenue_brain_snapshots" in tables
+        assert "revenue_brain_insights" not in tables
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018_revenue_brain",)
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         tables = {
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
-        assert {"opportunity_audit_events", "revenue_brain_snapshots"}.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018_revenue_brain",)
+        assert {
+            "opportunity_audit_events",
+            "revenue_brain_snapshots",
+            "revenue_brain_insights",
+        }.issubset(tables)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0019_revenue_brain_reasoning",
+        )
 
-    command.downgrade(configuration, "0017_opportunity_workspace")
+    command.downgrade(configuration, "0018_revenue_brain")
     with connect(database_path) as connection:
         tables = {
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         meeting_columns = {row[1] for row in connection.execute("PRAGMA table_info(meetings)").fetchall()}
         assert "opportunity_audit_events" in tables
-        assert "revenue_brain_snapshots" not in tables
+        assert "revenue_brain_snapshots" in tables
+        assert "revenue_brain_insights" not in tables
         assert "opportunity_id" in meeting_columns
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert "revenue_brain_insights" in {
+            row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        }
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0019_revenue_brain_reasoning",
+        )
 
 
 def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
@@ -816,7 +932,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0018_revenue_brain"
+                    assert version == "0019_revenue_brain_reasoning"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

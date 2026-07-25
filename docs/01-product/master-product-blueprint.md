@@ -1,7 +1,8 @@
 # RevenueOS master product blueprint
 
 - **Status:** Target product direction through private beta
-- **Current shipped baseline:** Sprints 1–3 foundation, core business entities and Meeting Domain
+- **Current shipped baseline:** Sprints 1–3 plus approved Meeting Intelligence,
+  Opportunity Workspace and deterministic Revenue Brain work through WO-008B
 - **Scope notation:** **Current** exists in the repository; **Pilot** is required for the first five design-partner companies; **Beta** is required before private beta; **Later** is deliberately deferred; **Future** is directional only.
 
 This is the primary product blueprint. It defines outcomes and boundaries, not an authorisation to implement future scope. The sequenced delivery plan is in [Product roadmap to beta](../06-roadmap/product-roadmap-to-beta.md).

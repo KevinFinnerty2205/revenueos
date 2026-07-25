@@ -38,6 +38,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "ai_jobs",
         "ai_artifacts",
         "revenue_brain_snapshots",
+        "revenue_brain_insights",
     )
     tenant_a = {
         "suffix": "A",
@@ -54,7 +55,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "ai_job_id": uuid.uuid4(),
         "ai_artifact_id": uuid.uuid4(),
         "snapshot_id": uuid.uuid4(),
+        "previous_snapshot_id": uuid.uuid4(),
+        "insight_id": uuid.uuid4(),
         "transcript_version_id": uuid.uuid4(),
+        "previous_transcript_version_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -71,7 +75,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "ai_job_id": uuid.uuid4(),
         "ai_artifact_id": uuid.uuid4(),
         "snapshot_id": uuid.uuid4(),
+        "previous_snapshot_id": uuid.uuid4(),
+        "insight_id": uuid.uuid4(),
         "transcript_version_id": uuid.uuid4(),
+        "previous_transcript_version_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -313,6 +320,46 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         ),
                         identity_parameters,
                     )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO revenue_brain_snapshots
+                                (id, organisation_id, company_id, opportunity_id,
+                                 meeting_id, transcript_version_id,
+                                 summary_reference, buying_signals_reference,
+                                 objections_reference, stakeholders_reference,
+                                 decisions_reference, actions_reference,
+                                 risks_reference, questions_reference,
+                                 next_best_action_reference)
+                            VALUES
+                                (:previous_snapshot_id, :organisation_id,
+                                 :company_id, :opportunity_id, :meeting_id,
+                                 :previous_transcript_version_id,
+                                 :ai_artifact_id, :ai_artifact_id,
+                                 :ai_artifact_id, :ai_artifact_id,
+                                 :ai_artifact_id, :ai_artifact_id,
+                                 :ai_artifact_id, :ai_artifact_id,
+                                 :ai_artifact_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO revenue_brain_insights
+                                (id, organisation_id, company_id, opportunity_id,
+                                 scope, scope_target_id, from_snapshot_id,
+                                 to_snapshot_id, content_json)
+                            VALUES
+                                (:insight_id, :organisation_id, :company_id,
+                                 :opportunity_id, 'opportunity', :opportunity_id,
+                                 :previous_snapshot_id, :snapshot_id,
+                                 '{"scope":"opportunity","changes":[]}'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
 
                 savepoint = await connection.begin_nested()
                 with pytest.raises(DBAPIError):
@@ -372,7 +419,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                 WHERE relname IN (
                                     'ai_jobs',
                                     'ai_artifacts',
-                                    'revenue_brain_snapshots'
+                                    'revenue_brain_snapshots',
+                                    'revenue_brain_insights'
                                 )
                                 """
                             )
@@ -383,6 +431,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "ai_jobs": (True, True),
                     "ai_artifacts": (True, True),
                     "revenue_brain_snapshots": (True, True),
+                    "revenue_brain_insights": (True, True),
                 }
 
             async with engine.connect() as connection:
@@ -394,7 +443,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 )
                 for table in tenant_tables:
                     count = await connection.scalar(text(f"SELECT count(*) FROM {table}"))
-                    assert count == 1
+                    assert count == (2 if table == "revenue_brain_snapshots" else 1)
                 company_update = await connection.execute(
                     text("UPDATE companies SET name = 'Blocked' WHERE id = :id"),
                     {"id": tenant_b["company_id"]},
@@ -415,6 +464,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["snapshot_id"]},
                 )
                 assert snapshot_update.rowcount == 0
+                insight_update = await connection.execute(
+                    text("UPDATE revenue_brain_insights SET reasoning_version = 2 WHERE id = :id"),
+                    {"id": tenant_b["insight_id"]},
+                )
+                assert insight_update.rowcount == 0
 
                 tenant_context = TenantContext(
                     organisation_id=tenant_a["organisation_id"],
@@ -520,6 +574,27 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     ),
                     (
                         """
+                        INSERT INTO revenue_brain_insights
+                            (id, organisation_id, company_id, opportunity_id,
+                             scope, scope_target_id, from_snapshot_id,
+                             to_snapshot_id, content_json)
+                        VALUES
+                            (:id, :organisation_id, :company_id, :opportunity_id,
+                             'opportunity', :opportunity_id, :from_snapshot_id,
+                             :to_snapshot_id,
+                             '{"scope":"opportunity","changes":[]}'::json)
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "company_id": tenant_b["company_id"],
+                            "opportunity_id": tenant_b["opportunity_id"],
+                            "from_snapshot_id": tenant_b["previous_snapshot_id"],
+                            "to_snapshot_id": tenant_b["snapshot_id"],
+                        },
+                    ),
+                    (
+                        """
                         INSERT INTO ai_artifacts
                             (id, organisation_id, meeting_id, transcript_id,
                              transcript_version, job_id, artifact_version,
@@ -550,9 +625,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         finally:
             async with engine.begin() as connection:
                 await connection.execute(
+                    text("ALTER TABLE revenue_brain_insights DISABLE TRIGGER revenue_brain_insights_append_only")
+                )
+                await connection.execute(
                     text("ALTER TABLE revenue_brain_snapshots DISABLE TRIGGER revenue_brain_snapshots_append_only")
                 )
                 for table in (
+                    "revenue_brain_insights",
                     "revenue_brain_snapshots",
                     "ai_artifacts",
                     "ai_jobs",
@@ -575,6 +654,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     )
                 await connection.execute(
                     text("ALTER TABLE revenue_brain_snapshots ENABLE TRIGGER revenue_brain_snapshots_append_only")
+                )
+                await connection.execute(
+                    text("ALTER TABLE revenue_brain_insights ENABLE TRIGGER revenue_brain_insights_append_only")
                 )
                 cleanup_parameters = {
                     "organisation_a": tenant_a["organisation_id"],

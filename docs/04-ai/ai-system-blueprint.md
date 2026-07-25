@@ -61,6 +61,13 @@ The pipeline is not automatically linear. A user may stop, correct, exclude or d
 
 ## 4. AI Reasoning Engine
 
+**Current bounded slice:** WO-008B implements deterministic adjacent-snapshot
+change detection only. It reads immutable Revenue Brain snapshot references and
+their strict validated artefacts, never transcript text. Application code owns
+matching, controlled changes, evidence and summary wording; no provider, prompt,
+retrieval engine, embedding, agent or free-form answer is involved. The target
+engine below remains future scope.
+
 - **Responsibilities:** Compose source-grounded account answers, meeting briefs, changed-context explanations and suggested questions from authorised retrieval.
 - **Inputs:** Explicit user question or briefing request, current user/tenant context, ranked authorised evidence and product-specific instruction template.
 - **Outputs:** Structured answer/brief with claims, citations, uncertainty, conflicts and unsupported areas.

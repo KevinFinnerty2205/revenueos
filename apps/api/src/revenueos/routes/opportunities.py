@@ -18,6 +18,12 @@ from revenueos.opportunity_contracts import (
 )
 from revenueos.opportunity_dependencies import get_opportunity_workspace_service
 from revenueos.opportunity_services import OpportunityWorkspaceService
+from revenueos.revenue_brain_dependencies import get_revenue_brain_reasoning_service
+from revenueos.revenue_brain_reasoning import RevenueBrainReasoningService
+from revenueos.revenue_brain_reasoning_contracts import (
+    RevenueBrainReasoningRequestResponse,
+    RevenueBrainReasoningResponse,
+)
 from revenueos.routes.business import page_response
 
 router = APIRouter(prefix="/api/v1/opportunities", tags=["opportunities"])
@@ -25,6 +31,10 @@ Service = Annotated[BusinessService, Depends(get_business_service)]
 WorkspaceService = Annotated[
     OpportunityWorkspaceService,
     Depends(get_opportunity_workspace_service),
+]
+ReasoningService = Annotated[
+    RevenueBrainReasoningService,
+    Depends(get_revenue_brain_reasoning_service),
 ]
 
 
@@ -86,6 +96,32 @@ async def get_opportunity_workspace(
     service: WorkspaceService,
 ) -> OpportunityWorkspaceResponse:
     return await service.get_workspace(opportunity_id)
+
+
+@router.post(
+    "/{opportunity_id}/brain/reasoning",
+    response_model=RevenueBrainReasoningRequestResponse,
+)
+async def generate_opportunity_reasoning(
+    opportunity_id: UUID,
+    service: ReasoningService,
+    mode: Annotated[
+        Literal["latest_change", "recent_history"],
+        Query(),
+    ] = "latest_change",
+) -> RevenueBrainReasoningRequestResponse:
+    return await service.generate_for_opportunity(opportunity_id, mode=mode)
+
+
+@router.get(
+    "/{opportunity_id}/brain/reasoning",
+    response_model=RevenueBrainReasoningResponse,
+)
+async def get_opportunity_reasoning(
+    opportunity_id: UUID,
+    service: ReasoningService,
+) -> RevenueBrainReasoningResponse:
+    return await service.read_for_opportunity(opportunity_id)
 
 
 @router.post(

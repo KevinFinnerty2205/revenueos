@@ -52,6 +52,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Next Best Action Intelligence](03-engineering/next-best-action-intelligence.md)
 - [Opportunity Workspace](03-engineering/opportunity-workspace.md)
 - [Revenue Brain foundation](03-engineering/revenue-brain-foundation.md)
+- [Revenue Brain longitudinal reasoning](03-engineering/revenue-brain-reasoning.md)
 - [API reference](03-engineering/api.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
@@ -102,6 +103,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-006D: Next Best Action Intelligence](07-sprints/wo-006d-next-best-action-intelligence.md)
 - [WO-007: Opportunity Workspace Foundation](07-sprints/wo-007-opportunity-workspace.md)
 - [WO-008A: Revenue Brain Foundation](07-sprints/wo-008a-revenue-brain-foundation.md)
+- [WO-008B: Revenue Brain Longitudinal Reasoning](07-sprints/wo-008b-revenue-brain-longitudinal-reasoning.md)
 
 ## 08 — Decision records
 
@@ -128,10 +130,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0021: ground Next Best Action in validated intelligence only](08-decisions/0021-validated-intelligence-next-best-action.md)
 - [ADR 0022: own meeting association and derive the latest-meeting Opportunity Workspace](08-decisions/0022-opportunity-ownership-latest-meeting-read-model.md)
 - [ADR 0023: persist Revenue Brain as immutable artefact compositions](08-decisions/0023-immutable-revenue-brain-compositions.md)
+- [ADR 0024: derive Revenue Brain changes deterministically from snapshots](08-decisions/0024-deterministic-revenue-brain-longitudinal-reasoning.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A are complete.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B are complete.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -146,14 +149,16 @@ OpenAI only when configured; Follow-up Email sends only its validated artefact
 projection and never queries or transmits transcript text. Next Best Action
 sends only its eight validated artefacts and likewise never reads transcript
 text. WO-007 adds a tenant-safe Opportunity Workspace over the latest
-associated meeting's existing current-version artefacts; it performs no
-transcript read, AI generation or longitudinal reasoning. There is no send,
+associated meeting's existing current-version artefacts. WO-008B adds
+deterministic, on-demand account and opportunity comparisons over immutable
+snapshots and their referenced artefacts. It performs no transcript read,
+extraction, provider call, prediction or forecast. There is no send,
 editing, approval, question answering, provider UI, recording, media storage,
 transcription, external integration, production Clerk verification, billing or
 mobile application. Completed account-linked meetings can now append one
 reference-only Revenue Brain snapshot per validated transcript revision. The
-account UI shows only an ordered meeting-date timeline; no Revenue Brain
-reasoning, comparison, prediction or forecast exists. Assistant remains a
-placeholder.
+account timeline and Opportunity Workspace now show explainable supported
+changes with meeting links and qualitative labels; no deal score, probability
+or forecast exists. Assistant remains a placeholder.
 
 Do not use production customer data. Production identity, consent evidence, retention/export/erasure and operational controls are incomplete. Future sprints remain unauthorised until a separate work order is approved.

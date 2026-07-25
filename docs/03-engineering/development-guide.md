@@ -170,6 +170,17 @@ meeting and artefact references, and installs update/delete rejection triggers.
 Its downgrade removes only snapshot compositions and must run before
 `0017_opportunity_workspace`.
 
+Migration `0019_revenue_brain_reasoning` adds immutable, tenant-owned account
+and opportunity insight records. It enables and forces PostgreSQL RLS, uses
+composite tenant foreign keys for both snapshot references and installs
+update/delete rejection triggers. Its downgrade permanently removes only
+reasoning history and must run before `0018_revenue_brain`.
+
+Revenue Brain reasoning is synchronous, bounded and deterministic. It requires
+no worker or provider process. Local fixtures should seed strict snapshot
+artefacts rather than transcripts; regression tests assert that comparison SQL
+never selects the transcript table or `raw_text`.
+
 WO-004C1A requires no migration because the existing trace fields already
 represent provider, model, request ID, usage and cost/currency metadata.
 
@@ -186,6 +197,7 @@ pnpm api:lint
 pnpm api:format
 pnpm api:typecheck
 pnpm api:test
+pnpm api:migrate
 pnpm api:migration:check
 pnpm build:api
 ```

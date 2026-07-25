@@ -219,6 +219,34 @@ data. Its latest-meeting view is not a longitudinal Revenue Brain.
 WO-008A adds persistence composition only. It does not alter the proposed
 production-readiness sequence below or authorise production customer data.
 
+### WO-008B — Revenue Brain Longitudinal Reasoning — Complete
+
+- **Objective:** Identify explainable account and opportunity changes between
+  adjacent immutable Revenue Brain snapshots without reopening transcripts or
+  predicting outcomes.
+- **Major deliverables:** Deterministic comparison engine and controlled
+  taxonomy, strict evidence contract, bounded latest/recent selection,
+  immutable idempotent insight persistence, account/opportunity POST/GET APIs,
+  Opportunity Workspace and account timeline integration, metadata-only
+  telemetry/audits and migration `0019_revenue_brain_reasoning`.
+- **Dependencies:** WO-008A snapshots and validated Meeting Intelligence
+  artefacts through WO-006D.
+- **Out of scope:** Transcript reads, re-extraction, prompts/provider calls,
+  deal scoring, probability, forecasting, opportunity health, embeddings,
+  relationship graph, CRM mutation, automatic actions and cross-account
+  benchmarking.
+- **Security gates:** Explicit tenant and scope predicates, composite tenant
+  keys, forced RLS, strict artefact revalidation, exact snapshot/evidence
+  ownership, conservative no-inference-from-silence rules and append-only
+  database guards.
+- **Demonstration:** Generate the latest supported opportunity changes, refresh
+  to reuse them, create bounded account history and verify dates, source labels
+  and old immutable pairs remain visible without transcript or provider access.
+
+WO-008B adds deterministic qualitative comparison only. It does not alter the
+proposed production-readiness sequence below or authorise production customer
+data.
+
 ### Sprint 4 — Production Identity and Organisation Administration
 
 - **Objective:** Replace the development-only session path with verified Clerk identity/membership and bounded organisation administration.

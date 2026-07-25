@@ -45,6 +45,63 @@ function snapshot(id: string, meetingDate: string) {
   };
 }
 
+const insufficientReasoning = {
+  state: "insufficient_history",
+  message:
+    "Revenue Brain needs at least two completed meeting snapshots before it can identify changes.",
+  latest: null,
+  history: [],
+};
+
+function completedReasoning() {
+  const insight = {
+    id: "insight-1",
+    companyId: "company-1",
+    opportunityId: null,
+    reasoningVersion: 1,
+    createdAt: "2026-07-20T12:00:00Z",
+    content: {
+      scope: "account",
+      fromSnapshotId: "old",
+      toSnapshotId: "new",
+      fromMeetingId: "meeting-old",
+      toMeetingId: "meeting-new",
+      fromMeetingDate: "2026-07-10",
+      toMeetingDate: "2026-07-20",
+      changes: [
+        {
+          changeType: "budget_confirmed",
+          direction: "improved",
+          importance: "high",
+          title: "Budget was confirmed",
+          description: "Budget moved from explicitly unconfirmed to confirmed.",
+          confidence: 0.91,
+          sourceCapabilities: ["buying_signals"],
+          evidence: [
+            {
+              snapshotId: "new",
+              artefactId: "buying-new",
+              artefactType: "buying_signals",
+              entityKey: "signal:budget_confirmed",
+              field: "signal_type",
+              value: "budget_confirmed",
+            },
+          ],
+        },
+      ],
+      summary:
+        "The most important supported change was: Budget was confirmed. 1 material supported change was identified.",
+      confidence: 0.91,
+    },
+  };
+  return {
+    state: "completed",
+    message: "Longitudinal reasoning is available.",
+    latest: insight,
+    history: [insight],
+  };
+}
+
 describe("RevenueBrainTimeline", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -53,16 +110,19 @@ describe("RevenueBrainTimeline", () => {
   it("shows the account snapshot timeline using meeting dates only", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn((input: RequestInfo | URL) =>
-        Promise.resolve(
-          String(input).includes("/brain")
-            ? jsonResponse([
-                snapshot("new", "2026-07-20T10:00:00Z"),
-                snapshot("old", "2026-07-10T10:00:00Z"),
-              ])
-            : jsonResponse(company),
-        ),
-      ),
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        return Promise.resolve(
+          path.endsWith("/brain/reasoning")
+            ? jsonResponse(completedReasoning())
+            : path.endsWith("/brain")
+              ? jsonResponse([
+                  snapshot("new", "2026-07-20T10:00:00Z"),
+                  snapshot("old", "2026-07-10T10:00:00Z"),
+                ])
+              : jsonResponse(company),
+        );
+      }),
     );
 
     render(<RevenueBrainTimeline accountId="company-1" />);
@@ -81,18 +141,27 @@ describe("RevenueBrainTimeline", () => {
     expect(timeline).toHaveTextContent("10 July 2026");
     expect(timeline).not.toHaveTextContent("summary-new");
     expect(screen.getAllByText("Meeting snapshot")).toHaveLength(2);
+    expect(screen.getAllByText(/Budget was confirmed/).length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      screen.getAllByRole("link", { name: "Open meeting" })[0],
+    ).toHaveAttribute("href", "/meetings/meeting-new");
   });
 
   it("shows an empty state when the account has no snapshots", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn((input: RequestInfo | URL) =>
-        Promise.resolve(
-          String(input).includes("/brain")
-            ? jsonResponse([])
-            : jsonResponse(company),
-        ),
-      ),
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        return Promise.resolve(
+          path.endsWith("/brain/reasoning")
+            ? jsonResponse(insufficientReasoning)
+            : path.endsWith("/brain")
+              ? jsonResponse([])
+              : jsonResponse(company),
+        );
+      }),
     );
 
     render(<RevenueBrainTimeline accountId="company-1" />);
@@ -112,8 +181,10 @@ describe("RevenueBrainTimeline", () => {
           503,
         ),
       )
+      .mockResolvedValueOnce(jsonResponse(insufficientReasoning))
       .mockResolvedValueOnce(jsonResponse(company))
-      .mockResolvedValueOnce(jsonResponse([]));
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse(insufficientReasoning));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<RevenueBrainTimeline accountId="company-1" />);

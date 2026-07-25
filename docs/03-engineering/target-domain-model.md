@@ -2,7 +2,13 @@
 
 **Status:** Conceptual model through private beta. This document creates no SQLAlchemy models, database migrations or API contracts.
 
-The current persisted model includes organisations, users, memberships, companies, contacts, opportunities, tasks, meetings, meeting participants, supplied plain-text transcripts and meeting audit events. The target keeps the existing modular-monolith, PostgreSQL, SQLAlchemy/Alembic and tenant-isolation decisions. Candidate entities are introduced only by their named implementation sprint after a schema/API decision and migration review.
+The current persisted model includes organisations, users, memberships,
+companies, contacts, opportunities, tasks, meetings, meeting participants,
+supplied plain-text transcripts, audit events, AI jobs/artefacts, immutable
+Revenue Brain snapshots and immutable longitudinal insights. The target keeps
+the existing modular-monolith, PostgreSQL, SQLAlchemy/Alembic and
+tenant-isolation decisions. Candidate entities are introduced only by their
+named implementation sprint after a schema/API decision and migration review.
 
 ## Modelling rules
 
@@ -25,6 +31,15 @@ The current persisted model includes organisations, users, memberships, companie
 | Opportunity | Commercial context with optional company, manual value/date, owner, tasks and associated meetings; its workspace derives the latest meeting view | Tenant-owned; manual now, supported CRM may later become authoritative for explicitly mapped fields | `open`, `won`, `lost` or `on_hold`; stage remains independently user-managed | **Current — Sprint 2, expanded WO-007** |
 | Task | Human-owned commitment linked to company/contact/opportunity and later source evidence | Tenant-owned; RevenueOS authoritative for native tasks, external task system if later mapped | Open/in progress → completed/cancelled; configurable operational retention | **Current — Sprint 2** |
 | OpportunityAuditEvent | Metadata-only opportunity create/update/delete and meeting-association activity | Tenant-owned; RevenueOS service transaction is authoritative | Append-only metadata; deliberately has no content payload or opportunity FK so delete audit can remain | **Current — WO-007** |
+
+## Current AI and Revenue Brain entities
+
+| Entity | Purpose and key relationships | Tenant and source of truth | Lifecycle and retention | Current / expected sprint |
+| --- | --- | --- | --- | --- |
+| AIJob | Durable tenant-scoped work state pinned to meeting/transcript/prompt/schema/provider trace | RevenueOS orchestration is authoritative for lifecycle; provider is execution-only | Pending/running/retry/completed/failed/cancelled with bounded leases and attempts | **Current — WO-004A1/B1 and later capabilities** |
+| AIArtifact | Append-only strict structured capability output linked to its exact completed job and transcript trace | Tenant-owned generated content; never silently authoritative over direct evidence | Immutable logical versions with one-way supersession | **Current — WO-004A1 and later capabilities** |
+| RevenueBrainSnapshot | Content-free composition of nine exact validated artefact references for one completed meeting transcript revision | Tenant-owned reference projection; source artefacts remain authoritative | Append-only; later transcript revisions create new rows | **Current — WO-008A** |
+| RevenueBrainInsight | Controlled evidence-backed change set for one account/opportunity snapshot pair and reasoning version | Tenant-owned deterministic derivation; selected snapshots and artefacts remain authoritative | Append-only and idempotent by scope/target/pair/version | **Current — WO-008B** |
 
 ## Meeting and ingestion entities
 
@@ -51,7 +66,7 @@ The current persisted model includes organisations, users, memberships, companie
 | RelationshipEvent | Chronological, source-linked change or interaction for company/contact/opportunity | Tenant-owned projection; linked source remains authoritative | Recorded → corrected/superseded/deleted; retention follows originating source and policy | **Not current — Sprint 8** |
 | MemoryItem | Concise correctable claim used in future briefs/answers | Tenant-owned; user-confirmed correction outranks inferred versions | Candidate → active → stale/superseded/deleted; excluded immediately from retrieval on deletion request | **Not current — Sprint 9** |
 | MemorySource | Links atomic memory claims to transcript segments/events/external records | Tenant-owned provenance edge; source object is authoritative evidence | Immutable link per memory version; cascades/invalidation follows source deletion | **Not current — Sprint 9** |
-| AIArtifact | Versioned structured model output such as summary, next steps, draft or brief | Tenant-owned; AI is never authoritative fact, reviewed version may become a user-confirmed artefact | Generated → review/accepted/rejected/superseded/deleted; derived-data retention follows source | **Not current — Sprint 7** |
+| ReviewedIntelligence | Future user-reviewed version of generated intelligence with acceptance/correction state | Tenant-owned; a user-confirmed correction may outrank generated content | Generated → reviewed/accepted/rejected/superseded/deleted; derived-data retention follows source | **Not current — Sprint 7** |
 
 ## Action, audit and notification entities
 
@@ -75,6 +90,7 @@ Organisation
 │   │   ├── MeetingParticipant ── Contact?
 │   │   ├── Transcript ── TranscriptSegment
 │   │   ├── AIArtifact
+│   │   ├── RevenueBrainSnapshot ── RevenueBrainInsight
 │   │   └── SuggestedAction ── Approval ── SyncOperation?
 │   ├── RelationshipEvent
 │   └── MemoryItem ── MemorySource ── source entity

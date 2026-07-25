@@ -353,6 +353,165 @@ export interface RevenueBrainSnapshot {
   version: number;
 }
 
+export type RevenueBrainScope = "account" | "opportunity";
+export type RevenueBrainReasoningState =
+  | "insufficient_history"
+  | "not_generated"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type RevenueBrainDirection =
+  | "improved"
+  | "worsened"
+  | "changed"
+  | "resolved"
+  | "introduced"
+  | "unchanged"
+  | "unclear";
+export type RevenueBrainImportance = "high" | "medium" | "low";
+export type RevenueBrainSourceCapability =
+  | "executive_summary"
+  | "buying_signals"
+  | "objections_competitive_signals"
+  | "stakeholder_intelligence"
+  | "decisions"
+  | "action_items"
+  | "risks_blockers"
+  | "open_questions"
+  | "next_best_action";
+export type RevenueBrainChangeType =
+  | "budget_confirmed"
+  | "budget_became_unclear"
+  | "timeline_confirmed"
+  | "timeline_became_unclear"
+  | "decision_maker_entered"
+  | "decision_maker_missing"
+  | "champion_emerged"
+  | "champion_strengthened"
+  | "champion_weakened"
+  | "champion_disappeared"
+  | "procurement_entered"
+  | "procurement_progressed"
+  | "procurement_became_unclear"
+  | "competitor_introduced"
+  | "competitor_removed"
+  | "competitor_position_strengthened"
+  | "competitor_position_weakened"
+  | "urgency_increased"
+  | "urgency_decreased"
+  | "commercial_intent_increased"
+  | "commercial_intent_decreased"
+  | "next_step_strengthened"
+  | "next_step_weakened"
+  | "stakeholder_alignment_improved"
+  | "stakeholder_alignment_worsened"
+  | "technical_fit_improved"
+  | "technical_fit_worsened"
+  | "security_or_legal_progressed"
+  | "security_or_legal_blocker_introduced"
+  | "security_or_legal_blocker_resolved"
+  | "objection_introduced"
+  | "objection_strengthened"
+  | "objection_weakened"
+  | "objection_resolved"
+  | "objection_reopened"
+  | "competitive_pressure_increased"
+  | "competitive_pressure_decreased"
+  | "stakeholder_added"
+  | "stakeholder_removed"
+  | "stakeholder_role_changed"
+  | "stakeholder_influence_increased"
+  | "stakeholder_influence_decreased"
+  | "stakeholder_stance_improved"
+  | "stakeholder_stance_worsened"
+  | "economic_buyer_identified"
+  | "economic_buyer_became_unclear"
+  | "technical_buyer_identified"
+  | "technical_buyer_became_unclear"
+  | "blocker_emerged"
+  | "blocker_resolved"
+  | "risk_introduced"
+  | "risk_severity_increased"
+  | "risk_severity_decreased"
+  | "risk_resolved"
+  | "risk_persisted"
+  | "open_question_introduced"
+  | "open_question_answered"
+  | "open_question_persisted"
+  | "open_question_importance_increased"
+  | "open_question_importance_decreased"
+  | "decision_added"
+  | "decision_changed"
+  | "decision_reversed"
+  | "action_item_added"
+  | "action_item_completed"
+  | "action_item_removed"
+  | "action_item_owner_changed"
+  | "action_item_due_date_changed"
+  | "action_item_overdue_evidence"
+  | "commitment_persisted"
+  | "next_best_action_changed"
+  | "next_best_action_priority_increased"
+  | "next_best_action_priority_decreased"
+  | "next_best_action_unchanged"
+  | "no_material_change"
+  | "other";
+
+export interface RevenueBrainEvidence {
+  snapshotId: string;
+  artefactId: string;
+  artefactType: RevenueBrainSourceCapability;
+  entityKey: string;
+  field: string;
+  value: string;
+}
+
+export interface RevenueBrainChange {
+  changeType: RevenueBrainChangeType;
+  direction: RevenueBrainDirection;
+  importance: RevenueBrainImportance;
+  title: string;
+  description: string;
+  confidence: number;
+  sourceCapabilities: RevenueBrainSourceCapability[];
+  evidence: RevenueBrainEvidence[];
+}
+
+export interface RevenueBrainInsightContent {
+  scope: RevenueBrainScope;
+  fromSnapshotId: string;
+  toSnapshotId: string;
+  fromMeetingId: string;
+  toMeetingId: string;
+  fromMeetingDate: string;
+  toMeetingDate: string;
+  changes: RevenueBrainChange[];
+  summary: string;
+  confidence: number;
+}
+
+export interface RevenueBrainInsight {
+  id: string;
+  companyId: string;
+  opportunityId: string | null;
+  reasoningVersion: number;
+  createdAt: string;
+  content: RevenueBrainInsightContent;
+}
+
+export interface RevenueBrainReasoningResponse {
+  state: RevenueBrainReasoningState;
+  message: string;
+  latest: RevenueBrainInsight | null;
+  history: RevenueBrainInsight[];
+}
+
+export interface RevenueBrainReasoningRequestResponse extends RevenueBrainReasoningResponse {
+  created: boolean;
+}
+
 export interface MeetingParticipant {
   id: string;
   organisationId: string;
@@ -852,6 +1011,7 @@ export interface OpportunityMeetingSummary {
 
 export interface OpportunityWorkspaceResponse {
   opportunity: OpportunityWorkspaceOpportunity;
+  reasoning: RevenueBrainReasoningResponse;
   latestMeeting: OpportunityMeetingSummary | null;
   recentMeetings: OpportunityMeetingSummary[];
   intelligence: MeetingIntelligenceResponse | null;
