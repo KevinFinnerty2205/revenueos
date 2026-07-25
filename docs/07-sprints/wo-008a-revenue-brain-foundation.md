@@ -34,6 +34,10 @@ reasoning. Every relationship is tenant-constrained and PostgreSQL applies
 forced RLS. The API is fail-closed and exposes only composition IDs and the
 meeting date needed for the timeline.
 
+## Account timeline
+
+![Revenue Brain account snapshot timeline](assets/wo-008a-revenue-brain-timeline.jpg)
+
 ## Out of scope retained
 
 No Revenue Brain reasoning, summary, comparison, prediction, forecast, trend
