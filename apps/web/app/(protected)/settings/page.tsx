@@ -1,13 +1,15 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { BetaAdmin } from "@/components/beta-admin";
+import { PageHeader } from "@/components/page-header";
 
 export default function SettingsPage() {
   return (
-    <PlaceholderPage
-      eyebrow="Workspace"
-      title="Settings"
-      description="Organisation, privacy and integration controls will be added only with their underlying capabilities."
-      emptyTitle="Workspace settings are not configurable yet"
-      emptyDescription="The development organisation is fixed and clearly labelled. No credentials or external connections can be added here."
-    />
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Private beta administration"
+        title="Organisation controls"
+        description="Review members, consent, retention, usage, feature flags and controlled privacy requests. Generated content and transcripts are deliberately excluded."
+      />
+      <BetaAdmin />
+    </div>
   );
 }

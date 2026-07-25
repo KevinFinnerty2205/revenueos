@@ -221,6 +221,7 @@ def _settings(**overrides: object) -> Settings:
         "auth_mode": "mock",
         "mock_auth_enabled": True,
         "ai_provider_name": "openai",
+        "feature_openai_provider_enabled": True,
         "openai_api_key": TEST_KEY,
         "openai_model": MODEL,
         "openai_timeout_seconds": 30,
@@ -919,6 +920,7 @@ def test_exact_openai_environment_variable_names_select_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.setenv("API_FEATURE_OPENAI_PROVIDER_ENABLED", "true")
     monkeypatch.setenv("OPENAI_API_KEY", TEST_KEY)
     monkeypatch.setenv("OPENAI_MODEL", MODEL)
     monkeypatch.setenv("OPENAI_TIMEOUT_SECONDS", "42")

@@ -178,5 +178,6 @@ and raw exceptions.
   approval workflow, streaming, WebSocket or background automation.
 - The mock is deliberately narrow, prompts/schemas are code-deployed and cost
   uses the existing integer project convention.
-- Production identity, consent, retention/export/erasure and operational
-  controls remain incomplete; production customer data is prohibited.
+- WO-009 supplies production identity, versioned consent acknowledgement and
+  beta-grade retention/export/erasure and operational controls. Launch approval
+  remains incomplete; production customer data is prohibited.

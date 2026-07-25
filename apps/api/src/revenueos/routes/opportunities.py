@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
+from revenueos.beta_dependencies import require_opportunity_workspace_feature, require_revenue_brain_feature
 from revenueos.business_contracts import (
     OpportunityCreate,
     OpportunityResponse,
@@ -90,6 +91,7 @@ async def get_opportunity(opportunity_id: UUID, service: Service) -> Opportunity
 @router.get(
     "/{opportunity_id}/workspace",
     response_model=OpportunityWorkspaceResponse,
+    dependencies=[Depends(require_opportunity_workspace_feature)],
 )
 async def get_opportunity_workspace(
     opportunity_id: UUID,
@@ -101,6 +103,7 @@ async def get_opportunity_workspace(
 @router.post(
     "/{opportunity_id}/brain/reasoning",
     response_model=RevenueBrainReasoningRequestResponse,
+    dependencies=[Depends(require_revenue_brain_feature)],
 )
 async def generate_opportunity_reasoning(
     opportunity_id: UUID,
@@ -116,6 +119,7 @@ async def generate_opportunity_reasoning(
 @router.get(
     "/{opportunity_id}/brain/reasoning",
     response_model=RevenueBrainReasoningResponse,
+    dependencies=[Depends(require_revenue_brain_feature)],
 )
 async def get_opportunity_reasoning(
     opportunity_id: UUID,
@@ -127,6 +131,7 @@ async def get_opportunity_reasoning(
 @router.post(
     "/{opportunity_id}/workspace/latest-meeting-navigation",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_opportunity_workspace_feature)],
 )
 async def record_latest_meeting_navigation(
     opportunity_id: UUID,

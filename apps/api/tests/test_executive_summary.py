@@ -108,6 +108,7 @@ def _openai_settings() -> Settings:
         mock_auth_enabled=True,
         database_url=TEST_DB_URL,
         ai_provider_name="openai",
+        feature_openai_provider_enabled=True,
         openai_api_key=OPENAI_TEST_KEY,
         openai_model=OPENAI_TEST_MODEL,
         openai_timeout_seconds=30,

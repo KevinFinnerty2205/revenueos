@@ -34,6 +34,7 @@ class BusinessRepository:
             select(OrganisationMembership.user_id).where(
                 OrganisationMembership.organisation_id == organisation_id,
                 OrganisationMembership.user_id == user_id,
+                OrganisationMembership.status == "active",
             )
         )
         return result is not None

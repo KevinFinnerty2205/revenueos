@@ -22,7 +22,7 @@ def test_persisted_membership_resolves_from_trusted_auth_context(tmp_path: objec
         organisation_id=organisation_id,
         organisation_name="Test Organisation",
         organisation_slug="test-organisation",
-        role="manager",
+        role="admin",
         auth_mode="mock",
     )
 
@@ -43,7 +43,7 @@ def test_persisted_membership_resolves_from_trusted_auth_context(tmp_path: objec
                     OrganisationMembership(
                         organisation_id=organisation_id,
                         user_id=user_id,
-                        role="manager",
+                        role="admin",
                     ),
                 ]
             )
@@ -52,7 +52,7 @@ def test_persisted_membership_resolves_from_trusted_auth_context(tmp_path: objec
             context = await OrganisationAccessService(session).resolve(authenticated_user)
             assert context.organisation_id == organisation_id
             assert context.user_id == user_id
-            assert context.role == "manager"
+            assert context.role == "admin"
         await engine.dispose()
 
     asyncio.run(scenario())

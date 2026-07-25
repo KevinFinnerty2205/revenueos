@@ -1,15 +1,18 @@
 import Link from "next/link";
+import { OrganizationSwitcher } from "@clerk/nextjs";
 import { DevAuthBanner } from "@/components/dev-auth-banner";
 import { type AuthState, getAuthState } from "@/lib/auth";
 
 const navigation = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/onboarding", label: "Getting started" },
   { href: "/companies", label: "Companies" },
   { href: "/contacts", label: "Contacts" },
   { href: "/opportunities", label: "Opportunities" },
   { href: "/meetings", label: "Meetings" },
   { href: "/tasks", label: "Tasks" },
   { href: "/assistant", label: "Assistant" },
+  { href: "/feedback", label: "Feedback" },
   { href: "/settings", label: "Settings" },
 ] as const;
 
@@ -57,6 +60,15 @@ export function AppShell({ children, authState }: AppShellProps) {
             ))}
           </nav>
           <div className="mt-5 border-t border-slate-200 pt-5">
+            {auth.mode === "clerk" ? (
+              <div className="mb-4">
+                <OrganizationSwitcher
+                  hidePersonal
+                  afterSelectOrganizationUrl="/onboarding"
+                  afterCreateOrganizationUrl="/onboarding"
+                />
+              </div>
+            ) : null}
             <Link
               href="/sign-out"
               className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-teal-50 hover:text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
@@ -66,13 +78,17 @@ export function AppShell({ children, authState }: AppShellProps) {
           </div>
           <div className="mt-6 hidden rounded-2xl bg-slate-950 p-4 text-white lg:block">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-300">
-              Development workspace
+              {auth.mode === "mock"
+                ? "Development workspace"
+                : "Private beta workspace"}
             </p>
             <p className="mt-2 text-sm font-semibold">
               {auth.organisation?.name ?? "No active organisation"}
             </p>
             <p className="mt-1 text-xs leading-5 text-slate-400">
-              Local mock identity. Never use production customer data here.
+              {auth.mode === "mock"
+                ? "Local mock identity. Never use production customer data here."
+                : "Production customer data remains prohibited until separately approved."}
             </p>
           </div>
         </aside>

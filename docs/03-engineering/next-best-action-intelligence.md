@@ -143,5 +143,6 @@ raw exceptions.
 - The dependency taxonomy is intentionally narrow and schema v1 is
   code-deployed.
 - There is no edit/approval flow or operational execution.
-- Production identity, consent, retention/export/erasure and operational
-  controls remain incomplete; production customer data is prohibited.
+- WO-009 supplies production identity, versioned consent acknowledgement and
+  beta-grade retention/export/erasure and operational controls. Launch approval
+  remains incomplete; production customer data is prohibited.

@@ -232,8 +232,9 @@ graph, forecast, probability,
 automatic matching, CRM integration, line items, quotes, contracts, generated
 content editing, email sending, task/calendar integration or next-action
 execution. These require separately approved work. Production customer data
-remains prohibited while production identity, consent, retention, export and
-erasure controls are incomplete.
+remains prohibited unless separately approved. WO-009 now feature-gates the
+workspace in both API and UI and retention/deletion remove its source meetings
+and artefacts; this does not broaden the workspace's intelligence boundary.
 
 Future Revenue Brain work may extend explicit schemas or explanation, but it
 must preserve the separately reviewed snapshot/evidence boundary and must not

@@ -77,7 +77,20 @@ Browser
 
 Next.js App Router, strict TypeScript and Tailwind CSS provide the responsive web shell. Pages compose application-local components; business rules remain server-side. Protected routes resolve an authentication adapter during server rendering and redirect when it does not provide a complete user and organisation context.
 
-Development auth returns one fixed example user/organisation, provisions that identity only in a migrated development database, and displays a warning banner. Production never provisions or falls back to the mock identity. The Clerk adapter boundary and environment path exist, but Clerk sessions are not connected.
+Development auth returns one fixed example user/organisation, provisions that
+identity only in a migrated development database, and displays a warning
+banner. Production never provisions or falls back to the mock identity. Clerk
+middleware resolves the server session and active organisation; the API
+verifies the RS256 JWT issuer, audience, lifetime and organisation claim, then
+deterministically projects active users, organisations and admin/member
+memberships. Client-supplied organisation IDs never establish tenant context.
+
+WO-009 keeps beta controls inside the modular monolith. Seven focused
+tenant-owned tables store retention, notice acknowledgement, onboarding, UTC
+usage counters, feedback, data requests and safe events. Explicit predicates,
+composite relationships and forced RLS apply. Retention/export/deletion remain
+separately invoked bounded maintenance commands; no scheduler or service was
+added. See [ADR 0025](../08-decisions/0025-private-beta-operational-controls.md).
 
 Companies, contacts, opportunities and tasks share form conventions.
 Opportunities use a focused enriched list and workspace that reuse product-safe
@@ -207,8 +220,10 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0019_revenue_brain_reasoning` is the head migration.
-It follows
+source exists. Migration `0020_private_beta_readiness` is the head migration.
+It follows `0019_revenue_brain_reasoning` and adds the focused tenant-owned
+private-beta control tables, identity/status metadata and approved maintenance
+deletion path described above. `0019_revenue_brain_reasoning` follows
 `0017_opportunity_workspace`, which expands Opportunity metadata and indexes,
 adds the nullable organisation-safe meeting association and creates metadata-
 only Opportunity audit events with forced RLS. `0018_revenue_brain` adds the

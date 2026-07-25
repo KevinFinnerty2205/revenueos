@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -217,8 +217,12 @@ class _AIDomainService:
         tenant: TenantContext,
         *,
         job_repository: AIJobRepository | None = None,
+        generation_limiter: Callable[[], Awaitable[None]] | None = None,
+        default_max_attempts: int | None = None,
     ) -> None:
         self.repository = job_repository or AIJobRepository(session)
+        self.repository.set_generation_limiter(generation_limiter)
+        self.repository.set_default_max_attempts(default_max_attempts)
         self.tenant = tenant
 
     async def _get_job(self, job_id: UUID) -> AIJob:

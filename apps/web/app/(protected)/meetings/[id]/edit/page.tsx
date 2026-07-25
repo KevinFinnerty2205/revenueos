@@ -1,4 +1,5 @@
 import { MeetingForm } from "@/components/meeting-form";
+import { DataNoticeCard } from "@/components/data-notice-card";
 
 export default async function EditMeetingPage({
   params,
@@ -6,5 +7,10 @@ export default async function EditMeetingPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <MeetingForm meetingId={id} />;
+  return (
+    <div className="space-y-6">
+      <DataNoticeCard />
+      <MeetingForm meetingId={id} />
+    </div>
+  );
 }

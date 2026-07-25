@@ -27,7 +27,10 @@ Sprints 1–3 provide:
   latest associated meeting's stored validated intelligence;
 - a [Revenue Brain](../03-engineering/revenue-brain-reasoning.md) account
   timeline of immutable snapshots plus deterministic, evidence-backed account
-  and opportunity changes across adjacent eligible meetings; and
+  and opportunity changes across adjacent eligible meetings;
+- a controlled private-beta foundation with Clerk organisation sign-in,
+  versioned transcript/data notice, onboarding, retention, export/deletion
+  requests, usage limits, feedback and an admin-only organisation view; and
 - an Assistant placeholder that states its capability is not implemented.
 
 The current product accepts only deliberately entered meeting metadata and
@@ -44,8 +47,9 @@ Meeting Intelligence generation. Revenue Brain reasoning is an explicit
 on-demand, provider-free comparison of stored snapshot references: it reports
 qualitative supported changes, never probability, forecast or deal health. The
 application does not answer or assign questions, record, store media,
-transcribe, connect external systems, verify production Clerk sessions or
-process payments. Production customer data must not be used.
+transcribe, connect external systems or process payments. Production customer
+data remains prohibited unless separately approved. See the
+[private beta readiness guide](../03-engineering/private-beta-readiness.md).
 
 ## Product principles
 

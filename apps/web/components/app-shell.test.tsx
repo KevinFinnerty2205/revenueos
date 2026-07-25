@@ -22,12 +22,14 @@ describe("application shell", () => {
     });
     for (const label of [
       "Dashboard",
+      "Getting started",
       "Companies",
       "Contacts",
       "Opportunities",
       "Meetings",
       "Tasks",
       "Assistant",
+      "Feedback",
       "Settings",
     ]) {
       expect(screen.getByRole("link", { name: label })).toBeVisible();

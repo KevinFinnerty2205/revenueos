@@ -167,7 +167,10 @@ Every service starts with trusted `TenantContext`. Every repository read/write h
 - The configured provider may be mock or OpenAI; there is no email-send
   integration or later Meeting Intelligence capability.
 - The transcript version identifies the current mutable transcript row but does not preserve a historical text snapshot.
-- Production identity, retention, export, erasure and operational controls remain incomplete; production customer data is prohibited.
+- WO-009 supplies verified production identity and beta-grade retention,
+  export, erasure and operational controls. Environment-specific launch,
+  privacy/legal/provider approval remains incomplete; production customer data
+  is prohibited.
 
 A later, separately approved provider/intelligence layer can register another
 adapter or immutable prompt/schema pair without changing the tenant trace,

@@ -1,8 +1,24 @@
 import Link from "next/link";
+import { SignUp } from "@clerk/nextjs";
 import { getAuthState } from "@/lib/auth";
 
 export default function SignUpPage() {
   const auth = getAuthState();
+  const clerkConfigured =
+    auth.mode === "clerk" &&
+    Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+  if (clerkConfigured) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#f5f7f4] px-5 py-12">
+        <SignUp
+          path="/sign-up"
+          signInUrl="/sign-in"
+          forceRedirectUrl="/select-organisation"
+        />
+      </main>
+    );
+  }
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#f5f7f4] px-5 py-12">
@@ -28,7 +44,7 @@ export default function SignUpPage() {
         <p className="mt-4 text-sm leading-7 text-slate-600">
           {auth.mode === "mock"
             ? "Local development uses a clearly marked example organisation. It does not create a real account."
-            : "Clerk will own account and organisation creation. That hosted flow is not connected in this build."}
+            : "Clerk account creation is not configured for this environment."}
         </p>
         {auth.authenticated ? (
           <Link

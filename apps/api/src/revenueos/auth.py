@@ -1,13 +1,31 @@
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import re
+import uuid
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from functools import lru_cache
+from typing import Literal, Protocol, cast
 from uuid import UUID
 
+import jwt
 from fastapi import Depends, Request
+from jwt import PyJWKClient
+from jwt.exceptions import InvalidTokenError, PyJWKClientError
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.config import Settings, get_settings
+from revenueos.database import set_tenant_database_context
+from revenueos.development import DEVELOPMENT_ORGANISATION_ID, DEVELOPMENT_USER_ID
 from revenueos.errors import PublicAPIError
+from revenueos.models import Organisation, OrganisationMembership, User
 
-Role = Literal["admin", "manager", "member"]
+Role = Literal["admin", "member"]
+AuthMode = Literal["mock", "clerk"]
+IDENTITY_NAMESPACE = UUID("fd2573b7-09a4-4c4a-a2f0-767b4c0ca901")
 
 
 class AuthenticationError(Exception):
@@ -16,6 +34,17 @@ class AuthenticationError(Exception):
 
 class AuthenticationUnavailableError(Exception):
     """Raised when the configured authentication provider is not ready."""
+
+
+@dataclass(frozen=True)
+class VerifiedIdentity:
+    external_auth_id: str
+    external_organisation_id: str
+    display_name: str
+    email: str
+    organisation_name: str
+    role: Role
+    auth_mode: AuthMode
 
 
 @dataclass(frozen=True)
@@ -28,11 +57,11 @@ class AuthenticatedUser:
     organisation_name: str
     organisation_slug: str
     role: Role
-    auth_mode: Literal["mock", "clerk"]
+    auth_mode: AuthMode
 
 
 class AuthAdapter(Protocol):
-    def authenticate(self, request: Request) -> AuthenticatedUser: ...
+    async def authenticate(self, request: Request) -> VerifiedIdentity: ...
 
 
 class DevelopmentAuthAdapter:
@@ -41,36 +70,101 @@ class DevelopmentAuthAdapter:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def authenticate(self, request: Request) -> AuthenticatedUser:
+    async def authenticate(self, request: Request) -> VerifiedIdentity:
         del request
         if not self.settings.mock_auth_enabled or self.settings.environment == "production":
             raise AuthenticationUnavailableError("Development authentication is disabled.")
-        return AuthenticatedUser(
-            user_id=UUID("00000000-0000-4000-8000-000000000001"),
+        return VerifiedIdentity(
             external_auth_id="user_dev_001",
+            external_organisation_id="org_dev_001",
             display_name="Alex Morgan",
             email="alex@example.test",
-            organisation_id=UUID("00000000-0000-4000-8000-000000000002"),
             organisation_name="Example Revenue Team",
-            organisation_slug="example-revenue-team",
             role="admin",
             auth_mode="mock",
         )
 
 
+@lru_cache(maxsize=8)
+def _jwks_client(url: str, timeout_seconds: float) -> PyJWKClient:
+    return PyJWKClient(
+        url,
+        cache_keys=True,
+        cache_jwk_set=True,
+        lifespan=300,
+        timeout=timeout_seconds,
+    )
+
+
 class ClerkAuthAdapter:
-    """Production adapter boundary for future verified Clerk JWT handling."""
+    """Verify Clerk session JWTs and return only server-trusted identity claims."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def authenticate(self, request: Request) -> AuthenticatedUser:
+    async def authenticate(self, request: Request) -> VerifiedIdentity:
         if not self.settings.clerk_configuration_complete:
             raise AuthenticationUnavailableError("Clerk authentication is not configured.")
         authorisation = request.headers.get("Authorization", "")
         if not authorisation.startswith("Bearer "):
             raise AuthenticationError("Authentication is required.")
-        raise AuthenticationUnavailableError("Clerk token verification is not connected in the Sprint 1 foundation.")
+        token = authorisation.removeprefix("Bearer ").strip()
+        if not token or len(token) > 16_384:
+            raise AuthenticationError("Authentication is required.")
+        assert self.settings.clerk_jwks_url is not None
+        assert self.settings.clerk_issuer is not None
+        assert self.settings.clerk_audience is not None
+        try:
+            signing_key = await asyncio.to_thread(
+                _jwks_client(
+                    self.settings.clerk_jwks_url,
+                    self.settings.clerk_jwks_timeout_seconds,
+                ).get_signing_key_from_jwt,
+                token,
+            )
+            claims = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256"],
+                issuer=self.settings.clerk_issuer,
+                audience=self.settings.clerk_audience,
+                leeway=self.settings.clerk_jwt_leeway_seconds,
+                options={"require": ["exp", "iat", "sub"]},
+            )
+        except PyJWKClientError as exc:
+            raise AuthenticationUnavailableError("Clerk signing keys could not be loaded.") from exc
+        except InvalidTokenError as exc:
+            raise AuthenticationError("Authentication is required.") from exc
+
+        external_user_id = self._required_claim(claims, "sub")
+        external_organisation_id = self._required_claim(claims, "org_id")
+        provider_role = str(claims.get("org_role", "")).lower()
+        role: Role = "admin" if provider_role in {"admin", "org:admin"} else "member"
+        fallback_hash = hashlib.sha256(external_user_id.encode()).hexdigest()[:20]
+        email = self._optional_claim(claims, "email") or f"{fallback_hash}@identity.invalid"
+        display_name = self._optional_claim(claims, "name") or "Private beta user"
+        organisation_name = self._optional_claim(claims, "org_name") or "Private beta organisation"
+        return VerifiedIdentity(
+            external_auth_id=external_user_id,
+            external_organisation_id=external_organisation_id,
+            display_name=display_name[:200],
+            email=email[:320],
+            organisation_name=organisation_name[:200],
+            role=role,
+            auth_mode="clerk",
+        )
+
+    @staticmethod
+    def _required_claim(claims: dict[str, object], key: str) -> str:
+        value = claims.get(key)
+        if not isinstance(value, str) or not value.strip() or len(value) > 255:
+            raise AuthenticationError("Authentication is required.")
+        return value.strip()
+
+    @staticmethod
+    def _optional_claim(claims: dict[str, object], key: str) -> str | None:
+        value = claims.get(key)
+        return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def get_auth_adapter(settings: Settings = Depends(get_settings)) -> AuthAdapter:
@@ -79,12 +173,12 @@ def get_auth_adapter(settings: Settings = Depends(get_settings)) -> AuthAdapter:
     return DevelopmentAuthAdapter(settings)
 
 
-def get_current_user(
+async def get_current_user(
     request: Request,
     adapter: AuthAdapter = Depends(get_auth_adapter),
 ) -> AuthenticatedUser:
     try:
-        user = adapter.authenticate(request)
+        identity = await adapter.authenticate(request)
     except AuthenticationError as exc:
         raise PublicAPIError("authentication_required", "Authentication is required.", status_code=401) from exc
     except AuthenticationUnavailableError as exc:
@@ -93,5 +187,135 @@ def get_current_user(
             "Authentication is not available in this environment.",
             status_code=503,
         ) from exc
+
+    if identity.auth_mode == "mock":
+        user = AuthenticatedUser(
+            user_id=DEVELOPMENT_USER_ID,
+            external_auth_id=identity.external_auth_id,
+            display_name=identity.display_name,
+            email=identity.email,
+            organisation_id=DEVELOPMENT_ORGANISATION_ID,
+            organisation_name=identity.organisation_name,
+            organisation_slug="example-revenue-team",
+            role="admin",
+            auth_mode="mock",
+        )
+        request.state.auth_user = user
+        return user
+
+    session_factory = cast(
+        async_sessionmaker[AsyncSession] | None,
+        request.app.state.session_factory,
+    )
+    if session_factory is None:
+        raise PublicAPIError(
+            "persistence_unavailable",
+            "Persistence is not configured for this environment.",
+            status_code=503,
+        )
+    async with session_factory() as session:
+        try:
+            user = await _resolve_identity(session, identity)
+        except AuthenticationError as exc:
+            await session.rollback()
+            raise PublicAPIError(
+                "authentication_required",
+                "Authentication is required.",
+                status_code=401,
+            ) from exc
+        except AuthenticationUnavailableError as exc:
+            await session.rollback()
+            raise PublicAPIError(
+                "authentication_unavailable",
+                "Authentication is not available in this environment.",
+                status_code=503,
+            ) from exc
+        except SQLAlchemyError as exc:
+            await session.rollback()
+            raise PublicAPIError(
+                "authentication_unavailable",
+                "Authentication is not available in this environment.",
+                status_code=503,
+            ) from exc
     request.state.auth_user = user
     return user
+
+
+async def _resolve_identity(session: AsyncSession, identity: VerifiedIdentity) -> AuthenticatedUser:
+    organisation_id = uuid.uuid5(IDENTITY_NAMESPACE, f"organisation:{identity.external_organisation_id}")
+    await set_tenant_database_context(session, organisation_id)
+    organisation = await session.scalar(
+        select(Organisation).where(
+            Organisation.id == organisation_id,
+            Organisation.external_auth_id == identity.external_organisation_id,
+        )
+    )
+    user = await session.scalar(select(User).where(User.external_auth_id == identity.external_auth_id))
+    if organisation is None:
+        organisation = Organisation(
+            id=organisation_id,
+            external_auth_id=identity.external_organisation_id,
+            name=identity.organisation_name,
+            slug=_organisation_slug(identity.external_organisation_id),
+        )
+        session.add(organisation)
+    if user is None:
+        user = User(
+            id=uuid.uuid5(IDENTITY_NAMESPACE, f"user:{identity.external_auth_id}"),
+            external_auth_id=identity.external_auth_id,
+            email=identity.email,
+            display_name=identity.display_name,
+            status="active",
+        )
+        session.add(user)
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        await set_tenant_database_context(session, organisation_id)
+        organisation = await session.scalar(
+            select(Organisation).where(
+                Organisation.id == organisation_id,
+                Organisation.external_auth_id == identity.external_organisation_id,
+            )
+        )
+        user = await session.scalar(select(User).where(User.external_auth_id == identity.external_auth_id))
+
+    if organisation is None or user is None or user.status != "active":
+        raise AuthenticationError("The authenticated user is inactive or unavailable.")
+    membership = await session.get(OrganisationMembership, (organisation.id, user.id))
+    if membership is None:
+        membership = OrganisationMembership(
+            organisation_id=organisation.id,
+            user_id=user.id,
+            role=identity.role,
+            status="active",
+        )
+        session.add(membership)
+    elif membership.status != "active":
+        raise AuthenticationError("The authenticated membership is disabled.")
+    elif membership.role != identity.role and identity.auth_mode == "clerk":
+        membership.role = identity.role
+
+    if identity.auth_mode == "clerk":
+        user.email = identity.email
+        user.display_name = identity.display_name
+        organisation.name = identity.organisation_name
+    await session.commit()
+    return AuthenticatedUser(
+        user_id=user.id,
+        external_auth_id=user.external_auth_id,
+        display_name=user.display_name,
+        email=user.email,
+        organisation_id=organisation.id,
+        organisation_name=organisation.name,
+        organisation_slug=organisation.slug,
+        role="admin" if membership.role == "admin" else "member",
+        auth_mode=identity.auth_mode,
+    )
+
+
+def _organisation_slug(external_organisation_id: str) -> str:
+    readable = re.sub(r"[^a-z0-9]+", "-", external_organisation_id.lower()).strip("-")[:48]
+    suffix = hashlib.sha256(external_organisation_id.encode()).hexdigest()[:12]
+    return f"{readable or 'organisation'}-{suffix}"

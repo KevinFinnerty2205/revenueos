@@ -7,6 +7,7 @@ from decimal import Decimal
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -61,11 +62,15 @@ class TimestampMixin:
 
 class Organisation(TimestampMixin, Base):
     __tablename__ = "organisations"
-    __table_args__ = (UniqueConstraint("slug", name="uq_organisations_slug"),)
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_organisations_slug"),
+        UniqueConstraint("external_auth_id", name="uq_organisations_external_auth_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    external_auth_id: Mapped[str | None] = mapped_column(String(255))
 
     memberships: Mapped[list[OrganisationMembership]] = relationship(
         back_populates="organisation",
@@ -85,12 +90,16 @@ class Organisation(TimestampMixin, Base):
 
 class User(TimestampMixin, Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("external_auth_id", name="uq_users_external_auth_id"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'disabled')", name="ck_users_status"),
+        UniqueConstraint("external_auth_id", name="uq_users_external_auth_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     external_auth_id: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
 
     memberships: Mapped[list[OrganisationMembership]] = relationship(
         back_populates="user",
@@ -105,7 +114,8 @@ class User(TimestampMixin, Base):
 class OrganisationMembership(Base):
     __tablename__ = "organisation_memberships"
     __table_args__ = (
-        CheckConstraint("role IN ('admin', 'manager', 'member')", name="ck_memberships_role"),
+        CheckConstraint("role IN ('admin', 'member')", name="ck_memberships_role"),
+        CheckConstraint("status IN ('active', 'disabled')", name="ck_memberships_status"),
         Index("ix_memberships_organisation_role", "organisation_id", "role"),
     )
 
@@ -120,14 +130,135 @@ class OrganisationMembership(Base):
         primary_key=True,
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     organisation: Mapped[Organisation] = relationship(back_populates="memberships")
     user: Mapped[User] = relationship(back_populates="memberships")
+
+
+class OrganisationBetaSettings(TimestampMixin, Base):
+    __tablename__ = "organisation_beta_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "retention_days IS NULL OR retention_days IN (30, 90, 180)",
+            name="ck_organisation_beta_settings_retention",
+        ),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    retention_days: Mapped[int | None] = mapped_column(Integer)
+
+
+class DataNoticeAcknowledgement(Base):
+    __tablename__ = "data_notice_acknowledgements"
+    __table_args__ = (
+        CheckConstraint("notice_version > 0", name="ck_data_notice_acknowledgements_version"),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_data_notice_acknowledgements_membership",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "user_id",
+            "notice_version",
+            name="uq_data_notice_acknowledgements_version",
+        ),
+        Index(
+            "ix_data_notice_acknowledgements_organisation_version",
+            "organisation_id",
+            "notice_version",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    notice_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    acknowledged_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class OnboardingProgress(Base):
+    __tablename__ = "onboarding_progress"
+    __table_args__ = (
+        CheckConstraint("current_step >= 0 AND current_step <= 9", name="ck_onboarding_progress_step"),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_onboarding_progress_membership",
+            ondelete="CASCADE",
+        ),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    current_step: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    skipped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class AIUsageCounter(Base):
+    __tablename__ = "ai_usage_counters"
+    __table_args__ = (
+        CheckConstraint("generation_count >= 0", name="ck_ai_usage_counters_generations"),
+        CheckConstraint("provider_request_count >= 0", name="ck_ai_usage_counters_provider_requests"),
+        Index("ix_ai_usage_counters_organisation_date", "organisation_id", "usage_date"),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    generation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    provider_request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class Company(TimestampMixin, Base):
@@ -1307,6 +1438,142 @@ class RevenueBrainInsight(Base):
     content_json: Mapped[dict[str, object]] = mapped_column(
         JSON(none_as_null=True),
         nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class BetaFeedback(Base):
+    __tablename__ = "beta_feedback"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('bug', 'confusing', 'inaccurate_intelligence', 'missing_feature', 'other')",
+            name="ck_beta_feedback_category",
+        ),
+        CheckConstraint("rating IS NULL OR rating BETWEEN 1 AND 5", name="ck_beta_feedback_rating"),
+        CheckConstraint("length(trim(message)) BETWEEN 1 AND 2000", name="ck_beta_feedback_message"),
+        CheckConstraint("length(current_route) BETWEEN 1 AND 500", name="ck_beta_feedback_route"),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_beta_feedback_membership",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"],
+            ["meetings.organisation_id", "meetings.id"],
+            name="fk_beta_feedback_meeting_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_beta_feedback_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_beta_feedback_organisation_id_id"),
+        Index("ix_beta_feedback_organisation_created", "organisation_id", "created_at"),
+        Index("ix_beta_feedback_user_created", "organisation_id", "user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    category: Mapped[str] = mapped_column(String(40), nullable=False)
+    rating: Mapped[int | None] = mapped_column(Integer)
+    message: Mapped[str] = mapped_column(String(2000), nullable=False)
+    current_route: Mapped[str] = mapped_column(String(500), nullable=False)
+    meeting_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class BetaDataRequest(TimestampMixin, Base):
+    __tablename__ = "beta_data_requests"
+    __table_args__ = (
+        CheckConstraint("request_type IN ('export', 'organisation_deletion')", name="ck_beta_data_requests_type"),
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'completed', 'failed')",
+            name="ck_beta_data_requests_status",
+        ),
+        CheckConstraint(
+            "failure_code IS NULL OR length(failure_code) <= 100",
+            name="ck_beta_data_requests_failure_code",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "requested_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_beta_data_requests_requester",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_beta_data_requests_organisation_id_id"),
+        Index("ix_beta_data_requests_organisation_status", "organisation_id", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    request_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    output_path: Mapped[str | None] = mapped_column(String(1000))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+
+
+class BetaSystemEvent(Base):
+    __tablename__ = "beta_system_events"
+    __table_args__ = (
+        CheckConstraint("length(event_type) BETWEEN 1 AND 100", name="ck_beta_system_events_type"),
+        ForeignKeyConstraint(
+            ["organisation_id", "actor_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_beta_system_events_actor_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_beta_system_events_organisation_id_id"),
+        Index("ix_beta_system_events_organisation_created", "organisation_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True),
+        nullable=False,
+        default=dict,
+        server_default="{}",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

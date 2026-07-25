@@ -1,5 +1,26 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.route(
+    "http://localhost:8000/api/v1/beta/capabilities",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          featureFlags: {
+            openaiProvider: false,
+            revenueBrain: true,
+            opportunityWorkspace: true,
+            dataExport: true,
+            organisationDeletion: false,
+          },
+          noticeVersion: 1,
+          maxTranscriptCharacters: 200000,
+        },
+      });
+    },
+  );
+});
+
 test("landing page explains the current product honestly", async ({ page }) => {
   await page.goto("/");
   await expect(
@@ -35,6 +56,150 @@ test("core entity pages remain usable at a mobile viewport", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Main navigation" }),
+  ).toBeVisible();
+});
+
+test("private beta onboarding, consent, feedback and admin controls stay product-safe", async ({
+  page,
+}) => {
+  let onboardingStep = 0;
+  let acknowledged = false;
+  let adminAllowed = true;
+  let feedbackPayload: Record<string, unknown> | null = null;
+
+  await page.route("http://localhost:8000/api/v1/beta/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith("/capabilities")) {
+      await route.fallback();
+      return;
+    }
+    if (path.endsWith("/data-notice/acknowledgements")) {
+      acknowledged = true;
+      await route.fulfill({ json: dataNotice(true) });
+      return;
+    }
+    if (path.endsWith("/data-notice")) {
+      await route.fulfill({ json: dataNotice(acknowledged) });
+      return;
+    }
+    if (path.endsWith("/onboarding") && request.method() === "PATCH") {
+      const body = request.postDataJSON() as {
+        action: string;
+        currentStep?: number;
+      };
+      onboardingStep =
+        body.action === "skip" || body.action === "complete"
+          ? 9
+          : (body.currentStep ?? onboardingStep + 1);
+      await route.fulfill({
+        json: {
+          currentStep: onboardingStep,
+          skipped: body.action === "skip",
+          completed: onboardingStep === 9,
+          completedAt: onboardingStep === 9 ? "2026-07-25T00:00:00Z" : null,
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/onboarding")) {
+      await route.fulfill({
+        json: {
+          currentStep: onboardingStep,
+          skipped: false,
+          completed: false,
+          completedAt: null,
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/feedback")) {
+      feedbackPayload = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 201,
+        json: {
+          id: "feedback-1",
+          ...feedbackPayload,
+          meetingId: null,
+          opportunityId: null,
+          createdAt: "2026-07-25T00:00:00Z",
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/admin")) {
+      await route.fulfill(
+        adminAllowed
+          ? { json: betaAdminOverview() }
+          : {
+              status: 403,
+              json: {
+                code: "forbidden",
+                message: "Administrator access is required.",
+                requestId: "beta-member-check",
+              },
+            },
+      );
+      return;
+    }
+    await route.fulfill({ status: 404, json: { message: "Not found" } });
+  });
+
+  await page.goto("/onboarding");
+  await expect(
+    page.getByRole("heading", { name: "Set up your safe first journey" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Start safely" }).click();
+  await expect(
+    page.getByRole("heading", { name: /Private beta data notice/ }),
+  ).toBeVisible();
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Acknowledge and continue" }).click();
+  expect(acknowledged).toBe(true);
+  await page.getByRole("button", { name: "Skip onboarding" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Your workspace is ready" }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Feedback" }).click();
+  await page.getByLabel("Category").selectOption("confusing");
+  await page.getByLabel("Rating").selectOption("4");
+  await page
+    .getByLabel("Short message")
+    .fill("The synthetic beta workflow needs a clearer next step.");
+  await page.getByRole("button", { name: "Send feedback" }).click();
+  await expect(page.getByText(/your feedback was sent/i)).toBeVisible();
+  expect(feedbackPayload).toEqual({
+    category: "confusing",
+    rating: 4,
+    message: "The synthetic beta workflow needs a clearer next step.",
+    currentRoute: "/feedback",
+  });
+
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Organisation controls" }),
+  ).toBeVisible();
+  await expect(page.getByLabel(/retention policy/i)).toHaveValue("days_90");
+  await expect(page.getByText("0 / 100")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Queue organisation deletion" }),
+  ).toHaveCount(0);
+  for (const prohibited of ["prompt", "worker", "api key", "provider"]) {
+    await expect(page.getByText(new RegExp(prohibited, "i"))).toHaveCount(0);
+  }
+  if (process.env.CAPTURE_WO_009_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-009-private-beta-admin.png",
+      fullPage: true,
+    });
+  }
+  adminAllowed = false;
+  await page.reload();
+  await expect(
+    page.getByRole("alert").filter({
+      hasText: "Administrator access is required.",
+    }),
   ).toBeVisible();
 });
 
@@ -657,6 +822,64 @@ function opportunityReasoning(
           : "Longitudinal reasoning is available.",
     latest,
     history: latest ? [latest] : [],
+  };
+}
+
+function dataNotice(acknowledged: boolean) {
+  return {
+    version: 1,
+    acknowledged,
+    acknowledgedAt: acknowledged ? "2026-07-25T00:00:00Z" : null,
+    providerMode: "mock",
+    externalProcessingEnabled: false,
+    notice: [
+      "You must have authority to add or process this meeting content.",
+      "Mock mode keeps processing internal.",
+      "Generated intelligence may contain errors and must be reviewed.",
+    ],
+  };
+}
+
+function betaAdminOverview() {
+  return {
+    organisation: {
+      id: "organisation-1",
+      name: "Synthetic Beta Organisation",
+      slug: "synthetic-beta-organisation",
+    },
+    members: [
+      {
+        user: {
+          id: "user-1",
+          displayName: "Alex Morgan",
+          email: "alex@example.test",
+        },
+        role: "admin",
+        status: "active",
+        joinedAt: "2026-07-25T00:00:00Z",
+      },
+    ],
+    retention: { policy: "days_90", defaultApplied: true },
+    noticeVersion: 1,
+    acknowledgementCount: 1,
+    activeMemberCount: 1,
+    featureFlags: {
+      openaiProvider: false,
+      revenueBrain: true,
+      opportunityWorkspace: true,
+      dataExport: true,
+      organisationDeletion: false,
+    },
+    usage: {
+      date: "2026-07-25",
+      generations: 0,
+      generationLimit: 100,
+      providerRequests: 0,
+      providerRequestLimit: 150,
+      estimatedCostAvailable: false,
+    },
+    recentEvents: [],
+    dataRequests: [],
   };
 }
 

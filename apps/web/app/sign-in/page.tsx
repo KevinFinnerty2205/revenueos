@@ -1,8 +1,24 @@
 import Link from "next/link";
+import { SignIn } from "@clerk/nextjs";
 import { getAuthState } from "@/lib/auth";
 
 export default function SignInPage() {
   const auth = getAuthState();
+  const clerkConfigured =
+    auth.mode === "clerk" &&
+    Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+  if (clerkConfigured) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#f5f7f4] px-5 py-12">
+        <SignIn
+          path="/sign-in"
+          signUpUrl="/sign-up"
+          forceRedirectUrl="/select-organisation"
+        />
+      </main>
+    );
+  }
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#f5f7f4] px-5 py-12">
@@ -28,7 +44,7 @@ export default function SignInPage() {
         <p className="mt-4 text-sm leading-7 text-slate-600">
           {auth.mode === "mock"
             ? "A clearly labelled development identity is available locally. No password is stored or requested."
-            : "Clerk is the approved authentication provider. Its hosted sign-in flow is not connected in this build."}
+            : "Clerk authentication is not configured for this environment."}
         </p>
         {auth.authenticated ? (
           <Link

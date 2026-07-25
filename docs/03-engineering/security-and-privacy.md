@@ -1,13 +1,17 @@
 # Security and privacy
 
-This is the engineering baseline through WO-008B, not legal advice or a
+This is the engineering baseline through WO-009, not legal advice or a
 certification claim.
 
 ## Authentication and authorisation
 
-Clerk is the approved production identity/organisation provider. Sprint 3 still provides only adapter boundaries, configuration validation and server-side protected-route checks. Development mock auth is non-production only, visibly labelled and backed by one deterministic example membership.
+Clerk is the approved production identity/organisation provider. WO-009 connects
+Next.js Clerk middleware/session handling to RS256 API JWT verification with
+required issuer, audience, lifetime, subject and active organisation claims.
+Development mock auth is non-production only, visibly labelled and backed by
+one deterministic example membership.
 
-Every request derives its user and organisation from the auth adapter. Client-supplied organisation identifiers do not select a tenant and are forbidden from create/update contracts. Meeting dependencies recheck that the trusted user has an active local membership before setting the database tenant context. Roles are `admin`, `manager` and `member`; Sprint 3 grants organisation members equal CRUD access because no narrower role policy is specified.
+Every request derives its user and organisation from the auth adapter. Client-supplied organisation identifiers do not select a tenant and are forbidden from create/update contracts. Tenant dependencies recheck that the trusted user has an active local membership before setting the database tenant context. Private-beta roles are limited to `admin` and `member`; administration and destructive-request routes enforce `admin` server-side, while active members retain the existing product access.
 
 ## Tenant isolation
 
@@ -15,8 +19,8 @@ Every request derives its user and organisation from the auth adapter. Client-su
 - PostgreSQL RLS policies use transaction-local trusted organisation context.
 - Companies, contacts, opportunities, tasks, meetings, participants,
   transcripts, meeting audit events, AI jobs, AI artefacts, Revenue Brain
-  snapshots and Revenue Brain insights have non-null organisation ownership and
-  forced RLS.
+  snapshots, Revenue Brain insights and all seven private-beta control tables
+  have non-null organisation ownership and forced RLS.
 - Composite foreign keys prevent cross-tenant company, contact, opportunity, meeting, owner, assignee, creator, audit-actor, AI requester, transcript trace and job/artefact references.
 - Services validate every referenced record in the trusted tenant before writing.
 - Runtime application roles must not bypass RLS.
@@ -251,7 +255,10 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
 
 Sprint 3 accepts only transcript text deliberately pasted by a user or read from an explicitly selected `.txt` file. The file is read in the browser and its text is sent through the ordinary API; there is no object-storage upload, microphone access, recording, listening, media processing or transcription. The form tells users to provide only content they are authorised to store.
 
-This notice is a product safeguard, not proof of consent or a legal determination. Production use still requires approved consent wording, provenance, retention, export and deletion policy. Future conversation capture must:
+WO-009 adds a server-authoritative versioned notice before transcript writes or
+intelligence requests. It stores only user/organisation/version/timestamp and
+requires re-acknowledgement after a version change. This safeguard is not proof
+of lawful authority or a legal determination. Future conversation capture must:
 
 - start only after a deliberate user action;
 - show a visible armed/active state;
@@ -260,23 +267,29 @@ This notice is a product safeguard, not proof of consent or a legal determinatio
 - disclose processing providers, purpose, retention and deletion;
 - never use customer content for training without a separate explicit opt-in.
 
-Meeting deletion currently makes records unavailable to normal application reads but is not a complete privacy erasure workflow. Backups, audit retention, export, hard deletion and legal holds are not implemented.
+Normal meeting deletion remains soft deletion. The separate beta retention
+command hard-deletes eligible meeting/transcript/intelligence/Revenue Brain
+dependencies in an approved tenant context. Admin export and confirmed
+organisation deletion workflows exist, but backups and Clerk lifecycle require
+documented operator action and legal hold is not implemented.
 
 ## Open risks before production use
 
-- Clerk session/JWT verification is not connected.
 - The production non-bypass database role and grants are not provisioned by this repository; CI tests the required RLS behaviour with a temporary restricted role.
-- Role-specific CRUD permissions, organisation-wide audit export, retention and customer-data erasure workflows are not yet specified.
+- Clerk sign-up/invitation/organisation policy and external identity deletion
+  are target-environment operator responsibilities.
 - OpenAI output is available when explicitly configured, but provider
   privacy/retention/residency approval, network policy, quality evaluation,
   accurate cost/budget controls and production enablement are incomplete.
 - The scheduler function necessarily reveals opaque eligible organisation UUIDs to the database worker role; deployment grants and role separation require production review.
 - Transcript version counters do not preserve historical transcript bodies, so version traceability is not yet source snapshot retention.
-- Hosting, secret management, monitoring, backup and incident-response providers are not selected.
+- Hosting, secret management, central monitoring and backup providers are not
+  selected; deployment/runbook requirements are documented for operators.
 - Recording wording, residency and deletion commitments require product/legal approval before conversation features.
 
 Do not use this system with production customer data. Enabling OpenAI changes
 the data-flow boundary and externally transmits selected transcript content.
-Production identity verification, provider/privacy approval, operational
-controls, consent evidence, retention/export/erasure and production audit policy
-are not complete.
+Technical production identity verification and beta consent/retention/export/
+deletion controls are implemented. Provider/privacy approval, target-environment
+operational evidence and production audit/legal policy are not complete. See
+[the WO-009 security review](private-beta-security-review.md).

@@ -244,8 +244,10 @@ strict parsing, schema validation, output retry/exhaustion, cancellation,
 provider error separation, transcript injection boundaries, trace persistence,
 atomic completion and tenant/RLS behavior.
 
-Do not use production customer data. Production identity, OpenAI privacy terms,
-consent evidence, retention/erasure and operational controls remain incomplete.
+Do not use production customer data. WO-009 supplies verified identity,
+versioned acknowledgement and beta-grade retention/erasure/operational
+controls; OpenAI privacy/legal/provider approval and environment-specific
+launch evidence remain incomplete.
 
 ## Future extension points
 

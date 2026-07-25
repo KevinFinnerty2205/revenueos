@@ -30,6 +30,8 @@ from revenueos.ai_services import (
     RisksBlockersStateResult,
     StakeholderIntelligenceStateResult,
 )
+from revenueos.beta_dependencies import get_beta_service, require_data_notice_acknowledgement
+from revenueos.beta_services import BetaService
 from revenueos.business_contracts import Page
 from revenueos.domain import AIJobStatus, FollowUpEmailTone, MeetingStatus, MeetingType
 from revenueos.errors import PublicAPIError
@@ -118,6 +120,7 @@ OpportunityWorkspace = Annotated[
     OpportunityWorkspaceService,
     Depends(get_opportunity_workspace_service),
 ]
+BetaPolicy = Annotated[BetaService, Depends(get_beta_service)]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -163,7 +166,14 @@ async def list_meetings(
 
 
 @router.post("", response_model=MeetingResponse, status_code=status.HTTP_201_CREATED)
-async def create_meeting(request: MeetingCreate, service: Meetings) -> MeetingResponse:
+async def create_meeting(
+    request: MeetingCreate,
+    service: Meetings,
+    beta: BetaPolicy,
+) -> MeetingResponse:
+    if request.transcript is not None:
+        await beta.require_notice_acknowledgement()
+        beta.validate_transcript_length(len(request.transcript.raw_text))
     return MeetingResponse.model_validate(await service.create_meeting(request))
 
 
@@ -211,6 +221,7 @@ async def get_meeting_intelligence(
     "/{meeting_id}/intelligence/generate",
     response_model=MeetingIntelligenceGenerationResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def generate_meeting_intelligence(
     meeting_id: UUID,
@@ -227,6 +238,7 @@ async def generate_meeting_intelligence(
     "/{meeting_id}/intelligence/executive-summary",
     response_model=ExecutiveSummaryRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_executive_summary(
     meeting_id: UUID,
@@ -254,6 +266,7 @@ async def get_executive_summary(
     "/{meeting_id}/intelligence/buying-signals",
     response_model=BuyingSignalsRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_buying_signals(
     meeting_id: UUID,
@@ -281,6 +294,7 @@ async def get_buying_signals(
     "/{meeting_id}/intelligence/objections-competitive-signals",
     response_model=ObjectionsCompetitiveSignalsRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_objections_competitive_signals(
     meeting_id: UUID,
@@ -308,6 +322,7 @@ async def get_objections_competitive_signals(
     "/{meeting_id}/intelligence/stakeholders",
     response_model=StakeholderIntelligenceRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_stakeholder_intelligence(
     meeting_id: UUID,
@@ -335,6 +350,7 @@ async def get_stakeholder_intelligence(
     "/{meeting_id}/intelligence/next-best-action",
     response_model=NextBestActionRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_next_best_action(
     meeting_id: UUID,
@@ -362,6 +378,7 @@ async def get_next_best_action(
     "/{meeting_id}/intelligence/decisions",
     response_model=DecisionsRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_decisions(
     meeting_id: UUID,
@@ -389,6 +406,7 @@ async def get_decisions(
     "/{meeting_id}/intelligence/action-items",
     response_model=ActionItemsRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_action_items(
     meeting_id: UUID,
@@ -416,6 +434,7 @@ async def get_action_items(
     "/{meeting_id}/intelligence/risks-blockers",
     response_model=RisksBlockersRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_risks_blockers(
     meeting_id: UUID,
@@ -443,6 +462,7 @@ async def get_risks_blockers(
     "/{meeting_id}/intelligence/open-questions",
     response_model=OpenQuestionsRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_open_questions(
     meeting_id: UUID,
@@ -470,6 +490,7 @@ async def get_open_questions(
     "/{meeting_id}/intelligence/follow-up-email",
     response_model=FollowUpEmailRequestResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_data_notice_acknowledgement)],
 )
 async def request_follow_up_email(
     meeting_id: UUID,
@@ -604,7 +625,10 @@ async def create_transcript(
     meeting_id: UUID,
     request: TranscriptCreate,
     service: Transcripts,
+    beta: BetaPolicy,
 ) -> TranscriptResponse:
+    await beta.require_notice_acknowledgement()
+    beta.validate_transcript_length(len(request.raw_text))
     return TranscriptResponse.model_validate(await service.create_transcript(meeting_id, request))
 
 
@@ -613,7 +637,11 @@ async def update_transcript(
     meeting_id: UUID,
     request: TranscriptUpdate,
     service: Transcripts,
+    beta: BetaPolicy,
 ) -> TranscriptResponse:
+    await beta.require_notice_acknowledgement()
+    if request.raw_text is not None:
+        beta.validate_transcript_length(len(request.raw_text))
     return TranscriptResponse.model_validate(await service.update_transcript(meeting_id, request))
 
 

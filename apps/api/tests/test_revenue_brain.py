@@ -536,6 +536,41 @@ def test_existing_worker_creates_snapshot_when_final_capability_completes() -> N
     _run(scenario)
 
 
+def test_disabled_revenue_brain_flag_prevents_worker_snapshot_composition() -> None:
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        async with session_factory() as session, session.begin():
+            await _seed_ready_meeting(
+                session,
+                pending_next_best_action=True,
+            )
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url=TEST_DB_URL,
+            worker_lease_duration_seconds=30,
+            worker_heartbeat_interval_seconds=10,
+            feature_revenue_brain_enabled=False,
+        )
+        service = AIWorkerService(
+            session_factory,
+            settings,
+            executors=AIExecutorRegistry({AIArtifactType.NEXT_BEST_ACTION.value: _NextBestActionExecutor()}),
+            clock=lambda: NOW,
+        )
+        claim = await service.claim_next_job(
+            PRIMARY_ORGANISATION_ID,
+            "revenue-brain-disabled-worker",
+        )
+        assert claim is not None
+        await service.execute_claimed_job(claim)
+
+        async with session_factory() as session:
+            assert await session.scalar(select(func.count()).select_from(RevenueBrainSnapshot)) == 0
+
+    _run(scenario)
+
+
 def test_account_brain_api_returns_ordered_compositions_only(
     client: TestClient,
     app: FastAPI,

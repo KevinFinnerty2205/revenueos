@@ -39,9 +39,16 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "revenue_brain_snapshots",
             "revenue_brain_insights",
             "opportunity_audit_events",
+            "organisation_beta_settings",
+            "data_notice_acknowledgements",
+            "onboarding_progress",
+            "ai_usage_counters",
+            "beta_feedback",
+            "beta_data_requests",
+            "beta_system_events",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0019_revenue_brain_reasoning",
+            "0020_private_beta_readiness",
         )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
@@ -121,6 +128,17 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "content_json": 1,
             "created_at": 1,
         }
+        membership_columns = {
+            row[1]: row[3] for row in connection.execute("PRAGMA table_info(organisation_memberships)").fetchall()
+        }
+        assert membership_columns["status"] == 1
+        assert membership_columns["updated_at"] == 1
+        user_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
+        assert user_columns["status"] == 1
+        organisation_columns = {
+            row[1]: row[3] for row in connection.execute("PRAGMA table_info(organisations)").fetchall()
+        }
+        assert organisation_columns["external_auth_id"] == 0
         audit_columns = {
             row[1]: (row[2], row[3]) for row in connection.execute("PRAGMA table_info(meeting_audit_events)").fetchall()
         }
@@ -648,7 +666,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0019_revenue_brain_reasoning",
+            "0020_private_beta_readiness",
         )
         connection.execute(
             """
@@ -702,7 +720,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0019_revenue_brain_reasoning",
+            "0020_private_beta_readiness",
         )
         connection.execute(
             """
@@ -748,7 +766,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0019_revenue_brain_reasoning",
+            "0020_private_beta_readiness",
         )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
@@ -764,7 +782,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0019_revenue_brain_reasoning",
+            "0020_private_beta_readiness",
         )
 
     command.downgrade(configuration, "0003_meeting_domain")
@@ -802,7 +820,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0019_revenue_brain_reasoning",
+            "0020_private_beta_readiness",
         )
 
     command.downgrade(configuration, "0002_core_business_entities")
@@ -869,7 +887,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_insights",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0019_revenue_brain_reasoning",
+            "0020_private_beta_readiness",
         )
 
     command.downgrade(configuration, "0018_revenue_brain")
@@ -889,7 +907,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0019_revenue_brain_reasoning",
+            "0020_private_beta_readiness",
         )
 
 
@@ -932,7 +950,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0019_revenue_brain_reasoning"
+                    assert version == "0020_private_beta_readiness"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

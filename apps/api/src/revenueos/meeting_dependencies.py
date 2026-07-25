@@ -4,6 +4,8 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.ai_services import AIJobService
+from revenueos.beta_services import BetaService
+from revenueos.config import Settings, get_settings
 from revenueos.database import get_db, set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.intelligence_workspace import MeetingIntelligenceService
@@ -55,14 +57,28 @@ async def get_transcript_service(
 async def get_ai_job_service(
     session: AsyncSession = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
 ) -> AsyncIterator[AIJobService]:
     await _authorise_meeting_context(session, tenant)
-    yield AIJobService(session, tenant)
+    beta = BetaService(session, tenant, settings)
+    yield AIJobService(
+        session,
+        tenant,
+        generation_limiter=beta.reserve_generation,
+        default_max_attempts=settings.worker_default_max_attempts,
+    )
 
 
 async def get_meeting_intelligence_service(
     session: AsyncSession = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
 ) -> AsyncIterator[MeetingIntelligenceService]:
     await _authorise_meeting_context(session, tenant)
-    yield MeetingIntelligenceService(session, tenant)
+    beta = BetaService(session, tenant, settings)
+    yield MeetingIntelligenceService(
+        session,
+        tenant,
+        generation_limiter=beta.reserve_generation,
+        default_max_attempts=settings.worker_default_max_attempts,
+    )

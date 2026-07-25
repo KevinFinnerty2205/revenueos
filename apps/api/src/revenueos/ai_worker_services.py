@@ -77,6 +77,7 @@ from revenueos.ai_prompt_registry import (
 from revenueos.ai_repositories import AIArtifactRepository, AIJobRepository
 from revenueos.ai_services import AIArtifactService
 from revenueos.ai_worker_repositories import AIWorkerRepository
+from revenueos.beta_services import BetaService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import (
@@ -127,8 +128,27 @@ class AIWorkerService:
     ) -> None:
         self._session_factory = session_factory
         self._settings = settings
-        self._executors = executors or AIExecutorRegistry(settings=settings)
+        self._executors = executors or AIExecutorRegistry(
+            settings=settings,
+            provider_request_limiter=self._reserve_provider_request,
+        )
         self._clock = clock or (lambda: datetime.now(UTC))
+
+    async def _reserve_provider_request(self, job: ClaimedAIJob) -> None:
+        if self._settings.ai_provider_name != "openai":
+            return
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, job.organisation_id)
+            service = BetaService(
+                session,
+                TenantContext(
+                    organisation_id=job.organisation_id,
+                    user_id=job.requested_by_user_id,
+                    role="member",
+                ),
+                self._settings,
+            )
+            await service.reserve_provider_request()
 
     async def discover_eligible_organisations(self) -> list[UUID]:
         async with self._session_factory() as session:
@@ -1403,7 +1423,7 @@ class AIWorkerService:
                 },
             )
             await session.flush()
-            if job.job_type in REQUIRED_ARTIFACT_TYPES:
+            if self._settings.feature_revenue_brain_enabled and job.job_type in REQUIRED_ARTIFACT_TYPES:
                 snapshot_result = await RevenueBrainService(
                     session,
                     tenant,

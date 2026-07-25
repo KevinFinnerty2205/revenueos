@@ -21,7 +21,7 @@ from revenueos.errors import (
     validation_error_handler,
 )
 from revenueos.observability import configure_logging
-from revenueos.routes import accounts, companies, contacts, health, me, meetings, opportunities, tasks
+from revenueos.routes import accounts, beta, companies, contacts, health, me, meetings, opportunities, tasks
 
 logger = logging.getLogger("revenueos.http")
 REQUEST_ID_ALLOWED_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.:")
@@ -56,10 +56,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="RevenueOS AI API",
-        version="0.3.0",
-        description="Versioned core business and Meeting Domain API for RevenueOS AI.",
-        docs_url="/docs",
-        redoc_url="/redoc",
+        version="0.4.0",
+        description="Tenant-isolated RevenueOS private beta API.",
+        docs_url=None if app_settings.environment == "production" else "/docs",
+        redoc_url=None if app_settings.environment == "production" else "/redoc",
         lifespan=lifespan,
     )
     app.state.settings = app_settings
@@ -104,11 +104,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "path": request.url.path,
                     "status_code": response.status_code if response is not None else 500,
                     "duration_ms": duration_ms,
+                    "organisation_id": str(request.state.auth_user.organisation_id)
+                    if getattr(request.state, "auth_user", None) is not None
+                    else None,
+                    "user_id": str(request.state.auth_user.user_id)
+                    if getattr(request.state, "auth_user", None) is not None
+                    else None,
                 },
             )
 
     app.include_router(health.router)
     app.include_router(me.router)
+    app.include_router(beta.router)
     app.include_router(companies.router)
     app.include_router(contacts.router)
     app.include_router(opportunities.router)

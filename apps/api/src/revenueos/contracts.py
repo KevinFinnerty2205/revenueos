@@ -50,7 +50,7 @@ class OrganisationSummary(APIModel):
 class MeResponse(APIModel):
     user: UserSummary
     organisation: OrganisationSummary
-    role: Literal["admin", "manager", "member"]
+    role: Literal["admin", "member"]
     auth_mode: Literal["mock", "clerk"]
     request_id: str
 

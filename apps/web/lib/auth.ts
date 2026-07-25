@@ -59,7 +59,7 @@ class ClerkAuthAdapter implements AuthAdapter {
       user: null,
       organisation: null,
       message: this.configured
-        ? "Clerk session handling is not connected in this build."
+        ? "Sign in with an approved private beta account."
         : "Clerk authentication is not configured.",
     };
   }
