@@ -34,10 +34,20 @@ storage, transcription, sending/integration or billing is implemented.
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
+WO-010 defines the approved future direction in the
+[Interaction Intelligence vision](docs/01-product/interaction-intelligence-vision.md),
+[product blueprint](docs/01-product/interaction-intelligence-product-blueprint.md)
+and [roadmap](docs/06-roadmap/interaction-intelligence-roadmap.md). RevenueOS is
+positioned as the AI operating system for customer interactions across Capture,
+Intelligence and Action. Those documents are architecture/product direction only:
+no Interaction domain, debrief, recording, transcription, mobile client or connector
+is implemented.
+
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B and WO-009.
+WO-010 is documentation only and does not expand that implementation boundary.
 
 ## Prerequisites
 

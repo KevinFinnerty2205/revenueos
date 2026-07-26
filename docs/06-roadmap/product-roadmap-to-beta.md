@@ -1,6 +1,10 @@
 # Product roadmap to beta
 
-**Status:** Proposed sequence, subject to evidence and capacity planning. No future sprint is authorised by this document.
+**Status:** Historical integration-led sequence retained for completed-baseline and
+planning context. WO-010's
+[Interaction Intelligence roadmap](interaction-intelligence-roadmap.md) governs the
+recommended next feature sequence. No future sprint is authorised by either
+document.
 
 The roadmap preserves one demonstrable outcome per sprint where practical. It takes the current Sprint 1–3 baseline to a narrow design-partner loop before broadening integrations. Sprint numbers express sequence, not committed dates; estimates require team capacity, provider access and design-partner availability.
 
@@ -569,9 +573,16 @@ customer-content use remains prohibited until the unchecked launch gates and
 separate privacy/legal/provider approvals are complete. Any further roadmap
 scope still requires a separately approved work order.
 
+The recommended next work is WO-011 Interaction Domain Foundation, followed by a
+preparation brief and the non-recording AI Debrief/Voice Journal face-to-face MVP.
+The older Sprint 4–26 entries remain useful integration/release-gate context but must
+be reconciled into the Interaction work orders rather than implemented in parallel
+as a contradictory plan.
+
 ## Related documents
 
 - [Master product blueprint](../01-product/master-product-blueprint.md)
+- [Interaction Intelligence roadmap](interaction-intelligence-roadmap.md)
 - [MVP and beta scope](mvp-and-beta-scope.md)
 - [Target domain model](../03-engineering/target-domain-model.md)
 - [Integration strategy](../05-integrations/integration-strategy.md)

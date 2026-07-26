@@ -2,15 +2,21 @@
 
 This document turns “MVP” and “beta” into release gates. It does not claim that future capabilities exist.
 
+WO-010 expands the target MVP product loop to face-to-face Interaction Intelligence
+and the non-recording AI Debrief/Voice Journal path. The security, production-data,
+approval, deletion and operational gates below remain mandatory. The
+[Interaction Intelligence roadmap](interaction-intelligence-roadmap.md) governs the
+recommended feature sequence; this document continues to govern release maturity.
+
 ## Scope ladder
 
-| Stage | Users/data | Product outcome | Required system qualities | Explicit exclusions |
-| --- | --- | --- | --- | --- |
-| Technical prototype | Internal team; synthetic data only | Prove one risky component or contract in isolation | Disposable, clearly labelled, no production connection claims | Customer use, production data, external actions |
-| Internal alpha | Authorised internal users; synthetic or approved redacted test data | Exercise the narrow loop end to end with mocks/manual sources | Deterministic tests, visible failure, measurement instrumentation | Customer production use, silent action, broad integrations |
-| Design-partner pilot (MVP) | Exactly five selected companies; limited authorised production workflows after all gates | Save measurable time across the complete meeting-to-next-meeting loop | Verified identity/tenancy, consent, evidence, approval, deletion, recovery, direct support | Public signup, every integration, autonomous action, mobile capture |
-| Private beta | Controlled additional companies in declared regions/stacks | Repeatable onboarding and support with both target productivity ecosystems/CRMs and one priority meeting import | SLO/cost controls, security/privacy review, entitlements if required, operational runbooks | Public availability, full provider breadth, ambient capture |
-| Later product | Evidence-led expansion | Broader Sales Brain, Recruitment Brain and Customer Success Brain outcomes | Separate product, safety, privacy and architecture decisions | Assumed compatibility without discovery |
+| Stage                      | Users/data                                                                               | Product outcome                                                                                                 | Required system qualities                                                                  | Explicit exclusions                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Technical prototype        | Internal team; synthetic data only                                                       | Prove one risky component or contract in isolation                                                              | Disposable, clearly labelled, no production connection claims                              | Customer use, production data, external actions                                                           |
+| Internal alpha             | Authorised internal users; synthetic or approved redacted test data                      | Exercise the narrow loop end to end with mocks/manual sources                                                   | Deterministic tests, visible failure, measurement instrumentation                          | Customer production use, silent action, broad integrations                                                |
+| Design-partner pilot (MVP) | Exactly five selected companies; limited authorised production workflows after all gates | Save measurable time across the complete interaction-to-next-interaction loop                                   | Verified identity/tenancy, consent, evidence, approval, deletion, recovery, direct support | Public signup, every integration, autonomous action, native/background capture unless separately approved |
+| Private beta               | Controlled additional companies in declared regions/stacks                               | Repeatable onboarding and support with both target productivity ecosystems/CRMs and one priority meeting import | SLO/cost controls, security/privacy review, entitlements if required, operational runbooks | Public availability, full provider breadth, ambient capture                                               |
+| Later product              | Evidence-led expansion                                                                   | Broader Sales Brain, Recruitment Brain and Customer Success Brain outcomes                                      | Separate product, safety, privacy and architecture decisions                               | Assumed compatibility without discovery                                                                   |
 
 ## Technical prototype
 
@@ -28,7 +34,7 @@ Prototype success is evidence for a product/engineering decision, not beta readi
 
 Internal alpha should complete this loop with manual sources and deterministic/mock adapters:
 
-`ingest → match → review transcript → source-backed summary → next steps → follow-up/CRM proposals → approval state → memory → next brief`
+`prepare → capture best available evidence or debrief → match → provenance-aware review → source-aware intelligence → next steps → follow-up/CRM proposals → approval state → memory → next brief`
 
 It must expose low-confidence, failure, correction, exclusion and deletion paths. External execution may remain mocked, but UI and documentation must say “proposal” or “mock” rather than “sent/synced”.
 
@@ -148,6 +154,8 @@ Resolve through design-partner discovery and implementation ADRs:
 
 ## Related documents
 
+- [Interaction Intelligence product blueprint](../01-product/interaction-intelligence-product-blueprint.md)
+- [Interaction Intelligence roadmap](interaction-intelligence-roadmap.md)
 - [Master product blueprint](../01-product/master-product-blueprint.md)
 - [User journeys](../01-product/user-journeys.md)
 - [Product roadmap to beta](product-roadmap-to-beta.md)

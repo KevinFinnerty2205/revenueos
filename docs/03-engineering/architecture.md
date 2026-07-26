@@ -254,7 +254,18 @@ enablement are not approved.
 
 ## Future extension boundaries
 
-Future, separately authorised Meeting Intelligence work can add additional
+WO-010 defines a separately authorised target direction in which Interaction is a
+source-neutral logical parent and Meeting remains a compatible subtype. Capture
+Session and Evidence separate customer events from recording, AI Debrief, Voice
+Journal, visual and future document/email acquisition. Migration is additive:
+existing Meeting IDs/APIs, AI artefacts, Opportunity Workspace and immutable Revenue
+Brain history remain unchanged. See the
+[Interaction domain architecture](interaction-domain-architecture.md),
+[evidence and provenance model](evidence-and-provenance-model.md) and
+[migration strategy](interaction-intelligence-migration-strategy.md). No part of
+that target is implemented by WO-010.
+
+Future, separately authorised Meeting or Interaction Intelligence work can add additional
 immutable prompt/schema pairs or providers on top of the durable worker. It must
 define source evidence, prompt-injection controls, evaluation thresholds and
 privacy terms; keep vendor SDK types behind the provider port and generated
@@ -283,3 +294,5 @@ See [AI database foundation](ai-database-foundation.md),
 and [Follow-up Email Composer](follow-up-email-composer.md), plus the
 [Unified Meeting Intelligence workspace](unified-meeting-intelligence.md) and
 [Opportunity Workspace](opportunity-workspace.md).
+The future Interaction direction is governed by
+[ADR 0026](../08-decisions/0026-interaction-intelligence-platform.md).

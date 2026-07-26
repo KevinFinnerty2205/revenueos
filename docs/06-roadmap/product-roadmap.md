@@ -2,7 +2,11 @@
 
 This sequence reduces trust and platform risk before product breadth. Phase completion depends on tested exit criteria, not dates.
 
-For the focused sprint sequence from the current baseline to private beta, see [Product roadmap to beta](product-roadmap-to-beta.md). For release gates and the exact first-five-company loop, see [MVP and beta scope](mvp-and-beta-scope.md).
+For the approved post-WO-009 direction, see the
+[Interaction Intelligence roadmap](interaction-intelligence-roadmap.md). The older
+[product roadmap to beta](product-roadmap-to-beta.md) retains integration-led
+planning and completed-baseline context. Release gates and the existing
+first-five-company loop remain in [MVP and beta scope](mvp-and-beta-scope.md).
 
 ## Phase 1 — Foundation
 
@@ -14,36 +18,47 @@ Working web/API shells, auth-ready route protection, organisations/users/members
 
 Verified Clerk identity, tenant-safe company/contact/opportunity records, deliberate meeting intake, private storage, durable transcription/analysis, reviewable insights, tasks and follow-up drafts. Exit requires two-organisation isolation, failure/retry tests, accessibility and deletion controls.
 
-**Status:** In progress. Sprint 2 completed tenant-safe company, contact,
-opportunity and task records. Sprint 3 completed tenant-safe meetings,
-participants, deliberately supplied plain-text transcripts and meeting audit
-history. WO-004A1/A2/B1/B2/B3 completed the durable AI foundation; WO-004C1
-adds the Executive Summary product flow, WO-004C1A adds optional server-side
-OpenAI execution, and WO-004C2–C6 add Decisions, Action Items, Risks & Blockers,
-Open Questions and artefact-only Follow-up Email while keeping mock as default.
-WO-005 unifies those six capabilities behind one derived workspace and
-idempotent generation action. Verified Clerk identity,
-production customer-content provider approval, media ingestion/storage,
-transcription, source-backed evaluation and approved sending/integrations remain
+**Status:** Current implementation through WO-009. Sprints 2–3 provide tenant-safe
+business entities, meetings, participants, deliberately supplied plain-text
+transcripts and audit history. WO-004A1–C6 and WO-005/006A–D provide the durable AI
+foundation, optional server-side OpenAI execution and ten-capability unified Meeting
+Intelligence. WO-007/008A/B provide Opportunity Workspace plus immutable Revenue
+Brain snapshots and deterministic longitudinal reasoning. WO-009 adds verified
+Clerk organisation sessions and controlled private-beta consent, retention,
+export/deletion, usage, onboarding, feedback, administration and operational
+foundations. Target-environment customer-content approval, media
+ingestion/storage, transcription and approved sending/integrations remain
 outstanding.
 
-## Phase 3 — Relationship Memory
+## Phase 3 — Interaction Intelligence Platform
+
+Evolve Meeting Intelligence through an additive Interaction parent and
+source-neutral Evidence model. Deliver preparation, immediate AI Debrief/Voice
+Journal and visual evidence before recording/native mobile, selected online capture,
+documents/emails and narrowly justified live intelligence. Exit requires usable
+face-to-face intelligence without transcript upload, visible provenance/conflict,
+Meeting/Revenue Brain compatibility, deletion and beta operational gates. See the
+[Interaction Intelligence roadmap](interaction-intelligence-roadmap.md).
+
+**Status:** Blueprint complete in WO-010; implementation not started or authorised.
+
+## Phase 4 — Relationship Memory
 
 Versioned, correctable, source-linked memory plus tenant- and subject-scoped retrieval and cited Q&A. Exit requires deterministic correction/deletion behaviour and adversarial retrieval isolation tests.
 
-## Phase 4 — CRM Integrations
+## Phase 5 — CRM Integrations
 
 Connector framework followed by one prioritised real sandbox adapter. Reads precede writes; every write needs an explicit diff, approval, idempotency receipt, reconciliation and audit.
 
-## Phase 5 — Recruitment Brain
+## Phase 6 — Recruitment Brain
 
 Recruitment-specific workflows, schemas, evaluations and approved integrations on the shared platform. Sales terminology must not leak into shared domain rules.
 
-## Phase 6 — Customer Success Brain
+## Phase 7 — Customer Success Brain
 
 Customer-success lifecycle, evidence-backed risks and success actions using the same tenant, interaction, memory, job and connector foundations.
 
-## Phase 7 — Enterprise
+## Phase 8 — Enterprise
 
 Only against explicit requirements: SSO/provisioning, custom roles, residency, advanced audit/export, key controls, availability/recovery targets and enterprise integration governance.
 

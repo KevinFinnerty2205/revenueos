@@ -8,7 +8,7 @@ The AI system extends the existing modular monolith and provider-port architectu
 
 ```text
 Authorised source
-  → Conversation Intelligence Engine
+  → Interaction Intelligence Engine
   → reviewable AI artifacts
   → Relationship Memory Engine
   → authorised retrieval context
@@ -20,17 +20,29 @@ Authorised source
 
 The pipeline is not automatically linear. A user may stop, correct, exclude or delete at every review boundary. No engine gains permissions merely because another engine produced output.
 
-## 1. Conversation Intelligence Engine
+## 1. Interaction Intelligence Engine
 
-- **Responsibilities:** Transcription orchestration, speaker/participant assistance, meeting segmentation, source-backed summary, commitments, next-step candidates and CRM-relevant fact candidates.
-- **Inputs:** Authorised recording or transcript, meeting metadata, user-confirmed participant/account links and organisation policy.
-- **Outputs:** Versioned transcript/segments and structured `AIArtifact` records with source spans, confidence metadata and prompt/model versions.
+**Current bounded slice:** the implemented capability is Meeting Intelligence over a
+deliberately supplied current plain-text transcript. WO-010 defines the future
+source-neutral engine below but adds no prompt, schema, job, provider or behaviour.
+
+- **Responsibilities:** Evidence processing/reconciliation, transcription
+  orchestration, speaker/participant assistance, interaction segmentation,
+  source-aware summary, commitments, next-step candidates and CRM-relevant fact
+  candidates across direct, reported, visual, document and imported evidence.
+- **Inputs:** Authorised versioned Evidence and fragments, Interaction/account/
+  opportunity context, user-confirmed links and organisation policy.
+- **Outputs:** Versioned derived Evidence, atomic claims/provenance and structured
+  `AIArtifact` records with exact source fragments, origin/support/validation state
+  and prompt/model/schema versions.
 - **Storage boundaries:** Raw files stay in private object storage; transcript and derived data stay in tenant-owned PostgreSQL records; provider request data is not an application system of record.
 - **Confidence handling:** Confidence is component-specific—transcription, speaker, match and claim confidence are not collapsed into one score. Below-threshold output enters review or failure, never silent promotion.
 - **Human review:** Required for participant/account matching when uncertain and for all meeting intelligence before it creates accountable work, memory or external proposals in the pilot.
 - **Failure behaviour:** Retain completed stages; label partial output; classify retryable provider failure separately from unsupported/unsafe input; never invent missing transcript text.
 - **Observability:** Stage duration, input duration/size, provider/model identifier, token/audio usage, retry class, confidence distribution, correction rate and completion outcome. No raw transcript in logs.
-- **Pilot/Beta scope:** Manual upload/paste, one bounded transcription path, structured summary and next steps with citations.
+- **Pilot/Beta scope:** Preparation plus non-recording AI Debrief/Voice Journal
+  first; visual, recording/transcription, selected online and document/email sources
+  follow only under their roadmap gates.
 - **Future scope:** Additional languages, diarisation options, provider routing and domain-specific extraction for Recruitment/Customer Success after separate evaluation.
 
 ## 2. Relationship Memory Engine
@@ -102,14 +114,14 @@ engine below remains future scope.
 
 Candidate artefact envelope:
 
-| Field | Meaning |
-| --- | --- |
-| `artifactType` / `schemaVersion` | Stable contract and migration path |
-| `sourceIds` / `sourceSpans` | Authorised evidence behind claims |
-| `claims` | Atomic, typed statements rather than one opaque blob |
-| `confidence` | Component-specific evidence/model signal and explanation |
-| `promptVersion` / `modelRef` | Reproducibility metadata without secrets |
-| `status` | Generated, review-required, accepted, rejected, superseded or deleted |
+| Field                            | Meaning                                                               |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `artifactType` / `schemaVersion` | Stable contract and migration path                                    |
+| `sourceIds` / `sourceSpans`      | Authorised evidence behind claims                                     |
+| `claims`                         | Atomic, typed statements rather than one opaque blob                  |
+| `confidence`                     | Component-specific evidence/model signal and explanation              |
+| `promptVersion` / `modelRef`     | Reproducibility metadata without secrets                              |
+| `status`                         | Generated, review-required, accepted, rejected, superseded or deleted |
 
 ## Prompt versioning and model abstraction
 
@@ -192,13 +204,13 @@ Record metadata for source receipt, consent evidence, job/model/prompt/schema ve
 
 ## Latency expectations
 
-| Interaction | Target experience |
-| --- | --- |
-| Search/navigation retrieval | p95 under 2 seconds |
-| Account question | first useful state under 3 seconds; completed answer p95 under 12 seconds |
-| Meeting brief | cached/open under 2 seconds; new brief p95 under 20 seconds |
-| Follow-up or CRM proposal draft | p95 under 15 seconds after reviewed evidence |
-| Transcript/meeting analysis | asynchronous; stage progress visible within 5 seconds and no request held open |
+| Interaction                     | Target experience                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------ |
+| Search/navigation retrieval     | p95 under 2 seconds                                                            |
+| Account question                | first useful state under 3 seconds; completed answer p95 under 12 seconds      |
+| Meeting brief                   | cached/open under 2 seconds; new brief p95 under 20 seconds                    |
+| Follow-up or CRM proposal draft | p95 under 15 seconds after reviewed evidence                                   |
+| Transcript/meeting analysis     | asynchronous; stage progress visible within 5 seconds and no request held open |
 
 Targets are hypotheses until real workload tests establish provider and file-size envelopes. Accuracy and safe failure outrank artificial streaming.
 
@@ -212,6 +224,9 @@ Targets are hypotheses until real workload tests establish provider and file-siz
 
 ## Related documents
 
+- [Interaction Intelligence product blueprint](../01-product/interaction-intelligence-product-blueprint.md)
+- [Evidence and provenance model](../03-engineering/evidence-and-provenance-model.md)
+- [Recording and transcription architecture](../03-engineering/recording-and-transcription-architecture.md)
 - [Core workflows](../02-design/core-workflows.md)
 - [Target domain model](../03-engineering/target-domain-model.md)
 - [Privacy, security and trust model](../03-engineering/privacy-security-and-trust-model.md)
