@@ -251,3 +251,13 @@ artefacts and make no OpenAI call.
 Revenue Brain v2 may add separately approved explicit lifecycle states or an
 optional provider summary composer. It must preserve deterministic changes as
 authoritative and cannot broaden the transcript boundary implicitly.
+
+WO-010 further defines Revenue Brain's target as customer-relationship intelligence
+over validated meetings, presentations, workshops, site visits, debrief-supported
+interactions, documents, emails and supported changes. The current version-1
+deterministic comparison remains unchanged and never reads those future sources.
+Cross-version reasoning requires an explicit normalised structured projection that
+preserves origin, conflict and verification, never rewrites historical insights and
+never treats absence as resolution. See the
+[evidence and provenance model](evidence-and-provenance-model.md) and
+[Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md).

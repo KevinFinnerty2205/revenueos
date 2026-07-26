@@ -102,3 +102,16 @@ WO-008A itself includes no reasoning. The separately implemented WO-008B
 comparison still excludes opportunity health, CRM behaviour, automation,
 forecasting, predictive trend scoring, relationship graphs, embeddings, vector
 search, new prompts, provider calls and transcript analysis.
+
+## Target Interaction evolution
+
+WO-010 leaves every current snapshot immutable and Meeting-based. Future
+Interaction snapshots use a new schema version and reference validated structured
+Interaction Intelligence plus provenance, not copied raw recordings, transcripts,
+documents or journals. Historical Meeting snapshots appear in the Interaction
+Timeline through the compatibility relation; they are not rewritten or assigned new
+semantics.
+
+Cross-version composition and deletion impact require separately approved work. See
+the [Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md)
+and [ADR 0026](../08-decisions/0026-interaction-intelligence-platform.md).

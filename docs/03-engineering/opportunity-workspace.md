@@ -240,9 +240,24 @@ Future Revenue Brain work may extend explicit schemas or explanation, but it
 must preserve the separately reviewed snapshot/evidence boundary and must not
 silently reinterpret this latest-meeting read model as historical intelligence.
 
+## Target Interaction continuity
+
+WO-010 does not change this current latest-meeting read model. The future
+Interaction Timeline will add presentations, workshops, site visits and other
+customer events through a separate named read surface. AI Debrief and Voice Journal
+appear as capture activity beneath their Interaction, not as customer events.
+
+During the additive migration, the Workspace keeps its current `latestMeeting` and
+ten Meeting Intelligence capability fields. A later `latestInteraction` or
+source-neutral opportunity-intelligence contract must be additive and must not
+reinterpret salesperson-reported evidence as transcript-grounded customer evidence.
+The compatibility adapter and migration are defined in the
+[Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md).
+
 ## Related decisions
 
 - [ADR 0002: tenant-owned business entities](../08-decisions/0002-tenant-business-entities.md)
 - [ADR 0017: derived Meeting Intelligence workspace](../08-decisions/0017-derived-meeting-intelligence-workspace.md)
 - [ADR 0022: opportunity ownership and latest-meeting read model](../08-decisions/0022-opportunity-ownership-latest-meeting-read-model.md)
 - [ADR 0024: deterministic Revenue Brain longitudinal reasoning](../08-decisions/0024-deterministic-revenue-brain-longitudinal-reasoning.md)
+- [ADR 0026: Interaction Intelligence platform](../08-decisions/0026-interaction-intelligence-platform.md)

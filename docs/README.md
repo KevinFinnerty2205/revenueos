@@ -5,11 +5,13 @@ This is the canonical product and engineering documentation index. Documents dis
 ## Start here
 
 1. [Company vision](00-company/vision.md)
-2. [Master product blueprint](01-product/master-product-blueprint.md) — primary product contract through beta
-3. [MVP and beta scope](06-roadmap/mvp-and-beta-scope.md) — release gates and the exact first-five-company loop
-4. [Product roadmap to beta](06-roadmap/product-roadmap-to-beta.md) — proposed sprint sequence
-5. [Current application architecture](03-engineering/architecture.md) — what exists now
-6. [ADR 0003: product blueprint and beta sequencing](08-decisions/0003-product-blueprint-and-beta-sequencing.md)
+2. [Master product blueprint](01-product/master-product-blueprint.md) — primary product contract
+3. [Interaction Intelligence vision](01-product/interaction-intelligence-vision.md) — approved post-WO-009 direction
+4. [Interaction Intelligence product blueprint](01-product/interaction-intelligence-product-blueprint.md) — Capture, Intelligence and Action target
+5. [Interaction Intelligence roadmap](06-roadmap/interaction-intelligence-roadmap.md) — recommended future work orders
+6. [MVP and beta scope](06-roadmap/mvp-and-beta-scope.md) — existing release gates and first-five-company loop
+7. [Current application architecture](03-engineering/architecture.md) — what exists now
+8. [ADR 0026: Interaction Intelligence platform](08-decisions/0026-interaction-intelligence-platform.md)
 
 ## 00 — Company
 
@@ -21,12 +23,19 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Personas and jobs](01-product/personas-and-jobs.md)
 - [User journeys](01-product/user-journeys.md)
 - [Product overview](01-product/product-overview.md)
+- [Interaction Intelligence vision](01-product/interaction-intelligence-vision.md)
+- [Interaction Intelligence product blueprint](01-product/interaction-intelligence-product-blueprint.md)
 
 ## 02 — Design
 
 - [Information architecture](02-design/information-architecture.md)
 - [Core workflows](02-design/core-workflows.md)
 - [Design principles](02-design/design-principles.md)
+- [Interaction lifecycle and UX](02-design/interaction-lifecycle-and-ux.md)
+- [Face-to-face interaction experience](02-design/face-to-face-interaction-experience.md)
+- [AI Companion and debrief](02-design/ai-companion-and-debrief.md)
+- [Presentation mode](02-design/presentation-mode.md)
+- [Mobile companion strategy](02-design/mobile-companion-strategy.md)
 
 ## 03 — Engineering
 
@@ -67,6 +76,12 @@ This is the canonical product and engineering documentation index. Documents dis
 
 - [Target domain model](03-engineering/target-domain-model.md)
 - [Privacy, security and trust model](03-engineering/privacy-security-and-trust-model.md)
+- [Interaction domain architecture](03-engineering/interaction-domain-architecture.md)
+- [Evidence and provenance model](03-engineering/evidence-and-provenance-model.md)
+- [Recording and transcription architecture](03-engineering/recording-and-transcription-architecture.md)
+- [Interaction Intelligence migration strategy](03-engineering/interaction-intelligence-migration-strategy.md)
+- [Interaction security, privacy and consent](03-engineering/interaction-security-privacy-and-consent.md)
+- [Interaction platform risk register](03-engineering/interaction-platform-risk-register.md)
 
 ## 04 — AI
 
@@ -83,6 +98,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Product roadmap to beta](06-roadmap/product-roadmap-to-beta.md)
 - [MVP and beta scope](06-roadmap/mvp-and-beta-scope.md)
 - [Long-range product roadmap](06-roadmap/product-roadmap.md)
+- [Interaction Intelligence roadmap](06-roadmap/interaction-intelligence-roadmap.md)
 
 ## 07 — Sprint records
 
@@ -110,6 +126,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-008A: Revenue Brain Foundation](07-sprints/wo-008a-revenue-brain-foundation.md)
 - [WO-008B: Revenue Brain Longitudinal Reasoning](07-sprints/wo-008b-revenue-brain-longitudinal-reasoning.md)
 - [WO-009: Private Beta Readiness](07-sprints/wo-009-private-beta-readiness.md)
+- [WO-010: Interaction Intelligence Blueprint](07-sprints/wo-010-interaction-intelligence-blueprint.md)
 
 ## 08 — Decision records
 
@@ -138,10 +155,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0023: persist Revenue Brain as immutable artefact compositions](08-decisions/0023-immutable-revenue-brain-compositions.md)
 - [ADR 0024: derive Revenue Brain changes deterministically from snapshots](08-decisions/0024-deterministic-revenue-brain-longitudinal-reasoning.md)
 - [ADR 0025: keep private beta controls in the modular monolith](08-decisions/0025-private-beta-operational-controls.md)
+- [ADR 0026: evolve Meeting Intelligence into an Interaction Intelligence platform](08-decisions/0026-interaction-intelligence-platform.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009 are complete.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009 are implemented. WO-010 is a completed documentation and architecture blueprint only.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

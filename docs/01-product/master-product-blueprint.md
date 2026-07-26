@@ -1,29 +1,46 @@
 # RevenueOS master product blueprint
 
-- **Status:** Target product direction through private beta
-- **Current shipped baseline:** Sprints 1–3 plus approved Meeting Intelligence,
-  Opportunity Workspace and deterministic Revenue Brain work through WO-008B
+- **Status:** Target product direction through the Interaction Platform private beta
+- **Current shipped baseline:** Sprints 1–3 plus Meeting Intelligence, Opportunity
+  Workspace, deterministic Revenue Brain and private-beta controls through WO-009
 - **Scope notation:** **Current** exists in the repository; **Pilot** is required for the first five design-partner companies; **Beta** is required before private beta; **Later** is deliberately deferred; **Future** is directional only.
 
-This is the primary product blueprint. It defines outcomes and boundaries, not an authorisation to implement future scope. The sequenced delivery plan is in [Product roadmap to beta](../06-roadmap/product-roadmap-to-beta.md).
+This is the primary product blueprint. It defines outcomes and boundaries, not an
+authorisation to implement future scope. The recommended next sequence is in the
+[Interaction Intelligence roadmap](../06-roadmap/interaction-intelligence-roadmap.md);
+the older [product roadmap to beta](../06-roadmap/product-roadmap-to-beta.md)
+retains integration-led planning and completed-baseline context.
 
 **Mission:** Eliminate administrative work from relationship-driven professions by building AI teammates that remember, reason and act.
 
 **Core principle:** Automate work, not relationships.
 
+**Interaction north star:** RevenueOS captures the best possible evidence from every
+customer interaction, transforms that evidence into trusted intelligence, and helps
+sales teams build stronger customer relationships over time.
+
+WO-010 expands the future direction beyond uploaded meeting transcripts and
+recordings. The [Interaction Intelligence vision](interaction-intelligence-vision.md)
+and [product blueprint](interaction-intelligence-product-blueprint.md) define the
+Capture → Intelligence → Action lifecycle and face-to-face priority. They do not
+describe implemented behaviour or authorise a later work order.
+
 ## Executive summary
 
 RevenueOS is the AI teammate for relationship-driven professionals. It sits above systems of record and communication tools—including Salesforce, HubSpot, email, calendars, phone and meeting platforms—as an intelligence and workflow layer. It is not a CRM.
 
-The first product, Sales Brain, should turn a consented customer conversation into a reviewable chain of evidence, decisions and approved work:
+The first product, Sales Brain, should turn authorised evidence from a customer
+interaction into a reviewable chain of evidence, decisions and approved work:
 
-1. ingest a meeting or transcript;
-2. identify the people, company and opportunity;
-3. produce a source-backed summary and next steps;
-4. draft a follow-up and propose CRM changes;
-5. let a human approve every consequential external action;
-6. preserve correctable relationship memory; and
-7. use that memory to prepare the next interaction.
+1. prepare for and associate the interaction;
+2. capture the best available evidence through recording, debrief, voice, visual,
+   document or authorised metadata sources;
+3. identify the people, company and opportunity;
+4. produce source-aware intelligence and next steps;
+5. draft a follow-up and propose CRM changes;
+6. let a human approve every consequential external action;
+7. preserve correctable relationship memory; and
+8. use that memory to prepare the next interaction.
 
 RevenueOS exists to eliminate administrative work from relationship-driven professions by building AI teammates that remember, reason and act. Its governing principle is **automate work, not relationships**.
 
@@ -33,7 +50,8 @@ Revenue professionals lose time and context because customer knowledge is distri
 
 RevenueOS can create durable value by:
 
-- treating conversations as consented, attributable evidence rather than disposable recordings;
+- treating authorised interaction sources as attributable evidence rather than
+  disposable recordings;
 - maintaining source-backed relationship memory instead of another undifferentiated data store;
 - preparing work proactively at the moment it is useful;
 - converting intelligence into drafts and proposals without silently acting;
@@ -47,6 +65,9 @@ This thesis depends on users trusting the evidence, correcting mistakes quickly 
 ### User problems
 
 - Sellers reconstruct account context before meetings from several tools.
+- Face-to-face conversations are lost when recording is refused, inappropriate or
+  unreliable and the seller cannot type notes.
+- Important details decay before a seller can reconstruct them hours later.
 - Notes, commitments and objections are incomplete or inconsistently entered.
 - Follow-ups and CRM updates compete with customer-facing time.
 - Managers see stale fields without the conversational evidence behind them.
@@ -71,12 +92,12 @@ Design-partner selection should favour a narrow, repeatable sales motion and an 
 
 ## Target users
 
-| User | Primary need | Beta value |
-| --- | --- | --- |
-| Sales representative | Spend less time reconstructing context and completing post-meeting administration | Accurate preparation, reviewable meeting intelligence, approved follow-up and CRM proposals |
-| Sales manager | Understand deal movement and coach from evidence | Exception-led pipeline review with links to source material |
-| Revenue operations leader | Improve data quality and workflow consistency without adding seller burden | Governed proposals, measurable completion and integration health |
-| System administrator | Connect systems and enforce secure access, retention and consent controls | Least-privilege setup, health visibility, audit evidence and reliable deletion |
+| User                      | Primary need                                                                      | Beta value                                                                                  |
+| ------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Sales representative      | Spend less time reconstructing context and completing post-meeting administration | Accurate preparation, reviewable meeting intelligence, approved follow-up and CRM proposals |
+| Sales manager             | Understand deal movement and coach from evidence                                  | Exception-led pipeline review with links to source material                                 |
+| Revenue operations leader | Improve data quality and workflow consistency without adding seller burden        | Governed proposals, measurable completion and integration health                            |
+| System administrator      | Connect systems and enforce secure access, retention and consent controls         | Least-privilege setup, health visibility, audit evidence and reliable deletion              |
 
 Detailed needs are in [Personas and jobs](personas-and-jobs.md).
 
@@ -97,7 +118,12 @@ RevenueOS is an AI teammate and relationship intelligence layer. Sales Brain is 
 
 ### Positioning statement
 
-For relationship-driven B2B revenue teams whose customer context is fragmented across meetings, communications and CRM, Sales Brain turns consented conversations into source-backed memory and approved next actions. Unlike a CRM or general meeting-notes tool, it works across existing systems, prepares future interactions and keeps people in control of consequential actions.
+For relationship-driven B2B revenue teams whose customer context is fragmented
+across interactions, communications and CRM, Sales Brain captures the best available
+authorised evidence and turns it into source-backed memory and approved next
+actions. Unlike a CRM, recorder or meeting-notes tool, it works before, during and
+after online and face-to-face interactions while keeping people in control of
+consequential actions.
 
 ### Platform direction
 
@@ -130,13 +156,13 @@ RevenueOS may cache the minimum connected data needed for its workflows, with so
 
 ## Competitive differentiation
 
-| Alternative | Useful capability | RevenueOS distinction |
-| --- | --- | --- |
-| CRM | Structured system of record | Preserves conversational context and prepares work while leaving the CRM authoritative |
-| Meeting notetaker | Transcription and per-meeting summaries | Builds correctable, cross-meeting relationship memory and carries it into the next interaction |
-| Sales engagement platform | Sequenced outreach and activity execution | Prioritises relationship context and human-approved, situation-specific actions |
-| General AI assistant | Flexible generation and questions | Uses tenant-authorised evidence, explicit confidence, provenance, domain workflows and audit trails |
-| Manual notes and personal memory | High individual control | Provides continuity, team visibility and measurable administration reduction without removing control |
+| Alternative                      | Useful capability                         | RevenueOS distinction                                                                                 |
+| -------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| CRM                              | Structured system of record               | Preserves conversational context and prepares work while leaving the CRM authoritative                |
+| Meeting notetaker                | Transcription and per-meeting summaries   | Builds correctable, cross-meeting relationship memory and carries it into the next interaction        |
+| Sales engagement platform        | Sequenced outreach and activity execution | Prioritises relationship context and human-approved, situation-specific actions                       |
+| General AI assistant             | Flexible generation and questions         | Uses tenant-authorised evidence, explicit confidence, provenance, domain workflows and audit trails   |
+| Manual notes and personal memory | High individual control                   | Provides continuity, team visibility and measurable administration reduction without removing control |
 
 Differentiation is only credible when outputs are attributable, corrections persist, external actions require approval and time saved is observable.
 
@@ -144,7 +170,7 @@ Differentiation is only credible when outputs are attributable, corrections pers
 
 The product should be evaluated against outcomes, not document volume or model activity:
 
-- less seller time spent on meeting preparation and post-meeting administration;
+- less seller time spent on interaction preparation and post-interaction administration;
 - faster, more consistent follow-up;
 - higher completion of agreed next steps;
 - more current CRM data with fewer unsupported updates;
@@ -155,15 +181,25 @@ The product should be evaluated against outcomes, not document volume or model a
 
 Initial targets are hypotheses to validate with design partners:
 
-- median combined preparation and post-meeting administration reduced by at least 20 minutes per customer meeting;
-- at least 80% of generated meeting artefacts reviewed or dismissed within one business day;
+- median combined preparation and post-interaction administration reduced by at
+  least 20 minutes per important customer interaction;
+- at least 80% of generated interaction artefacts reviewed or dismissed within one
+  business day;
 - at least 70% of approved suggestions require no material factual correction;
 - no external communication or CRM write without recorded human approval; and
 - zero confirmed cross-tenant data exposures.
 
 ## North-star product experience
 
-Shortly before a meeting, the seller receives a concise brief containing recent changes, open commitments, risks and suggested questions, each linked to its source. After an explicitly authorised conversation is available, RevenueOS identifies the relationship context and presents a review queue—not a falsely final answer. The seller corrects the transcript or matching, accepts or edits the summary, approves selected tasks, follow-up content and CRM changes, then returns to customer work. The next brief reflects confirmed memory and any corrections.
+Shortly before an interaction, the seller receives a concise brief containing recent
+changes, open commitments, risks and suggested questions, each linked to its source.
+During it, RevenueOS is passive by default and capture is optional. Afterwards it
+offers “Let’s capture this while it is fresh,” using a recording, Voice Journal,
+targeted AI Debrief, visual evidence or another authorised source. RevenueOS presents
+a provenance-aware review queue—not a falsely final answer. The seller corrects
+attribution or interpretation, approves selected tasks, follow-up content and CRM
+changes, then returns to customer work. The next brief reflects confirmed memory and
+corrections.
 
 The interface prioritises:
 
@@ -190,43 +226,58 @@ It does not centre on reproducing CRM tables.
 
 ## Assumptions requiring validation
 
-| Assumption | How to test | Decision signal |
-| --- | --- | --- |
-| The first ICP feels acute enough administrative pain | Baseline time study and weekly interviews across five design partners | Repeated, measurable time loss in the narrow loop |
-| Users will review output when the queue is short and evidence is clear | Instrument review time, edits, approvals and dismissals | Most artefacts resolved within one business day |
-| Manual upload or transcript paste is sufficient before broad capture | Pilot the loop without ambient capture | Continued weekly use despite manual ingestion |
-| Source-backed corrections build trust | Compare trust interviews and correction rates over time | Users rely on later briefs and correct errors rather than abandon |
-| One mail/calendar ecosystem and one CRM can support the first pilot cohort | Select partners by stack and integration value | Five companies can complete the loop without broad adapter coverage |
-| CRM proposals are valuable before broad write coverage | Present explicit diffs and track acceptance | Proposals are approved or edited, not routinely ignored |
-| Relationship memory can remain concise and useful | Review memory use in meeting preparation | Memory is cited in briefs and stale items are corrected or retired |
-| Managers value exceptions more than surveillance-style scoring | Test evidence-led review with manager and seller feedback | Coaching improves without reduced seller trust |
+| Assumption                                                                 | How to test                                                           | Decision signal                                                             |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| The first ICP feels acute enough administrative pain                       | Baseline time study and weekly interviews across five design partners | Repeated, measurable time loss in the narrow loop                           |
+| Users will review output when the queue is short and evidence is clear     | Instrument review time, edits, approvals and dismissals               | Most artefacts resolved within one business day                             |
+| Immediate non-recording debrief is useful before broad recording           | Pilot preparation plus Voice Journal/AI Debrief                       | Repeated face-to-face use and usable intelligence without transcript upload |
+| Source-backed corrections build trust                                      | Compare trust interviews and correction rates over time               | Users rely on later briefs and correct errors rather than abandon           |
+| One mail/calendar ecosystem and one CRM can support the first pilot cohort | Select partners by stack and integration value                        | Five companies can complete the loop without broad adapter coverage         |
+| CRM proposals are valuable before broad write coverage                     | Present explicit diffs and track acceptance                           | Proposals are approved or edited, not routinely ignored                     |
+| Relationship memory can remain concise and useful                          | Review memory use in meeting preparation                              | Memory is cited in briefs and stale items are corrected or retired          |
+| Managers value exceptions more than surveillance-style scoring             | Test evidence-led review with manager and seller feedback             | Coaching improves without reduced seller trust                              |
 
 Unresolved product decisions are recorded in [MVP and beta scope](../06-roadmap/mvp-and-beta-scope.md#unresolved-decisions).
 
 ## MVP definition
 
-“MVP” means the minimum Sales Brain product suitable for a controlled design-partner pilot, not the current repository and not a public release. It must:
+“MVP” means the minimum Sales Brain experience suitable for controlled use in real
+face-to-face customer interactions, not the current repository and not a public
+release. It must:
 
 - use production-verified identity, membership and tenant isolation;
-- accept an explicitly selected meeting file or pasted transcript with consent confirmation;
-- match or let the user match participants, company and opportunity;
-- show an editable transcript and source-backed meeting summary;
-- extract reviewable next steps;
-- draft, but never silently send, a follow-up;
-- propose, but never silently apply, supported CRM changes;
-- record approval and execution outcome for any external action;
-- create source-backed, correctable and deletable relationship memory;
-- prepare a concise brief for the next meeting;
-- expose failures, low confidence and retry state;
-- provide retention, deletion and audit controls; and
-- measure workflow completion and time saved without using production content in logs.
+- associate a planned or completed Interaction with account and opportunity context;
+- prepare a concise source-aware brief;
+- work when recording is unavailable, inappropriate or refused;
+- offer an immediate, safe Voice Journal and opportunity-aware AI Debrief;
+- distinguish salesperson-reported, direct customer, system, imported and inferred
+  evidence;
+- ask only high-value questions about missing, changed or conflicting information;
+- present reviewable claims, uncertainty and conflicts before promotion;
+- produce source-aware Interaction Intelligence and reviewable next steps;
+- update Opportunity Workspace and Revenue Brain from eligible validated structured
+  intelligence without rewriting historical Meeting snapshots;
+- draft, but never silently send, follow-up;
+- propose, but never silently apply, supported record changes;
+- expose partial, failed, skipped and deletion states;
+- provide retention, deletion, consent/policy and audit controls; and
+- measure workflow completion and time saved without using production content in
+  logs or employee-surveillance metrics.
 
-The pilot may support one calendar/mail ecosystem and one CRM selected from the first partners. Manual ingestion remains a valid fallback.
+The first face-to-face MVP is reached by WO-013 in the
+[Interaction Intelligence roadmap](../06-roadmap/interaction-intelligence-roadmap.md),
+subject to target-environment customer-data, privacy/legal and operational gates.
+Manual transcript input remains a valid current fallback; broad recording, native
+mobile capture and meeting bots are not MVP prerequisites.
 
 ## Beta definition
 
 Private beta adds repeatable onboarding and operational support beyond the first five companies:
 
+- a supported preparation, debrief and source-aware Interaction Timeline loop;
+- included capture modes with honest non-recording and partial-failure fallbacks;
+- validated evidence provenance, conflict, verification and deletion across every
+  included source;
 - supported Google Workspace and Microsoft 365 calendar/mail connection paths;
 - a deliberately phased subset of Zoom, Microsoft Teams and Google Meet ingestion;
 - supported Salesforce and HubSpot read/match/proposal/write paths, each independently gated;
@@ -257,6 +308,9 @@ An integration appears in beta only after its real adapter, authorisation, idemp
 
 ## Related documents
 
+- [Interaction Intelligence vision](interaction-intelligence-vision.md)
+- [Interaction Intelligence product blueprint](interaction-intelligence-product-blueprint.md)
+- [Interaction Intelligence roadmap](../06-roadmap/interaction-intelligence-roadmap.md)
 - [Personas and jobs](personas-and-jobs.md)
 - [User journeys](user-journeys.md)
 - [Information architecture](../02-design/information-architecture.md)

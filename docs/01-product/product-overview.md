@@ -6,9 +6,28 @@ RevenueOS AI is a multi-tenant relationship-intelligence platform. Sales Brain w
 
 ## Target Sales Brain journey
 
-A user will be able to sign in, work within an organisation, manage relationship records, deliberately supply a meeting recording or transcript, review source-linked intelligence, confirm useful memory, prepare follow-up and ask evidence-scoped questions.
+A user will be able to sign in, work within an organisation, manage relationship
+records, prepare for an online or face-to-face interaction, capture the best
+available authorised evidence, complete an immediate Voice Journal or targeted AI
+Debrief, review source-aware intelligence, confirm useful memory, prepare follow-up
+and ask evidence-scoped questions. Recording and transcript import remain optional
+capture paths rather than prerequisites.
 
-These are target product goals, not current capabilities. The complete scope and release boundaries are in the [master product blueprint](master-product-blueprint.md) and [MVP and beta scope](../06-roadmap/mvp-and-beta-scope.md).
+These are target product goals, not current capabilities. The complete direction is
+in the [master product blueprint](master-product-blueprint.md),
+[Interaction Intelligence vision](interaction-intelligence-vision.md),
+[Interaction Intelligence product blueprint](interaction-intelligence-product-blueprint.md)
+and [roadmap](../06-roadmap/interaction-intelligence-roadmap.md).
+
+## Interaction Intelligence direction
+
+RevenueOS is positioned as **the AI operating system for customer interactions**.
+The product works across Capture, Intelligence and Action before, during and after
+the event. Interaction becomes the future source-neutral parent while the mature
+Meeting domain remains compatible through an additive migration. AI Debrief and
+Voice Journal are supporting capture sessions that produce reported evidence; they
+are not customer interactions. WO-010 documents this direction and implements none
+of those capabilities.
 
 ## Current product surface
 
@@ -56,6 +75,9 @@ data remains prohibited unless separately approved. See the
 - Human judgement remains accountable.
 - Evidence and uncertainty are visible.
 - Capture is deliberate and consent-aware.
+- Recording is optional and non-recording face-to-face capture is first-class.
+- Salesperson-reported information is never presented as customer-confirmed fact.
+- Preparation begins before the interaction and capture occurs while memory is fresh.
 - Customer content is confidential and tenant-isolated.
 - Mocks are clearly labelled and never presented as live.
 - Shared platform foundations support future products without pre-building them.
