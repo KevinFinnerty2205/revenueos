@@ -85,7 +85,7 @@ then start the matching API/worker. Schedule tenant retention and expired-export
 purge commands. The complete process, backup/restore drill and launch evidence
 are in [private-beta deployment and recovery](private-beta-deployment-and-recovery.md).
 
-WO-011 requires current head `0021_interaction_domain_foundation`. Apply it once
+WO-011 requires current head `0021_interaction_foundation`. Apply it once
 before starting the matching API/web release, then verify deterministic Meeting
 links and forced RLS. No worker or provider configuration changes are required.
 

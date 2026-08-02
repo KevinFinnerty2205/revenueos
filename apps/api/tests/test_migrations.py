@@ -12,6 +12,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
+def test_migration_revision_identifiers_fit_alembic_version_column() -> None:
+    configuration = Config("alembic.ini")
+    script = ScriptDirectory.from_config(configuration)
+
+    revision_ids = [revision.revision for revision in script.walk_revisions()]
+
+    assert revision_ids
+    assert all(len(revision_id) <= 32 for revision_id in revision_ids)
+
+
 def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     tmp_path: Path,
     monkeypatch: object,
@@ -54,7 +64,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "interaction_audit_events",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_domain_foundation",
+            "0021_interaction_foundation",
         )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
@@ -686,7 +696,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_domain_foundation",
+            "0021_interaction_foundation",
         )
         connection.execute(
             """
@@ -740,7 +750,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_domain_foundation",
+            "0021_interaction_foundation",
         )
         connection.execute(
             """
@@ -786,7 +796,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_domain_foundation",
+            "0021_interaction_foundation",
         )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
@@ -802,7 +812,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_domain_foundation",
+            "0021_interaction_foundation",
         )
 
     command.downgrade(configuration, "0003_meeting_domain")
@@ -840,7 +850,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_domain_foundation",
+            "0021_interaction_foundation",
         )
 
     command.downgrade(configuration, "0002_core_business_entities")
@@ -907,7 +917,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_insights",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_domain_foundation",
+            "0021_interaction_foundation",
         )
 
     command.downgrade(configuration, "0018_revenue_brain")
@@ -927,7 +937,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_domain_foundation",
+            "0021_interaction_foundation",
         )
 
 
@@ -941,10 +951,10 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
     assert [revision.revision for revision in script.walk_revisions()][:2] == [
-        "0021_interaction_domain_foundation",
+        "0021_interaction_foundation",
         "0020_private_beta_readiness",
     ]
-    assert script.get_heads() == ["0021_interaction_domain_foundation"]
+    assert script.get_heads() == ["0021_interaction_foundation"]
     command.upgrade(configuration, "0020_private_beta_readiness")
 
     organisation_a = uuid.uuid4()
@@ -1054,7 +1064,7 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_domain_foundation",
+            "0021_interaction_foundation",
         )
         assert {row[0]: row[1] for row in connection.execute("SELECT id, interaction_id FROM meetings")} == expected
         assert connection.execute("SELECT count(*) FROM interactions").fetchone() == (3,)
@@ -1099,7 +1109,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0021_interaction_domain_foundation"
+                    assert version == "0021_interaction_foundation"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

@@ -172,7 +172,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0021_interaction_domain_foundation"
+    assert EXPECTED_MIGRATION_HEAD == "0021_interaction_foundation"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 

@@ -2,7 +2,7 @@
 
 ## Revision and ordering
 
-`0021_interaction_domain_foundation` directly revises
+`0021_interaction_foundation` directly revises
 `0020_private_beta_readiness` and is the sole head. Alembic remains the only schema
 owner. The upgrade is additive until the historical backfill has completed.
 

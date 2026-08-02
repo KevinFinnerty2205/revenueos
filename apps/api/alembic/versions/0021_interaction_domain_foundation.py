@@ -1,6 +1,6 @@
 """Add the tenant-owned Interaction and source-neutral Evidence foundations.
 
-Revision ID: 0021_interaction_domain_foundation
+Revision ID: 0021_interaction_foundation
 Revises: 0020_private_beta_readiness
 
 Downgrade warning: downgrading permanently removes Interaction-only records,
@@ -18,7 +18,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0021_interaction_domain_foundation"
+revision: str = "0021_interaction_foundation"
 down_revision: str | None = "0020_private_beta_readiness"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

@@ -28,7 +28,7 @@ not production options.
 4. Stop new worker claims or scale the worker to zero when the migration plan
    requires it; allow active bounded jobs to finish or recover by lease.
 5. Run `alembic upgrade head` exactly once with the migration role.
-6. Verify the database reports Alembic head `0021_interaction_domain_foundation` and
+6. Verify the database reports Alembic head `0021_interaction_foundation` and
    drift check passes.
 7. Deploy API, then confirm `/health/live` and `/health/ready` are green.
 8. Start the worker only after readiness confirms migration/config compatibility.
@@ -140,7 +140,7 @@ mapping, and cannot reconstruct historical `manager` roles. Do not downgrade
 without a backup, explicit data-loss approval and a release that understands
 the prior schema.
 
-Migration `0021_interaction_domain_foundation` then adds the four forced-RLS
+Migration `0021_interaction_foundation` then adds the four forced-RLS
 Interaction metadata tables and deterministic one-to-one Meeting link. Its
 downgrade preserves Meeting, Meeting Intelligence and Revenue Brain records but
 deletes standalone Interactions, Evidence, Capture Sessions and Interaction audits.

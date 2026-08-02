@@ -36,7 +36,7 @@ Workspace reads and historical Revenue Brain rows remain stable.
 
 ## Migration
 
-Alembic revision `0021_interaction_domain_foundation` follows
+Alembic revision `0021_interaction_foundation` follows
 `0020_private_beta_readiness` and is the single head. It creates `interactions`,
 `capture_sessions`, `evidence` and `interaction_audit_events`; adds the required
 `meetings.interaction_id`; backfills historical meetings in deterministic batches

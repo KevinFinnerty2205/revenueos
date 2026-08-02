@@ -238,7 +238,7 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0021_interaction_domain_foundation` is the head migration.
+source exists. Migration `0021_interaction_foundation` is the head migration.
 It follows `0020_private_beta_readiness`, adds the four Interaction foundation
 tables and deterministic Meeting link/backfill. `0020` adds the focused tenant-owned
 private-beta control tables, identity/status metadata and approved maintenance
