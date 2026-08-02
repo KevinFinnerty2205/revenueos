@@ -94,6 +94,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "opportunities",
         "opportunity_audit_events",
         "tasks",
+        "interactions",
+        "capture_sessions",
+        "evidence",
+        "interaction_audit_events",
         "meetings",
         "meeting_participants",
         "transcripts",
@@ -119,6 +123,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "opportunity_id": uuid.uuid4(),
         "opportunity_audit_id": uuid.uuid4(),
         "task_id": uuid.uuid4(),
+        "interaction_id": uuid.uuid4(),
+        "capture_session_id": uuid.uuid4(),
+        "evidence_id": uuid.uuid4(),
+        "interaction_audit_id": uuid.uuid4(),
         "meeting_id": uuid.uuid4(),
         "participant_id": uuid.uuid4(),
         "transcript_id": uuid.uuid4(),
@@ -144,6 +152,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "opportunity_id": uuid.uuid4(),
         "opportunity_audit_id": uuid.uuid4(),
         "task_id": uuid.uuid4(),
+        "interaction_id": uuid.uuid4(),
+        "capture_session_id": uuid.uuid4(),
+        "evidence_id": uuid.uuid4(),
+        "interaction_audit_id": uuid.uuid4(),
         "meeting_id": uuid.uuid4(),
         "participant_id": uuid.uuid4(),
         "transcript_id": uuid.uuid4(),
@@ -297,13 +309,77 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await connection.execute(
                         text(
                             """
-                            INSERT INTO meetings
-                                (id, organisation_id, title, meeting_date, meeting_type,
-                                 status, company_id, owner_user_id, created_by, updated_by)
+                            INSERT INTO interactions
+                                (id, organisation_id, company_id, opportunity_id,
+                                 interaction_type, lifecycle_status, title,
+                                 scheduled_start_at, creation_origin, created_by_user_id)
                             VALUES
-                                (:meeting_id, :organisation_id, :meeting_title, now(),
-                                 'remote', 'completed', :company_id, :user_id,
-                                 :user_id, :user_id)
+                                (:interaction_id, :organisation_id, :company_id,
+                                 :opportunity_id, 'online_meeting', 'completed',
+                                 :interaction_title, now(), 'meeting_compatibility',
+                                 :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "interaction_title": f"RLS Interaction {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO capture_sessions
+                                (id, organisation_id, interaction_id, capture_type,
+                                 status, started_by_user_id)
+                            VALUES
+                                (:capture_session_id, :organisation_id,
+                                 :interaction_id, 'manual_notes', 'completed',
+                                 :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO evidence
+                                (id, organisation_id, interaction_id,
+                                 capture_session_id, evidence_type, origin_class,
+                                 support_class, validation_state, lifecycle_status)
+                            VALUES
+                                (:evidence_id, :organisation_id, :interaction_id,
+                                 :capture_session_id, 'system_metadata',
+                                 'system_metadata', 'direct', 'not_applicable',
+                                 'available')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO interaction_audit_events
+                                (id, organisation_id, interaction_id, actor_user_id,
+                                 action, changed_fields)
+                            VALUES
+                                (:interaction_audit_id, :organisation_id,
+                                 :interaction_id, :user_id, 'created',
+                                 '["title"]'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO meetings
+                                (id, organisation_id, interaction_id, title,
+                                 meeting_date, meeting_type, status, company_id,
+                                 owner_user_id, created_by, updated_by)
+                            VALUES
+                                (:meeting_id, :organisation_id, :interaction_id,
+                                 :meeting_title, now(), 'remote', 'completed',
+                                 :company_id, :user_id, :user_id, :user_id)
                             """
                         ),
                         {
@@ -596,6 +672,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'opportunities',
                                     'opportunity_audit_events',
                                     'tasks',
+                                    'interactions',
+                                    'capture_sessions',
+                                    'evidence',
+                                    'interaction_audit_events',
                                     'meetings',
                                     'meeting_participants',
                                     'transcripts',
@@ -841,6 +921,23 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     ),
                     (
                         """
+                        INSERT INTO evidence
+                            (id, organisation_id, interaction_id, evidence_type,
+                             origin_class, support_class, validation_state,
+                             lifecycle_status)
+                        VALUES
+                            (:id, :organisation_id, :interaction_id,
+                             'system_metadata', 'system_metadata', 'direct',
+                             'not_applicable', 'available')
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_a["organisation_id"],
+                            "interaction_id": tenant_b["interaction_id"],
+                        },
+                    ),
+                    (
+                        """
                         INSERT INTO organisation_beta_settings
                             (organisation_id, retention_days)
                         VALUES (:organisation_id, 30)
@@ -883,10 +980,14 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "ai_artifacts",
                     "ai_jobs",
                     "opportunity_audit_events",
+                    "evidence",
+                    "capture_sessions",
+                    "interaction_audit_events",
                     "meeting_audit_events",
                     "transcripts",
                     "meeting_participants",
                     "meetings",
+                    "interactions",
                     "tasks",
                     "contacts",
                     "opportunities",

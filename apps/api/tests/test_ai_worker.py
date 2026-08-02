@@ -34,7 +34,7 @@ from revenueos.ai_worker_services import AIWorkerService, calculate_retry_delay_
 from revenueos.config import Settings
 from revenueos.domain import AIJobStatus, AIJobType
 from revenueos.errors import PublicAPIError
-from revenueos.models import AIArtifact, AIJob, Meeting, MeetingAuditEvent, Transcript
+from revenueos.models import AIArtifact, AIJob, Interaction, Meeting, MeetingAuditEvent, Transcript
 from revenueos.observability import JSONFormatter
 from revenueos.worker import AIWorker, run_worker
 
@@ -82,9 +82,20 @@ async def _seed_jobs(
     organisation_id: uuid.UUID = PRIMARY_ORGANISATION_ID,
     user_id: uuid.UUID = PRIMARY_USER_ID,
 ) -> list[AIJob]:
+    interaction = Interaction(
+        id=uuid.uuid4(),
+        organisation_id=organisation_id,
+        title="Worker queue meeting",
+        interaction_type="online_meeting",
+        lifecycle_status="planned",
+        scheduled_start_at=NOW,
+        creation_origin="meeting_compatibility",
+        created_by_user_id=user_id,
+    )
     meeting = Meeting(
         id=uuid.uuid4(),
         organisation_id=organisation_id,
+        interaction_id=interaction.id,
         title="Worker queue meeting",
         meeting_date=NOW,
         owner_user_id=user_id,
@@ -100,7 +111,7 @@ async def _seed_jobs(
     )
     jobs: list[AIJob] = []
     async with session_factory() as session:
-        session.add(meeting)
+        session.add_all([interaction, meeting])
         await session.flush()
         session.add(transcript)
         await session.flush()

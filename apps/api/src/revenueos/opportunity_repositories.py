@@ -14,6 +14,7 @@ from revenueos.models import (
     AIJob,
     Base,
     Company,
+    Interaction,
     Meeting,
     MeetingParticipant,
     Opportunity,
@@ -345,6 +346,22 @@ class OpportunityWorkspaceRepository:
                 Meeting.organisation_id == organisation_id,
                 Meeting.id == meeting_id,
                 Meeting.deleted_at.is_(None),
+            )
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
+    async def get_interaction_for_update(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+    ) -> Interaction | None:
+        result = await self.session.execute(
+            select(Interaction)
+            .where(
+                Interaction.organisation_id == organisation_id,
+                Interaction.id == interaction_id,
+                Interaction.deleted_at.is_(None),
             )
             .with_for_update()
         )

@@ -1,17 +1,18 @@
 # Target domain model
 
-**Status:** Conceptual model through the Interaction Platform private beta. This
-document creates no SQLAlchemy models, database migrations or API contracts.
+**Status:** Current entities through WO-011 plus conceptual model through the
+Interaction Platform private beta. Target rows do not authorise implementation.
 
 The current persisted model includes organisations, users, memberships,
 companies, contacts, opportunities, tasks, meetings, meeting participants,
-supplied plain-text transcripts, audit events, AI jobs/artefacts, immutable
+supplied plain-text transcripts, Interactions, Capture Session/Evidence metadata,
+audit events, AI jobs/artefacts, immutable
 Revenue Brain snapshots and immutable longitudinal insights. The target keeps
 the existing modular-monolith, PostgreSQL, SQLAlchemy/Alembic and
 tenant-isolation decisions. Candidate entities are introduced only by their
 named implementation sprint after a schema/API decision and migration review.
 
-WO-010 makes Interaction the target logical parent for customer events while
+WO-011 makes Interaction the current logical parent for customer events while
 preserving Meeting as a compatible subtype. AI Debrief and Voice Journal are Capture
 Sessions producing salesperson-reported Evidence; Visual Capture belongs to
 Evidence. The detailed model and safe staged transition are in
@@ -35,20 +36,22 @@ settings table.
 
 ## Target Interaction and evidence entities
 
-These are future conceptual boundaries, not current tables:
+WO-011 implements the first four metadata boundaries below. The remaining rows are
+future concepts:
 
 | Entity                         | Purpose and key relationships                                                                                        | Tenant and source of truth                                                   | Lifecycle and retention                                                            | Expected work order                       |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------- |
-| Interaction                    | Source-neutral customer event; logical parent of Meeting and owner of type/time/account/opportunity/timeline context | Tenant-owned; user/calendar/platform context according to field authority    | Planned → in progress → ended/closed/cancelled/deleted                             | **Target — WO-011**                       |
-| Meeting compatibility relation | One-to-one same-tenant link preserving existing Meeting ID/API/artefacts                                             | RevenueOS additive migration/backfill                                        | Added idempotently; removed only through approved rollback/deletion                | **Target — WO-011**                       |
-| CaptureSession                 | Bounded recording, AI Debrief, Voice Journal, visual/upload or quick-capture attempt                                 | Tenant-owned; RevenueOS lifecycle authoritative                              | Created/capturing/interrupted/finalising/complete/partial/failed/abandoned/deleted | **Target — WO-011 and source work order** |
-| Evidence                       | Source-neutral versioned envelope for direct, reported, system, imported, seller-prepared and derived sources        | Tenant-owned; origin never changes through verification                      | Received/processing/available/partial/excluded/superseded/deleted                  | **Target — WO-011 and source work order** |
+| Interaction                    | Source-neutral customer event; logical parent of Meeting and owner of shared type/time/account/opportunity context   | Tenant-owned; manual or Meeting-compatible creation in WO-011                | Planned → in progress → completed/cancelled; soft-deleted with linked Meeting      | **Current — WO-011 foundation**           |
+| Meeting compatibility relation | One-to-one same-tenant link preserving existing Meeting ID/API/artefacts                                             | RevenueOS additive migration/backfill                                        | Required, deterministic and removed only through approved rollback/deletion        | **Current — WO-011**                      |
+| CaptureSession                 | Metadata-only supporting activity below an Interaction; no execution/content in WO-011                              | Tenant-owned; same-tenant starter and Interaction                            | Created/capturing/completed/abandoned/failed; execution remains future             | **Current metadata foundation — WO-011**  |
+| Evidence                       | Source-neutral metadata envelope; no body/storage/version chain in WO-011                                            | Tenant-owned; origin never changes through verification                      | Received/available/excluded/superseded/deleted                                     | **Current metadata foundation — WO-011**  |
 | EvidenceFragment               | Citeable time/text/image/page/response/field region of one evidence version                                          | Tenant-owned and bound to its evidence source                                | Immutable locator version; invalidated with source/version                         | **Target — WO-011 and source work order** |
 | InteractionIntelligence        | Source-aware versioned capability artefacts/claims for an Interaction and evidence-set fingerprint                   | RevenueOS derived; strict schema/provenance and review determine eligibility | Provisional/review-required/validated/disputed/superseded/deleted                  | **Target — WO-013 onward**                |
 
 Recording, Transcript, Visual Evidence, Document Evidence and User Observation are
-typed Evidence details rather than nullable fields on Interaction. Exact tables,
-states, constraints and contracts remain implementation decisions.
+controlled Evidence types rather than nullable fields on Interaction. WO-011 stores
+their classification metadata only; typed bodies, versions, fragments, processing
+and public APIs remain future implementation decisions.
 
 ## Current identity and business entities
 

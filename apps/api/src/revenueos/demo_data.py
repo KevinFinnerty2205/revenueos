@@ -10,13 +10,14 @@ from uuid import UUID
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from revenueos.beta_maintenance import _delete_meeting_batch
+from revenueos.beta_maintenance import _delete_interaction_batch, _delete_meeting_batch
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
 from revenueos.models import (
     BetaFeedback,
     BetaSystemEvent,
     Company,
+    Interaction,
     Meeting,
     Opportunity,
     OpportunityAuditEvent,
@@ -25,6 +26,7 @@ from revenueos.models import (
 )
 
 DEMO_NAMESPACE = UUID("d7838892-ce0b-434a-a8e9-445767115063")
+INTERACTION_BACKFILL_NAMESPACE = UUID("cf709ef5-e59d-4ce2-9c93-547a4a5e5990")
 
 TRANSCRIPTS = (
     """SYNTHETIC DEMO TRANSCRIPT — no real person or customer data.\nSeller: Thanks for discussing the evaluation. What outcome matters most?\nBuyer: We need a consistent handover after sales calls. The operations lead supports a pilot, but the finance approver has not reviewed the budget.\nSeller: What timing are you working towards?\nBuyer: We would like a decision by the end of the quarter. Please send the security summary and a clear pilot plan next Tuesday.\nSeller: I will send both items next Tuesday and arrange a finance review.\nBuyer: That works. The unresolved questions are data retention and implementation effort.""",
@@ -48,12 +50,23 @@ def demo_ids(organisation_id: UUID) -> tuple[UUID, UUID, tuple[UUID, UUID], tupl
     )
 
 
+def demo_interaction_ids(organisation_id: UUID) -> tuple[UUID, UUID, UUID]:
+    prefix = str(organisation_id)
+    _, _, meeting_ids, _ = demo_ids(organisation_id)
+    return (
+        uuid.uuid5(INTERACTION_BACKFILL_NAMESPACE, f"{prefix}:{meeting_ids[0]}"),
+        uuid.uuid5(INTERACTION_BACKFILL_NAMESPACE, f"{prefix}:{meeting_ids[1]}"),
+        uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:interaction-presentation"),
+    )
+
+
 async def seed_demo_data(
     session_factory: async_sessionmaker[AsyncSession],
     organisation_id: UUID,
     user_id: UUID,
 ) -> dict[str, object]:
     company_id, opportunity_id, meeting_ids, transcript_ids = demo_ids(organisation_id)
+    interaction_ids = demo_interaction_ids(organisation_id)
     seeded_at = datetime.now(UTC)
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
@@ -89,13 +102,38 @@ async def seed_demo_data(
                 )
             )
         await session.flush()
+        linked_interaction_ids: list[UUID] = []
         for index, meeting_id in enumerate(meeting_ids):
             meeting = await session.get(Meeting, meeting_id)
+            interaction_id = meeting.interaction_id if meeting is not None else interaction_ids[index]
+            linked_interaction_ids.append(interaction_id)
+            interaction = await session.get(Interaction, interaction_id)
+            if interaction is None:
+                session.add(
+                    Interaction(
+                        id=interaction_id,
+                        organisation_id=organisation_id,
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        interaction_type="online_meeting",
+                        lifecycle_status="completed",
+                        title=(
+                            "[DEMO] Discovery and evaluation goals" if index == 0 else "[DEMO] Pilot decision review"
+                        ),
+                        scheduled_start_at=seeded_at - timedelta(days=14 if index == 0 else 7),
+                        actual_start_at=seeded_at - timedelta(days=14 if index == 0 else 7),
+                        actual_end_at=seeded_at - timedelta(days=14 if index == 0 else 7),
+                        timezone="Australia/Sydney",
+                        creation_origin="meeting_compatibility",
+                        created_by_user_id=user_id,
+                    )
+                )
             if meeting is None:
                 session.add(
                     Meeting(
                         id=meeting_id,
                         organisation_id=organisation_id,
+                        interaction_id=interaction_id,
                         title=(
                             "[DEMO] Discovery and evaluation goals" if index == 0 else "[DEMO] Pilot decision review"
                         ),
@@ -123,6 +161,25 @@ async def seed_demo_data(
                         source="manual",
                     )
                 )
+        standalone_interaction = await session.get(Interaction, interaction_ids[2])
+        if standalone_interaction is None:
+            session.add(
+                Interaction(
+                    id=interaction_ids[2],
+                    organisation_id=organisation_id,
+                    company_id=company_id,
+                    opportunity_id=opportunity_id,
+                    interaction_type="presentation",
+                    lifecycle_status="completed",
+                    title="[DEMO] Pilot presentation",
+                    scheduled_start_at=seeded_at - timedelta(days=3),
+                    actual_start_at=seeded_at - timedelta(days=3),
+                    actual_end_at=seeded_at - timedelta(days=3),
+                    timezone="Australia/Sydney",
+                    creation_origin="manual",
+                    created_by_user_id=user_id,
+                )
+            )
         exists = await session.scalar(
             select(BetaSystemEvent.id).where(
                 BetaSystemEvent.organisation_id == organisation_id,
@@ -137,7 +194,7 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 1},
+                    metadata_json={"dataset_version": 2},
                 )
             )
     return {
@@ -145,6 +202,7 @@ async def seed_demo_data(
         "company_id": company_id,
         "opportunity_id": opportunity_id,
         "meeting_ids": meeting_ids,
+        "interaction_ids": (*linked_interaction_ids, interaction_ids[2]),
         "provider_calls": 0,
     }
 
@@ -154,6 +212,7 @@ async def reset_demo_data(
     organisation_id: UUID,
 ) -> dict[str, object]:
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
+    interaction_ids = demo_interaction_ids(organisation_id)
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
         if session.get_bind().dialect.name == "postgresql":
@@ -167,6 +226,7 @@ async def reset_demo_data(
             .values(opportunity_id=None)
         )
         await _delete_meeting_batch(session, organisation_id, list(meeting_ids))
+        await _delete_interaction_batch(session, organisation_id, [interaction_ids[2]])
         await session.execute(
             delete(OpportunityAuditEvent).where(
                 OpportunityAuditEvent.organisation_id == organisation_id,

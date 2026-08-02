@@ -24,9 +24,13 @@ from revenueos.models import (
     BetaDataRequest,
     BetaFeedback,
     BetaSystemEvent,
+    CaptureSession,
     Company,
     Contact,
     DataNoticeAcknowledgement,
+    Evidence,
+    Interaction,
+    InteractionAuditEvent,
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
@@ -43,7 +47,7 @@ from revenueos.models import (
     User,
 )
 
-EXPORT_VERSION = 1
+EXPORT_VERSION = 2
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -53,6 +57,7 @@ class RetentionResult:
     dry_run: bool
     retention_days: int | None
     eligible_meetings: int
+    eligible_interactions: int
     removed: dict[str, int]
 
 
@@ -79,7 +84,7 @@ async def run_retention(
         )
         retention_days = configured_days if setting_exists else settings.private_beta_default_retention_days
         if retention_days is None:
-            return RetentionResult(organisation_id, dry_run, None, 0, {})
+            return RetentionResult(organisation_id, dry_run, None, 0, 0, {})
         cutoff = datetime.now(UTC) - timedelta(days=retention_days)
         meeting_ids = list(
             (
@@ -99,20 +104,77 @@ async def run_retention(
                 )
             ).all()
         )
+        linked_interactions = select(Meeting.interaction_id).where(Meeting.organisation_id == organisation_id)
+        remaining = max(0, bounded_batch_size - len(meeting_ids))
+        interaction_ids = (
+            list(
+                (
+                    await session.scalars(
+                        select(Interaction.id)
+                        .where(
+                            Interaction.organisation_id == organisation_id,
+                            Interaction.lifecycle_status.in_(("completed", "cancelled")),
+                            func.coalesce(
+                                Interaction.actual_end_at,
+                                Interaction.scheduled_start_at,
+                                Interaction.updated_at,
+                            )
+                            < cutoff,
+                            Interaction.id.not_in(linked_interactions),
+                        )
+                        .order_by(
+                            func.coalesce(
+                                Interaction.actual_end_at,
+                                Interaction.scheduled_start_at,
+                                Interaction.updated_at,
+                            ),
+                            Interaction.id,
+                        )
+                        .limit(remaining)
+                    )
+                ).all()
+            )
+            if remaining
+            else []
+        )
         counts = await _meeting_deletion_counts(session, organisation_id, meeting_ids)
-        if dry_run or not meeting_ids:
-            return RetentionResult(organisation_id, dry_run, retention_days, len(meeting_ids), counts)
+        interaction_counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
+        counts = _merge_counts(counts, interaction_counts)
+        if dry_run or (not meeting_ids and not interaction_ids):
+            return RetentionResult(
+                organisation_id,
+                dry_run,
+                retention_days,
+                len(meeting_ids),
+                len(interaction_ids),
+                counts,
+            )
         await _enable_approved_deletion(session)
         removed = await _delete_meeting_batch(session, organisation_id, meeting_ids)
+        removed = _merge_counts(
+            removed,
+            await _delete_interaction_batch(session, organisation_id, interaction_ids),
+        )
         session.add(
             BetaSystemEvent(
                 organisation_id=organisation_id,
                 actor_user_id=None,
                 event_type="retention_batch_completed",
-                metadata_json={"meeting_count": len(meeting_ids), "retention_days": retention_days},
+                metadata_json={
+                    "interaction_count": len(interaction_ids),
+                    "meeting_count": len(meeting_ids),
+                    "retention_days": retention_days,
+                },
             )
         )
-        return RetentionResult(organisation_id, False, retention_days, len(meeting_ids), removed)
+        return RetentionResult(
+            organisation_id,
+            False,
+            retention_days,
+            len(meeting_ids),
+            len(interaction_ids),
+            removed,
+        )
 
 
 async def generate_export(
@@ -280,6 +342,12 @@ async def _delete_organisation_records(
         await session.execute(delete(MeetingParticipant).where(MeetingParticipant.organisation_id == organisation_id))
         await session.execute(delete(Transcript).where(Transcript.organisation_id == organisation_id))
         await session.execute(delete(Meeting).where(Meeting.organisation_id == organisation_id))
+        await session.execute(delete(Evidence).where(Evidence.organisation_id == organisation_id))
+        await session.execute(delete(CaptureSession).where(CaptureSession.organisation_id == organisation_id))
+        await session.execute(
+            delete(InteractionAuditEvent).where(InteractionAuditEvent.organisation_id == organisation_id)
+        )
+        await session.execute(delete(Interaction).where(Interaction.organisation_id == organisation_id))
         await session.execute(
             delete(OpportunityAuditEvent).where(OpportunityAuditEvent.organisation_id == organisation_id)
         )
@@ -423,6 +491,14 @@ async def _meeting_deletion_counts(
             )
         ),
     }
+    interaction_ids = select(Meeting.interaction_id).where(
+        Meeting.organisation_id == organisation_id,
+        Meeting.id.in_(meeting_ids),
+    )
+    counts = _merge_counts(
+        counts,
+        await _interaction_deletion_counts_from_select(session, organisation_id, interaction_ids),
+    )
     snapshot_ids = select(RevenueBrainSnapshot.id).where(
         RevenueBrainSnapshot.organisation_id == organisation_id,
         RevenueBrainSnapshot.meeting_id.in_(meeting_ids),
@@ -445,7 +521,19 @@ async def _delete_meeting_batch(
     organisation_id: UUID,
     meeting_ids: list[UUID],
 ) -> dict[str, int]:
+    if not meeting_ids:
+        return {}
     counts = await _meeting_deletion_counts(session, organisation_id, meeting_ids)
+    interaction_ids = list(
+        (
+            await session.scalars(
+                select(Meeting.interaction_id).where(
+                    Meeting.organisation_id == organisation_id,
+                    Meeting.id.in_(meeting_ids),
+                )
+            )
+        ).all()
+    )
     snapshot_ids = select(RevenueBrainSnapshot.id).where(
         RevenueBrainSnapshot.organisation_id == organisation_id,
         RevenueBrainSnapshot.meeting_id.in_(meeting_ids),
@@ -492,7 +580,125 @@ async def _delete_meeting_batch(
     await session.execute(
         delete(Meeting).where(Meeting.organisation_id == organisation_id, Meeting.id.in_(meeting_ids))
     )
+    await _delete_interaction_batch(session, organisation_id, interaction_ids)
     return counts
+
+
+async def _interaction_deletion_counts(
+    session: AsyncSession,
+    organisation_id: UUID,
+    interaction_ids: list[UUID],
+) -> dict[str, int]:
+    if not interaction_ids:
+        return {}
+    return await _interaction_deletion_counts_from_select(
+        session,
+        organisation_id,
+        select(Interaction.id).where(
+            Interaction.organisation_id == organisation_id,
+            Interaction.id.in_(interaction_ids),
+        ),
+    )
+
+
+async def _interaction_deletion_counts_from_select(
+    session: AsyncSession,
+    organisation_id: UUID,
+    interaction_ids: Select[tuple[UUID]],
+) -> dict[str, int]:
+    return {
+        "interactions": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(Interaction)
+                    .where(
+                        Interaction.organisation_id == organisation_id,
+                        Interaction.id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "evidence": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(Evidence)
+                    .where(
+                        Evidence.organisation_id == organisation_id,
+                        Evidence.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "capture_sessions": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(CaptureSession)
+                    .where(
+                        CaptureSession.organisation_id == organisation_id,
+                        CaptureSession.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "interaction_audit_events": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(InteractionAuditEvent)
+                    .where(
+                        InteractionAuditEvent.organisation_id == organisation_id,
+                        InteractionAuditEvent.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+    }
+
+
+async def _delete_interaction_batch(
+    session: AsyncSession,
+    organisation_id: UUID,
+    interaction_ids: list[UUID],
+) -> dict[str, int]:
+    if not interaction_ids:
+        return {}
+    counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
+    await session.execute(
+        delete(Evidence).where(
+            Evidence.organisation_id == organisation_id,
+            Evidence.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(CaptureSession).where(
+            CaptureSession.organisation_id == organisation_id,
+            CaptureSession.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(InteractionAuditEvent).where(
+            InteractionAuditEvent.organisation_id == organisation_id,
+            InteractionAuditEvent.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(Interaction).where(
+            Interaction.organisation_id == organisation_id,
+            Interaction.id.in_(interaction_ids),
+        )
+    )
+    return counts
+
+
+def _merge_counts(first: dict[str, int], second: dict[str, int]) -> dict[str, int]:
+    return {key: first.get(key, 0) + second.get(key, 0) for key in first.keys() | second.keys()}
 
 
 async def _enable_approved_deletion(session: AsyncSession) -> None:
@@ -523,6 +729,13 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
     )
     tasks = await rows(select(Task).where(Task.organisation_id == organisation_id).order_by(Task.id))
     meetings = await rows(select(Meeting).where(Meeting.organisation_id == organisation_id).order_by(Meeting.id))
+    interactions = await rows(
+        select(Interaction).where(Interaction.organisation_id == organisation_id).order_by(Interaction.id)
+    )
+    capture_sessions = await rows(
+        select(CaptureSession).where(CaptureSession.organisation_id == organisation_id).order_by(CaptureSession.id)
+    )
+    evidence = await rows(select(Evidence).where(Evidence.organisation_id == organisation_id).order_by(Evidence.id))
     participants = await rows(
         select(MeetingParticipant)
         .where(MeetingParticipant.organisation_id == organisation_id)
@@ -548,6 +761,11 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
         select(MeetingAuditEvent)
         .where(MeetingAuditEvent.organisation_id == organisation_id)
         .order_by(MeetingAuditEvent.id)
+    )
+    interaction_audits = await rows(
+        select(InteractionAuditEvent)
+        .where(InteractionAuditEvent.organisation_id == organisation_id)
+        .order_by(InteractionAuditEvent.id)
     )
     opportunity_audits = await rows(
         select(OpportunityAuditEvent)
@@ -658,6 +876,7 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
                 item,
                 (
                     "id",
+                    "interaction_id",
                     "title",
                     "description",
                     "meeting_date",
@@ -674,6 +893,72 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
                 ),
             )
             for item in meetings
+        ],
+        "interactions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "company_id",
+                    "opportunity_id",
+                    "interaction_type",
+                    "lifecycle_status",
+                    "title",
+                    "scheduled_start_at",
+                    "scheduled_end_at",
+                    "actual_start_at",
+                    "actual_end_at",
+                    "timezone",
+                    "creation_origin",
+                    "created_by_user_id",
+                    "created_at",
+                    "updated_at",
+                    "deleted_at",
+                ),
+            )
+            for item in interactions
+        ],
+        "captureSessions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "capture_type",
+                    "status",
+                    "started_by_user_id",
+                    "started_at",
+                    "completed_at",
+                    "created_at",
+                    "updated_at",
+                    "deleted_at",
+                ),
+            )
+            for item in capture_sessions
+        ],
+        "evidence": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "capture_session_id",
+                    "evidence_type",
+                    "origin_class",
+                    "support_class",
+                    "validation_state",
+                    "captured_by_user_id",
+                    "captured_at",
+                    "effective_start_at",
+                    "effective_end_at",
+                    "lifecycle_status",
+                    "retention_class",
+                    "created_at",
+                    "updated_at",
+                    "deleted_at",
+                ),
+            )
+            for item in evidence
         ],
         "meetingParticipants": [
             _columns(
@@ -772,6 +1057,20 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
             for item in insights
         ],
         "auditEvents": [
+            *[
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "interaction_id",
+                        "actor_user_id",
+                        "action",
+                        "changed_fields",
+                        "created_at",
+                    ),
+                )
+                for item in interaction_audits
+            ],
             *[
                 _columns(
                     item,

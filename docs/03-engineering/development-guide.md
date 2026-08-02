@@ -100,9 +100,12 @@ aggregate API testing uses
 same path plus `/generate`. See
 [Unified Meeting Intelligence](unified-meeting-intelligence.md).
 
-WO-009 migration `0020_private_beta_readiness` follows `0019` as the single
-head. Migration tests upgrade, downgrade and re-upgrade it; PostgreSQL CI also
-verifies forced RLS for every new tenant table.
+WO-011 migration `0021_interaction_foundation` follows
+`0020_private_beta_readiness` as the single head. It adds four tenant tables,
+deterministically backfills every Meeting in batches of 500, then requires one
+tenant-safe Interaction link per Meeting. Migration tests upgrade, downgrade and
+re-upgrade it; PostgreSQL CI also verifies forced RLS for every new tenant table.
+See [Interaction migration and compatibility](interaction-migration-and-compatibility.md).
 
 ## Database workflow
 
@@ -189,6 +192,12 @@ and opportunity insight records. It enables and forces PostgreSQL RLS, uses
 composite tenant foreign keys for both snapshot references and installs
 update/delete rejection triggers. Its downgrade permanently removes only
 reasoning history and must run before `0018_revenue_brain`.
+
+Migration `0021_interaction_foundation` creates Interaction, Capture
+Session, metadata-only Evidence and Interaction audit tables, and adds the
+non-null one-to-one `meetings.interaction_id`. Downgrade preserves all Meeting,
+Meeting Intelligence and Revenue Brain rows but permanently removes standalone
+Interactions and new metadata. Back up and approve that data loss first.
 
 Revenue Brain reasoning is synchronous, bounded and deterministic. It requires
 no worker or provider process. Local fixtures should seed strict snapshot

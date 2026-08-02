@@ -61,6 +61,111 @@ class MeetingStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class InteractionType(StrEnum):
+    ONLINE_MEETING = "online_meeting"
+    FACE_TO_FACE_MEETING = "face_to_face_meeting"
+    PRESENTATION = "presentation"
+    WORKSHOP = "workshop"
+    SITE_VISIT = "site_visit"
+    EXECUTIVE_LUNCH = "executive_lunch"
+    PHONE_CALL = "phone_call"
+    CONFERENCE_INTERACTION = "conference_interaction"
+    TRADE_SHOW_INTERACTION = "trade_show_interaction"
+    MANUAL_INTERACTION = "manual_interaction"
+
+
+class InteractionLifecycleStatus(StrEnum):
+    PLANNED = "planned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class InteractionCreationOrigin(StrEnum):
+    MANUAL = "manual"
+    MEETING_COMPATIBILITY = "meeting_compatibility"
+    IMPORTED_EXTERNAL = "imported_external"
+
+
+class InteractionAuditAction(StrEnum):
+    CREATED = "created"
+    UPDATED = "updated"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    DELETED = "deleted"
+    MEETING_LINKED = "meeting_linked"
+
+
+class EvidenceType(StrEnum):
+    TRANSCRIPT = "transcript"
+    USER_OBSERVATION = "user_observation"
+    RECORDING = "recording"
+    VISUAL = "visual"
+    DOCUMENT = "document"
+    EMAIL = "email"
+    SYSTEM_METADATA = "system_metadata"
+
+
+class EvidenceOriginClass(StrEnum):
+    CUSTOMER_DIRECT = "customer_direct"
+    SALESPERSON_REPORTED = "salesperson_reported"
+    SYSTEM_METADATA = "system_metadata"
+    IMPORTED_EXTERNAL = "imported_external"
+    SELLER_PREPARED = "seller_prepared"
+    AI_INFERRED = "ai_inferred"
+
+
+class EvidenceSupportClass(StrEnum):
+    DIRECT = "direct"
+    REPORTED = "reported"
+    INFERRED = "inferred"
+    CORROBORATED = "corroborated"
+    VERIFIED = "verified"
+    DISPUTED = "disputed"
+    STALE = "stale"
+    SUPERSEDED = "superseded"
+
+
+class EvidenceValidationState(StrEnum):
+    UNREVIEWED = "unreviewed"
+    VERIFIED = "verified"
+    DISPUTED = "disputed"
+    REJECTED = "rejected"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class EvidenceLifecycleStatus(StrEnum):
+    RECEIVED = "received"
+    AVAILABLE = "available"
+    EXCLUDED = "excluded"
+    SUPERSEDED = "superseded"
+    DELETED = "deleted"
+
+
+class EvidenceRetentionClass(StrEnum):
+    INHERITED = "inherited"
+    SHORT_LIVED = "short_lived"
+    STANDARD = "standard"
+
+
+class CaptureSessionType(StrEnum):
+    AI_DEBRIEF = "ai_debrief"
+    VOICE_JOURNAL = "voice_journal"
+    LIVE_RECORDING = "live_recording"
+    VISUAL_CAPTURE = "visual_capture"
+    UPLOADED_TRANSCRIPT = "uploaded_transcript"
+    UPLOADED_RECORDING = "uploaded_recording"
+    MANUAL_NOTES = "manual_notes"
+
+
+class CaptureSessionStatus(StrEnum):
+    CREATED = "created"
+    CAPTURING = "capturing"
+    COMPLETED = "completed"
+    ABANDONED = "abandoned"
+    FAILED = "failed"
+
+
 class AttendanceStatus(StrEnum):
     INVITED = "invited"
     ATTENDED = "attended"

@@ -141,6 +141,7 @@ class MeetingUpdate(UpdateRequest):
 class MeetingResponse(APIModel):
     id: UUID
     organisation_id: UUID
+    interaction_id: UUID
     title: str
     description: str | None
     meeting_date: datetime

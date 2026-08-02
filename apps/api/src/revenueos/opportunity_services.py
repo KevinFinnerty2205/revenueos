@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.ai_contracts import BuyingSignalsArtifactContent, NextBestActionArtifactContent
 from revenueos.business_repositories import PageResult
 from revenueos.domain import (
+    InteractionAuditAction,
     MeetingAuditAction,
     MeetingAuditEntityType,
     MeetingStatus,
@@ -21,7 +22,7 @@ from revenueos.domain import (
 from revenueos.errors import PublicAPIError
 from revenueos.intelligence_workspace import CAPABILITIES, MeetingIntelligenceService
 from revenueos.meeting_contracts import MeetingOpportunityUpdate
-from revenueos.models import AIArtifact, Meeting, MeetingAuditEvent, OpportunityAuditEvent
+from revenueos.models import AIArtifact, InteractionAuditEvent, Meeting, MeetingAuditEvent, OpportunityAuditEvent
 from revenueos.opportunity_contracts import (
     IntelligenceReadiness,
     OpportunityListItemResponse,
@@ -262,9 +263,31 @@ class OpportunityWorkspaceService:
         if previous_id == request.opportunity_id:
             return meeting
 
+        interaction = await self.repository.get_interaction_for_update(
+            self.tenant.organisation_id,
+            meeting.interaction_id,
+        )
+        if interaction is None:
+            raise PublicAPIError(
+                "compatibility_conflict",
+                "The linked Interaction is unavailable.",
+                409,
+            )
+
         meeting.opportunity_id = request.opportunity_id
         meeting.updated_by = self.tenant.user_id
         meeting.updated_at = datetime.now(UTC)
+        interaction.opportunity_id = request.opportunity_id
+        interaction.updated_at = meeting.updated_at
+        self.repository.add(
+            InteractionAuditEvent(
+                organisation_id=self.tenant.organisation_id,
+                interaction_id=interaction.id,
+                actor_user_id=self.tenant.user_id,
+                action=InteractionAuditAction.UPDATED.value,
+                changed_fields=["opportunity_id"],
+            )
+        )
         self.repository.add(
             MeetingAuditEvent(
                 organisation_id=self.tenant.organisation_id,

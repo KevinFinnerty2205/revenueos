@@ -251,6 +251,21 @@ Secrets, tokens, authorisation headers, database URLs, signed URLs and provider 
   have no tool or write authority.
 - Locked dependencies and automated format, lint, type, test and build checks.
 
+## Interaction and evidence metadata
+
+WO-011 adds `interactions`, `capture_sessions`, `evidence` and
+`interaction_audit_events`. Every table has non-null tenant ownership, composite
+same-tenant relationships, explicit repository predicates and forced PostgreSQL
+RLS. The Meeting/Interaction link is non-null and one-to-one inside a tenant.
+
+Interaction audit/log data is content-minimised. Evidence contains controlled
+type, origin, support, validation, lifecycle, retention and time/member metadata
+only—no transcript copy, customer body, blob, storage URL, prompt or AI artefact.
+Origin is immutable in meaning: verification cannot turn salesperson-reported
+material into customer-direct evidence. Export version 2, retention and confirmed
+organisation deletion include the new metadata. See the
+[Interaction domain security review](interaction-domain-security-review.md).
+
 ## Recording consent and privacy
 
 Sprint 3 accepts only transcript text deliberately pasted by a user or read from an explicitly selected `.txt` file. The file is read in the browser and its text is sent through the ordinary API; there is no object-storage upload, microphone access, recording, listening, media processing or transcription. The form tells users to provide only content they are authorised to store.
@@ -267,9 +282,10 @@ of lawful authority or a legal determination. Future conversation capture must:
 - disclose processing providers, purpose, retention and deletion;
 - never use customer content for training without a separate explicit opt-in.
 
-Normal meeting deletion remains soft deletion. The separate beta retention
-command hard-deletes eligible meeting/transcript/intelligence/Revenue Brain
-dependencies in an approved tenant context. Admin export and confirmed
+Normal Meeting deletion remains soft deletion and also soft-deletes its linked
+Interaction. The separate beta retention command hard-deletes eligible
+Meeting/transcript/intelligence/Revenue Brain dependencies and eligible standalone
+completed/cancelled Interactions in an approved tenant context. Admin export and confirmed
 organisation deletion workflows exist, but backups and Clerk lifecycle require
 documented operator action and legal hold is not implemented.
 

@@ -1,6 +1,8 @@
 # Interaction Intelligence migration strategy
 
-- **Status:** Approved target migration direction; no migration is created by WO-010
+- **Status:** Approved migration direction; its WO-011 foundation is implemented in
+  `0021_interaction_foundation` and documented in
+  [migration and compatibility notes](interaction-migration-and-compatibility.md)
 - **Decision:** Add Interaction as the logical parent, preserve Meeting IDs/APIs and
   transition through compatibility links and adapters
 

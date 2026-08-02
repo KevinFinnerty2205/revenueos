@@ -1,0 +1,339 @@
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from revenueos.business_repositories import PageResult
+from revenueos.domain import InteractionAuditAction, InteractionLifecycleStatus
+from revenueos.errors import PublicAPIError
+from revenueos.interaction_compatibility import (
+    interaction_transition_is_allowed,
+    meeting_type_for_interaction,
+    project_interaction_to_meeting,
+)
+from revenueos.interaction_contracts import InteractionComplete, InteractionCreate, InteractionUpdate
+from revenueos.interaction_repositories import InteractionRecord, InteractionRepository
+from revenueos.models import Interaction, InteractionAuditEvent
+from revenueos.tenant import TenantContext
+
+logger = logging.getLogger("revenueos.interactions")
+
+
+class InteractionService:
+    def __init__(self, session: AsyncSession, tenant: TenantContext) -> None:
+        self.session = session
+        self.repository = InteractionRepository(session)
+        self.tenant = tenant
+
+    async def list_interactions(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        search: str | None,
+        company_id: UUID | None,
+        opportunity_id: UUID | None,
+        interaction_type: str | None,
+        lifecycle_status: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+        sort_by: str,
+        sort_order: str,
+    ) -> PageResult[InteractionRecord]:
+        if date_from and date_to and date_from > date_to:
+            raise PublicAPIError("invalid_date_range", "dateFrom must be before or equal to dateTo.", 422)
+        if company_id is not None:
+            await self._require_company(company_id)
+        if opportunity_id is not None:
+            await self._require_opportunity(opportunity_id)
+        return await self.repository.list_interactions(
+            self.tenant.organisation_id,
+            page=page,
+            page_size=page_size,
+            search=search,
+            company_id=company_id,
+            opportunity_id=opportunity_id,
+            interaction_type=interaction_type,
+            lifecycle_status=lifecycle_status,
+            date_from=date_from,
+            date_to=date_to,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+    async def get_interaction(self, interaction_id: UUID) -> InteractionRecord:
+        record = await self.repository.get_interaction(self.tenant.organisation_id, interaction_id)
+        if record is None:
+            raise self._not_found()
+        return record
+
+    async def create_interaction(self, request: InteractionCreate) -> InteractionRecord:
+        await self._validate_relationships(request.company_id, request.opportunity_id)
+        self._validate_lifecycle_times(request.lifecycle_status.value, request.actual_end_at)
+        interaction = Interaction(
+            organisation_id=self.tenant.organisation_id,
+            company_id=request.company_id,
+            opportunity_id=request.opportunity_id,
+            interaction_type=request.interaction_type.value,
+            lifecycle_status=request.lifecycle_status.value,
+            title=request.title,
+            scheduled_start_at=request.scheduled_start_at,
+            scheduled_end_at=request.scheduled_end_at,
+            actual_start_at=request.actual_start_at,
+            actual_end_at=request.actual_end_at,
+            timezone=request.timezone,
+            creation_origin="manual",
+            created_by_user_id=self.tenant.user_id,
+        )
+        self.session.add(interaction)
+        await self._flush()
+        self.session.add(self._audit(interaction.id, InteractionAuditAction.CREATED, self._create_fields()))
+        await self._commit(interaction)
+        logger.info(
+            "interaction_created",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "interaction_id": str(interaction.id),
+                "interaction_type": interaction.interaction_type,
+                "lifecycle_status": interaction.lifecycle_status,
+            },
+        )
+        return InteractionRecord(interaction=interaction, meeting_id=None)
+
+    async def update_interaction(self, interaction_id: UUID, request: InteractionUpdate) -> InteractionRecord:
+        record = await self._get_for_update(interaction_id)
+        interaction = record.interaction
+        values = request.model_dump(exclude_unset=True)
+        if "interaction_type" in values:
+            values["interaction_type"] = values["interaction_type"].value
+        if "lifecycle_status" in values:
+            values["lifecycle_status"] = values["lifecycle_status"].value
+            self._require_transition(interaction.lifecycle_status, values["lifecycle_status"])
+        company_id = values.get("company_id", interaction.company_id)
+        opportunity_id = values.get("opportunity_id", interaction.opportunity_id)
+        await self._validate_relationships(company_id, opportunity_id)
+        merged = {
+            "scheduled_start_at": interaction.scheduled_start_at,
+            "scheduled_end_at": interaction.scheduled_end_at,
+            "actual_start_at": interaction.actual_start_at,
+            "actual_end_at": interaction.actual_end_at,
+            **values,
+        }
+        self._validate_ranges(merged)
+        self._validate_lifecycle_times(
+            values.get("lifecycle_status", interaction.lifecycle_status),
+            merged["actual_end_at"],
+        )
+        if record.meeting_id is not None:
+            candidate_type = values.get("interaction_type", interaction.interaction_type)
+            if meeting_type_for_interaction(candidate_type) is None:
+                raise PublicAPIError(
+                    "incompatible_interaction_type",
+                    "A Meeting-linked interaction must retain a Meeting-compatible type.",
+                    422,
+                )
+        for field_name, value in values.items():
+            setattr(interaction, field_name, value)
+        now = datetime.now(UTC)
+        interaction.updated_at = now
+        if record.meeting_id is not None:
+            meeting = await self.repository.get_meeting_for_update(self.tenant.organisation_id, record.meeting_id)
+            if meeting is None:
+                raise PublicAPIError("compatibility_conflict", "The linked Meeting is unavailable.", 409)
+            project_interaction_to_meeting(
+                interaction,
+                meeting,
+                updated_by=self.tenant.user_id,
+                updated_at=now,
+            )
+        action = (
+            InteractionAuditAction.CANCELLED
+            if values.get("lifecycle_status") == InteractionLifecycleStatus.CANCELLED.value
+            else InteractionAuditAction.UPDATED
+        )
+        self.session.add(self._audit(interaction.id, action, list(values)))
+        await self._commit(interaction)
+        return InteractionRecord(interaction=interaction, meeting_id=record.meeting_id)
+
+    async def complete_interaction(
+        self,
+        interaction_id: UUID,
+        request: InteractionComplete,
+    ) -> InteractionRecord:
+        record = await self._get_for_update(interaction_id)
+        interaction = record.interaction
+        if interaction.lifecycle_status == InteractionLifecycleStatus.COMPLETED.value:
+            return record
+        self._require_transition(interaction.lifecycle_status, InteractionLifecycleStatus.COMPLETED.value)
+        actual_end_at = request.actual_end_at or datetime.now(UTC)
+        if interaction.actual_start_at is not None and actual_end_at < self._aware(interaction.actual_start_at):
+            raise PublicAPIError("invalid_time_range", "actualEndAt cannot be before actualStartAt.", 422)
+        interaction.lifecycle_status = InteractionLifecycleStatus.COMPLETED.value
+        interaction.actual_end_at = actual_end_at
+        interaction.updated_at = datetime.now(UTC)
+        if record.meeting_id is not None:
+            meeting = await self.repository.get_meeting_for_update(self.tenant.organisation_id, record.meeting_id)
+            if meeting is None:
+                raise PublicAPIError("compatibility_conflict", "The linked Meeting is unavailable.", 409)
+            project_interaction_to_meeting(
+                interaction,
+                meeting,
+                updated_by=self.tenant.user_id,
+                updated_at=interaction.updated_at,
+            )
+        self.session.add(
+            self._audit(
+                interaction.id,
+                InteractionAuditAction.COMPLETED,
+                ["actual_end_at", "lifecycle_status"],
+            )
+        )
+        await self._commit(interaction)
+        logger.info(
+            "interaction_completed",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "interaction_id": str(interaction.id),
+                "lifecycle_status": interaction.lifecycle_status,
+            },
+        )
+        return InteractionRecord(interaction=interaction, meeting_id=record.meeting_id)
+
+    async def _get_for_update(self, interaction_id: UUID) -> InteractionRecord:
+        record = await self.repository.get_interaction(
+            self.tenant.organisation_id,
+            interaction_id,
+        )
+        if record is None:
+            raise self._not_found()
+        if record.meeting_id is not None:
+            meeting = await self.repository.get_meeting_for_update(
+                self.tenant.organisation_id,
+                record.meeting_id,
+            )
+            if meeting is None:
+                raise PublicAPIError(
+                    "compatibility_conflict",
+                    "The linked Meeting is unavailable.",
+                    409,
+                )
+        locked = await self.repository.get_interaction(
+            self.tenant.organisation_id,
+            interaction_id,
+            for_update=True,
+        )
+        if locked is None:
+            raise self._not_found()
+        return locked
+
+    async def _validate_relationships(self, company_id: UUID | None, opportunity_id: UUID | None) -> None:
+        if company_id is not None:
+            await self._require_company(company_id)
+        if opportunity_id is None:
+            return
+        opportunity = await self._require_opportunity(opportunity_id)
+        if company_id is not None and opportunity.company_id is not None and company_id != opportunity.company_id:
+            raise PublicAPIError(
+                "inconsistent_relationship",
+                "The interaction and opportunity must refer to the same company.",
+                422,
+            )
+
+    async def _require_company(self, company_id: UUID) -> None:
+        if await self.repository.get_company(self.tenant.organisation_id, company_id) is None:
+            raise PublicAPIError("company_not_found", "The requested company was not found.", 404)
+
+    async def _require_opportunity(self, opportunity_id: UUID) -> Any:
+        opportunity = await self.repository.get_opportunity(self.tenant.organisation_id, opportunity_id)
+        if opportunity is None:
+            raise PublicAPIError("opportunity_not_found", "The requested opportunity was not found.", 404)
+        return opportunity
+
+    @staticmethod
+    def _require_transition(current: str, target: str) -> None:
+        if not interaction_transition_is_allowed(current, target):
+            raise PublicAPIError(
+                "invalid_lifecycle_transition",
+                f"An interaction cannot move from {current} to {target}.",
+                409,
+            )
+
+    @staticmethod
+    def _validate_ranges(values: dict[str, Any]) -> None:
+        scheduled_start = values["scheduled_start_at"]
+        scheduled_end = values["scheduled_end_at"]
+        actual_start = values["actual_start_at"]
+        actual_end = values["actual_end_at"]
+        if scheduled_start is not None and scheduled_end is not None:
+            if InteractionService._aware(scheduled_end) < InteractionService._aware(scheduled_start):
+                raise PublicAPIError("invalid_time_range", "scheduledEndAt cannot be before scheduledStartAt.", 422)
+        if actual_start is not None and actual_end is not None:
+            if InteractionService._aware(actual_end) < InteractionService._aware(actual_start):
+                raise PublicAPIError("invalid_time_range", "actualEndAt cannot be before actualStartAt.", 422)
+
+    @staticmethod
+    def _validate_lifecycle_times(lifecycle_status: str, actual_end_at: datetime | None) -> None:
+        if lifecycle_status == InteractionLifecycleStatus.IN_PROGRESS.value and actual_end_at is not None:
+            raise PublicAPIError(
+                "invalid_lifecycle_time",
+                "An in-progress interaction cannot have an actual end time.",
+                422,
+            )
+
+    @staticmethod
+    def _aware(value: datetime) -> datetime:
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+    def _audit(
+        self,
+        interaction_id: UUID,
+        action: InteractionAuditAction,
+        changed_fields: list[str],
+    ) -> InteractionAuditEvent:
+        return InteractionAuditEvent(
+            organisation_id=self.tenant.organisation_id,
+            interaction_id=interaction_id,
+            actor_user_id=self.tenant.user_id,
+            action=action.value,
+            changed_fields=sorted(changed_fields),
+        )
+
+    async def _flush(self) -> None:
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise PublicAPIError("conflict", "The interaction conflicts with related data.", 409) from exc
+
+    async def _commit(self, interaction: Interaction) -> None:
+        try:
+            await self.session.flush()
+            await self.session.refresh(interaction)
+            await self.session.commit()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise PublicAPIError("conflict", "The interaction conflicts with related data.", 409) from exc
+
+    @staticmethod
+    def _create_fields() -> list[str]:
+        return [
+            "actual_end_at",
+            "actual_start_at",
+            "company_id",
+            "interaction_type",
+            "lifecycle_status",
+            "opportunity_id",
+            "scheduled_end_at",
+            "scheduled_start_at",
+            "timezone",
+            "title",
+        ]
+
+    @staticmethod
+    def _not_found() -> PublicAPIError:
+        return PublicAPIError("interaction_not_found", "The requested interaction was not found.", 404)

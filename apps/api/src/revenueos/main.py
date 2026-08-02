@@ -21,7 +21,18 @@ from revenueos.errors import (
     validation_error_handler,
 )
 from revenueos.observability import configure_logging
-from revenueos.routes import accounts, beta, companies, contacts, health, me, meetings, opportunities, tasks
+from revenueos.routes import (
+    accounts,
+    beta,
+    companies,
+    contacts,
+    health,
+    interactions,
+    me,
+    meetings,
+    opportunities,
+    tasks,
+)
 
 logger = logging.getLogger("revenueos.http")
 REQUEST_ID_ALLOWED_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.:")
@@ -120,6 +131,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(contacts.router)
     app.include_router(opportunities.router)
     app.include_router(tasks.router)
+    app.include_router(interactions.router)
     app.include_router(meetings.router)
     app.include_router(accounts.router)
     return app

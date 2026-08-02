@@ -73,9 +73,11 @@ notice and release note.
 
 An admin chooses 30, 90 or 180 days, or explicitly chooses manual retention.
 The safe default is 90 days. Retention selects old meetings only when both the
-meeting date and transcript update time are older than the cutoff. It removes,
-in dependency order, Revenue Brain insights/snapshots, AI artefacts/jobs,
-content-minimised meeting audit rows, transcript, participants and meeting.
+meeting date and transcript update time are older than the cutoff, plus old
+standalone completed/cancelled Interactions using actual end, scheduled start or
+updated time in that order. It removes, in dependency order, Revenue Brain
+insights/snapshots, AI artefacts/jobs, content-minimised Meeting/Interaction audit
+rows, transcript, Evidence, Capture Sessions, participants, Meeting and Interaction.
 Feedback references are detached; no content is copied into the maintenance
 event. Deleted records therefore disappear from Opportunity Workspace and
 Revenue Brain.
@@ -87,8 +89,9 @@ uv --directory apps/api run revenueos-beta-maintenance retention --organisation-
 ```
 
 Review the counts, then omit `--dry-run` to execute one bounded batch. Repeat
-until `eligible_meetings` is zero. The command is idempotent and each batch is a
-separate transaction. Schedule it at least daily per beta organisation. The
+until both `eligible_meetings` and `eligible_interactions` are zero. The command is
+idempotent and each batch is a separate transaction. Schedule it at least daily
+per beta organisation. The
 PostgreSQL append-only guards allow deletion only when this command sets both
 the trusted tenant and explicit approved-maintenance context.
 
@@ -117,9 +120,10 @@ Admins queue a versioned JSON export in Settings. An operator runs:
 uv --directory apps/api run revenueos-beta-maintenance export --organisation-id <UUID> --request-id <UUID>
 ```
 
-The export has deterministic sections/order and a safe UUID filename. It may
+Export version 2 has deterministic sections/order and a safe UUID filename. It may
 contain authorised transcripts and validated intelligence, so store it only in
 the restricted directory configured by `API_PRIVATE_BETA_EXPORT_DIRECTORY`.
+It includes Interaction, Capture Session, Evidence and Interaction audit metadata.
 It excludes credentials, provider request IDs, worker leases, retry errors and
 other internal execution fields. API responses never expose the filesystem
 path. Downloads expire after 24 hours and validate both the configured root and
@@ -174,7 +178,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  Alembic head `0020_private_beta_readiness`, identity configuration, selected
+  Alembic head `0021_interaction_foundation`, identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
@@ -189,7 +193,8 @@ worker retry exhaustion, stuck leases and quota responses.
 ## Synthetic demo data
 
 The explicit seed creates one clearly labelled synthetic company, one
-opportunity and two recent completed meetings with synthetic transcripts, so
+opportunity, two recent completed meetings with linked Interactions and one
+standalone completed presentation Interaction. The Meetings retain synthetic transcripts, so
 the default retention policy does not immediately expire the walkthrough. Its
 IDs and content are deterministic, it is tenant-scoped and idempotent, and it
 makes zero provider calls:
@@ -210,6 +215,7 @@ Reset only that organisation's fixed demo IDs:
 uv --directory apps/api run revenueos-demo-data reset --organisation-id <UUID>
 ```
 
+Reset removes all three deterministic Interactions with the established demo rows.
 Never run the seed automatically or use it to overwrite a real record.
 
 ## Feedback handling

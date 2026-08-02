@@ -14,6 +14,7 @@ from revenueos.config import Settings
 from revenueos.domain import AIJobStatus, AIJobType
 from revenueos.models import (
     AIJob,
+    Interaction,
     Meeting,
     Organisation,
     OrganisationMembership,
@@ -30,6 +31,7 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
     organisation_id = uuid.uuid4()
     user_id = uuid.uuid4()
     meeting_id = uuid.uuid4()
+    interaction_id = uuid.uuid4()
     transcript_id = uuid.uuid4()
     claim_job_id = uuid.uuid4()
     recovery_job_id = uuid.uuid4()
@@ -75,9 +77,22 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
                 )
                 await session.flush()
                 session.add(
+                    Interaction(
+                        id=interaction_id,
+                        organisation_id=organisation_id,
+                        title="Worker concurrency meeting",
+                        interaction_type="online_meeting",
+                        lifecycle_status="planned",
+                        scheduled_start_at=now,
+                        creation_origin="meeting_compatibility",
+                        created_by_user_id=user_id,
+                    )
+                )
+                session.add(
                     Meeting(
                         id=meeting_id,
                         organisation_id=organisation_id,
+                        interaction_id=interaction_id,
                         title="Worker concurrency meeting",
                         meeting_date=now,
                         owner_user_id=user_id,
@@ -188,6 +203,7 @@ def test_postgresql_atomic_claim_and_abandoned_recovery_are_concurrency_safe() -
                 await session.execute(delete(AIJob).where(AIJob.organisation_id == organisation_id))
                 await session.execute(delete(Transcript).where(Transcript.organisation_id == organisation_id))
                 await session.execute(delete(Meeting).where(Meeting.organisation_id == organisation_id))
+                await session.execute(delete(Interaction).where(Interaction.organisation_id == organisation_id))
                 await session.execute(
                     delete(OrganisationMembership).where(OrganisationMembership.organisation_id == organisation_id)
                 )

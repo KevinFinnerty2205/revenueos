@@ -137,6 +137,7 @@ describe("MeetingDetail", () => {
       return Promise.resolve(
         jsonResponse({
           id: "meeting-1",
+          interactionId: "interaction-1",
           organisationId: "organisation-1",
           title: "Acme discovery",
           description: "Discuss expansion.",
@@ -158,6 +159,9 @@ describe("MeetingDetail", () => {
     expect(
       await screen.findByRole("heading", { name: "Acme discovery" }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Interaction record" }),
+    ).toHaveAttribute("href", "/interactions/interaction-1");
     expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
       "aria-selected",
       "true",

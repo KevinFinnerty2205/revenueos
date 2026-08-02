@@ -1,6 +1,7 @@
 # Interaction lifecycle and UX
 
-- **Status:** Target experience; no application behaviour is implemented by WO-010
+- **Status:** Target experience; WO-011 implements only basic list/create/detail and
+  planned/in-progress/completed/cancelled metadata, not the broader companion UX
 - **Primary surfaces:** responsive web first, followed by a constrained mobile
   companion and later native capture where justified
 

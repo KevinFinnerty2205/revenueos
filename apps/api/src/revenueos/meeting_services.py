@@ -2,14 +2,20 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.business_repositories import PageResult
-from revenueos.domain import MeetingAuditAction, MeetingAuditEntityType
+from revenueos.domain import InteractionAuditAction, MeetingAuditAction, MeetingAuditEntityType
 from revenueos.errors import PublicAPIError
+from revenueos.interaction_compatibility import (
+    interaction_status_for_meeting,
+    interaction_transition_is_allowed,
+    interaction_type_for_meeting,
+    project_meeting_to_interaction,
+)
 from revenueos.meeting_contracts import (
     MeetingCreate,
     MeetingParticipantCreate,
@@ -21,6 +27,8 @@ from revenueos.meeting_contracts import (
 from revenueos.meeting_repositories import MeetingRepository
 from revenueos.models import (
     Base,
+    Interaction,
+    InteractionAuditEvent,
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
@@ -209,8 +217,23 @@ class MeetingService(_MeetingDomainService):
             if participant_request.contact_id is not None:
                 await self._require_contact(participant_request.contact_id)
 
+        interaction = Interaction(
+            id=uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            company_id=request.company_id,
+            opportunity_id=request.opportunity_id,
+            interaction_type=interaction_type_for_meeting(request.meeting_type.value),
+            lifecycle_status=interaction_status_for_meeting(request.status.value),
+            title=request.title,
+            scheduled_start_at=request.meeting_date,
+            actual_start_at=request.meeting_date if request.status.value == "completed" else None,
+            actual_end_at=request.meeting_date if request.status.value == "completed" else None,
+            creation_origin="meeting_compatibility",
+            created_by_user_id=self.tenant.user_id,
+        )
         meeting = Meeting(
             organisation_id=self.tenant.organisation_id,
+            interaction_id=interaction.id,
             title=request.title,
             description=request.description,
             meeting_date=request.meeting_date,
@@ -222,8 +245,9 @@ class MeetingService(_MeetingDomainService):
             created_by=self.tenant.user_id,
             updated_by=self.tenant.user_id,
         )
-        self.repository.add(meeting)
         try:
+            self.repository.add(interaction)
+            self.repository.add(meeting)
             await self.repository.flush()
             participants = [
                 self._participant_from_create(meeting.id, participant_request)
@@ -239,6 +263,27 @@ class MeetingService(_MeetingDomainService):
             await self.repository.flush()
 
             audit_events: list[Base] = [
+                InteractionAuditEvent(
+                    organisation_id=self.tenant.organisation_id,
+                    interaction_id=interaction.id,
+                    actor_user_id=self.tenant.user_id,
+                    action=InteractionAuditAction.CREATED.value,
+                    changed_fields=[
+                        "company_id",
+                        "interaction_type",
+                        "lifecycle_status",
+                        "opportunity_id",
+                        "scheduled_start_at",
+                        "title",
+                    ],
+                ),
+                InteractionAuditEvent(
+                    organisation_id=self.tenant.organisation_id,
+                    interaction_id=interaction.id,
+                    actor_user_id=self.tenant.user_id,
+                    action=InteractionAuditAction.MEETING_LINKED.value,
+                    changed_fields=["meeting_id"],
+                ),
                 self._audit(
                     meeting_id=meeting.id,
                     entity_id=meeting.id,
@@ -254,7 +299,7 @@ class MeetingService(_MeetingDomainService):
                         "opportunity_id",
                         "owner_user_id",
                     ],
-                )
+                ),
             ]
             audit_events.extend(
                 self._audit(
@@ -298,6 +343,17 @@ class MeetingService(_MeetingDomainService):
 
     async def update_meeting(self, meeting_id: UUID, request: MeetingUpdate) -> Meeting:
         meeting = await self._get_meeting_for_update(meeting_id)
+        interaction = await self.repository.get_interaction(
+            self.tenant.organisation_id,
+            meeting.interaction_id,
+            for_update=True,
+        )
+        if interaction is None:
+            raise PublicAPIError(
+                "compatibility_conflict",
+                "The linked Interaction is unavailable.",
+                409,
+            )
         values = request.model_dump(exclude_unset=True)
         if "company_id" in values and values["company_id"] is not None:
             await self._require_company(values["company_id"])
@@ -311,8 +367,43 @@ class MeetingService(_MeetingDomainService):
         )
         if "owner_user_id" in values:
             await self._require_member(values["owner_user_id"], "ownerUserId")
+        if "status" in values:
+            target_status = interaction_status_for_meeting(values["status"].value)
+            if not interaction_transition_is_allowed(interaction.lifecycle_status, target_status):
+                raise PublicAPIError(
+                    "invalid_lifecycle_transition",
+                    f"An interaction cannot move from {interaction.lifecycle_status} to {target_status}.",
+                    409,
+                )
         meeting.updated_by = self.tenant.user_id
         self._apply_values(meeting, values)
+        changed_at = datetime.now(UTC)
+        meeting.updated_at = changed_at
+        interaction_field_map = {
+            "company_id": "company_id",
+            "meeting_date": "scheduled_start_at",
+            "meeting_type": "interaction_type",
+            "opportunity_id": "opportunity_id",
+            "status": "lifecycle_status",
+            "title": "title",
+        }
+        interaction_fields = sorted(interaction_field_map[field] for field in values if field in interaction_field_map)
+        if interaction_fields:
+            project_meeting_to_interaction(meeting, interaction)
+            interaction.updated_at = changed_at
+            self.repository.add(
+                InteractionAuditEvent(
+                    organisation_id=self.tenant.organisation_id,
+                    interaction_id=interaction.id,
+                    actor_user_id=self.tenant.user_id,
+                    action=(
+                        InteractionAuditAction.CANCELLED.value
+                        if "status" in values and interaction.lifecycle_status == "cancelled"
+                        else InteractionAuditAction.UPDATED.value
+                    ),
+                    changed_fields=interaction_fields,
+                )
+            )
         self.repository.add(
             self._audit(
                 meeting_id=meeting.id,
@@ -327,9 +418,23 @@ class MeetingService(_MeetingDomainService):
 
     async def delete_meeting(self, meeting_id: UUID) -> None:
         meeting = await self._get_meeting_for_update(meeting_id)
+        interaction = await self.repository.get_interaction(
+            self.tenant.organisation_id,
+            meeting.interaction_id,
+            for_update=True,
+        )
+        if interaction is None:
+            raise PublicAPIError(
+                "compatibility_conflict",
+                "The linked Interaction is unavailable.",
+                409,
+            )
         deleted_at = datetime.now(UTC)
         meeting.deleted_at = deleted_at
         meeting.updated_by = self.tenant.user_id
+        meeting.updated_at = deleted_at
+        interaction.deleted_at = deleted_at
+        interaction.updated_at = deleted_at
         participants = await self.repository.list_participants(
             self.tenant.organisation_id,
             meeting.id,
@@ -361,6 +466,15 @@ class MeetingService(_MeetingDomainService):
                     version=transcript.version,
                 )
             )
+        self.repository.add(
+            InteractionAuditEvent(
+                organisation_id=self.tenant.organisation_id,
+                interaction_id=interaction.id,
+                actor_user_id=self.tenant.user_id,
+                action=InteractionAuditAction.DELETED.value,
+                changed_fields=["deleted_at"],
+            )
+        )
         self.repository.add(
             self._audit(
                 meeting_id=meeting.id,

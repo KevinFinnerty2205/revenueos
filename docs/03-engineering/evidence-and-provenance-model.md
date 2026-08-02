@@ -1,6 +1,8 @@
 # Evidence and provenance model
 
-- **Status:** Approved target model; not implemented by WO-010
+- **Status:** Approved target model; WO-011 implements only the metadata envelope
+  subset documented in the
+  [Evidence foundation implementation guide](evidence-foundation-implementation.md)
 - **Goal:** Let RevenueOS explain what it believes, why, what conflicts and how the
   conclusion was validated without pretending every source is equally authoritative
 
