@@ -29,7 +29,18 @@ from revenueos.domain import (
     AIJobStatus,
     AIJobType,
     AttendanceStatus,
+    CaptureSessionStatus,
+    CaptureSessionType,
     CompanyStatus,
+    EvidenceLifecycleStatus,
+    EvidenceOriginClass,
+    EvidenceRetentionClass,
+    EvidenceSupportClass,
+    EvidenceType,
+    EvidenceValidationState,
+    InteractionCreationOrigin,
+    InteractionLifecycleStatus,
+    InteractionType,
     MeetingStatus,
     MeetingType,
     OpportunityAuditAction,
@@ -561,6 +572,100 @@ class Task(TimestampMixin, Base):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
 
 
+class Interaction(TimestampMixin, Base):
+    __tablename__ = "interactions"
+    __table_args__ = (
+        CheckConstraint("length(trim(title)) > 0", name="ck_interactions_title"),
+        CheckConstraint(
+            "interaction_type IN ("
+            "'online_meeting', 'face_to_face_meeting', 'presentation', 'workshop', "
+            "'site_visit', 'executive_lunch', 'phone_call', 'conference_interaction', "
+            "'trade_show_interaction', 'manual_interaction'"
+            ")",
+            name="ck_interactions_type",
+        ),
+        CheckConstraint(
+            "lifecycle_status IN ('planned', 'in_progress', 'completed', 'cancelled')",
+            name="ck_interactions_lifecycle_status",
+        ),
+        CheckConstraint(
+            "creation_origin IN ('manual', 'meeting_compatibility', 'imported_external')",
+            name="ck_interactions_creation_origin",
+        ),
+        CheckConstraint(
+            "scheduled_end_at IS NULL OR scheduled_start_at IS NULL OR scheduled_end_at >= scheduled_start_at",
+            name="ck_interactions_scheduled_range",
+        ),
+        CheckConstraint(
+            "actual_end_at IS NULL OR actual_start_at IS NULL OR actual_end_at >= actual_start_at",
+            name="ck_interactions_actual_range",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_interactions_company_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_interactions_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_interactions_creator_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_interactions_organisation_id_id"),
+        Index("ix_interactions_organisation_scheduled", "organisation_id", "scheduled_start_at"),
+        Index("ix_interactions_organisation_status", "organisation_id", "lifecycle_status"),
+        Index("ix_interactions_organisation_type", "organisation_id", "interaction_type"),
+        Index("ix_interactions_organisation_company", "organisation_id", "company_id"),
+        Index("ix_interactions_organisation_opportunity", "organisation_id", "opportunity_id"),
+        Index("ix_interactions_organisation_deleted", "organisation_id", "deleted_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    interaction_type: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default=InteractionType.MANUAL_INTERACTION.value,
+        server_default=InteractionType.MANUAL_INTERACTION.value,
+    )
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=InteractionLifecycleStatus.PLANNED.value,
+        server_default=InteractionLifecycleStatus.PLANNED.value,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scheduled_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    actual_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    actual_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    timezone: Mapped[str | None] = mapped_column(String(64))
+    creation_origin: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default=InteractionCreationOrigin.MANUAL.value,
+        server_default=InteractionCreationOrigin.MANUAL.value,
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Meeting(TimestampMixin, Base):
     __tablename__ = "meetings"
     __table_args__ = (
@@ -572,6 +677,12 @@ class Meeting(TimestampMixin, Base):
         CheckConstraint(
             "status IN ('scheduled', 'completed', 'cancelled')",
             name="ck_meetings_status",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_meetings_interaction_tenant",
+            ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["organisation_id", "company_id"],
@@ -613,6 +724,11 @@ class Meeting(TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("organisation_id", "id", name="uq_meetings_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            name="uq_meetings_organisation_interaction",
+        ),
         Index("ix_meetings_organisation_date", "organisation_id", "meeting_date"),
         Index("ix_meetings_organisation_status", "organisation_id", "status"),
         Index("ix_meetings_organisation_type", "organisation_id", "meeting_type"),
@@ -627,6 +743,7 @@ class Meeting(TimestampMixin, Base):
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
     )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     meeting_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -864,6 +981,238 @@ class MeetingAuditEvent(Base):
         server_default="{}",
     )
     version: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class CaptureSession(TimestampMixin, Base):
+    __tablename__ = "capture_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "capture_type IN ("
+            "'ai_debrief', 'voice_journal', 'live_recording', 'visual_capture', "
+            "'uploaded_transcript', 'uploaded_recording', 'manual_notes'"
+            ")",
+            name="ck_capture_sessions_type",
+        ),
+        CheckConstraint(
+            "status IN ('created', 'capturing', 'completed', 'abandoned', 'failed')",
+            name="ck_capture_sessions_status",
+        ),
+        CheckConstraint(
+            "completed_at IS NULL OR started_at IS NULL OR completed_at >= started_at",
+            name="ck_capture_sessions_time_range",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_capture_sessions_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "started_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_capture_sessions_starter_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_capture_sessions_organisation_id_id"),
+        Index("ix_capture_sessions_organisation_interaction", "organisation_id", "interaction_id"),
+        Index("ix_capture_sessions_organisation_status", "organisation_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    capture_type: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default=CaptureSessionType.MANUAL_NOTES.value,
+        server_default=CaptureSessionType.MANUAL_NOTES.value,
+    )
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=CaptureSessionStatus.CREATED.value,
+        server_default=CaptureSessionStatus.CREATED.value,
+    )
+    started_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Evidence(TimestampMixin, Base):
+    __tablename__ = "evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "evidence_type IN ('transcript', 'user_observation', 'recording', 'visual', "
+            "'document', 'email', 'system_metadata')",
+            name="ck_evidence_type",
+        ),
+        CheckConstraint(
+            "origin_class IN ('customer_direct', 'salesperson_reported', 'system_metadata', "
+            "'imported_external', 'seller_prepared', 'ai_inferred')",
+            name="ck_evidence_origin_class",
+        ),
+        CheckConstraint(
+            "support_class IN ('direct', 'reported', 'inferred', 'corroborated', "
+            "'verified', 'disputed', 'stale', 'superseded')",
+            name="ck_evidence_support_class",
+        ),
+        CheckConstraint(
+            "validation_state IN ('unreviewed', 'verified', 'disputed', 'rejected', 'not_applicable')",
+            name="ck_evidence_validation_state",
+        ),
+        CheckConstraint(
+            "lifecycle_status IN ('received', 'available', 'excluded', 'superseded', 'deleted')",
+            name="ck_evidence_lifecycle_status",
+        ),
+        CheckConstraint(
+            "retention_class IN ('inherited', 'short_lived', 'standard')",
+            name="ck_evidence_retention_class",
+        ),
+        CheckConstraint(
+            "effective_end_at IS NULL OR effective_start_at IS NULL OR effective_end_at >= effective_start_at",
+            name="ck_evidence_effective_range",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_evidence_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "capture_session_id"],
+            ["capture_sessions.organisation_id", "capture_sessions.id"],
+            name="fk_evidence_capture_session_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "captured_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_evidence_captured_by_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_evidence_organisation_id_id"),
+        Index("ix_evidence_organisation_interaction", "organisation_id", "interaction_id"),
+        Index("ix_evidence_organisation_capture_session", "organisation_id", "capture_session_id"),
+        Index("ix_evidence_organisation_status", "organisation_id", "lifecycle_status"),
+        Index("ix_evidence_organisation_type", "organisation_id", "evidence_type"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    capture_session_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    evidence_type: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default=EvidenceType.SYSTEM_METADATA.value,
+        server_default=EvidenceType.SYSTEM_METADATA.value,
+    )
+    origin_class: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default=EvidenceOriginClass.SYSTEM_METADATA.value,
+        server_default=EvidenceOriginClass.SYSTEM_METADATA.value,
+    )
+    support_class: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=EvidenceSupportClass.DIRECT.value,
+        server_default=EvidenceSupportClass.DIRECT.value,
+    )
+    validation_state: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=EvidenceValidationState.NOT_APPLICABLE.value,
+        server_default=EvidenceValidationState.NOT_APPLICABLE.value,
+    )
+    captured_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    effective_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    effective_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=EvidenceLifecycleStatus.RECEIVED.value,
+        server_default=EvidenceLifecycleStatus.RECEIVED.value,
+    )
+    retention_class: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=EvidenceRetentionClass.INHERITED.value,
+        server_default=EvidenceRetentionClass.INHERITED.value,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class InteractionAuditEvent(Base):
+    __tablename__ = "interaction_audit_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('created', 'updated', 'completed', 'cancelled', 'deleted', 'meeting_linked')",
+            name="ck_interaction_audit_events_action",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_interaction_audit_events_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "actor_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_interaction_audit_events_actor_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            name="uq_interaction_audit_events_organisation_id_id",
+        ),
+        Index(
+            "ix_interaction_audit_events_organisation_interaction_created",
+            "organisation_id",
+            "interaction_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    changed_fields: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

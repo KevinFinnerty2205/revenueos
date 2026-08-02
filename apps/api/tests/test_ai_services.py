@@ -14,7 +14,7 @@ from revenueos.ai_repositories import AIArtifactRepository, AIJobRepository
 from revenueos.ai_services import AIArtifactService, AIJobService
 from revenueos.domain import AIJobStatus, AIJobType
 from revenueos.errors import PublicAPIError
-from revenueos.models import AIArtifact, AIJob, Meeting, MeetingAuditEvent, Transcript
+from revenueos.models import AIArtifact, AIJob, Interaction, Meeting, MeetingAuditEvent, Transcript
 from revenueos.tenant import TenantContext
 
 from .conftest import (
@@ -63,9 +63,20 @@ async def _seed_trace(
     label: str = "Primary",
     version: int = 4,
 ) -> tuple[Meeting, Transcript]:
+    interaction = Interaction(
+        id=uuid.uuid4(),
+        organisation_id=organisation_id,
+        title=f"{label} meeting",
+        interaction_type="online_meeting",
+        lifecycle_status="planned",
+        scheduled_start_at=datetime(2026, 7, 18, 9, tzinfo=UTC),
+        creation_origin="meeting_compatibility",
+        created_by_user_id=user_id,
+    )
     meeting = Meeting(
         id=uuid.uuid4(),
         organisation_id=organisation_id,
+        interaction_id=interaction.id,
         title=f"{label} meeting",
         meeting_date=datetime(2026, 7, 18, 9, tzinfo=UTC),
         owner_user_id=user_id,
@@ -79,7 +90,7 @@ async def _seed_trace(
         raw_text=f"{label} confidential transcript content",
         version=version,
     )
-    session.add(meeting)
+    session.add_all([interaction, meeting])
     await session.flush()
     session.add(transcript)
     await session.commit()

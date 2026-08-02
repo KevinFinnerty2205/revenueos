@@ -290,6 +290,205 @@ test("meeting list and create form are responsive and deliberate", async ({
   await expect(page.getByText(/does not record or transcribe/i)).toBeVisible();
 });
 
+test("interaction timeline supports deliberate creation and completion without internal controls", async ({
+  page,
+}) => {
+  let created = false;
+  let completed = false;
+  let createPayload: Record<string, unknown> | null = null;
+  const linkedInteraction = interactionRecord({
+    id: "interaction-1",
+    meetingId: "meeting-1",
+    title: "Acme discovery",
+    interactionType: "online_meeting",
+  });
+  const createdInteraction = interactionRecord({
+    id: "interaction-2",
+    meetingId: null,
+    title: "Customer planning workshop",
+    interactionType: "workshop",
+  });
+
+  await page.route(
+    "http://localhost:8000/api/v1/interactions**",
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (request.method() === "POST" && path.endsWith("/complete")) {
+        completed = true;
+        await route.fulfill({
+          json: {
+            ...createdInteraction,
+            lifecycleStatus: "completed",
+            actualEndAt: "2026-08-04T02:00:00Z",
+          },
+        });
+        return;
+      }
+      if (request.method() === "POST") {
+        createPayload = request.postDataJSON() as Record<string, unknown>;
+        created = true;
+        await route.fulfill({ status: 201, json: createdInteraction });
+        return;
+      }
+      if (path.endsWith("/interaction-2")) {
+        await route.fulfill({
+          json: completed
+            ? {
+                ...createdInteraction,
+                lifecycleStatus: "completed",
+                actualEndAt: "2026-08-04T02:00:00Z",
+              }
+            : createdInteraction,
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          items: [
+            linkedInteraction,
+            ...(created
+              ? [
+                  completed
+                    ? {
+                        ...createdInteraction,
+                        lifecycleStatus: "completed",
+                        actualEndAt: "2026-08-04T02:00:00Z",
+                      }
+                    : createdInteraction,
+                ]
+              : []),
+          ],
+          page: 1,
+          pageSize: 100,
+          total: created ? 2 : 1,
+          pages: 1,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/companies**",
+    async (route) => {
+      if (new URL(route.request().url()).pathname.endsWith("/company-1")) {
+        await route.fulfill({
+          json: {
+            id: "company-1",
+            organisationId: "organisation-1",
+            name: "Acme Australia",
+            website: null,
+            industry: "Technology",
+            employeeCount: 120,
+            status: "active",
+            ownerUserId: "user-1",
+            createdAt: "2026-07-01T00:00:00Z",
+            updatedAt: "2026-07-01T00:00:00Z",
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          items: [{ id: "company-1", name: "Acme Australia" }],
+          page: 1,
+          pageSize: 100,
+          total: 1,
+          pages: 1,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/accounts/company-1/brain**",
+    async (route) => {
+      if (new URL(route.request().url()).pathname.endsWith("/reasoning")) {
+        await route.fulfill({
+          json: {
+            state: "insufficient_history",
+            message:
+              "Revenue Brain needs at least two completed meeting snapshots before it can identify changes.",
+            latest: null,
+            history: [],
+          },
+        });
+        return;
+      }
+      await route.fulfill({ json: [] });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/opportunities**",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: [{ id: "opportunity-1", name: "Expansion" }],
+          page: 1,
+          pageSize: 100,
+          total: 1,
+          pages: 1,
+        },
+      });
+    },
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/interactions");
+  await expect(
+    page.getByRole("heading", { name: "Interactions" }),
+  ).toBeVisible();
+  await expect(page.getByText("Acme Australia")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open Meeting Intelligence" }),
+  ).toHaveAttribute("href", "/meetings/meeting-1");
+
+  await page.getByRole("link", { name: "Create interaction" }).first().click();
+  await page.getByLabel("Title").fill("Customer planning workshop");
+  await page.getByLabel("Interaction type").selectOption("workshop");
+  await page.getByLabel("Company").selectOption("company-1");
+  await page.getByLabel("Opportunity").selectOption("opportunity-1");
+  await page.getByRole("button", { name: "Create interaction" }).click();
+  await expect(page).toHaveURL(/\/interactions\/interaction-2$/);
+  expect(created).toBe(true);
+  expect(createPayload).toMatchObject({
+    title: "Customer planning workshop",
+    interactionType: "workshop",
+    companyId: "company-1",
+    opportunityId: "opportunity-1",
+  });
+  await page.getByRole("button", { name: "Complete interaction" }).click();
+  await expect(page.getByText("Completed", { exact: true })).toBeVisible();
+  expect(completed).toBe(true);
+  if (process.env.CAPTURE_WO_011_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-011-interaction-detail.png",
+      fullPage: true,
+    });
+  }
+
+  await page.getByRole("link", { name: "Back to interactions" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Customer planning workshop" }),
+  ).toBeVisible();
+
+  await page.goto("/companies/company-1");
+  await expect(
+    page.getByRole("heading", { name: "Revenue Brain" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "No snapshots yet" }),
+  ).toBeVisible();
+
+  await expect(page.getByLabel(/transcript/i)).toHaveCount(0);
+  for (const prohibited of [
+    "prompt",
+    "worker",
+    "provider",
+    "internal metadata",
+  ]) {
+    await expect(page.getByText(new RegExp(prohibited, "i"))).toHaveCount(0);
+  }
+});
+
 test("meeting detail orchestrates and persists the unified Meeting Intelligence workspace", async ({
   page,
   context,
@@ -1186,5 +1385,28 @@ function generationWorkspace(
           ? ["next_best_action", "follow_up_email"]
           : [],
     reusedCapabilities: [],
+  };
+}
+
+function interactionRecord(overrides: Record<string, unknown>) {
+  return {
+    id: "interaction-1",
+    organisationId: "organisation-1",
+    companyId: "company-1",
+    opportunityId: null,
+    meetingId: null,
+    interactionType: "manual_interaction",
+    lifecycleStatus: "planned",
+    title: "Customer interaction",
+    scheduledStartAt: "2026-08-04T01:00:00Z",
+    scheduledEndAt: null,
+    actualStartAt: null,
+    actualEndAt: null,
+    timezone: "Australia/Sydney",
+    creationOrigin: "manual",
+    createdByUserId: "user-1",
+    createdAt: "2026-07-26T00:00:00Z",
+    updatedAt: "2026-07-26T00:00:00Z",
+    ...overrides,
   };
 }

@@ -85,7 +85,16 @@ then start the matching API/worker. Schedule tenant retention and expired-export
 purge commands. The complete process, backup/restore drill and launch evidence
 are in [private-beta deployment and recovery](private-beta-deployment-and-recovery.md).
 
+WO-011 requires current head `0021_interaction_domain_foundation`. Apply it once
+before starting the matching API/web release, then verify deterministic Meeting
+links and forced RLS. No worker or provider configuration changes are required.
+
 ## Rollback
+
+Prefer application rollback while retaining `0021`. Its downgrade removes all
+standalone Interaction, Capture Session, Evidence and Interaction audit metadata;
+Meeting and Revenue Brain rows survive but the compatibility link is removed.
+Back up and approve that data loss before downgrade.
 
 Downgrading `0020_private_beta_readiness` deletes all beta consent, settings,
 onboarding, usage, feedback, request and safe-event metadata and cannot restore

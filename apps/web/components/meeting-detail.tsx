@@ -265,6 +265,12 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
             {formatMeetingDate(meeting.meetingDate)} ·{" "}
             {humanise(meeting.status)}
           </p>
+          <Link
+            href={`/interactions/${meeting.interactionId}`}
+            className="mt-3 inline-flex rounded-full bg-teal-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-teal-800 hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-600"
+          >
+            Interaction record
+          </Link>
         </div>
         <Link className="primary-button" href={`/meetings/${meeting.id}/edit`}>
           Edit meeting

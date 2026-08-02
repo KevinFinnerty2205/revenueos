@@ -105,7 +105,9 @@ search, new prompts, provider calls and transcript analysis.
 
 ## Target Interaction evolution
 
-WO-010 leaves every current snapshot immutable and Meeting-based. Future
+WO-011 leaves every current snapshot immutable and Meeting-based. The new
+Meeting/Interaction compatibility relation supplies timeline identity without
+updating a snapshot or artefact reference. Future
 Interaction snapshots use a new schema version and reference validated structured
 Interaction Intelligence plus provenance, not copied raw recordings, transcripts,
 documents or journals. Historical Meeting snapshots appear in the Interaction

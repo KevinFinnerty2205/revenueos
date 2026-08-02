@@ -2,8 +2,8 @@
 
 - **Status:** Approved product and architecture direction; future work requires a
   separate work order
-- **Current baseline:** Meeting Intelligence, Opportunity Workspace, Revenue Brain
-  and WO-009 private-beta controls
+- **Current baseline:** Meeting Intelligence, Opportunity Workspace, Revenue Brain,
+  WO-009 private-beta controls and the WO-011 Interaction metadata foundation
 - **Primary problem:** Reliable intelligence from face-to-face and online customer
   interactions without depending on recording or transcript upload
 

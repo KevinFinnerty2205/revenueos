@@ -1,7 +1,8 @@
 # Interaction domain architecture
 
-- **Status:** Approved target architecture; no schema, API or application change is
-  implemented by WO-010
+- **Status:** Approved target architecture; WO-011 implements the Interaction,
+  Meeting compatibility and metadata-only Evidence/Capture Session subset. See the
+  [current implementation guide](interaction-domain-implementation.md)
 - **Decision:** Interaction is the source-neutral parent for future customer events;
   Meeting remains a compatible subtype aggregate during an additive migration
 - **Architecture:** Extend the existing modular monolith, PostgreSQL, durable worker

@@ -2,7 +2,7 @@
 
 - **Status:** Recommended sequence; each stage requires a separate approved work
   order before implementation
-- **Current baseline:** Work through WO-009 is complete; WO-010 is documentation only
+- **Current baseline:** Work through WO-011 is complete; WO-010 is the approved blueprint
 - **Primary optimisation:** Earliest trustworthy use for real face-to-face sales
   interactions without requiring recording or transcript upload
 
@@ -48,6 +48,10 @@ reliability and cost decision signals must be reviewed.
 
 ## WO-011 — Interaction Domain Foundation
 
+**Delivery status:** Implemented. See the
+[WO-011 sprint record](../07-sprints/wo-011-interaction-domain-foundation.md) and
+[implementation guide](../03-engineering/interaction-domain-implementation.md).
+
 ### Objective and user value
 
 Introduce the tenant-isolated Interaction, compatibility relation, Capture Session
@@ -74,7 +78,8 @@ single future timeline identity while current Meeting workflows remain unchanged
 - Interaction and link queries are tenant-isolated with forced RLS and composite
   tenant constraints.
 - New Meeting-to-Interaction creation and historical backfill are idempotent.
-- Capture Session and Evidence state transitions reject invalid lifecycle changes.
+- Capture Session and Evidence schemas reject unknown types/states and invalid time
+  relationships; their execution lifecycle remains out of scope.
 - Deletion/export behaviour is explicit for new metadata.
 - Migration upgrade/downgrade/re-upgrade, old-client compatibility and bounded query
   tests pass.

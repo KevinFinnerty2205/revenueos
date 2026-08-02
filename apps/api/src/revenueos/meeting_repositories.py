@@ -13,6 +13,7 @@ from revenueos.models import (
     Base,
     Company,
     Contact,
+    Interaction,
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
@@ -130,6 +131,23 @@ class MeetingRepository:
             Meeting.organisation_id == organisation_id,
             Meeting.id == meeting_id,
             Meeting.deleted_at.is_(None),
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def get_interaction(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> Interaction | None:
+        statement = select(Interaction).where(
+            Interaction.organisation_id == organisation_id,
+            Interaction.id == interaction_id,
+            Interaction.deleted_at.is_(None),
         )
         if for_update:
             statement = statement.with_for_update()

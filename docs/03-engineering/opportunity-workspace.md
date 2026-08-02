@@ -242,17 +242,20 @@ silently reinterpret this latest-meeting read model as historical intelligence.
 
 ## Target Interaction continuity
 
-WO-010 does not change this current latest-meeting read model. The future
-Interaction Timeline will add presentations, workshops, site visits and other
-customer events through a separate named read surface. AI Debrief and Voice Journal
-appear as capture activity beneath their Interaction, not as customer events.
+WO-011 deliberately does not change this current latest-meeting read model. It
+adds presentations, workshops, site visits and other customer events through the
+separate Interaction list/API, while Opportunity Workspace retains its stable
+`latestMeeting` contract. AI Debrief and Voice Journal remain unimplemented Capture
+Session types beneath their Interaction, not customer events.
 
-During the additive migration, the Workspace keeps its current `latestMeeting` and
+After the additive migration, the Workspace keeps its current `latestMeeting` and
 ten Meeting Intelligence capability fields. A later `latestInteraction` or
 source-neutral opportunity-intelligence contract must be additive and must not
 reinterpret salesperson-reported evidence as transcript-grounded customer evidence.
 The compatibility adapter and migration are defined in the
 [Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md).
+The implemented adapter is documented in
+[Interaction migration and compatibility](interaction-migration-and-compatibility.md).
 
 ## Related decisions
 

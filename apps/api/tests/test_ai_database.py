@@ -20,6 +20,7 @@ from revenueos.models import (
     AIArtifact,
     AIJob,
     Base,
+    Interaction,
     Meeting,
     Organisation,
     OrganisationMembership,
@@ -63,9 +64,20 @@ async def _seed_meeting(
     organisation_id = uuid.uuid4()
     user_id = uuid.uuid4()
     meeting_id = uuid.uuid4()
+    interaction = Interaction(
+        id=uuid.uuid4(),
+        organisation_id=organisation_id,
+        title=f"{label} meeting",
+        interaction_type="online_meeting",
+        lifecycle_status="planned",
+        scheduled_start_at=datetime(2026, 7, 18, 9, 0, tzinfo=UTC),
+        creation_origin="meeting_compatibility",
+        created_by_user_id=user_id,
+    )
     meeting = Meeting(
         id=meeting_id,
         organisation_id=organisation_id,
+        interaction_id=interaction.id,
         title=f"{label} meeting",
         meeting_date=datetime(2026, 7, 18, 9, 0, tzinfo=UTC),
         owner_user_id=user_id,
@@ -102,7 +114,7 @@ async def _seed_meeting(
         )
     )
     await session.flush()
-    session.add(meeting)
+    session.add_all([interaction, meeting])
     await session.flush()
     session.add(transcript)
     await session.flush()

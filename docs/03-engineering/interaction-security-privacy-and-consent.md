@@ -1,7 +1,8 @@
 # Interaction security, privacy and consent
 
-- **Status:** Target controls and review questions; WO-010 is not legal advice and
-  implements no capture or processing capability
+- **Status:** Target controls and review questions; WO-011 implements tenant-safe
+  metadata foundations only and no capture/processing capability. See the
+  [current security review](interaction-domain-security-review.md)
 - **Baseline:** Preserve current verified tenant context, forced RLS, safe errors,
   content-redacted logs, retention/export/deletion controls and provider boundaries
 

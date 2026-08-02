@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from revenueos.ai_repositories import AIArtifactRepository, AIJobRepository
 from revenueos.domain import AIArtifactType, AIJobStatus, AIJobType
-from revenueos.models import AIArtifact, AIJob, Meeting, Transcript
+from revenueos.models import AIArtifact, AIJob, Interaction, Meeting, Transcript
 
 from .conftest import (
     PRIMARY_ORGANISATION_ID,
@@ -43,9 +43,20 @@ async def _seed_trace(
     label: str = "Primary",
     version: int = 3,
 ) -> tuple[Meeting, Transcript]:
+    interaction = Interaction(
+        id=uuid.uuid4(),
+        organisation_id=organisation_id,
+        title=f"{label} meeting",
+        interaction_type="online_meeting",
+        lifecycle_status="planned",
+        scheduled_start_at=datetime(2026, 7, 18, 9, tzinfo=UTC),
+        creation_origin="meeting_compatibility",
+        created_by_user_id=user_id,
+    )
     meeting = Meeting(
         id=uuid.uuid4(),
         organisation_id=organisation_id,
+        interaction_id=interaction.id,
         title=f"{label} meeting",
         meeting_date=datetime(2026, 7, 18, 9, tzinfo=UTC),
         owner_user_id=user_id,
@@ -59,7 +70,7 @@ async def _seed_trace(
         raw_text=f"{label} deliberately supplied transcript",
         version=version,
     )
-    session.add(meeting)
+    session.add_all([interaction, meeting])
     await session.flush()
     session.add(transcript)
     await session.flush()

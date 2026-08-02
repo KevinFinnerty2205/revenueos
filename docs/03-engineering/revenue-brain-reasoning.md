@@ -261,3 +261,8 @@ preserves origin, conflict and verification, never rewrites historical insights 
 never treats absence as resolution. See the
 [evidence and provenance model](evidence-and-provenance-model.md) and
 [Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md).
+
+WO-011 does not add an Interaction reasoning source or change version-1 comparison.
+Historical snapshots/insights keep their exact Meeting, transcript and artefact
+references; retention removes the linked Interaction only in the same approved
+dependency-ordered Meeting deletion path.

@@ -191,6 +191,7 @@ function completedIntelligence(): MeetingIntelligenceResponse {
 
 const meeting: Meeting = {
   id: "meeting-1",
+  interactionId: "interaction-1",
   organisationId: "organisation-1",
   title: "Expansion review",
   description: null,

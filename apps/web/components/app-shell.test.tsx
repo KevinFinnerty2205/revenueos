@@ -26,6 +26,7 @@ describe("application shell", () => {
       "Companies",
       "Contacts",
       "Opportunities",
+      "Interactions",
       "Meetings",
       "Tasks",
       "Assistant",

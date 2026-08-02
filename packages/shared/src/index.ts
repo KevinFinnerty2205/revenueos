@@ -62,6 +62,26 @@ export type TaskStatus = "open" | "in_progress" | "completed" | "cancelled";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type MeetingType = "remote" | "phone" | "in_person" | "other";
 export type MeetingStatus = "scheduled" | "completed" | "cancelled";
+export type InteractionType =
+  | "online_meeting"
+  | "face_to_face_meeting"
+  | "presentation"
+  | "workshop"
+  | "site_visit"
+  | "executive_lunch"
+  | "phone_call"
+  | "conference_interaction"
+  | "trade_show_interaction"
+  | "manual_interaction";
+export type InteractionLifecycleStatus =
+  | "planned"
+  | "in_progress"
+  | "completed"
+  | "cancelled";
+export type InteractionCreationOrigin =
+  | "manual"
+  | "meeting_compatibility"
+  | "imported_external";
 export type AttendanceStatus = "invited" | "attended" | "absent" | "unknown";
 export type ParticipantRole = "host" | "attendee";
 export type TranscriptSource = "manual" | "upload";
@@ -320,6 +340,7 @@ export interface Task extends TenantEntity {
 }
 
 export interface Meeting extends TenantEntity {
+  interactionId: string;
   title: string;
   description: string | null;
   meetingDate: string;
@@ -330,6 +351,22 @@ export interface Meeting extends TenantEntity {
   ownerUserId: string;
   createdBy: string;
   updatedBy: string;
+}
+
+export interface Interaction extends TenantEntity {
+  companyId: string | null;
+  opportunityId: string | null;
+  meetingId: string | null;
+  interactionType: InteractionType;
+  lifecycleStatus: InteractionLifecycleStatus;
+  title: string;
+  scheduledStartAt: string | null;
+  scheduledEndAt: string | null;
+  actualStartAt: string | null;
+  actualEndAt: string | null;
+  timezone: string | null;
+  creationOrigin: InteractionCreationOrigin;
+  createdByUserId: string;
 }
 
 export interface RevenueBrainSnapshot {

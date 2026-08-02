@@ -24,14 +24,15 @@ and [roadmap](../06-roadmap/interaction-intelligence-roadmap.md).
 RevenueOS is positioned as **the AI operating system for customer interactions**.
 The product works across Capture, Intelligence and Action before, during and after
 the event. Interaction becomes the future source-neutral parent while the mature
-Meeting domain remains compatible through an additive migration. AI Debrief and
+Meeting domain remains compatible through an additive migration. WO-011 now
+implements that Interaction identity, Meeting compatibility link and a metadata-only
+Evidence/Capture Session foundation. AI Debrief and
 Voice Journal are supporting capture sessions that produce reported evidence; they
-are not customer interactions. WO-010 documents this direction and implements none
-of those capabilities.
+are not customer interactions, and neither is executable in WO-011.
 
 ## Current product surface
 
-Sprints 1–3 provide:
+The current implementation provides:
 
 - an honest public landing page;
 - sign-in, sign-up and sign-out paths prepared for Clerk;
@@ -50,7 +51,11 @@ Sprints 1–3 provide:
 - a controlled private-beta foundation with Clerk organisation sign-in,
   versioned transcript/data notice, onboarding, retention, export/deletion
   requests, usage limits, feedback and an admin-only organisation view; and
-- an Assistant placeholder that states its capability is not implemented.
+- an Assistant placeholder that states its capability is not implemented;
+- a tenant-isolated Interaction list/create/detail path with controlled types and
+  lifecycle, plus stable bidirectional links to existing Meetings; and
+- metadata-only Capture Session and Evidence foundations with explicit origin,
+  support and validation classification and no raw content.
 
 The current product accepts only deliberately entered meeting metadata and
 plain-text transcripts. The default provider is a deterministic no-network

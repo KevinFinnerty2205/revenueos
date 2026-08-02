@@ -28,6 +28,7 @@ from revenueos.models import (
     AIArtifact,
     AIJob,
     Company,
+    Interaction,
     Meeting,
     Opportunity,
     RevenueBrainSnapshot,
@@ -234,9 +235,22 @@ async def _seed_ready_meeting(
             )
         )
         await session.flush()
+    interaction = Interaction(
+        id=uuid.uuid4(),
+        organisation_id=PRIMARY_ORGANISATION_ID,
+        company_id=resolved_company_id,
+        opportunity_id=opportunity_id,
+        interaction_type="online_meeting",
+        lifecycle_status="completed" if meeting_status == "completed" else "planned",
+        title="Revenue Brain meeting",
+        scheduled_start_at=meeting_date,
+        creation_origin="meeting_compatibility",
+        created_by_user_id=PRIMARY_USER_ID,
+    )
     meeting = Meeting(
         id=uuid.uuid4(),
         organisation_id=PRIMARY_ORGANISATION_ID,
+        interaction_id=interaction.id,
         title="Revenue Brain meeting",
         meeting_date=meeting_date,
         status=meeting_status,
@@ -246,7 +260,7 @@ async def _seed_ready_meeting(
         created_by=PRIMARY_USER_ID,
         updated_by=PRIMARY_USER_ID,
     )
-    session.add(meeting)
+    session.add_all([interaction, meeting])
     await session.flush()
     transcript = Transcript(
         id=uuid.uuid4(),

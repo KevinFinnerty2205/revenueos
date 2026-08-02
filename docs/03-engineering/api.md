@@ -145,7 +145,28 @@ List parameters: `search`, `companyId`, `contactId`, `opportunityId`, `assignedU
 
 A task may be general or linked to records. If company, contact or opportunity links are present, they must resolve to one company in the current organisation. The service derives the company from a contact/opportunity when needed. Due timestamps must contain a timezone.
 
+## Interactions
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/interactions` | List active tenant Interactions |
+| `POST` | `/api/v1/interactions` | Create a manual Interaction |
+| `GET` | `/api/v1/interactions/{interactionId}` | Read an active Interaction |
+| `PATCH` | `/api/v1/interactions/{interactionId}` | Update metadata/lifecycle |
+| `POST` | `/api/v1/interactions/{interactionId}/complete` | Idempotently complete an Interaction |
+
+List filters are `search`, `companyId`, `opportunityId`, `interactionType`,
+`status`, timezone-aware `dateFrom`/`dateTo`, `sortBy` and `sortOrder`. Pagination
+is bounded and deterministic. Organisation context is server-authoritative;
+cross-tenant resources are hidden. See [Interaction API](interaction-api.md) for
+the complete contract and lifecycle behaviour.
+
 ## Meetings
+
+Every Meeting is linked one-to-one to an Interaction. Existing request paths,
+bodies and IDs remain unchanged; responses add backward-compatible
+`interactionId`. Creating, updating, associating or soft-deleting a Meeting keeps
+the shared Interaction projection aligned in the same transaction.
 
 | Method   | Path                                               | Purpose                                                               |
 | -------- | -------------------------------------------------- | --------------------------------------------------------------------- |

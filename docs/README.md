@@ -12,6 +12,7 @@ This is the canonical product and engineering documentation index. Documents dis
 6. [MVP and beta scope](06-roadmap/mvp-and-beta-scope.md) — existing release gates and first-five-company loop
 7. [Current application architecture](03-engineering/architecture.md) — what exists now
 8. [ADR 0026: Interaction Intelligence platform](08-decisions/0026-interaction-intelligence-platform.md)
+9. [Interaction domain implementation](03-engineering/interaction-domain-implementation.md) — current WO-011 boundary
 
 ## 00 — Company
 
@@ -71,6 +72,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Private beta operational and incident runbooks](03-engineering/private-beta-runbooks.md)
 - [Private beta security review](03-engineering/private-beta-security-review.md)
 - [Private beta launch checklist](03-engineering/private-beta-launch-checklist.md)
+- [Interaction domain implementation](03-engineering/interaction-domain-implementation.md)
+- [Interaction migration and compatibility](03-engineering/interaction-migration-and-compatibility.md)
+- [Interaction API](03-engineering/interaction-api.md)
+- [Evidence foundation implementation](03-engineering/evidence-foundation-implementation.md)
+- [Interaction domain security review](03-engineering/interaction-domain-security-review.md)
 
 ### Target through beta
 
@@ -127,6 +133,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-008B: Revenue Brain Longitudinal Reasoning](07-sprints/wo-008b-revenue-brain-longitudinal-reasoning.md)
 - [WO-009: Private Beta Readiness](07-sprints/wo-009-private-beta-readiness.md)
 - [WO-010: Interaction Intelligence Blueprint](07-sprints/wo-010-interaction-intelligence-blueprint.md)
+- [WO-011: Interaction Domain Foundation](07-sprints/wo-011-interaction-domain-foundation.md)
 
 ## 08 — Decision records
 
@@ -159,7 +166,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009 are implemented. WO-010 is a completed documentation and architecture blueprint only.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

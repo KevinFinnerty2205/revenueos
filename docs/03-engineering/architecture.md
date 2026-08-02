@@ -2,6 +2,12 @@
 
 ## Current scope
 
+WO-011 adds Interaction as the authoritative source for shared customer-event
+metadata while retaining Meeting as a stable one-to-one compatibility projection.
+It adds tenant-owned Capture Session, metadata-only Evidence and Interaction audit
+tables, a minimal API and small web timeline. There is no capture execution, new AI
+job, prompt, provider path, recording or transcription.
+
 WO-006A/WO-006B/WO-006C/WO-006D/WO-007/WO-008A/WO-008B keep the Sprint 3 modular monolith and
 WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 and WO-005 baseline. The durable worker runs
 its infrastructure test plus current-transcript Executive Summary, Decisions,
@@ -59,7 +65,7 @@ Browser
               │
               ▼
        PostgreSQL / Supabase later
-       identity · business records · meetings
+       identity · business records · interactions · meetings
        AI jobs/artefacts · Revenue Brain snapshots/insights
        audit metadata · RLS
 ```
@@ -118,6 +124,11 @@ transcription occurs. Components provide loading, empty, safe error and
 responsive mobile/desktop states. Business validation remains server-side even
 when HTML constraints improve feedback.
 
+The Interaction pages add accessible list/search/type/status filters, manual
+creation, detail and idempotent completion. Meeting pages add only an
+`Interaction record` link; their routes, tabs and intelligence experience remain
+unchanged.
+
 ## API architecture
 
 FastAPI exposes:
@@ -128,6 +139,7 @@ FastAPI exposes:
 - CRUD collections and resources under `/api/v1/companies`, `/api/v1/contacts`, `/api/v1/opportunities` and `/api/v1/tasks`;
 - an enriched opportunity list, aggregate read at `/api/v1/opportunities/{opportunityId}/workspace` and stale-write-safe meeting association at `/api/v1/meetings/{meetingId}/opportunity`;
 - meeting, nested participant, singular transcript and audit-history resources under `/api/v1/meetings`;
+- list/create/read/update/complete resources under `/api/v1/interactions`;
 - meeting-scoped POST/GET for Executive Summary, Buying Signals, Objections & Competitive Signals, Stakeholder Intelligence, Next Best Action, Decisions, Action Items, Risks & Blockers, Open Questions and Follow-up Email;
 - aggregate current-version GET at `/api/v1/meetings/{meetingId}/intelligence`; and
 - idempotent generation orchestration POST at `/api/v1/meetings/{meetingId}/intelligence/generate`; and
@@ -143,8 +155,9 @@ The intelligence endpoints expose only normalised product state, safe timestamps
 
 SQLAlchemy 2 models Organisation, User, OrganisationMembership, Company,
 Contact, Opportunity, OpportunityAuditEvent, Task, Meeting,
-MeetingParticipant, Transcript, MeetingAuditEvent, AIJob, AIArtifact,
-RevenueBrainSnapshot and RevenueBrainInsight. UUIDs, UTC timestamps, allowed
+MeetingParticipant, Transcript, MeetingAuditEvent, Interaction, CaptureSession,
+Evidence, InteractionAuditEvent, AIJob, AIArtifact, RevenueBrainSnapshot and
+RevenueBrainInsight. UUIDs, UTC timestamps, allowed
 enum values, bounded numeric values, unique organisation slugs, unique external
 auth IDs and membership uniqueness are enforced in schema and migrations.
 
@@ -154,13 +167,18 @@ The active organisation originates in the trusted auth adapter, never a body,
 path or query tenant identifier. Each request sets PostgreSQL's
 transaction-local `app.organisation_id`; repositories also apply an explicit
 organisation predicate. Companies, contacts, opportunities, tasks, all four
-Meeting Domain tables, AI jobs, AI artefacts, Revenue Brain snapshots and
-Revenue Brain insights enable and force RLS. Composite tenant foreign keys
-reject cross-tenant meeting, transcript, requester, job, artefact, snapshot and
+Meeting Domain tables, all four WO-011 Interaction foundation tables, AI jobs,
+AI artefacts, Revenue Brain snapshots and Revenue Brain insights enable and force
+RLS. Composite tenant foreign keys reject cross-tenant Interaction, Meeting,
+Evidence, Capture Session, transcript, requester, job, artefact, snapshot and
 insight references. Runtime deployment must use a non-bypass application role;
 migration credentials remain separate.
 
-All authenticated organisation members currently have the same entity and meeting CRUD access. Every Meeting Domain request also verifies an active local membership. This is the safest simple interpretation because no entity-level role matrix is specified. A future authorisation change requires an explicit product decision and policy tests.
+All authenticated organisation members currently have the same entity,
+Interaction and Meeting mutation access. Every Interaction and Meeting request
+also verifies an active local membership. This is the safest simple interpretation
+because no entity-level role matrix is specified. A future authorisation change
+requires an explicit product decision and policy tests.
 
 One active or soft-deleted transcript row is retained per meeting. Mutations lock the meeting aggregate root; transcript corrections also lock the transcript row, compare an optimistic integer `version` and fail stale updates with `409`. Audit events record actor, action, entity identity, changed field names and transcript version, never raw transcript or participant content. The version counter is an extension seam, not transcript snapshot history.
 
@@ -220,8 +238,9 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0020_private_beta_readiness` is the head migration.
-It follows `0019_revenue_brain_reasoning` and adds the focused tenant-owned
+source exists. Migration `0021_interaction_domain_foundation` is the head migration.
+It follows `0020_private_beta_readiness`, adds the four Interaction foundation
+tables and deterministic Meeting link/backfill. `0020` adds the focused tenant-owned
 private-beta control tables, identity/status metadata and approved maintenance
 deletion path described above. `0019_revenue_brain_reasoning` follows
 `0017_opportunity_workspace`, which expands Opportunity metadata and indexes,
@@ -254,16 +273,17 @@ enablement are not approved.
 
 ## Future extension boundaries
 
-WO-010 defines a separately authorised target direction in which Interaction is a
-source-neutral logical parent and Meeting remains a compatible subtype. Capture
-Session and Evidence separate customer events from recording, AI Debrief, Voice
-Journal, visual and future document/email acquisition. Migration is additive:
+WO-010 defines the target direction and WO-011 implements the first additive
+foundation: Interaction is the source-neutral logical parent and Meeting remains a
+compatible projection. Capture Session and metadata-only Evidence separate customer
+events from future recording, AI Debrief, Voice Journal, visual and document/email
+acquisition. Migration is additive:
 existing Meeting IDs/APIs, AI artefacts, Opportunity Workspace and immutable Revenue
 Brain history remain unchanged. See the
 [Interaction domain architecture](interaction-domain-architecture.md),
 [evidence and provenance model](evidence-and-provenance-model.md) and
-[migration strategy](interaction-intelligence-migration-strategy.md). No part of
-that target is implemented by WO-010.
+[migration strategy](interaction-intelligence-migration-strategy.md). Capture
+execution and generic Interaction Intelligence remain future work.
 
 Future, separately authorised Meeting or Interaction Intelligence work can add additional
 immutable prompt/schema pairs or providers on top of the durable worker. It must

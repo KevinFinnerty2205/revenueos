@@ -1,11 +1,13 @@
 import asyncio
 import os
+import uuid
 from pathlib import Path
 from sqlite3 import IntegrityError, connect
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -46,9 +48,13 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "beta_feedback",
             "beta_data_requests",
             "beta_system_events",
+            "interactions",
+            "capture_sessions",
+            "evidence",
+            "interaction_audit_events",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0020_private_beta_readiness",
+            "0021_interaction_domain_foundation",
         )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
@@ -68,6 +74,20 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert meeting_columns["updated_by"] == 1
         assert meeting_columns["deleted_at"] == 0
         assert meeting_columns["opportunity_id"] == 0
+        assert meeting_columns["interaction_id"] == 1
+        interaction_columns = {
+            row[1]: row[3] for row in connection.execute("PRAGMA table_info(interactions)").fetchall()
+        }
+        assert interaction_columns["organisation_id"] == 1
+        assert interaction_columns["interaction_type"] == 1
+        assert interaction_columns["lifecycle_status"] == 1
+        assert interaction_columns["created_by_user_id"] == 1
+        evidence_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(evidence)").fetchall()}
+        assert evidence_columns["organisation_id"] == 1
+        assert evidence_columns["origin_class"] == 1
+        assert evidence_columns["support_class"] == 1
+        assert evidence_columns["validation_state"] == 1
+        assert not {"raw_text", "content", "body", "blob"} & set(evidence_columns)
         participant_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(meeting_participants)").fetchall()
         }
@@ -666,7 +686,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0020_private_beta_readiness",
+            "0021_interaction_domain_foundation",
         )
         connection.execute(
             """
@@ -720,7 +740,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0020_private_beta_readiness",
+            "0021_interaction_domain_foundation",
         )
         connection.execute(
             """
@@ -766,7 +786,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0020_private_beta_readiness",
+            "0021_interaction_domain_foundation",
         )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
@@ -782,7 +802,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0020_private_beta_readiness",
+            "0021_interaction_domain_foundation",
         )
 
     command.downgrade(configuration, "0003_meeting_domain")
@@ -820,7 +840,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0020_private_beta_readiness",
+            "0021_interaction_domain_foundation",
         )
 
     command.downgrade(configuration, "0002_core_business_entities")
@@ -887,7 +907,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_insights",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0020_private_beta_readiness",
+            "0021_interaction_domain_foundation",
         )
 
     command.downgrade(configuration, "0018_revenue_brain")
@@ -907,8 +927,137 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0020_private_beta_readiness",
+            "0021_interaction_domain_foundation",
         )
+
+
+def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_deterministically(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "interaction-migration.db"
+    database_url = f"sqlite+aiosqlite:///{database_path}"
+    monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    script = ScriptDirectory.from_config(configuration)
+    assert [revision.revision for revision in script.walk_revisions()][:2] == [
+        "0021_interaction_domain_foundation",
+        "0020_private_beta_readiness",
+    ]
+    assert script.get_heads() == ["0021_interaction_domain_foundation"]
+    command.upgrade(configuration, "0020_private_beta_readiness")
+
+    organisation_a = uuid.uuid4()
+    organisation_b = uuid.uuid4()
+    user_a = uuid.uuid4()
+    user_b = uuid.uuid4()
+    meeting_a_one = uuid.uuid4()
+    meeting_a_two = uuid.uuid4()
+    meeting_b = uuid.uuid4()
+    meetings = (
+        (meeting_a_one, organisation_a, user_a, "remote", "completed", "Tenant A completed"),
+        (meeting_a_two, organisation_a, user_a, "in_person", "scheduled", "Tenant A planned"),
+        (meeting_b, organisation_b, user_b, "phone", "cancelled", "Tenant B cancelled"),
+    )
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        for organisation_id, user_id, label in (
+            (organisation_a, user_a, "a"),
+            (organisation_b, user_b, "b"),
+        ):
+            connection.execute(
+                "INSERT INTO organisations (id, name, slug) VALUES (?, ?, ?)",
+                (organisation_id.hex, f"Tenant {label.upper()}", f"tenant-{label}"),
+            )
+            connection.execute(
+                """
+                INSERT INTO users (id, external_auth_id, email, display_name)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    user_id.hex,
+                    f"user-{label}",
+                    f"user-{label}@example.test",
+                    f"User {label.upper()}",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO organisation_memberships (organisation_id, user_id, role)
+                VALUES (?, ?, 'admin')
+                """,
+                (organisation_id.hex, user_id.hex),
+            )
+        for meeting_id, organisation_id, user_id, meeting_type, meeting_status, title in meetings:
+            connection.execute(
+                """
+                INSERT INTO meetings
+                    (id, organisation_id, title, meeting_date, meeting_type, status,
+                     owner_user_id, created_by, updated_by)
+                VALUES (?, ?, ?, '2026-07-20 10:00:00', ?, ?, ?, ?, ?)
+                """,
+                (
+                    meeting_id.hex,
+                    organisation_id.hex,
+                    title,
+                    meeting_type,
+                    meeting_status,
+                    user_id.hex,
+                    user_id.hex,
+                    user_id.hex,
+                ),
+            )
+
+    command.upgrade(configuration, "head")
+    expected = {
+        meeting_id.hex: uuid.uuid5(
+            uuid.UUID("cf709ef5-e59d-4ce2-9c93-547a4a5e5990"),
+            f"{organisation_id}:{meeting_id}",
+        ).hex
+        for meeting_id, organisation_id, *_ in meetings
+    }
+    with connect(database_path) as connection:
+        rows = connection.execute("SELECT id, organisation_id, interaction_id FROM meetings ORDER BY id").fetchall()
+        assert len(rows) == 3
+        assert {row[0]: row[2] for row in rows} == expected
+        interaction_rows = connection.execute(
+            """
+            SELECT id, organisation_id, interaction_type, lifecycle_status,
+                   title, creation_origin
+            FROM interactions
+            ORDER BY id
+            """
+        ).fetchall()
+        assert len(interaction_rows) == 3
+        assert {row[1] for row in interaction_rows} == {organisation_a.hex, organisation_b.hex}
+        assert {row[2] for row in interaction_rows} == {
+            "online_meeting",
+            "face_to_face_meeting",
+            "phone_call",
+        }
+        assert {row[3] for row in interaction_rows} == {"planned", "completed", "cancelled"}
+        assert {row[5] for row in interaction_rows} == {"meeting_compatibility"}
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                "UPDATE meetings SET interaction_id = ? WHERE id = ?",
+                (expected[meeting_a_one.hex], meeting_a_two.hex),
+            )
+
+    command.downgrade(configuration, "0020_private_beta_readiness")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert not {"interactions", "capture_sessions", "evidence", "interaction_audit_events"} & tables
+        meeting_columns = {row[1] for row in connection.execute("PRAGMA table_info(meetings)")}
+        assert "interaction_id" not in meeting_columns
+        assert {row[0] for row in connection.execute("SELECT id FROM meetings")} == set(expected)
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0021_interaction_domain_foundation",
+        )
+        assert {row[0]: row[1] for row in connection.execute("SELECT id, interaction_id FROM meetings")} == expected
+        assert connection.execute("SELECT count(*) FROM interactions").fetchone() == (3,)
 
 
 def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
@@ -950,7 +1099,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0020_private_beta_readiness"
+                    assert version == "0021_interaction_domain_foundation"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False
