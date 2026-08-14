@@ -50,8 +50,9 @@ from revenueos.models import (
 from revenueos.tenant import TenantContext
 
 NOTICE_TEXT = (
-    "You must have authority to add or process this meeting content.",
-    "When OpenAI is explicitly enabled, transcript content may be sent to OpenAI for processing. Mock mode keeps processing internal.",
+    "You must have authority to add or process meeting and post-interaction debrief content.",
+    "A Voice Journal records your own post-interaction report, not the customer meeting. Short voice answers may be sent to the configured transcription provider when external processing is enabled.",
+    "When OpenAI is explicitly enabled, transcript or debrief content may be sent to OpenAI for processing. Mock mode keeps processing internal.",
     "Generated intelligence may contain errors and must be reviewed before it is relied on or shared.",
 )
 RETENTION_TO_DAYS: dict[RetentionPolicy, int | None] = {

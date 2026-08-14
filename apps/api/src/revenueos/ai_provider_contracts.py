@@ -247,6 +247,36 @@ class FollowUpEmailProviderInput(BaseModel):
         return self
 
 
+class AIDebriefQuestionProviderInput(BaseModel):
+    """Provider-neutral next-question input containing rendered messages."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["ai_debrief_question"] = "ai_debrief_question"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> AIDebriefQuestionProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("AI Debrief question messages must be ordered system then user.")
+        return self
+
+
+class AIDebriefEvidenceProviderInput(BaseModel):
+    """Provider-neutral candidate-evidence input containing rendered messages."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation: Literal["ai_debrief_evidence"] = "ai_debrief_evidence"
+    messages: tuple[ProviderMessage, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_message_order(self) -> AIDebriefEvidenceProviderInput:
+        if tuple(message.role for message in self.messages) != ("system", "user"):
+            raise ValueError("AI Debrief evidence messages must be ordered system then user.")
+        return self
+
+
 ProviderInput = (
     InfrastructureTestProviderInput
     | ExecutiveSummaryProviderInput
@@ -259,6 +289,8 @@ ProviderInput = (
     | StakeholderIntelligenceProviderInput
     | NextBestActionProviderInput
     | FollowUpEmailProviderInput
+    | AIDebriefQuestionProviderInput
+    | AIDebriefEvidenceProviderInput
 )
 
 

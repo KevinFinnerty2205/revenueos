@@ -119,7 +119,8 @@ Company is optional. Estimated value and currency must either both be null or bo
 The workspace returns display metadata, the deterministic latest associated
 meeting, at most 20 newest recent associated meetings, product-safe readiness,
 the ten existing capability states/results for the latest meeting's current
-transcript version and the current read-only Revenue Brain reasoning state.
+transcript version, the optional latest validated post-interaction
+`reportedIntelligence` composition and the current read-only Revenue Brain reasoning state.
 Cancelled and soft-deleted meetings are excluded; ordering is
 `meeting_date DESC, meeting UUID DESC`. It never returns transcript text or AI
 infrastructure trace and never starts intelligence or reasoning generation. See
@@ -160,6 +161,25 @@ List filters are `search`, `companyId`, `opportunityId`, `interactionType`,
 is bounded and deterministic. Organisation context is server-authoritative;
 cross-tenant resources are hidden. See [Interaction API](interaction-api.md) for
 the complete contract and lifecycle behaviour.
+
+### Post-interaction debrief
+
+| Method | Path                                                                      | Purpose                                      |
+| ------ | ------------------------------------------------------------------------- | -------------------------------------------- |
+| `POST` | `/api/v1/interactions/{interactionId}/debrief`                            | Start/reuse AI Debrief or Voice Journal      |
+| `GET`  | `/api/v1/interactions/{interactionId}/debrief/{sessionId}`                | Restore the private session and review state |
+| `POST` | `/api/v1/interactions/{interactionId}/debrief/{sessionId}/response`       | Submit one typed answer                      |
+| `POST` | `/api/v1/interactions/{interactionId}/debrief/{sessionId}/voice-response` | Submit one bounded voice answer              |
+| `POST` | `/api/v1/interactions/{interactionId}/debrief/{sessionId}/finish`         | Extract reviewable candidate Evidence        |
+| `POST` | `/api/v1/interactions/{interactionId}/debrief/{sessionId}/review`         | Apply complete accept/edit/reject review     |
+| `POST` | `/api/v1/interactions/{interactionId}/debrief/{sessionId}/cancel`         | Cancel the capture                           |
+
+Start requires a completed Interaction, current notice acknowledgement,
+safe-driving confirmation, enabled feature and idempotency key. Voice additionally
+requires explicit voice-processing acknowledgement and allowlisted base64 audio,
+MIME, duration and size. Responses expose product-safe lifecycle, questions, turns,
+candidates and resulting snapshot IDs; they never expose audio or provider payloads.
+See [AI Debrief](ai-debrief.md).
 
 ## Meetings
 

@@ -15,6 +15,7 @@ from revenueos.models import (
     Base,
     Company,
     Interaction,
+    InteractionIntelligenceSnapshot,
     Meeting,
     MeetingParticipant,
     Opportunity,
@@ -28,6 +29,7 @@ class OpportunityDisplayRecord:
     opportunity: Opportunity
     company_name: str | None
     owner_name: str
+    reported_intelligence: InteractionIntelligenceSnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -109,9 +111,29 @@ class OpportunityWorkspaceRepository:
         organisation_id: UUID,
         opportunity_id: UUID,
     ) -> OpportunityDisplayRecord | None:
+        latest_reported_id = (
+            select(InteractionIntelligenceSnapshot.id)
+            .where(
+                InteractionIntelligenceSnapshot.organisation_id == Opportunity.organisation_id,
+                InteractionIntelligenceSnapshot.opportunity_id == Opportunity.id,
+                InteractionIntelligenceSnapshot.validation_state == "validated",
+            )
+            .order_by(
+                InteractionIntelligenceSnapshot.created_at.desc(),
+                InteractionIntelligenceSnapshot.id.desc(),
+            )
+            .limit(1)
+            .correlate(Opportunity)
+            .scalar_subquery()
+        )
         row = (
             await self.session.execute(
-                select(Opportunity, Company.name, User.display_name)
+                select(
+                    Opportunity,
+                    Company.name,
+                    User.display_name,
+                    InteractionIntelligenceSnapshot,
+                )
                 .outerjoin(
                     Company,
                     and_(
@@ -120,6 +142,13 @@ class OpportunityWorkspaceRepository:
                     ),
                 )
                 .join(User, User.id == Opportunity.owner_user_id)
+                .outerjoin(
+                    InteractionIntelligenceSnapshot,
+                    and_(
+                        InteractionIntelligenceSnapshot.organisation_id == Opportunity.organisation_id,
+                        InteractionIntelligenceSnapshot.id == latest_reported_id,
+                    ),
+                )
                 .where(
                     Opportunity.organisation_id == organisation_id,
                     Opportunity.id == opportunity_id,
@@ -132,6 +161,7 @@ class OpportunityWorkspaceRepository:
             opportunity=row[0],
             company_name=row[1],
             owner_name=row[2],
+            reported_intelligence=row[3],
         )
 
     async def latest_meetings(

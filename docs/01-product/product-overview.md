@@ -26,9 +26,9 @@ The product works across Capture, Intelligence and Action before, during and aft
 the event. Interaction becomes the future source-neutral parent while the mature
 Meeting domain remains compatible through an additive migration. WO-011 now
 implements that Interaction identity, Meeting compatibility link and a metadata-only
-Evidence/Capture Session foundation. AI Debrief and
-Voice Journal are supporting capture sessions that produce reported evidence; they
-are not customer interactions, and neither is executable in WO-011.
+Evidence/Capture Session foundation. WO-013 now executes AI Debrief and Voice
+Journal as supporting capture sessions that produce reviewed reported evidence;
+they are not customer interactions.
 
 ## Current product surface
 
@@ -57,8 +57,12 @@ The current implementation provides:
 - preparation-only AI Companion briefs for all ten Interaction types, with
   source-aware deterministic composition, readiness, history and optional review;
   and
-- metadata-only Capture Session and Evidence foundations with explicit origin,
-  support and validation classification and no raw content.
+- completed-Interaction AI Debrief and foreground Voice Journal with typed fallback,
+  context-aware bounded questions, mandatory candidate review and visibly
+  salesperson-reported Opportunity Workspace/Revenue Brain updates; and
+- Capture Session and Evidence foundations with explicit origin, support and
+  validation classification. Debrief text is deliberately supplied; raw voice audio
+  is never stored.
 
 The current product accepts only deliberately entered meeting metadata and
 plain-text transcripts. The default provider is a deterministic no-network
@@ -76,8 +80,9 @@ qualitative supported changes, never probability, forecast or deal health. The
 Pre-Interaction Brief is likewise provider-free and reads only validated
 structured intelligence plus linked record metadata; it never reads transcript
 text. Source completeness is not a success forecast. The
-application does not answer or assign questions, record, store media,
-transcribe, connect external systems or process payments. Production customer
+application does not answer or assign customer questions, record customers or
+meetings, store media, connect external systems or process payments. It transcribes
+only bounded, deliberately submitted post-interaction voice segments. Production customer
 data remains prohibited unless separately approved. See the
 [private beta readiness guide](../03-engineering/private-beta-readiness.md).
 

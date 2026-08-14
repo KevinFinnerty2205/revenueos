@@ -18,6 +18,8 @@ from pydantic import ValidationError
 from revenueos.ai_provider_contracts import (
     PROVIDER_REQUEST_ID_MAX_LENGTH,
     ActionItemsProviderInput,
+    AIDebriefEvidenceProviderInput,
+    AIDebriefQuestionProviderInput,
     BuyingSignalsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
@@ -124,7 +126,9 @@ class OpenAIProvider:
             | type[ObjectionsCompetitiveSignalsProviderInput]
             | type[StakeholderIntelligenceProviderInput]
             | type[NextBestActionProviderInput]
-            | type[FollowUpEmailProviderInput],
+            | type[FollowUpEmailProviderInput]
+            | type[AIDebriefQuestionProviderInput]
+            | type[AIDebriefEvidenceProviderInput],
         ] = {
             "executive_summary": ExecutiveSummaryProviderInput,
             "decisions": DecisionsProviderInput,
@@ -136,6 +140,8 @@ class OpenAIProvider:
             "stakeholder_intelligence": StakeholderIntelligenceProviderInput,
             "next_best_action": NextBestActionProviderInput,
             "follow_up_email": FollowUpEmailProviderInput,
+            "ai_debrief_question": AIDebriefQuestionProviderInput,
+            "ai_debrief_evidence": AIDebriefEvidenceProviderInput,
         }
         expected_input = supported_inputs.get(request.job_type)
         if expected_input is None or not isinstance(request.input_payload, expected_input):

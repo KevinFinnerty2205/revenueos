@@ -1,5 +1,12 @@
 # OpenAI provider integration
 
+WO-013 also allowlists strict AI Debrief next-question and candidate-extraction
+requests. When OpenAI is selected, they send only the bounded normalised debrief
+context/answers or fragments described in [AI Debrief](ai-debrief.md), never raw
+recordings or Meeting transcripts. Voice transcription uses the separate server-side
+OpenAI transcription adapter and discards audio after the bounded call. Both paths
+require the existing OpenAI feature/configuration gate and organisation request quota.
+
 ## Current boundary
 
 WO-004C1A adds the first external AI adapter behind the existing

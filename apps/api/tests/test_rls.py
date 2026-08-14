@@ -98,6 +98,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "pre_interaction_briefs",
         "capture_sessions",
         "evidence",
+        "debrief_sessions",
+        "debrief_turns",
+        "evidence_fragments",
+        "candidate_evidence",
+        "interaction_intelligence_snapshots",
+        "revenue_brain_interaction_snapshots",
         "interaction_audit_events",
         "meetings",
         "meeting_participants",
@@ -128,6 +134,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "brief_id": uuid.uuid4(),
         "capture_session_id": uuid.uuid4(),
         "evidence_id": uuid.uuid4(),
+        "debrief_turn_id": uuid.uuid4(),
+        "evidence_fragment_id": uuid.uuid4(),
+        "candidate_evidence_id": uuid.uuid4(),
+        "interaction_intelligence_id": uuid.uuid4(),
+        "revenue_brain_interaction_id": uuid.uuid4(),
         "interaction_audit_id": uuid.uuid4(),
         "meeting_id": uuid.uuid4(),
         "participant_id": uuid.uuid4(),
@@ -158,6 +169,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "brief_id": uuid.uuid4(),
         "capture_session_id": uuid.uuid4(),
         "evidence_id": uuid.uuid4(),
+        "debrief_turn_id": uuid.uuid4(),
+        "evidence_fragment_id": uuid.uuid4(),
+        "candidate_evidence_id": uuid.uuid4(),
+        "interaction_intelligence_id": uuid.uuid4(),
+        "revenue_brain_interaction_id": uuid.uuid4(),
         "interaction_audit_id": uuid.uuid4(),
         "meeting_id": uuid.uuid4(),
         "participant_id": uuid.uuid4(),
@@ -358,11 +374,30 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  status, started_by_user_id)
                             VALUES
                                 (:capture_session_id, :organisation_id,
-                                 :interaction_id, 'manual_notes', 'completed',
+                                 :interaction_id, 'ai_debrief', 'completed',
                                  :user_id)
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO debrief_sessions
+                                (id, organisation_id, interaction_id,
+                                 started_by_user_id, lifecycle_status,
+                                 idempotency_key, question_count, max_questions,
+                                 safety_confirmed_at, completed_at)
+                            VALUES
+                                (:capture_session_id, :organisation_id,
+                                 :interaction_id, :user_id, 'completed',
+                                 :debrief_idempotency_key, 1, 6, now(), now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "debrief_idempotency_key": f"rls-debrief-{suffix.lower()}",
+                        },
                     )
                     await connection.execute(
                         text(
@@ -376,6 +411,100 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  :capture_session_id, 'system_metadata',
                                  'system_metadata', 'direct', 'not_applicable',
                                  'available')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO debrief_turns
+                                (id, organisation_id, interaction_id, session_id,
+                                 evidence_id, turn_number, question_json,
+                                 answer_text, input_mode, idempotency_key)
+                            VALUES
+                                (:debrief_turn_id, :organisation_id,
+                                 :interaction_id, :capture_session_id,
+                                 :evidence_id, 1,
+                                 '{"status":"ask","question":"How did it go?","reason":"RLS","target":"other","priority":"high"}'::json,
+                                 :debrief_answer, 'text', :turn_idempotency_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "debrief_answer": f"RLS debrief answer {suffix}",
+                            "turn_idempotency_key": f"rls-turn-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO evidence_fragments
+                                (id, organisation_id, evidence_id, session_id,
+                                 turn_id, content_text)
+                            VALUES
+                                (:evidence_fragment_id, :organisation_id,
+                                 :evidence_id, :capture_session_id,
+                                 :debrief_turn_id, :debrief_answer)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "debrief_answer": f"RLS debrief answer {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO candidate_evidence
+                                (id, organisation_id, interaction_id, session_id,
+                                 source_fragment_id, evidence_category,
+                                 statement, original_statement,
+                                 statement_fingerprint)
+                            VALUES
+                                (:candidate_evidence_id, :organisation_id,
+                                 :interaction_id, :capture_session_id,
+                                 :evidence_fragment_id, 'other',
+                                 :candidate_statement, :candidate_statement,
+                                 :candidate_fingerprint)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "candidate_statement": f"RLS reported statement {suffix}.",
+                            "candidate_fingerprint": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO interaction_intelligence_snapshots
+                                (id, organisation_id, interaction_id,
+                                 opportunity_id, session_id, content_json,
+                                 source_evidence_ids)
+                            VALUES
+                                (:interaction_intelligence_id, :organisation_id,
+                                 :interaction_id, :opportunity_id,
+                                 :capture_session_id,
+                                 '{"origin":"salesperson_reported","items":[]}'::json,
+                                 '[]'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO revenue_brain_interaction_snapshots
+                                (id, organisation_id, company_id, opportunity_id,
+                                 interaction_id, interaction_intelligence_id,
+                                 content_json, source_evidence_ids)
+                            VALUES
+                                (:revenue_brain_interaction_id, :organisation_id,
+                                 :company_id, :opportunity_id, :interaction_id,
+                                 :interaction_intelligence_id,
+                                 '{"origin":"salesperson_reported","items":[]}'::json,
+                                 '[]'::json)
                             """
                         ),
                         identity_parameters,
@@ -701,6 +830,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'pre_interaction_briefs',
                                     'capture_sessions',
                                     'evidence',
+                                    'debrief_sessions',
+                                    'debrief_turns',
+                                    'evidence_fragments',
+                                    'candidate_evidence',
+                                    'interaction_intelligence_snapshots',
+                                    'revenue_brain_interaction_snapshots',
                                     'interaction_audit_events',
                                     'meetings',
                                     'meeting_participants',
@@ -994,6 +1129,24 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     ),
                     (
                         """
+                        INSERT INTO debrief_sessions
+                            (id, organisation_id, interaction_id,
+                             started_by_user_id, lifecycle_status,
+                             idempotency_key, max_questions,
+                             safety_confirmed_at)
+                        VALUES
+                            (:id, :organisation_id, :interaction_id,
+                             :user_id, 'collecting', 'cross-tenant', 6, now())
+                        """,
+                        {
+                            "id": tenant_b["capture_session_id"],
+                            "organisation_id": tenant_b["organisation_id"],
+                            "interaction_id": tenant_b["interaction_id"],
+                            "user_id": tenant_b["user_id"],
+                        },
+                    ),
+                    (
+                        """
                         INSERT INTO organisation_beta_settings
                             (organisation_id, retention_days)
                         VALUES (:organisation_id, 30)
@@ -1026,6 +1179,18 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 await connection.execute(
                     text("ALTER TABLE revenue_brain_snapshots DISABLE TRIGGER revenue_brain_snapshots_append_only")
                 )
+                await connection.execute(
+                    text(
+                        "ALTER TABLE interaction_intelligence_snapshots "
+                        "DISABLE TRIGGER interaction_intelligence_snapshots_immutable"
+                    )
+                )
+                await connection.execute(
+                    text(
+                        "ALTER TABLE revenue_brain_interaction_snapshots "
+                        "DISABLE TRIGGER revenue_brain_interaction_snapshots_immutable"
+                    )
+                )
                 for table in (
                     "beta_system_events",
                     "beta_data_requests",
@@ -1035,11 +1200,17 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "data_notice_acknowledgements",
                     "organisation_beta_settings",
                     "revenue_brain_insights",
+                    "revenue_brain_interaction_snapshots",
+                    "interaction_intelligence_snapshots",
                     "revenue_brain_snapshots",
                     "ai_artifacts",
                     "ai_jobs",
                     "opportunity_audit_events",
                     "pre_interaction_briefs",
+                    "candidate_evidence",
+                    "evidence_fragments",
+                    "debrief_turns",
+                    "debrief_sessions",
                     "evidence",
                     "capture_sessions",
                     "interaction_audit_events",
@@ -1062,6 +1233,18 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     )
                 await connection.execute(
                     text("ALTER TABLE revenue_brain_snapshots ENABLE TRIGGER revenue_brain_snapshots_append_only")
+                )
+                await connection.execute(
+                    text(
+                        "ALTER TABLE interaction_intelligence_snapshots "
+                        "ENABLE TRIGGER interaction_intelligence_snapshots_immutable"
+                    )
+                )
+                await connection.execute(
+                    text(
+                        "ALTER TABLE revenue_brain_interaction_snapshots "
+                        "ENABLE TRIGGER revenue_brain_interaction_snapshots_immutable"
+                    )
                 )
                 await connection.execute(
                     text("ALTER TABLE revenue_brain_insights ENABLE TRIGGER revenue_brain_insights_append_only")

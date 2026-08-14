@@ -1,5 +1,11 @@
 # AI provider abstraction
 
+WO-013 extends the allowlist with `ai_debrief_question` and
+`ai_debrief_evidence`. These bounded foreground requests reuse the same typed
+messages, strict registry-derived schemas, mock/OpenAI adapters, timeout and safe
+telemetry. Short binary voice input remains outside this text contract behind the
+separate `TranscriptionProvider` boundary.
+
 ## Current boundary
 
 The provider-neutral seam supports two implementations:

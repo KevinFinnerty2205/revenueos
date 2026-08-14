@@ -11,6 +11,8 @@ test.beforeEach(async ({ page }) => {
             revenueBrain: true,
             opportunityWorkspace: true,
             aiCompanion: true,
+            aiDebrief: true,
+            voiceJournal: true,
             dataExport: true,
             organisationDeletion: false,
           },
@@ -615,6 +617,121 @@ test("AI Companion briefs support face-to-face, phone and presentation preparati
   await expect(page.getByRole("button", { name: /record/i })).toHaveCount(0);
 });
 
+test("a completed phone call supports a typed debrief, review and source-aware update", async ({
+  page,
+}) => {
+  const interaction = interactionRecord({
+    id: "interaction-debrief",
+    title: "Pricing follow-up call",
+    interactionType: "phone_call",
+    lifecycleStatus: "completed",
+    actualEndAt: "2026-08-14T02:00:00Z",
+  });
+  let debrief = debriefSession("collecting");
+
+  await page.route(
+    "http://localhost:8000/api/v1/interactions/interaction-debrief**",
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith("/companion/brief")) {
+        await route.fulfill({ json: emptyBriefResponse() });
+        return;
+      }
+      if (path.endsWith("/debrief") && request.method() === "POST") {
+        await route.fulfill({ status: 201, json: debrief });
+        return;
+      }
+      if (path.endsWith("/response")) {
+        debrief = debriefSession("collecting", {
+          questionCount: 1,
+          currentQuestion: {
+            status: "complete",
+            question: null,
+            reason: "The reported evidence is sufficient for review.",
+            target: null,
+            priority: null,
+          },
+          canFinish: true,
+          turns: [
+            {
+              id: "turn-1",
+              turnNumber: 1,
+              question: debrief.currentQuestion,
+              answerText:
+                "Jordan confirmed the budget and I will send the proposal.",
+              inputMode: "text",
+              createdAt: "2026-08-14T02:02:00Z",
+            },
+          ],
+        });
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      if (path.endsWith("/finish")) {
+        debrief = debriefSession("review", {
+          currentQuestion: null,
+          candidates: [reportedCandidate()],
+        });
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      if (path.endsWith("/review")) {
+        debrief = debriefSession("completed", {
+          currentQuestion: null,
+          candidates: [
+            {
+              ...reportedCandidate(),
+              statement: "Jordan confirmed the budget owner.",
+              validationState: "verified",
+              userReviewState: "accepted",
+              acceptedEvidenceId: "evidence-accepted",
+              edited: true,
+            },
+          ],
+          interactionIntelligenceId: "intelligence-1",
+          revenueBrainSnapshotId: "brain-1",
+          completedAt: "2026-08-14T02:05:00Z",
+          acceptedCount: 1,
+          rejectedCount: 0,
+          interactionUpdated: true,
+          revenueBrainUpdated: true,
+        });
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      if (path.includes("/debrief/session-1")) {
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      await route.fulfill({ json: interaction });
+    },
+  );
+
+  await page.goto("/interactions/interaction-debrief");
+  await expect(
+    page.getByRole("heading", {
+      name: "Capture what changed while it is fresh",
+    }),
+  ).toBeVisible();
+  await page.getByRole("checkbox", { name: /safely stopped/i }).check();
+  await page.getByRole("button", { name: "Start typed debrief" }).click();
+  await page
+    .getByLabel("Your answer")
+    .fill("Jordan confirmed the budget and I will send the proposal.");
+  await page.getByRole("button", { name: "Save answer" }).click();
+  await page.getByRole("button", { name: "Review captured evidence" }).click();
+  await expect(page.getByText("Reported by you")).toBeVisible();
+  await page
+    .getByLabel("Evidence statement")
+    .fill("Jordan confirmed the budget owner.");
+  await page
+    .getByRole("button", { name: "Finish review and update intelligence" })
+    .click();
+  await expect(page.getByText("Debrief complete")).toBeVisible();
+  await expect(page.getByText(/Reported by you/)).toBeVisible();
+});
+
 test("meeting detail orchestrates and persists the unified Meeting Intelligence workspace", async ({
   page,
   context,
@@ -1193,6 +1310,8 @@ function betaAdminOverview() {
       revenueBrain: true,
       opportunityWorkspace: true,
       aiCompanion: true,
+      aiDebrief: true,
+      voiceJournal: true,
       dataExport: true,
       organisationDeletion: false,
     },
@@ -1536,6 +1655,57 @@ function interactionRecord(overrides: Record<string, unknown>) {
     briefGeneratedAt: null,
     createdAt: "2026-07-26T00:00:00Z",
     updatedAt: "2026-07-26T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function reportedCandidate() {
+  return {
+    id: "candidate-1",
+    evidenceCategory: "budget",
+    statement: "Jordan confirmed the budget.",
+    originalStatement: "Jordan confirmed the budget.",
+    origin: "salesperson_reported",
+    sourceLabel: "Reported by you",
+    supportClassification: "reported",
+    validationState: "unreviewed",
+    userReviewState: "pending",
+    sourceCaptureSessionId: "session-1",
+    evidenceFragmentId: "fragment-1",
+    acceptedEvidenceId: null,
+    entityReference: null,
+    explicitlyReportedAt: null,
+    edited: false,
+  };
+}
+
+function debriefSession(
+  lifecycleStatus: string,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id: "session-1",
+    interactionId: "interaction-debrief",
+    captureType: "ai_debrief",
+    lifecycleStatus,
+    questionCount: 0,
+    maxQuestions: 6,
+    currentQuestion: {
+      status: "ask",
+      question: "How did it go?",
+      reason: "Start naturally.",
+      target: "other",
+      priority: "high",
+    },
+    canFinish: false,
+    finishedEarly: false,
+    turns: [],
+    candidates: [],
+    interactionIntelligenceId: null,
+    revenueBrainSnapshotId: null,
+    startedAt: "2026-08-14T02:01:00Z",
+    updatedAt: "2026-08-14T02:01:00Z",
+    completedAt: null,
     ...overrides,
   };
 }

@@ -2,7 +2,7 @@
 
 - **Status:** Recommended sequence; each stage requires a separate approved work
   order before implementation
-- **Current baseline:** Work through WO-012 is complete; WO-010 is the approved blueprint
+- **Current baseline:** Work through WO-013 is complete; WO-010 is the approved blueprint
 - **Primary optimisation:** Earliest trustworthy use for real face-to-face sales
   interactions without requiring recording or transcript upload
 
@@ -133,6 +133,9 @@ Existing Meeting Intelligence still depends on deliberately supplied transcripts
 the brief service itself never reads them.
 
 ## WO-013 — AI Debrief and Voice Journal
+
+**Implementation status:** Complete. See the
+[WO-013 sprint record](../07-sprints/wo-013-ai-debrief-voice-journal.md).
 
 ### Objective and user value
 

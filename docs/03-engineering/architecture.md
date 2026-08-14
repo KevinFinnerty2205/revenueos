@@ -5,8 +5,17 @@
 WO-011 adds Interaction as the authoritative source for shared customer-event
 metadata while retaining Meeting as a stable one-to-one compatibility projection.
 It adds tenant-owned Capture Session, metadata-only Evidence and Interaction audit
-tables, a minimal API and small web timeline. There is no capture execution, new AI
-job, prompt, provider path, recording or transcription.
+tables, a minimal API and small web timeline. That work order added no capture
+execution, new AI job, prompt, provider path, recording or transcription.
+
+WO-012 adds immutable deterministic Pre-Interaction Briefs. WO-013 adds the first
+executed post-interaction Capture Session slice: bounded AI Debrief and foreground
+Voice Journal, strict foreground question/extraction requests through the existing
+structured-output provider abstraction, a separate narrow transcription boundary,
+reviewed salesperson-reported Evidence and additive source-aware Interaction/Revenue
+Brain snapshots. Raw audio is never persisted and existing Meeting Intelligence is
+unchanged. See [AI Debrief](ai-debrief.md) and
+[ADR 0028](../08-decisions/0028-bounded-foreground-debrief-reasoning.md).
 
 WO-006A/WO-006B/WO-006C/WO-006D/WO-007/WO-008A/WO-008B keep the Sprint 3 modular monolith and
 WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 and WO-005 baseline. The durable worker runs
@@ -51,6 +60,10 @@ Browser
               ▼
         FastAPI application
         auth · tenant context · domain services
+              │
+              ├── Interaction/debrief domain services
+              │     bounded foreground prompt/schema/provider requests
+              │     narrow ephemeral voice transcription
               │
               ├── AI job/artefact domain services
               │
@@ -119,8 +132,10 @@ preserving completed content during partial failures. Stakeholders uses textual
 coverage and cautious role labels, with no graph or score. Next Best Action is
 read-only; Follow-up Email retains tone, plain-text Copy and deliberate
 Regenerate, but no Send. The browser reads an explicitly selected `.txt` file
-into the form; no file is uploaded to object storage and no recording or
-transcription occurs. Components provide loading, empty, safe error and
+into the meeting form; no file is uploaded to object storage. Completed
+Interactions can use one deliberately started, foreground-only bounded voice
+segment with pause/resume/stop/cancel and typed fallback. The API discards raw
+audio after transcription. Components provide loading, empty, safe error and
 responsive mobile/desktop states. Business validation remains server-side even
 when HTML constraints improve feedback.
 
@@ -238,7 +253,7 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0022_pre_interaction_brief` is the head migration. It
+source exists. Migration `0023_ai_debrief_voice_journal` is the head migration. It
 follows `0021_interaction_foundation` and adds immutable, forced-RLS
 Pre-Interaction Brief persistence with composite tenant keys and source-fingerprint
 idempotency. `0021` follows `0020_private_beta_readiness`, adds the four Interaction

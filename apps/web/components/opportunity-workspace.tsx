@@ -296,6 +296,46 @@ export function OpportunityWorkspace({
         }
       />
 
+      {workspace.reportedIntelligence ? (
+        <section
+          aria-labelledby="reported-intelligence-title"
+          className="form-card"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">
+                Source-aware interaction intelligence
+              </p>
+              <h2 id="reported-intelligence-title" className="form-legend mt-2">
+                Latest post-interaction report
+              </h2>
+            </div>
+            <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-800">
+              {workspace.reportedIntelligence.sourceLabel}
+            </span>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            These reviewed items came from the salesperson’s debrief. They
+            remain distinct from customer-direct meeting evidence.
+          </p>
+          <ul className="mt-5 grid gap-3 lg:grid-cols-2">
+            {workspace.reportedIntelligence.items.map((item) => (
+              <li
+                key={item.evidenceId}
+                className="rounded-2xl border border-slate-200 p-4"
+              >
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  {humanise(item.category)}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-800">
+                  {item.statement}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {!workspace.latestMeeting || !intelligence ? (
         <NoMeetingState />
       ) : (

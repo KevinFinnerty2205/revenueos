@@ -2,7 +2,9 @@
 
 - **Status:** Target product direction through the Interaction Platform private beta
 - **Current shipped baseline:** Sprints 1–3 plus Meeting Intelligence, Opportunity
-  Workspace, deterministic Revenue Brain and private-beta controls through WO-009
+  Workspace, deterministic Revenue Brain, private-beta controls, Interaction
+  foundation, Pre-Interaction Brief and reviewed AI Debrief/Voice Journal through
+  WO-013
 - **Scope notation:** **Current** exists in the repository; **Pilot** is required for the first five design-partner companies; **Beta** is required before private beta; **Later** is deliberately deferred; **Future** is directional only.
 
 This is the primary product blueprint. It defines outcomes and boundaries, not an
@@ -20,7 +22,9 @@ customer interaction, transforms that evidence into trusted intelligence, and he
 sales teams build stronger customer relationships over time.
 
 WO-010 expands the future direction beyond uploaded meeting transcripts and
-recordings. The [Interaction Intelligence vision](interaction-intelligence-vision.md)
+recordings. WO-011 through WO-013 now implement the initial Interaction identity,
+preparation and reviewed salesperson-reported post-interaction slice. The
+[Interaction Intelligence vision](interaction-intelligence-vision.md)
 and [product blueprint](interaction-intelligence-product-blueprint.md) define the
 Capture → Intelligence → Action lifecycle and face-to-face priority. They do not
 describe implemented behaviour or authorise a later work order.

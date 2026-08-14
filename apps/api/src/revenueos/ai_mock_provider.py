@@ -43,6 +43,8 @@ from revenueos.ai_contracts import (
 )
 from revenueos.ai_provider_contracts import (
     ActionItemsProviderInput,
+    AIDebriefEvidenceProviderInput,
+    AIDebriefQuestionProviderInput,
     BuyingSignalsProviderInput,
     DecisionsProviderInput,
     ExecutiveSummaryProviderInput,
@@ -59,6 +61,14 @@ from revenueos.ai_provider_errors import (
     InvalidProviderRequestError,
     UnsupportedModelError,
 )
+from revenueos.debrief_contracts import (
+    AI_DEBRIEF_EVIDENCE_REQUEST_TYPE,
+    AI_DEBRIEF_EVIDENCE_SCHEMA_VERSION,
+    AI_DEBRIEF_QUESTION_REQUEST_TYPE,
+    AI_DEBRIEF_QUESTION_SCHEMA_VERSION,
+    DebriefCaptureType,
+)
+from revenueos.debrief_reasoning import DeterministicDebriefReasoning
 from revenueos.domain import AIJobType
 
 MOCK_PROVIDER_NAME = "mock"
@@ -171,6 +181,14 @@ class DeterministicMockAIProvider:
         if request.job_type == AIJobType.FOLLOW_UP_EMAIL.value:
             return request.expected_schema_version == FOLLOW_UP_EMAIL_SCHEMA_VERSION and isinstance(
                 request.input_payload, FollowUpEmailProviderInput
+            )
+        if request.job_type == AI_DEBRIEF_QUESTION_REQUEST_TYPE:
+            return request.expected_schema_version == AI_DEBRIEF_QUESTION_SCHEMA_VERSION and isinstance(
+                request.input_payload, AIDebriefQuestionProviderInput
+            )
+        if request.job_type == AI_DEBRIEF_EVIDENCE_REQUEST_TYPE:
+            return request.expected_schema_version == AI_DEBRIEF_EVIDENCE_SCHEMA_VERSION and isinstance(
+                request.input_payload, AIDebriefEvidenceProviderInput
             )
         return False
 
@@ -293,7 +311,58 @@ class DeterministicMockAIProvider:
                 "tone": tone,
                 "confidence": 0.95,
             }
+        if isinstance(request.input_payload, AIDebriefQuestionProviderInput):
+            payload = cls._extract_debrief_input(request.input_payload.messages[1].content)
+            try:
+                result = DeterministicDebriefReasoning().next_question(
+                    interaction_type=str(payload["interaction_type"]),
+                    capture_type=cast(DebriefCaptureType, payload["capture_type"]),
+                    answers=tuple(str(value) for value in cast(list[object], payload["answers"])),
+                    asked_targets=tuple(str(value) for value in cast(list[object], payload["asked_targets"])),
+                    question_count=int(cast(int, payload["question_count"])),
+                    max_questions=int(cast(int, payload["max_questions"])),
+                    brief_questions=tuple(str(value) for value in cast(list[object], payload["context_questions"])),
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                raise InvalidProviderRequestError from exc
+            return cast(dict[str, JsonValue], result.model_dump(mode="json", by_alias=False))
+        if isinstance(request.input_payload, AIDebriefEvidenceProviderInput):
+            payload = cls._extract_debrief_input(request.input_payload.messages[1].content)
+            raw_fragments = payload.get("fragments")
+            if not isinstance(raw_fragments, list):
+                raise InvalidProviderRequestError
+            try:
+                fragments = tuple(
+                    (
+                        uuid.UUID(str(item["id"])),
+                        str(item["text"]),
+                    )
+                    for item in raw_fragments
+                    if isinstance(item, dict)
+                )
+                evidence_result = DeterministicDebriefReasoning().extract_candidates(fragments)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise InvalidProviderRequestError from exc
+            return cast(dict[str, JsonValue], evidence_result.model_dump(mode="json", by_alias=False))
         raise InvalidProviderRequestError
+
+    @staticmethod
+    def _extract_debrief_input(content: str) -> dict[str, object]:
+        markers = (
+            "Normalised AI Debrief input JSON:\n",
+            "Normalised debrief evidence input JSON:\n",
+        )
+        marker = next((value for value in markers if value in content), None)
+        if marker is None:
+            raise InvalidProviderRequestError
+        encoded = content.split(marker, 1)[1].split("\n", 1)[0]
+        try:
+            payload = json.loads(encoded)
+        except json.JSONDecodeError as exc:
+            raise InvalidProviderRequestError from exc
+        if not isinstance(payload, dict):
+            raise InvalidProviderRequestError
+        return cast(dict[str, object], payload)
 
     @staticmethod
     def _extract_composition_value(
@@ -2467,6 +2536,24 @@ class DeterministicMockAIProvider:
                 "tone": "casual",
                 "confidence": 2,
                 "body": "Unexpected field",
+            }
+        if request.job_type == AI_DEBRIEF_QUESTION_REQUEST_TYPE:
+            return {
+                "status": "ask",
+                "question": None,
+                "reason": "",
+                "target": "unsupported",
+                "priority": "urgent",
+            }
+        if request.job_type == AI_DEBRIEF_EVIDENCE_REQUEST_TYPE:
+            return {
+                "items": [
+                    {
+                        "evidence_category": "unsupported",
+                        "statement": "",
+                        "source_fragment_id": "not-a-uuid",
+                    }
+                ]
             }
         return {
             "decisions": [

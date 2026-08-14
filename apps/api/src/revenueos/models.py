@@ -1275,6 +1275,485 @@ class Evidence(TimestampMixin, Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class DebriefSession(TimestampMixin, Base):
+    __tablename__ = "debrief_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle_status IN ('created', 'collecting', 'processing', 'review', 'completed', 'cancelled', 'failed')",
+            name="ck_debrief_sessions_lifecycle_status",
+        ),
+        CheckConstraint("question_count >= 0", name="ck_debrief_sessions_question_count"),
+        CheckConstraint(
+            "max_questions BETWEEN 1 AND 10",
+            name="ck_debrief_sessions_max_questions",
+        ),
+        CheckConstraint(
+            "question_count <= max_questions",
+            name="ck_debrief_sessions_question_cap",
+        ),
+        CheckConstraint(
+            "failure_code IS NULL OR length(failure_code) <= 100",
+            name="ck_debrief_sessions_failure_code",
+        ),
+        CheckConstraint(
+            "length(trim(idempotency_key)) BETWEEN 1 AND 200",
+            name="ck_debrief_sessions_idempotency_key",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "id"],
+            ["capture_sessions.organisation_id", "capture_sessions.id"],
+            name="fk_debrief_sessions_capture_session_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_debrief_sessions_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "started_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_debrief_sessions_starter_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_debrief_sessions_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "started_by_user_id",
+            "idempotency_key",
+            name="uq_debrief_sessions_idempotency",
+        ),
+        Index(
+            "ix_debrief_sessions_organisation_interaction_created",
+            "organisation_id",
+            "interaction_id",
+            "created_at",
+        ),
+        Index(
+            "ix_debrief_sessions_organisation_status",
+            "organisation_id",
+            "lifecycle_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    started_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="created",
+        server_default="created",
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    question_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    max_questions: Mapped[int] = mapped_column(Integer, nullable=False, default=6, server_default="6")
+    current_question_json: Mapped[dict[str, object] | None] = mapped_column(JSON(none_as_null=True))
+    safety_confirmed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    voice_processing_acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_early: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DebriefTurn(Base):
+    __tablename__ = "debrief_turns"
+    __table_args__ = (
+        CheckConstraint("turn_number > 0", name="ck_debrief_turns_number"),
+        CheckConstraint("input_mode IN ('text', 'voice')", name="ck_debrief_turns_input_mode"),
+        CheckConstraint(
+            "length(trim(answer_text)) BETWEEN 1 AND 12000",
+            name="ck_debrief_turns_answer_text",
+        ),
+        CheckConstraint(
+            "audio_duration_seconds IS NULL OR audio_duration_seconds BETWEEN 0 AND 180",
+            name="ck_debrief_turns_audio_duration",
+        ),
+        CheckConstraint(
+            "length(trim(idempotency_key)) BETWEEN 1 AND 200",
+            name="ck_debrief_turns_idempotency_key",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_debrief_turns_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "session_id"],
+            ["debrief_sessions.organisation_id", "debrief_sessions.id"],
+            name="fk_debrief_turns_session_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_debrief_turns_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_debrief_turns_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "session_id",
+            "turn_number",
+            name="uq_debrief_turns_session_number",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "session_id",
+            "idempotency_key",
+            name="uq_debrief_turns_idempotency",
+        ),
+        Index(
+            "ix_debrief_turns_organisation_session_number",
+            "organisation_id",
+            "session_id",
+            "turn_number",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    question_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    answer_text: Mapped[str] = mapped_column(Text, nullable=False)
+    input_mode: Mapped[str] = mapped_column(String(10), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    audio_duration_seconds: Mapped[int | None] = mapped_column(Integer)
+    transcription_provider: Mapped[str | None] = mapped_column(String(40))
+    transcription_request_id: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class EvidenceFragment(Base):
+    __tablename__ = "evidence_fragments"
+    __table_args__ = (
+        CheckConstraint("locator_type = 'debrief_turn'", name="ck_evidence_fragments_locator_type"),
+        CheckConstraint(
+            "length(trim(content_text)) BETWEEN 1 AND 12000",
+            name="ck_evidence_fragments_content_text",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_evidence_fragments_evidence_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "session_id"],
+            ["debrief_sessions.organisation_id", "debrief_sessions.id"],
+            name="fk_evidence_fragments_session_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "turn_id"],
+            ["debrief_turns.organisation_id", "debrief_turns.id"],
+            name="fk_evidence_fragments_turn_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_evidence_fragments_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "turn_id",
+            name="uq_evidence_fragments_turn",
+        ),
+        Index(
+            "ix_evidence_fragments_organisation_evidence",
+            "organisation_id",
+            "evidence_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    turn_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    locator_type: Mapped[str] = mapped_column(String(30), nullable=False, default="debrief_turn")
+    content_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CandidateEvidence(TimestampMixin, Base):
+    __tablename__ = "candidate_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "evidence_category IN ('stakeholder', 'buying_signal', 'objection', 'competitor', "
+            "'risk', 'decision', 'action_item', 'open_question', 'commitment', 'timeline', "
+            "'procurement', 'budget', 'security_legal', 'implementation', 'commercial_intent', "
+            "'customer_request', 'other')",
+            name="ck_candidate_evidence_category",
+        ),
+        CheckConstraint("origin_class = 'salesperson_reported'", name="ck_candidate_evidence_origin"),
+        CheckConstraint("support_class = 'reported'", name="ck_candidate_evidence_support"),
+        CheckConstraint(
+            "validation_state IN ('unreviewed', 'verified', 'rejected')",
+            name="ck_candidate_evidence_validation_state",
+        ),
+        CheckConstraint(
+            "review_state IN ('pending', 'accepted', 'rejected')",
+            name="ck_candidate_evidence_review_state",
+        ),
+        CheckConstraint(
+            "length(trim(statement)) BETWEEN 1 AND 1000 AND length(trim(original_statement)) BETWEEN 1 AND 1000",
+            name="ck_candidate_evidence_statements",
+        ),
+        CheckConstraint(
+            "(review_state = 'pending' AND reviewed_at IS NULL AND reviewed_by_user_id IS NULL "
+            "AND accepted_evidence_id IS NULL AND validation_state = 'unreviewed') OR "
+            "(review_state = 'accepted' AND reviewed_at IS NOT NULL AND reviewed_by_user_id IS NOT NULL "
+            "AND accepted_evidence_id IS NOT NULL AND validation_state = 'verified') OR "
+            "(review_state = 'rejected' AND reviewed_at IS NOT NULL AND reviewed_by_user_id IS NOT NULL "
+            "AND accepted_evidence_id IS NULL AND validation_state = 'rejected')",
+            name="ck_candidate_evidence_review_consistency",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_candidate_evidence_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "session_id"],
+            ["debrief_sessions.organisation_id", "debrief_sessions.id"],
+            name="fk_candidate_evidence_session_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_fragment_id"],
+            ["evidence_fragments.organisation_id", "evidence_fragments.id"],
+            name="fk_candidate_evidence_fragment_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "accepted_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_candidate_evidence_accepted_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "reviewed_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_candidate_evidence_reviewer_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_candidate_evidence_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "session_id",
+            "evidence_category",
+            "statement_fingerprint",
+            name="uq_candidate_evidence_session_statement",
+        ),
+        Index(
+            "ix_candidate_evidence_organisation_session_review",
+            "organisation_id",
+            "session_id",
+            "review_state",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_fragment_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    accepted_evidence_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    evidence_category: Mapped[str] = mapped_column(String(30), nullable=False)
+    statement: Mapped[str] = mapped_column(String(1000), nullable=False)
+    original_statement: Mapped[str] = mapped_column(String(1000), nullable=False)
+    statement_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    origin_class: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="salesperson_reported", server_default="salesperson_reported"
+    )
+    support_class: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="reported", server_default="reported"
+    )
+    validation_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="unreviewed", server_default="unreviewed"
+    )
+    entity_reference: Mapped[str | None] = mapped_column(String(200))
+    explicitly_reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class InteractionIntelligenceSnapshot(Base):
+    __tablename__ = "interaction_intelligence_snapshots"
+    __table_args__ = (
+        CheckConstraint("schema_version > 0", name="ck_interaction_intelligence_schema_version"),
+        CheckConstraint("version > 0", name="ck_interaction_intelligence_version"),
+        CheckConstraint("validation_state = 'validated'", name="ck_interaction_intelligence_validation"),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_interaction_intelligence_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_interaction_intelligence_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "session_id"],
+            ["debrief_sessions.organisation_id", "debrief_sessions.id"],
+            name="fk_interaction_intelligence_session_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_interaction_intelligence_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "version",
+            name="uq_interaction_intelligence_logical_version",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "session_id",
+            name="uq_interaction_intelligence_session",
+        ),
+        Index(
+            "ix_interaction_intelligence_organisation_opportunity_created",
+            "organisation_id",
+            "opportunity_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    validation_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="validated", server_default="validated"
+    )
+    content_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    source_evidence_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class RevenueBrainInteractionSnapshot(Base):
+    __tablename__ = "revenue_brain_interaction_snapshots"
+    __table_args__ = (
+        CheckConstraint("schema_version > 0", name="ck_revenue_brain_interaction_schema_version"),
+        CheckConstraint("version > 0", name="ck_revenue_brain_interaction_version"),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_revenue_brain_interaction_company_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_revenue_brain_interaction_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_revenue_brain_interaction_interaction_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_intelligence_id"],
+            ["interaction_intelligence_snapshots.organisation_id", "interaction_intelligence_snapshots.id"],
+            name="fk_revenue_brain_interaction_intelligence_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_revenue_brain_interaction_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "interaction_intelligence_id",
+            name="uq_revenue_brain_interaction_source",
+        ),
+        Index(
+            "ix_revenue_brain_interaction_organisation_opportunity_created",
+            "organisation_id",
+            "opportunity_id",
+            "created_at",
+        ),
+        Index(
+            "ix_revenue_brain_interaction_organisation_company_created",
+            "organisation_id",
+            "company_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    interaction_intelligence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    content_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    source_evidence_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
 class InteractionAuditEvent(Base):
     __tablename__ = "interaction_audit_events"
     __table_args__ = (

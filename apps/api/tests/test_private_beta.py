@@ -36,6 +36,7 @@ from revenueos.beta_services import BetaService
 from revenueos.config import Settings
 from revenueos.demo_data import (
     demo_companion_ids,
+    demo_debrief_ids,
     demo_ids,
     demo_interaction_ids,
     reset_demo_data,
@@ -49,8 +50,10 @@ from revenueos.models import (
     CaptureSession,
     Company,
     DataNoticeAcknowledgement,
+    DebriefSession,
     Evidence,
     Interaction,
+    InteractionIntelligenceSnapshot,
     Meeting,
     Organisation,
     OrganisationMembership,
@@ -179,7 +182,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0022_pre_interaction_brief"
+    assert EXPECTED_MIGRATION_HEAD == "0023_ai_debrief_voice_journal"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -520,6 +523,8 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         assert first["provider_calls"] == 0
         _, _, meeting_ids, _ = demo_ids(PRIMARY_ORGANISATION_ID)
         interaction_ids = demo_interaction_ids(PRIMARY_ORGANISATION_ID)
+        debrief_ids = demo_debrief_ids(PRIMARY_ORGANISATION_ID)
+        debrief_interaction_ids = debrief_ids[:5]
         companion_interaction_ids, companion_meeting_ids, _, brief_ids = demo_companion_ids(PRIMARY_ORGANISATION_ID)
         async with factory() as session:
             assert all([await session.get(Meeting, meeting_id) is not None for meeting_id in meeting_ids])
@@ -540,6 +545,15 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
                 assert companion_interaction is not None
                 companion_types.add(companion_interaction.interaction_type)
             assert companion_types == {"face_to_face_meeting", "phone_call", "presentation"}
+            assert all(
+                [
+                    await session.get(Interaction, interaction_id) is not None
+                    for interaction_id in debrief_interaction_ids
+                ]
+            )
+            assert await session.get(DebriefSession, debrief_ids[5]) is not None
+            assert await session.get(DebriefSession, debrief_ids[6]) is not None
+            assert await session.get(InteractionIntelligenceSnapshot, debrief_ids[12]) is not None
             assert not any(
                 [
                     await session.get(Meeting, meeting_id) is not None
@@ -559,6 +573,9 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         async with factory() as session:
             assert all([await session.get(Meeting, meeting_id) is None for meeting_id in meeting_ids])
             assert all([await session.get(Interaction, interaction_id) is None for interaction_id in interaction_ids])
+            assert all(
+                [await session.get(Interaction, interaction_id) is None for interaction_id in debrief_interaction_ids]
+            )
             assert all([await session.get(PreInteractionBrief, brief_id) is None for brief_id in brief_ids])
         await engine.dispose()
 
@@ -928,7 +945,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 3
+        assert payload["exportVersion"] == 4
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         assert payload["captureSessions"][0]["id"] == str(capture_session_id)
@@ -936,6 +953,12 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert payload["evidence"][0]["origin_class"] == "salesperson_reported"
         assert payload["preInteractionBriefs"][0]["interaction_id"] == interaction.json()["id"]
         assert payload["preInteractionBriefs"][0]["source_references_json"]
+        assert payload["debriefSessions"] == []
+        assert payload["debriefTurns"] == []
+        assert payload["evidenceFragments"] == []
+        assert payload["candidateEvidence"] == []
+        assert payload["interactionIntelligenceSnapshots"] == []
+        assert payload["revenueBrainInteractionSnapshots"] == []
         exported_text = path.read_text(encoding="utf-8")
         assert str(SECONDARY_ORGANISATION_ID) not in exported_text
         forbidden = {"worker_id", "lease_expires_at", "last_error_message_safe", "provider_request_id"}
@@ -954,7 +977,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 3
+        assert download.json()["exportVersion"] == 4
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

@@ -375,6 +375,96 @@ export interface Interaction extends TenantEntity {
   briefGeneratedAt: string | null;
 }
 
+export type DebriefCaptureType = "ai_debrief" | "voice_journal";
+export type DebriefInputMode = "text" | "voice";
+export type DebriefLifecycleStatus =
+  | "created"
+  | "collecting"
+  | "processing"
+  | "review"
+  | "completed"
+  | "cancelled"
+  | "failed";
+export type DebriefQuestionTarget =
+  | "stakeholder"
+  | "budget"
+  | "timeline"
+  | "procurement"
+  | "security_legal"
+  | "objection"
+  | "competitor"
+  | "decision"
+  | "action_item"
+  | "open_question"
+  | "commitment"
+  | "implementation"
+  | "commercial_intent"
+  | "next_step"
+  | "other";
+export type CandidateEvidenceCategory =
+  DebriefQuestionTarget | "buying_signal" | "risk" | "customer_request";
+
+export interface DebriefQuestion {
+  status: "ask" | "complete";
+  question: string | null;
+  reason: string;
+  target: DebriefQuestionTarget | null;
+  priority: BriefPriority | null;
+}
+
+export interface DebriefTurn {
+  id: string;
+  turnNumber: number;
+  question: DebriefQuestion;
+  answerText: string;
+  inputMode: DebriefInputMode;
+  createdAt: string;
+}
+
+export interface CandidateEvidence {
+  id: string;
+  evidenceCategory: CandidateEvidenceCategory;
+  statement: string;
+  originalStatement: string;
+  origin: "salesperson_reported";
+  sourceLabel: "Reported by you";
+  supportClassification: "reported";
+  validationState: "unreviewed" | "verified" | "rejected";
+  userReviewState: "pending" | "accepted" | "rejected";
+  sourceCaptureSessionId: string;
+  evidenceFragmentId: string;
+  acceptedEvidenceId: string | null;
+  entityReference: string | null;
+  explicitlyReportedAt: string | null;
+  edited: boolean;
+}
+
+export interface DebriefSession {
+  id: string;
+  interactionId: string;
+  captureType: DebriefCaptureType;
+  lifecycleStatus: DebriefLifecycleStatus;
+  questionCount: number;
+  maxQuestions: number;
+  currentQuestion: DebriefQuestion | null;
+  canFinish: boolean;
+  finishedEarly: boolean;
+  turns: DebriefTurn[];
+  candidates: CandidateEvidence[];
+  interactionIntelligenceId: string | null;
+  revenueBrainSnapshotId: string | null;
+  startedAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export interface DebriefReviewResponse extends DebriefSession {
+  acceptedCount: number;
+  rejectedCount: number;
+  interactionUpdated: boolean;
+  revenueBrainUpdated: boolean;
+}
+
 export interface BriefRecentChange {
   change: string;
   importance: BriefPriority;
@@ -1128,12 +1218,30 @@ export interface OpportunityMeetingSummary {
   updatedAt: string;
 }
 
+export interface ReportedIntelligenceItem {
+  evidenceId: string;
+  category: string;
+  statement: string;
+  origin: "salesperson_reported";
+  sourceLabel: "Reported by you";
+  validationState: "verified";
+}
+
+export interface ReportedInteractionIntelligence {
+  id: string;
+  interactionId: string;
+  generatedAt: string;
+  sourceLabel: "Reported by you";
+  items: ReportedIntelligenceItem[];
+}
+
 export interface OpportunityWorkspaceResponse {
   opportunity: OpportunityWorkspaceOpportunity;
   reasoning: RevenueBrainReasoningResponse;
   latestMeeting: OpportunityMeetingSummary | null;
   recentMeetings: OpportunityMeetingSummary[];
   intelligence: MeetingIntelligenceResponse | null;
+  reportedIntelligence: ReportedInteractionIntelligence | null;
   intelligenceSectionsAvailable: number;
   partialData: boolean;
   generatedAt: string;

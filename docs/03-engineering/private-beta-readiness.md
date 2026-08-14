@@ -151,6 +151,10 @@ Daily PostgreSQL counters are tenant scoped and updated atomically:
   request, including strict-output retries. Mock requests do not count here.
 - `API_PRIVATE_BETA_MAX_TRANSCRIPT_CHARACTERS` rejects oversized transcript
   writes before processing.
+- `API_PRIVATE_BETA_MAX_DEBRIEF_SESSIONS_PER_DAY` defaults to 25. The question
+  cap defaults to six (allowed 1–10); voice segments default to at most 120 seconds
+  and 8 MB. Debrief finish consumes the generation counter and configured OpenAI
+  question/extraction/transcription calls consume the external-provider counter.
 - Existing `API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS` and
   `API_WORKER_DEFAULT_MAX_ATTEMPTS` bound validation attempts and durable
   retries.
@@ -170,6 +174,8 @@ defaults:
 | `API_FEATURE_REVENUE_BRAIN_ENABLED`         | `true`  |
 | `API_FEATURE_OPPORTUNITY_WORKSPACE_ENABLED` | `true`  |
 | `API_FEATURE_AI_COMPANION_ENABLED`          | `true`  |
+| `API_FEATURE_AI_DEBRIEF_ENABLED`            | `true`  |
+| `API_FEATURE_VOICE_JOURNAL_ENABLED`         | `true`  |
 | `API_FEATURE_DATA_EXPORT_ENABLED`           | `true`  |
 | `API_FEATURE_ORGANISATION_DELETION_ENABLED` | `false` |
 
@@ -182,7 +188,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  Alembic head `0022_pre_interaction_brief`, identity configuration, selected
+  Alembic head `0023_ai_debrief_voice_journal`, identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
@@ -197,13 +203,16 @@ worker retry exhaustion, stuck leases and quota responses.
 ## Synthetic demo data
 
 The explicit seed creates one clearly labelled synthetic company, one
-opportunity, two recent completed meetings with linked Interactions and three
-upcoming participant-linked Interactions: face-to-face, phone call and presentation.
-Each upcoming Interaction has an immutable deterministic brief. The completed
+opportunity, two recent completed meetings with linked Interactions, three upcoming
+participant-linked Interactions and completed synthetic phone, presentation, site,
+executive and trade-show variants. Each upcoming Interaction has an immutable
+deterministic brief. A reviewed phone AI Debrief supplies “Reported by you”
+Interaction/Revenue Brain state and a trade-show Voice Journal remains resumable.
+The completed
 Meetings retain synthetic transcripts, so
 the default retention policy does not immediately expire the walkthrough. Its
 IDs and content are deterministic, it is tenant-scoped and idempotent, and it
-makes zero provider calls:
+makes zero external provider calls:
 
 ```text
 uv --directory apps/api run revenueos-demo-data seed --organisation-id <UUID> --user-id <UUID>
@@ -213,7 +222,8 @@ With `AI_PROVIDER=mock`, use the existing Generate Meeting Intelligence action
 for both meetings and run the worker. This deterministic existing path creates
 Buying Signals, Objections, Stakeholders, Next Best Action and the remaining
 validated artefacts, which produce two Revenue Brain snapshots and support
-deterministic reasoning. No new AI path exists for demo data.
+deterministic reasoning. Seeded debrief state is deterministic persistence and does
+not invoke a provider.
 
 Reset only that organisation's fixed demo IDs:
 
@@ -221,7 +231,8 @@ Reset only that organisation's fixed demo IDs:
 uv --directory apps/api run revenueos-demo-data reset --organisation-id <UUID>
 ```
 
-Reset removes all five deterministic Interactions, three briefs and established demo rows.
+Reset removes every fixed demo Interaction, its three briefs, debrief/evidence state
+and the established Meeting/Brain rows.
 Never run the seed automatically or use it to overwrite a real record.
 
 ## Feedback handling

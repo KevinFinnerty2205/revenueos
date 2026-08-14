@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 
-type BetaFeature = "opportunityWorkspace" | "revenueBrain" | "aiCompanion";
+type BetaFeature =
+  | "opportunityWorkspace"
+  | "revenueBrain"
+  | "aiCompanion"
+  | "aiDebrief"
+  | "voiceJournal";
 
 interface Capabilities {
   featureFlags: Record<string, boolean>;

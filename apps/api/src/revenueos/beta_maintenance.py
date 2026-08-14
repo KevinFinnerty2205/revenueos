@@ -24,13 +24,18 @@ from revenueos.models import (
     BetaDataRequest,
     BetaFeedback,
     BetaSystemEvent,
+    CandidateEvidence,
     CaptureSession,
     Company,
     Contact,
     DataNoticeAcknowledgement,
+    DebriefSession,
+    DebriefTurn,
     Evidence,
+    EvidenceFragment,
     Interaction,
     InteractionAuditEvent,
+    InteractionIntelligenceSnapshot,
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
@@ -42,13 +47,14 @@ from revenueos.models import (
     OrganisationMembership,
     PreInteractionBrief,
     RevenueBrainInsight,
+    RevenueBrainInteractionSnapshot,
     RevenueBrainSnapshot,
     Task,
     Transcript,
     User,
 )
 
-EXPORT_VERSION = 3
+EXPORT_VERSION = 4
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -334,6 +340,16 @@ async def _delete_organisation_records(
             _validated_export_path(export_root, export_record).unlink(missing_ok=True)
         await session.execute(delete(RevenueBrainInsight).where(RevenueBrainInsight.organisation_id == organisation_id))
         await session.execute(
+            delete(RevenueBrainInteractionSnapshot).where(
+                RevenueBrainInteractionSnapshot.organisation_id == organisation_id
+            )
+        )
+        await session.execute(
+            delete(InteractionIntelligenceSnapshot).where(
+                InteractionIntelligenceSnapshot.organisation_id == organisation_id
+            )
+        )
+        await session.execute(
             delete(RevenueBrainSnapshot).where(RevenueBrainSnapshot.organisation_id == organisation_id)
         )
         await session.execute(delete(AIArtifact).where(AIArtifact.organisation_id == organisation_id))
@@ -343,6 +359,10 @@ async def _delete_organisation_records(
         await session.execute(delete(MeetingParticipant).where(MeetingParticipant.organisation_id == organisation_id))
         await session.execute(delete(Transcript).where(Transcript.organisation_id == organisation_id))
         await session.execute(delete(Meeting).where(Meeting.organisation_id == organisation_id))
+        await session.execute(delete(CandidateEvidence).where(CandidateEvidence.organisation_id == organisation_id))
+        await session.execute(delete(EvidenceFragment).where(EvidenceFragment.organisation_id == organisation_id))
+        await session.execute(delete(DebriefTurn).where(DebriefTurn.organisation_id == organisation_id))
+        await session.execute(delete(DebriefSession).where(DebriefSession.organisation_id == organisation_id))
         await session.execute(delete(Evidence).where(Evidence.organisation_id == organisation_id))
         await session.execute(delete(CaptureSession).where(CaptureSession.organisation_id == organisation_id))
         await session.execute(delete(PreInteractionBrief).where(PreInteractionBrief.organisation_id == organisation_id))
@@ -674,6 +694,89 @@ async def _interaction_deletion_counts_from_select(
             )
             or 0
         ),
+        "debrief_sessions": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(DebriefSession)
+                    .where(
+                        DebriefSession.organisation_id == organisation_id,
+                        DebriefSession.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "debrief_turns": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(DebriefTurn)
+                    .where(
+                        DebriefTurn.organisation_id == organisation_id,
+                        DebriefTurn.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "evidence_fragments": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(EvidenceFragment)
+                    .where(
+                        EvidenceFragment.organisation_id == organisation_id,
+                        EvidenceFragment.session_id.in_(
+                            select(DebriefSession.id).where(
+                                DebriefSession.organisation_id == organisation_id,
+                                DebriefSession.interaction_id.in_(interaction_ids),
+                            )
+                        ),
+                    )
+                )
+            )
+            or 0
+        ),
+        "candidate_evidence": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(CandidateEvidence)
+                    .where(
+                        CandidateEvidence.organisation_id == organisation_id,
+                        CandidateEvidence.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "interaction_intelligence_snapshots": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(InteractionIntelligenceSnapshot)
+                    .where(
+                        InteractionIntelligenceSnapshot.organisation_id == organisation_id,
+                        InteractionIntelligenceSnapshot.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "revenue_brain_interaction_snapshots": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(RevenueBrainInteractionSnapshot)
+                    .where(
+                        RevenueBrainInteractionSnapshot.organisation_id == organisation_id,
+                        RevenueBrainInteractionSnapshot.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
     }
 
 
@@ -685,6 +788,46 @@ async def _delete_interaction_batch(
     if not interaction_ids:
         return {}
     counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
+    await session.execute(
+        delete(RevenueBrainInteractionSnapshot).where(
+            RevenueBrainInteractionSnapshot.organisation_id == organisation_id,
+            RevenueBrainInteractionSnapshot.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(InteractionIntelligenceSnapshot).where(
+            InteractionIntelligenceSnapshot.organisation_id == organisation_id,
+            InteractionIntelligenceSnapshot.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(CandidateEvidence).where(
+            CandidateEvidence.organisation_id == organisation_id,
+            CandidateEvidence.interaction_id.in_(interaction_ids),
+        )
+    )
+    session_ids = select(DebriefSession.id).where(
+        DebriefSession.organisation_id == organisation_id,
+        DebriefSession.interaction_id.in_(interaction_ids),
+    )
+    await session.execute(
+        delete(EvidenceFragment).where(
+            EvidenceFragment.organisation_id == organisation_id,
+            EvidenceFragment.session_id.in_(session_ids),
+        )
+    )
+    await session.execute(
+        delete(DebriefTurn).where(
+            DebriefTurn.organisation_id == organisation_id,
+            DebriefTurn.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(DebriefSession).where(
+            DebriefSession.organisation_id == organisation_id,
+            DebriefSession.interaction_id.in_(interaction_ids),
+        )
+    )
     await session.execute(
         delete(Evidence).where(
             Evidence.organisation_id == organisation_id,
@@ -757,6 +900,32 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
         select(CaptureSession).where(CaptureSession.organisation_id == organisation_id).order_by(CaptureSession.id)
     )
     evidence = await rows(select(Evidence).where(Evidence.organisation_id == organisation_id).order_by(Evidence.id))
+    debrief_sessions = await rows(
+        select(DebriefSession).where(DebriefSession.organisation_id == organisation_id).order_by(DebriefSession.id)
+    )
+    debrief_turns = await rows(
+        select(DebriefTurn).where(DebriefTurn.organisation_id == organisation_id).order_by(DebriefTurn.id)
+    )
+    evidence_fragments = await rows(
+        select(EvidenceFragment)
+        .where(EvidenceFragment.organisation_id == organisation_id)
+        .order_by(EvidenceFragment.id)
+    )
+    candidate_evidence = await rows(
+        select(CandidateEvidence)
+        .where(CandidateEvidence.organisation_id == organisation_id)
+        .order_by(CandidateEvidence.id)
+    )
+    interaction_intelligence = await rows(
+        select(InteractionIntelligenceSnapshot)
+        .where(InteractionIntelligenceSnapshot.organisation_id == organisation_id)
+        .order_by(InteractionIntelligenceSnapshot.id)
+    )
+    revenue_brain_interactions = await rows(
+        select(RevenueBrainInteractionSnapshot)
+        .where(RevenueBrainInteractionSnapshot.organisation_id == organisation_id)
+        .order_by(RevenueBrainInteractionSnapshot.id)
+    )
     briefs = await rows(
         select(PreInteractionBrief)
         .where(PreInteractionBrief.organisation_id == organisation_id)
@@ -962,6 +1131,89 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
             )
             for item in capture_sessions
         ],
+        "debriefSessions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "started_by_user_id",
+                    "lifecycle_status",
+                    "question_count",
+                    "max_questions",
+                    "current_question_json",
+                    "safety_confirmed_at",
+                    "voice_processing_acknowledged_at",
+                    "finished_early",
+                    "failure_code",
+                    "completed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in debrief_sessions
+        ],
+        "debriefTurns": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "session_id",
+                    "evidence_id",
+                    "turn_number",
+                    "question_json",
+                    "answer_text",
+                    "input_mode",
+                    "audio_duration_seconds",
+                    "transcription_provider",
+                    "created_at",
+                ),
+            )
+            for item in debrief_turns
+        ],
+        "evidenceFragments": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "evidence_id",
+                    "session_id",
+                    "turn_id",
+                    "locator_type",
+                    "content_text",
+                    "created_at",
+                    "deleted_at",
+                ),
+            )
+            for item in evidence_fragments
+        ],
+        "candidateEvidence": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "session_id",
+                    "source_fragment_id",
+                    "accepted_evidence_id",
+                    "evidence_category",
+                    "statement",
+                    "original_statement",
+                    "origin_class",
+                    "support_class",
+                    "validation_state",
+                    "entity_reference",
+                    "explicitly_reported_at",
+                    "review_state",
+                    "reviewed_by_user_id",
+                    "reviewed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in candidate_evidence
+        ],
         "evidence": [
             _columns(
                 item,
@@ -1007,6 +1259,42 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
                 ),
             )
             for item in briefs
+        ],
+        "interactionIntelligenceSnapshots": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "opportunity_id",
+                    "session_id",
+                    "schema_version",
+                    "version",
+                    "validation_state",
+                    "content_json",
+                    "source_evidence_ids",
+                    "created_at",
+                ),
+            )
+            for item in interaction_intelligence
+        ],
+        "revenueBrainInteractionSnapshots": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "company_id",
+                    "opportunity_id",
+                    "interaction_id",
+                    "interaction_intelligence_id",
+                    "schema_version",
+                    "version",
+                    "content_json",
+                    "source_evidence_ids",
+                    "created_at",
+                ),
+            )
+            for item in revenue_brain_interactions
         ],
         "meetingParticipants": [
             _columns(

@@ -105,6 +105,14 @@ search, new prompts, provider calls and transcript analysis.
 
 ## Target Interaction evolution
 
+WO-013 adds `RevenueBrainInteractionSnapshot` as an immutable additive subtype for
+accepted post-interaction salesperson-reported Evidence. It references the source
+Interaction Intelligence composition and accepted Evidence IDs and keeps the visible
+source label “Reported by you”. It does not update, delete or reinterpret any existing
+Meeting snapshot, and the existing WO-008B comparison continues to reason only over
+its documented Meeting snapshot inputs. See
+[Source-aware Interaction Intelligence](source-aware-interaction-intelligence.md).
+
 WO-011 leaves every current snapshot immutable and Meeting-based. The new
 Meeting/Interaction compatibility relation supplies timeline identity without
 updating a snapshot or artefact reference. Future
