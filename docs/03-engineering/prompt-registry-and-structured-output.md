@@ -1,5 +1,11 @@
 # Prompt registry and structured output
 
+> WO-013 registers `ai_debrief_question` and `ai_debrief_evidence` prompt/schema
+> version 1 as explicit foreground request types. They reuse strict rendering,
+> provider allowlisting, parsing, validation/retry and metadata-only telemetry, but
+> are not inserted into the Meeting/transcript AI job table. See
+> [AI Debrief](ai-debrief.md) and [ADR 0028](../08-decisions/0028-bounded-foreground-debrief-reasoning.md).
+
 ## Current boundary
 
 WO-004B3 adds application-owned prompt versioning, schema registration, safe

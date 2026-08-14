@@ -29,6 +29,8 @@ from revenueos.opportunity_contracts import (
     OpportunityMeetingSummaryResponse,
     OpportunityWorkspaceOpportunityResponse,
     OpportunityWorkspaceResponse,
+    ReportedIntelligenceItemResponse,
+    ReportedInteractionIntelligenceResponse,
 )
 from revenueos.opportunity_repositories import (
     MeetingSummaryRecord,
@@ -157,12 +159,54 @@ class OpportunityWorkspaceService:
         else:
             reasoning = await self.reasoning.read_for_opportunity(opportunity_id)
         available_count = intelligence.progress.ready if intelligence is not None else 0
+        reported_record = record.reported_intelligence
+        reported_intelligence = None
+        if reported_record is not None:
+            raw_items = reported_record.content_json.get("items", [])
+            parsed_items: list[ReportedIntelligenceItemResponse] = []
+            if isinstance(raw_items, list):
+                for item in raw_items:
+                    if not isinstance(item, dict):
+                        continue
+                    evidence_id = item.get("evidenceId")
+                    category = item.get("category")
+                    statement = item.get("statement")
+                    if (
+                        not isinstance(evidence_id, str)
+                        or not evidence_id
+                        or not isinstance(category, str)
+                        or not category
+                        or not isinstance(statement, str)
+                        or not statement
+                    ):
+                        continue
+                    try:
+                        parsed_items.append(
+                            ReportedIntelligenceItemResponse(
+                                evidence_id=UUID(evidence_id),
+                                category=category,
+                                statement=statement,
+                                origin="salesperson_reported",
+                                source_label="Reported by you",
+                                validation_state="verified",
+                            )
+                        )
+                    except ValueError:
+                        continue
+            reported_intelligence = ReportedInteractionIntelligenceResponse(
+                id=reported_record.id,
+                interaction_id=reported_record.interaction_id,
+                generated_at=reported_record.created_at,
+                source_label="Reported by you",
+                items=parsed_items,
+            )
         response = OpportunityWorkspaceResponse(
             opportunity=self._workspace_opportunity(record),
             reasoning=reasoning,
             latest_meeting=meeting_summaries[0] if meeting_summaries else None,
             recent_meetings=meeting_summaries,
             intelligence=intelligence,
+            reported_intelligence=reported_intelligence,
             intelligence_sections_available=available_count,
             partial_data=(latest is not None and available_count < len(CAPABILITIES)),
             generated_at=datetime.now(UTC),

@@ -43,6 +43,8 @@ class OutputSchemaDefinition(BaseModel):
         "stakeholder_intelligence",
         "next_best_action",
         "follow_up_email",
+        "ai_debrief_question",
+        "ai_debrief_evidence",
     ]
     validation_model: type[BaseModel]
     description: SchemaDescription

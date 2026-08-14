@@ -6,6 +6,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 
 from revenueos.business_contracts import Page
+from revenueos.debrief_contracts import (
+    DebriefAnswerRequest,
+    DebriefCancelRequest,
+    DebriefFinishRequest,
+    DebriefReviewRequest,
+    DebriefReviewResponse,
+    DebriefSessionResponse,
+    DebriefStartRequest,
+    DebriefVoiceAnswerRequest,
+)
+from revenueos.debrief_services import DebriefService
 from revenueos.domain import InteractionLifecycleStatus, InteractionType
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_contracts import (
@@ -15,6 +26,7 @@ from revenueos.interaction_contracts import (
     InteractionUpdate,
 )
 from revenueos.interaction_dependencies import (
+    get_debrief_service,
     get_interaction_service,
     get_pre_interaction_brief_service,
 )
@@ -29,6 +41,7 @@ from revenueos.pre_interaction_services import PreInteractionBriefService
 router = APIRouter(prefix="/api/v1/interactions", tags=["interactions"])
 Interactions = Annotated[InteractionService, Depends(get_interaction_service)]
 Briefs = Annotated[PreInteractionBriefService, Depends(get_pre_interaction_brief_service)]
+Debriefs = Annotated[DebriefService, Depends(get_debrief_service)]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -156,3 +169,93 @@ async def review_pre_interaction_brief(
     service: Briefs,
 ) -> PreInteractionBriefResponse:
     return await service.review_brief(interaction_id)
+
+
+@router.post(
+    "/{interaction_id}/debrief",
+    response_model=DebriefSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def start_debrief(
+    interaction_id: UUID,
+    request: DebriefStartRequest,
+    service: Debriefs,
+) -> DebriefSessionResponse:
+    return await service.start(interaction_id, request)
+
+
+@router.get(
+    "/{interaction_id}/debrief/{session_id}",
+    response_model=DebriefSessionResponse,
+)
+async def get_debrief(
+    interaction_id: UUID,
+    session_id: UUID,
+    service: Debriefs,
+) -> DebriefSessionResponse:
+    return await service.get(interaction_id, session_id)
+
+
+@router.post(
+    "/{interaction_id}/debrief/{session_id}/response",
+    response_model=DebriefSessionResponse,
+)
+async def submit_debrief_response(
+    interaction_id: UUID,
+    session_id: UUID,
+    request: DebriefAnswerRequest,
+    service: Debriefs,
+) -> DebriefSessionResponse:
+    return await service.answer(interaction_id, session_id, request)
+
+
+@router.post(
+    "/{interaction_id}/debrief/{session_id}/voice-response",
+    response_model=DebriefSessionResponse,
+)
+async def submit_debrief_voice_response(
+    interaction_id: UUID,
+    session_id: UUID,
+    request: DebriefVoiceAnswerRequest,
+    service: Debriefs,
+) -> DebriefSessionResponse:
+    return await service.voice_answer(interaction_id, session_id, request)
+
+
+@router.post(
+    "/{interaction_id}/debrief/{session_id}/finish",
+    response_model=DebriefSessionResponse,
+)
+async def finish_debrief(
+    interaction_id: UUID,
+    session_id: UUID,
+    request: DebriefFinishRequest,
+    service: Debriefs,
+) -> DebriefSessionResponse:
+    return await service.finish(interaction_id, session_id, request)
+
+
+@router.post(
+    "/{interaction_id}/debrief/{session_id}/review",
+    response_model=DebriefReviewResponse,
+)
+async def review_debrief(
+    interaction_id: UUID,
+    session_id: UUID,
+    request: DebriefReviewRequest,
+    service: Debriefs,
+) -> DebriefReviewResponse:
+    return await service.review(interaction_id, session_id, request)
+
+
+@router.post(
+    "/{interaction_id}/debrief/{session_id}/cancel",
+    response_model=DebriefSessionResponse,
+)
+async def cancel_debrief(
+    interaction_id: UUID,
+    session_id: UUID,
+    request: DebriefCancelRequest,
+    service: Debriefs,
+) -> DebriefSessionResponse:
+    return await service.cancel(interaction_id, session_id, request)

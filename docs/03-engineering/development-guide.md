@@ -107,7 +107,8 @@ tenant-safe Interaction link per Meeting. Migration tests upgrade, downgrade and
 re-upgrade it; PostgreSQL CI also verifies forced RLS for every new tenant table.
 See [Interaction migration and compatibility](interaction-migration-and-compatibility.md).
 
-WO-012 migration `0022_pre_interaction_brief` follows `0021` as the single
+WO-012 migration `0022_pre_interaction_brief` follows `0021`, and WO-013 migration
+`0023_ai_debrief_voice_journal` follows `0022` as the single
 head. It adds immutable, forced-RLS brief persistence and no worker/provider
 configuration. See [Pre-Interaction Brief engineering](pre-interaction-brief.md).
 

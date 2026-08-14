@@ -36,6 +36,14 @@ from revenueos.ai_prompt_errors import (
     SchemaVersionNotFoundError,
     StructuredOutputValidationError,
 )
+from revenueos.debrief_contracts import (
+    AI_DEBRIEF_EVIDENCE_REQUEST_TYPE,
+    AI_DEBRIEF_EVIDENCE_SCHEMA_VERSION,
+    AI_DEBRIEF_QUESTION_REQUEST_TYPE,
+    AI_DEBRIEF_QUESTION_SCHEMA_VERSION,
+    CandidateEvidenceExtraction,
+    DebriefQuestion,
+)
 from revenueos.domain import AIJobType
 
 INFRASTRUCTURE_TEST_SCHEMA_KEY = "infrastructure_test"
@@ -49,6 +57,8 @@ OBJECTIONS_COMPETITIVE_SIGNALS_SCHEMA_KEY = "objections_competitive_signals"
 STAKEHOLDER_INTELLIGENCE_SCHEMA_KEY = "stakeholder_intelligence"
 NEXT_BEST_ACTION_SCHEMA_KEY = "next_best_action"
 FOLLOW_UP_EMAIL_SCHEMA_KEY = "follow_up_email"
+AI_DEBRIEF_QUESTION_SCHEMA_KEY = "ai_debrief_question"
+AI_DEBRIEF_EVIDENCE_SCHEMA_KEY = "ai_debrief_evidence"
 
 
 class OutputSchemaRegistry:
@@ -197,6 +207,22 @@ def create_default_output_schema_registry() -> OutputSchemaRegistry:
                 job_type=AIJobType.FOLLOW_UP_EMAIL.value,
                 validation_model=FollowUpEmailArtifactContent,
                 description="Strict schema for artefact-grounded Follow-up Emails.",
+                active=True,
+            ),
+            OutputSchemaDefinition(
+                schema_key=AI_DEBRIEF_QUESTION_SCHEMA_KEY,
+                schema_version=AI_DEBRIEF_QUESTION_SCHEMA_VERSION,
+                job_type=AI_DEBRIEF_QUESTION_REQUEST_TYPE,
+                validation_model=DebriefQuestion,
+                description="Strict next-question schema for bounded post-interaction debriefs.",
+                active=True,
+            ),
+            OutputSchemaDefinition(
+                schema_key=AI_DEBRIEF_EVIDENCE_SCHEMA_KEY,
+                schema_version=AI_DEBRIEF_EVIDENCE_SCHEMA_VERSION,
+                job_type=AI_DEBRIEF_EVIDENCE_REQUEST_TYPE,
+                validation_model=CandidateEvidenceExtraction,
+                description="Strict reviewable candidate-evidence schema for post-interaction debriefs.",
                 active=True,
             ),
         )

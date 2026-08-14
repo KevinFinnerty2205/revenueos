@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 Environment = Literal["development", "test", "production"]
 AuthMode = Literal["mock", "clerk"]
 AIProviderName = Literal["mock", "openai"]
+TranscriptionProviderName = Literal["mock", "openai"]
 
 
 class Settings(BaseSettings):
@@ -42,6 +43,10 @@ class Settings(BaseSettings):
     private_beta_max_generations_per_day: int = Field(default=100, ge=1, le=10_000)
     private_beta_max_openai_requests_per_day: int = Field(default=150, ge=1, le=10_000)
     private_beta_max_transcript_characters: int = Field(default=200_000, ge=1_000, le=1_000_000)
+    private_beta_max_debrief_sessions_per_day: int = Field(default=25, ge=1, le=500)
+    private_beta_debrief_question_cap: int = Field(default=6, ge=1, le=10)
+    private_beta_max_debrief_audio_seconds: int = Field(default=120, ge=15, le=180)
+    private_beta_max_debrief_audio_bytes: int = Field(default=8_000_000, ge=100_000, le=12_000_000)
     private_beta_feedback_per_user_per_day: int = Field(default=20, ge=1, le=1_000)
     private_beta_retention_batch_size: int = Field(default=100, ge=1, le=1_000)
     private_beta_export_directory: str = Field(default="/tmp/revenueos-private-beta-exports", min_length=1)
@@ -49,6 +54,8 @@ class Settings(BaseSettings):
     feature_revenue_brain_enabled: bool = True
     feature_opportunity_workspace_enabled: bool = True
     feature_ai_companion_enabled: bool = True
+    feature_ai_debrief_enabled: bool = True
+    feature_voice_journal_enabled: bool = True
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -104,6 +111,14 @@ class Settings(BaseSettings):
         pattern=r"^[a-z0-9][a-z0-9_]*$",
     )
     ai_structured_output_max_attempts: int = Field(default=3, ge=1, le=5)
+    transcription_provider_name: TranscriptionProviderName = "mock"
+    transcription_model_identifier: str = Field(
+        default="gpt-4o-mini-transcribe",
+        min_length=1,
+        max_length=200,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+    )
+    transcription_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
 
     @field_validator(
         "database_url",
@@ -141,13 +156,13 @@ class Settings(BaseSettings):
             raise ValueError("Worker base retry delay cannot exceed the maximum retry delay.")
         if self.private_beta_default_retention_days not in {30, 90, 180}:
             raise ValueError("Private beta default retention must be 30, 90 or 180 days.")
-        if self.ai_provider_name == "openai":
+        if self.ai_provider_name == "openai" or self.transcription_provider_name == "openai":
             if self.openai_api_key is None:
-                raise ValueError("OPENAI_API_KEY is required when AI_PROVIDER=openai.")
+                raise ValueError("OPENAI_API_KEY is required when an OpenAI processing path is enabled.")
             api_key = self.openai_api_key.get_secret_value()
             if len(api_key) < 8 or len(api_key) > 512 or any(character.isspace() for character in api_key):
                 raise ValueError("OPENAI_API_KEY is malformed.")
-            if self.openai_model is None:
+            if self.ai_provider_name == "openai" and self.openai_model is None:
                 raise ValueError("OPENAI_MODEL is required when AI_PROVIDER=openai.")
             if not self.feature_openai_provider_enabled:
                 raise ValueError("OpenAI requires the server-side beta feature flag.")
@@ -193,6 +208,8 @@ class Settings(BaseSettings):
             "revenueBrain": self.feature_revenue_brain_enabled,
             "opportunityWorkspace": self.feature_opportunity_workspace_enabled,
             "aiCompanion": self.feature_ai_companion_enabled,
+            "aiDebrief": self.feature_ai_debrief_enabled,
+            "voiceJournal": self.feature_voice_journal_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

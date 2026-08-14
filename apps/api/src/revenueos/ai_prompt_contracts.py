@@ -46,6 +46,8 @@ class PromptDefinition(BaseModel):
         "stakeholder_intelligence",
         "next_best_action",
         "follow_up_email",
+        "ai_debrief_question",
+        "ai_debrief_evidence",
     ]
     system_template: PromptTemplate
     user_template: PromptTemplate

@@ -267,6 +267,7 @@ function workspace(
       createdAt: "2026-07-20T00:00:00Z",
       updatedAt: "2026-07-24T00:00:00Z",
     },
+    reportedIntelligence: null,
     latestMeeting: {
       id: "meeting-1",
       title: "Expansion review",
@@ -409,6 +410,53 @@ describe("OpportunityWorkspace", () => {
     ).toBeVisible();
     expect(screen.getByText("Acme Australia")).toBeVisible();
     expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
+  });
+
+  it("labels reviewed debrief evidence separately from customer-direct meeting evidence", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          response(
+            workspace({
+              latestMeeting: null,
+              recentMeetings: [],
+              intelligence: null,
+              intelligenceSectionsAvailable: 0,
+              reportedIntelligence: {
+                id: "reported-1",
+                interactionId: "interaction-1",
+                generatedAt: "2026-08-14T02:00:00Z",
+                sourceLabel: "Reported by you",
+                items: [
+                  {
+                    evidenceId: "evidence-1",
+                    category: "stakeholder",
+                    statement: "Jordan is the confirmed economic buyer.",
+                    origin: "salesperson_reported",
+                    sourceLabel: "Reported by you",
+                    validationState: "verified",
+                  },
+                ],
+              },
+            }),
+          ),
+        )
+        .mockResolvedValueOnce(response(meetingPage([]))),
+    );
+    render(<OpportunityWorkspace opportunityId="opportunity-1" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Latest post-interaction report",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText("Reported by you")).toBeVisible();
+    expect(
+      screen.getByText("Jordan is the confirmed economic buyer."),
+    ).toBeVisible();
+    expect(screen.getByText(/distinct from customer-direct/i)).toBeVisible();
   });
 
   it("associates a selected same-organisation meeting with an optimistic token", async () => {

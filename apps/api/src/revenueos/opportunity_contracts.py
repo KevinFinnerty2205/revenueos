@@ -67,12 +67,30 @@ class OpportunityMeetingSummaryResponse(APIModel):
     updated_at: datetime
 
 
+class ReportedIntelligenceItemResponse(APIModel):
+    evidence_id: UUID
+    category: str
+    statement: str
+    origin: Literal["salesperson_reported"]
+    source_label: Literal["Reported by you"]
+    validation_state: Literal["verified"]
+
+
+class ReportedInteractionIntelligenceResponse(APIModel):
+    id: UUID
+    interaction_id: UUID
+    generated_at: datetime
+    source_label: Literal["Reported by you"]
+    items: list[ReportedIntelligenceItemResponse]
+
+
 class OpportunityWorkspaceResponse(APIModel):
     opportunity: OpportunityWorkspaceOpportunityResponse
     reasoning: RevenueBrainReasoningResponse
     latest_meeting: OpportunityMeetingSummaryResponse | None
     recent_meetings: list[OpportunityMeetingSummaryResponse]
     intelligence: MeetingIntelligenceResponse | None
+    reported_intelligence: ReportedInteractionIntelligenceResponse | None = None
     intelligence_sections_available: int
     partial_data: bool
     generated_at: datetime

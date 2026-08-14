@@ -8,6 +8,7 @@ import { humanise } from "@/lib/business-entities";
 import { formatInteractionDate } from "@/lib/interactions";
 import { BetaFeatureGate } from "@/components/beta-feature-gate";
 import { PreInteractionBrief } from "@/components/pre-interaction-brief";
+import { PostInteractionCapture } from "@/components/post-interaction-capture";
 
 export function InteractionDetail({
   interactionId,
@@ -164,6 +165,16 @@ export function InteractionDetail({
           />
         </BetaFeatureGate>
       </div>
+      {interaction.lifecycleStatus === "completed" ? (
+        <div className="mt-6" id="debrief">
+          <BetaFeatureGate feature="aiDebrief">
+            <PostInteractionCapture
+              interactionId={interaction.id}
+              interactionType={interaction.interactionType}
+            />
+          </BetaFeatureGate>
+        </div>
+      ) : null}
     </section>
   );
 }

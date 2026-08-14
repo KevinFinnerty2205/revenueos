@@ -1,8 +1,10 @@
 # Interaction domain architecture
 
-- **Status:** Approved target architecture; WO-011 implements the Interaction,
-  Meeting compatibility and metadata-only Evidence/Capture Session subset. See the
-  [current implementation guide](interaction-domain-implementation.md)
+- **Status:** Approved target architecture; WO-011 implements Interaction/Meeting
+  compatibility and the Evidence/Capture Session foundation, WO-012 adds preparation,
+  and WO-013 executes the reviewed AI Debrief/Voice Journal subset. See the
+  [current implementation guide](interaction-domain-implementation.md) and
+  [AI Debrief guide](ai-debrief.md)
 - **Decision:** Interaction is the source-neutral parent for future customer events;
   Meeting remains a compatible subtype aggregate during an additive migration
 - **Architecture:** Extend the existing modular monolith, PostgreSQL, durable worker
@@ -21,6 +23,11 @@ New capture and evidence capabilities depend on Interaction. Existing Meeting pa
 continue through adapters until their contracts can safely expose an optional
 Interaction reference. This is a logical parent with an additive physical rollout,
 not a big-bang inheritance hierarchy or a permanent adjacent silo.
+
+WO-013 follows this boundary: debriefs are Capture Sessions owned by completed
+Interactions, answers/fragments are Evidence, accepted candidate review produces
+source-aware Interaction Intelligence, and an additive subtype extends the existing
+Revenue Brain without changing Meeting Intelligence.
 
 ## Domain boundaries
 

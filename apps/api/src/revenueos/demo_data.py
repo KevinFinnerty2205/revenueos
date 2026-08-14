@@ -11,20 +11,28 @@ from uuid import UUID
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from revenueos.beta_maintenance import _delete_meeting_batch
+from revenueos.beta_maintenance import _delete_interaction_batch, _delete_meeting_batch
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
 from revenueos.models import (
     BetaFeedback,
     BetaSystemEvent,
+    CandidateEvidence,
+    CaptureSession,
     Company,
+    DebriefSession,
+    DebriefTurn,
+    Evidence,
+    EvidenceFragment,
     Interaction,
+    InteractionIntelligenceSnapshot,
     Meeting,
     MeetingParticipant,
     Opportunity,
     OpportunityAuditEvent,
     OrganisationMembership,
     PreInteractionBrief,
+    RevenueBrainInteractionSnapshot,
     Transcript,
 )
 from revenueos.pre_interaction_contracts import (
@@ -98,6 +106,27 @@ def demo_interaction_ids(organisation_id: UUID) -> tuple[UUID, UUID, UUID, UUID,
         uuid.uuid5(INTERACTION_BACKFILL_NAMESPACE, f"{prefix}:{meeting_ids[1]}"),
         *companion_interaction_ids,
     )
+
+
+def demo_debrief_ids(organisation_id: UUID) -> tuple[UUID, ...]:
+    prefix = str(organisation_id)
+    labels = (
+        "debrief-phone-interaction",
+        "debrief-presentation-interaction",
+        "debrief-site-interaction",
+        "debrief-executive-interaction",
+        "debrief-trade-show-interaction",
+        "debrief-phone-session",
+        "debrief-trade-show-session",
+        "debrief-phone-source-evidence",
+        "debrief-phone-accepted-evidence",
+        "debrief-phone-turn",
+        "debrief-phone-fragment",
+        "debrief-phone-candidate",
+        "debrief-phone-intelligence",
+        "debrief-phone-brain",
+    )
+    return tuple(uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:{label}") for label in labels)
 
 
 def _demo_brief_content(interaction_id: UUID, interaction_type: BriefInteractionType) -> dict[str, object]:
@@ -217,6 +246,7 @@ async def seed_demo_data(
 ) -> dict[str, object]:
     company_id, opportunity_id, meeting_ids, transcript_ids = demo_ids(organisation_id)
     interaction_ids = demo_interaction_ids(organisation_id)
+    debrief_ids = demo_debrief_ids(organisation_id)
     companion_interaction_ids, companion_meeting_ids, participant_ids, brief_ids = demo_companion_ids(organisation_id)
     seeded_at = datetime.now(UTC)
     async with session_factory() as session, session.begin():
@@ -368,7 +398,7 @@ async def seed_demo_data(
                 )
             if await session.get(PreInteractionBrief, brief_ids[index]) is None:
                 fingerprint = hashlib.sha256(
-                    f"demo-v3:{organisation_id}:{interaction_id}:{interaction_type}".encode()
+                    f"demo-v4:{organisation_id}:{interaction_id}:{interaction_type}".encode()
                 ).hexdigest()
                 session.add(
                     PreInteractionBrief(
@@ -391,6 +421,251 @@ async def seed_demo_data(
                         created_by_user_id=user_id,
                     )
                 )
+        debrief_interaction_ids = debrief_ids[:5]
+        debrief_variants = (
+            ("phone_call", "[DEMO] Completed pricing follow-up call"),
+            ("presentation", "[DEMO] Completed pilot presentation"),
+            ("site_visit", "[DEMO] Completed implementation site visit"),
+            ("executive_lunch", "[DEMO] Completed executive lunch"),
+            ("trade_show_interaction", "[DEMO] Completed trade-show conversation"),
+        )
+        for index, (debrief_type, title) in enumerate(debrief_variants):
+            interaction_id = debrief_interaction_ids[index]
+            if await session.get(Interaction, interaction_id) is None:
+                completed_at = seeded_at - timedelta(hours=index + 1)
+                session.add(
+                    Interaction(
+                        id=interaction_id,
+                        organisation_id=organisation_id,
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        interaction_type=debrief_type,
+                        lifecycle_status="completed",
+                        title=title,
+                        scheduled_start_at=completed_at - timedelta(minutes=30),
+                        actual_start_at=completed_at - timedelta(minutes=30),
+                        actual_end_at=completed_at,
+                        timezone="Australia/Sydney",
+                        creation_origin="manual",
+                        created_by_user_id=user_id,
+                    )
+                )
+        await session.flush()
+
+        (
+            phone_interaction_id,
+            _,
+            _,
+            _,
+            trade_show_interaction_id,
+            phone_session_id,
+            trade_show_session_id,
+            source_evidence_id,
+            accepted_evidence_id,
+            turn_id,
+            fragment_id,
+            candidate_id,
+            intelligence_id,
+            brain_id,
+        ) = debrief_ids
+        if await session.get(CaptureSession, phone_session_id) is None:
+            answer = (
+                "[DEMO] Jordan confirmed the finance approver owns the pilot budget. "
+                "I will send the final proposal tomorrow."
+            )
+            statement = "[DEMO] Jordan confirmed the finance approver owns the pilot budget."
+            phone_capture = CaptureSession(
+                id=phone_session_id,
+                organisation_id=organisation_id,
+                interaction_id=phone_interaction_id,
+                capture_type="ai_debrief",
+                status="completed",
+                started_by_user_id=user_id,
+                started_at=seeded_at - timedelta(minutes=20),
+                completed_at=seeded_at - timedelta(minutes=15),
+            )
+            session.add(phone_capture)
+            await session.flush()
+            session.add(
+                DebriefSession(
+                    id=phone_session_id,
+                    organisation_id=organisation_id,
+                    interaction_id=phone_interaction_id,
+                    started_by_user_id=user_id,
+                    lifecycle_status="completed",
+                    idempotency_key="demo-phone-debrief",
+                    question_count=1,
+                    max_questions=6,
+                    current_question_json=None,
+                    safety_confirmed_at=seeded_at - timedelta(minutes=20),
+                    finished_early=True,
+                    completed_at=seeded_at - timedelta(minutes=15),
+                )
+            )
+            await session.flush()
+            session.add_all(
+                [
+                    Evidence(
+                        id=source_evidence_id,
+                        organisation_id=organisation_id,
+                        interaction_id=phone_interaction_id,
+                        capture_session_id=phone_session_id,
+                        evidence_type="user_observation",
+                        origin_class="salesperson_reported",
+                        support_class="reported",
+                        validation_state="unreviewed",
+                        captured_by_user_id=user_id,
+                        captured_at=seeded_at - timedelta(minutes=19),
+                        lifecycle_status="available",
+                        retention_class="inherited",
+                    ),
+                    Evidence(
+                        id=accepted_evidence_id,
+                        organisation_id=organisation_id,
+                        interaction_id=phone_interaction_id,
+                        capture_session_id=phone_session_id,
+                        evidence_type="user_observation",
+                        origin_class="salesperson_reported",
+                        support_class="reported",
+                        validation_state="verified",
+                        captured_by_user_id=user_id,
+                        captured_at=seeded_at - timedelta(minutes=15),
+                        lifecycle_status="available",
+                        retention_class="inherited",
+                    ),
+                ]
+            )
+            await session.flush()
+            session.add(
+                DebriefTurn(
+                    id=turn_id,
+                    organisation_id=organisation_id,
+                    interaction_id=phone_interaction_id,
+                    session_id=phone_session_id,
+                    evidence_id=source_evidence_id,
+                    turn_number=1,
+                    question_json={
+                        "status": "ask",
+                        "question": "How did it go?",
+                        "reason": "Start naturally.",
+                        "target": "other",
+                        "priority": "high",
+                    },
+                    answer_text=answer,
+                    input_mode="text",
+                    idempotency_key="demo-phone-answer",
+                )
+            )
+            await session.flush()
+            session.add(
+                EvidenceFragment(
+                    id=fragment_id,
+                    organisation_id=organisation_id,
+                    evidence_id=source_evidence_id,
+                    session_id=phone_session_id,
+                    turn_id=turn_id,
+                    locator_type="debrief_turn",
+                    content_text=answer,
+                )
+            )
+            await session.flush()
+            content = {
+                "schemaVersion": 1,
+                "origin": "salesperson_reported",
+                "sourceLabel": "Reported by you",
+                "items": [
+                    {
+                        "candidateId": str(candidate_id),
+                        "evidenceId": str(accepted_evidence_id),
+                        "category": "budget",
+                        "statement": statement,
+                        "origin": "salesperson_reported",
+                        "validationState": "verified",
+                    }
+                ],
+            }
+            session.add(
+                CandidateEvidence(
+                    id=candidate_id,
+                    organisation_id=organisation_id,
+                    interaction_id=phone_interaction_id,
+                    session_id=phone_session_id,
+                    source_fragment_id=fragment_id,
+                    accepted_evidence_id=accepted_evidence_id,
+                    evidence_category="budget",
+                    statement=statement,
+                    original_statement=statement,
+                    statement_fingerprint=hashlib.sha256(statement.lower().encode()).hexdigest(),
+                    origin_class="salesperson_reported",
+                    support_class="reported",
+                    validation_state="verified",
+                    review_state="accepted",
+                    reviewed_by_user_id=user_id,
+                    reviewed_at=seeded_at - timedelta(minutes=15),
+                )
+            )
+            session.add(
+                InteractionIntelligenceSnapshot(
+                    id=intelligence_id,
+                    organisation_id=organisation_id,
+                    interaction_id=phone_interaction_id,
+                    opportunity_id=opportunity_id,
+                    session_id=phone_session_id,
+                    schema_version=1,
+                    version=1,
+                    validation_state="validated",
+                    content_json=content,
+                    source_evidence_ids=[str(accepted_evidence_id)],
+                )
+            )
+            await session.flush()
+            session.add(
+                RevenueBrainInteractionSnapshot(
+                    id=brain_id,
+                    organisation_id=organisation_id,
+                    company_id=company_id,
+                    opportunity_id=opportunity_id,
+                    interaction_id=phone_interaction_id,
+                    interaction_intelligence_id=intelligence_id,
+                    schema_version=1,
+                    version=1,
+                    content_json=content,
+                    source_evidence_ids=[str(accepted_evidence_id)],
+                )
+            )
+        if await session.get(CaptureSession, trade_show_session_id) is None:
+            session.add(
+                CaptureSession(
+                    id=trade_show_session_id,
+                    organisation_id=organisation_id,
+                    interaction_id=trade_show_interaction_id,
+                    capture_type="voice_journal",
+                    status="capturing",
+                    started_by_user_id=user_id,
+                    started_at=seeded_at - timedelta(minutes=5),
+                )
+            )
+            await session.flush()
+            session.add(
+                DebriefSession(
+                    id=trade_show_session_id,
+                    organisation_id=organisation_id,
+                    interaction_id=trade_show_interaction_id,
+                    started_by_user_id=user_id,
+                    lifecycle_status="collecting",
+                    idempotency_key="demo-trade-show-voice-journal",
+                    max_questions=2,
+                    current_question_json={
+                        "status": "ask",
+                        "question": "How did it go?",
+                        "reason": "Start naturally.",
+                        "target": "other",
+                        "priority": "high",
+                    },
+                    safety_confirmed_at=seeded_at - timedelta(minutes=5),
+                    voice_processing_acknowledged_at=seeded_at - timedelta(minutes=5),
+                )
+            )
         event = await session.scalar(
             select(BetaSystemEvent).where(
                 BetaSystemEvent.organisation_id == organisation_id,
@@ -405,11 +680,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 3},
+                    metadata_json={"dataset_version": 4},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 3}
+            event.metadata_json = {"dataset_version": 4}
     return {
         "status": "ready",
         "company_id": company_id,
@@ -417,6 +692,8 @@ async def seed_demo_data(
         "meeting_ids": meeting_ids,
         "interaction_ids": (*linked_interaction_ids, *companion_interaction_ids),
         "brief_ids": brief_ids,
+        "debrief_interaction_ids": debrief_interaction_ids,
+        "debrief_session_ids": (phone_session_id, trade_show_session_id),
         "provider_calls": 0,
     }
 
@@ -427,6 +704,7 @@ async def reset_demo_data(
 ) -> dict[str, object]:
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
+    debrief_interaction_ids = list(demo_debrief_ids(organisation_id)[:5])
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
         if session.get_bind().dialect.name == "postgresql":
@@ -440,6 +718,7 @@ async def reset_demo_data(
             .values(opportunity_id=None)
         )
         await _delete_meeting_batch(session, organisation_id, [*meeting_ids, *companion_meeting_ids])
+        await _delete_interaction_batch(session, organisation_id, debrief_interaction_ids)
         await session.execute(
             delete(OpportunityAuditEvent).where(
                 OpportunityAuditEvent.organisation_id == organisation_id,

@@ -89,13 +89,17 @@ WO-011 requires current head `0021_interaction_foundation`. Apply it once
 before starting the matching API/web release, then verify deterministic Meeting
 links and forced RLS. No worker or provider configuration changes are required.
 
-WO-012 requires current head `0022_pre_interaction_brief`. Apply it once before
-the matching API/web release, verify brief-table forced RLS/immutability and keep
-worker/provider configuration unchanged because composition is deterministic.
+WO-013 requires current head `0023_ai_debrief_voice_journal`. Apply it once before
+the matching API/web release and verify forced RLS, candidate review guards and
+immutable source-aware snapshots. Configure the existing AI provider plus the narrow
+transcription provider only when the feature is enabled; mock remains the no-network
+default.
 
 ## Rollback
 
-Prefer application rollback while retaining `0022`. Downgrading `0022` removes
+Prefer application rollback while retaining `0023`. Downgrading `0023` removes all
+debrief sessions, turns, fragments, candidates and source-aware snapshot rows.
+Downgrading `0022` removes
 all brief versions, traces and review metadata. Downgrading `0021` removes all
 standalone Interaction, Capture Session, Evidence and Interaction audit metadata;
 Meeting and Revenue Brain rows survive but the compatibility link is removed.

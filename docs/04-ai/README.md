@@ -44,6 +44,15 @@ preserves section-level source references and rejects unsupported, predictive an
 automation fields. See the
 [Pre-Interaction Brief guide](../03-engineering/pre-interaction-brief.md).
 
+WO-013 adds two explicit foreground structured-output request types through the
+same prompt/schema/provider contracts: `ai_debrief_question` and
+`ai_debrief_evidence`. The default mock is deterministic; OpenAI remains
+server-configured and allowlisted. Captured input is committed before each bounded
+call and only strict validated output is persisted. Voice transcription is a separate
+narrow provider contract and raw audio is discarded. See the
+[questioning strategy](debrief-questioning-strategy.md) and
+[AI Debrief guide](../03-engineering/ai-debrief.md).
+
 See [AI domain services](../03-engineering/ai-domain-services.md), the
 [AI worker queue](../03-engineering/ai-worker-queue.md) and
 [AI provider abstraction](../03-engineering/ai-provider-abstraction.md) for the

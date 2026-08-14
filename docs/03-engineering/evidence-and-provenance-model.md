@@ -217,6 +217,17 @@ of support. Resolution requires one of:
 Newest does not always win. Absence does not mean resolution. An AI model cannot
 resolve a factual conflict merely by choosing the more plausible statement.
 
+## WO-013 reviewed reported evidence
+
+AI Debrief and Voice Journal persist each deliberately supplied answer as unreviewed
+`salesperson_reported`/`reported` Evidence plus a content-bearing Evidence Fragment.
+Strict extraction creates candidates only. Complete user review promotes accepted or
+edited candidates into new verified Evidence while retaining Capture Session,
+fragment, original statement and reviewer/time lineage. Rejected candidates stay
+rejected. Derived Interaction/Revenue Brain snapshots reference accepted Evidence IDs
+and keep the visible label “Reported by you”; they never upgrade recollection to
+customer-direct support. See [Candidate evidence and review](candidate-evidence-review.md).
+
 ## User verification
 
 Verification is an append-only event bound to claim and evidence versions, user,

@@ -245,7 +245,7 @@ silently reinterpret this latest-meeting read model as historical intelligence.
 WO-011 deliberately does not change this current latest-meeting read model. It
 adds presentations, workshops, site visits and other customer events through the
 separate Interaction list/API, while Opportunity Workspace retains its stable
-`latestMeeting` contract. AI Debrief and Voice Journal remain unimplemented Capture
+`latestMeeting` contract. WO-013 now implements AI Debrief and Voice Journal Capture
 Session types beneath their Interaction, not customer events.
 
 After the additive migration, the Workspace keeps its current `latestMeeting` and
@@ -264,6 +264,18 @@ The implemented adapter is documented in
 - [ADR 0022: opportunity ownership and latest-meeting read model](../08-decisions/0022-opportunity-ownership-latest-meeting-read-model.md)
 - [ADR 0024: deterministic Revenue Brain longitudinal reasoning](../08-decisions/0024-deterministic-revenue-brain-longitudinal-reasoning.md)
 - [ADR 0026: Interaction Intelligence platform](../08-decisions/0026-interaction-intelligence-platform.md)
+
+## Post-interaction reported intelligence
+
+WO-013 adds the optional `reportedIntelligence` field without changing
+`latestMeeting` or any of the ten Meeting Intelligence capability fields. It selects
+the newest validated post-interaction snapshot for the exact opportunity and renders
+its accepted items in a separate “Reported by you” section. Each item retains category,
+statement, Evidence identifier, `salesperson_reported` origin and verified validation
+state. It is never presented as transcript-grounded or customer-confirmed evidence.
+
+The workspace remains read-only and does not start a debrief, provider request or
+Brain update. See [Source-aware Interaction Intelligence](source-aware-interaction-intelligence.md).
 
 ## Pre-interaction preparation consumer
 
