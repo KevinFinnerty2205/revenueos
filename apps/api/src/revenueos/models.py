@@ -1173,7 +1173,7 @@ class Evidence(TimestampMixin, Base):
         ),
         CheckConstraint(
             "support_class IN ('direct', 'reported', 'inferred', 'corroborated', "
-            "'verified', 'disputed', 'stale', 'superseded')",
+            "'verified', 'disputed', 'stale', 'superseded', 'observed')",
             name="ck_evidence_support_class",
         ),
         CheckConstraint(
@@ -1273,6 +1273,272 @@ class Evidence(TimestampMixin, Base):
         server_default=EvidenceRetentionClass.INHERITED.value,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class VisualAsset(TimestampMixin, Base):
+    __tablename__ = "visual_assets"
+    __table_args__ = (
+        CheckConstraint(
+            "visual_type IN ('whiteboard', 'workshop_output', 'architecture_diagram', "
+            "'handwritten_notes', 'agenda', 'business_card', 'presentation_slide', "
+            "'presentation_deck_page', 'customer_document_photo', 'site_photo', "
+            "'product_photo', 'screenshot', 'other')",
+            name="ck_visual_assets_type",
+        ),
+        CheckConstraint(
+            "source_ownership IN ('customer_created', 'salesperson_created', 'jointly_created', 'unknown_origin')",
+            name="ck_visual_assets_source_ownership",
+        ),
+        CheckConstraint("mime_type IN ('image/jpeg', 'image/png')", name="ck_visual_assets_mime_type"),
+        CheckConstraint("byte_size BETWEEN 1 AND 25000000", name="ck_visual_assets_byte_size"),
+        CheckConstraint("upload_byte_size BETWEEN 1 AND 25000000", name="ck_visual_assets_upload_byte_size"),
+        CheckConstraint(
+            "(width IS NULL AND height IS NULL) OR (width BETWEEN 1 AND 30000 AND height BETWEEN 1 AND 30000)",
+            name="ck_visual_assets_dimensions",
+        ),
+        CheckConstraint(
+            "length(checksum_sha256) = 64 AND checksum_sha256 = lower(checksum_sha256)",
+            name="ck_visual_assets_checksum",
+        ),
+        CheckConstraint(
+            "length(upload_checksum_sha256) = 64 AND upload_checksum_sha256 = lower(upload_checksum_sha256)",
+            name="ck_visual_assets_upload_checksum",
+        ),
+        CheckConstraint(
+            "processing_status IN ('uploading', 'uploaded', 'processing', 'review', "
+            "'completed', 'failed', 'cancelled', 'deletion_pending', 'deleted')",
+            name="ck_visual_assets_processing_status",
+        ),
+        CheckConstraint(
+            "storage_status IN ('pending', 'available', 'missing', 'deletion_pending', 'delete_failed', 'deleted')",
+            name="ck_visual_assets_storage_status",
+        ),
+        CheckConstraint(
+            "processing_attempts BETWEEN 0 AND 5",
+            name="ck_visual_assets_processing_attempts",
+        ),
+        CheckConstraint(
+            "length(trim(upload_idempotency_key)) BETWEEN 1 AND 200",
+            name="ck_visual_assets_idempotency_key",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_visual_assets_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "capture_session_id"],
+            ["capture_sessions.organisation_id", "capture_sessions.id"],
+            name="fk_visual_assets_capture_session_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_visual_assets_source_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "captured_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_visual_assets_captured_by_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_visual_assets_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "capture_session_id",
+            name="uq_visual_assets_capture_session",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "captured_by_user_id",
+            "upload_idempotency_key",
+            name="uq_visual_assets_upload_idempotency",
+        ),
+        UniqueConstraint("storage_key", name="uq_visual_assets_storage_key"),
+        Index(
+            "ix_visual_assets_organisation_interaction_created",
+            "organisation_id",
+            "interaction_id",
+            "created_at",
+        ),
+        Index(
+            "ix_visual_assets_organisation_processing",
+            "organisation_id",
+            "processing_status",
+        ),
+        Index(
+            "ix_visual_assets_organisation_storage",
+            "organisation_id",
+            "storage_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    capture_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    captured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    visual_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_ownership: Mapped[str] = mapped_column(String(30), nullable=False)
+    context_label: Mapped[str | None] = mapped_column(String(200))
+    display_filename: Mapped[str] = mapped_column(String(160), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(300), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    upload_byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    upload_checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    upload_idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    completion_idempotency_key: Mapped[str | None] = mapped_column(String(200))
+    processing_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="uploading", server_default="uploading"
+    )
+    storage_status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", server_default="pending")
+    processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    provider_name: Mapped[str | None] = mapped_column(String(40))
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    upload_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    upload_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class VisualCandidateEvidence(TimestampMixin, Base):
+    __tablename__ = "visual_candidate_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "evidence_category IN ('stakeholder', 'customer_request', 'decision', 'action_item', "
+            "'risk', 'technical_constraint', 'implementation_requirement', 'timeline', "
+            "'procurement', 'security_legal', 'budget', 'objection', 'commercial_intent', "
+            "'contact_detail', 'other')",
+            name="ck_visual_candidate_category",
+        ),
+        CheckConstraint("origin_class = 'ai_inferred'", name="ck_visual_candidate_origin"),
+        CheckConstraint(
+            "source_ownership IN ('customer_created', 'salesperson_created', 'jointly_created', 'unknown_origin')",
+            name="ck_visual_candidate_source_ownership",
+        ),
+        CheckConstraint(
+            "support_classification IN ('direct', 'observed', 'context')",
+            name="ck_visual_candidate_support",
+        ),
+        CheckConstraint(
+            "validation_state IN ('unreviewed', 'verified', 'rejected')",
+            name="ck_visual_candidate_validation",
+        ),
+        CheckConstraint(
+            "review_state IN ('pending', 'accepted', 'rejected')",
+            name="ck_visual_candidate_review",
+        ),
+        CheckConstraint(
+            "conflict_state IN ('not_assessed', 'conflicting')",
+            name="ck_visual_candidate_conflict",
+        ),
+        CheckConstraint(
+            "confidence_class IS NULL OR confidence_class IN ('low', 'medium', 'high')",
+            name="ck_visual_candidate_confidence",
+        ),
+        CheckConstraint(
+            "length(trim(statement)) BETWEEN 1 AND 1000 AND length(trim(original_statement)) BETWEEN 1 AND 1000",
+            name="ck_visual_candidate_statements",
+        ),
+        CheckConstraint(
+            "(review_state = 'pending' AND reviewed_at IS NULL AND reviewed_by_user_id IS NULL "
+            "AND accepted_evidence_id IS NULL AND validation_state = 'unreviewed') OR "
+            "(review_state = 'accepted' AND reviewed_at IS NOT NULL AND reviewed_by_user_id IS NOT NULL "
+            "AND accepted_evidence_id IS NOT NULL AND validation_state = 'verified') OR "
+            "(review_state = 'rejected' AND reviewed_at IS NOT NULL AND reviewed_by_user_id IS NOT NULL "
+            "AND accepted_evidence_id IS NULL AND validation_state = 'rejected')",
+            name="ck_visual_candidate_review_consistency",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_visual_candidate_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_visual_id"],
+            ["visual_assets.organisation_id", "visual_assets.id"],
+            name="fk_visual_candidate_visual_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "accepted_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_visual_candidate_accepted_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "reviewed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_visual_candidate_reviewer_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            name="uq_visual_candidate_organisation_id_id",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "source_visual_id",
+            "evidence_category",
+            "statement_fingerprint",
+            name="uq_visual_candidate_statement",
+        ),
+        Index(
+            "ix_visual_candidate_organisation_visual_review",
+            "organisation_id",
+            "source_visual_id",
+            "review_state",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_visual_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    accepted_evidence_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    evidence_category: Mapped[str] = mapped_column(String(40), nullable=False)
+    statement: Mapped[str] = mapped_column(String(1000), nullable=False)
+    original_statement: Mapped[str] = mapped_column(String(1000), nullable=False)
+    statement_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_ownership: Mapped[str] = mapped_column(String(30), nullable=False)
+    origin_class: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="ai_inferred", server_default="ai_inferred"
+    )
+    support_classification: Mapped[str] = mapped_column(String(20), nullable=False)
+    validation_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="unreviewed", server_default="unreviewed"
+    )
+    review_state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    conflict_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="not_assessed", server_default="not_assessed"
+    )
+    confidence_class: Mapped[str | None] = mapped_column(String(10))
+    evidence_region_json: Mapped[dict[str, object] | None] = mapped_column(JSON(none_as_null=True))
+    entity_reference: Mapped[str | None] = mapped_column(String(200))
+    extracted_text_snippet: Mapped[str | None] = mapped_column(String(500))
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class DebriefSession(TimestampMixin, Base):
@@ -1636,7 +1902,7 @@ class InteractionIntelligenceSnapshot(Base):
         ),
         ForeignKeyConstraint(
             ["organisation_id", "session_id"],
-            ["debrief_sessions.organisation_id", "debrief_sessions.id"],
+            ["capture_sessions.organisation_id", "capture_sessions.id"],
             name="fk_interaction_intelligence_session_tenant",
             ondelete="RESTRICT",
         ),

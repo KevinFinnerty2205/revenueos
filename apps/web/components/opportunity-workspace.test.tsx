@@ -268,6 +268,7 @@ function workspace(
       updatedAt: "2026-07-24T00:00:00Z",
     },
     reportedIntelligence: null,
+    visualIntelligence: null,
     latestMeeting: {
       id: "meeting-1",
       title: "Expansion review",
@@ -457,6 +458,58 @@ describe("OpportunityWorkspace", () => {
       screen.getByText("Jordan is the confirmed economic buyer."),
     ).toBeVisible();
     expect(screen.getByText(/distinct from customer-direct/i)).toBeVisible();
+  });
+
+  it("labels reviewed visual evidence by ownership and support without overstating site observations", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          response(
+            workspace({
+              latestMeeting: null,
+              recentMeetings: [],
+              intelligence: null,
+              intelligenceSectionsAvailable: 0,
+              visualIntelligence: {
+                id: "visual-intelligence-1",
+                interactionId: "interaction-1",
+                generatedAt: "2026-08-14T02:00:00Z",
+                sourceLabel: "reviewed site photo",
+                visualType: "site_photo",
+                items: [
+                  {
+                    evidenceId: "visual-evidence-1",
+                    category: "technical_constraint",
+                    statement: "The loading bay may require a narrower frame.",
+                    origin: "ai_inferred",
+                    sourceOwnership: "unknown_origin",
+                    supportClassification: "observed",
+                    sourceLabel: "reviewed site photo",
+                    validationState: "verified",
+                    conflictState: "not_assessed",
+                  },
+                ],
+              },
+            }),
+          ),
+        )
+        .mockResolvedValueOnce(response(meetingPage([]))),
+    );
+    render(<OpportunityWorkspace opportunityId="opportunity-1" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Latest visual interaction intelligence",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText(/AI interpreted this site photo/i)).toBeVisible();
+    expect(screen.getByText(/not customer-confirmed facts/i)).toBeVisible();
+    expect(
+      screen.getByText("The loading bay may require a narrower frame."),
+    ).toBeVisible();
+    expect(screen.queryByText(/buying probability/i)).not.toBeInTheDocument();
   });
 
   it("associates a selected same-organisation meeting with an optimistic token", async () => {

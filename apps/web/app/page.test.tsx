@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import LandingPage from "@/app/page";
 
 describe("landing page", () => {
-  it("describes RevenueOS without claiming planned features are live", () => {
+  it("describes the reviewed private-beta workflow without claiming recording or connected actions", () => {
     render(<LandingPage />);
 
     expect(
@@ -13,8 +13,9 @@ describe("landing page", () => {
       }),
     ).toBeVisible();
     expect(
-      screen.getByText(/conversation recording, ai processing/i),
+      screen.getByText(/does not record customer conversations/i),
     ).toBeVisible();
-    expect(screen.getByText("Not connected")).toBeVisible();
+    expect(screen.getByText("Review required")).toBeVisible();
+    expect(screen.getByText(/private reviewed visual evidence/i)).toBeVisible();
   });
 });

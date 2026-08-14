@@ -69,10 +69,10 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "candidate_evidence",
             "interaction_intelligence_snapshots",
             "revenue_brain_interaction_snapshots",
+            "visual_assets",
+            "visual_candidate_evidence",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0023_ai_debrief_voice_journal",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
         }
@@ -130,6 +130,20 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert candidate_columns["origin_class"] == 1
         assert candidate_columns["support_class"] == 1
         assert candidate_columns["validation_state"] == 1
+        visual_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(visual_assets)").fetchall()}
+        assert visual_columns["organisation_id"] == 1
+        assert visual_columns["interaction_id"] == 1
+        assert visual_columns["source_ownership"] == 1
+        assert visual_columns["storage_key"] == 1
+        assert visual_columns["processing_status"] == 1
+        assert not {"image", "image_bytes", "blob", "content"} & set(visual_columns)
+        visual_candidate_columns = {
+            row[1]: row[3] for row in connection.execute("PRAGMA table_info(visual_candidate_evidence)").fetchall()
+        }
+        assert visual_candidate_columns["source_visual_id"] == 1
+        assert visual_candidate_columns["source_ownership"] == 1
+        assert visual_candidate_columns["origin_class"] == 1
+        assert visual_candidate_columns["support_classification"] == 1
         participant_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(meeting_participants)").fetchall()
         }
@@ -295,6 +309,13 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert debrief_snapshot_triggers == {
             "revenue_brain_interaction_snapshots_prevent_update",
         }
+        visual_review_triggers = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'visual_candidate_evidence'"
+            ).fetchall()
+        }
+        assert visual_review_triggers == {"visual_candidate_evidence_review_guard"}
 
         connection.execute(
             """
@@ -747,9 +768,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0023_ai_debrief_voice_journal",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -801,9 +820,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0023_ai_debrief_voice_journal",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -847,9 +864,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0023_ai_debrief_voice_journal",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
 
     command.downgrade(configuration, "0004_ai_database_foundation")
     with connect(database_path) as connection:
@@ -863,9 +878,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0023_ai_debrief_voice_journal",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
 
     command.downgrade(configuration, "0003_meeting_domain")
     with connect(database_path) as connection:
@@ -901,9 +914,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "revenue_brain_insights",
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0023_ai_debrief_voice_journal",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
 
     command.downgrade(configuration, "0002_core_business_entities")
     with connect(database_path) as connection:
@@ -968,9 +979,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_snapshots",
             "revenue_brain_insights",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0023_ai_debrief_voice_journal",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
 
     command.downgrade(configuration, "0018_revenue_brain")
     with connect(database_path) as connection:
@@ -988,9 +997,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
         assert "revenue_brain_insights" in {
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0023_ai_debrief_voice_journal",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
 
 
 def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_deterministically(
@@ -1002,11 +1009,12 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
-    assert [revision.revision for revision in script.walk_revisions()][:2] == [
+    assert [revision.revision for revision in script.walk_revisions()][:3] == [
+        "0024_visual_evidence",
         "0023_ai_debrief_voice_journal",
         "0022_pre_interaction_brief",
     ]
-    assert script.get_heads() == ["0023_ai_debrief_voice_journal"]
+    assert script.get_heads() == ["0024_visual_evidence"]
     command.upgrade(configuration, "0020_private_beta_readiness")
 
     organisation_a = uuid.uuid4()
@@ -1115,9 +1123,7 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0023_ai_debrief_voice_journal",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
         assert {row[0]: row[1] for row in connection.execute("SELECT id, interaction_id FROM meetings")} == expected
         assert connection.execute("SELECT count(*) FROM interactions").fetchone() == (3,)
 
@@ -1231,9 +1237,135 @@ def test_pre_interaction_brief_migration_is_immutable_and_reupgrades_cleanly(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM pre_interaction_briefs").fetchone() == (0,)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+
+
+def test_visual_evidence_migration_review_guard_and_downgrade_reupgrade(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "visual-evidence-migration.db"
+    monkeypatch.setenv(  # type: ignore[attr-defined]
+        "DATABASE_URL",
+        f"sqlite+aiosqlite:///{database_path}",
+    )
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "head")
+    organisation_id = uuid.uuid4().hex
+    user_id = uuid.uuid4().hex
+    interaction_id = uuid.uuid4().hex
+    visual_id = uuid.uuid4().hex
+    evidence_id = uuid.uuid4().hex
+    candidate_id = uuid.uuid4().hex
+
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Visual tenant', ?)",
+            (organisation_id, f"visual-{organisation_id}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Visual user')",
+            (user_id, f"visual-user-{user_id}", f"{user_id}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO interactions
+                (id, organisation_id, interaction_type, lifecycle_status, title,
+                 creation_origin, created_by_user_id)
+            VALUES (?, ?, 'workshop', 'completed', 'Visual workshop', 'manual', ?)
+            """,
+            (interaction_id, organisation_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO capture_sessions
+                (id, organisation_id, interaction_id, capture_type, status,
+                 started_by_user_id, started_at)
+            VALUES (?, ?, ?, 'visual_capture', 'capturing', ?, '2026-08-14 01:00:00')
+            """,
+            (visual_id, organisation_id, interaction_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO evidence
+                (id, organisation_id, interaction_id, capture_session_id, evidence_type,
+                 origin_class, support_class, validation_state, captured_by_user_id,
+                 lifecycle_status, retention_class)
+            VALUES (?, ?, ?, ?, 'visual', 'customer_direct', 'direct', 'unreviewed',
+                    ?, 'available', 'inherited')
+            """,
+            (evidence_id, organisation_id, interaction_id, visual_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO visual_assets
+                (id, organisation_id, interaction_id, capture_session_id, source_evidence_id,
+                 captured_by_user_id, visual_type, source_ownership, display_filename,
+                 storage_key, mime_type, byte_size, upload_byte_size, checksum_sha256,
+                 upload_checksum_sha256, captured_at, upload_idempotency_key,
+                 processing_status, storage_status, processing_attempts, upload_expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'whiteboard', 'customer_created', 'board.png', ?,
+                    'image/png', 68, 68, ?, ?, '2026-08-14 01:00:00', 'migration-upload',
+                    'review', 'available', 1, '2026-08-14 01:05:00')
+            """,
+            (
+                visual_id,
+                organisation_id,
+                interaction_id,
+                visual_id,
+                evidence_id,
+                user_id,
+                f"{organisation_id}/{interaction_id}/visual.png",
+                "a" * 64,
+                "a" * 64,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO visual_candidate_evidence
+                (id, organisation_id, interaction_id, source_visual_id, evidence_category,
+                 statement, original_statement, statement_fingerprint, source_ownership,
+                 origin_class, support_classification, validation_state, review_state,
+                 conflict_state)
+            VALUES (?, ?, ?, ?, 'customer_request', 'Requested a pilot.',
+                    'Requested a pilot.', ?, 'customer_created', 'ai_inferred', 'direct',
+                    'unreviewed', 'pending', 'not_assessed')
+            """,
+            (candidate_id, organisation_id, interaction_id, visual_id, "b" * 64),
+        )
+        connection.execute(
+            """
+            UPDATE visual_candidate_evidence
+            SET review_state = 'rejected', validation_state = 'rejected',
+                reviewed_by_user_id = ?, reviewed_at = '2026-08-14 01:02:00'
+            WHERE id = ?
+            """,
+            (user_id, candidate_id),
+        )
+        with pytest.raises(IntegrityError, match="Reviewed visual candidate evidence is immutable"):
+            connection.execute(
+                "UPDATE visual_candidate_evidence SET statement = 'Changed.' WHERE id = ?",
+                (candidate_id,),
+            )
+
+    command.downgrade(configuration, "0023_ai_debrief_voice_journal")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "visual_assets" not in tables
+        assert "visual_candidate_evidence" not in tables
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
             "0023_ai_debrief_voice_journal",
         )
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT count(*) FROM visual_assets").fetchone() == (0,)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
 
 
 def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
@@ -1275,7 +1407,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0023_ai_debrief_voice_journal"
+                    assert version == "0024_visual_evidence"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

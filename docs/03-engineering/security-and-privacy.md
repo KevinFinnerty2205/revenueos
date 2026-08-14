@@ -270,6 +270,16 @@ organisation deletion include the new metadata. See the
 
 Sprint 3 accepts only transcript text deliberately pasted by a user or read from an explicitly selected `.txt` file. The file is read in the browser and its text is sent through the ordinary API; there is no object-storage upload, microphone access, recording, listening, media processing or transcription. The form tells users to provide only content they are authorised to store.
 
+WO-014 separately permits deliberately selected JPEG/PNG visual evidence. It
+uses private tenant-prefixed storage and short-lived resource grants; validates
+actual MIME, checksums, dimensions and pixel count; removes unsafe PNG/JPEG
+metadata; and rejects polyglots and malformed structure. Provider and audit
+logs retain metadata only. Derived candidates remain `ai_inferred` and
+unreviewed until the user makes a complete accept/edit/reject decision. Seller
+material cannot become a customer signal, business cards cannot create Contacts
+and site-photo claims remain explicitly observed. See the
+[visual security review](visual-evidence-security-review.md).
+
 WO-009 adds a server-authoritative versioned notice before transcript writes or
 intelligence requests. It stores only user/organisation/version/timestamp and
 requires re-acknowledgement after a version change. This safeguard is not proof

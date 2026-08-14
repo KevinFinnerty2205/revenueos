@@ -214,6 +214,15 @@ performance proxy, individual rankings or covert employee activity.
 
 ## Related documents
 
+## Implemented visual capture and review
+
+Interaction detail now offers browser-native camera/file/drop capture for
+non-cancelled interactions. A preview remains local until the user supplies
+type, ownership and authority confirmation. Upload and analysis have semantic
+progress, restore/list states, safe errors and bounded retry. Review cards
+require accept/edit/reject decisions for every suggestion before intelligence
+updates. Saved visuals retain explicit ownership and AI/user-review labels.
+
 - [Face-to-face interaction experience](face-to-face-interaction-experience.md)
 - [AI Companion and debrief](ai-companion-and-debrief.md)
 - [Presentation mode](presentation-mode.md)

@@ -84,6 +84,32 @@ class ReportedInteractionIntelligenceResponse(APIModel):
     items: list[ReportedIntelligenceItemResponse]
 
 
+class VisualIntelligenceItemResponse(APIModel):
+    evidence_id: UUID
+    category: str
+    statement: str
+    origin: Literal["ai_inferred"]
+    source_ownership: Literal[
+        "customer_created",
+        "salesperson_created",
+        "jointly_created",
+        "unknown_origin",
+    ]
+    support_classification: Literal["direct", "observed", "context"]
+    source_label: str
+    validation_state: Literal["verified"]
+    conflict_state: Literal["not_assessed", "conflicting"]
+
+
+class VisualInteractionIntelligenceResponse(APIModel):
+    id: UUID
+    interaction_id: UUID
+    generated_at: datetime
+    source_label: str
+    visual_type: str
+    items: list[VisualIntelligenceItemResponse]
+
+
 class OpportunityWorkspaceResponse(APIModel):
     opportunity: OpportunityWorkspaceOpportunityResponse
     reasoning: RevenueBrainReasoningResponse
@@ -91,6 +117,7 @@ class OpportunityWorkspaceResponse(APIModel):
     recent_meetings: list[OpportunityMeetingSummaryResponse]
     intelligence: MeetingIntelligenceResponse | None
     reported_intelligence: ReportedInteractionIntelligenceResponse | None = None
+    visual_intelligence: VisualInteractionIntelligenceResponse | None = None
     intelligence_sections_available: int
     partial_data: bool
     generated_at: datetime

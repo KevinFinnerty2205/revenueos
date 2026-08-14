@@ -115,12 +115,14 @@ describe("RevenueBrainTimeline", () => {
         return Promise.resolve(
           path.endsWith("/brain/reasoning")
             ? jsonResponse(completedReasoning())
-            : path.endsWith("/brain")
-              ? jsonResponse([
-                  snapshot("new", "2026-07-20T10:00:00Z"),
-                  snapshot("old", "2026-07-10T10:00:00Z"),
-                ])
-              : jsonResponse(company),
+            : path.endsWith("/brain/visual-evidence")
+              ? jsonResponse([])
+              : path.endsWith("/brain")
+                ? jsonResponse([
+                    snapshot("new", "2026-07-20T10:00:00Z"),
+                    snapshot("old", "2026-07-10T10:00:00Z"),
+                  ])
+                : jsonResponse(company),
         );
       }),
     );
@@ -157,9 +159,11 @@ describe("RevenueBrainTimeline", () => {
         return Promise.resolve(
           path.endsWith("/brain/reasoning")
             ? jsonResponse(insufficientReasoning)
-            : path.endsWith("/brain")
+            : path.endsWith("/brain/visual-evidence")
               ? jsonResponse([])
-              : jsonResponse(company),
+              : path.endsWith("/brain")
+                ? jsonResponse([])
+                : jsonResponse(company),
         );
       }),
     );
@@ -169,6 +173,62 @@ describe("RevenueBrainTimeline", () => {
     expect(
       await screen.findByRole("heading", { name: "No snapshots yet" }),
     ).toBeVisible();
+  });
+
+  it("shows reviewed source-labelled visual evidence without exposing raw images", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/brain/reasoning")) {
+          return Promise.resolve(jsonResponse(insufficientReasoning));
+        }
+        if (path.endsWith("/brain/visual-evidence")) {
+          return Promise.resolve(
+            jsonResponse([
+              {
+                id: "visual-snapshot-1",
+                interactionId: "interaction-1",
+                opportunityId: "opportunity-1",
+                interactionTitle: "Customer site visit",
+                interactionType: "site_visit",
+                interactionDate: "2026-08-14T02:00:00Z",
+                createdAt: "2026-08-14T03:00:00Z",
+                sourceLabel: "reviewed site photo",
+                visualType: "site_photo",
+                items: [
+                  {
+                    evidenceId: "evidence-1",
+                    category: "technical_constraint",
+                    statement: "The loading bay may require validation.",
+                    origin: "ai_inferred",
+                    sourceOwnership: "unknown_origin",
+                    supportClassification: "observed",
+                    sourceLabel: "reviewed site photo",
+                    validationState: "verified",
+                  },
+                ],
+              },
+            ]),
+          );
+        }
+        return Promise.resolve(
+          path.endsWith("/brain") ? jsonResponse([]) : jsonResponse(company),
+        );
+      }),
+    );
+
+    render(<RevenueBrainTimeline accountId="company-1" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Reviewed visual evidence" }),
+    ).toBeVisible();
+    expect(screen.getByText("Customer site visit")).toBeVisible();
+    expect(screen.getByText(/Observed; not customer-confirmed/i)).toBeVisible();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open interaction" }),
+    ).toHaveAttribute("href", "/interactions/interaction-1");
   });
 
   it("shows a recoverable error state", async () => {
@@ -182,9 +242,11 @@ describe("RevenueBrainTimeline", () => {
         ),
       )
       .mockResolvedValueOnce(jsonResponse(insufficientReasoning))
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse(company))
       .mockResolvedValueOnce(jsonResponse([]))
-      .mockResolvedValueOnce(jsonResponse(insufficientReasoning));
+      .mockResolvedValueOnce(jsonResponse(insufficientReasoning))
+      .mockResolvedValueOnce(jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<RevenueBrainTimeline accountId="company-1" />);

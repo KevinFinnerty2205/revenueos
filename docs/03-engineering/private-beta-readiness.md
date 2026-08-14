@@ -188,7 +188,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  Alembic head `0023_ai_debrief_voice_journal`, identity configuration, selected
+  Alembic head `0024_visual_evidence`, identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
@@ -208,7 +208,9 @@ participant-linked Interactions and completed synthetic phone, presentation, sit
 executive and trade-show variants. Each upcoming Interaction has an immutable
 deterministic brief. A reviewed phone AI Debrief supplies “Reported by you”
 Interaction/Revenue Brain state and a trade-show Voice Journal remains resumable.
-The completed
+The completed presentation includes a synthetic, reviewed customer-whiteboard
+visual in private storage and a provenance-labelled schema-v2 Interaction and
+Revenue Brain projection. It makes no provider call. The completed
 Meetings retain synthetic transcripts, so
 the default retention policy does not immediately expire the walkthrough. Its
 IDs and content are deterministic, it is tenant-scoped and idempotent, and it
@@ -231,8 +233,8 @@ Reset only that organisation's fixed demo IDs:
 uv --directory apps/api run revenueos-demo-data reset --organisation-id <UUID>
 ```
 
-Reset removes every fixed demo Interaction, its three briefs, debrief/evidence state
-and the established Meeting/Brain rows.
+Reset removes every fixed demo Interaction, its three briefs, debrief/evidence
+state, the visual object and its lineage, and the established Meeting/Brain rows.
 Never run the seed automatically or use it to overwrite a real record.
 
 ## Feedback handling
@@ -255,6 +257,20 @@ global cross-tenant console. Membership disablement takes effect at the next
 verified API request.
 
 ## Known limitations
+
+## WO-014 visual-data controls
+
+Visual evidence has separate per-image, per-interaction storage, daily analysis
+and retry limits. `visualEvidence` and `presentationMode` are independently
+visible feature flags. Production validation rejects local storage or the
+default signing secret when visual capture is enabled.
+
+Retention and organisation deletion remove visual objects before database
+lineage. Export version 5 includes visual metadata and review content; image
+bytes remain disabled unless `API_PRIVATE_BETA_EXPORT_VISUAL_IMAGES_ENABLED`
+has received separate approval. Telemetry records counts, type, ownership,
+attempt and safe error codes only—not bytes, OCR, context labels, statements,
+signed URLs or provider payloads.
 
 - Private beta only; production customer data is prohibited unless separately
   approved.

@@ -31,6 +31,7 @@ from revenueos.domain import AIArtifactType, MeetingStatus
 from revenueos.errors import PublicAPIError
 from revenueos.models import AIArtifact, RevenueBrainSnapshot
 from revenueos.revenue_brain_repositories import (
+    RevenueBrainInteractionTimelineItem,
     RevenueBrainRepository,
     RevenueBrainTimelineItem,
 )
@@ -212,6 +213,24 @@ class RevenueBrainService:
                 404,
             )
         return await self.repository.list_for_company(
+            self.tenant.organisation_id,
+            account_id,
+        )
+
+    async def list_account_visual_snapshots(
+        self,
+        account_id: UUID,
+    ) -> list[RevenueBrainInteractionTimelineItem]:
+        if not await self.repository.company_exists(
+            self.tenant.organisation_id,
+            account_id,
+        ):
+            raise PublicAPIError(
+                "not_found",
+                "The requested account was not found.",
+                404,
+            )
+        return await self.repository.list_visual_for_company(
             self.tenant.organisation_id,
             account_id,
         )

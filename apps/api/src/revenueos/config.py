@@ -8,6 +8,8 @@ Environment = Literal["development", "test", "production"]
 AuthMode = Literal["mock", "clerk"]
 AIProviderName = Literal["mock", "openai"]
 TranscriptionProviderName = Literal["mock", "openai"]
+VisualProviderName = Literal["mock", "openai"]
+VisualStorageBackend = Literal["local", "s3_compatible"]
 
 
 class Settings(BaseSettings):
@@ -47,15 +49,29 @@ class Settings(BaseSettings):
     private_beta_debrief_question_cap: int = Field(default=6, ge=1, le=10)
     private_beta_max_debrief_audio_seconds: int = Field(default=120, ge=15, le=180)
     private_beta_max_debrief_audio_bytes: int = Field(default=8_000_000, ge=100_000, le=12_000_000)
+    private_beta_max_visuals_per_interaction: int = Field(default=20, ge=1, le=100)
+    private_beta_max_visual_bytes: int = Field(default=10_000_000, ge=100_000, le=25_000_000)
+    private_beta_max_visual_bytes_per_interaction: int = Field(
+        default=80_000_000,
+        ge=1_000_000,
+        le=500_000_000,
+    )
+    private_beta_max_visual_dimension: int = Field(default=12_000, ge=256, le=30_000)
+    private_beta_max_visual_pixels: int = Field(default=40_000_000, ge=65_536, le=100_000_000)
+    private_beta_max_visual_ai_requests_per_day: int = Field(default=50, ge=1, le=5_000)
+    private_beta_visual_processing_retries: int = Field(default=3, ge=1, le=5)
     private_beta_feedback_per_user_per_day: int = Field(default=20, ge=1, le=1_000)
     private_beta_retention_batch_size: int = Field(default=100, ge=1, le=1_000)
     private_beta_export_directory: str = Field(default="/tmp/revenueos-private-beta-exports", min_length=1)
+    private_beta_export_visual_images_enabled: bool = False
     feature_openai_provider_enabled: bool = False
     feature_revenue_brain_enabled: bool = True
     feature_opportunity_workspace_enabled: bool = True
     feature_ai_companion_enabled: bool = True
     feature_ai_debrief_enabled: bool = True
     feature_voice_journal_enabled: bool = True
+    feature_visual_evidence_enabled: bool = True
+    feature_presentation_mode_enabled: bool = True
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -119,6 +135,26 @@ class Settings(BaseSettings):
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
     )
     transcription_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    visual_provider_name: VisualProviderName = "mock"
+    visual_provider_model_identifier: str = Field(
+        default="mock-visual-evidence-v1",
+        min_length=1,
+        max_length=200,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+    )
+    visual_provider_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    visual_storage_backend: VisualStorageBackend = "local"
+    visual_storage_directory: str = Field(default="/tmp/revenueos-visual-evidence", min_length=1)
+    visual_storage_signing_secret: SecretStr = Field(
+        default=SecretStr("local-development-visual-signing-key"),
+        min_length=24,
+    )
+    visual_signed_url_ttl_seconds: int = Field(default=300, ge=30, le=900)
+    visual_s3_endpoint: str | None = None
+    visual_s3_bucket: str | None = None
+    visual_s3_region: str | None = None
+    visual_s3_access_key_id: SecretStr | None = None
+    visual_s3_secret_access_key: SecretStr | None = None
 
     @field_validator(
         "database_url",
@@ -127,6 +163,11 @@ class Settings(BaseSettings):
         "clerk_audience",
         "openai_api_key",
         "openai_model",
+        "visual_s3_endpoint",
+        "visual_s3_bucket",
+        "visual_s3_region",
+        "visual_s3_access_key_id",
+        "visual_s3_secret_access_key",
         mode="before",
     )
     @classmethod
@@ -156,7 +197,11 @@ class Settings(BaseSettings):
             raise ValueError("Worker base retry delay cannot exceed the maximum retry delay.")
         if self.private_beta_default_retention_days not in {30, 90, 180}:
             raise ValueError("Private beta default retention must be 30, 90 or 180 days.")
-        if self.ai_provider_name == "openai" or self.transcription_provider_name == "openai":
+        if (
+            self.ai_provider_name == "openai"
+            or self.transcription_provider_name == "openai"
+            or self.visual_provider_name == "openai"
+        ):
             if self.openai_api_key is None:
                 raise ValueError("OPENAI_API_KEY is required when an OpenAI processing path is enabled.")
             api_key = self.openai_api_key.get_secret_value()
@@ -166,6 +211,26 @@ class Settings(BaseSettings):
                 raise ValueError("OPENAI_MODEL is required when AI_PROVIDER=openai.")
             if not self.feature_openai_provider_enabled:
                 raise ValueError("OpenAI requires the server-side beta feature flag.")
+        if self.visual_provider_name == "openai":
+            if self.visual_provider_model_identifier.startswith("mock-"):
+                raise ValueError("OpenAI visual processing requires a non-mock VISUAL_PROVIDER_MODEL_IDENTIFIER.")
+            if not self.feature_openai_provider_enabled:
+                raise ValueError("OpenAI visual processing requires the server-side beta feature flag.")
+        if self.visual_storage_backend == "s3_compatible" and not all(
+            (
+                self.visual_s3_endpoint,
+                self.visual_s3_bucket,
+                self.visual_s3_region,
+                self.visual_s3_access_key_id,
+                self.visual_s3_secret_access_key,
+            )
+        ):
+            raise ValueError("S3-compatible visual storage requires endpoint, bucket, region and credentials.")
+        if self.environment == "production" and self.feature_visual_evidence_enabled:
+            if self.visual_storage_backend != "s3_compatible":
+                raise ValueError("Production visual evidence requires private S3-compatible object storage.")
+            if self.visual_storage_signing_secret.get_secret_value() == "local-development-visual-signing-key":
+                raise ValueError("Production visual evidence requires a deployment-specific signing secret.")
         return self
 
     @property
@@ -210,6 +275,8 @@ class Settings(BaseSettings):
             "aiCompanion": self.feature_ai_companion_enabled,
             "aiDebrief": self.feature_ai_debrief_enabled,
             "voiceJournal": self.feature_voice_journal_enabled,
+            "visualEvidence": self.feature_visual_evidence_enabled,
+            "presentationMode": self.feature_presentation_mode_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

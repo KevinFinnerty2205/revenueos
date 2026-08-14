@@ -336,6 +336,53 @@ export function OpportunityWorkspace({
         </section>
       ) : null}
 
+      {workspace.visualIntelligence ? (
+        <section
+          aria-labelledby="visual-intelligence-title"
+          className="form-card"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+                Reviewed visual evidence
+              </p>
+              <h2 id="visual-intelligence-title" className="form-legend mt-2">
+                Latest visual interaction intelligence
+              </h2>
+            </div>
+            <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800">
+              {workspace.visualIntelligence.sourceLabel}
+            </span>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            AI interpreted this{" "}
+            {humanise(workspace.visualIntelligence.visualType).toLowerCase()}. A
+            user reviewed every item before it was added. Site-photo findings
+            remain observed evidence, not customer-confirmed facts.
+          </p>
+          <ul className="mt-5 grid gap-3 lg:grid-cols-2">
+            {workspace.visualIntelligence.items.map((item) => (
+              <li
+                key={item.evidenceId}
+                className="rounded-2xl border border-slate-200 p-4"
+              >
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  {humanise(item.category)} ·{" "}
+                  {humanise(item.supportClassification)}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-800">
+                  {item.statement}
+                </p>
+                <p className="mt-2 text-xs font-semibold text-teal-800">
+                  {humanise(item.sourceOwnership)} · AI-interpreted,
+                  user-reviewed
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {!workspace.latestMeeting || !intelligence ? (
         <NoMeetingState />
       ) : (

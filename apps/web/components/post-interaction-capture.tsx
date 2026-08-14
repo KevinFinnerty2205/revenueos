@@ -473,6 +473,15 @@ export function PostInteractionCapture({
         ) : null}
       </div>
 
+      {interactionType === "presentation" ? (
+        <div className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">
+          Presentation debriefs focus on audience reactions, customer questions,
+          objections, requested material, decision-path changes, commitments and
+          the next meeting. Claims from your own deck are not customer buying
+          signals.
+        </div>
+      ) : null}
+
       {error ? (
         <p
           role="alert"

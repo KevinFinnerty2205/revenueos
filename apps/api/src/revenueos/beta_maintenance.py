@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import os
 import tempfile
@@ -52,9 +53,12 @@ from revenueos.models import (
     Task,
     Transcript,
     User,
+    VisualAsset,
+    VisualCandidateEvidence,
 )
+from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 4
+EXPORT_VERSION = 5
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -66,6 +70,18 @@ class RetentionResult:
     eligible_meetings: int
     eligible_interactions: int
     removed: dict[str, int]
+
+
+@dataclass(frozen=True)
+class VisualReconciliationResult:
+    organisation_id: UUID
+    repaired: bool
+    database_objects: int
+    storage_objects: int
+    missing_objects: tuple[str, ...]
+    orphaned_objects: tuple[str, ...]
+    repaired_missing_objects: int
+    removed_orphaned_objects: int
 
 
 async def run_retention(
@@ -156,6 +172,22 @@ async def run_retention(
                 len(interaction_ids),
                 counts,
             )
+        meeting_interaction_ids = list(
+            (
+                await session.scalars(
+                    select(Meeting.interaction_id).where(
+                        Meeting.organisation_id == organisation_id,
+                        Meeting.id.in_(meeting_ids),
+                    )
+                )
+            ).all()
+        )
+        await _delete_visual_objects(
+            session,
+            settings,
+            organisation_id,
+            [*meeting_interaction_ids, *interaction_ids],
+        )
         await _enable_approved_deletion(session)
         removed = await _delete_meeting_batch(session, organisation_id, meeting_ids)
         removed = _merge_counts(
@@ -184,6 +216,80 @@ async def run_retention(
         )
 
 
+async def reconcile_visual_storage(
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    organisation_id: UUID,
+    *,
+    repair: bool,
+) -> VisualReconciliationResult:
+    storage = create_visual_storage(settings)
+    prefix = f"{organisation_id}/"
+    async with session_factory() as session, session.begin():
+        await set_tenant_database_context(session, organisation_id)
+        assets = list(
+            (
+                await session.scalars(
+                    select(VisualAsset).where(
+                        VisualAsset.organisation_id == organisation_id,
+                        VisualAsset.storage_status.not_in(("deleted", "deletion_pending")),
+                        VisualAsset.deleted_at.is_(None),
+                    )
+                )
+            ).all()
+        )
+        database_keys = {asset.storage_key for asset in assets}
+        storage_keys = set(await storage.list_keys(prefix))
+        missing = tuple(sorted(database_keys - storage_keys))
+        orphaned = tuple(sorted(storage_keys - database_keys))
+        repaired_missing = 0
+        removed_orphans = 0
+        if repair:
+            missing_set = set(missing)
+            for asset in assets:
+                if asset.storage_key not in missing_set:
+                    continue
+                asset.storage_status = "missing"
+                asset.processing_status = "failed"
+                asset.failure_code = "visual_object_missing"
+                source = await session.scalar(
+                    select(Evidence).where(
+                        Evidence.organisation_id == organisation_id,
+                        Evidence.id == asset.source_evidence_id,
+                    )
+                )
+                if source is not None:
+                    source.lifecycle_status = "excluded"
+                repaired_missing += 1
+            for key in orphaned:
+                await storage.delete(key)
+                removed_orphans += 1
+            session.add(
+                BetaSystemEvent(
+                    organisation_id=organisation_id,
+                    actor_user_id=None,
+                    event_type="visual_storage_reconciled",
+                    metadata_json={
+                        "missing_objects": len(missing),
+                        "orphaned_objects": len(orphaned),
+                        "repaired_missing_objects": repaired_missing,
+                        "removed_orphaned_objects": removed_orphans,
+                        "storage_backend": storage.backend_name,
+                    },
+                )
+            )
+        return VisualReconciliationResult(
+            organisation_id=organisation_id,
+            repaired=repair,
+            database_objects=len(database_keys),
+            storage_objects=len(storage_keys),
+            missing_objects=missing,
+            orphaned_objects=orphaned,
+            repaired_missing_objects=repaired_missing,
+            removed_orphaned_objects=removed_orphans,
+        )
+
+
 async def generate_export(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
@@ -194,7 +300,7 @@ async def generate_export(
     try:
         async with session_factory() as session, session.begin():
             await set_tenant_database_context(session, organisation_id)
-            payload = await _export_payload(session, organisation_id)
+            payload = await _export_payload(session, organisation_id, settings)
         root = Path(settings.private_beta_export_directory).resolve()
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         final_path = root / f"revenueos-export-{request_id}.json"
@@ -314,6 +420,10 @@ async def _delete_organisation_records(
 ) -> None:
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
+        interaction_ids = list(
+            (await session.scalars(select(Interaction.id).where(Interaction.organisation_id == organisation_id))).all()
+        )
+        await _delete_visual_objects(session, settings, organisation_id, interaction_ids)
         await _enable_approved_deletion(session)
         user_ids = list(
             (
@@ -363,6 +473,10 @@ async def _delete_organisation_records(
         await session.execute(delete(EvidenceFragment).where(EvidenceFragment.organisation_id == organisation_id))
         await session.execute(delete(DebriefTurn).where(DebriefTurn.organisation_id == organisation_id))
         await session.execute(delete(DebriefSession).where(DebriefSession.organisation_id == organisation_id))
+        await session.execute(
+            delete(VisualCandidateEvidence).where(VisualCandidateEvidence.organisation_id == organisation_id)
+        )
+        await session.execute(delete(VisualAsset).where(VisualAsset.organisation_id == organisation_id))
         await session.execute(delete(Evidence).where(Evidence.organisation_id == organisation_id))
         await session.execute(delete(CaptureSession).where(CaptureSession.organisation_id == organisation_id))
         await session.execute(delete(PreInteractionBrief).where(PreInteractionBrief.organisation_id == organisation_id))
@@ -454,6 +568,33 @@ async def _mark_request_failed(
         if record is not None:
             record.status = "failed"
             record.failure_code = failure_code
+
+
+async def _delete_visual_objects(
+    session: AsyncSession,
+    settings: Settings,
+    organisation_id: UUID,
+    interaction_ids: list[UUID],
+) -> None:
+    if not interaction_ids:
+        return
+    keys = list(
+        (
+            await session.scalars(
+                select(VisualAsset.storage_key).where(
+                    VisualAsset.organisation_id == organisation_id,
+                    VisualAsset.interaction_id.in_(interaction_ids),
+                    VisualAsset.storage_status != "deleted",
+                )
+            )
+        ).all()
+    )
+    storage = create_visual_storage(settings)
+    try:
+        for key in keys:
+            await storage.delete(key)
+    except VisualStorageError as exc:
+        raise RuntimeError("Visual object deletion did not complete; database deletion was stopped.") from exc
 
 
 async def _meeting_deletion_counts(
@@ -751,6 +892,32 @@ async def _interaction_deletion_counts_from_select(
             )
             or 0
         ),
+        "visual_assets": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(VisualAsset)
+                    .where(
+                        VisualAsset.organisation_id == organisation_id,
+                        VisualAsset.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "visual_candidate_evidence": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(VisualCandidateEvidence)
+                    .where(
+                        VisualCandidateEvidence.organisation_id == organisation_id,
+                        VisualCandidateEvidence.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
         "interaction_intelligence_snapshots": int(
             (
                 await session.scalar(
@@ -804,6 +971,18 @@ async def _delete_interaction_batch(
         delete(CandidateEvidence).where(
             CandidateEvidence.organisation_id == organisation_id,
             CandidateEvidence.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(VisualCandidateEvidence).where(
+            VisualCandidateEvidence.organisation_id == organisation_id,
+            VisualCandidateEvidence.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(VisualAsset).where(
+            VisualAsset.organisation_id == organisation_id,
+            VisualAsset.interaction_id.in_(interaction_ids),
         )
     )
     session_ids = select(DebriefSession.id).where(
@@ -870,7 +1049,11 @@ async def _enable_approved_deletion(session: AsyncSession) -> None:
         await session.execute(text("SELECT set_config('app.beta_maintenance', 'approved', true)"))
 
 
-async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[str, object]:
+async def _export_payload(
+    session: AsyncSession,
+    organisation_id: UUID,
+    settings: Settings,
+) -> dict[str, object]:
     organisation = await session.get(Organisation, organisation_id)
     if organisation is None:
         raise ValueError("The export organisation was not found.")
@@ -915,6 +1098,14 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
         select(CandidateEvidence)
         .where(CandidateEvidence.organisation_id == organisation_id)
         .order_by(CandidateEvidence.id)
+    )
+    visual_assets = await rows(
+        select(VisualAsset).where(VisualAsset.organisation_id == organisation_id).order_by(VisualAsset.id)
+    )
+    visual_candidates = await rows(
+        select(VisualCandidateEvidence)
+        .where(VisualCandidateEvidence.organisation_id == organisation_id)
+        .order_by(VisualCandidateEvidence.id)
     )
     interaction_intelligence = await rows(
         select(InteractionIntelligenceSnapshot)
@@ -973,6 +1164,47 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
     feedback = await rows(
         select(BetaFeedback).where(BetaFeedback.organisation_id == organisation_id).order_by(BetaFeedback.id)
     )
+    storage = create_visual_storage(settings)
+    exported_visuals: list[dict[str, object]] = []
+    for item in visual_assets:
+        image_base64: str | None = None
+        image_export_status = "not_requested"
+        if settings.private_beta_export_visual_images_enabled and item.storage_status == "available":
+            try:
+                image_base64 = base64.b64encode(await storage.read(item.storage_key)).decode("ascii")
+                image_export_status = "included"
+            except VisualStorageError:
+                image_export_status = "unavailable"
+        exported_visuals.append(
+            {
+                **_columns(
+                    item,
+                    (
+                        "id",
+                        "interaction_id",
+                        "capture_session_id",
+                        "source_evidence_id",
+                        "captured_by_user_id",
+                        "visual_type",
+                        "source_ownership",
+                        "context_label",
+                        "display_filename",
+                        "mime_type",
+                        "byte_size",
+                        "width",
+                        "height",
+                        "captured_at",
+                        "processing_status",
+                        "storage_status",
+                        "created_at",
+                        "updated_at",
+                        "deleted_at",
+                    ),
+                ),
+                "imageExportStatus": image_export_status,
+                **({"imageBase64": image_base64} if image_base64 is not None else {}),
+            }
+        )
     return {
         "exportVersion": EXPORT_VERSION,
         "generatedAt": datetime.now(UTC),
@@ -1213,6 +1445,36 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
                 ),
             )
             for item in candidate_evidence
+        ],
+        "visualAssets": exported_visuals,
+        "visualCandidateEvidence": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "source_visual_id",
+                    "accepted_evidence_id",
+                    "evidence_category",
+                    "statement",
+                    "original_statement",
+                    "source_ownership",
+                    "origin_class",
+                    "support_classification",
+                    "validation_state",
+                    "review_state",
+                    "conflict_state",
+                    "confidence_class",
+                    "evidence_region_json",
+                    "entity_reference",
+                    "extracted_text_snippet",
+                    "reviewed_by_user_id",
+                    "reviewed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in visual_candidates
         ],
         "evidence": [
             _columns(
@@ -1517,6 +1779,22 @@ async def _run_cli(arguments: argparse.Namespace) -> None:
                 ),
             )
             print(json.dumps({"status": "completed", "expired_exports_removed": removed}, sort_keys=True))
+        elif arguments.command == "visual-reconcile":
+            reconciliation_result = await reconcile_visual_storage(
+                session_factory,
+                settings,
+                UUID(arguments.organisation_id),
+                repair=arguments.repair,
+            )
+            print(
+                json.dumps(
+                    {
+                        **reconciliation_result.__dict__,
+                        "organisation_id": str(reconciliation_result.organisation_id),
+                    },
+                    sort_keys=True,
+                )
+            )
         else:
             organisation_id = await delete_organisation(
                 session_factory,
@@ -1542,6 +1820,9 @@ def main() -> None:
     purge_exports = subparsers.add_parser("purge-exports")
     purge_exports.add_argument("--organisation-id", required=True)
     purge_exports.add_argument("--batch-size", type=int)
+    reconciliation = subparsers.add_parser("visual-reconcile")
+    reconciliation.add_argument("--organisation-id", required=True)
+    reconciliation.add_argument("--repair", action="store_true")
     deletion = subparsers.add_parser("delete-organisation")
     deletion.add_argument("--organisation-id", required=True)
     deletion.add_argument("--request-id", required=True)

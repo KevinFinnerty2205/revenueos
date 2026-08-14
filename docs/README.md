@@ -15,6 +15,7 @@ This is the canonical product and engineering documentation index. Documents dis
 9. [Interaction domain implementation](03-engineering/interaction-domain-implementation.md) — current WO-011 boundary
 10. [Pre-Interaction Brief engineering guide](03-engineering/pre-interaction-brief.md) — current WO-012 boundary
 11. [AI Debrief engineering guide](03-engineering/ai-debrief.md) — current WO-013 boundary
+12. [Visual Evidence engineering guide](03-engineering/visual-evidence-engineering-guide.md) — current WO-014 boundary
 
 ## 00 — Company
 
@@ -39,6 +40,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Face-to-face interaction experience](02-design/face-to-face-interaction-experience.md)
 - [AI Companion and debrief](02-design/ai-companion-and-debrief.md)
 - [Presentation mode](02-design/presentation-mode.md)
+- [Presentation Mode implementation guide](02-design/presentation-mode-guide.md)
 - [Mobile companion strategy](02-design/mobile-companion-strategy.md)
 - [Phone-call preparation](02-design/phone-call-preparation.md)
 - [Presentation preparation](02-design/presentation-preparation.md)
@@ -93,6 +95,14 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Candidate evidence and review](03-engineering/candidate-evidence-review.md)
 - [Source-aware Interaction Intelligence](03-engineering/source-aware-interaction-intelligence.md)
 - [AI Debrief security and privacy review](03-engineering/ai-debrief-security-privacy-review.md)
+- [Visual Evidence engineering guide](03-engineering/visual-evidence-engineering-guide.md)
+- [Browser camera and upload](03-engineering/browser-camera-upload.md)
+- [Visual provenance rules](03-engineering/visual-provenance-rules.md)
+- [Visual provider guide](03-engineering/visual-provider-guide.md)
+- [Business card handling](03-engineering/business-card-handling.md)
+- [Site photo handling](03-engineering/site-photo-handling.md)
+- [Visual Evidence security review](03-engineering/visual-evidence-security-review.md)
+- [Visual storage lifecycle](03-engineering/visual-storage-lifecycle.md)
 
 ### Target through beta
 
@@ -153,6 +163,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-011: Interaction Domain Foundation](07-sprints/wo-011-interaction-domain-foundation.md)
 - [WO-012: AI Companion and Pre-Interaction Brief](07-sprints/wo-012-ai-companion-pre-interaction-brief.md)
 - [WO-013: AI Debrief and Voice Journal](07-sprints/wo-013-ai-debrief-voice-journal.md)
+- [WO-014: Visual Evidence and Presentation Mode](07-sprints/wo-014-visual-evidence-presentation-mode.md)
 
 ## 08 — Decision records
 
@@ -184,10 +195,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0026: evolve Meeting Intelligence into an Interaction Intelligence platform](08-decisions/0026-interaction-intelligence-platform.md)
 - [ADR 0027: deterministic Pre-Interaction Briefs](08-decisions/0027-deterministic-pre-interaction-briefs.md)
 - [ADR 0028: bounded foreground debrief reasoning and ephemeral browser voice](08-decisions/0028-bounded-foreground-debrief-reasoning.md)
+- [ADR 0029: private visual evidence storage and mandatory review](08-decisions/0029-private-visual-evidence-storage-and-review.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -228,6 +240,14 @@ complete candidate review and source-aware Opportunity Workspace/Revenue Brain
 updates. Raw audio is never persisted. Customer/meeting recording, background
 capture, call interception, live intelligence and general media storage remain
 unimplemented.
+
+WO-014 adds deliberately supplied JPEG/PNG visual evidence with private object
+storage, metadata stripping, strict mock/optional OpenAI analysis, mandatory
+candidate review and source-aware Opportunity Workspace/Revenue Brain updates.
+Presentation Mode keeps seller-created slides as context rather than customer
+signals; business cards do not auto-create Contacts; site photos remain
+observed evidence. Native capture, live recording, video and general document
+ingestion remain unimplemented.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

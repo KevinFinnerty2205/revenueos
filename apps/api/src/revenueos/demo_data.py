@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import hashlib
 import json
 import uuid
@@ -11,7 +12,11 @@ from uuid import UUID
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from revenueos.beta_maintenance import _delete_interaction_batch, _delete_meeting_batch
+from revenueos.beta_maintenance import (
+    _delete_interaction_batch,
+    _delete_meeting_batch,
+    _delete_visual_objects,
+)
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
 from revenueos.models import (
@@ -34,6 +39,8 @@ from revenueos.models import (
     PreInteractionBrief,
     RevenueBrainInteractionSnapshot,
     Transcript,
+    VisualAsset,
+    VisualCandidateEvidence,
 )
 from revenueos.pre_interaction_contracts import (
     BriefInteractionType,
@@ -43,6 +50,7 @@ from revenueos.pre_interaction_contracts import (
     PreInteractionBriefContent,
     PreInteractionSourceReference,
 )
+from revenueos.visual_storage import create_visual_storage
 
 DEMO_NAMESPACE = UUID("d7838892-ce0b-434a-a8e9-445767115063")
 INTERACTION_BACKFILL_NAMESPACE = UUID("cf709ef5-e59d-4ce2-9c93-547a4a5e5990")
@@ -50,6 +58,12 @@ INTERACTION_BACKFILL_NAMESPACE = UUID("cf709ef5-e59d-4ce2-9c93-547a4a5e5990")
 TRANSCRIPTS = (
     """SYNTHETIC DEMO TRANSCRIPT — no real person or customer data.\nSeller: Thanks for discussing the evaluation. What outcome matters most?\nBuyer: We need a consistent handover after sales calls. The operations lead supports a pilot, but the finance approver has not reviewed the budget.\nSeller: What timing are you working towards?\nBuyer: We would like a decision by the end of the quarter. Please send the security summary and a clear pilot plan next Tuesday.\nSeller: I will send both items next Tuesday and arrange a finance review.\nBuyer: That works. The unresolved questions are data retention and implementation effort.""",
     """SYNTHETIC DEMO TRANSCRIPT — no real person or customer data.\nSeller: Since the discovery meeting, what has changed?\nBuyer: The finance approver joined and confirmed budget for a limited pilot. Security is comfortable with the proposed controls.\nSeller: Are there remaining concerns?\nBuyer: The team is comparing the internal process with another vendor. Implementation capacity is the main risk, although the operations lead remains our champion.\nSeller: What should happen next?\nBuyer: Send the final pilot scope by Friday. We will hold a decision meeting next Wednesday.\nSeller: I will own the pilot scope and include the retention settings.""",
+)
+
+# A one-pixel synthetic PNG used only by the deterministic demo seed. It has no
+# embedded text, location, camera or person metadata.
+DEMO_VISUAL_IMAGE = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 )
 
 
@@ -125,6 +139,19 @@ def demo_debrief_ids(organisation_id: UUID) -> tuple[UUID, ...]:
         "debrief-phone-candidate",
         "debrief-phone-intelligence",
         "debrief-phone-brain",
+    )
+    return tuple(uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:{label}") for label in labels)
+
+
+def demo_visual_ids(organisation_id: UUID) -> tuple[UUID, ...]:
+    prefix = str(organisation_id)
+    labels = (
+        "visual-presentation-asset",
+        "visual-presentation-source-evidence",
+        "visual-presentation-accepted-evidence",
+        "visual-presentation-candidate",
+        "visual-presentation-intelligence",
+        "visual-presentation-brain",
     )
     return tuple(uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:{label}") for label in labels)
 
@@ -243,10 +270,13 @@ async def seed_demo_data(
     session_factory: async_sessionmaker[AsyncSession],
     organisation_id: UUID,
     user_id: UUID,
+    settings: Settings | None = None,
 ) -> dict[str, object]:
+    active_settings = settings or get_settings()
     company_id, opportunity_id, meeting_ids, transcript_ids = demo_ids(organisation_id)
     interaction_ids = demo_interaction_ids(organisation_id)
     debrief_ids = demo_debrief_ids(organisation_id)
+    visual_ids = demo_visual_ids(organisation_id)
     companion_interaction_ids, companion_meeting_ids, participant_ids, brief_ids = demo_companion_ids(organisation_id)
     seeded_at = datetime.now(UTC)
     async with session_factory() as session, session.begin():
@@ -666,6 +696,179 @@ async def seed_demo_data(
                     voice_processing_acknowledged_at=seeded_at - timedelta(minutes=5),
                 )
             )
+        (
+            visual_id,
+            visual_source_evidence_id,
+            visual_accepted_evidence_id,
+            visual_candidate_id,
+            visual_intelligence_id,
+            visual_brain_id,
+        ) = visual_ids
+        presentation_interaction_id = debrief_interaction_ids[1]
+        visual_storage_key = f"{organisation_id}/{presentation_interaction_id}/demo-whiteboard.png"
+        visual_checksum = hashlib.sha256(DEMO_VISUAL_IMAGE).hexdigest()
+        await create_visual_storage(active_settings).write(
+            visual_storage_key,
+            DEMO_VISUAL_IMAGE,
+            "image/png",
+        )
+        if await session.get(VisualAsset, visual_id) is None:
+            captured_at = seeded_at - timedelta(hours=2)
+            statement = "[DEMO] The customer requested a security workshop before the pilot decision."
+            content = {
+                "schemaVersion": 2,
+                "origin": "ai_inferred",
+                "sourceLabel": "customer whiteboard",
+                "sourceOwnership": "customer_created",
+                "sourceVisualId": str(visual_id),
+                "visualType": "whiteboard",
+                "items": [
+                    {
+                        "candidateId": str(visual_candidate_id),
+                        "evidenceId": str(visual_accepted_evidence_id),
+                        "category": "customer_request",
+                        "statement": statement,
+                        "origin": "ai_inferred",
+                        "sourceOwnership": "customer_created",
+                        "supportClassification": "direct",
+                        "sourceLabel": "customer whiteboard",
+                        "validationState": "verified",
+                        "conflictState": "not_assessed",
+                    }
+                ],
+            }
+            session.add(
+                CaptureSession(
+                    id=visual_id,
+                    organisation_id=organisation_id,
+                    interaction_id=presentation_interaction_id,
+                    capture_type="visual_capture",
+                    status="completed",
+                    started_by_user_id=user_id,
+                    started_at=captured_at,
+                    completed_at=captured_at + timedelta(minutes=2),
+                )
+            )
+            await session.flush()
+            session.add_all(
+                [
+                    Evidence(
+                        id=visual_source_evidence_id,
+                        organisation_id=organisation_id,
+                        interaction_id=presentation_interaction_id,
+                        capture_session_id=visual_id,
+                        evidence_type="visual",
+                        origin_class="customer_direct",
+                        support_class="direct",
+                        validation_state="unreviewed",
+                        captured_by_user_id=user_id,
+                        captured_at=captured_at,
+                        lifecycle_status="available",
+                        retention_class="inherited",
+                    ),
+                    Evidence(
+                        id=visual_accepted_evidence_id,
+                        organisation_id=organisation_id,
+                        interaction_id=presentation_interaction_id,
+                        capture_session_id=visual_id,
+                        evidence_type="visual",
+                        origin_class="ai_inferred",
+                        support_class="inferred",
+                        validation_state="verified",
+                        captured_by_user_id=user_id,
+                        captured_at=captured_at,
+                        lifecycle_status="available",
+                        retention_class="inherited",
+                    ),
+                ]
+            )
+            await session.flush()
+            session.add(
+                VisualAsset(
+                    id=visual_id,
+                    organisation_id=organisation_id,
+                    interaction_id=presentation_interaction_id,
+                    capture_session_id=visual_id,
+                    source_evidence_id=visual_source_evidence_id,
+                    captured_by_user_id=user_id,
+                    visual_type="whiteboard",
+                    source_ownership="customer_created",
+                    context_label="[DEMO] Customer Q&A whiteboard",
+                    display_filename="demo-customer-whiteboard.png",
+                    storage_key=visual_storage_key,
+                    mime_type="image/png",
+                    byte_size=len(DEMO_VISUAL_IMAGE),
+                    upload_byte_size=len(DEMO_VISUAL_IMAGE),
+                    width=1,
+                    height=1,
+                    checksum_sha256=visual_checksum,
+                    upload_checksum_sha256=visual_checksum,
+                    captured_at=captured_at,
+                    upload_idempotency_key="demo-presentation-whiteboard",
+                    completion_idempotency_key="demo-presentation-whiteboard-complete",
+                    processing_status="completed",
+                    storage_status="available",
+                    processing_attempts=1,
+                    provider_name="mock",
+                    provider_request_id=f"mock-{visual_id}",
+                    upload_expires_at=captured_at + timedelta(minutes=5),
+                    upload_completed_at=captured_at + timedelta(minutes=1),
+                    processed_at=captured_at + timedelta(minutes=2),
+                )
+            )
+            await session.flush()
+            session.add(
+                VisualCandidateEvidence(
+                    id=visual_candidate_id,
+                    organisation_id=organisation_id,
+                    interaction_id=presentation_interaction_id,
+                    source_visual_id=visual_id,
+                    accepted_evidence_id=visual_accepted_evidence_id,
+                    evidence_category="customer_request",
+                    statement=statement,
+                    original_statement=statement,
+                    statement_fingerprint=hashlib.sha256(statement.lower().encode()).hexdigest(),
+                    source_ownership="customer_created",
+                    origin_class="ai_inferred",
+                    support_classification="direct",
+                    validation_state="verified",
+                    review_state="accepted",
+                    conflict_state="not_assessed",
+                    confidence_class="low",
+                    evidence_region_json={"x": 0, "y": 0, "width": 1, "height": 1},
+                    reviewed_by_user_id=user_id,
+                    reviewed_at=captured_at + timedelta(minutes=2),
+                )
+            )
+            session.add(
+                InteractionIntelligenceSnapshot(
+                    id=visual_intelligence_id,
+                    organisation_id=organisation_id,
+                    interaction_id=presentation_interaction_id,
+                    opportunity_id=opportunity_id,
+                    session_id=visual_id,
+                    schema_version=2,
+                    version=1,
+                    validation_state="validated",
+                    content_json=content,
+                    source_evidence_ids=[str(visual_accepted_evidence_id)],
+                )
+            )
+            await session.flush()
+            session.add(
+                RevenueBrainInteractionSnapshot(
+                    id=visual_brain_id,
+                    organisation_id=organisation_id,
+                    company_id=company_id,
+                    opportunity_id=opportunity_id,
+                    interaction_id=presentation_interaction_id,
+                    interaction_intelligence_id=visual_intelligence_id,
+                    schema_version=2,
+                    version=2,
+                    content_json=content,
+                    source_evidence_ids=[str(visual_accepted_evidence_id)],
+                )
+            )
         event = await session.scalar(
             select(BetaSystemEvent).where(
                 BetaSystemEvent.organisation_id == organisation_id,
@@ -680,11 +883,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 4},
+                    metadata_json={"dataset_version": 5},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 4}
+            event.metadata_json = {"dataset_version": 5}
     return {
         "status": "ready",
         "company_id": company_id,
@@ -694,6 +897,7 @@ async def seed_demo_data(
         "brief_ids": brief_ids,
         "debrief_interaction_ids": debrief_interaction_ids,
         "debrief_session_ids": (phone_session_id, trade_show_session_id),
+        "visual_ids": visual_ids,
         "provider_calls": 0,
     }
 
@@ -701,7 +905,9 @@ async def seed_demo_data(
 async def reset_demo_data(
     session_factory: async_sessionmaker[AsyncSession],
     organisation_id: UUID,
+    settings: Settings | None = None,
 ) -> dict[str, object]:
+    active_settings = settings or get_settings()
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
     debrief_interaction_ids = list(demo_debrief_ids(organisation_id)[:5])
@@ -718,6 +924,7 @@ async def reset_demo_data(
             .values(opportunity_id=None)
         )
         await _delete_meeting_batch(session, organisation_id, [*meeting_ids, *companion_meeting_ids])
+        await _delete_visual_objects(session, active_settings, organisation_id, debrief_interaction_ids)
         await _delete_interaction_batch(session, organisation_id, debrief_interaction_ids)
         await session.execute(
             delete(OpportunityAuditEvent).where(
@@ -759,9 +966,10 @@ async def _run_cli(arguments: argparse.Namespace) -> None:
                 session_factory,
                 UUID(arguments.organisation_id),
                 UUID(arguments.user_id),
+                settings,
             )
         else:
-            result = await reset_demo_data(session_factory, UUID(arguments.organisation_id))
+            result = await reset_demo_data(session_factory, UUID(arguments.organisation_id), settings)
         print(json.dumps(result, default=str, sort_keys=True))
     finally:
         await engine.dispose()

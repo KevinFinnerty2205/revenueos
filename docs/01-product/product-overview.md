@@ -88,6 +88,16 @@ data remains prohibited unless separately approved. See the
 
 ## Product principles
 
+### WO-014 visual evidence boundary
+
+The current browser product accepts deliberately supplied JPEG/PNG evidence on
+an Interaction, shows a local preview before confirmation, stores sanitised
+bytes privately and requires review of every AI-suggested item. Presentation
+Mode keeps seller-created slides as context, business cards as unsaved contact
+candidates and site photos as observations. Reviewed eligible evidence appears
+in Opportunity Workspace and Revenue Brain with source labels. This is not
+live capture, recording, video, native mobile or general document ingestion.
+
 - Human judgement remains accountable.
 - Evidence and uncertainty are visible.
 - Capture is deliberate and consent-aware.

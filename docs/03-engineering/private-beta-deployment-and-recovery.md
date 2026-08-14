@@ -2,7 +2,7 @@
 
 ## Supported architecture
 
-Deploy one immutable release as four components:
+Deploy one immutable release as five components:
 
 1. Next.js web service exposed over TLS. It receives only public web
    configuration and the server-side Clerk secret; it has no database or
@@ -11,7 +11,9 @@ Deploy one immutable release as four components:
    least-privilege PostgreSQL application role that cannot bypass RLS.
 3. Independently supervised `revenueos-ai-worker` process using the same image,
    API configuration and application database role.
-4. Managed PostgreSQL with encryption at rest/in transit, a separate guarded
+4. Private S3-compatible object storage with tenant-prefixed keys, encryption,
+   blocked public access and least-privilege API credentials.
+5. Managed PostgreSQL with encryption at rest/in transit, a separate guarded
    migration role and encrypted automated backups.
 
 Use the platform secret manager. Do not put secrets in build arguments,
@@ -28,14 +30,14 @@ not production options.
 4. Stop new worker claims or scale the worker to zero when the migration plan
    requires it; allow active bounded jobs to finish or recover by lease.
 5. Run `alembic upgrade head` exactly once with the migration role.
-6. Verify the database reports Alembic head `0023_ai_debrief_voice_journal` and
+6. Verify the database reports Alembic head `0024_visual_evidence` and
    drift check passes.
 7. Deploy API, then confirm `/health/live` and `/health/ready` are green.
 8. Start the worker only after readiness confirms migration/config compatibility.
 9. Deploy the web service, confirm Clerk sign-in/organisation selection and run
    the synthetic Playwright journey.
 10. Verify safe structured logs, tenant isolation, retention configuration,
-    quotas and feature flags. Keep OpenAI off unless explicitly approved.
+    quotas, visual reconciliation and feature flags. Keep OpenAI off unless explicitly approved.
 
 Do not perform a migration from every replica. One controlled release job owns
 it. API and worker must use the same release because prompt/schema registries,
@@ -52,10 +54,12 @@ production decisions include:
 - exact Clerk JWKS URL, issuer and API audience; restricted sign-up,
   organisation creation and invitations;
 - explicit TLS web/API URLs and CORS origins;
-- data-notice version, default retention, transcript/generation/provider limits,
+- data-notice version, default retention, transcript/generation/provider/visual limits,
   retry/timeout limits and restricted export directory;
 - feature flags, with OpenAI and organisation deletion off initially;
-- server-only OpenAI key/model only after approval; and
+- server-only OpenAI key/model only after approval;
+- private S3-compatible visual endpoint/bucket/region/credentials, a
+  deployment-specific signing secret and short signed-URL lifetime; and
 - central JSON log sink, alert routes and named incident contacts.
 
 Never expose `CLERK_SECRET_KEY`, database credentials or `OPENAI_API_KEY` as
@@ -81,6 +85,11 @@ Recommended private-beta baseline:
 - tightly restricted backup/migration principals separate from runtime;
 - provider-side audit logging and tested restore access; and
 - no copying production backups to a laptop or general developer environment.
+
+Apply the same retention classification to private visual objects. Verify that
+object-versioning or provider backups cannot silently outlive the declared
+retention period, and exercise tenant-scoped object/row reconciliation during
+restore drills.
 
 Provider-agnostic logical backup shape (supply secrets through the platform,
 not the command line):
@@ -112,7 +121,8 @@ database. Production content must never enter a local developer environment.
 5. Run migration drift, forced-RLS and tenant-isolation tests against the
    restored database.
 6. Verify append-only triggers, current notice/settings, counts and
-   `/health/ready` without enabling OpenAI.
+   `/health/ready` without enabling OpenAI. Reconcile visual rows and private
+   object keys without printing filenames, labels or signed URLs.
 7. Record recovery time/objective result and discrepancies using metadata only.
 8. Securely destroy the validation database and temporary backup copy.
 
@@ -146,6 +156,13 @@ downgrade preserves Meeting, Meeting Intelligence and Revenue Brain records but
 deletes standalone Interactions, Evidence, Capture Sessions and Interaction audits.
 Prefer application rollback on the forward schema; obtain explicit data-loss
 approval before schema downgrade.
+
+Migration `0024_visual_evidence` adds forced-RLS visual metadata and candidates,
+review guards, source-lineage constraints and visual snapshot support. Its
+downgrade deletes visual rows and cannot recover already-deleted private image
+objects. Prefer application rollback with `visualEvidence` and
+`presentationMode` disabled; require a backup and explicit data-loss approval
+before downgrade.
 
 If a forward migration partially fails, keep API/worker stopped, preserve the
 database, inspect the exact Alembic state with the migration role and follow the

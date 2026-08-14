@@ -2,7 +2,7 @@
 
 - **Status:** Recommended sequence; each stage requires a separate approved work
   order before implementation
-- **Current baseline:** Work through WO-013 is complete; WO-010 is the approved blueprint
+- **Current baseline:** Work through WO-014 is complete; WO-010 is the approved blueprint
 - **Primary optimisation:** Earliest trustworthy use for real face-to-face sales
   interactions without requiring recording or transcript upload
 
@@ -180,6 +180,10 @@ after the production customer-data, legal/privacy and operational gates for the
 target environment are satisfied.
 
 ## WO-014 — Visual Evidence Capture
+
+**Delivery status:** implemented by WO-014, including the Presentation Mode
+specialisation, private storage lifecycle and source-aware review described in
+the accepted work order. Later work orders remain unauthorised.
 
 ### Objective and user value
 

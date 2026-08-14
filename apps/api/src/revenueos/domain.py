@@ -124,6 +124,7 @@ class EvidenceSupportClass(StrEnum):
     DISPUTED = "disputed"
     STALE = "stale"
     SUPERSEDED = "superseded"
+    OBSERVED = "observed"
 
 
 class EvidenceValidationState(StrEnum):
@@ -164,6 +165,29 @@ class CaptureSessionStatus(StrEnum):
     COMPLETED = "completed"
     ABANDONED = "abandoned"
     FAILED = "failed"
+
+
+class VisualType(StrEnum):
+    WHITEBOARD = "whiteboard"
+    WORKSHOP_OUTPUT = "workshop_output"
+    ARCHITECTURE_DIAGRAM = "architecture_diagram"
+    HANDWRITTEN_NOTES = "handwritten_notes"
+    AGENDA = "agenda"
+    BUSINESS_CARD = "business_card"
+    PRESENTATION_SLIDE = "presentation_slide"
+    PRESENTATION_DECK_PAGE = "presentation_deck_page"
+    CUSTOMER_DOCUMENT_PHOTO = "customer_document_photo"
+    SITE_PHOTO = "site_photo"
+    PRODUCT_PHOTO = "product_photo"
+    SCREENSHOT = "screenshot"
+    OTHER = "other"
+
+
+class VisualSourceOwnership(StrEnum):
+    CUSTOMER_CREATED = "customer_created"
+    SALESPERSON_CREATED = "salesperson_created"
+    JOINTLY_CREATED = "jointly_created"
+    UNKNOWN_ORIGIN = "unknown_origin"
 
 
 class AttendanceStatus(StrEnum):

@@ -9,6 +9,7 @@ import { formatInteractionDate } from "@/lib/interactions";
 import { BetaFeatureGate } from "@/components/beta-feature-gate";
 import { PreInteractionBrief } from "@/components/pre-interaction-brief";
 import { PostInteractionCapture } from "@/components/post-interaction-capture";
+import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
 
 export function InteractionDetail({
   interactionId,
@@ -156,6 +157,15 @@ export function InteractionDetail({
             </Link>
           ) : null}
         </div>
+      </div>
+      <div className="mt-6" id="visual-evidence">
+        <BetaFeatureGate feature="visualEvidence">
+          <VisualEvidenceCapture
+            interactionId={interaction.id}
+            interactionType={interaction.interactionType}
+            lifecycleStatus={interaction.lifecycleStatus}
+          />
+        </BetaFeatureGate>
       </div>
       <div className="mt-6" id="preparation">
         <BetaFeatureGate feature="aiCompanion">

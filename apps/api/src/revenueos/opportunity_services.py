@@ -31,6 +31,8 @@ from revenueos.opportunity_contracts import (
     OpportunityWorkspaceResponse,
     ReportedIntelligenceItemResponse,
     ReportedInteractionIntelligenceResponse,
+    VisualIntelligenceItemResponse,
+    VisualInteractionIntelligenceResponse,
 )
 from revenueos.opportunity_repositories import (
     MeetingSummaryRecord,
@@ -200,6 +202,44 @@ class OpportunityWorkspaceService:
                 source_label="Reported by you",
                 items=parsed_items,
             )
+        visual_record = record.visual_intelligence
+        visual_intelligence = None
+        if visual_record is not None:
+            source_label = visual_record.content_json.get("sourceLabel")
+            visual_type = visual_record.content_json.get("visualType")
+            raw_items = visual_record.content_json.get("items", [])
+            visual_items: list[VisualIntelligenceItemResponse] = []
+            if isinstance(raw_items, list):
+                for item in raw_items:
+                    if not isinstance(item, dict):
+                        continue
+                    try:
+                        visual_items.append(
+                            VisualIntelligenceItemResponse.model_validate(
+                                {
+                                    "evidenceId": item.get("evidenceId"),
+                                    "category": item.get("category"),
+                                    "statement": item.get("statement"),
+                                    "origin": item.get("origin"),
+                                    "sourceOwnership": item.get("sourceOwnership"),
+                                    "supportClassification": item.get("supportClassification"),
+                                    "sourceLabel": item.get("sourceLabel"),
+                                    "validationState": item.get("validationState"),
+                                    "conflictState": item.get("conflictState"),
+                                }
+                            )
+                        )
+                    except ValidationError:
+                        continue
+            if isinstance(source_label, str) and isinstance(visual_type, str) and visual_items:
+                visual_intelligence = VisualInteractionIntelligenceResponse(
+                    id=visual_record.id,
+                    interaction_id=visual_record.interaction_id,
+                    generated_at=visual_record.created_at,
+                    source_label=source_label,
+                    visual_type=visual_type,
+                    items=visual_items,
+                )
         response = OpportunityWorkspaceResponse(
             opportunity=self._workspace_opportunity(record),
             reasoning=reasoning,
@@ -207,6 +247,7 @@ class OpportunityWorkspaceService:
             recent_meetings=meeting_summaries,
             intelligence=intelligence,
             reported_intelligence=reported_intelligence,
+            visual_intelligence=visual_intelligence,
             intelligence_sections_available=available_count,
             partial_data=(latest is not None and available_count < len(CAPABILITIES)),
             generated_at=datetime.now(UTC),

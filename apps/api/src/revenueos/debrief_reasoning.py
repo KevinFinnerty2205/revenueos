@@ -89,10 +89,10 @@ TYPE_QUESTIONS: dict[str, tuple[QuestionTemplate, ...]] = {
     "presentation": (
         QuestionTemplate(
             "other",
-            "Which parts generated the most customer discussion?",
-            "Customer reaction matters more than the seller’s prepared material.",
+            "How did the audience react, and which parts generated discussion or fell flat?",
+            "Audience reaction matters more than the seller’s prepared material.",
             "high",
-            ("discussion", "reacted", "engaged", "questioned"),
+            ("audience", "discussion", "reacted", "engaged", "questioned"),
         ),
         QuestionTemplate(
             "open_question",
@@ -102,11 +102,32 @@ TYPE_QUESTIONS: dict[str, tuple[QuestionTemplate, ...]] = {
             ("asked", "question"),
         ),
         QuestionTemplate(
+            "objection",
+            "What objections, concerns or points of hesitation came up?",
+            "Customer objections need to remain distinct from claims made in the presentation.",
+            "high",
+            ("objection", "concern", "hesitant", "pushback", "blocker"),
+        ),
+        QuestionTemplate(
             "action_item",
-            "Did they request any material or another interaction?",
-            "A customer request can create a clear reviewable follow-up.",
+            "What material or follow-up did the customer request?",
+            "A customer request can create a clear, reviewable follow-up.",
             "medium",
-            ("requested", "asked for", "send", "material", "next meeting"),
+            ("requested", "asked for", "send", "material", "follow up"),
+        ),
+        QuestionTemplate(
+            "decision",
+            "What changed in the decision path, stakeholder group or commercial intent?",
+            "Decision-path, stakeholder and commercial changes are useful only when explicitly reported.",
+            "medium",
+            ("decision", "approval", "stakeholder", "committee", "sign off"),
+        ),
+        QuestionTemplate(
+            "commitment",
+            "What commitments or next meeting did either side agree to?",
+            "Agreed commitments and next meetings should be captured while fresh.",
+            "high",
+            ("committed", "agreed", "next meeting", "will ", "scheduled"),
         ),
     ),
     "site_visit": (

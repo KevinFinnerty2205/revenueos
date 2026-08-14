@@ -310,6 +310,19 @@ execution using content-minimised metadata.
 
 ## Related documents
 
+## Implemented WO-014 visual capture
+
+`visual_capture` is now an implemented Capture Session type. Its source Evidence
+owns the visual envelope; `VisualAsset` owns private-storage metadata and
+source ownership; `VisualCandidateEvidence` owns strict AI interpretation and
+review state. Accepted candidates may create schema-version-2 Interaction
+Intelligence snapshots. Current consumers reject snapshots whose source
+Evidence is deleted, excluded or no longer verified.
+
+This implementation retains the planned separation between Capture,
+Intelligence and Action. It does not authorise recording or a general media
+aggregate.
+
 - [Evidence and provenance model](evidence-and-provenance-model.md)
 - [Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md)
 - [Recording and transcription architecture](recording-and-transcription-architecture.md)

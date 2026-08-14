@@ -253,7 +253,10 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0023_ai_debrief_voice_journal` is the head migration. It
+source exists. Migration `0024_visual_evidence` is the head migration. It adds
+forced-RLS visual asset/candidate metadata, review guards, storage lifecycle
+state and the `observed` evidence support class. It follows
+`0023_ai_debrief_voice_journal`, which
 follows `0021_interaction_foundation` and adds immutable, forced-RLS
 Pre-Interaction Brief persistence with composite tenant keys and source-fingerprint
 idempotency. `0021` follows `0020_private_beta_readiness`, adds the four Interaction
@@ -289,6 +292,19 @@ server-side OpenAI provider exist now. Production hosting and customer-content
 enablement are not approved.
 
 ## Future extension boundaries
+
+## WO-014 visual evidence extension
+
+The modular monolith now includes a `VisualEvidenceService`, tenant-explicit
+repository, private storage adapter and strict visual provider adapter. Local
+and CI bytes use private filesystem storage; production configuration requires
+private S3-compatible storage. The API owns upload grants, sanitisation,
+analysis state, review and deletion. The browser never receives object-store
+credentials and does not write directly to the database.
+
+Migration `0024_visual_evidence` adds metadata/candidate tables with forced RLS
+and composite tenant relationships. Image bytes remain outside the application
+database. A separate media service, queue or datastore was not introduced.
 
 WO-010 defines the target direction and WO-011 implements the first additive
 foundation: Interaction is the source-neutral logical parent and Meeting remains a
