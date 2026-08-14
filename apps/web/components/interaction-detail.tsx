@@ -95,7 +95,11 @@ export function InteractionDetail({
           <span className="rounded-full bg-teal-50 px-3 py-1 text-teal-800">
             {humanise(interaction.interactionType)}
           </span>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+          <span
+            role="status"
+            aria-label="Interaction lifecycle status"
+            className="rounded-full bg-slate-100 px-3 py-1 text-slate-700"
+          >
             {humanise(interaction.lifecycleStatus)}
           </span>
         </div>

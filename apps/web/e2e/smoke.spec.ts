@@ -461,7 +461,9 @@ test("interaction timeline supports deliberate creation and completion without i
     opportunityId: "opportunity-1",
   });
   await page.getByRole("button", { name: "Complete interaction" }).click();
-  await expect(page.getByText("Completed", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: "Interaction lifecycle status" }),
+  ).toHaveText("Completed");
   expect(completed).toBe(true);
   if (process.env.CAPTURE_WO_011_SCREENSHOT === "1") {
     await page.screenshot({
