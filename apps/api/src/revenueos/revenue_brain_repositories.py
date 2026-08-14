@@ -5,14 +5,17 @@ from datetime import datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.models import (
     AIArtifact,
     AIJob,
     Company,
+    Evidence,
+    Interaction,
     Meeting,
+    RevenueBrainInteractionSnapshot,
     RevenueBrainSnapshot,
     Transcript,
 )
@@ -22,6 +25,14 @@ from revenueos.models import (
 class RevenueBrainTimelineItem:
     snapshot: RevenueBrainSnapshot
     meeting_date: datetime
+
+
+@dataclass(frozen=True)
+class RevenueBrainInteractionTimelineItem:
+    snapshot: RevenueBrainInteractionSnapshot
+    interaction_title: str
+    interaction_type: str
+    interaction_date: datetime
 
 
 class RevenueBrainRepository:
@@ -167,3 +178,65 @@ class RevenueBrainRepository:
             RevenueBrainTimelineItem(snapshot=snapshot, meeting_date=meeting_date)
             for snapshot, meeting_date in result.tuples().all()
         ]
+
+    async def list_visual_for_company(
+        self,
+        organisation_id: UUID,
+        company_id: UUID,
+    ) -> list[RevenueBrainInteractionTimelineItem]:
+        result = await self.session.execute(
+            select(RevenueBrainInteractionSnapshot, Interaction)
+            .join(
+                Interaction,
+                and_(
+                    Interaction.organisation_id == RevenueBrainInteractionSnapshot.organisation_id,
+                    Interaction.id == RevenueBrainInteractionSnapshot.interaction_id,
+                ),
+            )
+            .where(
+                RevenueBrainInteractionSnapshot.organisation_id == organisation_id,
+                RevenueBrainInteractionSnapshot.company_id == company_id,
+                RevenueBrainInteractionSnapshot.schema_version == 2,
+                Interaction.deleted_at.is_(None),
+            )
+            .order_by(
+                RevenueBrainInteractionSnapshot.created_at.desc(),
+                RevenueBrainInteractionSnapshot.version.desc(),
+                RevenueBrainInteractionSnapshot.id.desc(),
+            )
+            .limit(20)
+        )
+        timeline: list[RevenueBrainInteractionTimelineItem] = []
+        for snapshot, interaction in result.tuples().all():
+            try:
+                source_ids = [UUID(value) for value in snapshot.source_evidence_ids]
+            except (TypeError, ValueError):
+                continue
+            if not source_ids:
+                continue
+            available_count = await self.session.scalar(
+                select(func.count(Evidence.id)).where(
+                    Evidence.organisation_id == organisation_id,
+                    Evidence.id.in_(source_ids),
+                    Evidence.validation_state == "verified",
+                    Evidence.lifecycle_status == "available",
+                    Evidence.deleted_at.is_(None),
+                )
+            )
+            if available_count != len(source_ids):
+                continue
+            interaction_date = (
+                interaction.actual_end_at
+                or interaction.actual_start_at
+                or interaction.scheduled_start_at
+                or interaction.created_at
+            )
+            timeline.append(
+                RevenueBrainInteractionTimelineItem(
+                    snapshot=snapshot,
+                    interaction_title=interaction.title,
+                    interaction_type=interaction.interaction_type,
+                    interaction_date=interaction_date,
+                )
+            )
+        return timeline

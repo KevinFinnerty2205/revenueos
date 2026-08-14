@@ -8,7 +8,9 @@ type BetaFeature =
   | "revenueBrain"
   | "aiCompanion"
   | "aiDebrief"
-  | "voiceJournal";
+  | "voiceJournal"
+  | "visualEvidence"
+  | "presentationMode";
 
 interface Capabilities {
   featureFlags: Record<string, boolean>;

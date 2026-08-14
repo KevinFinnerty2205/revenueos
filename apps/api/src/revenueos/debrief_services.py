@@ -297,7 +297,13 @@ class DebriefService:
         debrief = record.debrief_session
         if debrief.lifecycle_status != "processing":
             return await self._response(record)
-        for item in extraction.items:
+        eligible_items = [
+            item
+            for item in extraction.items
+            if interaction.interaction_type != "presentation"
+            or self._presentation_candidate_allowed(item.statement, item.evidence_category)
+        ]
+        for item in eligible_items:
             fingerprint = self._fingerprint(item.statement)
             self.session.add(
                 CandidateEvidence(
@@ -325,12 +331,39 @@ class DebriefService:
             session_id,
             {
                 "candidate_count": len(extraction.items),
+                "eligible_candidate_count": len(eligible_items),
                 "question_count": debrief.question_count,
                 "interaction_type": interaction.interaction_type,
             },
         )
         await self._commit("The captured evidence could not be prepared for review.")
         return await self._response(record)
+
+    @staticmethod
+    def _presentation_candidate_allowed(statement: str, category: str) -> bool:
+        """Keep seller-authored presentation claims out of customer-signal evidence."""
+
+        normalised = " ".join(statement.casefold().split())
+        seller_material_markers = (
+            "our deck",
+            "our slide",
+            "our presentation",
+            "we presented",
+            "we showed",
+            "we explained",
+            "the slide says",
+            "the deck says",
+        )
+        signal_categories = {
+            "buying_signal",
+            "commercial_intent",
+            "decision",
+            "commitment",
+            "timeline",
+            "procurement",
+            "budget",
+        }
+        return not (category in signal_categories and any(marker in normalised for marker in seller_material_markers))
 
     async def review(
         self,

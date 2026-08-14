@@ -182,6 +182,20 @@ owner.
 
 ## 12. Rollback
 
+## 13. Visual upload, processing or storage failure
+
+1. Confirm whether failure is upload validation, provider processing, object
+   deletion or database/object reconciliation; do not request the customer image.
+2. Inspect metadata-only events and safe failure codes. Never paste signed URLs,
+   OCR or image bytes into logs or tickets.
+3. Provider failures may use the bounded retry action. `delete_failed` requires
+   an object-delete retry before reporting completion.
+4. Run `visual-reconcile` without `--repair` for the affected organisation.
+   Investigate unexpected missing/orphan counts before a reviewed `--repair`.
+5. If tenant isolation, a public object or credential exposure is suspected,
+   disable `visualEvidence`, revoke/rotate credentials and follow the tenant
+   isolation/secret incident runbooks.
+
 - **Detection:** release regression, readiness failure, unsafe privacy/security
   behaviour or incompatible worker/API contract.
 - **Immediate containment:** stop rollout and worker claims; disable the

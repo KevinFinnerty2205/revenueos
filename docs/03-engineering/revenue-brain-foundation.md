@@ -105,6 +105,14 @@ search, new prompts, provider calls and transcript analysis.
 
 ## Target Interaction evolution
 
+## WO-014 visual timeline
+
+`GET /api/v1/accounts/{account_id}/brain/visual-evidence` reads tenant-scoped
+schema-version-2 Interaction snapshots whose source Evidence is still verified
+and available. The account UI shows source label, support classification and a
+link to the Interaction; it never embeds raw image bytes in Revenue Brain.
+Business cards and seller-context-only material do not create these snapshots.
+
 WO-013 adds `RevenueBrainInteractionSnapshot` as an immutable additive subtype for
 accepted post-interaction salesperson-reported Evidence. It references the source
 Interaction Intelligence composition and accepted Evidence IDs and keeps the visible

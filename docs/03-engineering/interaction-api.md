@@ -17,8 +17,34 @@ not-found response and cannot be enumerated.
 | `GET`   | `/interactions/{interactionId}/companion/brief`        | Read product-safe preparation state/result                  |
 | `POST`  | `/interactions/{interactionId}/companion/brief`        | Create or reuse a deterministic brief                       |
 | `POST`  | `/interactions/{interactionId}/companion/brief/review` | Mark the latest completed brief reviewed                    |
+| `POST`  | `/interactions/{interactionId}/visual-evidence/uploads` | Create/reuse a private visual upload grant                  |
+| `PUT`   | `/interactions/{interactionId}/visual-evidence/{visualId}/content` | Upload bytes through the local private adapter      |
+| `POST`  | `/interactions/{interactionId}/visual-evidence/{visualId}/complete` | Verify and sanitise the uploaded image             |
+| `POST`  | `/interactions/{interactionId}/visual-evidence/{visualId}/process` | Produce bounded review candidates                   |
+| `POST`  | `/interactions/{interactionId}/visual-evidence/{visualId}/review` | Accept/edit/reject every candidate                  |
+| `GET`   | `/interactions/{interactionId}/visual-evidence`          | List visual metadata and review state                        |
+| `GET`   | `/interactions/{interactionId}/visual-evidence/{visualId}` | Read one visual metadata/review record                      |
+| `GET`   | `/interactions/{interactionId}/visual-evidence/{visualId}/content` | Download through a short-lived private grant      |
+| `DELETE` | `/interactions/{interactionId}/visual-evidence/{visualId}` | Delete bytes and invalidate current lineage                |
 
-There is deliberately no public delete, Capture Session or Evidence endpoint.
+There is deliberately no generic public Capture Session or Evidence endpoint.
+Visual routes expose the narrow reviewed workflow only; they never expose a
+freely supplied organisation ID or durable storage key.
+
+## Visual evidence contract
+
+The browser supplies one authorised JPEG/PNG (10 MB default maximum), explicit
+visual type/ownership/context, timezone-aware capture time, SHA-256 checksum and
+idempotency key. Completion verifies actual bytes, MIME, dimensions and pixel
+count; rewrites a metadata-minimised image; and rejects polyglots or unsafe
+structure. Processing returns `ai_inferred`, initially unreviewed candidates.
+Every candidate must be accepted, edited or rejected before completion.
+
+Only reviewed eligible claims create schema-v2 Interaction Intelligence and
+Revenue Brain snapshots. Seller-created deck material is context only,
+business-card candidates never create a Contact, and site-photo claims use the
+`observed` support label. See the
+[Visual Evidence engineering guide](visual-evidence-engineering-guide.md).
 
 ## Create and update fields
 

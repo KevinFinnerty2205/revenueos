@@ -39,6 +39,7 @@ from revenueos.demo_data import (
     demo_debrief_ids,
     demo_ids,
     demo_interaction_ids,
+    demo_visual_ids,
     reset_demo_data,
     seed_demo_data,
 )
@@ -60,6 +61,8 @@ from revenueos.models import (
     PreInteractionBrief,
     Transcript,
     User,
+    VisualAsset,
+    VisualCandidateEvidence,
 )
 from revenueos.routes.health import EXPECTED_MIGRATION_HEAD
 from revenueos.tenant import TenantContext
@@ -69,6 +72,7 @@ from tests.conftest import (
     SECONDARY_ORGANISATION_ID,
     SECONDARY_USER_ID,
     TEST_DB_URL,
+    TEST_VISUAL_STORAGE,
 )
 
 
@@ -182,7 +186,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0023_ai_debrief_voice_journal"
+    assert EXPECTED_MIGRATION_HEAD == "0024_visual_evidence"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -517,13 +521,15 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
     async def scenario() -> None:
         engine = create_async_engine(TEST_DB_URL)
         factory = async_sessionmaker(engine, expire_on_commit=False)
-        first = await seed_demo_data(factory, PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID)
-        second = await seed_demo_data(factory, PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID)
+        settings = beta_settings(visual_storage_directory=str(TEST_VISUAL_STORAGE))
+        first = await seed_demo_data(factory, PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, settings)
+        second = await seed_demo_data(factory, PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, settings)
         assert first == second
         assert first["provider_calls"] == 0
         _, _, meeting_ids, _ = demo_ids(PRIMARY_ORGANISATION_ID)
         interaction_ids = demo_interaction_ids(PRIMARY_ORGANISATION_ID)
         debrief_ids = demo_debrief_ids(PRIMARY_ORGANISATION_ID)
+        visual_ids = demo_visual_ids(PRIMARY_ORGANISATION_ID)
         debrief_interaction_ids = debrief_ids[:5]
         companion_interaction_ids, companion_meeting_ids, _, brief_ids = demo_companion_ids(PRIMARY_ORGANISATION_ID)
         async with factory() as session:
@@ -554,6 +560,15 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             assert await session.get(DebriefSession, debrief_ids[5]) is not None
             assert await session.get(DebriefSession, debrief_ids[6]) is not None
             assert await session.get(InteractionIntelligenceSnapshot, debrief_ids[12]) is not None
+            visual = await session.get(VisualAsset, visual_ids[0])
+            assert visual is not None
+            assert visual.storage_status == "available"
+            assert await session.get(VisualCandidateEvidence, visual_ids[3]) is not None
+            visual_snapshot = await session.get(InteractionIntelligenceSnapshot, visual_ids[4])
+            assert visual_snapshot is not None
+            assert visual_snapshot.schema_version == 2
+            assert visual_snapshot.content_json["sourceLabel"] == "customer whiteboard"
+            assert (TEST_VISUAL_STORAGE / visual.storage_key).is_file()
             assert not any(
                 [
                     await session.get(Meeting, meeting_id) is not None
@@ -568,7 +583,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             batch_size=100,
         )
         assert retention.eligible_meetings == 0
-        reset = await reset_demo_data(factory, PRIMARY_ORGANISATION_ID)
+        reset = await reset_demo_data(factory, PRIMARY_ORGANISATION_ID, settings)
         assert reset["provider_calls"] == 0
         async with factory() as session:
             assert all([await session.get(Meeting, meeting_id) is None for meeting_id in meeting_ids])
@@ -577,6 +592,8 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
                 [await session.get(Interaction, interaction_id) is None for interaction_id in debrief_interaction_ids]
             )
             assert all([await session.get(PreInteractionBrief, brief_id) is None for brief_id in brief_ids])
+            assert await session.get(VisualAsset, visual_ids[0]) is None
+            assert not (TEST_VISUAL_STORAGE / visual.storage_key).exists()
         await engine.dispose()
 
     asyncio.run(scenario())
@@ -945,7 +962,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 4
+        assert payload["exportVersion"] == 5
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         assert payload["captureSessions"][0]["id"] == str(capture_session_id)
@@ -957,6 +974,8 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert payload["debriefTurns"] == []
         assert payload["evidenceFragments"] == []
         assert payload["candidateEvidence"] == []
+        assert payload["visualAssets"] == []
+        assert payload["visualCandidateEvidence"] == []
         assert payload["interactionIntelligenceSnapshots"] == []
         assert payload["revenueBrainInteractionSnapshots"] == []
         exported_text = path.read_text(encoding="utf-8")
@@ -977,7 +996,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 4
+        assert download.json()["exportVersion"] == 5
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

@@ -98,6 +98,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "pre_interaction_briefs",
         "capture_sessions",
         "evidence",
+        "visual_assets",
+        "visual_candidate_evidence",
         "debrief_sessions",
         "debrief_turns",
         "evidence_fragments",
@@ -134,6 +136,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "brief_id": uuid.uuid4(),
         "capture_session_id": uuid.uuid4(),
         "evidence_id": uuid.uuid4(),
+        "visual_id": uuid.uuid4(),
+        "visual_candidate_id": uuid.uuid4(),
         "debrief_turn_id": uuid.uuid4(),
         "evidence_fragment_id": uuid.uuid4(),
         "candidate_evidence_id": uuid.uuid4(),
@@ -169,6 +173,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "brief_id": uuid.uuid4(),
         "capture_session_id": uuid.uuid4(),
         "evidence_id": uuid.uuid4(),
+        "visual_id": uuid.uuid4(),
+        "visual_candidate_id": uuid.uuid4(),
         "debrief_turn_id": uuid.uuid4(),
         "evidence_fragment_id": uuid.uuid4(),
         "candidate_evidence_id": uuid.uuid4(),
@@ -434,6 +440,62 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             **identity_parameters,
                             "debrief_answer": f"RLS debrief answer {suffix}",
                             "turn_idempotency_key": f"rls-turn-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO visual_assets
+                                (id, organisation_id, interaction_id,
+                                 capture_session_id, source_evidence_id,
+                                 captured_by_user_id, visual_type,
+                                 source_ownership, display_filename, storage_key,
+                                 mime_type, byte_size, upload_byte_size, width,
+                                 height, checksum_sha256,
+                                 upload_checksum_sha256, captured_at,
+                                 upload_idempotency_key, processing_status,
+                                 storage_status, upload_expires_at)
+                            VALUES
+                                (:visual_id, :organisation_id, :interaction_id,
+                                 :capture_session_id, :evidence_id, :user_id,
+                                 'whiteboard', 'customer_created',
+                                 'rls-whiteboard.png', :visual_storage_key,
+                                 'image/png', 68, 68, 1, 1,
+                                 :visual_checksum, :visual_checksum, now(),
+                                 :visual_idempotency_key, 'review', 'available',
+                                 now() + interval '5 minutes')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "visual_storage_key": (f"{tenant['organisation_id']}/{tenant['interaction_id']}/rls.png"),
+                            "visual_checksum": suffix.lower() * 64,
+                            "visual_idempotency_key": f"rls-visual-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO visual_candidate_evidence
+                                (id, organisation_id, interaction_id,
+                                 source_visual_id, evidence_category, statement,
+                                 original_statement, statement_fingerprint,
+                                 source_ownership, origin_class,
+                                 support_classification, validation_state,
+                                 review_state, conflict_state)
+                            VALUES
+                                (:visual_candidate_id, :organisation_id,
+                                 :interaction_id, :visual_id, 'other',
+                                 :visual_statement, :visual_statement,
+                                 :visual_candidate_fingerprint,
+                                 'customer_created', 'ai_inferred', 'direct',
+                                 'unreviewed', 'pending', 'not_assessed')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "visual_statement": f"RLS visual statement {suffix}.",
+                            "visual_candidate_fingerprint": suffix.upper() * 64,
                         },
                     )
                     await connection.execute(
@@ -830,6 +892,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'pre_interaction_briefs',
                                     'capture_sessions',
                                     'evidence',
+                                    'visual_assets',
+                                    'visual_candidate_evidence',
                                     'debrief_sessions',
                                     'debrief_turns',
                                     'evidence_fragments',
@@ -1208,6 +1272,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "opportunity_audit_events",
                     "pre_interaction_briefs",
                     "candidate_evidence",
+                    "visual_candidate_evidence",
+                    "visual_assets",
                     "evidence_fragments",
                     "debrief_turns",
                     "debrief_sessions",

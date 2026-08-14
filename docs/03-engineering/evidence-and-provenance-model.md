@@ -279,6 +279,19 @@ customer-versus-seller attribution before a capability can promote claims.
 
 ## Related documents
 
+## WO-014 reviewed visual evidence
+
+Visual source ownership is now persisted separately from origin:
+`customer_created`, `salesperson_created`, `jointly_created` or
+`unknown_origin`. Provider candidates remain `ai_inferred`, initially
+`unreviewed`, and use `direct`, `observed` or `context` support. User acceptance
+creates verified Evidence without rewriting origin or ownership.
+
+Seller-created presentation material is context only; business-card contact
+details do not enter current intelligence; site photos use observed support.
+Deleting a source suppresses derived current Opportunity/Revenue Brain reads.
+See [Visual provenance rules](visual-provenance-rules.md).
+
 - [Interaction domain architecture](interaction-domain-architecture.md)
 - [Recording and transcription architecture](recording-and-transcription-architecture.md)
 - [Interaction security, privacy and consent](interaction-security-privacy-and-consent.md)

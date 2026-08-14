@@ -14,6 +14,7 @@ from revenueos.models import (
     AIJob,
     Base,
     Company,
+    Evidence,
     Interaction,
     InteractionIntelligenceSnapshot,
     Meeting,
@@ -30,6 +31,7 @@ class OpportunityDisplayRecord:
     company_name: str | None
     owner_name: str
     reported_intelligence: InteractionIntelligenceSnapshot | None = None
+    visual_intelligence: InteractionIntelligenceSnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -111,28 +113,12 @@ class OpportunityWorkspaceRepository:
         organisation_id: UUID,
         opportunity_id: UUID,
     ) -> OpportunityDisplayRecord | None:
-        latest_reported_id = (
-            select(InteractionIntelligenceSnapshot.id)
-            .where(
-                InteractionIntelligenceSnapshot.organisation_id == Opportunity.organisation_id,
-                InteractionIntelligenceSnapshot.opportunity_id == Opportunity.id,
-                InteractionIntelligenceSnapshot.validation_state == "validated",
-            )
-            .order_by(
-                InteractionIntelligenceSnapshot.created_at.desc(),
-                InteractionIntelligenceSnapshot.id.desc(),
-            )
-            .limit(1)
-            .correlate(Opportunity)
-            .scalar_subquery()
-        )
         row = (
             await self.session.execute(
                 select(
                     Opportunity,
                     Company.name,
                     User.display_name,
-                    InteractionIntelligenceSnapshot,
                 )
                 .outerjoin(
                     Company,
@@ -142,13 +128,6 @@ class OpportunityWorkspaceRepository:
                     ),
                 )
                 .join(User, User.id == Opportunity.owner_user_id)
-                .outerjoin(
-                    InteractionIntelligenceSnapshot,
-                    and_(
-                        InteractionIntelligenceSnapshot.organisation_id == Opportunity.organisation_id,
-                        InteractionIntelligenceSnapshot.id == latest_reported_id,
-                    ),
-                )
                 .where(
                     Opportunity.organisation_id == organisation_id,
                     Opportunity.id == opportunity_id,
@@ -157,12 +136,70 @@ class OpportunityWorkspaceRepository:
         ).one_or_none()
         if row is None:
             return None
+        reported = await self._latest_eligible_interaction_intelligence(
+            organisation_id,
+            opportunity_id,
+            schema_version=1,
+        )
+        visual = await self._latest_eligible_interaction_intelligence(
+            organisation_id,
+            opportunity_id,
+            schema_version=2,
+        )
         return OpportunityDisplayRecord(
             opportunity=row[0],
             company_name=row[1],
             owner_name=row[2],
-            reported_intelligence=row[3],
+            reported_intelligence=reported,
+            visual_intelligence=visual,
         )
+
+    async def _latest_eligible_interaction_intelligence(
+        self,
+        organisation_id: UUID,
+        opportunity_id: UUID,
+        *,
+        schema_version: int,
+    ) -> InteractionIntelligenceSnapshot | None:
+        snapshots = list(
+            (
+                await self.session.scalars(
+                    select(InteractionIntelligenceSnapshot)
+                    .where(
+                        InteractionIntelligenceSnapshot.organisation_id == organisation_id,
+                        InteractionIntelligenceSnapshot.opportunity_id == opportunity_id,
+                        InteractionIntelligenceSnapshot.validation_state == "validated",
+                        InteractionIntelligenceSnapshot.schema_version == schema_version,
+                    )
+                    .order_by(
+                        InteractionIntelligenceSnapshot.created_at.desc(),
+                        InteractionIntelligenceSnapshot.id.desc(),
+                    )
+                    .limit(20)
+                )
+            ).all()
+        )
+        for snapshot in snapshots:
+            try:
+                source_ids = [UUID(value) for value in snapshot.source_evidence_ids]
+            except (TypeError, ValueError):
+                continue
+            if not source_ids:
+                continue
+            active_count = await self.session.scalar(
+                select(func.count())
+                .select_from(Evidence)
+                .where(
+                    Evidence.organisation_id == organisation_id,
+                    Evidence.id.in_(source_ids),
+                    Evidence.lifecycle_status == "available",
+                    Evidence.validation_state == "verified",
+                    Evidence.deleted_at.is_(None),
+                )
+            )
+            if int(active_count or 0) == len(source_ids):
+                return snapshot
+        return None
 
     async def latest_meetings(
         self,

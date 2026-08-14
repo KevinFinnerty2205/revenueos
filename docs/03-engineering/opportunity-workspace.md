@@ -279,6 +279,15 @@ Brain update. See [Source-aware Interaction Intelligence](source-aware-interacti
 
 ## Pre-interaction preparation consumer
 
+## Reviewed visual evidence
+
+The workspace can now expose the latest eligible schema-version-2 visual
+Interaction Intelligence snapshot. Items include AI origin, source ownership,
+support classification, validation and conflict state. The web surface labels
+them AI-interpreted and user-reviewed and calls out observed site-photo evidence.
+The repository verifies every source Evidence is still available and verified,
+so visual deletion suppresses stale derived current content.
+
 WO-012 reuses the same exact-opportunity latest eligible Meeting rule to build a
 Pre-Interaction Brief for a future Interaction. It reads validated stored
 artefacts directly in one backend service; it does not repeatedly call Workspace

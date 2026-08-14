@@ -89,15 +89,23 @@ WO-011 requires current head `0021_interaction_foundation`. Apply it once
 before starting the matching API/web release, then verify deterministic Meeting
 links and forced RLS. No worker or provider configuration changes are required.
 
-WO-013 requires current head `0023_ai_debrief_voice_journal`. Apply it once before
+WO-013 introduced `0023_ai_debrief_voice_journal`. Apply it once before
 the matching API/web release and verify forced RLS, candidate review guards and
 immutable source-aware snapshots. Configure the existing AI provider plus the narrow
 transcription provider only when the feature is enabled; mock remains the no-network
 default.
 
+WO-014 requires current head `0024_visual_evidence`. Apply it once before the
+matching API/web release and verify forced RLS, visual review guards and the
+tenant-scoped storage lifecycle. Production visual capture additionally
+requires private S3-compatible storage, a deployment-specific signing secret
+and explicit `visualEvidence`/`presentationMode` flag review.
+
 ## Rollback
 
-Prefer application rollback while retaining `0023`. Downgrading `0023` removes all
+Prefer application rollback while retaining `0024`. Disable `visualEvidence`
+and `presentationMode` first. Downgrading `0024` removes visual metadata and
+cannot restore deleted image objects. Downgrading `0023` removes all
 debrief sessions, turns, fragments, candidates and source-aware snapshot rows.
 Downgrading `0022` removes
 all brief versions, traces and review metadata. Downgrading `0021` removes all

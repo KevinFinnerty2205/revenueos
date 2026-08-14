@@ -3,7 +3,7 @@ from math import ceil
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from revenueos.business_contracts import Page
 from revenueos.debrief_contracts import (
@@ -29,6 +29,7 @@ from revenueos.interaction_dependencies import (
     get_debrief_service,
     get_interaction_service,
     get_pre_interaction_brief_service,
+    get_visual_evidence_service,
 )
 from revenueos.interaction_repositories import InteractionRecord
 from revenueos.interaction_services import InteractionService
@@ -37,11 +38,23 @@ from revenueos.pre_interaction_contracts import (
     PreInteractionBriefResponse,
 )
 from revenueos.pre_interaction_services import PreInteractionBriefService
+from revenueos.visual_contracts import (
+    VisualDeleteResponse,
+    VisualEvidenceResponse,
+    VisualProcessRequest,
+    VisualReviewRequest,
+    VisualReviewResponse,
+    VisualUploadCompleteRequest,
+    VisualUploadCreateRequest,
+    VisualUploadCreateResponse,
+)
+from revenueos.visual_services import VisualEvidenceService
 
 router = APIRouter(prefix="/api/v1/interactions", tags=["interactions"])
 Interactions = Annotated[InteractionService, Depends(get_interaction_service)]
 Briefs = Annotated[PreInteractionBriefService, Depends(get_pre_interaction_brief_service)]
 Debriefs = Annotated[DebriefService, Depends(get_debrief_service)]
+Visuals = Annotated[VisualEvidenceService, Depends(get_visual_evidence_service)]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -259,3 +272,142 @@ async def cancel_debrief(
     service: Debriefs,
 ) -> DebriefSessionResponse:
     return await service.cancel(interaction_id, session_id, request)
+
+
+@router.post(
+    "/{interaction_id}/visual-evidence/uploads",
+    response_model=VisualUploadCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_visual_upload(
+    interaction_id: UUID,
+    request: VisualUploadCreateRequest,
+    service: Visuals,
+) -> VisualUploadCreateResponse:
+    return await service.create_upload(interaction_id, request)
+
+
+@router.put(
+    "/{interaction_id}/visual-evidence/{visual_id}/content",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def upload_visual_content(
+    interaction_id: UUID,
+    visual_id: UUID,
+    token: Annotated[str, Query(min_length=10, max_length=200)],
+    request: Request,
+    service: Visuals,
+) -> Response:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > service.settings.private_beta_max_visual_bytes:
+                raise PublicAPIError("image_too_large", "The uploaded image exceeds the configured size limit.", 413)
+        except ValueError as exc:
+            raise PublicAPIError("invalid_content_length", "The upload Content-Length is invalid.", 400) from exc
+    content = bytearray()
+    async for chunk in request.stream():
+        content.extend(chunk)
+        if len(content) > service.settings.private_beta_max_visual_bytes:
+            raise PublicAPIError("image_too_large", "The uploaded image exceeds the configured size limit.", 413)
+    await service.upload_content(
+        interaction_id,
+        visual_id,
+        token=token,
+        content=bytes(content),
+        content_type=request.headers.get("content-type"),
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{interaction_id}/visual-evidence/{visual_id}/content",
+)
+async def download_visual_content(
+    interaction_id: UUID,
+    visual_id: UUID,
+    token: Annotated[str, Query(min_length=10, max_length=200)],
+    service: Visuals,
+) -> Response:
+    content, mime_type, filename = await service.get_content(interaction_id, visual_id, token)
+    return Response(
+        content=content,
+        media_type=mime_type,
+        headers={
+            "Cache-Control": "private, no-store, max-age=0",
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Content-Security-Policy": "sandbox",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post(
+    "/{interaction_id}/visual-evidence/{visual_id}/complete",
+    response_model=VisualEvidenceResponse,
+)
+async def complete_visual_upload(
+    interaction_id: UUID,
+    visual_id: UUID,
+    request: VisualUploadCompleteRequest,
+    service: Visuals,
+) -> VisualEvidenceResponse:
+    return await service.complete_upload(interaction_id, visual_id, request)
+
+
+@router.get(
+    "/{interaction_id}/visual-evidence",
+    response_model=list[VisualEvidenceResponse],
+)
+async def list_visual_evidence(interaction_id: UUID, service: Visuals) -> list[VisualEvidenceResponse]:
+    return await service.list_visuals(interaction_id)
+
+
+@router.get(
+    "/{interaction_id}/visual-evidence/{visual_id}",
+    response_model=VisualEvidenceResponse,
+)
+async def get_visual_evidence(
+    interaction_id: UUID,
+    visual_id: UUID,
+    service: Visuals,
+) -> VisualEvidenceResponse:
+    return await service.get_visual(interaction_id, visual_id)
+
+
+@router.post(
+    "/{interaction_id}/visual-evidence/{visual_id}/process",
+    response_model=VisualEvidenceResponse,
+)
+async def process_visual_evidence(
+    interaction_id: UUID,
+    visual_id: UUID,
+    request: VisualProcessRequest,
+    service: Visuals,
+) -> VisualEvidenceResponse:
+    return await service.process(interaction_id, visual_id, request)
+
+
+@router.post(
+    "/{interaction_id}/visual-evidence/{visual_id}/review",
+    response_model=VisualReviewResponse,
+)
+async def review_visual_evidence(
+    interaction_id: UUID,
+    visual_id: UUID,
+    request: VisualReviewRequest,
+    service: Visuals,
+) -> VisualReviewResponse:
+    return await service.review(interaction_id, visual_id, request)
+
+
+@router.delete(
+    "/{interaction_id}/visual-evidence/{visual_id}",
+    response_model=VisualDeleteResponse,
+)
+async def delete_visual_evidence(
+    interaction_id: UUID,
+    visual_id: UUID,
+    service: Visuals,
+) -> VisualDeleteResponse:
+    return await service.delete_visual(interaction_id, visual_id)

@@ -13,6 +13,8 @@ test.beforeEach(async ({ page }) => {
             aiCompanion: true,
             aiDebrief: true,
             voiceJournal: true,
+            visualEvidence: false,
+            presentationMode: false,
             dataExport: true,
             organisationDeletion: false,
           },
@@ -32,7 +34,7 @@ test("landing page explains the current product honestly", async ({ page }) => {
     }),
   ).toBeVisible();
   await expect(
-    page.getByText(/conversation recording, AI processing/i),
+    page.getByText(/does not record customer conversations/i),
   ).toBeVisible();
 });
 
@@ -617,6 +619,528 @@ test("AI Companion briefs support face-to-face, phone and presentation preparati
   await expect(page.getByRole("button", { name: /record/i })).toHaveCount(0);
 });
 
+test("a presentation supports browser image upload, explicit review and intelligence update", async ({
+  page,
+}) => {
+  let interaction: Record<string, unknown> = interactionRecord({
+    id: "interaction-visual",
+    title: "Customer solution presentation",
+    interactionType: "presentation",
+    companyId: "company-visual",
+    opportunityId: "opportunity-visual",
+  });
+  let brief: Record<string, unknown> = emptyBriefResponse();
+  let debrief = debriefSession("collecting", {
+    interactionId: "interaction-visual",
+  });
+  let visuals: Record<string, unknown>[] = [];
+  let reviewPayload: Record<string, unknown> | null = null;
+  let debriefReviewPayload: Record<string, unknown> | null = null;
+  let currentUpload: Record<string, unknown> | null = null;
+  let workspaceReads = 0;
+  let brainVisualReads = 0;
+
+  await page.route(
+    "http://localhost:8000/api/v1/beta/capabilities",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          featureFlags: {
+            openaiProvider: false,
+            revenueBrain: true,
+            opportunityWorkspace: true,
+            aiCompanion: true,
+            aiDebrief: true,
+            voiceJournal: true,
+            visualEvidence: true,
+            presentationMode: true,
+            dataExport: true,
+            organisationDeletion: false,
+          },
+          noticeVersion: 1,
+          maxTranscriptCharacters: 200000,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/interactions/interaction-visual**",
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith("/companion/brief/review")) {
+        brief = companionBrief("presentation", true);
+        await route.fulfill({ json: brief });
+        return;
+      }
+      if (path.endsWith("/companion/brief")) {
+        if (request.method() === "POST") {
+          brief = companionBrief("presentation", false);
+        }
+        await route.fulfill({ json: brief });
+        return;
+      }
+      if (path === "/api/v1/interactions/interaction-visual/complete") {
+        interaction = {
+          ...interaction,
+          lifecycleStatus: "completed",
+          actualEndAt: "2026-08-14T02:00:00Z",
+        };
+        await route.fulfill({ json: interaction });
+        return;
+      }
+      if (path.endsWith("/visual-evidence/uploads")) {
+        const body = request.postDataJSON() as Record<string, unknown>;
+        const seller = body.sourceOwnership === "salesperson_created";
+        const id = seller ? "visual-seller" : "visual-1";
+        currentUpload = visualEvidence("uploading", {
+          id,
+          captureSessionId: id,
+          visualType: body.visualType,
+          sourceOwnership: body.sourceOwnership,
+          contextLabel: body.contextLabel,
+          filename: body.filename,
+          candidates: [],
+        });
+        await route.fulfill({
+          status: 201,
+          json: {
+            ...currentUpload,
+            uploadUrl: `/api/v1/interactions/interaction-visual/visual-evidence/${id}/content?token=test-signed-token`,
+            uploadExpiresAt: "2026-08-14T02:05:00Z",
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/content") && request.method() === "PUT") {
+        await route.fulfill({ status: 204, body: "" });
+        return;
+      }
+      if (path.endsWith("/complete")) {
+        currentUpload = {
+          ...(currentUpload ?? {}),
+          processingStatus: "uploaded",
+        };
+        await route.fulfill({
+          json: currentUpload,
+        });
+        return;
+      }
+      if (path.endsWith("/process")) {
+        if (currentUpload?.sourceOwnership === "salesperson_created") {
+          currentUpload = {
+            ...currentUpload,
+            processingStatus: "completed",
+            processingAttempts: 1,
+            candidates: [],
+          };
+          visuals = [...visuals, currentUpload];
+        } else {
+          currentUpload = {
+            ...currentUpload,
+            processingStatus: "review",
+            processingAttempts: 1,
+            candidates: [
+              visualCandidate(),
+              visualCandidate({
+                id: "candidate-visual-unsupported",
+                category: "commercial_intent",
+                statement:
+                  "Our slide proves the customer will buy this quarter.",
+                originalStatement:
+                  "Our slide proves the customer will buy this quarter.",
+              }),
+            ],
+          };
+          visuals = [currentUpload];
+        }
+        await route.fulfill({ json: currentUpload });
+        return;
+      }
+      if (path.includes("/visual-evidence/") && path.endsWith("/review")) {
+        reviewPayload = request.postDataJSON() as Record<string, unknown>;
+        visuals = [
+          {
+            ...visualEvidence("completed"),
+            candidates: [
+              visualCandidate({
+                statement: "Customer requested a reviewed security workshop.",
+                validationState: "verified",
+                reviewState: "accepted",
+                acceptedEvidenceId: "evidence-visual-accepted",
+                edited: true,
+              }),
+              visualCandidate({
+                id: "candidate-visual-unsupported",
+                category: "commercial_intent",
+                statement:
+                  "Our slide proves the customer will buy this quarter.",
+                originalStatement:
+                  "Our slide proves the customer will buy this quarter.",
+                validationState: "rejected",
+                reviewState: "rejected",
+              }),
+            ],
+            interactionIntelligenceId: "intelligence-visual-1",
+            revenueBrainSnapshotId: "brain-visual-1",
+            acceptedCount: 1,
+            rejectedCount: 1,
+            interactionUpdated: true,
+            revenueBrainUpdated: true,
+          },
+        ];
+        await route.fulfill({ json: visuals[0] });
+        return;
+      }
+      if (path.endsWith("/visual-evidence")) {
+        await route.fulfill({ json: visuals });
+        return;
+      }
+      if (path.endsWith("/debrief") && request.method() === "POST") {
+        await route.fulfill({ status: 201, json: debrief });
+        return;
+      }
+      if (path.endsWith("/response")) {
+        debrief = debriefSession("collecting", {
+          interactionId: "interaction-visual",
+          questionCount: 1,
+          currentQuestion: {
+            status: "complete",
+            question: null,
+            reason: "Presentation-specific evidence is sufficient for review.",
+            target: null,
+            priority: null,
+          },
+          canFinish: true,
+          turns: [
+            {
+              id: "turn-presentation-1",
+              turnNumber: 1,
+              question: debrief.currentQuestion,
+              answerText:
+                "The customer asked about security and requested a workshop before the next meeting.",
+              inputMode: "text",
+              createdAt: "2026-08-14T02:12:00Z",
+            },
+          ],
+        });
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      if (path.endsWith("/finish")) {
+        debrief = debriefSession("review", {
+          interactionId: "interaction-visual",
+          currentQuestion: null,
+          candidates: [
+            {
+              ...reportedCandidate(),
+              evidenceCategory: "action_item",
+              statement: "The customer requested a security workshop.",
+              originalStatement: "The customer requested a security workshop.",
+            },
+          ],
+        });
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      if (path.includes("/debrief/") && path.endsWith("/review")) {
+        debriefReviewPayload = request.postDataJSON() as Record<
+          string,
+          unknown
+        >;
+        debrief = debriefSession("completed", {
+          interactionId: "interaction-visual",
+          currentQuestion: null,
+          candidates: [
+            {
+              ...reportedCandidate(),
+              evidenceCategory: "action_item",
+              statement: "The customer requested a security workshop.",
+              originalStatement: "The customer requested a security workshop.",
+              validationState: "verified",
+              userReviewState: "accepted",
+              acceptedEvidenceId: "evidence-debrief-accepted",
+            },
+          ],
+          interactionIntelligenceId: "intelligence-debrief-1",
+          revenueBrainSnapshotId: "brain-debrief-1",
+          completedAt: "2026-08-14T02:15:00Z",
+          acceptedCount: 1,
+          rejectedCount: 0,
+          interactionUpdated: true,
+          revenueBrainUpdated: true,
+        });
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      if (path.includes("/debrief/session-1")) {
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      await route.fulfill({ json: interaction });
+    },
+  );
+
+  await page.route(
+    "http://localhost:8000/api/v1/opportunities/opportunity-visual/workspace",
+    async (route) => {
+      workspaceReads += 1;
+      await route.fulfill({
+        json: {
+          ...opportunityWorkspace(false, false),
+          opportunity: {
+            ...opportunity(),
+            id: "opportunity-visual",
+            companyId: "company-visual",
+            name: "Customer security programme",
+            companyName: "Southern Cross Operations",
+            ownerName: "Alex Morgan",
+          },
+          reportedIntelligence:
+            debrief.lifecycleStatus === "completed"
+              ? {
+                  id: "intelligence-debrief-1",
+                  interactionId: "interaction-visual",
+                  generatedAt: "2026-08-14T02:15:00Z",
+                  sourceLabel: "Reported by you",
+                  items: [
+                    {
+                      evidenceId: "evidence-debrief-accepted",
+                      category: "action_item",
+                      statement: "The customer requested a security workshop.",
+                      origin: "salesperson_reported",
+                      sourceLabel: "Reported by you",
+                      validationState: "verified",
+                    },
+                  ],
+                }
+              : null,
+          visualIntelligence: visualIntelligencePayload(),
+        },
+      });
+    },
+  );
+  await page.route("http://localhost:8000/api/v1/meetings**", async (route) => {
+    await route.fulfill({
+      json: { items: [], page: 1, pageSize: 100, total: 0, pages: 0 },
+    });
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/companies/company-visual",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          id: "company-visual",
+          organisationId: "organisation-1",
+          name: "Southern Cross Operations",
+          website: null,
+          industry: "Professional services",
+          employeeCount: 75,
+          status: "active",
+          ownerUserId: "user-1",
+          createdAt: "2026-08-01T00:00:00Z",
+          updatedAt: "2026-08-14T02:15:00Z",
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/accounts/company-visual/brain**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/reasoning")) {
+        await route.fulfill({
+          json: {
+            state: "insufficient_history",
+            message:
+              "Revenue Brain needs more history before it can identify longitudinal changes.",
+            latest: null,
+            history: [],
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/visual-evidence")) {
+        brainVisualReads += 1;
+        await route.fulfill({
+          json: [
+            {
+              id: "brain-visual-1",
+              interactionId: "interaction-visual",
+              opportunityId: "opportunity-visual",
+              interactionTitle: "Customer solution presentation",
+              interactionType: "presentation",
+              interactionDate: "2026-08-14T02:00:00Z",
+              createdAt: "2026-08-14T02:10:00Z",
+              sourceLabel: "customer whiteboard",
+              visualType: "whiteboard",
+              items: visualIntelligencePayload().items,
+            },
+          ],
+        });
+        return;
+      }
+      await route.fulfill({ json: [] });
+    },
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/sign-in");
+  await page
+    .getByRole("link", { name: "Continue with development identity" })
+    .click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goto("/interactions/interaction-visual");
+  await page.getByRole("button", { name: "Prepare brief" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Presentation guidance" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Mark as reviewed" }).click();
+  await expect(page.getByRole("button", { name: "Reviewed" })).toBeDisabled();
+  await page.getByRole("button", { name: "Complete interaction" }).click();
+  await expect(
+    page.getByRole("status", { name: "Interaction lifecycle status" }),
+  ).toHaveText("Completed");
+  await expect(
+    page.getByRole("heading", { name: "Visual evidence" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/never treated as customer-confirmed buying signals/i),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Add whiteboard or photo" }).click();
+  await page.getByLabel("Choose an image").setInputFiles({
+    name: "customer-question.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  await expect(page.getByAltText("Selected visual preview")).toBeVisible();
+  await page
+    .getByLabel("Context label (optional)")
+    .fill("Customer requested a security workshop");
+  await page.getByLabel(/I am authorised to upload this image/i).check();
+  await page.getByRole("button", { name: "Upload and prepare review" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Review suggested evidence" }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Suggested statement")
+    .first()
+    .fill("Customer requested a reviewed security workshop.");
+  await page.getByRole("radio", { name: "Reject" }).nth(1).check();
+  await page.getByRole("button", { name: "Finish review" }).click();
+  await expect(
+    page.getByText(/added to Interaction Intelligence and Revenue Brain/i),
+  ).toBeVisible();
+  expect(reviewPayload).toMatchObject({
+    decisions: [
+      {
+        candidateId: "candidate-visual-1",
+        decision: "accept",
+        statement: "Customer requested a reviewed security workshop.",
+      },
+      {
+        candidateId: "candidate-visual-unsupported",
+        decision: "reject",
+        statement: null,
+      },
+    ],
+  });
+  await expect(
+    page.getByText("Accepted · AI-interpreted, user-reviewed"),
+  ).toBeVisible();
+  await expect(page.getByText("Rejected · not used downstream")).toBeVisible();
+
+  await page.getByRole("button", { name: "Add presentation context" }).click();
+  await page.getByLabel("Choose an image").setInputFiles({
+    name: "seller-slide.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  await page
+    .getByLabel("Context label (optional)")
+    .fill("Our slide says the customer will buy this quarter");
+  await page.getByLabel(/I am authorised to upload this image/i).check();
+  await page.getByRole("button", { name: "Upload and prepare review" }).click();
+  await expect(page.getByText(/saved as presentation context/i)).toBeVisible();
+  await expect(
+    page.getByText(/Salesperson Created · Seller material · context only/i),
+  ).toBeVisible();
+
+  await page.getByRole("checkbox", { name: /safely stopped/i }).check();
+  await page.getByRole("button", { name: "Start typed debrief" }).click();
+  await page
+    .getByLabel("Your answer")
+    .fill(
+      "The customer asked about security and requested a workshop before the next meeting.",
+    );
+  await page.getByRole("button", { name: "Save answer" }).click();
+  await page.getByRole("button", { name: "Review captured evidence" }).click();
+  await expect(page.getByText("Reported by you")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Finish review and update intelligence" })
+    .click();
+  await expect(page.getByText("Debrief complete")).toBeVisible();
+  expect(debriefReviewPayload).toMatchObject({
+    decisions: [{ decision: "accept" }],
+  });
+
+  await page.reload();
+  await expect(
+    page.getByText("Accepted · AI-interpreted, user-reviewed"),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Our slide says the customer will buy this quarter/i),
+  ).toHaveCount(0);
+  const hasHorizontalOverflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+  if (process.env.CAPTURE_WO_014_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-014-visual-evidence-review.png",
+      fullPage: true,
+    });
+  }
+
+  await page.goto("/opportunities/opportunity-visual");
+  await expect(
+    page.getByRole("heading", {
+      name: "Latest visual interaction intelligence",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("customer whiteboard")).toBeVisible();
+  await expect(
+    page.getByText("Customer requested a reviewed security workshop."),
+  ).toBeVisible();
+  await expect(page.getByText("Reported by you")).toBeVisible();
+  await page.getByRole("button", { name: "Refresh workspace" }).click();
+  await expect(
+    page.getByText("Customer requested a reviewed security workshop."),
+  ).toBeVisible();
+  expect(workspaceReads).toBeGreaterThanOrEqual(2);
+
+  await page.goto("/companies/company-visual");
+  await expect(
+    page.getByRole("heading", { name: "Reviewed visual evidence" }),
+  ).toBeVisible();
+  await expect(page.getByText("customer whiteboard")).toBeVisible();
+  await expect(
+    page.getByText("Customer requested a reviewed security workshop."),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("customer whiteboard")).toBeVisible();
+  expect(brainVisualReads).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole("button", { name: /record/i })).toHaveCount(0);
+});
+
 test("a completed phone call supports a typed debrief, review and source-aware update", async ({
   page,
 }) => {
@@ -1056,7 +1580,7 @@ test("opportunity workspace persists an associated meeting and composes stored i
 
   await page.goto("/opportunities");
   await expect(
-    page.getByRole("heading", { name: "Opportunities" }),
+    page.getByRole("heading", { name: "Opportunities", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Create opportunity" }).first().click();
   await page.getByLabel("Company").selectOption("company-1");
@@ -1312,6 +1836,8 @@ function betaAdminOverview() {
       aiCompanion: true,
       aiDebrief: true,
       voiceJournal: true,
+      visualEvidence: false,
+      presentationMode: false,
       dataExport: true,
       organisationDeletion: false,
     },
@@ -1676,6 +2202,85 @@ function reportedCandidate() {
     entityReference: null,
     explicitlyReportedAt: null,
     edited: false,
+  };
+}
+
+function visualCandidate(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "candidate-visual-1",
+    category: "customer_request",
+    statement: "Customer requested a security workshop.",
+    originalStatement: "Customer requested a security workshop.",
+    sourceVisualId: "visual-1",
+    sourceOwnership: "customer_created",
+    origin: "ai_inferred",
+    supportClassification: "direct",
+    validationState: "unreviewed",
+    reviewState: "pending",
+    conflictState: "not_assessed",
+    confidenceClass: "low",
+    evidenceRegion: { x: 0, y: 0, width: 1, height: 1 },
+    relatedEntity: null,
+    extractedTextSnippet: null,
+    acceptedEvidenceId: null,
+    edited: false,
+    ...overrides,
+  };
+}
+
+function visualEvidence(
+  processingStatus: string,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id: "visual-1",
+    interactionId: "interaction-visual",
+    captureSessionId: "visual-1",
+    visualType: "whiteboard",
+    sourceOwnership: "customer_created",
+    contextLabel: "Customer requested a security workshop",
+    filename: "customer-question.png",
+    mimeType: "image/png",
+    byteSize: 68,
+    width: 1,
+    height: 1,
+    checksumSha256: "a".repeat(64),
+    capturedAt: "2026-08-14T02:00:00Z",
+    processingStatus,
+    processingAttempts: processingStatus === "uploading" ? 0 : 1,
+    failureCode: null,
+    providerMode: "mock",
+    externalProcessing: false,
+    candidates: processingStatus === "review" ? [visualCandidate()] : [],
+    downloadUrl: null,
+    interactionIntelligenceId: null,
+    revenueBrainSnapshotId: null,
+    createdAt: "2026-08-14T02:00:00Z",
+    updatedAt: "2026-08-14T02:00:00Z",
+    ...overrides,
+  };
+}
+
+function visualIntelligencePayload() {
+  return {
+    id: "intelligence-visual-1",
+    interactionId: "interaction-visual",
+    generatedAt: "2026-08-14T02:10:00Z",
+    sourceLabel: "customer whiteboard",
+    visualType: "whiteboard",
+    items: [
+      {
+        evidenceId: "evidence-visual-accepted",
+        category: "customer_request",
+        statement: "Customer requested a reviewed security workshop.",
+        origin: "ai_inferred",
+        sourceOwnership: "customer_created",
+        supportClassification: "direct",
+        sourceLabel: "customer whiteboard",
+        validationState: "verified",
+        conflictState: "not_assessed",
+      },
+    ],
   };
 }
 

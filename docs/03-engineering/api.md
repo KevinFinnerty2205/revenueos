@@ -58,6 +58,7 @@ List parameters: `search`, `status`, `industry`, `sortBy` (`name`, `created_at`,
 | Method | Path                                           | Purpose                                                          |
 | ------ | ---------------------------------------------- | ---------------------------------------------------------------- |
 | `GET`  | `/api/v1/accounts/{accountId}/brain`           | List the account's immutable Revenue Brain snapshot compositions |
+| `GET`  | `/api/v1/accounts/{accountId}/brain/visual-evidence` | List current reviewed visual Interaction snapshots            |
 | `POST` | `/api/v1/accounts/{accountId}/brain/reasoning` | Create or reuse deterministic account comparisons                |
 | `GET`  | `/api/v1/accounts/{accountId}/brain/reasoning` | Read the latest account comparison and bounded history           |
 
@@ -83,6 +84,10 @@ qualitative direction and importance, confidence as evidence support, source
 capability labels and structured evidence. It contains no outcome score,
 probability, forecast, prompt/provider/job fields or raw source content. See
 [Revenue Brain longitudinal reasoning](revenue-brain-reasoning.md).
+
+The visual-evidence read returns source labels and reviewed statements only
+while every referenced Evidence row remains verified and available. It never
+contains raw image bytes or signed object URLs.
 
 ## Contacts
 
@@ -180,6 +185,25 @@ requires explicit voice-processing acknowledgement and allowlisted base64 audio,
 MIME, duration and size. Responses expose product-safe lifecycle, questions, turns,
 candidates and resulting snapshot IDs; they never expose audio or provider payloads.
 See [AI Debrief](ai-debrief.md).
+
+### Visual evidence
+
+| Method   | Path                                                                                | Purpose                                      |
+| -------- | ----------------------------------------------------------------------------------- | -------------------------------------------- |
+| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/uploads`                      | Create/reuse a private upload grant          |
+| `PUT`    | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/content`            | Upload bytes in local-storage mode           |
+| `GET`    | `/api/v1/interactions/{interactionId}/visual-evidence`                              | List current visual metadata/review state    |
+| `GET`    | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}`                   | Read one visual metadata/review record       |
+| `GET`    | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/content`            | Download with a short-lived private grant    |
+| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/complete`           | Verify, sanitise and finalise an upload      |
+| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/process`            | Run bounded strict visual analysis           |
+| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/review`             | Apply complete accept/edit/reject review     |
+| `DELETE` | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}`                   | Delete object and invalidate current sources |
+
+Requests accept JPEG/PNG only and enforce checksum, size, dimension, pixel,
+source-ownership, consent and idempotency constraints. Relative local upload
+URLs require API auth; absolute S3-compatible signed URLs receive no RevenueOS
+bearer token. See [Visual Evidence engineering guide](visual-evidence-engineering-guide.md).
 
 ## Meetings
 

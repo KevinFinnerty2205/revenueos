@@ -5,7 +5,10 @@ from fastapi import APIRouter, Depends, Query
 
 from revenueos.beta_dependencies import require_revenue_brain_feature
 from revenueos.revenue_brain import RevenueBrainService
-from revenueos.revenue_brain_contracts import RevenueBrainSnapshotResponse
+from revenueos.revenue_brain_contracts import (
+    RevenueBrainSnapshotResponse,
+    RevenueBrainVisualSnapshotResponse,
+)
 from revenueos.revenue_brain_dependencies import (
     get_revenue_brain_reasoning_service,
     get_revenue_brain_service,
@@ -37,6 +40,22 @@ async def get_revenue_brain(
         RevenueBrainSnapshotResponse.from_timeline_item(item)
         for item in await service.list_account_snapshots(account_id)
     ]
+
+
+@router.get(
+    "/{account_id}/brain/visual-evidence",
+    response_model=list[RevenueBrainVisualSnapshotResponse],
+    dependencies=[Depends(require_revenue_brain_feature)],
+)
+async def get_revenue_brain_visual_evidence(
+    account_id: UUID,
+    service: Service,
+) -> list[RevenueBrainVisualSnapshotResponse]:
+    responses = [
+        RevenueBrainVisualSnapshotResponse.from_timeline_item(item)
+        for item in await service.list_account_visual_snapshots(account_id)
+    ]
+    return [response for response in responses if response is not None]
 
 
 @router.post(

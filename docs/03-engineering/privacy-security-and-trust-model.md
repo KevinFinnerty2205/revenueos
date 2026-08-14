@@ -220,9 +220,10 @@ No production customer content until all applicable gates pass:
 - Production requires PostgreSQL and all tenant tables have forced RLS, but the
   deployed least-privilege runtime role, backup and restore evidence still need
   environment-specific validation.
-- Storage, media ingestion, connectors, approval workflows and complete product
-  audit coverage are not implemented. WO-009 adds beta-grade deletion/export,
-  retention and worker operations, not regulated-industry certification.
+- Private browser-supplied visual storage and review are implemented by WO-014;
+  recording/general media ingestion, connectors, action approval workflows and
+  complete product audit coverage are not. Beta deletion/export and retention
+  controls are not regulated-industry certification.
 - The existing server-side OpenAI adapter is explicitly flag- and usage-gated;
   production provider privacy/retention/residency, evaluation and legal
   approvals remain incomplete. Selecting it sends the documented bounded

@@ -108,9 +108,15 @@ re-upgrade it; PostgreSQL CI also verifies forced RLS for every new tenant table
 See [Interaction migration and compatibility](interaction-migration-and-compatibility.md).
 
 WO-012 migration `0022_pre_interaction_brief` follows `0021`, and WO-013 migration
-`0023_ai_debrief_voice_journal` follows `0022` as the single
-head. It adds immutable, forced-RLS brief persistence and no worker/provider
+`0023_ai_debrief_voice_journal` follows `0022`. It adds immutable, forced-RLS
+brief persistence and no worker/provider
 configuration. See [Pre-Interaction Brief engineering](pre-interaction-brief.md).
+
+WO-014 migration `0024_visual_evidence` is the current head. It adds forced-RLS
+visual asset and candidate tables, composite tenant relationships, review
+guards, private storage lifecycle metadata, schema-v2 visual snapshots and the
+`observed` support class. Its downgrade deletes visual metadata; object cleanup
+must be completed before an explicitly approved downgrade.
 
 ## Database workflow
 
@@ -245,6 +251,22 @@ pnpm build:api
 5. Update documentation when the public behaviour changes.
 
 ## Troubleshooting
+
+### Visual evidence locally
+
+The deterministic default writes private objects beneath
+`API_VISUAL_STORAGE_DIRECTORY` and makes no network call. Use synthetic JPEG/PNG
+fixtures only. To test an S3-compatible deployment, configure all five
+`API_VISUAL_S3_*` settings and a non-default signing secret. Production settings
+will fail validation if visual evidence remains on local storage.
+
+Run a read-only reconciliation with:
+
+```text
+pnpm --filter @revenueos/api exec revenueos-beta-maintenance visual-reconcile --organisation-id <uuid>
+```
+
+Use `--repair` only after reviewing the tenant-scoped report.
 
 - `/ready` returning `503` is correct when PostgreSQL or authentication is unavailable.
 - Mock auth is rejected in production and must remain visibly labelled locally.

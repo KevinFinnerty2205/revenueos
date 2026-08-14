@@ -210,6 +210,44 @@ def test_ai_debrief_is_bounded_idempotent_reviewed_and_source_aware(client: Test
     assert not {"audio", "audio_bytes", "audio_blob", "recording"} & set(EvidenceFragment.__table__.columns)
 
 
+def test_presentation_debrief_prioritises_customer_reaction_and_filters_seller_deck_claims(
+    client: TestClient,
+) -> None:
+    interaction_id, _ = _completed_interaction(client, interaction_type="presentation")
+    started = _start(client, interaction_id, key="presentation-start")
+    session_id = str(started["id"])
+    answered = client.post(
+        f"/api/v1/interactions/{interaction_id}/debrief/{session_id}/response",
+        json={
+            "answerText": (
+                "Our deck says the customer will purchase this quarter. "
+                "The customer asked for a security workshop and challenged the rollout plan."
+            ),
+            "idempotencyKey": "presentation-answer",
+        },
+    )
+    assert answered.status_code == 200, answered.text
+    question = answered.json()["currentQuestion"]
+    assert question["target"] in {
+        "other",
+        "open_question",
+        "objection",
+        "action_item",
+        "decision",
+        "commitment",
+    }
+
+    finished = client.post(
+        f"/api/v1/interactions/{interaction_id}/debrief/{session_id}/finish",
+        json={"idempotencyKey": "presentation-finish", "finishEarly": True},
+    )
+    assert finished.status_code == 200, finished.text
+    statements = [item["statement"].casefold() for item in finished.json()["candidates"]]
+    assert statements
+    assert not any("our deck says" in statement for statement in statements)
+    assert any("customer asked" in statement or "challenged" in statement for statement in statements)
+
+
 def test_voice_journal_uses_ephemeral_audio_and_has_typed_fallbacks(client: TestClient) -> None:
     interaction_id, _ = _completed_interaction(client, interaction_type="conference_interaction")
     without_ack = _start(client, interaction_id, capture_type="voice_journal", key="voice-no-ack")

@@ -562,6 +562,30 @@ export interface RevenueBrainSnapshot {
   version: number;
 }
 
+export interface RevenueBrainVisualEvidenceItem {
+  evidenceId: string;
+  category: string;
+  statement: string;
+  origin: "ai_inferred";
+  sourceOwnership: VisualSourceOwnership;
+  supportClassification: VisualSupportClassification;
+  sourceLabel: string;
+  validationState: "verified";
+}
+
+export interface RevenueBrainVisualSnapshot {
+  id: string;
+  interactionId: string;
+  opportunityId: string | null;
+  interactionTitle: string;
+  interactionType: string;
+  interactionDate: string;
+  createdAt: string;
+  sourceLabel: string;
+  visualType: VisualType;
+  items: RevenueBrainVisualEvidenceItem[];
+}
+
 export type RevenueBrainScope = "account" | "opportunity";
 export type RevenueBrainReasoningState =
   | "insufficient_history"
@@ -1235,6 +1259,140 @@ export interface ReportedInteractionIntelligence {
   items: ReportedIntelligenceItem[];
 }
 
+export type VisualType =
+  | "whiteboard"
+  | "workshop_output"
+  | "architecture_diagram"
+  | "handwritten_notes"
+  | "agenda"
+  | "business_card"
+  | "presentation_slide"
+  | "presentation_deck_page"
+  | "customer_document_photo"
+  | "site_photo"
+  | "product_photo"
+  | "screenshot"
+  | "other";
+export type VisualSourceOwnership =
+  | "customer_created"
+  | "salesperson_created"
+  | "jointly_created"
+  | "unknown_origin";
+export type VisualProcessingStatus =
+  | "uploading"
+  | "uploaded"
+  | "processing"
+  | "review"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "deletion_pending"
+  | "deleted";
+export type VisualSupportClassification = "direct" | "observed" | "context";
+export type VisualEvidenceCategory =
+  | "stakeholder"
+  | "customer_request"
+  | "decision"
+  | "action_item"
+  | "risk"
+  | "technical_constraint"
+  | "implementation_requirement"
+  | "timeline"
+  | "procurement"
+  | "security_legal"
+  | "budget"
+  | "objection"
+  | "commercial_intent"
+  | "contact_detail"
+  | "other";
+
+export interface VisualCandidateRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface VisualCandidateEvidence {
+  id: string;
+  category: VisualEvidenceCategory;
+  statement: string;
+  originalStatement: string;
+  sourceVisualId: string;
+  sourceOwnership: VisualSourceOwnership;
+  origin: "ai_inferred";
+  supportClassification: VisualSupportClassification;
+  validationState: "unreviewed" | "verified" | "rejected";
+  reviewState: "pending" | "accepted" | "rejected";
+  conflictState: "not_assessed" | "conflicting";
+  confidenceClass: "low" | "medium" | "high" | null;
+  evidenceRegion: VisualCandidateRegion | null;
+  relatedEntity: string | null;
+  extractedTextSnippet: string | null;
+  acceptedEvidenceId: string | null;
+  edited: boolean;
+}
+
+export interface VisualEvidence {
+  id: string;
+  interactionId: string;
+  captureSessionId: string;
+  visualType: VisualType;
+  sourceOwnership: VisualSourceOwnership;
+  contextLabel: string | null;
+  filename: string;
+  mimeType: "image/jpeg" | "image/png";
+  byteSize: number;
+  width: number | null;
+  height: number | null;
+  checksumSha256: string;
+  capturedAt: string;
+  processingStatus: VisualProcessingStatus;
+  processingAttempts: number;
+  failureCode: string | null;
+  providerMode: "mock" | "openai";
+  externalProcessing: boolean;
+  candidates: VisualCandidateEvidence[];
+  downloadUrl: string | null;
+  interactionIntelligenceId: string | null;
+  revenueBrainSnapshotId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VisualUploadCreateResponse extends VisualEvidence {
+  uploadUrl: string;
+  uploadExpiresAt: string;
+}
+
+export interface VisualReviewResponse extends VisualEvidence {
+  acceptedCount: number;
+  rejectedCount: number;
+  interactionUpdated: boolean;
+  revenueBrainUpdated: boolean;
+}
+
+export interface VisualIntelligenceItem {
+  evidenceId: string;
+  category: string;
+  statement: string;
+  origin: "ai_inferred";
+  sourceOwnership: VisualSourceOwnership;
+  supportClassification: VisualSupportClassification;
+  sourceLabel: string;
+  validationState: "verified";
+  conflictState: "not_assessed" | "conflicting";
+}
+
+export interface VisualInteractionIntelligence {
+  id: string;
+  interactionId: string;
+  generatedAt: string;
+  sourceLabel: string;
+  visualType: VisualType;
+  items: VisualIntelligenceItem[];
+}
+
 export interface OpportunityWorkspaceResponse {
   opportunity: OpportunityWorkspaceOpportunity;
   reasoning: RevenueBrainReasoningResponse;
@@ -1242,6 +1400,7 @@ export interface OpportunityWorkspaceResponse {
   recentMeetings: OpportunityMeetingSummary[];
   intelligence: MeetingIntelligenceResponse | null;
   reportedIntelligence: ReportedInteractionIntelligence | null;
+  visualIntelligence: VisualInteractionIntelligence | null;
   intelligenceSectionsAvailable: number;
   partialData: boolean;
   generatedAt: string;

@@ -11,6 +11,7 @@ from revenueos.interaction_repositories import InteractionRepository
 from revenueos.interaction_services import InteractionService
 from revenueos.pre_interaction_services import PreInteractionBriefService
 from revenueos.tenant import TenantContext, get_tenant_context
+from revenueos.visual_services import VisualEvidenceService
 
 
 async def get_interaction_service(
@@ -43,3 +44,14 @@ async def get_debrief_service(
     if not await InteractionRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
         raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
     yield DebriefService(session, tenant, settings)
+
+
+async def get_visual_evidence_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[VisualEvidenceService]:
+    await set_tenant_database_context(session, tenant.organisation_id)
+    if not await InteractionRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
+        raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
+    yield VisualEvidenceService(session, tenant, settings)

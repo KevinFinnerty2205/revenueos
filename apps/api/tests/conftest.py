@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
@@ -51,9 +52,12 @@ from revenueos.models import (
     Task,
     Transcript,
     User,
+    VisualAsset,
+    VisualCandidateEvidence,
 )
 
 TEST_DB = Path(__file__).with_name("test_revenueos.db")
+TEST_VISUAL_STORAGE = Path(__file__).with_name("test-visual-storage")
 TEST_DB_URL = f"sqlite+aiosqlite:///{TEST_DB}"
 PRIMARY_ORGANISATION_ID = UUID("00000000-0000-4000-8000-000000000002")
 PRIMARY_USER_ID = UUID("00000000-0000-4000-8000-000000000001")
@@ -65,6 +69,7 @@ SECONDARY_USER_ID = UUID("00000000-0000-4000-8000-000000000011")
 def database() -> Iterator[None]:
     if TEST_DB.exists():
         TEST_DB.unlink()
+    shutil.rmtree(TEST_VISUAL_STORAGE, ignore_errors=True)
     engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
 
     def enable_foreign_keys(
@@ -144,6 +149,7 @@ def database() -> Iterator[None]:
         await engine.dispose()
         if TEST_DB.exists():
             TEST_DB.unlink()
+        shutil.rmtree(TEST_VISUAL_STORAGE, ignore_errors=True)
 
     asyncio.run(create_tables_and_identities())
     yield
@@ -173,6 +179,8 @@ def clean_business_entities() -> Iterator[None]:
                 AIJob,
                 OpportunityAuditEvent,
                 InteractionAuditEvent,
+                VisualCandidateEvidence,
+                VisualAsset,
                 CandidateEvidence,
                 EvidenceFragment,
                 DebriefTurn,
@@ -197,9 +205,11 @@ def clean_business_entities() -> Iterator[None]:
             await session.execute(update(OrganisationMembership).values(status="active"))
             await session.commit()
 
+    shutil.rmtree(TEST_VISUAL_STORAGE, ignore_errors=True)
     asyncio.run(clean())
     yield
     asyncio.run(clean())
+    shutil.rmtree(TEST_VISUAL_STORAGE, ignore_errors=True)
     asyncio.run(engine.dispose())
 
 
@@ -213,6 +223,7 @@ def app() -> FastAPI:
             database_url=TEST_DB_URL,
             log_level="WARNING",
             cors_origins="http://localhost:3000",
+            visual_storage_directory=str(TEST_VISUAL_STORAGE),
         ),
     )
 
