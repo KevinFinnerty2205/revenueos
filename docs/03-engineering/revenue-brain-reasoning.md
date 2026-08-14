@@ -266,3 +266,13 @@ WO-011 does not add an Interaction reasoning source or change version-1 comparis
 Historical snapshots/insights keep their exact Meeting, transcript and artefact
 references; retention removes the linked Interaction only in the same approved
 dependency-ordered Meeting deletion path.
+
+## Pre-interaction preparation consumer
+
+WO-012 may include the latest completed Revenue Brain insight for the exact linked
+opportunity, with account fallback only when the target Interaction has no
+opportunity. Its bounded changes are the only source for `recentChanges`; no
+change is reconstructed from transcript text and no new reasoning is triggered by
+opening or generating a brief. The insight ID, scope and validation state remain
+in internal source references. See
+[Pre-Interaction source grounding](pre-interaction-source-grounding.md).

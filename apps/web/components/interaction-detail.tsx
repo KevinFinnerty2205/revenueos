@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatInteractionDate } from "@/lib/interactions";
+import { BetaFeatureGate } from "@/components/beta-feature-gate";
+import { PreInteractionBrief } from "@/components/pre-interaction-brief";
 
 export function InteractionDetail({
   interactionId,
@@ -93,7 +95,11 @@ export function InteractionDetail({
           <span className="rounded-full bg-teal-50 px-3 py-1 text-teal-800">
             {humanise(interaction.interactionType)}
           </span>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+          <span
+            role="status"
+            aria-label="Interaction lifecycle status"
+            className="rounded-full bg-slate-100 px-3 py-1 text-slate-700"
+          >
             {humanise(interaction.lifecycleStatus)}
           </span>
         </div>
@@ -149,6 +155,14 @@ export function InteractionDetail({
             </Link>
           ) : null}
         </div>
+      </div>
+      <div className="mt-6" id="preparation">
+        <BetaFeatureGate feature="aiCompanion">
+          <PreInteractionBrief
+            interactionId={interaction.id}
+            interactionType={interaction.interactionType}
+          />
+        </BetaFeatureGate>
       </div>
     </section>
   );

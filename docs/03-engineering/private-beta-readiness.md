@@ -78,6 +78,8 @@ standalone completed/cancelled Interactions using actual end, scheduled start or
 updated time in that order. It removes, in dependency order, Revenue Brain
 insights/snapshots, AI artefacts/jobs, content-minimised Meeting/Interaction audit
 rows, transcript, Evidence, Capture Sessions, participants, Meeting and Interaction.
+Completed Pre-Interaction Briefs are counted in dry runs and removed before their
+Interaction; no brief content enters the maintenance event.
 Feedback references are detached; no content is copied into the maintenance
 event. Deleted records therefore disappear from Opportunity Workspace and
 Revenue Brain.
@@ -120,10 +122,11 @@ Admins queue a versioned JSON export in Settings. An operator runs:
 uv --directory apps/api run revenueos-beta-maintenance export --organisation-id <UUID> --request-id <UUID>
 ```
 
-Export version 2 has deterministic sections/order and a safe UUID filename. It may
+Export version 3 has deterministic sections/order and a safe UUID filename. It may
 contain authorised transcripts and validated intelligence, so store it only in
 the restricted directory configured by `API_PRIVATE_BETA_EXPORT_DIRECTORY`.
-It includes Interaction, Capture Session, Evidence and Interaction audit metadata.
+It includes Interaction, Capture Session, Evidence, Interaction audit metadata and
+Pre-Interaction Brief content plus safe typed source references.
 It excludes credentials, provider request IDs, worker leases, retry errors and
 other internal execution fields. API responses never expose the filesystem
 path. Downloads expire after 24 hours and validate both the configured root and
@@ -142,8 +145,8 @@ Do not log, email or attach export content to an incident ticket.
 Daily PostgreSQL counters are tenant scoped and updated atomically:
 
 - `API_PRIVATE_BETA_MAX_GENERATIONS_PER_DAY` counts newly created generation
-  jobs. Idempotent reuse does not increment it. Mock and OpenAI are both
-  bounded for abuse.
+  jobs or deterministic Pre-Interaction Brief versions. Idempotent reuse does not
+  increment it. Mock, OpenAI and provider-free generation are bounded for abuse.
 - `API_PRIVATE_BETA_MAX_OPENAI_REQUESTS_PER_DAY` counts each actual OpenAI
   request, including strict-output retries. Mock requests do not count here.
 - `API_PRIVATE_BETA_MAX_TRANSCRIPT_CHARACTERS` rejects oversized transcript
@@ -161,12 +164,13 @@ is reported as unavailable; RevenueOS makes no hard-coded pricing claim.
 The following environment flags are server-authoritative and have safe
 defaults:
 
-| Flag | Default |
-| --- | --- |
-| `API_FEATURE_OPENAI_PROVIDER_ENABLED` | `false` |
-| `API_FEATURE_REVENUE_BRAIN_ENABLED` | `true` |
-| `API_FEATURE_OPPORTUNITY_WORKSPACE_ENABLED` | `true` |
-| `API_FEATURE_DATA_EXPORT_ENABLED` | `true` |
+| Flag                                        | Default |
+| ------------------------------------------- | ------- |
+| `API_FEATURE_OPENAI_PROVIDER_ENABLED`       | `false` |
+| `API_FEATURE_REVENUE_BRAIN_ENABLED`         | `true`  |
+| `API_FEATURE_OPPORTUNITY_WORKSPACE_ENABLED` | `true`  |
+| `API_FEATURE_AI_COMPANION_ENABLED`          | `true`  |
+| `API_FEATURE_DATA_EXPORT_ENABLED`           | `true`  |
 | `API_FEATURE_ORGANISATION_DELETION_ENABLED` | `false` |
 
 OpenAI selection is invalid unless its flag is enabled. Disabled API routes
@@ -178,7 +182,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  Alembic head `0021_interaction_foundation`, identity configuration, selected
+  Alembic head `0022_pre_interaction_brief`, identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
@@ -193,8 +197,10 @@ worker retry exhaustion, stuck leases and quota responses.
 ## Synthetic demo data
 
 The explicit seed creates one clearly labelled synthetic company, one
-opportunity, two recent completed meetings with linked Interactions and one
-standalone completed presentation Interaction. The Meetings retain synthetic transcripts, so
+opportunity, two recent completed meetings with linked Interactions and three
+upcoming participant-linked Interactions: face-to-face, phone call and presentation.
+Each upcoming Interaction has an immutable deterministic brief. The completed
+Meetings retain synthetic transcripts, so
 the default retention policy does not immediately expire the walkthrough. Its
 IDs and content are deterministic, it is tenant-scoped and idempotent, and it
 makes zero provider calls:
@@ -215,7 +221,7 @@ Reset only that organisation's fixed demo IDs:
 uv --directory apps/api run revenueos-demo-data reset --organisation-id <UUID>
 ```
 
-Reset removes all three deterministic Interactions with the established demo rows.
+Reset removes all five deterministic Interactions, three briefs and established demo rows.
 Never run the seed automatically or use it to overwrite a real record.
 
 ## Feedback handling

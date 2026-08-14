@@ -95,6 +95,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "opportunity_audit_events",
         "tasks",
         "interactions",
+        "pre_interaction_briefs",
         "capture_sessions",
         "evidence",
         "interaction_audit_events",
@@ -124,6 +125,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "opportunity_audit_id": uuid.uuid4(),
         "task_id": uuid.uuid4(),
         "interaction_id": uuid.uuid4(),
+        "brief_id": uuid.uuid4(),
         "capture_session_id": uuid.uuid4(),
         "evidence_id": uuid.uuid4(),
         "interaction_audit_id": uuid.uuid4(),
@@ -153,6 +155,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "opportunity_audit_id": uuid.uuid4(),
         "task_id": uuid.uuid4(),
         "interaction_id": uuid.uuid4(),
+        "brief_id": uuid.uuid4(),
         "capture_session_id": uuid.uuid4(),
         "evidence_id": uuid.uuid4(),
         "interaction_audit_id": uuid.uuid4(),
@@ -323,6 +326,28 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         {
                             **identity_parameters,
                             "interaction_title": f"RLS Interaction {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO pre_interaction_briefs
+                                (id, organisation_id, interaction_id, company_id,
+                                 opportunity_id, source_context_fingerprint,
+                                 brief_version, schema_version, status,
+                                 content_json, source_references_json,
+                                 created_by_user_id)
+                            VALUES
+                                (:brief_id, :organisation_id, :interaction_id,
+                                 :company_id, :opportunity_id,
+                                 :source_context_fingerprint, 1, 1, 'completed',
+                                 '{"headline":"RLS brief"}'::json, '[]'::json,
+                                 :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "source_context_fingerprint": suffix.lower() * 64,
                         },
                     )
                     await connection.execute(
@@ -673,6 +698,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'opportunity_audit_events',
                                     'tasks',
                                     'interactions',
+                                    'pre_interaction_briefs',
                                     'capture_sessions',
                                     'evidence',
                                     'interaction_audit_events',
@@ -728,6 +754,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["ai_artifact_id"]},
                 )
                 assert artifact_update.rowcount == 0
+                brief_update = await connection.execute(
+                    text("UPDATE pre_interaction_briefs SET status = 'failed' WHERE id = :id"),
+                    {"id": tenant_b["brief_id"]},
+                )
+                assert brief_update.rowcount == 0
                 snapshot_update = await connection.execute(
                     text("UPDATE revenue_brain_snapshots SET version = 2 WHERE id = :id"),
                     {"id": tenant_b["snapshot_id"]},
@@ -921,6 +952,31 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     ),
                     (
                         """
+                        INSERT INTO pre_interaction_briefs
+                            (id, organisation_id, interaction_id, company_id,
+                             opportunity_id, source_context_fingerprint,
+                             brief_version, schema_version, status,
+                             content_json, source_references_json,
+                             created_by_user_id)
+                        VALUES
+                            (:id, :organisation_id, :interaction_id,
+                             :company_id, :opportunity_id,
+                             :source_context_fingerprint, 2, 1, 'completed',
+                             '{"headline":"Cross tenant"}'::json, '[]'::json,
+                             :user_id)
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "interaction_id": tenant_b["interaction_id"],
+                            "company_id": tenant_b["company_id"],
+                            "opportunity_id": tenant_b["opportunity_id"],
+                            "source_context_fingerprint": "c" * 64,
+                            "user_id": tenant_b["user_id"],
+                        },
+                    ),
+                    (
+                        """
                         INSERT INTO evidence
                             (id, organisation_id, interaction_id, evidence_type,
                              origin_class, support_class, validation_state,
@@ -962,6 +1018,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         finally:
             async with engine.begin() as connection:
                 await connection.execute(
+                    text("ALTER TABLE pre_interaction_briefs DISABLE TRIGGER pre_interaction_briefs_immutable")
+                )
+                await connection.execute(
                     text("ALTER TABLE revenue_brain_insights DISABLE TRIGGER revenue_brain_insights_append_only")
                 )
                 await connection.execute(
@@ -980,6 +1039,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "ai_artifacts",
                     "ai_jobs",
                     "opportunity_audit_events",
+                    "pre_interaction_briefs",
                     "evidence",
                     "capture_sessions",
                     "interaction_audit_events",
@@ -1005,6 +1065,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 )
                 await connection.execute(
                     text("ALTER TABLE revenue_brain_insights ENABLE TRIGGER revenue_brain_insights_append_only")
+                )
+                await connection.execute(
+                    text("ALTER TABLE pre_interaction_briefs ENABLE TRIGGER pre_interaction_briefs_immutable")
                 )
                 cleanup_parameters = {
                     "organisation_a": tenant_a["organisation_id"],

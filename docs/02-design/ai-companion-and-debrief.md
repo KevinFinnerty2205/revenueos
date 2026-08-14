@@ -1,7 +1,7 @@
 # AI Companion and debrief
 
-- **Status:** Target lifecycle design; no companion, debrief or voice capture is
-  implemented by WO-010
+- **Status:** WO-012 implements the preparation-only Companion brief; debrief,
+  voice capture and live Companion remain target design
 - **First release:** preparation brief plus post-interaction Voice Journal and
   targeted AI Debrief
 

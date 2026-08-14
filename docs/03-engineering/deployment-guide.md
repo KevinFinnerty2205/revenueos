@@ -89,9 +89,14 @@ WO-011 requires current head `0021_interaction_foundation`. Apply it once
 before starting the matching API/web release, then verify deterministic Meeting
 links and forced RLS. No worker or provider configuration changes are required.
 
+WO-012 requires current head `0022_pre_interaction_brief`. Apply it once before
+the matching API/web release, verify brief-table forced RLS/immutability and keep
+worker/provider configuration unchanged because composition is deterministic.
+
 ## Rollback
 
-Prefer application rollback while retaining `0021`. Its downgrade removes all
+Prefer application rollback while retaining `0022`. Downgrading `0022` removes
+all brief versions, traces and review metadata. Downgrading `0021` removes all
 standalone Interaction, Capture Session, Evidence and Interaction audit metadata;
 Meeting and Revenue Brain rows survive but the compatibility link is removed.
 Back up and approve that data loss before downgrade.

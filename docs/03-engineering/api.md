@@ -20,21 +20,21 @@ ReDoc. JSON fields use camel case; database and Python fields use snake case.
 
 ## Private beta controls
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/beta/capabilities` | Safe server feature flags, notice version and transcript bound |
-| `GET` | `/api/v1/beta/data-notice` | Read current notice/acknowledgement state |
-| `POST` | `/api/v1/beta/data-notice/acknowledgements` | Acknowledge the current server version |
-| `GET/PATCH` | `/api/v1/beta/onboarding` | Read/advance/skip persisted user journey |
-| `POST` | `/api/v1/beta/feedback` | Submit bounded feedback without automatic content attachment |
-| `GET` | `/api/v1/beta/admin` | Admin-only safe organisation overview |
-| `PATCH` | `/api/v1/beta/admin/retention` | Admin-only 30/90/180/manual setting |
-| `GET` | `/api/v1/beta/admin/feedback` | Admin-only bounded feedback retrieval |
-| `PATCH` | `/api/v1/beta/admin/members/{userId}` | Admin-only enable/disable membership |
-| `POST` | `/api/v1/beta/admin/exports` | Queue tenant export request |
-| `GET` | `/api/v1/beta/admin/data-requests` | Read export/deletion status |
-| `GET` | `/api/v1/beta/admin/exports/{requestId}/download` | Download non-expired restricted export |
-| `POST` | `/api/v1/beta/admin/organisation-deletion` | Queue exact-phrase-confirmed deletion |
+| Method      | Path                                              | Purpose                                                        |
+| ----------- | ------------------------------------------------- | -------------------------------------------------------------- |
+| `GET`       | `/api/v1/beta/capabilities`                       | Safe server feature flags, notice version and transcript bound |
+| `GET`       | `/api/v1/beta/data-notice`                        | Read current notice/acknowledgement state                      |
+| `POST`      | `/api/v1/beta/data-notice/acknowledgements`       | Acknowledge the current server version                         |
+| `GET/PATCH` | `/api/v1/beta/onboarding`                         | Read/advance/skip persisted user journey                       |
+| `POST`      | `/api/v1/beta/feedback`                           | Submit bounded feedback without automatic content attachment   |
+| `GET`       | `/api/v1/beta/admin`                              | Admin-only safe organisation overview                          |
+| `PATCH`     | `/api/v1/beta/admin/retention`                    | Admin-only 30/90/180/manual setting                            |
+| `GET`       | `/api/v1/beta/admin/feedback`                     | Admin-only bounded feedback retrieval                          |
+| `PATCH`     | `/api/v1/beta/admin/members/{userId}`             | Admin-only enable/disable membership                           |
+| `POST`      | `/api/v1/beta/admin/exports`                      | Queue tenant export request                                    |
+| `GET`       | `/api/v1/beta/admin/data-requests`                | Read export/deletion status                                    |
+| `GET`       | `/api/v1/beta/admin/exports/{requestId}/download` | Download non-expired restricted export                         |
+| `POST`      | `/api/v1/beta/admin/organisation-deletion`        | Queue exact-phrase-confirmed deletion                          |
 
 `GET /health/live` is process liveness. `GET /health/ready` performs bounded
 database, migration-head, auth, selected-provider and worker-configuration
@@ -100,17 +100,17 @@ A contact requires a company in the same organisation and a syntactically valid 
 
 ## Opportunities
 
-| Method   | Path                                    | Purpose                      |
-| -------- | --------------------------------------- | ---------------------------- |
-| `GET`    | `/api/v1/opportunities`                 | List opportunities           |
-| `POST`   | `/api/v1/opportunities`                 | Create an opportunity        |
-| `GET`    | `/api/v1/opportunities/{opportunityId}` | Read an opportunity          |
-| `PATCH`  | `/api/v1/opportunities/{opportunityId}` | Update an opportunity        |
-| `DELETE` | `/api/v1/opportunities/{opportunityId}` | Delete an unused opportunity |
-| `GET` | `/api/v1/opportunities/{opportunityId}/workspace` | Read the latest-meeting Opportunity Workspace |
-| `POST` | `/api/v1/opportunities/{opportunityId}/workspace/latest-meeting-navigation` | Record metadata-only navigation to the selected latest meeting |
-| `POST` | `/api/v1/opportunities/{opportunityId}/brain/reasoning` | Create or reuse deterministic opportunity comparisons |
-| `GET` | `/api/v1/opportunities/{opportunityId}/brain/reasoning` | Read the latest opportunity comparison and bounded history |
+| Method   | Path                                                                        | Purpose                                                        |
+| -------- | --------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `GET`    | `/api/v1/opportunities`                                                     | List opportunities                                             |
+| `POST`   | `/api/v1/opportunities`                                                     | Create an opportunity                                          |
+| `GET`    | `/api/v1/opportunities/{opportunityId}`                                     | Read an opportunity                                            |
+| `PATCH`  | `/api/v1/opportunities/{opportunityId}`                                     | Update an opportunity                                          |
+| `DELETE` | `/api/v1/opportunities/{opportunityId}`                                     | Delete an unused opportunity                                   |
+| `GET`    | `/api/v1/opportunities/{opportunityId}/workspace`                           | Read the latest-meeting Opportunity Workspace                  |
+| `POST`   | `/api/v1/opportunities/{opportunityId}/workspace/latest-meeting-navigation` | Record metadata-only navigation to the selected latest meeting |
+| `POST`   | `/api/v1/opportunities/{opportunityId}/brain/reasoning`                     | Create or reuse deterministic opportunity comparisons          |
+| `GET`    | `/api/v1/opportunities/{opportunityId}/brain/reasoning`                     | Read the latest opportunity comparison and bounded history     |
 
 List parameters: `search`, `companyId`, `stage`, `status`, `sortBy` (`name`, `estimated_value`, `expected_close_date`, `created_at`, `updated_at`) and `sortOrder`. Items include company display name, deterministic latest active meeting date, current qualitative momentum and a bounded Next Best Action preview when valid. The web list defaults to `updated_at DESC`.
 
@@ -147,13 +147,13 @@ A task may be general or linked to records. If company, contact or opportunity l
 
 ## Interactions
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/interactions` | List active tenant Interactions |
-| `POST` | `/api/v1/interactions` | Create a manual Interaction |
-| `GET` | `/api/v1/interactions/{interactionId}` | Read an active Interaction |
-| `PATCH` | `/api/v1/interactions/{interactionId}` | Update metadata/lifecycle |
-| `POST` | `/api/v1/interactions/{interactionId}/complete` | Idempotently complete an Interaction |
+| Method  | Path                                            | Purpose                              |
+| ------- | ----------------------------------------------- | ------------------------------------ |
+| `GET`   | `/api/v1/interactions`                          | List active tenant Interactions      |
+| `POST`  | `/api/v1/interactions`                          | Create a manual Interaction          |
+| `GET`   | `/api/v1/interactions/{interactionId}`          | Read an active Interaction           |
+| `PATCH` | `/api/v1/interactions/{interactionId}`          | Update metadata/lifecycle            |
+| `POST`  | `/api/v1/interactions/{interactionId}/complete` | Idempotently complete an Interaction |
 
 List filters are `search`, `companyId`, `opportunityId`, `interactionType`,
 `status`, timezone-aware `dateFrom`/`dateTo`, `sortBy` and `sortOrder`. Pagination
@@ -168,15 +168,15 @@ bodies and IDs remain unchanged; responses add backward-compatible
 `interactionId`. Creating, updating, associating or soft-deleting a Meeting keeps
 the shared Interaction projection aligned in the same transaction.
 
-| Method   | Path                                               | Purpose                                                               |
-| -------- | -------------------------------------------------- | --------------------------------------------------------------------- |
-| `GET`    | `/api/v1/meetings`                                 | List active meetings                                                  |
-| `POST`   | `/api/v1/meetings`                                 | Create a meeting, optionally with initial participants and transcript |
-| `GET`    | `/api/v1/meetings/{meetingId}`                     | Read an active meeting                                                |
-| `PATCH`  | `/api/v1/meetings/{meetingId}`                     | Update meeting metadata                                               |
-| `PATCH`  | `/api/v1/meetings/{meetingId}/opportunity`         | Associate or disassociate one same-tenant opportunity                 |
-| `DELETE` | `/api/v1/meetings/{meetingId}`                     | Soft-delete a meeting and its active children                         |
-| `GET`    | `/api/v1/meetings/{meetingId}/history`             | List content-minimised audit events                                   |
+| Method   | Path                                       | Purpose                                                               |
+| -------- | ------------------------------------------ | --------------------------------------------------------------------- |
+| `GET`    | `/api/v1/meetings`                         | List active meetings                                                  |
+| `POST`   | `/api/v1/meetings`                         | Create a meeting, optionally with initial participants and transcript |
+| `GET`    | `/api/v1/meetings/{meetingId}`             | Read an active meeting                                                |
+| `PATCH`  | `/api/v1/meetings/{meetingId}`             | Update meeting metadata                                               |
+| `PATCH`  | `/api/v1/meetings/{meetingId}/opportunity` | Associate or disassociate one same-tenant opportunity                 |
+| `DELETE` | `/api/v1/meetings/{meetingId}`             | Soft-delete a meeting and its active children                         |
+| `GET`    | `/api/v1/meetings/{meetingId}/history`     | List content-minimised audit events                                   |
 
 List parameters: `search`, `companyId`, `status`, `meetingType`, `dateFrom`, `dateTo`, `sortBy` (`meeting_date`, `title`, `created_at`, `updated_at`) and `sortOrder`. Dates must include a timezone. `meetingType` is `remote`, `phone`, `in_person` or `other`; status is `scheduled`, `completed` or `cancelled`.
 
@@ -442,6 +442,21 @@ strict result contains subject, greeting, summary, decision/action/open-
 question arrays, closing, tone and confidence. It excludes source artefacts,
 transcript, risks, evidence, prompts, raw errors, worker fields and provider
 payloads. See [Follow-up Email Composer](follow-up-email-composer.md).
+
+## AI Companion preparation
+
+| Method | Path                                                          | Purpose                                                   |
+| ------ | ------------------------------------------------------------- | --------------------------------------------------------- |
+| `GET`  | `/api/v1/interactions/{interactionId}/companion/brief`        | Read latest safe brief state, content and bounded history |
+| `POST` | `/api/v1/interactions/{interactionId}/companion/brief`        | Deterministically create or reuse an equivalent brief     |
+| `POST` | `/api/v1/interactions/{interactionId}/companion/brief/review` | Idempotently append review user/time metadata             |
+
+The active tenant is server-derived. Generation requires `aiCompanion`, the
+current data-notice acknowledgement and available daily generation quota. Version
+1 is bounded synchronous application work with no provider/worker call. Responses
+contain product-safe source labels but no raw source IDs, transcript, raw artefact,
+prompt, schema-registry, provider or worker metadata. See the
+[Pre-Interaction Brief guide](pre-interaction-brief.md).
 
 ## Scope boundary
 

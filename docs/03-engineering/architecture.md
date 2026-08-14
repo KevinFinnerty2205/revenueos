@@ -238,9 +238,11 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0021_interaction_foundation` is the head migration.
-It follows `0020_private_beta_readiness`, adds the four Interaction foundation
-tables and deterministic Meeting link/backfill. `0020` adds the focused tenant-owned
+source exists. Migration `0022_pre_interaction_brief` is the head migration. It
+follows `0021_interaction_foundation` and adds immutable, forced-RLS
+Pre-Interaction Brief persistence with composite tenant keys and source-fingerprint
+idempotency. `0021` follows `0020_private_beta_readiness`, adds the four Interaction
+foundation tables and deterministic Meeting link/backfill. `0020` adds the focused tenant-owned
 private-beta control tables, identity/status metadata and approved maintenance
 deletion path described above. `0019_revenue_brain_reasoning` follows
 `0017_opportunity_workspace`, which expands Opportunity metadata and indexes,
@@ -315,4 +317,7 @@ and [Follow-up Email Composer](follow-up-email-composer.md), plus the
 [Unified Meeting Intelligence workspace](unified-meeting-intelligence.md) and
 [Opportunity Workspace](opportunity-workspace.md).
 The future Interaction direction is governed by
-[ADR 0026](../08-decisions/0026-interaction-intelligence-platform.md).
+[ADR 0026](../08-decisions/0026-interaction-intelligence-platform.md). The
+current provider-free preparation path is documented in the
+[Pre-Interaction Brief guide](pre-interaction-brief.md) and
+[ADR 0027](../08-decisions/0027-deterministic-pre-interaction-briefs.md).

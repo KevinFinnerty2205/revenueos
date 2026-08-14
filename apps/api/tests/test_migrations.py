@@ -62,9 +62,10 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "capture_sessions",
             "evidence",
             "interaction_audit_events",
+            "pre_interaction_briefs",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_foundation",
+            "0022_pre_interaction_brief",
         )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
@@ -92,6 +93,15 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert interaction_columns["interaction_type"] == 1
         assert interaction_columns["lifecycle_status"] == 1
         assert interaction_columns["created_by_user_id"] == 1
+        brief_columns = {
+            row[1]: row[3] for row in connection.execute("PRAGMA table_info(pre_interaction_briefs)").fetchall()
+        }
+        assert brief_columns["organisation_id"] == 1
+        assert brief_columns["interaction_id"] == 1
+        assert brief_columns["source_context_fingerprint"] == 1
+        assert brief_columns["content_json"] == 1
+        assert brief_columns["source_references_json"] == 1
+        assert brief_columns["reviewed_at"] == 0
         evidence_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(evidence)").fetchall()}
         assert evidence_columns["organisation_id"] == 1
         assert evidence_columns["origin_class"] == 1
@@ -696,7 +706,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_foundation",
+            "0022_pre_interaction_brief",
         )
         connection.execute(
             """
@@ -750,7 +760,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_foundation",
+            "0022_pre_interaction_brief",
         )
         connection.execute(
             """
@@ -796,7 +806,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_foundation",
+            "0022_pre_interaction_brief",
         )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
@@ -812,7 +822,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_foundation",
+            "0022_pre_interaction_brief",
         )
 
     command.downgrade(configuration, "0003_meeting_domain")
@@ -850,7 +860,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_foundation",
+            "0022_pre_interaction_brief",
         )
 
     command.downgrade(configuration, "0002_core_business_entities")
@@ -917,7 +927,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_insights",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_foundation",
+            "0022_pre_interaction_brief",
         )
 
     command.downgrade(configuration, "0018_revenue_brain")
@@ -937,7 +947,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_foundation",
+            "0022_pre_interaction_brief",
         )
 
 
@@ -951,10 +961,10 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
     assert [revision.revision for revision in script.walk_revisions()][:2] == [
+        "0022_pre_interaction_brief",
         "0021_interaction_foundation",
-        "0020_private_beta_readiness",
     ]
-    assert script.get_heads() == ["0021_interaction_foundation"]
+    assert script.get_heads() == ["0022_pre_interaction_brief"]
     command.upgrade(configuration, "0020_private_beta_readiness")
 
     organisation_a = uuid.uuid4()
@@ -1064,10 +1074,124 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_interaction_foundation",
+            "0022_pre_interaction_brief",
         )
         assert {row[0]: row[1] for row in connection.execute("SELECT id, interaction_id FROM meetings")} == expected
         assert connection.execute("SELECT count(*) FROM interactions").fetchone() == (3,)
+
+
+def test_pre_interaction_brief_migration_is_immutable_and_reupgrades_cleanly(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "pre-interaction-brief-migration.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "0021_interaction_foundation")
+    organisation_id = uuid.uuid4().hex
+    user_id = uuid.uuid4().hex
+    company_id = uuid.uuid4().hex
+    opportunity_id = uuid.uuid4().hex
+    interaction_id = uuid.uuid4().hex
+    brief_id = uuid.uuid4().hex
+
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Brief tenant', ?)",
+            (organisation_id, f"brief-{organisation_id}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Brief user')",
+            (user_id, f"brief-user-{user_id}", f"{user_id}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO companies (id, organisation_id, name, owner_user_id) VALUES (?, ?, 'Brief company', ?)",
+            (company_id, organisation_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO opportunities
+                (id, organisation_id, company_id, name, stage, status, owner_user_id)
+            VALUES (?, ?, ?, 'Brief opportunity', 'discovery', 'open', ?)
+            """,
+            (opportunity_id, organisation_id, company_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO interactions
+                (id, organisation_id, company_id, opportunity_id, interaction_type,
+                 lifecycle_status, title, creation_origin, created_by_user_id)
+            VALUES (?, ?, ?, ?, 'phone_call', 'planned', 'Brief call', 'manual', ?)
+            """,
+            (interaction_id, organisation_id, company_id, opportunity_id, user_id),
+        )
+        connection.commit()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            """
+            INSERT INTO pre_interaction_briefs
+                (id, organisation_id, interaction_id, company_id, opportunity_id,
+                 source_context_fingerprint, brief_version, schema_version,
+                 status, content_json, source_references_json, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, 1, 1, 'completed', ?, ?, ?)
+            """,
+            (
+                brief_id,
+                organisation_id,
+                interaction_id,
+                company_id,
+                opportunity_id,
+                "a" * 64,
+                '{"headline":"Migration brief"}',
+                '[{"capability":"interaction_metadata"}]',
+                user_id,
+            ),
+        )
+        with pytest.raises(IntegrityError, match="immutable"):
+            connection.execute(
+                'UPDATE pre_interaction_briefs SET content_json = \'{"headline":"Changed"}\' WHERE id = ?',
+                (brief_id,),
+            )
+        connection.execute(
+            "UPDATE pre_interaction_briefs SET reviewed_at = CURRENT_TIMESTAMP, reviewed_by_user_id = ? WHERE id = ?",
+            (user_id, brief_id),
+        )
+        with pytest.raises(IntegrityError, match="append only"):
+            connection.execute(
+                "UPDATE pre_interaction_briefs SET reviewed_at = '2099-01-01 00:00:00' WHERE id = ?",
+                (brief_id,),
+            )
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO pre_interaction_briefs
+                    (id, organisation_id, interaction_id, source_context_fingerprint,
+                     brief_version, schema_version, status, content_json,
+                     source_references_json, created_by_user_id)
+                VALUES (?, ?, ?, ?, 2, 1, 'completed', '{}', '[]', ?)
+                """,
+                (uuid.uuid4().hex, organisation_id, interaction_id, "a" * 64, user_id),
+            )
+
+    command.downgrade(configuration, "0021_interaction_foundation")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "pre_interaction_briefs" not in tables
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT count(*) FROM pre_interaction_briefs").fetchone() == (0,)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0022_pre_interaction_brief",
+        )
 
 
 def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
@@ -1109,7 +1233,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0021_interaction_foundation"
+                    assert version == "0022_pre_interaction_brief"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

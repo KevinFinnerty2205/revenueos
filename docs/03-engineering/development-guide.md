@@ -107,6 +107,10 @@ tenant-safe Interaction link per Meeting. Migration tests upgrade, downgrade and
 re-upgrade it; PostgreSQL CI also verifies forced RLS for every new tenant table.
 See [Interaction migration and compatibility](interaction-migration-and-compatibility.md).
 
+WO-012 migration `0022_pre_interaction_brief` follows `0021` as the single
+head. It adds immutable, forced-RLS brief persistence and no worker/provider
+configuration. See [Pre-Interaction Brief engineering](pre-interaction-brief.md).
+
 ## Database workflow
 
 SQLAlchemy metadata and Alembic migration history must agree:
@@ -198,6 +202,10 @@ Session, metadata-only Evidence and Interaction audit tables, and adds the
 non-null one-to-one `meetings.interaction_id`. Downgrade preserves all Meeting,
 Meeting Intelligence and Revenue Brain rows but permanently removes standalone
 Interactions and new metadata. Back up and approve that data loss first.
+
+Migration `0022_pre_interaction_brief` creates the tenant-owned versioned brief
+table and immutability guards. Its downgrade permanently removes all brief content,
+source traces and review metadata while preserving Interactions.
 
 Revenue Brain reasoning is synchronous, bounded and deterministic. It requires
 no worker or provider process. Local fixtures should seed strict snapshot

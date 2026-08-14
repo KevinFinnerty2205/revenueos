@@ -224,6 +224,21 @@ export function InteractionList() {
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
                   {humanise(interaction.lifecycleStatus)}
                 </span>
+                <span
+                  className={`rounded-full px-3 py-1 ${
+                    interaction.briefState === "completed"
+                      ? "bg-emerald-50 text-emerald-800"
+                      : interaction.briefState === "not_generated"
+                        ? "bg-amber-50 text-amber-900"
+                        : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {interaction.briefState === "completed"
+                    ? "Brief ready"
+                    : interaction.briefState === "not_generated"
+                      ? "Not prepared"
+                      : "Link context"}
+                </span>
               </div>
               <h2 className="mt-4 text-xl font-semibold text-slate-950">
                 <Link
@@ -250,6 +265,16 @@ export function InteractionList() {
                   href={`/meetings/${interaction.meetingId}`}
                 >
                   Open Meeting Intelligence
+                </Link>
+              ) : null}
+              {interaction.briefState !== "unavailable" ? (
+                <Link
+                  className="mt-4 ml-4 inline-block text-sm font-bold text-teal-800 underline-offset-4 hover:underline"
+                  href={`/interactions/${interaction.id}#preparation`}
+                >
+                  {interaction.briefState === "completed"
+                    ? "Open brief"
+                    : "Prepare brief"}
                 </Link>
               ) : null}
             </article>

@@ -1,7 +1,7 @@
 # Mobile companion strategy
 
-- **Status:** Target strategy; no mobile application, PWA or recording capability is
-  implemented by WO-010
+- **Status:** WO-012 implements responsive mobile-web preparation; no mobile
+  application, PWA, recording or background capture capability is implemented
 - **Recommendation:** responsive web for the debrief MVP, a constrained PWA for
   convenience/offline experiments, then a cross-platform native capture client only
   when background recording requirements are validated

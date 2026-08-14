@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Literal
 from uuid import UUID
 
 from pydantic import StringConstraints, field_validator, model_validator
@@ -112,6 +112,8 @@ class InteractionResponse(APIModel):
     timezone: str | None
     creation_origin: InteractionCreationOrigin
     created_by_user_id: UUID
+    brief_state: Literal["unavailable", "not_generated", "completed"] = "unavailable"
+    brief_generated_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -120,6 +122,7 @@ class InteractionResponse(APIModel):
         "scheduled_end_at",
         "actual_start_at",
         "actual_end_at",
+        "brief_generated_at",
         "created_at",
         "updated_at",
         mode="before",

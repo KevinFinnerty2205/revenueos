@@ -9,13 +9,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from revenueos.business_repositories import PageResult
-from revenueos.models import Company, Interaction, Meeting, Opportunity, OrganisationMembership
+from revenueos.models import (
+    Company,
+    Interaction,
+    Meeting,
+    Opportunity,
+    OrganisationMembership,
+    PreInteractionBrief,
+)
 
 
 @dataclass(frozen=True)
 class InteractionRecord:
     interaction: Interaction
     meeting_id: UUID | None
+    brief_generated_at: datetime | None = None
 
 
 class InteractionRepository:
@@ -92,14 +100,34 @@ class InteractionRepository:
             "updated_at": Interaction.updated_at,
         }.get(sort_by, effective_start)
         ordering = sort_column.desc() if sort_order == "desc" else sort_column.asc()
+        brief_summary = (
+            select(
+                PreInteractionBrief.organisation_id.label("organisation_id"),
+                PreInteractionBrief.interaction_id.label("interaction_id"),
+                func.max(PreInteractionBrief.created_at).label("generated_at"),
+            )
+            .where(
+                PreInteractionBrief.organisation_id == organisation_id,
+                PreInteractionBrief.status == "completed",
+            )
+            .group_by(PreInteractionBrief.organisation_id, PreInteractionBrief.interaction_id)
+            .subquery()
+        )
         rows = (
             await self.session.execute(
-                select(Interaction, Meeting.id)
+                select(Interaction, Meeting.id, brief_summary.c.generated_at)
                 .outerjoin(
                     Meeting,
                     and_(
                         Meeting.organisation_id == Interaction.organisation_id,
                         Meeting.interaction_id == Interaction.id,
+                    ),
+                )
+                .outerjoin(
+                    brief_summary,
+                    and_(
+                        brief_summary.c.organisation_id == Interaction.organisation_id,
+                        brief_summary.c.interaction_id == Interaction.id,
                     ),
                 )
                 .where(*conditions)
@@ -110,7 +138,14 @@ class InteractionRepository:
         ).all()
         total = await self.session.scalar(select(func.count()).select_from(Interaction).where(*conditions))
         return PageResult(
-            items=[InteractionRecord(interaction=row[0], meeting_id=row[1]) for row in rows],
+            items=[
+                InteractionRecord(
+                    interaction=row[0],
+                    meeting_id=row[1],
+                    brief_generated_at=row[2],
+                )
+                for row in rows
+            ],
             total=int(total or 0),
         )
 
@@ -121,13 +156,33 @@ class InteractionRepository:
         *,
         for_update: bool = False,
     ) -> InteractionRecord | None:
+        brief_summary = (
+            select(
+                PreInteractionBrief.organisation_id.label("organisation_id"),
+                PreInteractionBrief.interaction_id.label("interaction_id"),
+                func.max(PreInteractionBrief.created_at).label("generated_at"),
+            )
+            .where(
+                PreInteractionBrief.organisation_id == organisation_id,
+                PreInteractionBrief.status == "completed",
+            )
+            .group_by(PreInteractionBrief.organisation_id, PreInteractionBrief.interaction_id)
+            .subquery()
+        )
         statement = (
-            select(Interaction, Meeting.id)
+            select(Interaction, Meeting.id, brief_summary.c.generated_at)
             .outerjoin(
                 Meeting,
                 and_(
                     Meeting.organisation_id == Interaction.organisation_id,
                     Meeting.interaction_id == Interaction.id,
+                ),
+            )
+            .outerjoin(
+                brief_summary,
+                and_(
+                    brief_summary.c.organisation_id == Interaction.organisation_id,
+                    brief_summary.c.interaction_id == Interaction.id,
                 ),
             )
             .where(
@@ -141,7 +196,11 @@ class InteractionRepository:
         row = (await self.session.execute(statement)).one_or_none()
         if row is None:
             return None
-        return InteractionRecord(interaction=row[0], meeting_id=row[1])
+        return InteractionRecord(
+            interaction=row[0],
+            meeting_id=row[1],
+            brief_generated_at=row[2],
+        )
 
     async def get_meeting_for_update(self, organisation_id: UUID, meeting_id: UUID) -> Meeting | None:
         result = await self.session.execute(

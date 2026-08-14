@@ -27,6 +27,8 @@ const interactionPage = {
       timezone: "Australia/Sydney",
       creationOrigin: "meeting_compatibility",
       createdByUserId: "user-1",
+      briefState: "completed",
+      briefGeneratedAt: "2026-07-26T00:00:00Z",
       createdAt: "2026-07-26T00:00:00Z",
       updatedAt: "2026-07-26T00:00:00Z",
     },
@@ -73,6 +75,11 @@ describe("InteractionList", () => {
     expect(
       screen.getByRole("link", { name: "Open Meeting Intelligence" }),
     ).toHaveAttribute("href", "/meetings/meeting-1");
+    expect(screen.getByText("Brief ready")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open brief" })).toHaveAttribute(
+      "href",
+      "/interactions/interaction-1#preparation",
+    );
     expect(
       screen.queryByText(/prompt|provider|worker/i),
     ).not.toBeInTheDocument();

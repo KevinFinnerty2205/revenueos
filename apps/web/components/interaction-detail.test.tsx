@@ -54,6 +54,9 @@ describe("InteractionDetail", () => {
       await screen.findByRole("heading", { name: "Acme discovery" }),
     ).toBeVisible();
     expect(
+      screen.getByRole("status", { name: "Interaction lifecycle status" }),
+    ).toHaveTextContent("Planned");
+    expect(
       screen.getByRole("link", { name: "Open Meeting Intelligence" }),
     ).toHaveAttribute("href", "/meetings/meeting-1");
     fireEvent.click(
@@ -64,6 +67,9 @@ describe("InteractionDetail", () => {
         screen.queryByRole("button", { name: "Complete interaction" }),
       ).not.toBeInTheDocument(),
     );
+    expect(
+      screen.getByRole("status", { name: "Interaction lifecycle status" }),
+    ).toHaveTextContent("Completed");
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/interactions/interaction-1/complete"),
       expect.objectContaining({ method: "POST" }),
