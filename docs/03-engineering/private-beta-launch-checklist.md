@@ -30,8 +30,8 @@ the approved release record. Repository completion is not production approval.
 - [ ] TLS and explicit CORS origins are configured.
 - [ ] Encrypted database backup completed.
 - [ ] Non-production restore drill completed, including RLS verification.
-- [ ] Migration `0021_interaction_foundation` applied exactly once and
-      deterministic Meeting links/forced RLS verified.
+- [ ] Migration `0022_pre_interaction_brief` applied exactly once and brief
+      immutability, deterministic Meeting links and forced RLS verified.
 - [ ] API liveness/readiness are green.
 - [ ] Worker starts after the compatible migration and processes mock work.
 - [ ] Web sign-in, organisation selection and beta journey are green.

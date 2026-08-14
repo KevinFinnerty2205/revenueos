@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -10,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from revenueos.beta_maintenance import _delete_interaction_batch, _delete_meeting_batch
+from revenueos.beta_maintenance import _delete_meeting_batch
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
 from revenueos.models import (
@@ -19,10 +20,20 @@ from revenueos.models import (
     Company,
     Interaction,
     Meeting,
+    MeetingParticipant,
     Opportunity,
     OpportunityAuditEvent,
     OrganisationMembership,
+    PreInteractionBrief,
     Transcript,
+)
+from revenueos.pre_interaction_contracts import (
+    BriefInteractionType,
+    BriefObjective,
+    BriefQuestion,
+    BriefStakeholder,
+    PreInteractionBriefContent,
+    PreInteractionSourceReference,
 )
 
 DEMO_NAMESPACE = UUID("d7838892-ce0b-434a-a8e9-445767115063")
@@ -50,14 +61,153 @@ def demo_ids(organisation_id: UUID) -> tuple[UUID, UUID, tuple[UUID, UUID], tupl
     )
 
 
-def demo_interaction_ids(organisation_id: UUID) -> tuple[UUID, UUID, UUID]:
+def demo_companion_ids(
+    organisation_id: UUID,
+) -> tuple[tuple[UUID, UUID, UUID], tuple[UUID, UUID, UUID], tuple[UUID, UUID, UUID], tuple[UUID, UUID, UUID]]:
+    prefix = str(organisation_id)
+    return (
+        (
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-interaction-face"),
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-interaction-phone"),
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-interaction-presentation"),
+        ),
+        (
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-meeting-face"),
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-meeting-phone"),
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-meeting-presentation"),
+        ),
+        (
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-participant-face"),
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-participant-phone"),
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-participant-presentation"),
+        ),
+        (
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-brief-face"),
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-brief-phone"),
+            uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-brief-presentation"),
+        ),
+    )
+
+
+def demo_interaction_ids(organisation_id: UUID) -> tuple[UUID, UUID, UUID, UUID, UUID]:
     prefix = str(organisation_id)
     _, _, meeting_ids, _ = demo_ids(organisation_id)
+    companion_interaction_ids, _, _, _ = demo_companion_ids(organisation_id)
     return (
         uuid.uuid5(INTERACTION_BACKFILL_NAMESPACE, f"{prefix}:{meeting_ids[0]}"),
         uuid.uuid5(INTERACTION_BACKFILL_NAMESPACE, f"{prefix}:{meeting_ids[1]}"),
-        uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:interaction-presentation"),
+        *companion_interaction_ids,
     )
+
+
+def _demo_brief_content(interaction_id: UUID, interaction_type: BriefInteractionType) -> dict[str, object]:
+    variants = {
+        "face_to_face_meeting": {
+            "headline": "Align on the pilot outcome and agree a clear next step.",
+            "objective": "Confirm the most valuable outcome for the in-person discussion.",
+            "question": "What would make this meeting useful from your perspective?",
+            "purpose": "Confirm the customer's desired outcome before discussing next steps.",
+            "success": "The intended pilot outcome and next step are clear.",
+            "guidance": "Keep the objective, stakeholder priorities and success criteria easy to scan before the meeting.",
+        },
+        "phone_call": {
+            "headline": "Use the call to agree one useful next step.",
+            "objective": "Agree a concrete next step with ownership and timing.",
+            "question": "What is the most useful next step we can agree on this call?",
+            "purpose": "Close the call clearly without overloading a short interaction.",
+            "success": "A clear next step, owner and timing are agreed.",
+            "guidance": "Keep the call concise, lead with the objective and close with a confirmed next step.",
+        },
+        "presentation": {
+            "headline": "Validate audience priorities and agree the next validation step.",
+            "objective": "Confirm which questions and evidence matter most to the audience.",
+            "question": "Which questions or evidence would be most useful to the audience today?",
+            "purpose": "Focus the presentation on customer needs and requested validation.",
+            "success": "Audience questions and a next validation step are clarified.",
+            "guidance": "Treat seller-prepared material as context, not customer evidence, and close with a validation step.",
+        },
+    }
+    variant = variants[interaction_type]
+    return PreInteractionBriefContent(
+        interaction_id=interaction_id,
+        interaction_type=interaction_type,
+        brief_version=1,
+        headline=variant["headline"],
+        account_context=(
+            "[DEMO] Southern Cross Operations has the Revenue workflow pilot opportunity "
+            "at the evaluation stage with open status. Only linked record context is used."
+        ),
+        recent_changes=(),
+        objectives=(
+            BriefObjective(
+                objective=variant["objective"],
+                priority="high",
+                reason="This is an interaction-specific preparation recommendation.",
+            ),
+        ),
+        questions_to_ask=(
+            BriefQuestion(
+                question=variant["question"],
+                purpose=variant["purpose"],
+                priority="high",
+            ),
+        ),
+        stakeholder_focus=(
+            BriefStakeholder(
+                name="[DEMO] Alex Morgan",
+                role="attendee",
+                focus="Confirm Alex's priorities and role in this interaction.",
+            ),
+        ),
+        open_commitments=(),
+        risks_to_watch=(),
+        success_criteria=(variant["success"],),
+        interaction_guidance=variant["guidance"],
+        confidence=0.55,
+    ).as_json()
+
+
+def _demo_brief_sources(
+    interaction_id: UUID,
+    company_id: UUID,
+    opportunity_id: UUID,
+    participant_id: UUID,
+) -> list[dict[str, object]]:
+    references = (
+        PreInteractionSourceReference(
+            section="account_context",
+            capability="interaction_metadata",
+            source_id=interaction_id,
+            scope="interaction",
+            source_classification="system_metadata",
+            validation_status="not_applicable",
+        ),
+        PreInteractionSourceReference(
+            section="account_context",
+            capability="company_metadata",
+            source_id=company_id,
+            scope="account",
+            source_classification="system_metadata",
+            validation_status="not_applicable",
+        ),
+        PreInteractionSourceReference(
+            section="account_context",
+            capability="opportunity_metadata",
+            source_id=opportunity_id,
+            scope="opportunity",
+            source_classification="system_metadata",
+            validation_status="not_applicable",
+        ),
+        PreInteractionSourceReference(
+            section="stakeholder_focus",
+            capability="meeting_participants",
+            source_id=participant_id,
+            scope="interaction",
+            source_classification="system_metadata",
+            validation_status="not_applicable",
+        ),
+    )
+    return [reference.model_dump(mode="json") for reference in references]
 
 
 async def seed_demo_data(
@@ -67,6 +217,7 @@ async def seed_demo_data(
 ) -> dict[str, object]:
     company_id, opportunity_id, meeting_ids, transcript_ids = demo_ids(organisation_id)
     interaction_ids = demo_interaction_ids(organisation_id)
+    companion_interaction_ids, companion_meeting_ids, participant_ids, brief_ids = demo_companion_ids(organisation_id)
     seeded_at = datetime.now(UTC)
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
@@ -161,48 +312,111 @@ async def seed_demo_data(
                         source="manual",
                     )
                 )
-        standalone_interaction = await session.get(Interaction, interaction_ids[2])
-        if standalone_interaction is None:
-            session.add(
-                Interaction(
-                    id=interaction_ids[2],
-                    organisation_id=organisation_id,
-                    company_id=company_id,
-                    opportunity_id=opportunity_id,
-                    interaction_type="presentation",
-                    lifecycle_status="completed",
-                    title="[DEMO] Pilot presentation",
-                    scheduled_start_at=seeded_at - timedelta(days=3),
-                    actual_start_at=seeded_at - timedelta(days=3),
-                    actual_end_at=seeded_at - timedelta(days=3),
-                    timezone="Australia/Sydney",
-                    creation_origin="manual",
-                    created_by_user_id=user_id,
+        companion_variants: tuple[tuple[BriefInteractionType, str, str, int], ...] = (
+            ("face_to_face_meeting", "in_person", "[DEMO] On-site pilot planning", 1),
+            ("phone_call", "phone", "[DEMO] Pilot next-step call", 2),
+            ("presentation", "other", "[DEMO] Pilot presentation", 3),
+        )
+        for index, (interaction_type, meeting_type, title, days_ahead) in enumerate(companion_variants):
+            interaction_id = companion_interaction_ids[index]
+            meeting_id = companion_meeting_ids[index]
+            participant_id = participant_ids[index]
+            if await session.get(Interaction, interaction_id) is None:
+                session.add(
+                    Interaction(
+                        id=interaction_id,
+                        organisation_id=organisation_id,
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        interaction_type=interaction_type,
+                        lifecycle_status="planned",
+                        title=title,
+                        scheduled_start_at=seeded_at + timedelta(days=days_ahead),
+                        timezone="Australia/Sydney",
+                        creation_origin="manual",
+                        created_by_user_id=user_id,
+                    )
                 )
-            )
-        exists = await session.scalar(
-            select(BetaSystemEvent.id).where(
+            if await session.get(Meeting, meeting_id) is None:
+                session.add(
+                    Meeting(
+                        id=meeting_id,
+                        organisation_id=organisation_id,
+                        interaction_id=interaction_id,
+                        title=title,
+                        description="Synthetic upcoming interaction for AI Companion preparation.",
+                        meeting_date=seeded_at + timedelta(days=days_ahead),
+                        meeting_type=meeting_type,
+                        status="scheduled",
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        owner_user_id=user_id,
+                        created_by=user_id,
+                        updated_by=user_id,
+                    )
+                )
+            if await session.get(MeetingParticipant, participant_id) is None:
+                session.add(
+                    MeetingParticipant(
+                        id=participant_id,
+                        organisation_id=organisation_id,
+                        meeting_id=meeting_id,
+                        display_name="[DEMO] Alex Morgan",
+                        attendance_status="invited",
+                        role="attendee",
+                    )
+                )
+            if await session.get(PreInteractionBrief, brief_ids[index]) is None:
+                fingerprint = hashlib.sha256(
+                    f"demo-v3:{organisation_id}:{interaction_id}:{interaction_type}".encode()
+                ).hexdigest()
+                session.add(
+                    PreInteractionBrief(
+                        id=brief_ids[index],
+                        organisation_id=organisation_id,
+                        interaction_id=interaction_id,
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        source_context_fingerprint=fingerprint,
+                        brief_version=1,
+                        schema_version=1,
+                        status="completed",
+                        content_json=_demo_brief_content(interaction_id, interaction_type),
+                        source_references_json=_demo_brief_sources(
+                            interaction_id,
+                            company_id,
+                            opportunity_id,
+                            participant_id,
+                        ),
+                        created_by_user_id=user_id,
+                    )
+                )
+        event = await session.scalar(
+            select(BetaSystemEvent).where(
                 BetaSystemEvent.organisation_id == organisation_id,
                 BetaSystemEvent.event_type == "demo_data_seeded",
                 BetaSystemEvent.subject_id == opportunity_id,
             )
         )
-        if exists is None:
+        if event is None:
             session.add(
                 BetaSystemEvent(
                     organisation_id=organisation_id,
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 2},
+                    metadata_json={"dataset_version": 3},
                 )
             )
+        else:
+            event.metadata_json = {"dataset_version": 3}
     return {
         "status": "ready",
         "company_id": company_id,
         "opportunity_id": opportunity_id,
         "meeting_ids": meeting_ids,
-        "interaction_ids": (*linked_interaction_ids, interaction_ids[2]),
+        "interaction_ids": (*linked_interaction_ids, *companion_interaction_ids),
+        "brief_ids": brief_ids,
         "provider_calls": 0,
     }
 
@@ -212,7 +426,7 @@ async def reset_demo_data(
     organisation_id: UUID,
 ) -> dict[str, object]:
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
-    interaction_ids = demo_interaction_ids(organisation_id)
+    _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
         if session.get_bind().dialect.name == "postgresql":
@@ -225,8 +439,7 @@ async def reset_demo_data(
             )
             .values(opportunity_id=None)
         )
-        await _delete_meeting_batch(session, organisation_id, list(meeting_ids))
-        await _delete_interaction_batch(session, organisation_id, [interaction_ids[2]])
+        await _delete_meeting_batch(session, organisation_id, [*meeting_ids, *companion_meeting_ids])
         await session.execute(
             delete(OpportunityAuditEvent).where(
                 OpportunityAuditEvent.organisation_id == organisation_id,

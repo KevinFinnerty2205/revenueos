@@ -14,12 +14,21 @@ from revenueos.interaction_contracts import (
     InteractionResponse,
     InteractionUpdate,
 )
-from revenueos.interaction_dependencies import get_interaction_service
+from revenueos.interaction_dependencies import (
+    get_interaction_service,
+    get_pre_interaction_brief_service,
+)
 from revenueos.interaction_repositories import InteractionRecord
 from revenueos.interaction_services import InteractionService
+from revenueos.pre_interaction_contracts import (
+    PreInteractionBriefRequestResponse,
+    PreInteractionBriefResponse,
+)
+from revenueos.pre_interaction_services import PreInteractionBriefService
 
 router = APIRouter(prefix="/api/v1/interactions", tags=["interactions"])
 Interactions = Annotated[InteractionService, Depends(get_interaction_service)]
+Briefs = Annotated[PreInteractionBriefService, Depends(get_pre_interaction_brief_service)]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -30,7 +39,22 @@ def _require_timezone(value: datetime | None, field_name: str) -> datetime | Non
 
 def _response(record: InteractionRecord) -> InteractionResponse:
     response = InteractionResponse.model_validate(record.interaction)
-    return response.model_copy(update={"meeting_id": record.meeting_id})
+    brief_state = (
+        "completed"
+        if record.brief_generated_at is not None
+        else (
+            "not_generated"
+            if record.interaction.company_id is not None or record.interaction.opportunity_id is not None
+            else "unavailable"
+        )
+    )
+    return response.model_copy(
+        update={
+            "meeting_id": record.meeting_id,
+            "brief_state": brief_state,
+            "brief_generated_at": record.brief_generated_at,
+        }
+    )
 
 
 @router.get("", response_model=Page[InteractionResponse])
@@ -99,3 +123,36 @@ async def complete_interaction(
     service: Interactions,
 ) -> InteractionResponse:
     return _response(await service.complete_interaction(interaction_id, request))
+
+
+@router.post(
+    "/{interaction_id}/companion/brief",
+    response_model=PreInteractionBriefRequestResponse,
+)
+async def generate_pre_interaction_brief(
+    interaction_id: UUID,
+    service: Briefs,
+) -> PreInteractionBriefRequestResponse:
+    return await service.generate_brief(interaction_id)
+
+
+@router.get(
+    "/{interaction_id}/companion/brief",
+    response_model=PreInteractionBriefResponse,
+)
+async def get_pre_interaction_brief(
+    interaction_id: UUID,
+    service: Briefs,
+) -> PreInteractionBriefResponse:
+    return await service.get_brief(interaction_id)
+
+
+@router.post(
+    "/{interaction_id}/companion/brief/review",
+    response_model=PreInteractionBriefResponse,
+)
+async def review_pre_interaction_brief(
+    interaction_id: UUID,
+    service: Briefs,
+) -> PreInteractionBriefResponse:
+    return await service.review_brief(interaction_id)

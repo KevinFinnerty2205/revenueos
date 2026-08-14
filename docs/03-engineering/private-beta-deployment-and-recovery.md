@@ -28,7 +28,7 @@ not production options.
 4. Stop new worker claims or scale the worker to zero when the migration plan
    requires it; allow active bounded jobs to finish or recover by lease.
 5. Run `alembic upgrade head` exactly once with the migration role.
-6. Verify the database reports Alembic head `0021_interaction_foundation` and
+6. Verify the database reports Alembic head `0022_pre_interaction_brief` and
    drift check passes.
 7. Deploy API, then confirm `/health/live` and `/health/ready` are green.
 8. Start the worker only after readiness confirms migration/config compatibility.

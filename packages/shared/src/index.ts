@@ -74,14 +74,18 @@ export type InteractionType =
   | "trade_show_interaction"
   | "manual_interaction";
 export type InteractionLifecycleStatus =
-  | "planned"
-  | "in_progress"
-  | "completed"
-  | "cancelled";
+  "planned" | "in_progress" | "completed" | "cancelled";
 export type InteractionCreationOrigin =
-  | "manual"
-  | "meeting_compatibility"
-  | "imported_external";
+  "manual" | "meeting_compatibility" | "imported_external";
+export type PreInteractionBriefState =
+  | "unavailable"
+  | "not_generated"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type BriefPriority = "high" | "medium" | "low";
 export type AttendanceStatus = "invited" | "attended" | "absent" | "unknown";
 export type ParticipantRole = "host" | "attendee";
 export type TranscriptSource = "manual" | "upload";
@@ -367,6 +371,84 @@ export interface Interaction extends TenantEntity {
   timezone: string | null;
   creationOrigin: InteractionCreationOrigin;
   createdByUserId: string;
+  briefState: "unavailable" | "not_generated" | "completed";
+  briefGeneratedAt: string | null;
+}
+
+export interface BriefRecentChange {
+  change: string;
+  importance: BriefPriority;
+  source: "revenue_brain";
+}
+
+export interface BriefObjective {
+  objective: string;
+  priority: BriefPriority;
+  reason: string;
+}
+
+export interface BriefQuestion {
+  question: string;
+  purpose: string;
+  priority: BriefPriority;
+}
+
+export interface BriefStakeholder {
+  name: string;
+  role: string;
+  focus: string;
+}
+
+export interface BriefCommitment {
+  commitment: string;
+  owner: string | null;
+  dueDate: string | null;
+}
+
+export interface BriefRisk {
+  risk: string;
+  severity: BriefPriority;
+}
+
+export interface PreInteractionBriefContent {
+  interactionId: string;
+  interactionType: InteractionType;
+  briefVersion: number;
+  headline: string;
+  accountContext: string;
+  recentChanges: BriefRecentChange[];
+  objectives: BriefObjective[];
+  questionsToAsk: BriefQuestion[];
+  stakeholderFocus: BriefStakeholder[];
+  openCommitments: BriefCommitment[];
+  risksToWatch: BriefRisk[];
+  successCriteria: string[];
+  interactionGuidance: string;
+  confidence: number;
+}
+
+export interface BriefVersionSummary {
+  briefVersion: number;
+  generatedAt: string;
+  reviewed: boolean;
+  reviewedAt: string | null;
+}
+
+export interface PreInteractionBriefResponse {
+  state: PreInteractionBriefState;
+  generationAvailable: boolean;
+  unavailableReason: string | null;
+  safeMessage: string | null;
+  brief: PreInteractionBriefContent | null;
+  generatedAt: string | null;
+  reviewed: boolean;
+  reviewedAt: string | null;
+  priorVersions: BriefVersionSummary[];
+  sourceLabels: string[];
+}
+
+export interface PreInteractionBriefRequestResponse extends PreInteractionBriefResponse {
+  created: boolean;
 }
 
 export interface RevenueBrainSnapshot {

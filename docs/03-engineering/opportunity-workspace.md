@@ -264,3 +264,13 @@ The implemented adapter is documented in
 - [ADR 0022: opportunity ownership and latest-meeting read model](../08-decisions/0022-opportunity-ownership-latest-meeting-read-model.md)
 - [ADR 0024: deterministic Revenue Brain longitudinal reasoning](../08-decisions/0024-deterministic-revenue-brain-longitudinal-reasoning.md)
 - [ADR 0026: Interaction Intelligence platform](../08-decisions/0026-interaction-intelligence-platform.md)
+
+## Pre-interaction preparation consumer
+
+WO-012 reuses the same exact-opportunity latest eligible Meeting rule to build a
+Pre-Interaction Brief for a future Interaction. It reads validated stored
+artefacts directly in one backend service; it does not repeatedly call Workspace
+endpoints and does not trigger Meeting Intelligence generation. An Interaction
+without an opportunity may use company scope, but one with an opportunity never
+mixes another opportunity at the same company. See
+[Pre-Interaction source grounding](pre-interaction-source-grounding.md).

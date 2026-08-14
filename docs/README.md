@@ -13,6 +13,7 @@ This is the canonical product and engineering documentation index. Documents dis
 7. [Current application architecture](03-engineering/architecture.md) — what exists now
 8. [ADR 0026: Interaction Intelligence platform](08-decisions/0026-interaction-intelligence-platform.md)
 9. [Interaction domain implementation](03-engineering/interaction-domain-implementation.md) — current WO-011 boundary
+10. [Pre-Interaction Brief engineering guide](03-engineering/pre-interaction-brief.md) — current WO-012 boundary
 
 ## 00 — Company
 
@@ -26,6 +27,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Product overview](01-product/product-overview.md)
 - [Interaction Intelligence vision](01-product/interaction-intelligence-vision.md)
 - [Interaction Intelligence product blueprint](01-product/interaction-intelligence-product-blueprint.md)
+- [AI Companion preparation](01-product/ai-companion-preparation.md)
 
 ## 02 — Design
 
@@ -37,6 +39,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [AI Companion and debrief](02-design/ai-companion-and-debrief.md)
 - [Presentation mode](02-design/presentation-mode.md)
 - [Mobile companion strategy](02-design/mobile-companion-strategy.md)
+- [Phone-call preparation](02-design/phone-call-preparation.md)
+- [Presentation preparation](02-design/presentation-preparation.md)
 
 ## 03 — Engineering
 
@@ -77,6 +81,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Interaction API](03-engineering/interaction-api.md)
 - [Evidence foundation implementation](03-engineering/evidence-foundation-implementation.md)
 - [Interaction domain security review](03-engineering/interaction-domain-security-review.md)
+- [Pre-Interaction Brief engineering guide](03-engineering/pre-interaction-brief.md)
+- [Pre-Interaction Brief source context and grounding](03-engineering/pre-interaction-source-grounding.md)
+- [Pre-Interaction Brief security and privacy review](03-engineering/pre-interaction-security-review.md)
 
 ### Target through beta
 
@@ -134,6 +141,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-009: Private Beta Readiness](07-sprints/wo-009-private-beta-readiness.md)
 - [WO-010: Interaction Intelligence Blueprint](07-sprints/wo-010-interaction-intelligence-blueprint.md)
 - [WO-011: Interaction Domain Foundation](07-sprints/wo-011-interaction-domain-foundation.md)
+- [WO-012: AI Companion and Pre-Interaction Brief](07-sprints/wo-012-ai-companion-pre-interaction-brief.md)
 
 ## 08 — Decision records
 
@@ -163,10 +171,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0024: derive Revenue Brain changes deterministically from snapshots](08-decisions/0024-deterministic-revenue-brain-longitudinal-reasoning.md)
 - [ADR 0025: keep private beta controls in the modular monolith](08-decisions/0025-private-beta-operational-controls.md)
 - [ADR 0026: evolve Meeting Intelligence into an Interaction Intelligence platform](08-decisions/0026-interaction-intelligence-platform.md)
+- [ADR 0027: deterministic Pre-Interaction Briefs](08-decisions/0027-deterministic-pre-interaction-briefs.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -194,6 +203,13 @@ reference-only Revenue Brain snapshot per validated transcript revision. The
 account timeline and Opportunity Workspace now show explainable supported
 changes with meeting links and qualitative labels; no deal score, probability
 or forecast exists. Assistant remains a placeholder.
+
+WO-012 adds preparation-only AI Companion briefs for every initial Interaction
+type. The bounded deterministic composer uses linked metadata and validated
+current-version intelligence, never transcript text, and never calls OpenAI.
+Briefs are immutable, source-aware, versioned, reviewable and covered by beta
+quota, retention, export, deletion and synthetic demo operations. Live Companion,
+AI Debrief, Voice Journal, recording and transcription remain unimplemented.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

@@ -34,7 +34,13 @@ from revenueos.beta_maintenance import (
 )
 from revenueos.beta_services import BetaService
 from revenueos.config import Settings
-from revenueos.demo_data import demo_ids, demo_interaction_ids, reset_demo_data, seed_demo_data
+from revenueos.demo_data import (
+    demo_companion_ids,
+    demo_ids,
+    demo_interaction_ids,
+    reset_demo_data,
+    seed_demo_data,
+)
 from revenueos.errors import PublicAPIError
 from revenueos.main import create_app
 from revenueos.models import (
@@ -48,6 +54,7 @@ from revenueos.models import (
     Meeting,
     Organisation,
     OrganisationMembership,
+    PreInteractionBrief,
     Transcript,
     User,
 )
@@ -172,7 +179,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0021_interaction_foundation"
+    assert EXPECTED_MIGRATION_HEAD == "0022_pre_interaction_brief"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -513,6 +520,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         assert first["provider_calls"] == 0
         _, _, meeting_ids, _ = demo_ids(PRIMARY_ORGANISATION_ID)
         interaction_ids = demo_interaction_ids(PRIMARY_ORGANISATION_ID)
+        companion_interaction_ids, companion_meeting_ids, _, brief_ids = demo_companion_ids(PRIMARY_ORGANISATION_ID)
         async with factory() as session:
             assert all([await session.get(Meeting, meeting_id) is not None for meeting_id in meeting_ids])
             assert all(
@@ -524,6 +532,14 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             assert all(
                 [await session.get(Interaction, interaction_id) is not None for interaction_id in interaction_ids]
             )
+            assert all([await session.get(Meeting, meeting_id) is not None for meeting_id in companion_meeting_ids])
+            assert all([await session.get(PreInteractionBrief, brief_id) is not None for brief_id in brief_ids])
+            companion_types: set[str] = set()
+            for interaction_id in companion_interaction_ids:
+                companion_interaction = await session.get(Interaction, interaction_id)
+                assert companion_interaction is not None
+                companion_types.add(companion_interaction.interaction_type)
+            assert companion_types == {"face_to_face_meeting", "phone_call", "presentation"}
             assert not any(
                 [
                     await session.get(Meeting, meeting_id) is not None
@@ -543,6 +559,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         async with factory() as session:
             assert all([await session.get(Meeting, meeting_id) is None for meeting_id in meeting_ids])
             assert all([await session.get(Interaction, interaction_id) is None for interaction_id in interaction_ids])
+            assert all([await session.get(PreInteractionBrief, brief_id) is None for brief_id in brief_ids])
         await engine.dispose()
 
     asyncio.run(scenario())
@@ -555,6 +572,8 @@ def test_retention_dry_run_and_execution_are_bounded_and_idempotent() -> None:
     other_meeting_id = uuid.uuid4()
     other_interaction_id = uuid.uuid4()
     other_transcript_id = uuid.uuid4()
+    brief_id = uuid.uuid4()
+    other_brief_id = uuid.uuid4()
     old = datetime.now(UTC) - timedelta(days=200)
 
     async def scenario() -> None:
@@ -603,6 +622,21 @@ def test_retention_dry_run_and_execution_are_bounded_and_idempotent() -> None:
                 )
             )
             session.add(
+                PreInteractionBrief(
+                    id=brief_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    interaction_id=interaction_id,
+                    source_context_fingerprint="a" * 64,
+                    brief_version=1,
+                    schema_version=1,
+                    status="completed",
+                    content_json={"synthetic": "retention fixture"},
+                    source_references_json=[],
+                    created_by_user_id=PRIMARY_USER_ID,
+                    created_at=old,
+                )
+            )
+            session.add(
                 Interaction(
                     id=other_interaction_id,
                     organisation_id=SECONDARY_ORGANISATION_ID,
@@ -643,20 +677,38 @@ def test_retention_dry_run_and_execution_are_bounded_and_idempotent() -> None:
                     updated_at=old,
                 )
             )
+            session.add(
+                PreInteractionBrief(
+                    id=other_brief_id,
+                    organisation_id=SECONDARY_ORGANISATION_ID,
+                    interaction_id=other_interaction_id,
+                    source_context_fingerprint="b" * 64,
+                    brief_version=1,
+                    schema_version=1,
+                    status="completed",
+                    content_json={"synthetic": "other tenant retention fixture"},
+                    source_references_json=[],
+                    created_by_user_id=SECONDARY_USER_ID,
+                    created_at=old,
+                )
+            )
             await session.commit()
         settings = beta_settings(private_beta_default_retention_days=90)
         dry_run = await run_retention(factory, settings, PRIMARY_ORGANISATION_ID, dry_run=True, batch_size=1)
         assert dry_run.eligible_meetings == 1
+        assert dry_run.removed["pre_interaction_briefs"] == 1
         async with factory() as session:
             assert await session.get(Meeting, meeting_id) is not None
         removed = await run_retention(factory, settings, PRIMARY_ORGANISATION_ID, dry_run=False, batch_size=1)
         assert removed.removed["transcripts"] == 1
         assert removed.removed["interactions"] == 1
+        assert removed.removed["pre_interaction_briefs"] == 1
         repeated = await run_retention(factory, settings, PRIMARY_ORGANISATION_ID, dry_run=False, batch_size=1)
         assert repeated.eligible_meetings == 0
         async with factory() as session:
             assert await session.get(Meeting, other_meeting_id) is not None
             assert await session.get(Transcript, other_transcript_id) is not None
+            assert await session.get(PreInteractionBrief, other_brief_id) is not None
         await engine.dispose()
 
     asyncio.run(scenario())
@@ -837,6 +889,9 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             },
         )
         assert interaction.status_code == 201
+        brief = client.post(f"/api/v1/interactions/{interaction.json()['id']}/companion/brief")
+        assert brief.status_code == 200
+        assert brief.json()["state"] == "completed"
         request = client.post("/api/v1/beta/admin/exports")
         assert request.status_code == 202
         request_id = UUID(request.json()["id"])
@@ -873,12 +928,14 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 2
+        assert payload["exportVersion"] == 3
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         assert payload["captureSessions"][0]["id"] == str(capture_session_id)
         assert payload["evidence"][0]["id"] == str(evidence_id)
         assert payload["evidence"][0]["origin_class"] == "salesperson_reported"
+        assert payload["preInteractionBriefs"][0]["interaction_id"] == interaction.json()["id"]
+        assert payload["preInteractionBriefs"][0]["source_references_json"]
         exported_text = path.read_text(encoding="utf-8")
         assert str(SECONDARY_ORGANISATION_ID) not in exported_text
         forbidden = {"worker_id", "lease_expires_at", "last_error_message_safe", "provider_request_id"}
@@ -897,7 +954,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 2
+        assert download.json()["exportVersion"] == 3
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

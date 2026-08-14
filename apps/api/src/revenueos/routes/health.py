@@ -8,7 +8,7 @@ from revenueos.contracts import DependencyCheck, HealthResponse, ReadyResponse
 from revenueos.database import database_is_ready, database_migration_version
 
 router = APIRouter(tags=["system"])
-EXPECTED_MIGRATION_HEAD = "0021_interaction_foundation"
+EXPECTED_MIGRATION_HEAD = "0022_pre_interaction_brief"
 
 
 @router.get("/health", response_model=HealthResponse)

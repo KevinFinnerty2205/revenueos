@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatInteractionDate } from "@/lib/interactions";
+import { BetaFeatureGate } from "@/components/beta-feature-gate";
+import { PreInteractionBrief } from "@/components/pre-interaction-brief";
 
 export function InteractionDetail({
   interactionId,
@@ -149,6 +151,14 @@ export function InteractionDetail({
             </Link>
           ) : null}
         </div>
+      </div>
+      <div className="mt-6" id="preparation">
+        <BetaFeatureGate feature="aiCompanion">
+          <PreInteractionBrief
+            interactionId={interaction.id}
+            interactionType={interaction.interactionType}
+          />
+        </BetaFeatureGate>
       </div>
     </section>
   );

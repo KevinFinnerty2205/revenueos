@@ -36,6 +36,14 @@ evidence-backed change set and makes no model or provider call. It is not the
 future free-form AI Reasoning Engine, a prediction model, a relationship graph
 or an agent.
 
+WO-012 adds a deterministic Pre-Interaction Brief composer over linked metadata,
+current validated Meeting Intelligence and the latest eligible Revenue Brain
+insight. It never reads transcript text, never calls a provider and deliberately
+adds no prompt, schema-registry entry or worker job. Its strict output still
+preserves section-level source references and rejects unsupported, predictive and
+automation fields. See the
+[Pre-Interaction Brief guide](../03-engineering/pre-interaction-brief.md).
+
 See [AI domain services](../03-engineering/ai-domain-services.md), the
 [AI worker queue](../03-engineering/ai-worker-queue.md) and
 [AI provider abstraction](../03-engineering/ai-provider-abstraction.md) for the

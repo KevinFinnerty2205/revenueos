@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     feature_openai_provider_enabled: bool = False
     feature_revenue_brain_enabled: bool = True
     feature_opportunity_workspace_enabled: bool = True
+    feature_ai_companion_enabled: bool = True
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -191,6 +192,7 @@ class Settings(BaseSettings):
             "openaiProvider": self.feature_openai_provider_enabled,
             "revenueBrain": self.feature_revenue_brain_enabled,
             "opportunityWorkspace": self.feature_opportunity_workspace_enabled,
+            "aiCompanion": self.feature_ai_companion_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

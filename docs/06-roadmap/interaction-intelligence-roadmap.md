@@ -2,7 +2,7 @@
 
 - **Status:** Recommended sequence; each stage requires a separate approved work
   order before implementation
-- **Current baseline:** Work through WO-011 is complete; WO-010 is the approved blueprint
+- **Current baseline:** Work through WO-012 is complete; WO-010 is the approved blueprint
 - **Primary optimisation:** Earliest trustworthy use for real face-to-face sales
   interactions without requiring recording or transcript upload
 
@@ -92,6 +92,11 @@ domain/compatibility; end users do not yet receive the face-to-face loop.
 
 ## WO-012 — AI Companion and Pre-Interaction Brief
 
+**Delivery status:** Implemented. See the
+[WO-012 sprint record](../07-sprints/wo-012-ai-companion-pre-interaction-brief.md),
+[product guide](../01-product/ai-companion-preparation.md) and
+[engineering guide](../03-engineering/pre-interaction-brief.md).
+
 ### Objective and user value
 
 Deliver an interaction-aware preparation brief from current account, opportunity,
@@ -123,8 +128,9 @@ commitments, risks, stakeholders, open questions and focused objectives.
 ### Out of scope and testing availability
 
 No debrief, recording, email/document connector, live coaching or external action.
-Users can test preparation for real interactions, but RevenueOS still depends on
-current manual transcript workflows for post-interaction intelligence.
+Users can test preparation for real interactions, including without recording.
+Existing Meeting Intelligence still depends on deliberately supplied transcripts;
+the brief service itself never reads them.
 
 ## WO-013 — AI Debrief and Voice Journal
 

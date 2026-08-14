@@ -54,6 +54,9 @@ The current implementation provides:
 - an Assistant placeholder that states its capability is not implemented;
 - a tenant-isolated Interaction list/create/detail path with controlled types and
   lifecycle, plus stable bidirectional links to existing Meetings; and
+- preparation-only AI Companion briefs for all ten Interaction types, with
+  source-aware deterministic composition, readiness, history and optional review;
+  and
 - metadata-only Capture Session and Evidence foundations with explicit origin,
   support and validation classification and no raw content.
 
@@ -70,6 +73,9 @@ Workspace reads stored artefacts only and neither reads transcripts nor triggers
 Meeting Intelligence generation. Revenue Brain reasoning is an explicit
 on-demand, provider-free comparison of stored snapshot references: it reports
 qualitative supported changes, never probability, forecast or deal health. The
+Pre-Interaction Brief is likewise provider-free and reads only validated
+structured intelligence plus linked record metadata; it never reads transcript
+text. Source completeness is not a success forecast. The
 application does not answer or assign questions, record, store media,
 transcribe, connect external systems or process payments. Production customer
 data remains prohibited unless separately approved. See the

@@ -666,6 +666,113 @@ class Interaction(TimestampMixin, Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class PreInteractionBrief(Base):
+    __tablename__ = "pre_interaction_briefs"
+    __table_args__ = (
+        CheckConstraint("brief_version > 0", name="ck_pre_interaction_briefs_version"),
+        CheckConstraint("schema_version > 0", name="ck_pre_interaction_briefs_schema_version"),
+        CheckConstraint("status IN ('completed', 'failed', 'cancelled')", name="ck_pre_interaction_briefs_status"),
+        CheckConstraint(
+            "length(source_context_fingerprint) = 64",
+            name="ck_pre_interaction_briefs_fingerprint",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_pre_interaction_briefs_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_pre_interaction_briefs_company_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_pre_interaction_briefs_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_pre_interaction_briefs_creator_membership",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "reviewed_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_pre_interaction_briefs_reviewer_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            name="uq_pre_interaction_briefs_organisation_id_id",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "brief_version",
+            name="uq_pre_interaction_briefs_logical_version",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "source_context_fingerprint",
+            "schema_version",
+            name="uq_pre_interaction_briefs_idempotency",
+        ),
+        Index(
+            "ix_pre_interaction_briefs_organisation_interaction_created",
+            "organisation_id",
+            "interaction_id",
+            "created_at",
+        ),
+        Index(
+            "ix_pre_interaction_briefs_organisation_company",
+            "organisation_id",
+            "company_id",
+        ),
+        Index(
+            "ix_pre_interaction_briefs_organisation_opportunity",
+            "organisation_id",
+            "opportunity_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    source_context_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    brief_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="completed", server_default="completed")
+    content_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    source_references_json: Mapped[list[dict[str, object]]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
 class Meeting(TimestampMixin, Base):
     __tablename__ = "meetings"
     __table_args__ = (

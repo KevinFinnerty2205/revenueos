@@ -125,6 +125,18 @@ Candidate artefact envelope:
 
 ## Prompt versioning and model abstraction
 
+### Current deterministic preparation exception
+
+WO-012 Pre-Interaction Brief v1 is intentionally outside the prompt/provider
+execution path. A bounded application composer consumes only normalised validated
+structured context and persists strict source-aware output. This is not a mock
+integration and does not create a fake worker job. A future model-backed wording
+pass must use the existing provider/worker rules and keep the same deterministic
+context authoritative. See
+[ADR 0027](../08-decisions/0027-deterministic-pre-interaction-briefs.md).
+
+## Prompt versioning and model abstraction
+
 - Prompts are versioned, reviewed artefacts with owner, purpose, schema, test set, changelog and rollback reference.
 - The domain depends on `TranscriptionProvider`, `StructuredAIProvider` and `EmbeddingProvider` ports, not OpenAI request types.
 - A model configuration identifies capability class, provider model, parameters, timeout and cost ceiling.

@@ -10,6 +10,7 @@ test.beforeEach(async ({ page }) => {
             openaiProvider: false,
             revenueBrain: true,
             opportunityWorkspace: true,
+            aiCompanion: true,
             dataExport: true,
             organisationDeletion: false,
           },
@@ -314,6 +315,10 @@ test("interaction timeline supports deliberate creation and completion without i
     async (route) => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
+      if (path.endsWith("/companion/brief")) {
+        await route.fulfill({ json: emptyBriefResponse() });
+        return;
+      }
       if (request.method() === "POST" && path.endsWith("/complete")) {
         completed = true;
         await route.fulfill({
@@ -487,6 +492,125 @@ test("interaction timeline supports deliberate creation and completion without i
   ]) {
     await expect(page.getByText(new RegExp(prohibited, "i"))).toHaveCount(0);
   }
+});
+
+test("AI Companion briefs support face-to-face, phone and presentation preparation", async ({
+  page,
+}) => {
+  let faceReviewed = false;
+  const interactions = [
+    interactionRecord({
+      id: "interaction-face",
+      title: "On-site pilot planning",
+      interactionType: "face_to_face_meeting",
+      briefState: "completed",
+      briefGeneratedAt: "2026-08-14T02:00:00Z",
+    }),
+    interactionRecord({
+      id: "interaction-phone",
+      title: "Pilot next-step call",
+      interactionType: "phone_call",
+      briefState: "completed",
+      briefGeneratedAt: "2026-08-14T02:00:00Z",
+    }),
+    interactionRecord({
+      id: "interaction-presentation",
+      title: "Pilot presentation",
+      interactionType: "presentation",
+      briefState: "completed",
+      briefGeneratedAt: "2026-08-14T02:00:00Z",
+    }),
+  ];
+
+  await page.route(
+    "http://localhost:8000/api/v1/interactions**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const match = path.match(/\/interactions\/(interaction-[^/]+)/);
+      const interaction = interactions.find((item) => item.id === match?.[1]);
+      if (path.endsWith("/companion/brief/review")) {
+        faceReviewed = true;
+        await route.fulfill({
+          json: companionBrief("face_to_face_meeting", true),
+        });
+        return;
+      }
+      if (path.endsWith("/companion/brief") && interaction) {
+        await route.fulfill({
+          json: companionBrief(
+            String(interaction.interactionType),
+            interaction.id === "interaction-face" && faceReviewed,
+          ),
+        });
+        return;
+      }
+      if (interaction) {
+        await route.fulfill({ json: interaction });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          items: interactions,
+          page: 1,
+          pageSize: 100,
+          total: interactions.length,
+          pages: 1,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/companies**",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: [{ id: "company-1", name: "Southern Cross Operations" }],
+          page: 1,
+          pageSize: 100,
+          total: 1,
+          pages: 1,
+        },
+      });
+    },
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/interactions");
+  await expect(page.getByText("Brief ready").first()).toBeVisible();
+  await page.getByRole("link", { name: "Open brief" }).first().click();
+  await expect(
+    page.getByRole("heading", { name: "Prepare for this interaction" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Objectives" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Questions to ask" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Stakeholder focus" }),
+  ).toBeVisible();
+  await expect(page.getByText("Risks to watch")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Success criteria", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Mark as reviewed" }).click();
+  await expect(page.getByRole("button", { name: "Reviewed" })).toBeDisabled();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Reviewed" })).toBeDisabled();
+
+  await page.goto("/interactions/interaction-phone");
+  await expect(page.getByText(/Keep the call concise/i)).toBeVisible();
+  await expect(page.getByText("Alex Morgan · champion")).toBeVisible();
+  await expect(page.getByText("Provide the security summary.")).toBeVisible();
+
+  await page.goto("/interactions/interaction-presentation");
+  await expect(
+    page.getByRole("heading", { name: "Presentation guidance" }),
+  ).toBeVisible();
+  await expect(page.getByText(/seller-prepared material/i)).toBeVisible();
+  for (const prohibited of ["prompt", "provider", "worker", "transcript"]) {
+    await expect(page.getByText(new RegExp(prohibited, "i"))).toHaveCount(0);
+  }
+  await expect(page.getByRole("button", { name: /record/i })).toHaveCount(0);
 });
 
 test("meeting detail orchestrates and persists the unified Meeting Intelligence workspace", async ({
@@ -1066,6 +1190,7 @@ function betaAdminOverview() {
       openaiProvider: false,
       revenueBrain: true,
       opportunityWorkspace: true,
+      aiCompanion: true,
       dataExport: true,
       organisationDeletion: false,
     },
@@ -1405,8 +1530,99 @@ function interactionRecord(overrides: Record<string, unknown>) {
     timezone: "Australia/Sydney",
     creationOrigin: "manual",
     createdByUserId: "user-1",
+    briefState: "not_generated",
+    briefGeneratedAt: null,
     createdAt: "2026-07-26T00:00:00Z",
     updatedAt: "2026-07-26T00:00:00Z",
     ...overrides,
+  };
+}
+
+function emptyBriefResponse() {
+  return {
+    state: "not_generated",
+    generationAvailable: true,
+    unavailableReason: null,
+    safeMessage: null,
+    brief: null,
+    generatedAt: null,
+    reviewed: false,
+    reviewedAt: null,
+    priorVersions: [],
+    sourceLabels: [],
+  };
+}
+
+function companionBrief(interactionType: string, reviewed: boolean) {
+  const presentation = interactionType === "presentation";
+  const phone = interactionType === "phone_call";
+  return {
+    ...emptyBriefResponse(),
+    state: "completed",
+    generatedAt: "2026-08-14T02:00:00Z",
+    reviewed,
+    reviewedAt: reviewed ? "2026-08-14T02:05:00Z" : null,
+    sourceLabels: [
+      "Interaction details",
+      "Opportunity record",
+      "Prior validated Meeting Intelligence",
+    ],
+    brief: {
+      interactionId: `interaction-${presentation ? "presentation" : phone ? "phone" : "face"}`,
+      interactionType,
+      briefVersion: 1,
+      headline: presentation
+        ? "Validate audience priorities and agree the next validation step."
+        : phone
+          ? "Use the call to agree one useful next step."
+          : "Align on the pilot outcome and agree a clear next step.",
+      accountContext:
+        "Southern Cross Operations has an evaluation-stage pilot opportunity with validated prior context.",
+      recentChanges: [
+        {
+          change: "Procurement entered the process.",
+          importance: "high",
+          source: "revenue_brain",
+        },
+      ],
+      objectives: [
+        {
+          objective: "Clarify procurement ownership.",
+          priority: "high",
+          reason: "The approval path remains unresolved.",
+        },
+      ],
+      questionsToAsk: [
+        {
+          question: "Who will own the procurement process from here?",
+          purpose: "Clarify the approval path.",
+          priority: "high",
+        },
+      ],
+      stakeholderFocus: [
+        {
+          name: "Alex Morgan",
+          role: "champion",
+          focus: "Confirm current priorities and the next introduction.",
+        },
+      ],
+      openCommitments: [
+        {
+          commitment: "Provide the security summary.",
+          owner: "Revenue team",
+          dueDate: null,
+        },
+      ],
+      risksToWatch: [
+        { risk: "Security review may delay progress.", severity: "high" },
+      ],
+      successCriteria: ["A next step, owner and timing are agreed."],
+      interactionGuidance: presentation
+        ? "Treat seller-prepared material as context, not customer evidence, and close with a validation step."
+        : phone
+          ? "Keep the call concise, lead with the objective and close with a confirmed next step."
+          : "Keep the objective, stakeholder priorities and success criteria easy to scan before the meeting.",
+      confidence: 0.82,
+    },
   };
 }

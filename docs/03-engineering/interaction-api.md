@@ -7,15 +7,18 @@ not-found response and cannot be enumerated.
 
 ## Endpoints
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/interactions` | List active Interactions with stable pagination and filters |
-| `POST` | `/interactions` | Create one manual Interaction |
-| `GET` | `/interactions/{interactionId}` | Read one active Interaction |
-| `PATCH` | `/interactions/{interactionId}` | Update supplied fields and lifecycle |
-| `POST` | `/interactions/{interactionId}/complete` | Idempotently complete an Interaction |
+| Method  | Path                                                   | Purpose                                                     |
+| ------- | ------------------------------------------------------ | ----------------------------------------------------------- |
+| `GET`   | `/interactions`                                        | List active Interactions with stable pagination and filters |
+| `POST`  | `/interactions`                                        | Create one manual Interaction                               |
+| `GET`   | `/interactions/{interactionId}`                        | Read one active Interaction                                 |
+| `PATCH` | `/interactions/{interactionId}`                        | Update supplied fields and lifecycle                        |
+| `POST`  | `/interactions/{interactionId}/complete`               | Idempotently complete an Interaction                        |
+| `GET`   | `/interactions/{interactionId}/companion/brief`        | Read product-safe preparation state/result                  |
+| `POST`  | `/interactions/{interactionId}/companion/brief`        | Create or reuse a deterministic brief                       |
+| `POST`  | `/interactions/{interactionId}/companion/brief/review` | Mark the latest completed brief reviewed                    |
 
-There is deliberately no delete, Capture Session or Evidence endpoint in WO-011.
+There is deliberately no public delete, Capture Session or Evidence endpoint.
 
 ## Create and update fields
 
@@ -46,7 +49,21 @@ List responses use `{items, page, pageSize, total, pages}`. `page` starts at 1 a
 - `sortBy=start_at|title|created_at|updated_at`, `sortOrder=asc|desc`.
 
 Sorting always adds the Interaction UUID as a stable tie-breaker. Soft-deleted rows
-are hidden.
+are hidden. Each item also returns `briefState` (`unavailable`, `not_generated` or
+`completed`) and nullable `briefGeneratedAt`; no brief body or internal trace is
+joined into the list.
+
+## Preparation brief contract
+
+The completed brief contains interaction ID/type/version, headline, account
+context, bounded recent changes, objectives, questions, stakeholder focus, open
+commitments, risks, success criteria, interaction guidance and source-completeness
+confidence. Unknown fields, predictive scores and automation actions are rejected.
+
+Equivalent context is reused; changed validated context appends a version. GET
+returns bounded prior-version metadata and product-safe source labels. Review is
+idempotent metadata only. Deterministic v1 has no queued worker execution and no
+provider call. See [Pre-Interaction Brief engineering](pre-interaction-brief.md).
 
 ## Compatibility behaviour
 

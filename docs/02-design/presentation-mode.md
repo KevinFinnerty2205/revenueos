@@ -1,7 +1,7 @@
 # Presentation mode
 
-- **Status:** Target specialised workflow; no presentation mode is implemented by
-  WO-010
+- **Status:** WO-012 implements presentation-specific preparation guidance;
+  deck ingestion, capture, review and debrief remain target design
 - **Principle:** Prepared seller content is context, not evidence of customer intent
 
 ## Why presentation mode is distinct

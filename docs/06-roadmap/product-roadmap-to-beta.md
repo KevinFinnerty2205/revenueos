@@ -565,7 +565,7 @@ Not every listed integration is a prerequisite for the first pilot or private be
 
 ## Next sequencing decision
 
-WO-009 is the current implemented baseline. It supplies the smallest verified
+WO-012 is the current implemented baseline. WO-009 supplies the smallest verified
 identity, organisation-administration and operational controls needed for a
 controlled beta, so the older Sprint 4 description below is retained as target
 roadmap history rather than an instruction to rebuild that surface. Production
@@ -573,8 +573,9 @@ customer-content use remains prohibited until the unchecked launch gates and
 separate privacy/legal/provider approvals are complete. Any further roadmap
 scope still requires a separately approved work order.
 
-The recommended next work is WO-011 Interaction Domain Foundation, followed by a
-preparation brief and the non-recording AI Debrief/Voice Journal face-to-face MVP.
+WO-011 Interaction Domain Foundation and WO-012 preparation are complete. The
+recommended next work is the separately authorised non-recording AI Debrief/Voice
+Journal face-to-face MVP (WO-013).
 The older Sprint 4–26 entries remain useful integration/release-gate context but must
 be reconciled into the Interaction work orders rather than implemented in parallel
 as a contradictory plan.

@@ -8,8 +8,8 @@ infrastructure, WO-004C1–C6 capabilities, WO-005 unified Meeting Intelligence,
 WO-006A Buying Signals & Deal Momentum, WO-006B Objections & Competitive
 Signals, WO-006C Stakeholder Intelligence, WO-006D Next Best Action, WO-007
 Opportunity Workspace, WO-008A Revenue Brain Foundation, WO-008B Revenue Brain
-Longitudinal Reasoning, WO-009 Private Beta Readiness and WO-011 Interaction
-Domain Foundation. Interactions, Meetings,
+Longitudinal Reasoning, WO-009 Private Beta Readiness, WO-011 Interaction
+Domain Foundation and WO-012 AI Companion preparation. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -25,6 +25,9 @@ intelligence appends one immutable, reference-only Revenue Brain snapshot per
 transcript revision. Deterministic, on-demand Revenue Brain reasoning compares
 only those snapshots and their referenced validated artefacts for account and
 opportunity change views; it never reads transcript text or calls a provider.
+WO-012 adds immutable, versioned Pre-Interaction Briefs for all ten initial
+Interaction types. Its deterministic composer uses linked metadata and validated
+structured intelligence only, never transcript text, and makes no provider call.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
@@ -42,13 +45,14 @@ and [roadmap](docs/06-roadmap/interaction-intelligence-roadmap.md). RevenueOS is
 positioned as the AI operating system for customer interactions across Capture,
 Intelligence and Action. WO-011 now implements the tenant-isolated Interaction,
 Capture Session and metadata-only Evidence foundation plus one-to-one Meeting
-compatibility. Debrief, recording, transcription, mobile client, connector and
-generic Interaction Intelligence remain unimplemented.
+compatibility. WO-012 implements the preparation-only AI Companion slice.
+Debrief, recording, transcription, mobile client, connector, live Companion and
+generic post-interaction Intelligence remain unimplemented.
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
-WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009 and WO-011.
+WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011 and WO-012.
 WO-010 remains the blueprint; later roadmap work remains unauthorised.
 
 ## Prerequisites
@@ -162,7 +166,9 @@ worker selects OpenAI. Company names open an account page with the reference-
 only Revenue Brain snapshot timeline and deterministic adjacent comparison
 summaries. Opportunity Workspace includes the same safe latest comparison.
 The Interaction surface lists and filters customer events, creates manual
-non-Meeting interactions and completes them. Linked Meeting and Interaction
+non-Meeting interactions, completes them and shows source-aware preparation
+brief readiness. Interaction Detail can create/reuse and review a responsive
+brief for every initial Interaction type. Linked Meeting and Interaction
 pages navigate to each other while the established Meeting workflow remains
 unchanged.
 
@@ -183,6 +189,8 @@ API routes:
 - CRUD under `/api/v1/tasks`
 - CRUD under `/api/v1/meetings`
 - list/create/read/update/complete under `/api/v1/interactions`
+- read/create/review Pre-Interaction Briefs under
+  `/api/v1/interactions/{interactionId}/companion/brief`
 - `GET /api/v1/accounts/{accountId}/brain` — retrieve ordered immutable snapshot compositions without content
 - account and opportunity `POST/GET .../brain/reasoning` — create/reuse and read deterministic longitudinal comparisons
 - nested participant CRUD under `/api/v1/meetings/{meetingId}/participants`

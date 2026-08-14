@@ -40,6 +40,7 @@ from revenueos.models import (
     Organisation,
     OrganisationBetaSettings,
     OrganisationMembership,
+    PreInteractionBrief,
     RevenueBrainInsight,
     RevenueBrainSnapshot,
     Task,
@@ -47,7 +48,7 @@ from revenueos.models import (
     User,
 )
 
-EXPORT_VERSION = 2
+EXPORT_VERSION = 3
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -344,6 +345,7 @@ async def _delete_organisation_records(
         await session.execute(delete(Meeting).where(Meeting.organisation_id == organisation_id))
         await session.execute(delete(Evidence).where(Evidence.organisation_id == organisation_id))
         await session.execute(delete(CaptureSession).where(CaptureSession.organisation_id == organisation_id))
+        await session.execute(delete(PreInteractionBrief).where(PreInteractionBrief.organisation_id == organisation_id))
         await session.execute(
             delete(InteractionAuditEvent).where(InteractionAuditEvent.organisation_id == organisation_id)
         )
@@ -659,6 +661,19 @@ async def _interaction_deletion_counts_from_select(
             )
             or 0
         ),
+        "pre_interaction_briefs": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(PreInteractionBrief)
+                    .where(
+                        PreInteractionBrief.organisation_id == organisation_id,
+                        PreInteractionBrief.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
     }
 
 
@@ -686,6 +701,12 @@ async def _delete_interaction_batch(
         delete(InteractionAuditEvent).where(
             InteractionAuditEvent.organisation_id == organisation_id,
             InteractionAuditEvent.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(PreInteractionBrief).where(
+            PreInteractionBrief.organisation_id == organisation_id,
+            PreInteractionBrief.interaction_id.in_(interaction_ids),
         )
     )
     await session.execute(
@@ -736,6 +757,11 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
         select(CaptureSession).where(CaptureSession.organisation_id == organisation_id).order_by(CaptureSession.id)
     )
     evidence = await rows(select(Evidence).where(Evidence.organisation_id == organisation_id).order_by(Evidence.id))
+    briefs = await rows(
+        select(PreInteractionBrief)
+        .where(PreInteractionBrief.organisation_id == organisation_id)
+        .order_by(PreInteractionBrief.interaction_id, PreInteractionBrief.brief_version)
+    )
     participants = await rows(
         select(MeetingParticipant)
         .where(MeetingParticipant.organisation_id == organisation_id)
@@ -959,6 +985,28 @@ async def _export_payload(session: AsyncSession, organisation_id: UUID) -> dict[
                 ),
             )
             for item in evidence
+        ],
+        "preInteractionBriefs": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "company_id",
+                    "opportunity_id",
+                    "source_context_fingerprint",
+                    "brief_version",
+                    "schema_version",
+                    "status",
+                    "content_json",
+                    "source_references_json",
+                    "created_by_user_id",
+                    "reviewed_at",
+                    "reviewed_by_user_id",
+                    "created_at",
+                ),
+            )
+            for item in briefs
         ],
         "meetingParticipants": [
             _columns(

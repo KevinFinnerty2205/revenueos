@@ -1,6 +1,7 @@
 # Face-to-face interaction experience
 
-- **Status:** Target design; no face-to-face capture is implemented by WO-010
+- **Status:** WO-012 implements responsive face-to-face preparation; capture,
+  AI Debrief and Voice Journal remain target design
 - **MVP:** Prepared, non-recording customer office meeting followed by immediate
   AI Debrief or Voice Journal
 
