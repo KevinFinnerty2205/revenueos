@@ -1,5 +1,7 @@
+import ast
 import asyncio
 import os
+import re
 import uuid
 from pathlib import Path
 from sqlite3 import IntegrityError, connect
@@ -11,6 +13,78 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+POSTGRES_IDENTIFIER_MAX_BYTES = 63
+MIGRATION_NAMED_OBJECT_ARGUMENTS = {
+    "CheckConstraint": (None, ("name",)),
+    "Column": (0, ("name",)),
+    "Enum": (None, ("name",)),
+    "ForeignKeyConstraint": (None, ("name",)),
+    "Index": (0, ("name",)),
+    "PrimaryKeyConstraint": (None, ("name",)),
+    "Sequence": (0, ("name",)),
+    "UniqueConstraint": (None, ("name",)),
+    "create_check_constraint": (0, ("constraint_name",)),
+    "create_exclude_constraint": (0, ("constraint_name",)),
+    "create_foreign_key": (0, ("constraint_name",)),
+    "create_index": (0, ("index_name",)),
+    "create_primary_key": (0, ("constraint_name",)),
+    "create_table": (0, ("table_name",)),
+    "create_unique_constraint": (0, ("constraint_name",)),
+}
+POSTGRES_RAW_DDL_IDENTIFIER_PATTERN = re.compile(
+    r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?"
+    r"(?:INDEX|TRIGGER|POLICY|FUNCTION|TABLE|VIEW|TYPE|SEQUENCE)\s+"
+    r"(?:IF\s+NOT\s+EXISTS\s+)?[\"']?([A-Za-z_][A-Za-z0-9_$]*)",
+    flags=re.IGNORECASE,
+)
+POSTGRES_RAW_CONSTRAINT_IDENTIFIER_PATTERN = re.compile(
+    r"\bADD\s+CONSTRAINT\s+[\"']?([A-Za-z_][A-Za-z0-9_$]*)",
+    flags=re.IGNORECASE,
+)
+
+
+def _call_name(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    return None
+
+
+def _literal_identifier(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Call) and _call_name(node) == "f" and node.args:
+        return _literal_identifier(node.args[0])
+    return None
+
+
+def _explicit_migration_identifiers(migration_path: Path) -> set[str]:
+    source = migration_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(migration_path))
+    identifiers = {match.group(1) for match in POSTGRES_RAW_DDL_IDENTIFIER_PATTERN.finditer(source)}
+    identifiers.update(match.group(1) for match in POSTGRES_RAW_CONSTRAINT_IDENTIFIER_PATTERN.finditer(source))
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _call_name(node)
+        arguments = MIGRATION_NAMED_OBJECT_ARGUMENTS.get(name or "")
+        if arguments is None:
+            continue
+        positional_index, keyword_names = arguments
+        if positional_index is not None and len(node.args) > positional_index:
+            identifier = _literal_identifier(node.args[positional_index])
+            if identifier is not None:
+                identifiers.add(identifier)
+        for keyword in node.keywords:
+            if keyword.arg in keyword_names:
+                identifier = _literal_identifier(keyword.value)
+                if identifier is not None:
+                    identifiers.add(identifier)
+
+    return identifiers
+
 
 def test_migration_revision_identifiers_fit_alembic_version_column() -> None:
     configuration = Config("alembic.ini")
@@ -20,6 +94,20 @@ def test_migration_revision_identifiers_fit_alembic_version_column() -> None:
 
     assert revision_ids
     assert all(len(revision_id) <= 32 for revision_id in revision_ids)
+
+
+def test_explicit_postgresql_migration_identifiers_fit_server_limit() -> None:
+    migrations_path = Path(__file__).parents[1] / "alembic" / "versions"
+    violations = sorted(
+        (migration_path.name, identifier, len(identifier.encode("utf-8")))
+        for migration_path in migrations_path.glob("*.py")
+        for identifier in _explicit_migration_identifiers(migration_path)
+        if len(identifier.encode("utf-8")) > POSTGRES_IDENTIFIER_MAX_BYTES
+    )
+
+    assert not violations, (
+        f"PostgreSQL identifiers must be at most {POSTGRES_IDENTIFIER_MAX_BYTES} bytes; found {violations}"
+    )
 
 
 def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
@@ -270,6 +358,15 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "ix_ai_artifacts_job",
             "ix_ai_artifacts_latest_version",
         }.issubset(artifact_indexes)
+        online_import_index = "ix_online_meeting_transcript_imports_org_interaction_at"
+        online_import_indexes = {
+            row[1] for row in connection.execute("PRAGMA index_list(online_meeting_transcript_imports)").fetchall()
+        }
+        assert online_import_index in online_import_indexes
+        online_import_index_columns = [
+            row[2] for row in connection.execute(f"PRAGMA index_info('{online_import_index}')").fetchall()
+        ]
+        assert online_import_index_columns == ["organisation_id", "interaction_id", "imported_at"]
         triggers = {
             row[0]
             for row in connection.execute(

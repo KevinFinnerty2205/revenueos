@@ -326,7 +326,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_online_meeting_transcript_imports_organisation_interaction_imported",
+        "ix_online_meeting_transcript_imports_org_interaction_at",
         "online_meeting_transcript_imports",
         ["organisation_id", "interaction_id", "imported_at"],
     )
