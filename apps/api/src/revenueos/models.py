@@ -272,6 +272,32 @@ class AIUsageCounter(Base):
     )
 
 
+class RecordingUsageCounter(Base):
+    __tablename__ = "recording_usage_counters"
+    __table_args__ = (
+        CheckConstraint("uploaded_bytes >= 0", name="ck_recording_usage_uploaded_bytes"),
+        CheckConstraint("transcription_minutes >= 0", name="ck_recording_usage_transcription_minutes"),
+        CheckConstraint("transcription_request_count >= 0", name="ck_recording_usage_request_count"),
+        Index("ix_recording_usage_organisation_date", "organisation_id", "usage_date"),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    uploaded_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    transcription_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    transcription_request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class Company(TimestampMixin, Base):
     __tablename__ = "companies"
     __table_args__ = (
@@ -972,7 +998,7 @@ class Transcript(TimestampMixin, Base):
         CheckConstraint("length(trim(raw_text)) > 0", name="ck_transcripts_raw_text"),
         CheckConstraint("version > 0", name="ck_transcripts_version"),
         CheckConstraint(
-            "source IN ('manual', 'upload')",
+            "source IN ('manual', 'upload', 'recorded_audio', 'uploaded_audio', 'imported_audio')",
             name="ck_transcripts_source",
         ),
         ForeignKeyConstraint(
@@ -1024,6 +1050,147 @@ class Transcript(TimestampMixin, Base):
         foreign_keys="[AIArtifact.organisation_id, AIArtifact.transcript_id, AIArtifact.meeting_id]",
         viewonly=True,
     )
+
+
+class TranscriptVersion(Base):
+    __tablename__ = "transcript_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_transcript_versions_version"),
+        CheckConstraint("length(trim(raw_text)) > 0", name="ck_transcript_versions_raw_text"),
+        CheckConstraint(
+            "source IN ('manual', 'upload', 'recorded_audio', 'uploaded_audio', 'imported_audio')",
+            name="ck_transcript_versions_source",
+        ),
+        CheckConstraint("status IN ('final', 'deleted')", name="ck_transcript_versions_status"),
+        CheckConstraint(
+            "transcript_id IS NOT NULL OR recording_session_id IS NOT NULL",
+            name="ck_transcript_versions_trace",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_transcript_versions_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"],
+            ["meetings.organisation_id", "meetings.id"],
+            name="fk_transcript_versions_meeting_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_id", "meeting_id"],
+            ["transcripts.organisation_id", "transcripts.id", "transcripts.meeting_id"],
+            name="fk_transcript_versions_transcript_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "recording_session_id"],
+            ["recording_sessions.organisation_id", "recording_sessions.id"],
+            name="fk_transcript_versions_recording_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_transcript_versions_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_transcript_versions_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "transcript_id",
+            "version",
+            name="uq_transcript_versions_logical_version",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "recording_session_id",
+            name="uq_transcript_versions_recording",
+        ),
+        Index(
+            "ix_transcript_versions_organisation_interaction_created",
+            "organisation_id",
+            "interaction_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    meeting_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    transcript_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    recording_session_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    evidence_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[str] = mapped_column(String(16), nullable=False, default="en", server_default="en")
+    source: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="final", server_default="final")
+    provider_name: Mapped[str | None] = mapped_column(String(40))
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TranscriptSegment(Base):
+    __tablename__ = "transcript_segments"
+    __table_args__ = (
+        CheckConstraint("sequence_number >= 0", name="ck_transcript_segments_sequence"),
+        CheckConstraint("start_ms >= 0 AND end_ms >= start_ms", name="ck_transcript_segments_time_range"),
+        CheckConstraint(
+            "length(trim(text)) BETWEEN 1 AND 12000",
+            name="ck_transcript_segments_text",
+        ),
+        CheckConstraint(
+            "speaker_label IS NULL OR length(trim(speaker_label)) BETWEEN 1 AND 80",
+            name="ck_transcript_segments_speaker_label",
+        ),
+        CheckConstraint(
+            "source_confidence IS NULL OR (source_confidence >= 0 AND source_confidence <= 1)",
+            name="ck_transcript_segments_confidence",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_version_id"],
+            ["transcript_versions.organisation_id", "transcript_versions.id"],
+            name="fk_transcript_segments_version_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_transcript_segments_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "transcript_version_id",
+            "sequence_number",
+            name="uq_transcript_segments_sequence",
+        ),
+        Index(
+            "ix_transcript_segments_organisation_version_sequence",
+            "organisation_id",
+            "transcript_version_id",
+            "sequence_number",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    transcript_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    speaker_label: Mapped[str | None] = mapped_column(String(80))
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class MeetingAuditEvent(Base):
@@ -1100,8 +1267,9 @@ class CaptureSession(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint(
             "capture_type IN ("
-            "'ai_debrief', 'voice_journal', 'live_recording', 'visual_capture', "
-            "'uploaded_transcript', 'uploaded_recording', 'manual_notes'"
+            "'ai_debrief', 'voice_journal', 'live_recording', 'live_audio_recording', "
+            "'visual_capture', 'uploaded_transcript', 'uploaded_recording', "
+            "'uploaded_audio_recording', 'imported_audio_recording', 'manual_notes'"
             ")",
             name="ck_capture_sessions_type",
         ),
@@ -1273,6 +1441,263 @@ class Evidence(TimestampMixin, Base):
         server_default=EvidenceRetentionClass.INHERITED.value,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RecordingSession(TimestampMixin, Base):
+    __tablename__ = "recording_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "recording_type IN ('live_audio_recording', 'uploaded_audio_recording', 'imported_audio_recording')",
+            name="ck_recording_sessions_type",
+        ),
+        CheckConstraint(
+            "lifecycle_status IN ('created', 'recording', 'uploading', 'uploaded', 'transcribing', "
+            "'completed', 'failed', 'cancelled', 'deleting', 'deleted')",
+            name="ck_recording_sessions_lifecycle",
+        ),
+        CheckConstraint("consent_state = 'acknowledged'", name="ck_recording_sessions_consent"),
+        CheckConstraint(
+            "expected_mime_type IN ('audio/webm', 'audio/mp4', 'audio/m4a')",
+            name="ck_recording_sessions_expected_mime",
+        ),
+        CheckConstraint(
+            "final_mime_type IS NULL OR final_mime_type IN ('audio/webm', 'audio/mp4', 'audio/m4a')",
+            name="ck_recording_sessions_final_mime",
+        ),
+        CheckConstraint(
+            "duration_seconds IS NULL OR duration_seconds BETWEEN 1 AND 14400",
+            name="ck_recording_sessions_duration",
+        ),
+        CheckConstraint("total_bytes >= 0", name="ck_recording_sessions_total_bytes"),
+        CheckConstraint("chunk_count >= 0", name="ck_recording_sessions_chunk_count"),
+        CheckConstraint(
+            "transcription_attempts BETWEEN 0 AND 5",
+            name="ck_recording_sessions_transcription_attempts",
+        ),
+        CheckConstraint(
+            "stopped_at IS NULL OR started_at IS NULL OR stopped_at >= started_at",
+            name="ck_recording_sessions_time_range",
+        ),
+        CheckConstraint(
+            "auto_intelligence_status IN ('disabled', 'not_requested', 'requested', 'failed')",
+            name="ck_recording_sessions_auto_intelligence",
+        ),
+        CheckConstraint(
+            "length(trim(idempotency_key)) BETWEEN 1 AND 200",
+            name="ck_recording_sessions_idempotency",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_recording_sessions_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "capture_session_id"],
+            ["capture_sessions.organisation_id", "capture_sessions.id"],
+            name="fk_recording_sessions_capture_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_recording_sessions_source_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_recording_sessions_transcript_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_recording_sessions_creator_membership",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_version_id"],
+            ["transcript_versions.organisation_id", "transcript_versions.id"],
+            name="fk_recording_sessions_transcript_version_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_recording_sessions_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "capture_session_id",
+            name="uq_recording_sessions_capture_session",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "created_by_user_id",
+            "idempotency_key",
+            name="uq_recording_sessions_idempotency",
+        ),
+        Index(
+            "ix_recording_sessions_organisation_interaction_created",
+            "organisation_id",
+            "interaction_id",
+            "created_at",
+        ),
+        Index(
+            "ix_recording_sessions_organisation_lifecycle",
+            "organisation_id",
+            "lifecycle_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    capture_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_evidence_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    recording_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="created", server_default="created"
+    )
+    consent_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="acknowledged", server_default="acknowledged"
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_seconds: Mapped[int | None] = mapped_column(Integer)
+    expected_mime_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    final_mime_type: Mapped[str | None] = mapped_column(String(40))
+    language: Mapped[str | None] = mapped_column(String(16))
+    total_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    upload_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    transcription_provider_key: Mapped[str | None] = mapped_column(String(40))
+    transcription_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    transcription_request_id: Mapped[str | None] = mapped_column(String(255))
+    transcription_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    transcription_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    transcript_version_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    session_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    auto_intelligence_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="disabled", server_default="disabled"
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RecordingConsent(Base):
+    __tablename__ = "recording_consents"
+    __table_args__ = (
+        CheckConstraint("notice_version > 0", name="ck_recording_consents_notice_version"),
+        CheckConstraint(
+            "consent_method IN ('participant_notice_confirmed', 'platform_notice', 'contractual_authority')",
+            name="ck_recording_consents_method",
+        ),
+        CheckConstraint("user_attested_authority", name="ck_recording_consents_authority"),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_recording_consents_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "recording_session_id"],
+            ["recording_sessions.organisation_id", "recording_sessions.id"],
+            name="fk_recording_consents_recording_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_recording_consents_user_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_recording_consents_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "recording_session_id",
+            name="uq_recording_consents_recording",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    recording_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    notice_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    acknowledged_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    consent_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    user_attested_authority: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+
+
+class RecordingChunk(Base):
+    __tablename__ = "recording_chunks"
+    __table_args__ = (
+        CheckConstraint("sequence_number >= 0", name="ck_recording_chunks_sequence"),
+        CheckConstraint("byte_size BETWEEN 1 AND 25000000", name="ck_recording_chunks_byte_size"),
+        CheckConstraint(
+            "length(checksum_sha256) = 64 AND checksum_sha256 = lower(checksum_sha256)",
+            name="ck_recording_chunks_checksum",
+        ),
+        CheckConstraint(
+            "upload_state IN ('pending', 'uploaded', 'verified', 'deletion_pending', 'delete_failed', 'deleted')",
+            name="ck_recording_chunks_upload_state",
+        ),
+        CheckConstraint(
+            "length(trim(upload_idempotency_key)) BETWEEN 1 AND 200",
+            name="ck_recording_chunks_upload_idempotency",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "recording_session_id"],
+            ["recording_sessions.organisation_id", "recording_sessions.id"],
+            name="fk_recording_chunks_recording_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_recording_chunks_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "recording_session_id",
+            "sequence_number",
+            name="uq_recording_chunks_sequence",
+        ),
+        UniqueConstraint("storage_key", name="uq_recording_chunks_storage_key"),
+        Index(
+            "ix_recording_chunks_organisation_recording_sequence",
+            "organisation_id",
+            "recording_session_id",
+            "sequence_number",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    recording_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(360), nullable=False)
+    upload_state: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", server_default="pending")
+    upload_idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    completion_idempotency_key: Mapped[str | None] = mapped_column(String(200))
+    upload_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class VisualAsset(TimestampMixin, Base):

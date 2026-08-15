@@ -101,10 +101,23 @@ tenant-scoped storage lifecycle. Production visual capture additionally
 requires private S3-compatible storage, a deployment-specific signing secret
 and explicit `visualEvidence`/`presentationMode` flag review.
 
+WO-015 requires current head `0025_recording_transcription`. Apply it once before
+the matching API/web/worker release and verify six new forced-RLS tables, transcript
+history backfill, the worker organisation-discovery function and object storage.
+Keep recording/transcription/automatic-intelligence flags false initially. Production
+binary capture requires private S3-compatible storage and a deployment-specific
+signing secret. Run report-only recording reconciliation, a synthetic mock capture,
+object-first deletion and raw-retention drill before tenant enablement. OpenAI
+transcription additionally requires approved provider terms, server-only key/model
+and the OpenAI flag; mock remains the no-network default.
+
 ## Rollback
 
-Prefer application rollback while retaining `0024`. Disable `visualEvidence`
-and `presentationMode` first. Downgrading `0024` removes visual metadata and
+Prefer application rollback while retaining `0025`. Disable recording,
+transcription and automatic intelligence first. Downgrading `0025` permanently
+removes recording manifests/consents/usage, transcript history and segments; delete
+or export private objects separately before an approved downgrade. Then disable
+`visualEvidence` and `presentationMode` if rolling farther back. Downgrading `0024` removes visual metadata and
 cannot restore deleted image objects. Downgrading `0023` removes all
 debrief sessions, turns, fragments, candidates and source-aware snapshot rows.
 Downgrading `0022` removes

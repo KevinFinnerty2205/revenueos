@@ -39,6 +39,7 @@ from revenueos.models import (
     PreInteractionBrief,
     RevenueBrainInteractionSnapshot,
     Transcript,
+    TranscriptVersion,
     VisualAsset,
     VisualCandidateEvidence,
 )
@@ -361,15 +362,34 @@ async def seed_demo_data(
                 )
             transcript = await session.get(Transcript, transcript_ids[index])
             if transcript is None:
+                transcript = Transcript(
+                    id=transcript_ids[index],
+                    organisation_id=organisation_id,
+                    meeting_id=meeting_id,
+                    raw_text=TRANSCRIPTS[index],
+                    language="en-AU",
+                    version=1,
+                    source="manual",
+                )
+                session.add(transcript)
+                await session.flush()
+            transcript_version_id = uuid.uuid5(
+                DEMO_NAMESPACE,
+                f"{organisation_id}:transcript-version-{index + 1}",
+            )
+            if await session.get(TranscriptVersion, transcript_version_id) is None:
                 session.add(
-                    Transcript(
-                        id=transcript_ids[index],
+                    TranscriptVersion(
+                        id=transcript_version_id,
                         organisation_id=organisation_id,
+                        interaction_id=interaction_id,
                         meeting_id=meeting_id,
+                        transcript_id=transcript_ids[index],
+                        version=1,
                         raw_text=TRANSCRIPTS[index],
                         language="en-AU",
-                        version=1,
                         source="manual",
+                        status="final",
                     )
                 )
         companion_variants: tuple[tuple[BriefInteractionType, str, str, int], ...] = (
@@ -883,11 +903,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 5},
+                    metadata_json={"dataset_version": 6},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 5}
+            event.metadata_json = {"dataset_version": 6}
     return {
         "status": "ready",
         "company_id": company_id,

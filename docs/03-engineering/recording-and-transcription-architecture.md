@@ -1,9 +1,10 @@
 # Recording and transcription architecture
 
-- **Status:** Target architecture; recording, media storage and transcription remain
-  unimplemented after WO-010
-- **MVP posture:** Build debrief first; when recording is authorised, start with
-  finalised sessions and batch transcription rather than real-time infrastructure
+- **Status:** WO-015 current implementation for browser-first recording, resumable
+  private upload and batch transcription. Near-real-time, native and connector
+  paths remain target architecture.
+- **MVP posture:** Debrief remains first-class. Authorised recording uses finalised
+  sessions and batch transcription, not real-time infrastructure.
 
 ## Decision summary
 
@@ -28,7 +29,7 @@ flowchart LR
     API -->|"short-lived upload grant"| CL
     CL -->|"idempotent chunks"| OS["Private object storage"]
     CL -->|"chunk receipts / finalise"| API
-    API --> Q["Existing durable worker queue"]
+    API --> Q["Existing durable worker process"]
     Q --> F["Validate manifest and assemble source"]
     F --> T["Transcription provider port"]
     T --> TX["Versioned transcript evidence"]
@@ -38,20 +39,20 @@ flowchart LR
 
 ## Recording session model
 
-A future Recording Capture Session needs:
+The WO-015 Recording Capture Session records:
 
-- tenant, Interaction, user/device client class and policy/consent snapshot;
+- tenant, Interaction, Capture Session, user and versioned consent snapshot;
 - stable session ID and client-generated idempotency key;
 - requested media kind, expected codec/container and supported limits;
 - start/end, original timezone and monotonic client sequence;
-- state, last heartbeat, interruption/gap state and finalisation reason;
+- deterministic lifecycle, start/stop/finalisation and failure state;
 - chunk count/bytes/duration and manifest version;
-- storage region/reference class without a public URL;
+- opaque private storage references without a public URL; and
 - retention/deletion state; and
 - safe error/retry classification.
 
-Each chunk needs session/tenant ownership, sequence, checksum, byte count, media time
-range, upload receipt and state. A unique `(organisation_id, session_id, sequence)`
+Each chunk has session/tenant ownership, sequence, SHA-256 checksum, byte count,
+opaque storage key, upload receipt and state. A unique `(organisation_id, session_id, sequence)`
 plus checksum makes retry idempotent. The server rejects a reused sequence with a
 different checksum. Out-of-order arrival is accepted; finalisation identifies
 missing or conflicting parts.
@@ -77,7 +78,8 @@ Finalisation is explicit and idempotent:
 2. API locks the session and compares the manifest;
 3. missing/duplicate/conflicting chunks produce a reviewable partial state;
 4. complete manifests become immutable inputs;
-5. a durable job verifies/assembles media without holding an HTTP request;
+5. the existing durable worker discovers finalised sessions and verifies/assembles
+   media on bounded temporary disk without holding an HTTP request;
 6. successful assembly records duration/checksum and queues transcription; and
 7. device content is deleted only after verified receipt and policy permits.
 
@@ -99,6 +101,21 @@ retry.
 - Raw media has an explicit, usually shorter retention class than validated
   intelligence.
 - Backups and replicas follow documented retention/deletion behaviour.
+
+## Current bounded implementation
+
+- MIME allowlist: WebM/Opus and MP4/M4A (`audio/webm`, `audio/mp4`, `audio/m4a`).
+- Maximum duration: 10,800 seconds (three hours).
+- Maximum recording: 512 MiB; maximum chunk: 8 MiB; maximum chunks: 4,096.
+- Session expiry: 24 hours; verified raw-audio retention: seven days by default.
+- Browser: feature detection and foreground `MediaRecorder`; no background or
+  screen-lock guarantee.
+- Storage: the hardened private visual-storage port is reused under a neutral
+  binary-object alias. Production requires S3-compatible private storage.
+- Queueing: `recording_sessions.lifecycle_status='uploaded'` is the durable work
+  record. No broker or second queue was introduced.
+- Transcript: immutable `transcript_versions` plus ordered `transcript_segments`;
+  the current Meeting `transcripts` row remains the compatibility read model.
 
 ## Processing stages
 

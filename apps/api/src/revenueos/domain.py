@@ -153,9 +153,12 @@ class CaptureSessionType(StrEnum):
     AI_DEBRIEF = "ai_debrief"
     VOICE_JOURNAL = "voice_journal"
     LIVE_RECORDING = "live_recording"
+    LIVE_AUDIO_RECORDING = "live_audio_recording"
     VISUAL_CAPTURE = "visual_capture"
     UPLOADED_TRANSCRIPT = "uploaded_transcript"
     UPLOADED_RECORDING = "uploaded_recording"
+    UPLOADED_AUDIO_RECORDING = "uploaded_audio_recording"
+    IMPORTED_AUDIO_RECORDING = "imported_audio_recording"
     MANUAL_NOTES = "manual_notes"
 
 
@@ -205,6 +208,9 @@ class ParticipantRole(StrEnum):
 class TranscriptSource(StrEnum):
     MANUAL = "manual"
     UPLOAD = "upload"
+    RECORDED_AUDIO = "recorded_audio"
+    UPLOADED_AUDIO = "uploaded_audio"
+    IMPORTED_AUDIO = "imported_audio"
 
 
 class MeetingAuditAction(StrEnum):

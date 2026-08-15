@@ -217,7 +217,7 @@ class DebriefService:
                 413,
             )
         if self.settings.transcription_provider_name == "openai":
-            await self.beta.reserve_provider_request()
+            await self.beta.reserve_provider_request(self.settings.transcription_provider_name)
         await self.session.commit()
         try:
             transcription = await execute_transcription(

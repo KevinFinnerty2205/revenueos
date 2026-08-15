@@ -46,11 +46,17 @@ from revenueos.models import (
     OrganisationBetaSettings,
     OrganisationMembership,
     PreInteractionBrief,
+    RecordingChunk,
+    RecordingConsent,
+    RecordingSession,
+    RecordingUsageCounter,
     RevenueBrainInsight,
     RevenueBrainInteractionSnapshot,
     RevenueBrainSnapshot,
     Task,
     Transcript,
+    TranscriptSegment,
+    TranscriptVersion,
     User,
     VisualAsset,
     VisualCandidateEvidence,
@@ -163,6 +169,7 @@ def clean_business_entities() -> Iterator[None]:
     async def clean() -> None:
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         async with session_factory() as session:
+            await session.execute(update(RecordingSession).values(transcript_version_id=None))
             for model in (
                 BetaFeedback,
                 BetaSystemEvent,
@@ -179,6 +186,12 @@ def clean_business_entities() -> Iterator[None]:
                 AIJob,
                 OpportunityAuditEvent,
                 InteractionAuditEvent,
+                TranscriptSegment,
+                TranscriptVersion,
+                RecordingChunk,
+                RecordingConsent,
+                RecordingSession,
+                RecordingUsageCounter,
                 VisualCandidateEvidence,
                 VisualAsset,
                 CandidateEvidence,

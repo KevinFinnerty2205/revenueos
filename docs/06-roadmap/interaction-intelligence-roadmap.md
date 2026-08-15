@@ -221,6 +221,9 @@ presentations and site visits with foreground visual evidence.
 
 ## WO-015 — Recording and Transcription Foundation
 
+**Delivery status:** Implemented by WO-015. The design below remains the accepted
+scope record; WO-016 and later work are not authorised by this status.
+
 ### Objective and user value
 
 Add optional finalised audio capture/upload and reliable batch transcription as one

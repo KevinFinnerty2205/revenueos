@@ -33,6 +33,7 @@ from revenueos.models import (
     MeetingAuditEvent,
     MeetingParticipant,
     Transcript,
+    TranscriptVersion,
 )
 from revenueos.tenant import TenantContext
 
@@ -261,6 +262,20 @@ class MeetingService(_MeetingDomainService):
             if transcript is not None:
                 self.repository.add(transcript)
             await self.repository.flush()
+            if transcript is not None:
+                self.repository.add(
+                    TranscriptVersion(
+                        organisation_id=self.tenant.organisation_id,
+                        interaction_id=interaction.id,
+                        meeting_id=meeting.id,
+                        transcript_id=transcript.id,
+                        version=transcript.version,
+                        raw_text=transcript.raw_text,
+                        language=transcript.language,
+                        source=transcript.source,
+                        status="final",
+                    )
+                )
 
             audit_events: list[Base] = [
                 InteractionAuditEvent(
@@ -680,12 +695,26 @@ class TranscriptService(_MeetingDomainService):
             await self._flush()
         else:
             transcript = existing
+            await self._preserve_version(meeting.interaction_id, transcript)
             transcript.raw_text = request.raw_text
             transcript.language = request.language
             transcript.source = request.source.value
             transcript.version += 1
             transcript.deleted_at = None
             action = MeetingAuditAction.RESTORED
+        self.repository.add(
+            TranscriptVersion(
+                organisation_id=self.tenant.organisation_id,
+                interaction_id=meeting.interaction_id,
+                meeting_id=meeting.id,
+                transcript_id=transcript.id,
+                version=transcript.version,
+                raw_text=transcript.raw_text,
+                language=transcript.language,
+                source=transcript.source,
+                status="final",
+            )
+        )
         self.repository.add(
             self._audit(
                 meeting_id=meeting.id,
@@ -704,7 +733,7 @@ class TranscriptService(_MeetingDomainService):
         meeting_id: UUID,
         request: TranscriptUpdate,
     ) -> Transcript:
-        await self._get_meeting_for_update(meeting_id)
+        meeting = await self._get_meeting_for_update(meeting_id)
         transcript = await self.repository.get_transcript(
             self.tenant.organisation_id,
             meeting_id,
@@ -718,9 +747,23 @@ class TranscriptService(_MeetingDomainService):
                 "The transcript changed since it was loaded. Refresh and try again.",
                 409,
             )
+        await self._preserve_version(meeting.interaction_id, transcript)
         values = request.model_dump(exclude={"version"}, exclude_unset=True)
         self._apply_values(transcript, values)
         transcript.version += 1
+        self.repository.add(
+            TranscriptVersion(
+                organisation_id=self.tenant.organisation_id,
+                interaction_id=meeting.interaction_id,
+                meeting_id=meeting.id,
+                transcript_id=transcript.id,
+                version=transcript.version,
+                raw_text=transcript.raw_text,
+                language=transcript.language,
+                source=transcript.source,
+                status="final",
+            )
+        )
         self.repository.add(
             self._audit(
                 meeting_id=meeting_id,
@@ -733,6 +776,30 @@ class TranscriptService(_MeetingDomainService):
         )
         await self._commit(transcript)
         return transcript
+
+    async def _preserve_version(self, interaction_id: UUID, transcript: Transcript) -> None:
+        if (
+            await self.repository.get_transcript_version(
+                self.tenant.organisation_id,
+                transcript.id,
+                transcript.version,
+            )
+            is not None
+        ):
+            return
+        self.repository.add(
+            TranscriptVersion(
+                organisation_id=self.tenant.organisation_id,
+                interaction_id=interaction_id,
+                meeting_id=transcript.meeting_id,
+                transcript_id=transcript.id,
+                version=transcript.version,
+                raw_text=transcript.raw_text,
+                language=transcript.language,
+                source=transcript.source,
+                status="final",
+            )
+        )
 
     async def delete_transcript(self, meeting_id: UUID) -> None:
         await self._get_meeting_for_update(meeting_id)

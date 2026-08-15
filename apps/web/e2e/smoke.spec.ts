@@ -15,6 +15,9 @@ test.beforeEach(async ({ page }) => {
             voiceJournal: true,
             visualEvidence: false,
             presentationMode: false,
+            recordingCapture: false,
+            transcription: false,
+            autoGenerateIntelligenceAfterTranscription: false,
             dataExport: true,
             organisationDeletion: false,
           },
@@ -34,7 +37,7 @@ test("landing page explains the current product honestly", async ({ page }) => {
     }),
   ).toBeVisible();
   await expect(
-    page.getByText(/does not record customer conversations/i),
+    page.getByText(/recording is consent-gated and never starts implicitly/i),
   ).toBeVisible();
 });
 
@@ -654,6 +657,9 @@ test("a presentation supports browser image upload, explicit review and intellig
             voiceJournal: true,
             visualEvidence: true,
             presentationMode: true,
+            recordingCapture: false,
+            transcription: false,
+            autoGenerateIntelligenceAfterTranscription: false,
             dataExport: true,
             organisationDeletion: false,
           },
@@ -1256,6 +1262,469 @@ test("a completed phone call supports a typed debrief, review and source-aware u
   await expect(page.getByText(/Reported by you/)).toBeVisible();
 });
 
+test("browser recording persists a consented transcript into existing intelligence surfaces", async ({
+  page,
+}) => {
+  let interaction: Record<string, unknown> = interactionRecord({
+    id: "interaction-recording",
+    title: "On-site recording foundation",
+    interactionType: "face_to_face_meeting",
+    meetingId: "meeting-1",
+    companyId: "company-1",
+    opportunityId: "opportunity-1",
+    briefState: "completed",
+    briefGeneratedAt: "2026-08-14T02:00:00Z",
+  });
+  let briefReviewed = false;
+  let recordingCreated = false;
+  let recordingLifecycle = "created";
+  let transcriptionReads = 0;
+  let intelligenceGenerated = false;
+
+  const recording = () => ({
+    id: "recording-1",
+    interactionId: "interaction-recording",
+    captureSessionId: "capture-recording-1",
+    recordingType: "live_audio_recording",
+    lifecycleStatus: recordingLifecycle,
+    consentState: "acknowledged",
+    startedAt: recordingCreated ? "2026-08-14T02:10:00Z" : null,
+    stoppedAt:
+      recordingLifecycle === "recording" ? null : "2026-08-14T02:11:00Z",
+    durationSeconds: recordingLifecycle === "recording" ? null : 60,
+    expectedMimeType: "audio/webm",
+    finalMimeType: recordingLifecycle === "recording" ? null : "audio/webm",
+    totalBytes: recordingLifecycle === "recording" ? 0 : 36,
+    chunkCount: recordingLifecycle === "recording" ? 0 : 1,
+    uploadCompletedAt:
+      recordingLifecycle === "recording" ? null : "2026-08-14T02:11:00Z",
+    transcriptionStatus:
+      recordingLifecycle === "completed"
+        ? "completed"
+        : recordingLifecycle === "uploaded"
+          ? "processing"
+          : "queued",
+    transcriptionAttempts: recordingLifecycle === "completed" ? 1 : 0,
+    failureCode: null,
+    autoIntelligenceStatus: "disabled",
+    sessionExpiresAt: "2026-08-15T02:10:00Z",
+    providerMode: "mock",
+    externalProcessing: false,
+    createdAt: "2026-08-14T02:10:00Z",
+    updatedAt: "2026-08-14T02:11:00Z",
+  });
+
+  await page.addInitScript(() => {
+    class DeterministicMediaRecorder {
+      static isTypeSupported(type: string) {
+        return type.startsWith("audio/webm");
+      }
+
+      state: RecordingState = "inactive";
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      onstop: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      start() {
+        this.state = "recording";
+      }
+
+      pause() {
+        this.state = "paused";
+      }
+
+      resume() {
+        this.state = "recording";
+      }
+
+      stop() {
+        this.state = "inactive";
+        this.ondataavailable?.({
+          data: new Blob(
+            [
+              new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]),
+              "synthetic-browser-audio",
+            ],
+            { type: "audio/webm" },
+          ),
+        });
+        queueMicrotask(() => this.onstop?.());
+      }
+    }
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => ({
+          getTracks: () => [{ stop: () => undefined }],
+        }),
+      },
+    });
+    Object.defineProperty(globalThis, "MediaRecorder", {
+      configurable: true,
+      value: DeterministicMediaRecorder,
+    });
+  });
+
+  await page.route(
+    "http://localhost:8000/api/v1/beta/capabilities",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          featureFlags: {
+            openaiProvider: false,
+            revenueBrain: true,
+            opportunityWorkspace: true,
+            aiCompanion: true,
+            aiDebrief: true,
+            voiceJournal: true,
+            visualEvidence: false,
+            presentationMode: false,
+            recordingCapture: true,
+            transcription: true,
+            autoGenerateIntelligenceAfterTranscription: false,
+            dataExport: true,
+            organisationDeletion: false,
+          },
+          noticeVersion: 1,
+          maxTranscriptCharacters: 200000,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/interactions/interaction-recording**",
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith("/companion/brief/review")) {
+        briefReviewed = true;
+        await route.fulfill({
+          json: companionBrief("face_to_face_meeting", true),
+        });
+        return;
+      }
+      if (path.endsWith("/companion/brief")) {
+        await route.fulfill({
+          json: companionBrief("face_to_face_meeting", briefReviewed),
+        });
+        return;
+      }
+      if (
+        path === "/api/v1/interactions/interaction-recording/complete" &&
+        request.method() === "POST"
+      ) {
+        interaction = {
+          ...interaction,
+          lifecycleStatus: "completed",
+          actualEndAt: "2026-08-14T02:15:00Z",
+        };
+        await route.fulfill({ json: interaction });
+        return;
+      }
+      if (path.endsWith("/recordings") && request.method() === "GET") {
+        await route.fulfill({ json: recordingCreated ? [recording()] : [] });
+        return;
+      }
+      if (path.endsWith("/recordings") && request.method() === "POST") {
+        recordingCreated = true;
+        await route.fulfill({ status: 201, json: recording() });
+        return;
+      }
+      if (path.endsWith("/start")) {
+        recordingLifecycle = "recording";
+        await route.fulfill({ json: recording() });
+        return;
+      }
+      if (path.endsWith("/pause") || path.endsWith("/resume")) {
+        await route.fulfill({ json: recording() });
+        return;
+      }
+      if (path.endsWith("/chunks") && request.method() === "POST") {
+        const body = request.postDataJSON() as {
+          byteSize: number;
+          checksumSha256: string;
+          sequenceNumber: number;
+        };
+        await route.fulfill({
+          status: 201,
+          json: {
+            id: "chunk-1",
+            recordingSessionId: "recording-1",
+            sequenceNumber: body.sequenceNumber,
+            byteSize: body.byteSize,
+            checksumSha256: body.checksumSha256,
+            uploadState: "pending",
+            uploadedAt: null,
+            createdAt: "2026-08-14T02:10:00Z",
+            uploadUrl: `${path}/chunk-1/content?token=short-lived-test-token`,
+            uploadExpiresAt: "2026-08-14T02:15:00Z",
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/content") && request.method() === "PUT") {
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      if (path.endsWith("/complete") && path.includes("/chunks/")) {
+        await route.fulfill({ json: { uploadState: "verified" } });
+        return;
+      }
+      if (path.endsWith("/stop")) {
+        recordingLifecycle = "uploading";
+        await route.fulfill({ json: recording() });
+        return;
+      }
+      if (path.endsWith("/finalize")) {
+        recordingLifecycle = "uploaded";
+        await route.fulfill({ json: recording() });
+        return;
+      }
+      if (path.endsWith("/transcription")) {
+        transcriptionReads += 1;
+        const completed = transcriptionReads > 1;
+        if (completed) recordingLifecycle = "completed";
+        await route.fulfill({
+          json: {
+            recordingId: "recording-1",
+            status: completed ? "completed" : "processing",
+            transcriptVersionId: completed
+              ? "transcript-version-recorded"
+              : null,
+            transcriptId: completed ? "transcript-1" : null,
+            meetingId: completed ? "meeting-1" : null,
+            version: completed ? 1 : null,
+            source: completed ? "recorded_audio" : null,
+            language: completed ? "en-AU" : null,
+            text: completed
+              ? "The customer approved the pilot and confirmed procurement ownership."
+              : null,
+            segments: completed
+              ? [
+                  {
+                    sequenceNumber: 0,
+                    startMs: 0,
+                    endMs: 60_000,
+                    speakerLabel: null,
+                    text: "The customer approved the pilot and confirmed procurement ownership.",
+                    sourceConfidence: null,
+                  },
+                ]
+              : [],
+            completedAt: completed ? "2026-08-14T02:12:00Z" : null,
+            safeMessage: completed
+              ? "Transcription is ready."
+              : "Transcription is processing.",
+          },
+        });
+        return;
+      }
+      await route.fulfill({ json: interaction });
+    },
+  );
+
+  await page.route("http://localhost:8000/api/v1/meetings**", async (route) => {
+    await route.fulfill({
+      json: {
+        items: [opportunityMeeting()],
+        page: 1,
+        pageSize: 100,
+        total: 1,
+        pages: 1,
+      },
+    });
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/meetings/meeting-1**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/participants") || path.endsWith("/history")) {
+        await route.fulfill({ json: [] });
+        return;
+      }
+      if (path.endsWith("/transcript")) {
+        await route.fulfill({
+          json: {
+            id: "transcript-1",
+            organisationId: "organisation-1",
+            meetingId: "meeting-1",
+            rawText:
+              "The customer approved the pilot and confirmed procurement ownership.",
+            language: "en-AU",
+            version: 1,
+            source: "recorded_audio",
+            createdAt: "2026-08-14T02:12:00Z",
+            updatedAt: "2026-08-14T02:12:00Z",
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/intelligence/generate")) {
+        intelligenceGenerated = true;
+        await route.fulfill({
+          status: 202,
+          json: generationWorkspace("completed"),
+        });
+        return;
+      }
+      if (path.endsWith("/intelligence")) {
+        await route.fulfill({
+          json: workspace(intelligenceGenerated ? "completed" : "not_started"),
+        });
+        return;
+      }
+      await route.fulfill({ json: meeting() });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/opportunities/opportunity-1**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      await route.fulfill({
+        json: path.endsWith("/workspace")
+          ? opportunityWorkspace(true, true)
+          : opportunity(),
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/companies**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      await route.fulfill({
+        json:
+          path === "/api/v1/companies/company-1"
+            ? {
+                id: "company-1",
+                organisationId: "organisation-1",
+                name: "Acme Australia",
+                website: null,
+                industry: "Technology",
+                employeeCount: 120,
+                status: "active",
+                ownerUserId: "user-1",
+                createdAt: "2026-07-01T00:00:00Z",
+                updatedAt: "2026-08-14T02:12:00Z",
+              }
+            : { items: [], page: 1, pageSize: 100, total: 0, pages: 0 },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/accounts/company-1/brain**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/reasoning")) {
+        await route.fulfill({
+          json: {
+            state: "insufficient_history",
+            message:
+              "A second snapshot is required for longitudinal reasoning.",
+            latest: null,
+            history: [],
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/visual-evidence")) {
+        await route.fulfill({ json: [] });
+        return;
+      }
+      await route.fulfill({
+        json: [
+          {
+            id: "snapshot-recorded",
+            organisationId: "organisation-1",
+            companyId: "company-1",
+            opportunityId: "opportunity-1",
+            meetingId: "meeting-1",
+            transcriptVersionId: "transcript-version-recorded",
+            createdAt: "2026-08-14T02:13:00Z",
+            meetingDate: "2026-08-14T02:00:00Z",
+            summaryReference: "summary-recorded",
+            buyingSignalsReference: "buying-recorded",
+            objectionsReference: "objections-recorded",
+            stakeholdersReference: "stakeholders-recorded",
+            decisionsReference: "decisions-recorded",
+            actionsReference: "actions-recorded",
+            risksReference: "risks-recorded",
+            questionsReference: "questions-recorded",
+            nextBestActionReference: "next-recorded",
+            version: 1,
+          },
+        ],
+      });
+    },
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/sign-in");
+  await page
+    .getByRole("link", { name: "Continue with development identity" })
+    .click();
+  await page.goto("/interactions/interaction-recording");
+  await expect(
+    page.getByRole("heading", { name: "Prepare for this interaction" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Mark as reviewed" }).click();
+  await page
+    .getByRole("checkbox", { name: /participants have received/i })
+    .check();
+  await page.getByRole("button", { name: "Start recording" }).click();
+  await page.getByRole("button", { name: "Pause" }).click();
+  await page.getByRole("button", { name: "Resume" }).click();
+  await page.getByRole("button", { name: "Stop and upload" }).click();
+  await expect(page.getByText("Transcription is processing.")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Refresh transcription status" })
+    .click();
+  await expect(page.getByText("Transcription is ready.")).toBeVisible();
+  await expect(
+    page.getByText(
+      "The customer approved the pilot and confirmed procurement ownership.",
+    ),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_015_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-015-recording-transcription.png",
+      fullPage: true,
+    });
+  }
+  await page.reload();
+  await expect(page.getByText("Transcription is ready.")).toBeVisible();
+  for (const prohibited of [
+    "providerRequestId",
+    "transcriptionRequestId",
+    "storageKey",
+    "short-lived-test-token",
+    "MOCK_TRANSCRIPT",
+  ]) {
+    await expect(page.getByText(prohibited, { exact: false })).toHaveCount(0);
+  }
+
+  await page.getByRole("button", { name: "Complete interaction" }).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Capture what changed while it is fresh",
+    }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Open Meeting Intelligence" }).click();
+  await page.getByRole("tab", { name: "Intelligence" }).click();
+  await page
+    .getByRole("button", { name: "Generate Meeting Intelligence" })
+    .click();
+  await expect(page.getByText("10 of 10 ready")).toBeVisible();
+  await page.goto("/opportunities/opportunity-1");
+  await expect(
+    page.getByText("Identify the economic buyer.", { exact: true }).first(),
+  ).toBeVisible();
+  await page.goto("/companies/company-1");
+  await expect(page.getByText("Meeting snapshot")).toBeVisible();
+  expect(intelligenceGenerated).toBe(true);
+  expect(briefReviewed).toBe(true);
+});
+
 test("meeting detail orchestrates and persists the unified Meeting Intelligence workspace", async ({
   page,
   context,
@@ -1838,6 +2307,9 @@ function betaAdminOverview() {
       voiceJournal: true,
       visualEvidence: false,
       presentationMode: false,
+      recordingCapture: false,
+      transcription: false,
+      autoGenerateIntelligenceAfterTranscription: false,
       dataExport: true,
       organisationDeletion: false,
     },

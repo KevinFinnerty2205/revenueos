@@ -13,7 +13,9 @@ describe("landing page", () => {
       }),
     ).toBeVisible();
     expect(
-      screen.getByText(/does not record customer conversations/i),
+      screen.getByText(
+        /recording is consent-gated and never starts implicitly/i,
+      ),
     ).toBeVisible();
     expect(screen.getByText("Review required")).toBeVisible();
     expect(screen.getByText(/private reviewed visual evidence/i)).toBeVisible();

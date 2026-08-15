@@ -71,8 +71,16 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "revenue_brain_interaction_snapshots",
             "visual_assets",
             "visual_candidate_evidence",
+            "recording_usage_counters",
+            "recording_sessions",
+            "recording_consents",
+            "recording_chunks",
+            "transcript_versions",
+            "transcript_segments",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
         }
@@ -143,6 +151,16 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert visual_candidate_columns["source_visual_id"] == 1
         assert visual_candidate_columns["source_ownership"] == 1
         assert visual_candidate_columns["origin_class"] == 1
+        recording_columns = {
+            row[1]: row[3] for row in connection.execute("PRAGMA table_info(recording_sessions)").fetchall()
+        }
+        assert recording_columns["organisation_id"] == 1
+        assert recording_columns["interaction_id"] == 1
+        assert recording_columns["transcript_version_id"] == 0
+        assert not {"audio", "audio_bytes", "audio_blob", "transcript_text"} & set(recording_columns)
+        chunk_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(recording_chunks)").fetchall()}
+        assert chunk_columns["storage_key"] == 1
+        assert not {"audio", "audio_bytes", "audio_blob", "content"} & set(chunk_columns)
         assert visual_candidate_columns["support_classification"] == 1
         participant_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(meeting_participants)").fetchall()
@@ -768,7 +786,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -820,7 +840,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -864,7 +886,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
     with connect(database_path) as connection:
@@ -878,7 +902,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
 
     command.downgrade(configuration, "0003_meeting_domain")
     with connect(database_path) as connection:
@@ -914,7 +940,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "revenue_brain_insights",
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
 
     command.downgrade(configuration, "0002_core_business_entities")
     with connect(database_path) as connection:
@@ -979,7 +1007,9 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_snapshots",
             "revenue_brain_insights",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
 
     command.downgrade(configuration, "0018_revenue_brain")
     with connect(database_path) as connection:
@@ -997,7 +1027,9 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
         assert "revenue_brain_insights" in {
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
 
 
 def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_deterministically(
@@ -1010,11 +1042,11 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
     assert [revision.revision for revision in script.walk_revisions()][:3] == [
+        "0025_recording_transcription",
         "0024_visual_evidence",
         "0023_ai_debrief_voice_journal",
-        "0022_pre_interaction_brief",
     ]
-    assert script.get_heads() == ["0024_visual_evidence"]
+    assert script.get_heads() == ["0025_recording_transcription"]
     command.upgrade(configuration, "0020_private_beta_readiness")
 
     organisation_a = uuid.uuid4()
@@ -1123,7 +1155,9 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
         assert {row[0]: row[1] for row in connection.execute("SELECT id, interaction_id FROM meetings")} == expected
         assert connection.execute("SELECT count(*) FROM interactions").fetchone() == (3,)
 
@@ -1237,7 +1271,9 @@ def test_pre_interaction_brief_migration_is_immutable_and_reupgrades_cleanly(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM pre_interaction_briefs").fetchone() == (0,)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
 
 
 def test_visual_evidence_migration_review_guard_and_downgrade_reupgrade(
@@ -1365,7 +1401,107 @@ def test_visual_evidence_migration_review_guard_and_downgrade_reupgrade(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM visual_assets").fetchone() == (0,)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0024_visual_evidence",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
+
+
+def test_recording_transcription_migration_backfills_history_and_reupgrades_cleanly(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "recording-transcription-migration.db"
+    monkeypatch.setenv(  # type: ignore[attr-defined]
+        "DATABASE_URL",
+        f"sqlite+aiosqlite:///{database_path}",
+    )
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "0024_visual_evidence")
+    organisation_id = uuid.uuid4().hex
+    user_id = uuid.uuid4().hex
+    interaction_id = uuid.uuid4().hex
+    meeting_id = uuid.uuid4().hex
+    transcript_id = uuid.uuid4().hex
+
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Recording tenant', ?)",
+            (organisation_id, f"recording-{organisation_id}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Recorder')",
+            (user_id, f"recorder-{user_id}", f"{user_id}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO interactions
+                (id, organisation_id, interaction_type, lifecycle_status, title,
+                 creation_origin, created_by_user_id)
+            VALUES (?, ?, 'face_to_face_meeting', 'completed', 'Recorded discovery',
+                    'meeting_compatibility', ?)
+            """,
+            (interaction_id, organisation_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO meetings
+                (id, organisation_id, interaction_id, title, meeting_date,
+                 meeting_type, status, owner_user_id, created_by, updated_by)
+            VALUES (?, ?, ?, 'Recorded discovery', '2026-08-14 01:00:00',
+                    'in_person', 'completed', ?, ?, ?)
+            """,
+            (meeting_id, organisation_id, interaction_id, user_id, user_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO transcripts
+                (id, organisation_id, meeting_id, raw_text, language, version, source)
+            VALUES (?, ?, ?, 'Deliberately supplied transcript.', 'en-AU', 2, 'manual')
+            """,
+            (transcript_id, organisation_id, meeting_id),
+        )
+        connection.commit()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
+        assert connection.execute("SELECT transcript_id, version, raw_text FROM transcript_versions").fetchone() == (
+            transcript_id,
+            2,
+            "Deliberately supplied transcript.",
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute("UPDATE transcript_versions SET raw_text = 'Overwritten history'")
+
+    command.downgrade(configuration, "0024_visual_evidence")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert (
+            not {
+                "recording_sessions",
+                "recording_chunks",
+                "recording_consents",
+                "recording_usage_counters",
+                "transcript_versions",
+                "transcript_segments",
+            }
+            & tables
+        )
+        assert connection.execute("SELECT source FROM transcripts").fetchone() == ("manual",)
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT count(*) FROM transcript_versions").fetchone() == (1,)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0025_recording_transcription",
+        )
 
 
 def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
@@ -1407,7 +1543,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0024_visual_evidence"
+                    assert version == "0025_recording_transcription"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

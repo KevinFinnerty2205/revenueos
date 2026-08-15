@@ -1,8 +1,8 @@
 # Interaction security, privacy and consent
 
-- **Status:** Target controls and review questions; WO-011 implements tenant-safe
-  metadata foundations only and no capture/processing capability. See the
-  [current security review](interaction-domain-security-review.md)
+- **Status:** Target controls plus implemented WO-011–015 capture foundations.
+  Recording-specific controls and residual risks are in the
+  [WO-015 recording security review](recording-security-review.md).
 - **Baseline:** Preserve current verified tenant context, forced RLS, safe errors,
   content-redacted logs, retention/export/deletion controls and provider boundaries
 
@@ -245,6 +245,16 @@ No production customer capture until:
 - device loss/offline and deletion behaviour are documented and exercised;
 - logs, analytics and notifications are verified content-free; and
 - incident response and feature-disable rollback are ready.
+
+## Implemented recording consent boundary
+
+WO-015 requires a distinct immutable notice/authority acknowledgement before the
+microphone is requested or a Recording Session can start. Private chunk grants are
+tenant/object/method/expiry scoped; finalisation verifies checksum, MIME, size and
+gaps; raw audio uses a short explicit retention class; and deletion is object-first
+with retry. The product does not decide whether consent is legally sufficient in a
+jurisdiction. All recording flags remain off until the customer policy, provider,
+region, browser and operational gates above are approved.
 
 ## Related documents
 

@@ -30,7 +30,7 @@ not production options.
 4. Stop new worker claims or scale the worker to zero when the migration plan
    requires it; allow active bounded jobs to finish or recover by lease.
 5. Run `alembic upgrade head` exactly once with the migration role.
-6. Verify the database reports Alembic head `0024_visual_evidence` and
+6. Verify the database reports Alembic head `0025_recording_transcription` and
    drift check passes.
 7. Deploy API, then confirm `/health/live` and `/health/ready` are green.
 8. Start the worker only after readiness confirms migration/config compatibility.
@@ -162,6 +162,13 @@ review guards, source-lineage constraints and visual snapshot support. Its
 downgrade deletes visual rows and cannot recover already-deleted private image
 objects. Prefer application rollback with `visualEvidence` and
 `presentationMode` disabled; require a backup and explicit data-loss approval
+before downgrade.
+
+Migration `0025_recording_transcription` adds six forced-RLS recording/transcript
+tables, transcript-history backfill and worker discovery. Its downgrade deletes
+recording consent/manifests, transcript history and segments but cannot remove
+external objects. Prefer application rollback with all recording flags disabled;
+reconcile/export/delete objects and require backup plus explicit data-loss approval
 before downgrade.
 
 If a forward migration partially fails, keep API/worker stopped, preserve the

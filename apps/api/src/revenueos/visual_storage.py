@@ -6,6 +6,7 @@ import hmac
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
@@ -113,11 +114,14 @@ class LocalVisualStorage:
         del mime_type
         path = self._path(storage_key)
         await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
-        temporary = path.with_suffix(f"{path.suffix}.uploading")
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.uploading")
 
         def persist() -> None:
-            temporary.write_bytes(content)
-            temporary.replace(path)
+            try:
+                temporary.write_bytes(content)
+                temporary.replace(path)
+            finally:
+                temporary.unlink(missing_ok=True)
 
         await asyncio.to_thread(persist)
 

@@ -60,6 +60,22 @@ class Settings(BaseSettings):
     private_beta_max_visual_pixels: int = Field(default=40_000_000, ge=65_536, le=100_000_000)
     private_beta_max_visual_ai_requests_per_day: int = Field(default=50, ge=1, le=5_000)
     private_beta_visual_processing_retries: int = Field(default=3, ge=1, le=5)
+    private_beta_max_active_recordings: int = Field(default=5, ge=1, le=50)
+    private_beta_max_recording_duration_seconds: int = Field(default=10_800, ge=60, le=14_400)
+    private_beta_max_recording_bytes: int = Field(default=536_870_912, ge=1_000_000, le=2_147_483_648)
+    private_beta_max_recording_chunk_bytes: int = Field(default=8_388_608, ge=64_000, le=25_000_000)
+    private_beta_max_recording_chunks: int = Field(default=4_096, ge=1, le=10_000)
+    private_beta_max_recording_bytes_per_day: int = Field(
+        default=1_073_741_824,
+        ge=1_000_000,
+        le=10_737_418_240,
+    )
+    private_beta_max_transcription_minutes_per_day: int = Field(default=600, ge=1, le=10_000)
+    private_beta_max_transcription_requests_per_day: int = Field(default=25, ge=1, le=1_000)
+    private_beta_max_simultaneous_transcriptions: int = Field(default=2, ge=1, le=20)
+    private_beta_transcription_retries: int = Field(default=3, ge=1, le=5)
+    private_beta_recording_session_expiry_hours: int = Field(default=24, ge=1, le=168)
+    private_beta_raw_recording_retention_days: int = Field(default=7, ge=1, le=30)
     private_beta_feedback_per_user_per_day: int = Field(default=20, ge=1, le=1_000)
     private_beta_retention_batch_size: int = Field(default=100, ge=1, le=1_000)
     private_beta_export_directory: str = Field(default="/tmp/revenueos-private-beta-exports", min_length=1)
@@ -72,6 +88,9 @@ class Settings(BaseSettings):
     feature_voice_journal_enabled: bool = True
     feature_visual_evidence_enabled: bool = True
     feature_presentation_mode_enabled: bool = True
+    feature_recording_capture_enabled: bool = False
+    feature_transcription_enabled: bool = False
+    feature_auto_generate_intelligence_after_transcription: bool = False
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -127,7 +146,14 @@ class Settings(BaseSettings):
         pattern=r"^[a-z0-9][a-z0-9_]*$",
     )
     ai_structured_output_max_attempts: int = Field(default=3, ge=1, le=5)
-    transcription_provider_name: TranscriptionProviderName = "mock"
+    transcription_provider_name: TranscriptionProviderName = Field(
+        default="mock",
+        validation_alias=AliasChoices(
+            "TRANSCRIPTION_PROVIDER",
+            "API_TRANSCRIPTION_PROVIDER",
+            "API_TRANSCRIPTION_PROVIDER_NAME",
+        ),
+    )
     transcription_model_identifier: str = Field(
         default="gpt-4o-mini-transcribe",
         min_length=1,
@@ -226,11 +252,15 @@ class Settings(BaseSettings):
             )
         ):
             raise ValueError("S3-compatible visual storage requires endpoint, bucket, region and credentials.")
-        if self.environment == "production" and self.feature_visual_evidence_enabled:
+        if self.environment == "production" and (
+            self.feature_visual_evidence_enabled or self.feature_recording_capture_enabled
+        ):
             if self.visual_storage_backend != "s3_compatible":
-                raise ValueError("Production visual evidence requires private S3-compatible object storage.")
+                raise ValueError("Production binary evidence requires private S3-compatible object storage.")
             if self.visual_storage_signing_secret.get_secret_value() == "local-development-visual-signing-key":
-                raise ValueError("Production visual evidence requires a deployment-specific signing secret.")
+                raise ValueError("Production binary evidence requires a deployment-specific signing secret.")
+        if self.feature_auto_generate_intelligence_after_transcription and not self.feature_transcription_enabled:
+            raise ValueError("Automatic intelligence after transcription requires transcription to be enabled.")
         return self
 
     @property
@@ -277,6 +307,9 @@ class Settings(BaseSettings):
             "voiceJournal": self.feature_voice_journal_enabled,
             "visualEvidence": self.feature_visual_evidence_enabled,
             "presentationMode": self.feature_presentation_mode_enabled,
+            "recordingCapture": self.feature_recording_capture_enabled,
+            "transcription": self.feature_transcription_enabled,
+            "autoGenerateIntelligenceAfterTranscription": (self.feature_auto_generate_intelligence_after_transcription),
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

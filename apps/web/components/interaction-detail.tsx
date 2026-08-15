@@ -10,6 +10,7 @@ import { BetaFeatureGate } from "@/components/beta-feature-gate";
 import { PreInteractionBrief } from "@/components/pre-interaction-brief";
 import { PostInteractionCapture } from "@/components/post-interaction-capture";
 import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
+import { RecordingFoundation } from "@/components/recording-foundation";
 
 export function InteractionDetail({
   interactionId,
@@ -157,6 +158,14 @@ export function InteractionDetail({
             </Link>
           ) : null}
         </div>
+      </div>
+      <div className="mt-6" id="recording">
+        <BetaFeatureGate feature="recordingCapture">
+          <RecordingFoundation
+            interactionId={interaction.id}
+            lifecycleStatus={interaction.lifecycleStatus}
+          />
+        </BetaFeatureGate>
       </div>
       <div className="mt-6" id="visual-evidence">
         <BetaFeatureGate feature="visualEvidence">

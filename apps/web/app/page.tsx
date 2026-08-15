@@ -71,9 +71,9 @@ export default function LandingPage() {
             </div>
             <p className="mt-6 text-sm leading-6 text-slate-500">
               The current build supports deliberate transcripts, preparation
-              briefs, reviewed debriefs and private reviewed visual evidence. It
-              does not record customer conversations or send changes to
-              connected systems.
+              briefs, reviewed debriefs and private reviewed visual evidence.
+              Optional browser recording is consent-gated and never starts
+              implicitly. RevenueOS does not send changes to connected systems.
             </p>
           </div>
 

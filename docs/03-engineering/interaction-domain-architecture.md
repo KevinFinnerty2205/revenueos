@@ -2,7 +2,8 @@
 
 - **Status:** Approved target architecture; WO-011 implements Interaction/Meeting
   compatibility and the Evidence/Capture Session foundation, WO-012 adds preparation,
-  and WO-013 executes the reviewed AI Debrief/Voice Journal subset. See the
+  WO-013 executes reviewed AI Debrief/Voice Journal, WO-014 visual evidence and
+  WO-015 consented recording/batch transcription. See the
   [current implementation guide](interaction-domain-implementation.md) and
   [AI Debrief guide](ai-debrief.md)
 - **Decision:** Interaction is the source-neutral parent for future customer events;
@@ -320,8 +321,17 @@ Intelligence snapshots. Current consumers reject snapshots whose source
 Evidence is deleted, excluded or no longer verified.
 
 This implementation retains the planned separation between Capture,
-Intelligence and Action. It does not authorise recording or a general media
-aggregate.
+Intelligence and Action. It does not authorise a general media aggregate.
+
+## Implemented WO-015 recording capture
+
+`live_audio_recording`, `uploaded_audio_recording` and
+`imported_audio_recording` are implemented Capture Session types. The focused
+Recording Session owns consent/lifecycle and the private chunk manifest; a final
+transcript Evidence record owns the usable source. Immutable Transcript Versions
+and Segments preserve source/time trace while the current Meeting Transcript stays
+the compatibility read model for existing intelligence. Recording remains optional
+and adds no new customer Interaction subtype, native client, bot or telephony path.
 
 - [Evidence and provenance model](evidence-and-provenance-model.md)
 - [Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md)

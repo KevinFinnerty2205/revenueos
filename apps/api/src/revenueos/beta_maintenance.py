@@ -47,18 +47,29 @@ from revenueos.models import (
     OrganisationBetaSettings,
     OrganisationMembership,
     PreInteractionBrief,
+    RecordingChunk,
+    RecordingConsent,
+    RecordingSession,
+    RecordingUsageCounter,
     RevenueBrainInsight,
     RevenueBrainInteractionSnapshot,
     RevenueBrainSnapshot,
     Task,
     Transcript,
+    TranscriptSegment,
+    TranscriptVersion,
     User,
     VisualAsset,
     VisualCandidateEvidence,
 )
+from revenueos.recording_maintenance import (
+    delete_recording_objects,
+    purge_expired_recording_audio,
+    reconcile_recording_storage,
+)
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 5
+EXPORT_VERSION = 6
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -183,6 +194,12 @@ async def run_retention(
             ).all()
         )
         await _delete_visual_objects(
+            session,
+            settings,
+            organisation_id,
+            [*meeting_interaction_ids, *interaction_ids],
+        )
+        await delete_recording_objects(
             session,
             settings,
             organisation_id,
@@ -424,6 +441,7 @@ async def _delete_organisation_records(
             (await session.scalars(select(Interaction.id).where(Interaction.organisation_id == organisation_id))).all()
         )
         await _delete_visual_objects(session, settings, organisation_id, interaction_ids)
+        await delete_recording_objects(session, settings, organisation_id, interaction_ids)
         await _enable_approved_deletion(session)
         user_ids = list(
             (
@@ -467,6 +485,13 @@ async def _delete_organisation_records(
         await session.execute(delete(MeetingAuditEvent).where(MeetingAuditEvent.organisation_id == organisation_id))
         await session.execute(delete(BetaFeedback).where(BetaFeedback.organisation_id == organisation_id))
         await session.execute(delete(MeetingParticipant).where(MeetingParticipant.organisation_id == organisation_id))
+        await session.execute(
+            update(RecordingSession)
+            .where(RecordingSession.organisation_id == organisation_id)
+            .values(transcript_version_id=None)
+        )
+        await session.execute(delete(TranscriptSegment).where(TranscriptSegment.organisation_id == organisation_id))
+        await session.execute(delete(TranscriptVersion).where(TranscriptVersion.organisation_id == organisation_id))
         await session.execute(delete(Transcript).where(Transcript.organisation_id == organisation_id))
         await session.execute(delete(Meeting).where(Meeting.organisation_id == organisation_id))
         await session.execute(delete(CandidateEvidence).where(CandidateEvidence.organisation_id == organisation_id))
@@ -477,6 +502,12 @@ async def _delete_organisation_records(
             delete(VisualCandidateEvidence).where(VisualCandidateEvidence.organisation_id == organisation_id)
         )
         await session.execute(delete(VisualAsset).where(VisualAsset.organisation_id == organisation_id))
+        await session.execute(delete(RecordingChunk).where(RecordingChunk.organisation_id == organisation_id))
+        await session.execute(delete(RecordingConsent).where(RecordingConsent.organisation_id == organisation_id))
+        await session.execute(delete(RecordingSession).where(RecordingSession.organisation_id == organisation_id))
+        await session.execute(
+            delete(RecordingUsageCounter).where(RecordingUsageCounter.organisation_id == organisation_id)
+        )
         await session.execute(delete(Evidence).where(Evidence.organisation_id == organisation_id))
         await session.execute(delete(CaptureSession).where(CaptureSession.organisation_id == organisation_id))
         await session.execute(delete(PreInteractionBrief).where(PreInteractionBrief.organisation_id == organisation_id))
@@ -731,6 +762,7 @@ async def _delete_meeting_batch(
             MeetingAuditEvent.meeting_id.in_(meeting_ids),
         )
     )
+    await _delete_recording_database_rows(session, organisation_id, interaction_ids)
     await session.execute(
         delete(Transcript).where(Transcript.organisation_id == organisation_id, Transcript.meeting_id.in_(meeting_ids))
     )
@@ -892,6 +924,81 @@ async def _interaction_deletion_counts_from_select(
             )
             or 0
         ),
+        "recording_sessions": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(RecordingSession)
+                    .where(
+                        RecordingSession.organisation_id == organisation_id,
+                        RecordingSession.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "recording_chunks": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(RecordingChunk)
+                    .where(
+                        RecordingChunk.organisation_id == organisation_id,
+                        RecordingChunk.recording_session_id.in_(
+                            select(RecordingSession.id).where(
+                                RecordingSession.organisation_id == organisation_id,
+                                RecordingSession.interaction_id.in_(interaction_ids),
+                            )
+                        ),
+                    )
+                )
+            )
+            or 0
+        ),
+        "recording_consents": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(RecordingConsent)
+                    .where(
+                        RecordingConsent.organisation_id == organisation_id,
+                        RecordingConsent.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "transcript_versions": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(TranscriptVersion)
+                    .where(
+                        TranscriptVersion.organisation_id == organisation_id,
+                        TranscriptVersion.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "transcript_segments": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(TranscriptSegment)
+                    .where(
+                        TranscriptSegment.organisation_id == organisation_id,
+                        TranscriptSegment.transcript_version_id.in_(
+                            select(TranscriptVersion.id).where(
+                                TranscriptVersion.organisation_id == organisation_id,
+                                TranscriptVersion.interaction_id.in_(interaction_ids),
+                            )
+                        ),
+                    )
+                )
+            )
+            or 0
+        ),
         "visual_assets": int(
             (
                 await session.scalar(
@@ -955,6 +1062,7 @@ async def _delete_interaction_batch(
     if not interaction_ids:
         return {}
     counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
+    await _delete_recording_database_rows(session, organisation_id, interaction_ids)
     await session.execute(
         delete(RevenueBrainInteractionSnapshot).where(
             RevenueBrainInteractionSnapshot.organisation_id == organisation_id,
@@ -1038,6 +1146,61 @@ async def _delete_interaction_batch(
         )
     )
     return counts
+
+
+async def _delete_recording_database_rows(
+    session: AsyncSession,
+    organisation_id: UUID,
+    interaction_ids: list[UUID],
+) -> None:
+    if not interaction_ids:
+        return
+    recording_ids = select(RecordingSession.id).where(
+        RecordingSession.organisation_id == organisation_id,
+        RecordingSession.interaction_id.in_(interaction_ids),
+    )
+    version_ids = select(TranscriptVersion.id).where(
+        TranscriptVersion.organisation_id == organisation_id,
+        TranscriptVersion.interaction_id.in_(interaction_ids),
+    )
+    await session.execute(
+        update(RecordingSession)
+        .where(
+            RecordingSession.organisation_id == organisation_id,
+            RecordingSession.interaction_id.in_(interaction_ids),
+        )
+        .values(transcript_version_id=None)
+    )
+    await session.execute(
+        delete(TranscriptSegment).where(
+            TranscriptSegment.organisation_id == organisation_id,
+            TranscriptSegment.transcript_version_id.in_(version_ids),
+        )
+    )
+    await session.execute(
+        delete(TranscriptVersion).where(
+            TranscriptVersion.organisation_id == organisation_id,
+            TranscriptVersion.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(RecordingChunk).where(
+            RecordingChunk.organisation_id == organisation_id,
+            RecordingChunk.recording_session_id.in_(recording_ids),
+        )
+    )
+    await session.execute(
+        delete(RecordingConsent).where(
+            RecordingConsent.organisation_id == organisation_id,
+            RecordingConsent.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
+        delete(RecordingSession).where(
+            RecordingSession.organisation_id == organisation_id,
+            RecordingSession.interaction_id.in_(interaction_ids),
+        )
+    )
 
 
 def _merge_counts(first: dict[str, int], second: dict[str, int]) -> dict[str, int]:
@@ -1129,6 +1292,31 @@ async def _export_payload(
     )
     transcripts = await rows(
         select(Transcript).where(Transcript.organisation_id == organisation_id).order_by(Transcript.id)
+    )
+    recording_sessions = await rows(
+        select(RecordingSession)
+        .where(RecordingSession.organisation_id == organisation_id)
+        .order_by(RecordingSession.id)
+    )
+    recording_consents = await rows(
+        select(RecordingConsent)
+        .where(RecordingConsent.organisation_id == organisation_id)
+        .order_by(RecordingConsent.id)
+    )
+    recording_chunks = await rows(
+        select(RecordingChunk)
+        .where(RecordingChunk.organisation_id == organisation_id)
+        .order_by(RecordingChunk.recording_session_id, RecordingChunk.sequence_number)
+    )
+    transcript_versions = await rows(
+        select(TranscriptVersion)
+        .where(TranscriptVersion.organisation_id == organisation_id)
+        .order_by(TranscriptVersion.interaction_id, TranscriptVersion.created_at, TranscriptVersion.id)
+    )
+    transcript_segments = await rows(
+        select(TranscriptSegment)
+        .where(TranscriptSegment.organisation_id == organisation_id)
+        .order_by(TranscriptSegment.transcript_version_id, TranscriptSegment.sequence_number)
     )
     artifacts = await rows(
         select(AIArtifact).where(AIArtifact.organisation_id == organisation_id).order_by(AIArtifact.id)
@@ -1592,6 +1780,118 @@ async def _export_payload(
             )
             for item in transcripts
         ],
+        "recordingSessions": [
+            {
+                **_columns(
+                    item,
+                    (
+                        "id",
+                        "interaction_id",
+                        "capture_session_id",
+                        "source_evidence_id",
+                        "transcript_evidence_id",
+                        "created_by_user_id",
+                        "recording_type",
+                        "lifecycle_status",
+                        "consent_state",
+                        "started_at",
+                        "stopped_at",
+                        "duration_seconds",
+                        "expected_mime_type",
+                        "final_mime_type",
+                        "language",
+                        "total_bytes",
+                        "chunk_count",
+                        "upload_completed_at",
+                        "transcription_provider_key",
+                        "transcription_attempts",
+                        "transcription_started_at",
+                        "transcription_completed_at",
+                        "transcript_version_id",
+                        "failure_code",
+                        "session_expires_at",
+                        "auto_intelligence_status",
+                        "deleted_at",
+                        "created_at",
+                        "updated_at",
+                    ),
+                ),
+                "rawAudioExportStatus": "excluded_manifest_only",
+            }
+            for item in recording_sessions
+        ],
+        "recordingConsents": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "recording_session_id",
+                    "user_id",
+                    "notice_version",
+                    "acknowledged_at",
+                    "consent_method",
+                    "user_attested_authority",
+                ),
+            )
+            for item in recording_consents
+        ],
+        "recordingChunkManifest": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "recording_session_id",
+                    "sequence_number",
+                    "byte_size",
+                    "checksum_sha256",
+                    "upload_state",
+                    "uploaded_at",
+                    "created_at",
+                ),
+            )
+            for item in recording_chunks
+        ],
+        "transcriptVersions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "meeting_id",
+                    "transcript_id",
+                    "recording_session_id",
+                    "evidence_id",
+                    "version",
+                    "raw_text",
+                    "language",
+                    "source",
+                    "status",
+                    "provider_name",
+                    "created_at",
+                    "deleted_at",
+                ),
+            )
+            for item in transcript_versions
+        ],
+        "transcriptSegments": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "transcript_version_id",
+                    "sequence_number",
+                    "start_ms",
+                    "end_ms",
+                    "speaker_label",
+                    "text",
+                    "source_confidence",
+                    "created_at",
+                    "deleted_at",
+                ),
+            )
+            for item in transcript_segments
+        ],
         "aiArtifacts": [
             _columns(
                 item,
@@ -1795,6 +2095,43 @@ async def _run_cli(arguments: argparse.Namespace) -> None:
                     sort_keys=True,
                 )
             )
+        elif arguments.command == "recording-reconcile":
+            recording_reconciliation = await reconcile_recording_storage(
+                session_factory,
+                settings,
+                UUID(arguments.organisation_id),
+                repair=arguments.repair,
+            )
+            print(
+                json.dumps(
+                    {
+                        **recording_reconciliation.__dict__,
+                        "organisation_id": str(recording_reconciliation.organisation_id),
+                    },
+                    sort_keys=True,
+                )
+            )
+        elif arguments.command == "recording-retention":
+            recording_retention = await purge_expired_recording_audio(
+                session_factory,
+                settings,
+                UUID(arguments.organisation_id),
+                dry_run=arguments.dry_run,
+                batch_size=(
+                    arguments.batch_size
+                    if arguments.batch_size is not None
+                    else settings.private_beta_retention_batch_size
+                ),
+            )
+            print(
+                json.dumps(
+                    {
+                        **recording_retention.__dict__,
+                        "organisation_id": str(recording_retention.organisation_id),
+                    },
+                    sort_keys=True,
+                )
+            )
         else:
             organisation_id = await delete_organisation(
                 session_factory,
@@ -1823,6 +2160,13 @@ def main() -> None:
     reconciliation = subparsers.add_parser("visual-reconcile")
     reconciliation.add_argument("--organisation-id", required=True)
     reconciliation.add_argument("--repair", action="store_true")
+    recording_reconciliation = subparsers.add_parser("recording-reconcile")
+    recording_reconciliation.add_argument("--organisation-id", required=True)
+    recording_reconciliation.add_argument("--repair", action="store_true")
+    recording_retention = subparsers.add_parser("recording-retention")
+    recording_retention.add_argument("--organisation-id", required=True)
+    recording_retention.add_argument("--batch-size", type=int)
+    recording_retention.add_argument("--dry-run", action="store_true")
     deletion = subparsers.add_parser("delete-organisation")
     deletion.add_argument("--organisation-id", required=True)
     deletion.add_argument("--request-id", required=True)

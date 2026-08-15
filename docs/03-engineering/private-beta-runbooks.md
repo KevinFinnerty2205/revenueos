@@ -196,6 +196,21 @@ owner.
    disable `visualEvidence`, revoke/rotate credentials and follow the tenant
    isolation/secret incident runbooks.
 
+## 14. Recording upload, transcription or storage failure
+
+1. Disable `recordingCapture` and, for provider/retry incidents,
+   `transcription`/automatic intelligence. Do not delete or mark sessions complete.
+2. Separate consent/permission, chunk receipt/integrity, storage, worker claim,
+   provider and transcript-persistence failures using safe codes and opaque IDs.
+3. Run tenant-scoped `recording-reconcile` without repair. Never request/download
+   customer audio or paste transcript, object key, signed URL or provider payload.
+4. Retry only classified transient transcription failures within the configured
+   attempt limit. A final transcript remains usable if automatic intelligence fails.
+5. For deletion failure, retry object deletion before relational removal or a
+   complete-erasure report. Use the dedicated reconciliation runbook for repair.
+6. Validate one synthetic mock WebM flow, one transcript version, no orphan object,
+   forced RLS and content-free logs before re-enabling.
+
 - **Detection:** release regression, readiness failure, unsafe privacy/security
   behaviour or incompatible worker/API contract.
 - **Immediate containment:** stop rollout and worker claims; disable the

@@ -10,7 +10,7 @@ Retention selects eligible tenant interactions, calculates dry-run counts, delet
 
 ## Export
 
-Export version 5 includes visual metadata, source ownership, review decisions and extracted candidate text. Internal storage keys, provider request IDs and signed URLs are excluded. Image bytes are omitted by default. `API_PRIVATE_BETA_EXPORT_VISUAL_IMAGES_ENABLED=true` includes base64 bytes only inside an already confirmed admin export; this setting requires separate privacy approval.
+Export version 6 includes visual metadata, source ownership, review decisions and extracted candidate text. Internal storage keys, provider request IDs and signed URLs are excluded. Image bytes are omitted by default. `API_PRIVATE_BETA_EXPORT_VISUAL_IMAGES_ENABLED=true` includes base64 bytes only inside an already confirmed admin export; this setting requires separate privacy approval.
 
 ## Reconciliation
 

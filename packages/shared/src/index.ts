@@ -1393,6 +1393,94 @@ export interface VisualInteractionIntelligence {
   items: VisualIntelligenceItem[];
 }
 
+export type RecordingType =
+  | "live_audio_recording"
+  | "uploaded_audio_recording"
+  | "imported_audio_recording";
+export type RecordingLifecycleStatus =
+  | "created"
+  | "recording"
+  | "uploading"
+  | "uploaded"
+  | "transcribing"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "deleting"
+  | "deleted";
+export type RecordingMimeType = "audio/webm" | "audio/mp4" | "audio/m4a";
+export type RecordingTranscriptionStatus =
+  "disabled" | "queued" | "processing" | "completed" | "failed";
+
+export interface RecordingSession {
+  id: string;
+  interactionId: string;
+  captureSessionId: string;
+  recordingType: RecordingType;
+  lifecycleStatus: RecordingLifecycleStatus;
+  consentState: "acknowledged";
+  startedAt: string | null;
+  stoppedAt: string | null;
+  durationSeconds: number | null;
+  expectedMimeType: RecordingMimeType;
+  finalMimeType: RecordingMimeType | null;
+  totalBytes: number;
+  chunkCount: number;
+  uploadCompletedAt: string | null;
+  transcriptionStatus: RecordingTranscriptionStatus;
+  transcriptionAttempts: number;
+  failureCode: string | null;
+  autoIntelligenceStatus: "disabled" | "not_requested" | "requested" | "failed";
+  sessionExpiresAt: string;
+  providerMode: "mock" | "openai";
+  externalProcessing: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecordingChunkUpload {
+  id: string;
+  recordingSessionId: string;
+  sequenceNumber: number;
+  byteSize: number;
+  checksumSha256: string;
+  uploadState:
+    | "pending"
+    | "uploaded"
+    | "verified"
+    | "deletion_pending"
+    | "delete_failed"
+    | "deleted";
+  uploadedAt: string | null;
+  createdAt: string;
+  uploadUrl: string;
+  uploadExpiresAt: string;
+}
+
+export interface RecordingTranscriptSegment {
+  sequenceNumber: number;
+  startMs: number;
+  endMs: number;
+  speakerLabel: string | null;
+  text: string;
+  sourceConfidence: string | null;
+}
+
+export interface RecordingTranscription {
+  recordingId: string;
+  status: RecordingTranscriptionStatus;
+  transcriptVersionId: string | null;
+  transcriptId: string | null;
+  meetingId: string | null;
+  version: number | null;
+  source: "recorded_audio" | "uploaded_audio" | "imported_audio" | null;
+  language: string | null;
+  text: string | null;
+  segments: RecordingTranscriptSegment[];
+  completedAt: string | null;
+  safeMessage: string;
+}
+
 export interface OpportunityWorkspaceResponse {
   opportunity: OpportunityWorkspaceOpportunity;
   reasoning: RevenueBrainReasoningResponse;

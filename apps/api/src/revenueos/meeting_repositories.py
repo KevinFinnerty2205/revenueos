@@ -20,6 +20,7 @@ from revenueos.models import (
     Opportunity,
     OrganisationMembership,
     Transcript,
+    TranscriptVersion,
 )
 
 
@@ -207,6 +208,21 @@ class MeetingRepository:
         if for_update:
             statement = statement.with_for_update()
         result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def get_transcript_version(
+        self,
+        organisation_id: UUID,
+        transcript_id: UUID,
+        version: int,
+    ) -> TranscriptVersion | None:
+        result = await self.session.execute(
+            select(TranscriptVersion).where(
+                TranscriptVersion.organisation_id == organisation_id,
+                TranscriptVersion.transcript_id == transcript_id,
+                TranscriptVersion.version == version,
+            )
+        )
         return result.scalar_one_or_none()
 
     async def list_history(

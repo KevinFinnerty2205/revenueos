@@ -15,6 +15,8 @@ describe("dashboard shell", () => {
     ]) {
       expect(screen.getByRole("heading", { name: heading })).toBeVisible();
     }
-    expect(screen.getByText(/no ai provider/i)).toBeVisible();
+    expect(
+      screen.getByText(/dashboard insight summary is not implemented/i),
+    ).toBeVisible();
   });
 });
