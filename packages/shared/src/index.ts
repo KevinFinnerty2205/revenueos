@@ -447,9 +447,7 @@ export interface InteractionMarker {
 }
 
 export type LiveIntelligenceAvailability =
-  | "available"
-  | "unavailable"
-  | "disabled";
+  "available" | "unavailable" | "disabled";
 export type LiveIntelligenceState =
   | "available"
   | "unavailable"
@@ -481,11 +479,7 @@ export type LiveSignalLifecycle =
   | "promoted_candidate"
   | "expired";
 export type LiveSignalResolution =
-  | "pending"
-  | "confirmed"
-  | "revised"
-  | "unsupported"
-  | "unresolved";
+  "pending" | "confirmed" | "revised" | "unsupported" | "unresolved";
 
 export interface LiveSourceReference {
   transcriptVersionId: string;
@@ -501,9 +495,7 @@ export interface ProvisionalLiveSignal {
   provisional: true;
   priority: "high" | "normal";
   evidenceStrength:
-    | "customer_attributed"
-    | "speaker_uncertain"
-    | "context_only";
+    "customer_attributed" | "speaker_uncertain" | "context_only";
   resolutionStatus: LiveSignalResolution;
   source: LiveSourceReference;
   detectedAt: string;
@@ -515,10 +507,7 @@ export interface LiveBriefProgress {
   itemType: "objective" | "open_question";
   itemIndex: number;
   label: string;
-  progressStatus:
-    | "unresolved"
-    | "possibly_addressed"
-    | "possibly_answered";
+  progressStatus: "unresolved" | "possibly_addressed" | "possibly_answered";
 }
 
 export interface LiveReconciliationSummary {
@@ -1942,4 +1931,143 @@ export interface OpportunityInteractionCaptureStatus {
   visualCount: number;
   markerCount: number;
   updatedAt: string;
+}
+
+export type ActionType =
+  | "follow_up_email"
+  | "send_requested_material"
+  | "create_task"
+  | "follow_up_stakeholder"
+  | "schedule_interaction"
+  | "update_opportunity"
+  | "update_contact"
+  | "update_stakeholder"
+  | "add_decision"
+  | "add_commitment"
+  | "add_risk"
+  | "update_timeline"
+  | "update_procurement"
+  | "update_security_legal"
+  | "create_reminder"
+  | "notify_internal"
+  | "prepare_next_interaction"
+  | "resolve_open_question"
+  | "review_conflict"
+  | "other";
+export type ActionStatus =
+  | "proposed"
+  | "edited"
+  | "approved"
+  | "rejected"
+  | "superseded"
+  | "completed_manually";
+export type ActionPriority = "high" | "normal" | "low";
+export type ActionAudience = "internal" | "customer_facing";
+export type ActionRiskClass =
+  "internal_low_risk" | "external_customer_facing" | "data_mutation";
+export type ActionRejectionReason =
+  | "already_done"
+  | "incorrect"
+  | "not_relevant"
+  | "unsupported"
+  | "duplicate"
+  | "not_now"
+  | "other";
+
+interface ActionPayloadBase {
+  kind: ActionType;
+}
+
+export interface FollowUpEmailActionPayload extends ActionPayloadBase {
+  kind: "follow_up_email";
+  draftArtifactId: string;
+  recipientContactId: string | null;
+  recipientEmail: string | null;
+  recipientConfirmed: boolean;
+  subject: string;
+  body: string;
+}
+
+export interface CreateTaskActionPayload extends ActionPayloadBase {
+  kind: "create_task";
+  title: string;
+  ownerName: string | null;
+  ownerUserId: string | null;
+  dueAt: string | null;
+  context: string;
+  linkedOpportunityId: string;
+  linkedInteractionId: string | null;
+}
+
+export type ActionPayload =
+  | FollowUpEmailActionPayload
+  | CreateTaskActionPayload
+  | ({
+      kind: Exclude<ActionType, "follow_up_email" | "create_task">;
+    } & Record<string, unknown>);
+
+export interface ActionSourceReference {
+  sourceType:
+    | "ai_artifact"
+    | "accepted_evidence"
+    | "interaction_intelligence"
+    | "revenue_brain_insight";
+  sourceId: string;
+  itemKey: string;
+  label: string;
+  origin:
+    | "customer_direct"
+    | "salesperson_reported"
+    | "validated_intelligence"
+    | "revenue_brain";
+}
+
+export interface ActionProposal {
+  id: string;
+  organisationId: string;
+  opportunityId: string;
+  interactionId: string | null;
+  actionType: ActionType;
+  status: ActionStatus;
+  priority: ActionPriority;
+  audience: ActionAudience;
+  riskClass: ActionRiskClass;
+  currentVersion: number;
+  approvedVersion: number | null;
+  title: string;
+  description: string;
+  proposedDueAt: string | null;
+  targetEntityType: string | null;
+  targetEntityId: string | null;
+  proposedPayload: ActionPayload;
+  sourceRefs: ActionSourceReference[];
+  provenanceSummary: string;
+  generatedAt: string;
+  versionCreatedAt: string;
+  createdByUserId: string;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  rejectionReasonCode: ActionRejectionReason | null;
+  supersedesActionId: string | null;
+  completedByUserId: string | null;
+  completedAt: string | null;
+  executionState: "not_executed";
+  sendReady: false;
+}
+
+export interface ActionListResponse {
+  items: ActionProposal[];
+  total: number;
+}
+
+export interface ActionGenerationResponse {
+  actions: ActionProposal[];
+  createdCount: number;
+  reusedCount: number;
+  supersededCount: number;
+  proposalLimit: number;
+  providerCompositionUsed: false;
+  externalActionsExecuted: false;
 }

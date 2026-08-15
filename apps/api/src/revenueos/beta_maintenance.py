@@ -21,6 +21,9 @@ from revenueos.database import create_engine, create_session_factory, set_tenant
 from revenueos.live_intelligence_maintenance import delete_live_intelligence
 from revenueos.live_intelligence_services import expire_live_intelligence
 from revenueos.models import (
+    ActionAuditEvent,
+    ActionProposal,
+    ActionProposalVersion,
     AIArtifact,
     AIJob,
     AIUsageCounter,
@@ -83,7 +86,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 11
+EXPORT_VERSION = 12
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -580,6 +583,11 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(AIArtifact).where(AIArtifact.organisation_id == organisation_id))
         await session.execute(delete(AIJob).where(AIJob.organisation_id == organisation_id))
+        await session.execute(delete(ActionAuditEvent).where(ActionAuditEvent.organisation_id == organisation_id))
+        await session.execute(
+            delete(ActionProposalVersion).where(ActionProposalVersion.organisation_id == organisation_id)
+        )
+        await session.execute(delete(ActionProposal).where(ActionProposal.organisation_id == organisation_id))
         await session.execute(delete(MeetingAuditEvent).where(MeetingAuditEvent.organisation_id == organisation_id))
         await session.execute(delete(BetaFeedback).where(BetaFeedback.organisation_id == organisation_id))
         await session.execute(delete(MeetingParticipant).where(MeetingParticipant.organisation_id == organisation_id))
@@ -1177,6 +1185,55 @@ async def _interaction_deletion_counts_from_select(
             )
             or 0
         ),
+        "action_proposals": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ActionProposal)
+                    .where(
+                        ActionProposal.organisation_id == organisation_id,
+                        ActionProposal.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "action_proposal_versions": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ActionProposalVersion)
+                    .where(
+                        ActionProposalVersion.organisation_id == organisation_id,
+                        ActionProposalVersion.action_id.in_(
+                            select(ActionProposal.id).where(
+                                ActionProposal.organisation_id == organisation_id,
+                                ActionProposal.interaction_id.in_(interaction_ids),
+                            )
+                        ),
+                    )
+                )
+            )
+            or 0
+        ),
+        "action_audit_events": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ActionAuditEvent)
+                    .where(
+                        ActionAuditEvent.organisation_id == organisation_id,
+                        ActionAuditEvent.action_id.in_(
+                            select(ActionProposal.id).where(
+                                ActionProposal.organisation_id == organisation_id,
+                                ActionProposal.interaction_id.in_(interaction_ids),
+                            )
+                        ),
+                    )
+                )
+            )
+            or 0
+        ),
         "debrief_sessions": int(
             (
                 await session.scalar(
@@ -1522,6 +1579,28 @@ async def _delete_interaction_batch(
             PreInteractionBrief.interaction_id.in_(interaction_ids),
         )
     )
+    action_ids = select(ActionProposal.id).where(
+        ActionProposal.organisation_id == organisation_id,
+        ActionProposal.interaction_id.in_(interaction_ids),
+    )
+    await session.execute(
+        delete(ActionAuditEvent).where(
+            ActionAuditEvent.organisation_id == organisation_id,
+            ActionAuditEvent.action_id.in_(action_ids),
+        )
+    )
+    await session.execute(
+        delete(ActionProposalVersion).where(
+            ActionProposalVersion.organisation_id == organisation_id,
+            ActionProposalVersion.action_id.in_(action_ids),
+        )
+    )
+    await session.execute(
+        delete(ActionProposal).where(
+            ActionProposal.organisation_id == organisation_id,
+            ActionProposal.interaction_id.in_(interaction_ids),
+        )
+    )
     await session.execute(
         delete(OnlineMeetingMetadata).where(
             OnlineMeetingMetadata.organisation_id == organisation_id,
@@ -1636,6 +1715,24 @@ async def _export_payload(
     contacts = await rows(select(Contact).where(Contact.organisation_id == organisation_id).order_by(Contact.id))
     opportunities = await rows(
         select(Opportunity).where(Opportunity.organisation_id == organisation_id).order_by(Opportunity.id)
+    )
+    action_proposals = await rows(
+        select(ActionProposal)
+        .where(ActionProposal.organisation_id == organisation_id)
+        .order_by(ActionProposal.opportunity_id, ActionProposal.generated_at, ActionProposal.id)
+    )
+    action_versions = await rows(
+        select(ActionProposalVersion)
+        .where(ActionProposalVersion.organisation_id == organisation_id)
+        .order_by(
+            ActionProposalVersion.action_id,
+            ActionProposalVersion.version,
+        )
+    )
+    action_audits = await rows(
+        select(ActionAuditEvent)
+        .where(ActionAuditEvent.organisation_id == organisation_id)
+        .order_by(ActionAuditEvent.action_id, ActionAuditEvent.created_at, ActionAuditEvent.id)
     )
     tasks = await rows(select(Task).where(Task.organisation_id == organisation_id).order_by(Task.id))
     meetings = await rows(select(Meeting).where(Meeting.organisation_id == organisation_id).order_by(Meeting.id))
@@ -1962,6 +2059,71 @@ async def _export_payload(
                 ),
             )
             for item in opportunities
+        ],
+        "actionProposals": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "opportunity_id",
+                    "interaction_id",
+                    "action_type",
+                    "status",
+                    "priority",
+                    "audience",
+                    "risk_class",
+                    "current_version",
+                    "approved_version",
+                    "created_by_user_id",
+                    "generated_at",
+                    "reviewed_by_user_id",
+                    "reviewed_at",
+                    "approved_at",
+                    "rejected_at",
+                    "rejection_reason_code",
+                    "supersedes_action_id",
+                    "completed_by_user_id",
+                    "completed_at",
+                ),
+            )
+            for item in action_proposals
+        ],
+        "actionProposalVersions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "action_id",
+                    "version",
+                    "title",
+                    "description",
+                    "proposed_due_at",
+                    "target_entity_type",
+                    "target_entity_id",
+                    "payload_json",
+                    "source_refs_json",
+                    "provenance_summary",
+                    "content_fingerprint",
+                    "created_by_user_id",
+                    "created_at",
+                ),
+            )
+            for item in action_versions
+        ],
+        "actionAuditEvents": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "action_id",
+                    "actor_user_id",
+                    "event_type",
+                    "proposal_version",
+                    "metadata_json",
+                    "created_at",
+                ),
+            )
+            for item in action_audits
         ],
         "tasks": [
             _columns(

@@ -1192,7 +1192,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 11
+        assert payload["exportVersion"] == 12
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1204,6 +1204,9 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert exported_evidence["origin_class"] == "salesperson_reported"
         assert payload["preInteractionBriefs"][0]["interaction_id"] == interaction.json()["id"]
         assert payload["preInteractionBriefs"][0]["source_references_json"]
+        assert payload["actionProposals"] == []
+        assert payload["actionProposalVersions"] == []
+        assert payload["actionAuditEvents"] == []
         assert payload["debriefSessions"] == []
         assert payload["debriefTurns"] == []
         assert payload["evidenceFragments"] == []
@@ -1242,7 +1245,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 11
+        assert download.json()["exportVersion"] == 12
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

@@ -591,3 +591,16 @@ worker-control or automation
 endpoints. Mock/OpenAI selection and beta flags are server-side configuration
 and do not create generic provider control endpoints. Clerk tokens are verified
 by the API; production fails closed without complete configuration.
+
+## Action Layer routes
+
+- `POST /api/v1/opportunities/{opportunity_id}/actions/generate`
+- `GET /api/v1/opportunities/{opportunity_id}/actions?status=...`
+- `GET|PATCH /api/v1/actions/{action_id}`
+- `POST /api/v1/actions/{action_id}/approve`
+- `POST /api/v1/actions/{action_id}/reject`
+- `POST /api/v1/actions/{action_id}/complete`
+
+Payloads are strict discriminated unions. Review mutations require
+`expectedVersion`. Approval reports `not_executed`; no route dispatches an external
+action. Generation/listing derive the organisation from verified auth context.

@@ -25,6 +25,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
 from revenueos.domain import (
+    ActionAudience,
+    ActionPriority,
+    ActionRiskClass,
+    ActionStatus,
+    ActionType,
     AIArtifactType,
     AIJobStatus,
     AIJobType,
@@ -517,6 +522,276 @@ class OpportunityAuditEvent(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+
+class ActionProposal(Base):
+    __tablename__ = "action_proposals"
+    __table_args__ = (
+        CheckConstraint(
+            "action_type IN ('follow_up_email', 'send_requested_material', 'create_task', "
+            "'follow_up_stakeholder', 'schedule_interaction', 'update_opportunity', "
+            "'update_contact', 'update_stakeholder', 'add_decision', 'add_commitment', "
+            "'add_risk', 'update_timeline', 'update_procurement', 'update_security_legal', "
+            "'create_reminder', 'notify_internal', 'prepare_next_interaction', "
+            "'resolve_open_question', 'review_conflict', 'other')",
+            name="ck_action_proposals_type",
+        ),
+        CheckConstraint(
+            "status IN ('proposed', 'edited', 'approved', 'rejected', 'superseded', 'completed_manually')",
+            name="ck_action_proposals_status",
+        ),
+        CheckConstraint(
+            "priority IN ('high', 'normal', 'low')",
+            name="ck_action_proposals_priority",
+        ),
+        CheckConstraint(
+            "audience IN ('internal', 'customer_facing')",
+            name="ck_action_proposals_audience",
+        ),
+        CheckConstraint(
+            "risk_class IN ('internal_low_risk', 'external_customer_facing', 'data_mutation')",
+            name="ck_action_proposals_risk",
+        ),
+        CheckConstraint("current_version > 0", name="ck_action_proposals_current_version"),
+        CheckConstraint(
+            "approved_version IS NULL OR approved_version BETWEEN 1 AND current_version",
+            name="ck_action_proposals_approved_version",
+        ),
+        CheckConstraint("length(source_fingerprint) = 64", name="ck_action_proposals_fingerprint"),
+        CheckConstraint("length(semantic_key) = 64", name="ck_action_proposals_semantic_key"),
+        CheckConstraint(
+            "rejection_reason_code IS NULL OR rejection_reason_code IN "
+            "('already_done', 'incorrect', 'not_relevant', 'unsupported', 'duplicate', 'not_now', 'other')",
+            name="ck_action_proposals_rejection_reason",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_action_proposals_opportunity_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_action_proposals_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_action_proposals_creator_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "reviewed_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_action_proposals_reviewer_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "completed_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_action_proposals_completer_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "supersedes_action_id"],
+            ["action_proposals.organisation_id", "action_proposals.id"],
+            name="fk_action_proposals_supersedes_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_action_proposals_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "opportunity_id",
+            "source_fingerprint",
+            name="uq_action_proposals_source_fingerprint",
+        ),
+        Index(
+            "ix_action_proposals_org_opportunity_status",
+            "organisation_id",
+            "opportunity_id",
+            "status",
+        ),
+        Index(
+            "ix_action_proposals_org_created",
+            "organisation_id",
+            "generated_at",
+        ),
+        Index(
+            "ix_action_proposals_org_semantic",
+            "organisation_id",
+            "opportunity_id",
+            "semantic_key",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    action_type: Mapped[str] = mapped_column(
+        String(40), nullable=False, default=ActionType.OTHER.value, server_default=ActionType.OTHER.value
+    )
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=ActionStatus.PROPOSED.value, server_default=ActionStatus.PROPOSED.value
+    )
+    priority: Mapped[str] = mapped_column(
+        String(12), nullable=False, default=ActionPriority.NORMAL.value, server_default=ActionPriority.NORMAL.value
+    )
+    audience: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ActionAudience.INTERNAL.value, server_default=ActionAudience.INTERNAL.value
+    )
+    risk_class: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ActionRiskClass.INTERNAL_LOW_RISK.value,
+        server_default=ActionRiskClass.INTERNAL_LOW_RISK.value,
+    )
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    approved_version: Mapped[int | None] = mapped_column(Integer)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    semantic_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejection_reason_code: Mapped[str | None] = mapped_column(String(24))
+    supersedes_action_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    completed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ActionProposalVersion(Base):
+    __tablename__ = "action_proposal_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_action_versions_version"),
+        CheckConstraint("length(trim(title)) BETWEEN 1 AND 240", name="ck_action_versions_title"),
+        CheckConstraint(
+            "length(trim(description)) BETWEEN 1 AND 2000",
+            name="ck_action_versions_description",
+        ),
+        CheckConstraint(
+            "target_entity_type IS NULL OR target_entity_type IN "
+            "('opportunity', 'contact', 'stakeholder', 'interaction', 'task', 'internal_user')",
+            name="ck_action_versions_target_type",
+        ),
+        CheckConstraint(
+            "(target_entity_type IS NULL AND target_entity_id IS NULL) OR target_entity_type IS NOT NULL",
+            name="ck_action_versions_target_pair",
+        ),
+        CheckConstraint(
+            "length(trim(provenance_summary)) BETWEEN 1 AND 2000",
+            name="ck_action_versions_provenance",
+        ),
+        CheckConstraint("length(content_fingerprint) = 64", name="ck_action_versions_fingerprint"),
+        ForeignKeyConstraint(
+            ["organisation_id", "action_id"],
+            ["action_proposals.organisation_id", "action_proposals.id"],
+            name="fk_action_versions_action_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_action_versions_creator_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_action_versions_org_id"),
+        UniqueConstraint("organisation_id", "action_id", "version", name="uq_action_versions_action_version"),
+        Index(
+            "ix_action_versions_org_action",
+            "organisation_id",
+            "action_id",
+            "version",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    description: Mapped[str] = mapped_column(String(2000), nullable=False)
+    proposed_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    target_entity_type: Mapped[str | None] = mapped_column(String(24))
+    target_entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    payload_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    source_refs_json: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False)
+    provenance_summary: Mapped[str] = mapped_column(String(2000), nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ActionAuditEvent(Base):
+    __tablename__ = "action_audit_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('proposed', 'edited', 'approved', 'rejected', 'superseded', 'completed_manually')",
+            name="ck_action_audit_events_type",
+        ),
+        CheckConstraint("proposal_version > 0", name="ck_action_audit_events_version"),
+        ForeignKeyConstraint(
+            ["organisation_id", "action_id"],
+            ["action_proposals.organisation_id", "action_proposals.id"],
+            name="fk_action_audit_events_action_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "actor_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_action_audit_events_actor_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_action_audit_events_org_id"),
+        Index(
+            "ix_action_audit_events_org_action_created",
+            "organisation_id",
+            "action_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    proposal_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class Task(TimestampMixin, Base):

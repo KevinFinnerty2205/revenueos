@@ -13,7 +13,7 @@ Domain Foundation, WO-012 AI Companion preparation, WO-013 AI Debrief/Voice
 Journal, WO-014 Visual Evidence/Presentation Mode, WO-015 Recording &
 Transcription Foundation, WO-016 Browser Face-to-Face Companion, WO-017 Phone
 Call Intelligence, WO-018 Online Meeting Capture, WO-019 Documents & Email
-Evidence and WO-020 Live Interaction Intelligence. Interactions, Meetings,
+Evidence, WO-020 Live Interaction Intelligence and WO-021 Action Layer. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -73,6 +73,11 @@ separate provisional aggregate, show possible signals and brief progress, then
 reconcile against final Interaction Intelligence. The default detector is
 deterministic/no-network; both live flags default off. Provisional state never writes
 final Opportunity Workspace intelligence or Revenue Brain.
+WO-021 adds tenant-scoped, typed and versioned Action proposals derived only from
+final validated intelligence. The Opportunity Workspace supports source review,
+safe revision, approval, controlled rejection and internal manual completion.
+Approval is always `not_executed`: no email, CRM, calendar or task connector and no
+autonomous execution loop is implemented.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
@@ -108,7 +113,7 @@ Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019 and WO-020.
+WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019, WO-020 and WO-021.
 WO-010 remains the blueprint; later roadmap work remains unauthorised.
 
 ## Prerequisites
@@ -247,6 +252,10 @@ API routes:
 - CRUD under `/api/v1/contacts`
 - CRUD under `/api/v1/opportunities`
 - `GET /api/v1/opportunities/{opportunityId}/workspace` — latest associated meeting and stored product-safe intelligence
+- generate/list opportunity Actions under
+  `/api/v1/opportunities/{opportunityId}/actions`
+- read/revise/approve/reject/manual-complete review-only proposals under
+  `/api/v1/actions/{actionId}`; every approval remains not executed
 - `PATCH /api/v1/meetings/{meetingId}/opportunity` — stale-write-safe association or disassociation
 - CRUD under `/api/v1/tasks`
 - CRUD under `/api/v1/meetings`
@@ -364,6 +373,12 @@ flag does not configure a provider and fails safely if enabled. Cadence, window,
 request, character, concurrency, provider-call and 30-day live-retention controls
 are documented in the [product guide](docs/01-product/live-interaction-intelligence.md)
 and [`apps/api/.env.example`](apps/api/.env.example).
+
+Action generation is deterministic and makes no provider call. The Action Layer
+and internal manual completion have separate feature flags, with daily and
+per-opportunity caps documented in the
+[Action Layer guide](docs/01-product/action-layer.md). No external execution
+configuration exists.
 
 ## Private beta operations
 

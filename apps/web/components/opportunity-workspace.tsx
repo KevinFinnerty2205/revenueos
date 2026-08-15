@@ -1,6 +1,8 @@
 "use client";
 
 import type {
+  ActionListResponse,
+  ActionProposal,
   EntityPage,
   FollowUpEmailContent,
   Meeting,
@@ -27,6 +29,7 @@ import { humanise } from "@/lib/business-entities";
 import { formatMeetingDate } from "@/lib/meetings";
 import { RevenueBrainInsightPanel } from "@/components/revenue-brain-insight";
 import { CustomerEvidencePanel } from "@/components/customer-evidence-panel";
+import { RecommendedActions } from "@/components/recommended-actions";
 
 export function OpportunityWorkspace({
   opportunityId,
@@ -36,6 +39,8 @@ export function OpportunityWorkspace({
   const [workspace, setWorkspace] =
     useState<OpportunityWorkspaceResponse | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [actions, setActions] = useState<ActionProposal[]>([]);
+  const [actionLoadError, setActionLoadError] = useState<string | null>(null);
   const [selectedMeetingId, setSelectedMeetingId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +56,7 @@ export function OpportunityWorkspace({
 
   const loadWorkspace = useCallback(
     async (signal: AbortSignal) => {
-      const [loadedWorkspace, meetingPage] = await Promise.all([
+      const [loadedWorkspace, meetingPage, actionPage] = await Promise.all([
         apiRequest<OpportunityWorkspaceResponse>(
           `/api/v1/opportunities/${opportunityId}/workspace`,
           { signal },
@@ -60,8 +65,32 @@ export function OpportunityWorkspace({
           "/api/v1/meetings?pageSize=100&sortBy=meeting_date&sortOrder=desc",
           { signal },
         ),
+        apiRequest<ActionListResponse>(
+          `/api/v1/opportunities/${opportunityId}/actions`,
+          { signal },
+        )
+          .then((page) =>
+            Array.isArray(page.items)
+              ? { page, error: null }
+              : {
+                  page: { items: [], total: 0 },
+                  error: "Recommended Actions could not be loaded.",
+                },
+          )
+          .catch((requestError: unknown) => ({
+            page: { items: [], total: 0 },
+            error:
+              requestError instanceof Error
+                ? requestError.message
+                : "Recommended Actions could not be loaded.",
+          })),
       ]);
-      return { workspace: loadedWorkspace, meetings: meetingPage.items };
+      return {
+        workspace: loadedWorkspace,
+        meetings: meetingPage.items,
+        actions: actionPage.page.items,
+        actionError: actionPage.error,
+      };
     },
     [opportunityId],
   );
@@ -72,6 +101,8 @@ export function OpportunityWorkspace({
       .then((loaded) => {
         setWorkspace(loaded.workspace);
         setMeetings(loaded.meetings);
+        setActions(loaded.actions);
+        setActionLoadError(loaded.actionError);
         setError(null);
       })
       .catch((requestError: unknown) => {
@@ -339,6 +370,13 @@ export function OpportunityWorkspace({
       <CustomerEvidencePanel
         opportunityId={opportunity.id}
         companyId={opportunity.companyId}
+      />
+
+      <RecommendedActions
+        key={`${opportunity.id}-${refreshKey}`}
+        opportunityId={opportunity.id}
+        initialActions={actions}
+        initialError={actionLoadError}
       />
 
       <RevenueBrainInsightPanel

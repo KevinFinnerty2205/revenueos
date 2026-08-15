@@ -261,3 +261,11 @@ See [Phone Call Intelligence](phone-call-intelligence-guide.md) and
 - [Presentation mode](presentation-mode.md)
 - [Mobile companion strategy](mobile-companion-strategy.md)
 - [Interaction security, privacy and consent](../03-engineering/interaction-security-privacy-and-consent.md)
+
+## Action review after final intelligence
+
+Once final validated intelligence exists, an opportunity can produce review-only
+Actions. Provisional DURING signals never feed this step. The user reviews and may
+revise, approve or reject; approval is visibly not execution. Pending and approved
+Actions can inform the next BEFORE brief, while rejected, superseded and manually
+completed Actions are excluded.

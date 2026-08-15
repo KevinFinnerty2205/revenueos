@@ -41,3 +41,17 @@ async def require_opportunity_workspace_feature(
 ) -> None:
     if not settings.feature_opportunity_workspace_enabled:
         raise PublicAPIError("feature_unavailable", "This feature is not enabled for the private beta.", 404)
+
+
+async def require_action_layer_feature(
+    settings: Settings = Depends(get_settings),
+) -> None:
+    if not settings.feature_action_layer_enabled:
+        raise PublicAPIError("feature_unavailable", "This feature is not enabled for the private beta.", 404)
+
+
+async def require_action_manual_completion_feature(
+    settings: Settings = Depends(get_settings),
+) -> None:
+    if not settings.feature_action_layer_enabled or not settings.feature_action_manual_completion_enabled:
+        raise PublicAPIError("feature_unavailable", "This feature is not enabled for the private beta.", 404)

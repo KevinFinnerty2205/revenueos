@@ -172,3 +172,10 @@ Source rows are reference-only and are never recomputed in the read path. Deleti
 the source removes its candidates, accepted Evidence and source snapshots, so it
 cannot continue influencing the timeline. This slice does not score, forecast,
 perform longitudinal inference across source types or mutate opportunity fields.
+
+## Action Layer consumer
+
+Completed Revenue Brain insights can ground bounded Action proposals when their
+source snapshots remain current. The Action Layer stores only references and a
+bounded provenance summary; it does not modify Revenue Brain snapshots or insights.
+Approval is refused if the referenced insight is no longer current.

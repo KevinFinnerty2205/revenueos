@@ -279,3 +279,11 @@ These are expected current limitations, not defects hidden by this target docume
 - [AI system blueprint](../04-ai/ai-system-blueprint.md)
 - [Integration strategy](../05-integrations/integration-strategy.md)
 - [MVP and beta scope](../06-roadmap/mvp-and-beta-scope.md)
+
+## Current Action Layer trust boundary
+
+Action proposals can contain customer-facing drafts and proposed record changes, so
+they remain tenant-confidential content. Forced RLS, composite tenant keys, bounded
+strict payloads, immutable revisions, source revalidation and metadata-only audits
+apply. Approval is human intent, not external execution. Action data is included in
+export v12 and participates in retention and organisation deletion.

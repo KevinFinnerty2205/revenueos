@@ -93,6 +93,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "contacts",
         "opportunities",
         "opportunity_audit_events",
+        "action_proposals",
+        "action_proposal_versions",
+        "action_audit_events",
         "tasks",
         "interactions",
         "online_meeting_metadata",
@@ -149,6 +152,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "contact_id": uuid.uuid4(),
         "opportunity_id": uuid.uuid4(),
         "opportunity_audit_id": uuid.uuid4(),
+        "action_id": uuid.uuid4(),
+        "action_version_id": uuid.uuid4(),
+        "action_audit_event_id": uuid.uuid4(),
         "task_id": uuid.uuid4(),
         "interaction_id": uuid.uuid4(),
         "brief_id": uuid.uuid4(),
@@ -203,6 +209,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "contact_id": uuid.uuid4(),
         "opportunity_id": uuid.uuid4(),
         "opportunity_audit_id": uuid.uuid4(),
+        "action_id": uuid.uuid4(),
+        "action_version_id": uuid.uuid4(),
+        "action_audit_event_id": uuid.uuid4(),
         "task_id": uuid.uuid4(),
         "interaction_id": uuid.uuid4(),
         "brief_id": uuid.uuid4(),
@@ -401,6 +410,64 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             **identity_parameters,
                             "interaction_title": f"RLS Interaction {suffix}",
                         },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO action_proposals
+                                (id, organisation_id, opportunity_id, interaction_id,
+                                 action_type, status, priority, audience, risk_class,
+                                 current_version, source_fingerprint, semantic_key,
+                                 created_by_user_id)
+                            VALUES
+                                (:action_id, :organisation_id, :opportunity_id,
+                                 :interaction_id, 'create_task', 'proposed', 'normal',
+                                 'internal', 'internal_low_risk', 1,
+                                 :source_fingerprint, :semantic_key, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "source_fingerprint": f"{suffix.lower():0<64}"[:64],
+                            "semantic_key": f"{suffix.upper():0<64}"[:64],
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO action_proposal_versions
+                                (id, organisation_id, action_id, version, title,
+                                 description, payload_json, source_refs_json,
+                                 provenance_summary, content_fingerprint,
+                                 created_by_user_id)
+                            VALUES
+                                (:action_version_id, :organisation_id, :action_id, 1,
+                                 :action_title, :action_description,
+                                 :payload_json, '[]'::json, :provenance_summary,
+                                 :content_fingerprint, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "action_title": f"RLS Action {suffix}",
+                            "action_description": f"Tenant-isolated Action {suffix}",
+                            "payload_json": '{"kind":"create_task","title":"Review"}',
+                            "provenance_summary": "Validated tenant evidence",
+                            "content_fingerprint": f"{suffix.lower():0<64}"[:64],
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO action_audit_events
+                                (id, organisation_id, action_id, actor_user_id,
+                                 event_type, proposal_version, metadata_json)
+                            VALUES
+                                (:action_audit_event_id, :organisation_id, :action_id,
+                                 :user_id, 'proposed', 1, '{}'::json)
+                            """
+                        ),
+                        identity_parameters,
                     )
                     await connection.execute(
                         text(
@@ -1371,6 +1438,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'contacts',
                                     'opportunities',
                                     'opportunity_audit_events',
+                                    'action_proposals',
+                                    'action_proposal_versions',
+                                    'action_audit_events',
                                     'tasks',
                                     'interactions',
                                     'online_meeting_metadata',

@@ -334,3 +334,12 @@ Cards display human-readable source labels, document/email type, source date,
 origin/support badge and page/paragraph or message/line locator. The feature does
 not write stage, amount, close date or other opportunity fields. Contradictory
 accepted evidence is additive and may explicitly supersede an earlier candidate.
+
+## Recommended Actions
+
+WO-021 adds a Recommended Actions section with pending, approved and rejected views.
+It loads tenant-scoped proposal records separately from the existing intelligence
+read model. Cards show type, priority, customer-facing risk, due date, explanation
+and source labels. Users can save a new revision, approve without execution, reject
+with a controlled reason, or manually complete an approved internal Action. There
+are no send, sync, record-update or schedule controls.

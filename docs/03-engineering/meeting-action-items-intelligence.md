@@ -229,3 +229,10 @@ WO-005 presents this capability in the unified Meeting Intelligence workspace
 and aggregate read. Its individual API, strict schema, durable job/artefact,
 retry and transcript-grounding rules are unchanged. See
 [Unified Meeting Intelligence](unified-meeting-intelligence.md).
+
+## Action Layer consumer
+
+WO-021 converts current open Action Items into typed `create_task` proposals. This
+does not create a `tasks` row. The proposal can be edited, approved, rejected or
+manually marked complete as an internal user report; the source artefact remains
+immutable and independently queryable.

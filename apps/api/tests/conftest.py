@@ -17,6 +17,9 @@ from sqlalchemy.pool import ConnectionPoolEntry
 from revenueos.config import Settings
 from revenueos.main import create_app
 from revenueos.models import (
+    ActionAuditEvent,
+    ActionProposal,
+    ActionProposalVersion,
     AIArtifact,
     AIJob,
     AIUsageCounter,
@@ -185,6 +188,9 @@ def clean_business_entities() -> Iterator[None]:
                 BetaFeedback,
                 BetaSystemEvent,
                 BetaDataRequest,
+                ActionAuditEvent,
+                ActionProposalVersion,
+                ActionProposal,
                 AIUsageCounter,
                 OnboardingProgress,
                 OrganisationBetaSettings,

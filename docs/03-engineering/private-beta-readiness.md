@@ -398,3 +398,12 @@ See [private-beta deployment and recovery](private-beta-deployment-and-recovery.
 [operational runbooks](private-beta-runbooks.md), the
 [security review](private-beta-security-review.md) and
 [launch checklist](private-beta-launch-checklist.md).
+
+## Action Layer controls
+
+`API_FEATURE_ACTION_LAYER_ENABLED` gates all Action routes and defaults on for the
+WO-021 baseline. `API_FEATURE_ACTION_MANUAL_COMPLETION_ENABLED` separately gates
+internal manual completion. `API_PRIVATE_BETA_MAX_ACTION_GENERATIONS_PER_DAY`
+defaults to 100 per organisation; each request is capped at eight new proposals and
+each opportunity at 50 active proposals. Export schema v12 contains proposals,
+versions and safe audit metadata. No connector credential or execution flag exists.

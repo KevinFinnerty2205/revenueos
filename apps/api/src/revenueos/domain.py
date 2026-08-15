@@ -34,6 +34,65 @@ class OpportunityAuditAction(StrEnum):
     MEETING_DISASSOCIATED = "meeting_disassociated"
 
 
+class ActionType(StrEnum):
+    FOLLOW_UP_EMAIL = "follow_up_email"
+    SEND_REQUESTED_MATERIAL = "send_requested_material"
+    CREATE_TASK = "create_task"
+    FOLLOW_UP_STAKEHOLDER = "follow_up_stakeholder"
+    SCHEDULE_INTERACTION = "schedule_interaction"
+    UPDATE_OPPORTUNITY = "update_opportunity"
+    UPDATE_CONTACT = "update_contact"
+    UPDATE_STAKEHOLDER = "update_stakeholder"
+    ADD_DECISION = "add_decision"
+    ADD_COMMITMENT = "add_commitment"
+    ADD_RISK = "add_risk"
+    UPDATE_TIMELINE = "update_timeline"
+    UPDATE_PROCUREMENT = "update_procurement"
+    UPDATE_SECURITY_LEGAL = "update_security_legal"
+    CREATE_REMINDER = "create_reminder"
+    NOTIFY_INTERNAL = "notify_internal"
+    PREPARE_NEXT_INTERACTION = "prepare_next_interaction"
+    RESOLVE_OPEN_QUESTION = "resolve_open_question"
+    REVIEW_CONFLICT = "review_conflict"
+    OTHER = "other"
+
+
+class ActionStatus(StrEnum):
+    PROPOSED = "proposed"
+    EDITED = "edited"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    SUPERSEDED = "superseded"
+    COMPLETED_MANUALLY = "completed_manually"
+
+
+class ActionPriority(StrEnum):
+    HIGH = "high"
+    NORMAL = "normal"
+    LOW = "low"
+
+
+class ActionAudience(StrEnum):
+    INTERNAL = "internal"
+    CUSTOMER_FACING = "customer_facing"
+
+
+class ActionRiskClass(StrEnum):
+    INTERNAL_LOW_RISK = "internal_low_risk"
+    EXTERNAL_CUSTOMER_FACING = "external_customer_facing"
+    DATA_MUTATION = "data_mutation"
+
+
+class ActionRejectionReason(StrEnum):
+    ALREADY_DONE = "already_done"
+    INCORRECT = "incorrect"
+    NOT_RELEVANT = "not_relevant"
+    UNSUPPORTED = "unsupported"
+    DUPLICATE = "duplicate"
+    NOT_NOW = "not_now"
+    OTHER = "other"
+
+
 class TaskStatus(StrEnum):
     OPEN = "open"
     IN_PROGRESS = "in_progress"
