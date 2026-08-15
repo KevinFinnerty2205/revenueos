@@ -1685,6 +1685,12 @@ test("browser recording persists a consented transcript into existing intelligen
       "The customer approved the pilot and confirmed procurement ownership.",
     ),
   ).toBeVisible();
+  if (process.env.CAPTURE_WO_015_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-015-recording-transcription.png",
+      fullPage: true,
+    });
+  }
   await page.reload();
   await expect(page.getByText("Transcription is ready.")).toBeVisible();
   for (const prohibited of [

@@ -25,6 +25,14 @@ Meeting Intelligence compatibility without a native app, broker, bot or telephon
   start/pause/resume/stop/cancel, retry, status, transcript and Debrief fallback;
 - deterministic API, migration, tenant/RLS, privacy, component and Playwright tests.
 
+## UI evidence
+
+The deterministic mobile-width journey below shows a deliberately consented,
+completed browser recording and its ready transcript. It uses mock authentication,
+storage and transcription; no microphone, customer data or provider call is used.
+
+![WO-015 recording and transcription mobile journey](assets/wo-015-recording-transcription.png)
+
 ## Deliberately out of scope
 
 Native/background recording guarantees, screen-lock survival, meeting bots, Zoom,
