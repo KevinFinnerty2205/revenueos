@@ -92,11 +92,14 @@ The current implementation provides:
   Workspace status.
 - a first-class phone-call path with compact preparation, explicit direction and
   outcome, Contact association, adaptive AI Debrief/Voice Journal/typed notes,
-  recording import and source-aware downstream updates.
+  recording import and source-aware downstream updates; and
+- a deliberate PDF/TXT document and plain-text email path with exact source
+  ownership/direction, mandatory review and accepted-evidence Opportunity/Revenue
+  Brain timelines.
 
 The current product accepts only deliberately supplied or explicitly armed inputs:
-record metadata, pasted transcripts, reviewed visual evidence, post-interaction
-reports and optional private recording uploads/capture. It does not ingest ambient
+record metadata, pasted transcripts, reviewed visual/document/email evidence,
+post-interaction reports and optional private recording uploads/capture. It does not ingest ambient
 calls, meetings, device history or connected-system data. The default provider is a
 deterministic no-network mock; an explicitly configured server-side OpenAI adapter can process Executive
 Summary, Buying Signals, Objections & Competitive Signals, Stakeholder
@@ -121,6 +124,19 @@ Production customer data remains prohibited unless separately approved. See the
 [private beta readiness guide](../03-engineering/private-beta-readiness.md).
 
 ## Product principles
+
+### WO-019 document and email evidence
+
+The current private-beta surface accepts deliberately selected PDF/TXT documents
+and manually pasted plain-text emails against an account, opportunity and optional
+Interaction. Findings are AI-inferred candidates until the seller edits, accepts
+or rejects every item. Accepted evidence keeps source type, ownership/direction,
+date and exact location in Opportunity Workspace and Revenue Brain.
+
+Customer-provided documents and verified inbound customer email may provide direct
+support. Seller proposals, outbound messages and internal forwards remain context
+and cannot establish customer intent or acceptance. There is no mailbox/drive
+connection, automatic Contact creation, legal advice or automatic CRM write.
 
 ### WO-014 visual evidence boundary
 

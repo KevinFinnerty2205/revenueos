@@ -1554,7 +1554,8 @@ class CaptureSession(TimestampMixin, Base):
             "capture_type IN ("
             "'ai_debrief', 'voice_journal', 'live_recording', 'live_audio_recording', "
             "'visual_capture', 'uploaded_transcript', 'uploaded_recording', "
-            "'uploaded_audio_recording', 'imported_audio_recording', 'manual_notes'"
+            "'uploaded_audio_recording', 'imported_audio_recording', 'document_import', "
+            "'email_import', 'manual_notes'"
             ")",
             name="ck_capture_sessions_type",
         ),
@@ -1592,7 +1593,7 @@ class CaptureSession(TimestampMixin, Base):
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
     )
-    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     capture_type: Mapped[str] = mapped_column(
         String(40),
         nullable=False,
@@ -1625,7 +1626,7 @@ class Evidence(TimestampMixin, Base):
             name="ck_evidence_origin_class",
         ),
         CheckConstraint(
-            "support_class IN ('direct', 'reported', 'inferred', 'corroborated', "
+            "support_class IN ('direct', 'reported', 'context', 'inferred', 'corroborated', "
             "'verified', 'disputed', 'stale', 'superseded', 'observed')",
             name="ck_evidence_support_class",
         ),
@@ -1679,7 +1680,7 @@ class Evidence(TimestampMixin, Base):
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
     )
-    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     capture_session_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     evidence_type: Mapped[str] = mapped_column(
         String(40),
@@ -2432,6 +2433,522 @@ class DebriefTurn(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+
+class DocumentSource(TimestampMixin, Base):
+    __tablename__ = "document_sources"
+    __table_args__ = (
+        CheckConstraint(
+            "document_type IN ('proposal', 'rfp', 'rfq', 'requirements', 'contract', 'sow', "
+            "'pricing', 'procurement', 'security_questionnaire', 'implementation_plan', "
+            "'technical_specification', 'customer_presentation', 'sales_material', 'other')",
+            name="ck_document_sources_type",
+        ),
+        CheckConstraint(
+            "source_ownership IN ('customer_provided', 'salesperson_provided', 'jointly_created', "
+            "'externally_generated', 'system_imported', 'unknown')",
+            name="ck_document_sources_ownership",
+        ),
+        CheckConstraint(
+            "mime_type IN ('application/pdf', 'text/plain')",
+            name="ck_document_sources_mime",
+        ),
+        CheckConstraint("byte_size BETWEEN 1 AND 50000000", name="ck_document_sources_size"),
+        CheckConstraint(
+            "length(checksum_sha256) = 64 AND checksum_sha256 = lower(checksum_sha256)",
+            name="ck_document_sources_checksum",
+        ),
+        CheckConstraint(
+            "processing_status IN ('received', 'processing', 'review', 'completed', 'failed', "
+            "'deletion_pending', 'deleted')",
+            name="ck_document_sources_processing",
+        ),
+        CheckConstraint(
+            "storage_status IN ('available', 'missing', 'deletion_pending', 'delete_failed', 'deleted')",
+            name="ck_document_sources_storage",
+        ),
+        CheckConstraint("processing_attempts BETWEEN 0 AND 5", name="ck_document_sources_attempts"),
+        CheckConstraint("page_count IS NULL OR page_count BETWEEN 1 AND 500", name="ck_document_sources_pages"),
+        CheckConstraint(
+            "extracted_character_count IS NULL OR extracted_character_count BETWEEN 1 AND 2000000",
+            name="ck_document_sources_characters",
+        ),
+        CheckConstraint(
+            "company_id IS NOT NULL OR opportunity_id IS NOT NULL OR interaction_id IS NOT NULL",
+            name="ck_document_sources_association",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_document_sources_company_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_document_sources_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_document_sources_interaction_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "capture_session_id"],
+            ["capture_sessions.organisation_id", "capture_sessions.id"],
+            name="fk_document_sources_capture_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_document_sources_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "uploaded_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_document_sources_user_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_document_sources_org_id"),
+        UniqueConstraint("organisation_id", "source_evidence_id", name="uq_document_sources_evidence"),
+        UniqueConstraint("organisation_id", "checksum_sha256", name="uq_document_sources_content"),
+        UniqueConstraint(
+            "organisation_id",
+            "uploaded_by_user_id",
+            "idempotency_key",
+            name="uq_document_sources_idempotency",
+        ),
+        UniqueConstraint("storage_key", name="uq_document_sources_storage_key"),
+        Index("ix_document_sources_org_opportunity", "organisation_id", "opportunity_id", "created_at"),
+        Index("ix_document_sources_org_company", "organisation_id", "company_id", "created_at"),
+        Index("ix_document_sources_org_status", "organisation_id", "processing_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    capture_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_ownership: Mapped[str] = mapped_column(String(30), nullable=False)
+    display_filename: Mapped[str] = mapped_column(String(160), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(360), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    document_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    processing_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="received", server_default="received"
+    )
+    storage_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="available", server_default="available"
+    )
+    processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    extracted_character_count: Mapped[int | None] = mapped_column(Integer)
+    provider_name: Mapped[str | None] = mapped_column(String(40))
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    authority_confirmed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    external_processing_acknowledged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DocumentFragment(Base):
+    __tablename__ = "document_fragments"
+    __table_args__ = (
+        CheckConstraint("page_number IS NULL OR page_number BETWEEN 1 AND 500", name="ck_document_fragments_page"),
+        CheckConstraint("paragraph_index BETWEEN 0 AND 100000", name="ck_document_fragments_paragraph"),
+        CheckConstraint("length(trim(content_text)) BETWEEN 1 AND 12000", name="ck_document_fragments_content"),
+        ForeignKeyConstraint(
+            ["organisation_id", "document_source_id"],
+            ["document_sources.organisation_id", "document_sources.id"],
+            name="fk_document_fragments_source_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_document_fragments_evidence_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_document_fragments_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "document_source_id",
+            "page_number",
+            "paragraph_index",
+            name="uq_document_fragments_locator",
+        ),
+        Index("ix_document_fragments_org_source", "organisation_id", "document_source_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    document_source_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    page_number: Mapped[int | None] = mapped_column(Integer)
+    section: Mapped[str | None] = mapped_column(String(200))
+    paragraph_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EmailSource(TimestampMixin, Base):
+    __tablename__ = "email_sources"
+    __table_args__ = (
+        CheckConstraint(
+            "source_type IN ('customer_sent', 'salesperson_sent', 'internal_forward', "
+            "'manually_pasted', 'external_provider_import')",
+            name="ck_email_sources_type",
+        ),
+        CheckConstraint(
+            "direction IN ('inbound', 'outbound', 'internal', 'unknown')", name="ck_email_sources_direction"
+        ),
+        CheckConstraint(
+            "sender_identity_state IN ('verified_contact', 'unknown')",
+            name="ck_email_sources_sender_identity",
+        ),
+        CheckConstraint(
+            "origin_class IN ('customer_direct', 'salesperson_reported', 'imported_external')",
+            name="ck_email_sources_origin",
+        ),
+        CheckConstraint("support_class IN ('direct', 'reported', 'context')", name="ck_email_sources_support"),
+        CheckConstraint(
+            "quote_handling IN ('none', 'stripped', 'ambiguous')",
+            name="ck_email_sources_quote_handling",
+        ),
+        CheckConstraint(
+            "processing_status IN ('received', 'processing', 'review', 'completed', 'failed', 'deleted')",
+            name="ck_email_sources_processing",
+        ),
+        CheckConstraint("processing_attempts BETWEEN 0 AND 5", name="ck_email_sources_attempts"),
+        CheckConstraint("length(trim(body_text)) BETWEEN 1 AND 200000", name="ck_email_sources_body"),
+        CheckConstraint(
+            "length(trim(normalized_body_text)) BETWEEN 1 AND 200000",
+            name="ck_email_sources_normalized_body",
+        ),
+        CheckConstraint(
+            "length(content_sha256) = 64 AND content_sha256 = lower(content_sha256)",
+            name="ck_email_sources_checksum",
+        ),
+        CheckConstraint(
+            "company_id IS NOT NULL OR opportunity_id IS NOT NULL OR interaction_id IS NOT NULL",
+            name="ck_email_sources_association",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_email_sources_company_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_email_sources_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_email_sources_interaction_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "capture_session_id"],
+            ["capture_sessions.organisation_id", "capture_sessions.id"],
+            name="fk_email_sources_capture_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_email_sources_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "sender_contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_email_sources_contact_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "submitted_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_email_sources_user_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_email_sources_org_id"),
+        UniqueConstraint("organisation_id", "source_evidence_id", name="uq_email_sources_evidence"),
+        UniqueConstraint("organisation_id", "content_sha256", name="uq_email_sources_content"),
+        UniqueConstraint(
+            "organisation_id",
+            "submitted_by_user_id",
+            "idempotency_key",
+            name="uq_email_sources_idempotency",
+        ),
+        Index("ix_email_sources_org_opportunity", "organisation_id", "opportunity_id", "message_at"),
+        Index("ix_email_sources_org_company", "organisation_id", "company_id", "message_at"),
+        Index("ix_email_sources_org_status", "organisation_id", "processing_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    capture_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    submitted_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    sender_contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    sender_identity_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    origin_class: Mapped[str] = mapped_column(String(30), nullable=False)
+    support_class: Mapped[str] = mapped_column(String(20), nullable=False)
+    subject: Mapped[str | None] = mapped_column(String(500))
+    body_text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_body_text: Mapped[str] = mapped_column(Text, nullable=False)
+    quote_handling: Mapped[str] = mapped_column(String(16), nullable=False)
+    message_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    processing_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="received", server_default="received"
+    )
+    processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    provider_name: Mapped[str | None] = mapped_column(String(40))
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    authority_confirmed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    external_processing_acknowledged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SourceCandidateEvidence(TimestampMixin, Base):
+    __tablename__ = "source_candidate_evidence"
+    __table_args__ = (
+        CheckConstraint("source_kind IN ('document', 'email')", name="ck_source_candidates_kind"),
+        CheckConstraint(
+            "(source_kind = 'document' AND document_source_id IS NOT NULL AND email_source_id IS NULL) OR "
+            "(source_kind = 'email' AND email_source_id IS NOT NULL AND document_source_id IS NULL)",
+            name="ck_source_candidates_source",
+        ),
+        CheckConstraint(
+            "evidence_category IN ('buying_signal', 'objection', 'competitor', 'stakeholder', 'decision', "
+            "'action_item', 'risk', 'open_question', 'commitment', 'timeline', 'budget', 'procurement', "
+            "'security_legal', 'implementation', 'commercial_intent', 'customer_request', "
+            "'technical_requirement', 'contractual_requirement', 'pricing_requirement', "
+            "'renewal_signal', 'expansion_signal', 'other')",
+            name="ck_source_candidates_category",
+        ),
+        CheckConstraint("interpretation_origin = 'ai_inferred'", name="ck_source_candidates_interpretation"),
+        CheckConstraint(
+            "origin_class IN ('customer_direct', 'seller_prepared', 'salesperson_reported', 'imported_external')",
+            name="ck_source_candidates_origin",
+        ),
+        CheckConstraint("support_class IN ('direct', 'reported', 'context')", name="ck_source_candidates_support"),
+        CheckConstraint(
+            "validation_state IN ('unreviewed', 'verified', 'rejected')",
+            name="ck_source_candidates_validation",
+        ),
+        CheckConstraint("review_state IN ('pending', 'accepted', 'rejected')", name="ck_source_candidates_review"),
+        CheckConstraint(
+            "conflict_state IN ('not_assessed', 'conflicting', 'supersedes', 'superseded')",
+            name="ck_source_candidates_conflict",
+        ),
+        CheckConstraint(
+            "length(trim(statement)) BETWEEN 1 AND 1000 AND length(trim(original_statement)) BETWEEN 1 AND 1000",
+            name="ck_source_candidates_statements",
+        ),
+        CheckConstraint(
+            "(review_state = 'pending' AND reviewed_at IS NULL AND reviewed_by_user_id IS NULL "
+            "AND accepted_evidence_id IS NULL AND validation_state = 'unreviewed') OR "
+            "(review_state = 'accepted' AND reviewed_at IS NOT NULL AND reviewed_by_user_id IS NOT NULL "
+            "AND accepted_evidence_id IS NOT NULL AND validation_state = 'verified') OR "
+            "(review_state = 'rejected' AND reviewed_at IS NOT NULL AND reviewed_by_user_id IS NOT NULL "
+            "AND accepted_evidence_id IS NULL AND validation_state = 'rejected')",
+            name="ck_source_candidates_review_consistency",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "document_source_id"],
+            ["document_sources.organisation_id", "document_sources.id"],
+            name="fk_source_candidates_document_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "email_source_id"],
+            ["email_sources.organisation_id", "email_sources.id"],
+            name="fk_source_candidates_email_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_source_candidates_source_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "accepted_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_source_candidates_accepted_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "document_fragment_id"],
+            ["document_fragments.organisation_id", "document_fragments.id"],
+            name="fk_source_candidates_fragment_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "reviewed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_source_candidates_reviewer_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "supersedes_candidate_id"],
+            ["source_candidate_evidence.organisation_id", "source_candidate_evidence.id"],
+            name="fk_source_candidates_supersedes_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_source_candidates_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "source_evidence_id",
+            "evidence_category",
+            "statement_fingerprint",
+            name="uq_source_candidates_statement",
+        ),
+        Index("ix_source_candidates_org_document", "organisation_id", "document_source_id", "review_state"),
+        Index("ix_source_candidates_org_email", "organisation_id", "email_source_id", "review_state"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    source_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    document_source_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    email_source_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    source_evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    document_fragment_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    accepted_evidence_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    evidence_category: Mapped[str] = mapped_column(String(40), nullable=False)
+    statement: Mapped[str] = mapped_column(String(1000), nullable=False)
+    original_statement: Mapped[str] = mapped_column(String(1000), nullable=False)
+    statement_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    interpretation_origin: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="ai_inferred", server_default="ai_inferred"
+    )
+    origin_class: Mapped[str] = mapped_column(String(30), nullable=False)
+    support_class: Mapped[str] = mapped_column(String(20), nullable=False)
+    source_location_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
+    validation_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="unreviewed", server_default="unreviewed"
+    )
+    review_state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    conflict_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="not_assessed", server_default="not_assessed"
+    )
+    supersedes_candidate_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RevenueBrainSourceSnapshot(Base):
+    __tablename__ = "revenue_brain_source_snapshots"
+    __table_args__ = (
+        CheckConstraint("source_kind IN ('document', 'email')", name="ck_brain_source_snapshots_kind"),
+        CheckConstraint(
+            "(source_kind = 'document' AND document_source_id IS NOT NULL AND email_source_id IS NULL) OR "
+            "(source_kind = 'email' AND email_source_id IS NOT NULL AND document_source_id IS NULL)",
+            name="ck_brain_source_snapshots_source",
+        ),
+        CheckConstraint("schema_version = 1", name="ck_brain_source_snapshots_schema"),
+        CheckConstraint("version > 0", name="ck_brain_source_snapshots_version"),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_brain_source_snapshots_company_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_brain_source_snapshots_opportunity_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_brain_source_snapshots_interaction_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_brain_source_snapshots_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "document_source_id"],
+            ["document_sources.organisation_id", "document_sources.id"],
+            name="fk_brain_source_snapshots_document_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "email_source_id"],
+            ["email_sources.organisation_id", "email_sources.id"],
+            name="fk_brain_source_snapshots_email_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_brain_source_snapshots_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "source_evidence_id",
+            "version",
+            name="uq_brain_source_snapshots_version",
+        ),
+        Index("ix_brain_source_snapshots_org_company", "organisation_id", "company_id", "created_at"),
+        Index("ix_brain_source_snapshots_org_opportunity", "organisation_id", "opportunity_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    source_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    document_source_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    email_source_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    source_evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_evidence_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    content_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class EvidenceFragment(Base):

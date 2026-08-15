@@ -241,3 +241,22 @@ owner.
   tenant isolation, mock worker, quotas and safe logs.
 - **Escalation:** engineering lead owns decision; database/security/privacy
   owners approve destructive or incident-related steps.
+## 16. Document or email evidence failure
+
+1. Check `/ready` capability flags, safe event codes and quota counters; do not ask
+   for the customer's content in logs or tickets.
+2. For parse rejection, confirm the source is PDF/TXT, within byte/page/text limits,
+   not password-protected and has extractable text. Do not bypass active-content or
+   malformed-file checks.
+3. For provider failure, keep the source out of review/downstream views and retry
+   only within its configured attempt limit. Switch
+   `API_EVIDENCE_EXTRACTION_PROVIDER_NAME` to the labelled deterministic mock if
+   external processing is paused.
+4. For a stuck review, confirm every candidate has an explicit accept/reject
+   decision. Zero findings require an explicit empty completion.
+5. For document deletion failure, leave the row in `delete_failed`, repair storage
+   access and retry. Never delete database lineage first. Email deletion has no
+   external object but must clear both raw and normalised text.
+6. Disable `API_FEATURE_DOCUMENT_EVIDENCE_ENABLED` or
+   `API_FEATURE_EMAIL_EVIDENCE_ENABLED` to stop new intake while preserving existing
+   data for recovery/export.

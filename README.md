@@ -12,7 +12,8 @@ Longitudinal Reasoning, WO-009 Private Beta Readiness, WO-011 Interaction
 Domain Foundation, WO-012 AI Companion preparation, WO-013 AI Debrief/Voice
 Journal, WO-014 Visual Evidence/Presentation Mode, WO-015 Recording &
 Transcription Foundation, WO-016 Browser Face-to-Face Companion, WO-017 Phone
-Call Intelligence and WO-018 Online Meeting Capture. Interactions, Meetings,
+Call Intelligence, WO-018 Online Meeting Capture and WO-019 Documents & Email
+Evidence. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -60,6 +61,12 @@ browser-first Interactions. It adds safe meeting navigation, passive timing,
 server-negotiated post-meeting choices, authorised TXT/VTT/SRT transcript import
 and WO-015 recording import reuse. Native provider and auto-ingestion flags remain
 off, and no connector, meeting bot or system-audio capture is implemented.
+WO-019 adds deliberate PDF/TXT upload and plain-text email paste, bounded parsing,
+strict provenance, mandatory finding review and accepted-evidence timelines in the
+Opportunity Workspace and Revenue Brain. Seller documents and outbound email stay
+context rather than customer confirmation. DOCX, OCR, attachments, mailbox/drive
+sync, legal interpretation and automatic opportunity-field writes are not
+implemented.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
@@ -84,7 +91,8 @@ implements browser-only visual evidence and bounded Presentation Mode, WO-015
 implements the browser-first recording/batch-transcription foundation, and WO-016
 implements the thin browser Companion orchestration and gap-fill hand-off,
 WO-017 implements the browser-first phone-call path and compliant recording import,
-and WO-018 implements the provider-neutral online-meeting import path.
+WO-018 implements the provider-neutral online-meeting import path, and WO-019
+implements first-party document/email evidence without an external connector.
 Native/background capture, mobile client, meeting bot, telephony provider, production connector, live
 transcription and live intelligence remain unimplemented.
 
@@ -92,7 +100,7 @@ Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013, WO-014, WO-015, WO-016, WO-017 and WO-018.
+WO-013, WO-014, WO-015, WO-016, WO-017, WO-018 and WO-019.
 WO-010 remains the blueprint; later roadmap work remains unauthorised.
 
 ## Prerequisites
@@ -241,6 +249,9 @@ API routes:
   `/api/v1/interactions/{interactionId}/companion/markers`
 - `GET /api/v1/accounts/{accountId}/brain` — retrieve ordered immutable snapshot compositions without content
 - account and opportunity `POST/GET .../brain/reasoning` — create/reuse and read deterministic longitudinal comparisons
+- deliberate document/email evidence under `/api/v1/evidence`, including
+  capability, create, process, complete-review, private-content, deletion,
+  Opportunity Workspace and account Revenue Brain source routes
 - nested participant CRUD under `/api/v1/meetings/{meetingId}/participants`
 - singular transcript CRUD under `/api/v1/meetings/{meetingId}/transcript`
 - `GET /api/v1/meetings/{meetingId}/history` — content-minimised audit activity
@@ -324,6 +335,15 @@ configure server-only `OPENAI_API_KEY`, `OPENAI_MODEL`, set
 
 See the [OpenAI provider integration guide](docs/03-engineering/openai-provider-integration.md)
 for strict output, error/retry behaviour, smoke testing and rollback.
+
+Document/email extraction independently uses
+`API_EVIDENCE_EXTRACTION_PROVIDER_NAME=mock` by
+default. Optional `openai` mode requires the same server-only key plus
+`API_EVIDENCE_EXTRACTION_MODEL_IDENTIFIER` and
+`API_EVIDENCE_EXTRACTION_TIMEOUT_SECONDS`. Document and email flags,
+upload/storage/page/text/daily quotas and processing retries are listed in
+[`apps/api/.env.example`](apps/api/.env.example). No mailbox or drive credential is
+accepted.
 
 ## Private beta operations
 

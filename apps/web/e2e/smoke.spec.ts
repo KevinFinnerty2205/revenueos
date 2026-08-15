@@ -3203,6 +3203,521 @@ test("opportunity workspace persists an associated meeting and composes stored i
   ).toHaveAttribute("href", "/opportunities/opportunity-1");
 });
 
+test("document and email evidence require explicit review before appearing in the opportunity", async ({
+  page,
+}) => {
+  const acceptedItems: Record<string, unknown>[] = [];
+  const reviewPayloads: Record<string, unknown>[] = [];
+  const sourceCandidate = (
+    kind: "document" | "email",
+    sourceId: string,
+    candidateId: string,
+    statement: string,
+    category: string,
+  ) => ({
+    id: candidateId,
+    category,
+    statement,
+    originalStatement: statement,
+    sourceKind: kind,
+    sourceId,
+    sourceEvidenceId: `source-evidence-${sourceId}`,
+    sourceLabel:
+      kind === "document"
+        ? "Customer-provided document"
+        : "Manually supplied email",
+    sourceOrigin: kind === "document" ? "customer_provided" : "manually_pasted",
+    interpretationOrigin: "ai_inferred",
+    originClass: kind === "document" ? "customer_direct" : "imported_external",
+    supportClass: kind === "document" ? "direct" : "reported",
+    sourceLocation: {
+      reference: kind === "document" ? "Paragraph 1" : "Message paragraph 1",
+      pageNumber: null,
+      section: null,
+      paragraphIndex: 0,
+    },
+    validationState: "unreviewed",
+    reviewState: "pending",
+    conflictState: "not_assessed",
+    supersedesCandidateId: null,
+    acceptedEvidenceId: null,
+    edited: false,
+  });
+  const documentCandidate = sourceCandidate(
+    "document",
+    "document-1",
+    "candidate-document-1-requirement",
+    "The platform must support SSO integration.",
+    "technical_requirement",
+  );
+  const documentTimelineCandidate = sourceCandidate(
+    "document",
+    "document-1",
+    "candidate-document-1-timeline",
+    "Implementation should complete by December.",
+    "timeline",
+  );
+  const emailCandidate = sourceCandidate(
+    "email",
+    "email-1",
+    "candidate-email-1-commitment",
+    "We will proceed with security review.",
+    "commitment",
+  );
+  const emailTimelineCandidate = sourceCandidate(
+    "email",
+    "email-1",
+    "candidate-email-1-timeline",
+    "Please complete the review by December.",
+    "timeline",
+  );
+  const sellerCandidate = {
+    ...sourceCandidate(
+      "document",
+      "document-seller",
+      "candidate-document-seller-pricing",
+      "The proposed price is AUD 90,000.",
+      "pricing_requirement",
+    ),
+    sourceLabel: "Seller-provided document",
+    sourceOrigin: "salesperson_provided",
+    originClass: "seller_prepared",
+    supportClass: "context",
+  };
+  const documentSource = {
+    id: "document-1",
+    sourceEvidenceId: "source-evidence-document-1",
+    companyId: "company-1",
+    opportunityId: "opportunity-1",
+    interactionId: null,
+    documentType: "rfp",
+    sourceOwnership: "customer_provided",
+    filename: "customer-rfp.txt",
+    mimeType: "text/plain",
+    byteSize: 42,
+    checksumSha256: "a".repeat(64),
+    documentAt: "2026-08-15T01:00:00Z",
+    processingStatus: "review",
+    storageStatus: "available",
+    pageCount: 1,
+    extractedCharacterCount: 42,
+    failureCode: null,
+    candidates: [documentCandidate, documentTimelineCandidate],
+    downloadUrl: "/api/v1/evidence/documents/document-1/content?token=signed",
+    revenueBrainSnapshotId: null,
+    createdAt: "2026-08-15T01:00:00Z",
+    updatedAt: "2026-08-15T01:00:00Z",
+  };
+  const emailSource = {
+    id: "email-1",
+    sourceEvidenceId: "source-evidence-email-1",
+    companyId: "company-1",
+    opportunityId: "opportunity-1",
+    interactionId: null,
+    sourceType: "manually_pasted",
+    direction: "unknown",
+    senderContactId: null,
+    senderIdentityState: "unknown",
+    subjectPresent: true,
+    messageAt: "2026-08-15T02:00:00Z",
+    quoteHandling: "none",
+    processingStatus: "review",
+    failureCode: null,
+    candidates: [emailCandidate, emailTimelineCandidate],
+    revenueBrainSnapshotId: null,
+    createdAt: "2026-08-15T02:00:00Z",
+    updatedAt: "2026-08-15T02:00:00Z",
+  };
+  const sellerSource = {
+    ...documentSource,
+    id: "document-seller",
+    sourceEvidenceId: "source-evidence-document-seller",
+    documentType: "proposal",
+    sourceOwnership: "salesperson_provided",
+    filename: "seller-proposal.txt",
+    checksumSha256: "b".repeat(64),
+    documentAt: "2026-08-15T03:00:00Z",
+    candidates: [sellerCandidate],
+    downloadUrl:
+      "/api/v1/evidence/documents/document-seller/content?token=signed",
+    createdAt: "2026-08-15T03:00:00Z",
+    updatedAt: "2026-08-15T03:00:00Z",
+  };
+
+  await page.route(
+    "http://localhost:8000/api/v1/opportunities/opportunity-1/workspace",
+    async (route) => {
+      await route.fulfill({ json: opportunityWorkspace(false, false) });
+    },
+  );
+  await page.route("http://localhost:8000/api/v1/meetings**", async (route) => {
+    await route.fulfill({
+      json: { items: [], page: 1, pageSize: 100, total: 0, pages: 0 },
+    });
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/evidence/**",
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith("/capabilities")) {
+        await route.fulfill({
+          json: {
+            documentEvidence: true,
+            emailEvidence: true,
+            supportedDocumentMimeTypes: ["application/pdf", "text/plain"],
+            emailProviderImport: false,
+            documentProviderImport: false,
+            safeMessage:
+              "Select only evidence you are authorised to process. Gmail, Outlook and drive synchronisation are not connected.",
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/accounts/company-1/brain")) {
+        const snapshots = [
+          {
+            id: "snapshot-document-1",
+            sourceKind: "document",
+            sourceId: "document-1",
+            opportunityId: "opportunity-1",
+            interactionId: null,
+            sourceType: "rfp",
+            sourceLabel: "Customer-provided document",
+            sourceOrigin: "customer_provided",
+            occurredAt: "2026-08-15T01:00:00Z",
+            createdAt: "2026-08-15T01:10:00Z",
+            items: acceptedItems.filter(
+              (item) => item.sourceId === "document-1",
+            ),
+          },
+          {
+            id: "snapshot-email-1",
+            sourceKind: "email",
+            sourceId: "email-1",
+            opportunityId: "opportunity-1",
+            interactionId: null,
+            sourceType: "manually_pasted",
+            sourceLabel: "Manually supplied email",
+            sourceOrigin: "manually_pasted",
+            occurredAt: "2026-08-15T02:00:00Z",
+            createdAt: "2026-08-15T02:10:00Z",
+            items: acceptedItems.filter((item) => item.sourceId === "email-1"),
+          },
+          {
+            id: "snapshot-document-seller",
+            sourceKind: "document",
+            sourceId: "document-seller",
+            opportunityId: "opportunity-1",
+            interactionId: null,
+            sourceType: "proposal",
+            sourceLabel: "Seller-provided document",
+            sourceOrigin: "salesperson_provided",
+            occurredAt: "2026-08-15T03:00:00Z",
+            createdAt: "2026-08-15T03:10:00Z",
+            items: acceptedItems.filter(
+              (item) => item.sourceId === "document-seller",
+            ),
+          },
+        ].filter((snapshot) => snapshot.items.length > 0);
+        await route.fulfill({ json: snapshots });
+        return;
+      }
+      if (path.endsWith("/opportunities/opportunity-1")) {
+        await route.fulfill({ json: acceptedItems });
+        return;
+      }
+      if (path.endsWith("/documents") && request.method() === "POST") {
+        const body = request.postDataJSON() as {
+          sourceOwnership: string;
+        };
+        const selectedSource =
+          body.sourceOwnership === "salesperson_provided"
+            ? sellerSource
+            : documentSource;
+        await route.fulfill({
+          status: 201,
+          json: {
+            ...selectedSource,
+            processingStatus: "received",
+            candidates: [],
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/documents/document-1/process")) {
+        await route.fulfill({ json: documentSource });
+        return;
+      }
+      if (path.endsWith("/documents/document-1/review")) {
+        reviewPayloads.push(request.postDataJSON() as Record<string, unknown>);
+        acceptedItems.push({
+          snapshotId: "snapshot-document-1",
+          sourceKind: "document",
+          sourceId: "document-1",
+          sourceType: "rfp",
+          sourceLabel: "Customer-provided document",
+          sourceOrigin: "customer_provided",
+          occurredAt: "2026-08-15T01:00:00Z",
+          category: "technical_requirement",
+          statement: documentCandidate.statement,
+          evidenceId: "accepted-document-1",
+          location: documentCandidate.sourceLocation,
+          originClass: "customer_direct",
+          supportClass: "direct",
+          conflictState: "not_assessed",
+        });
+        await route.fulfill({
+          json: {
+            sourceKind: "document",
+            sourceId: "document-1",
+            acceptedCount: 1,
+            rejectedCount: 1,
+            opportunityUpdated: true,
+            revenueBrainUpdated: true,
+            revenueBrainSnapshotId: "snapshot-document-1",
+            candidates: [documentCandidate, documentTimelineCandidate],
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/documents/document-seller/process")) {
+        await route.fulfill({ json: sellerSource });
+        return;
+      }
+      if (path.endsWith("/documents/document-seller/review")) {
+        reviewPayloads.push(request.postDataJSON() as Record<string, unknown>);
+        acceptedItems.push({
+          snapshotId: "snapshot-document-seller",
+          sourceKind: "document",
+          sourceId: "document-seller",
+          sourceType: "proposal",
+          sourceLabel: "Seller-provided document",
+          sourceOrigin: "salesperson_provided",
+          occurredAt: "2026-08-15T03:00:00Z",
+          category: "pricing_requirement",
+          statement: sellerCandidate.statement,
+          evidenceId: "accepted-document-seller",
+          location: sellerCandidate.sourceLocation,
+          originClass: "seller_prepared",
+          supportClass: "context",
+          conflictState: "not_assessed",
+        });
+        await route.fulfill({
+          json: {
+            sourceKind: "document",
+            sourceId: "document-seller",
+            acceptedCount: 1,
+            rejectedCount: 0,
+            opportunityUpdated: true,
+            revenueBrainUpdated: true,
+            revenueBrainSnapshotId: "snapshot-document-seller",
+            candidates: [sellerCandidate],
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/emails") && request.method() === "POST") {
+        await route.fulfill({
+          status: 201,
+          json: {
+            ...emailSource,
+            processingStatus: "received",
+            candidates: [],
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/emails/email-1/process")) {
+        await route.fulfill({ json: emailSource });
+        return;
+      }
+      if (path.endsWith("/emails/email-1/review")) {
+        reviewPayloads.push(request.postDataJSON() as Record<string, unknown>);
+        for (const candidate of [emailCandidate, emailTimelineCandidate]) {
+          acceptedItems.push({
+            snapshotId: "snapshot-email-1",
+            sourceKind: "email",
+            sourceId: "email-1",
+            sourceType: "manually_pasted",
+            sourceLabel: "Manually supplied email",
+            sourceOrigin: "manually_pasted",
+            occurredAt: "2026-08-15T02:00:00Z",
+            category: candidate.category,
+            statement: candidate.statement,
+            evidenceId: `accepted-${candidate.id}`,
+            location: candidate.sourceLocation,
+            originClass: "imported_external",
+            supportClass: "reported",
+            conflictState: "not_assessed",
+          });
+        }
+        await route.fulfill({
+          json: {
+            sourceKind: "email",
+            sourceId: "email-1",
+            acceptedCount: 2,
+            rejectedCount: 0,
+            opportunityUpdated: true,
+            revenueBrainUpdated: true,
+            revenueBrainSnapshotId: "snapshot-email-1",
+            candidates: [emailCandidate, emailTimelineCandidate],
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 404,
+        json: { code: "not_found", message: "Unexpected evidence request" },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/companies/company-1",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          id: "company-1",
+          organisationId: "organisation-1",
+          name: "Acme Australia",
+          website: null,
+          industry: "Technology",
+          employeeCount: 120,
+          status: "active",
+          ownerUserId: "user-1",
+          createdAt: "2026-07-01T00:00:00Z",
+          updatedAt: "2026-07-01T00:00:00Z",
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/accounts/company-1/brain**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/reasoning")) {
+        await route.fulfill({
+          json: opportunityReasoning("insufficient_history"),
+        });
+        return;
+      }
+      await route.fulfill({ json: [] });
+    },
+  );
+
+  await page.goto("/opportunities/opportunity-1");
+  await expect(
+    page.getByRole("heading", { name: "Add customer evidence" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Add document" }).click();
+  await page.getByLabel("PDF or TXT file").setInputFiles({
+    name: "customer-rfp.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("The platform must support SSO integration."),
+  });
+  await page.getByLabel(/authorised to use this document/i).check();
+  await page
+    .getByLabel(/text may be sent to the configured AI provider/i)
+    .check();
+  await page.getByRole("button", { name: "Upload and review" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Review every AI finding" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Finish review" }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Accept", exact: true })
+    .first()
+    .click();
+  await page
+    .getByRole("button", { name: "Reject", exact: true })
+    .nth(1)
+    .click();
+  await page.getByRole("button", { name: "Finish review" }).click();
+  await expect(
+    page.getByText("The platform must support SSO integration."),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Paste email" }).click();
+  await page.getByLabel("Subject (optional)").fill("Next steps");
+  await page
+    .getByLabel("Plain-text email")
+    .fill(
+      "We will proceed with security review. Please complete the review by December.",
+    );
+  await page.getByLabel(/authorised to use this email/i).check();
+  await page
+    .getByLabel(/email text may be sent to the configured AI provider/i)
+    .check();
+  await page.getByRole("button", { name: "Analyse and review" }).click();
+  await page.getByRole("button", { name: "Accept all" }).click();
+  await page.getByRole("button", { name: "Finish review" }).click();
+  await expect(
+    page.getByText("We will proceed with security review."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Please complete the review by December."),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Add document" }).click();
+  await page.getByLabel("PDF or TXT file").setInputFiles({
+    name: "seller-proposal.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("The proposed price is AUD 90,000."),
+  });
+  await page.getByLabel("Document type").selectOption("proposal");
+  await page
+    .getByLabel("Who supplied it?")
+    .selectOption("salesperson_provided");
+  await page.getByLabel(/authorised to use this document/i).check();
+  await page
+    .getByLabel(/text may be sent to the configured AI provider/i)
+    .check();
+  await page.getByRole("button", { name: "Upload and review" }).click();
+  await expect(page.getByText(/pricing requirement/i)).toBeVisible();
+  await expect(page.getByText(/seller prepared/i)).toBeVisible();
+  await expect(page.getByText(/buying signal/i)).toHaveCount(0);
+  await page.getByRole("button", { name: "Accept all" }).click();
+  await page.getByRole("button", { name: "Finish review" }).click();
+  await expect(
+    page.getByText(/Seller-provided document/).first(),
+  ).toBeVisible();
+  await expect(page.getByText(/Proposal · Context/).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Refresh workspace" }).click();
+  await expect(
+    page.getByText("The platform must support SSO integration."),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_019_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-019-document-email-evidence.png",
+      fullPage: true,
+    });
+  }
+  const documentReview = reviewPayloads[0] as {
+    decisions: { decision: string }[];
+  };
+  expect(documentReview.decisions.map((decision) => decision.decision)).toEqual(
+    ["accept", "reject"],
+  );
+  expect(reviewPayloads).toHaveLength(3);
+
+  await page.goto("/companies/company-1");
+  await expect(
+    page.getByRole("heading", { name: "Document and email evidence" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("The platform must support SSO integration."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("We will proceed with security review."),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Seller-provided document/).first(),
+  ).toBeVisible();
+});
+
 function meeting() {
   return {
     id: "meeting-1",

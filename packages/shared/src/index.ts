@@ -1492,6 +1492,180 @@ export interface VisualInteractionIntelligence {
   items: VisualIntelligenceItem[];
 }
 
+export type DocumentEvidenceType =
+  | "proposal"
+  | "rfp"
+  | "rfq"
+  | "requirements"
+  | "contract"
+  | "sow"
+  | "pricing"
+  | "procurement"
+  | "security_questionnaire"
+  | "implementation_plan"
+  | "technical_specification"
+  | "customer_presentation"
+  | "sales_material"
+  | "other";
+export type DocumentSourceOwnership =
+  | "customer_provided"
+  | "salesperson_provided"
+  | "jointly_created"
+  | "externally_generated"
+  | "system_imported"
+  | "unknown";
+export type EmailEvidenceSourceType =
+  | "customer_sent"
+  | "salesperson_sent"
+  | "internal_forward"
+  | "manually_pasted"
+  | "external_provider_import";
+export type EmailEvidenceDirection =
+  "inbound" | "outbound" | "internal" | "unknown";
+
+export interface SourceEvidenceLocation {
+  reference: string;
+  pageNumber: number | null;
+  section: string | null;
+  paragraphIndex: number | null;
+}
+
+export interface SourceEvidenceCandidate {
+  id: string;
+  category: string;
+  statement: string;
+  originalStatement: string;
+  sourceKind: "document" | "email";
+  sourceId: string;
+  sourceEvidenceId: string;
+  sourceLabel: string;
+  sourceOrigin: string;
+  interpretationOrigin: "ai_inferred";
+  originClass:
+    | "customer_direct"
+    | "seller_prepared"
+    | "salesperson_reported"
+    | "imported_external";
+  supportClass: "direct" | "reported" | "context";
+  sourceLocation: SourceEvidenceLocation;
+  validationState: "unreviewed" | "verified" | "rejected";
+  reviewState: "pending" | "accepted" | "rejected";
+  conflictState: "not_assessed" | "conflicting" | "supersedes" | "superseded";
+  supersedesCandidateId: string | null;
+  acceptedEvidenceId: string | null;
+  edited: boolean;
+}
+
+export interface DocumentEvidenceSource {
+  id: string;
+  sourceEvidenceId: string;
+  companyId: string | null;
+  opportunityId: string | null;
+  interactionId: string | null;
+  documentType: DocumentEvidenceType;
+  sourceOwnership: DocumentSourceOwnership;
+  filename: string;
+  mimeType: "application/pdf" | "text/plain";
+  byteSize: number;
+  checksumSha256: string;
+  documentAt: string;
+  processingStatus:
+    | "received"
+    | "processing"
+    | "review"
+    | "completed"
+    | "failed"
+    | "deletion_pending"
+    | "deleted";
+  storageStatus:
+    "available" | "missing" | "deletion_pending" | "delete_failed" | "deleted";
+  pageCount: number | null;
+  extractedCharacterCount: number | null;
+  failureCode: string | null;
+  candidates: SourceEvidenceCandidate[];
+  downloadUrl: string | null;
+  revenueBrainSnapshotId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentEmailEvidenceCapabilities {
+  documentEvidence: boolean;
+  emailEvidence: boolean;
+  supportedDocumentMimeTypes: ("application/pdf" | "text/plain")[];
+  emailProviderImport: false;
+  documentProviderImport: false;
+  safeMessage: string;
+}
+
+export interface EmailEvidenceSource {
+  id: string;
+  sourceEvidenceId: string;
+  companyId: string | null;
+  opportunityId: string | null;
+  interactionId: string | null;
+  sourceType: EmailEvidenceSourceType;
+  direction: EmailEvidenceDirection;
+  senderContactId: string | null;
+  senderIdentityState: "verified_contact" | "unknown";
+  subjectPresent: boolean;
+  messageAt: string;
+  quoteHandling: "none" | "stripped" | "ambiguous";
+  processingStatus:
+    "received" | "processing" | "review" | "completed" | "failed" | "deleted";
+  failureCode: string | null;
+  candidates: SourceEvidenceCandidate[];
+  revenueBrainSnapshotId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SourceEvidenceReviewResponse {
+  sourceKind: "document" | "email";
+  sourceId: string;
+  acceptedCount: number;
+  rejectedCount: number;
+  opportunityUpdated: boolean;
+  revenueBrainUpdated: boolean;
+  revenueBrainSnapshotId: string | null;
+  candidates: SourceEvidenceCandidate[];
+}
+
+export interface OpportunitySourceEvidenceItem {
+  snapshotId: string;
+  sourceKind: "document" | "email";
+  sourceId: string;
+  sourceType: string;
+  sourceLabel: string;
+  sourceOrigin: string;
+  occurredAt: string;
+  category: string;
+  statement: string;
+  evidenceId: string;
+  location: SourceEvidenceLocation;
+  originClass:
+    | "customer_direct"
+    | "seller_prepared"
+    | "salesperson_reported"
+    | "imported_external";
+  supportClass: "direct" | "reported" | "context";
+  conflictState: "not_assessed" | "conflicting" | "supersedes" | "superseded";
+}
+
+export interface RevenueBrainSourceSnapshot {
+  id: string;
+  sourceKind: "document" | "email";
+  sourceId: string;
+  opportunityId: string | null;
+  interactionId: string | null;
+  sourceType: string;
+  sourceLabel: string;
+  sourceOrigin: string;
+  occurredAt: string;
+  createdAt: string;
+  items: OpportunitySourceEvidenceItem[];
+}
+
 export type RecordingType =
   | "live_audio_recording"
   | "uploaded_audio_recording"

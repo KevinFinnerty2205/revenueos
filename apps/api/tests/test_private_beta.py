@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -41,6 +42,7 @@ from revenueos.demo_data import (
     demo_ids,
     demo_interaction_ids,
     demo_marker_ids,
+    demo_source_evidence_ids,
     demo_visual_ids,
     reset_demo_data,
     seed_demo_data,
@@ -54,6 +56,8 @@ from revenueos.models import (
     Company,
     DataNoticeAcknowledgement,
     DebriefSession,
+    DocumentSource,
+    EmailSource,
     Evidence,
     Interaction,
     InteractionIntelligenceSnapshot,
@@ -65,6 +69,8 @@ from revenueos.models import (
     OrganisationMembership,
     PreInteractionBrief,
     RecordingSession,
+    RevenueBrainSourceSnapshot,
+    SourceCandidateEvidence,
     Transcript,
     TranscriptVersion,
     User,
@@ -72,6 +78,7 @@ from revenueos.models import (
     VisualCandidateEvidence,
 )
 from revenueos.routes.health import EXPECTED_MIGRATION_HEAD
+from revenueos.source_evidence_contracts import SourceCandidateLocation
 from revenueos.tenant import TenantContext
 from tests.conftest import (
     PRIMARY_ORGANISATION_ID,
@@ -193,7 +200,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0028_online_meeting_capture"
+    assert EXPECTED_MIGRATION_HEAD == "0029_doc_email_evidence"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -539,6 +546,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         interaction_ids = demo_interaction_ids(PRIMARY_ORGANISATION_ID)
         debrief_ids = demo_debrief_ids(PRIMARY_ORGANISATION_ID)
         visual_ids = demo_visual_ids(PRIMARY_ORGANISATION_ID)
+        source_evidence_ids = demo_source_evidence_ids(PRIMARY_ORGANISATION_ID)
         marker_ids = demo_marker_ids(PRIMARY_ORGANISATION_ID)
         debrief_interaction_ids = debrief_ids[:5]
         companion_interaction_ids, companion_meeting_ids, _, brief_ids = demo_companion_ids(PRIMARY_ORGANISATION_ID)
@@ -591,6 +599,49 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             assert visual_snapshot is not None
             assert visual_snapshot.schema_version == 2
             assert visual_snapshot.content_json["sourceLabel"] == "customer whiteboard"
+            customer_document = await session.get(DocumentSource, source_evidence_ids["customer-rfp:source"])
+            seller_document = await session.get(DocumentSource, source_evidence_ids["seller-proposal:source"])
+            inbound_email = await session.get(EmailSource, source_evidence_ids["customer-inbound:source"])
+            outbound_email = await session.get(EmailSource, source_evidence_ids["seller-outbound:source"])
+            assert customer_document is not None
+            assert customer_document.source_ownership == "customer_provided"
+            assert seller_document is not None
+            assert seller_document.source_ownership == "salesperson_provided"
+            assert inbound_email is not None
+            assert inbound_email.origin_class == "customer_direct"
+            assert outbound_email is not None
+            assert outbound_email.origin_class == "salesperson_reported"
+            source_candidates = [
+                await session.get(
+                    SourceCandidateEvidence,
+                    source_evidence_ids[f"{label}:candidate"],
+                )
+                for label in (
+                    "customer-rfp",
+                    "seller-proposal",
+                    "customer-inbound",
+                    "seller-outbound",
+                )
+            ]
+            assert all(candidate is not None for candidate in source_candidates)
+            for candidate in source_candidates:
+                assert candidate is not None
+                SourceCandidateLocation.model_validate(candidate.source_location_json)
+            assert all(
+                [
+                    await session.get(
+                        RevenueBrainSourceSnapshot,
+                        source_evidence_ids[f"{label}:snapshot"],
+                    )
+                    is not None
+                    for label in (
+                        "customer-rfp",
+                        "seller-proposal",
+                        "customer-inbound",
+                        "seller-outbound",
+                    )
+                ]
+            )
             assert all([await session.get(InteractionMarker, marker_id) is not None for marker_id in marker_ids])
             metadata_rows = [
                 await session.scalar(
@@ -653,6 +704,18 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             )
             assert all([await session.get(PreInteractionBrief, brief_id) is None for brief_id in brief_ids])
             assert await session.get(VisualAsset, visual_ids[0]) is None
+            assert all(
+                [
+                    await session.get(DocumentSource, source_evidence_ids[f"{label}:source"]) is None
+                    for label in ("customer-rfp", "seller-proposal")
+                ]
+            )
+            assert all(
+                [
+                    await session.get(EmailSource, source_evidence_ids[f"{label}:source"]) is None
+                    for label in ("customer-inbound", "seller-outbound")
+                ]
+            )
             assert all([await session.get(InteractionMarker, marker_id) is None for marker_id in marker_ids])
             assert not (TEST_VISUAL_STORAGE / visual.storage_key).exists()
         await engine.dispose()
@@ -1002,6 +1065,72 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             },
         )
         assert transcript_import.status_code == 201, transcript_import.text
+        document_content = b"SECURITY REQUIREMENTS:\n\nThe customer requires SSO integration."
+        document = client.post(
+            "/api/v1/evidence/documents",
+            json={
+                "companyId": company.json()["id"],
+                "documentType": "security_questionnaire",
+                "sourceOwnership": "customer_provided",
+                "filename": "export-security-requirements.txt",
+                "mimeType": "text/plain",
+                "contentBase64": base64.b64encode(document_content).decode(),
+                "checksumSha256": hashlib.sha256(document_content).hexdigest(),
+                "documentAt": "2026-07-25T04:00:00Z",
+                "authorityConfirmed": True,
+                "externalProcessingAcknowledged": True,
+                "idempotencyKey": "export-document-evidence",
+            },
+        )
+        assert document.status_code == 201, document.text
+        processed_document = client.post(
+            f"/api/v1/evidence/documents/{document.json()['id']}/process",
+            json={"idempotencyKey": "export-document-process"},
+        )
+        assert processed_document.status_code == 200, processed_document.text
+        reviewed_document = client.post(
+            f"/api/v1/evidence/documents/{document.json()['id']}/review",
+            json={
+                "decisions": [
+                    {"candidateId": candidate["id"], "decision": "accept"}
+                    for candidate in processed_document.json()["candidates"]
+                ],
+                "idempotencyKey": "export-document-review",
+            },
+        )
+        assert reviewed_document.status_code == 200, reviewed_document.text
+        email_body = "We will proceed with the security review.\n\n--\nCasey"
+        email = client.post(
+            "/api/v1/evidence/emails",
+            json={
+                "companyId": company.json()["id"],
+                "sourceType": "manually_pasted",
+                "direction": "inbound",
+                "subject": "Security review",
+                "body": email_body,
+                "messageAt": "2026-07-25T04:30:00Z",
+                "authorityConfirmed": True,
+                "externalProcessingAcknowledged": True,
+                "idempotencyKey": "export-email-evidence",
+            },
+        )
+        assert email.status_code == 201, email.text
+        processed_email = client.post(
+            f"/api/v1/evidence/emails/{email.json()['id']}/process",
+            json={"idempotencyKey": "export-email-process"},
+        )
+        assert processed_email.status_code == 200, processed_email.text
+        reviewed_email = client.post(
+            f"/api/v1/evidence/emails/{email.json()['id']}/review",
+            json={
+                "decisions": [
+                    {"candidateId": candidate["id"], "decision": "accept"}
+                    for candidate in processed_email.json()["candidates"]
+                ],
+                "idempotencyKey": "export-email-review",
+            },
+        )
+        assert reviewed_email.status_code == 200, reviewed_email.text
         request = client.post("/api/v1/beta/admin/exports")
         assert request.status_code == 202
         request_id = UUID(request.json()["id"])
@@ -1050,7 +1179,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 9
+        assert payload["exportVersion"] == 10
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1068,6 +1197,14 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert payload["candidateEvidence"] == []
         assert payload["visualAssets"] == []
         assert payload["visualCandidateEvidence"] == []
+        assert payload["documentSources"][0]["contentExportStatus"] == "included"
+        assert base64.b64decode(payload["documentSources"][0]["contentBase64"]) == document_content
+        assert payload["documentFragments"][0]["content_text"]
+        assert payload["emailSources"][0]["body_text"] == email_body
+        assert payload["emailSources"][0]["normalized_body_text"] == ("We will proceed with the security review.")
+        assert payload["sourceCandidateEvidence"]
+        assert {item["review_state"] for item in payload["sourceCandidateEvidence"]} == {"accepted"}
+        assert payload["revenueBrainSourceSnapshots"]
         assert payload["interactionIntelligenceSnapshots"] == []
         assert payload["revenueBrainInteractionSnapshots"] == []
         assert payload["onlineMeetingMetadata"][0]["meeting_platform"] == "google_meet"
@@ -1092,7 +1229,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 9
+        assert download.json()["exportVersion"] == 10
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

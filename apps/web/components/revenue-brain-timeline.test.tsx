@@ -113,18 +113,20 @@ describe("RevenueBrainTimeline", () => {
       vi.fn((input: RequestInfo | URL) => {
         const path = String(input);
         return Promise.resolve(
-          path.endsWith("/brain/reasoning")
-            ? jsonResponse(completedReasoning())
-            : path.endsWith("/brain/visual-evidence")
-              ? jsonResponse([])
-              : path.endsWith("/brain/reported-interactions")
+          path.includes("/api/v1/evidence/accounts/")
+            ? jsonResponse([])
+            : path.endsWith("/brain/reasoning")
+              ? jsonResponse(completedReasoning())
+              : path.endsWith("/brain/visual-evidence")
                 ? jsonResponse([])
-                : path.endsWith("/brain")
-                  ? jsonResponse([
-                      snapshot("new", "2026-07-20T10:00:00Z"),
-                      snapshot("old", "2026-07-10T10:00:00Z"),
-                    ])
-                  : jsonResponse(company),
+                : path.endsWith("/brain/reported-interactions")
+                  ? jsonResponse([])
+                  : path.endsWith("/brain")
+                    ? jsonResponse([
+                        snapshot("new", "2026-07-20T10:00:00Z"),
+                        snapshot("old", "2026-07-10T10:00:00Z"),
+                      ])
+                    : jsonResponse(company),
         );
       }),
     );
@@ -159,15 +161,17 @@ describe("RevenueBrainTimeline", () => {
       vi.fn((input: RequestInfo | URL) => {
         const path = String(input);
         return Promise.resolve(
-          path.endsWith("/brain/reasoning")
-            ? jsonResponse(insufficientReasoning)
-            : path.endsWith("/brain/visual-evidence")
-              ? jsonResponse([])
-              : path.endsWith("/brain/reported-interactions")
+          path.includes("/api/v1/evidence/accounts/")
+            ? jsonResponse([])
+            : path.endsWith("/brain/reasoning")
+              ? jsonResponse(insufficientReasoning)
+              : path.endsWith("/brain/visual-evidence")
                 ? jsonResponse([])
-                : path.endsWith("/brain")
+                : path.endsWith("/brain/reported-interactions")
                   ? jsonResponse([])
-                  : jsonResponse(company),
+                  : path.endsWith("/brain")
+                    ? jsonResponse([])
+                    : jsonResponse(company),
         );
       }),
     );
@@ -184,6 +188,9 @@ describe("RevenueBrainTimeline", () => {
       "fetch",
       vi.fn((input: RequestInfo | URL) => {
         const path = String(input);
+        if (path.includes("/api/v1/evidence/accounts/")) {
+          return Promise.resolve(jsonResponse([]));
+        }
         if (path.endsWith("/brain/reasoning")) {
           return Promise.resolve(jsonResponse(insufficientReasoning));
         }
@@ -243,6 +250,9 @@ describe("RevenueBrainTimeline", () => {
       "fetch",
       vi.fn((input: RequestInfo | URL) => {
         const path = String(input);
+        if (path.includes("/api/v1/evidence/accounts/")) {
+          return Promise.resolve(jsonResponse([]));
+        }
         if (path.endsWith("/brain/reasoning")) {
           return Promise.resolve(jsonResponse(insufficientReasoning));
         }
@@ -299,6 +309,110 @@ describe("RevenueBrainTimeline", () => {
     ).toBeVisible();
   });
 
+  it("shows reviewed document evidence with source and location labels", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/api/v1/evidence/accounts/")) {
+          return Promise.resolve(
+            jsonResponse([
+              {
+                id: "source-snapshot-1",
+                sourceKind: "document",
+                sourceId: "document-1",
+                opportunityId: "opportunity-1",
+                interactionId: null,
+                sourceType: "rfp",
+                sourceLabel: "Customer-provided document",
+                sourceOrigin: "customer_provided",
+                occurredAt: "2026-08-15T01:00:00Z",
+                createdAt: "2026-08-15T02:00:00Z",
+                items: [
+                  {
+                    snapshotId: "source-snapshot-1",
+                    sourceKind: "document",
+                    sourceId: "document-1",
+                    sourceType: "rfp",
+                    sourceLabel: "Customer-provided document",
+                    sourceOrigin: "customer_provided",
+                    occurredAt: "2026-08-15T01:00:00Z",
+                    category: "technical_requirement",
+                    statement: "The platform must support SSO.",
+                    evidenceId: "evidence-1",
+                    location: {
+                      reference: "Page 2, paragraph 1",
+                      pageNumber: 2,
+                      section: "Requirements",
+                      paragraphIndex: 3,
+                    },
+                    originClass: "customer_direct",
+                    supportClass: "direct",
+                    conflictState: "not_assessed",
+                  },
+                ],
+              },
+            ]),
+          );
+        }
+        if (path.endsWith("/brain/reasoning")) {
+          return Promise.resolve(jsonResponse(insufficientReasoning));
+        }
+        if (
+          path.endsWith("/brain/visual-evidence") ||
+          path.endsWith("/brain/reported-interactions") ||
+          path.endsWith("/brain")
+        ) {
+          return Promise.resolve(jsonResponse([]));
+        }
+        return Promise.resolve(jsonResponse(company));
+      }),
+    );
+
+    render(<RevenueBrainTimeline accountId="company-1" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Document and email evidence",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText("The platform must support SSO.")).toBeVisible();
+    expect(screen.getByText(/Page 2, paragraph 1 · direct/i)).toBeVisible();
+    expect(
+      screen.getByText(/document · rfp · customer provided/i),
+    ).toBeVisible();
+  });
+
+  it("keeps the established timeline available when source evidence cannot load", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/api/v1/evidence/accounts/")) {
+          return Promise.reject(new Error("Failed to fetch"));
+        }
+        return Promise.resolve(
+          path.endsWith("/brain/reasoning")
+            ? jsonResponse(insufficientReasoning)
+            : path.endsWith("/brain/visual-evidence") ||
+                path.endsWith("/brain/reported-interactions") ||
+                path.endsWith("/brain")
+              ? jsonResponse([])
+              : jsonResponse(company),
+        );
+      }),
+    );
+
+    render(<RevenueBrainTimeline accountId="company-1" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "No snapshots yet" }),
+    ).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Document and email evidence could not be loaded.",
+    );
+  });
+
   it("shows a recoverable error state", async () => {
     const fetchMock = vi
       .fn()
@@ -312,9 +426,11 @@ describe("RevenueBrainTimeline", () => {
       .mockResolvedValueOnce(jsonResponse(insufficientReasoning))
       .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse(company))
       .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse(insufficientReasoning))
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);

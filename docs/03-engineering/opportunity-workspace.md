@@ -315,3 +315,15 @@ endpoints and does not trigger Meeting Intelligence generation. An Interaction
 without an opportunity may use company scope, but one with an opportunity never
 mixes another opportunity at the same company. See
 [Pre-Interaction source grounding](pre-interaction-source-grounding.md).
+## Reviewed document and email evidence
+
+Opportunity Detail now includes a Customer evidence panel. A user can add an
+authorised PDF/TXT document or paste one plain-text email, process it, inspect
+source-located candidate findings and edit/accept/reject every item. The accepted
+evidence list is read from immutable source snapshots; pending, rejected, failed
+and deleted sources never appear.
+
+Cards display human-readable source labels, document/email type, source date,
+origin/support badge and page/paragraph or message/line locator. The feature does
+not write stage, amount, close date or other opportunity fields. Contradictory
+accepted evidence is additive and may explicitly supersede an earlier candidate.

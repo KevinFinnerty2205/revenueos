@@ -1,13 +1,13 @@
 # Interaction Intelligence roadmap
 
-The current baseline now includes WO-018 deliberate online-meeting
-recording/transcript import and Debrief fallback. A first native adapter remains a
-separately approved, design-partner-driven increment; Google Meet v2 is the
-conditional first technical spike, not a committed production integration.
+The current baseline now includes WO-019 deliberate document and email evidence.
+WO-018 already provides recording/transcript import and Debrief fallback for
+online meetings. Any native mailbox, drive or meeting adapter remains a separately
+approved, design-partner-driven increment.
 
 - **Status:** Recommended sequence; each stage requires a separate approved work
   order before implementation
-- **Current baseline:** Work through WO-018 Online Meeting Capture is complete;
+- **Current baseline:** Work through WO-019 Documents and Email Evidence is complete;
   WO-010 remains the approved blueprint
 - **Primary optimisation:** Earliest trustworthy use for real face-to-face sales
   interactions without requiring recording or transcript upload
@@ -367,6 +367,10 @@ audio or live intelligence. All providers use explicit import or Debrief fallbac
 Google Meet v2 is only the conditional first technical-spike recommendation.
 
 ## WO-019 — Document and Email Evidence
+
+**Delivery status:** Implemented by WO-019 with deliberate PDF/TXT upload and
+plain-text email paste. No provider connector was selected: mailbox/drive sync,
+DOCX, OCR and attachments remain outside the current boundary.
 
 ### Objective and user value
 
