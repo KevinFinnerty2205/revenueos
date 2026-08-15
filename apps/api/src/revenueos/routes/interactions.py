@@ -91,6 +91,23 @@ def _require_timezone(value: datetime | None, field_name: str) -> datetime | Non
 
 def _response(record: InteractionRecord) -> InteractionResponse:
     response = InteractionResponse.model_validate(record.interaction)
+    actual_start = record.interaction.actual_start_at
+    actual_end = record.interaction.actual_end_at
+    duration_seconds = None
+    if actual_start is not None and actual_end is not None:
+        start = actual_start if actual_start.tzinfo is not None else actual_start.replace(tzinfo=actual_end.tzinfo)
+        end = actual_end if actual_end.tzinfo is not None else actual_end.replace(tzinfo=actual_start.tzinfo)
+        duration_seconds = max(0, int((end - start).total_seconds()))
+    if record.interaction.call_outcome in {"no_answer", "voicemail", "cancelled"}:
+        intelligence_state = "not_applicable"
+    elif record.intelligence_snapshot_exists:
+        intelligence_state = "ready"
+    elif record.latest_debrief_status == "review":
+        intelligence_state = "review_required"
+    elif record.latest_recording_status in {"uploading", "uploaded", "transcribing"}:
+        intelligence_state = "processing"
+    else:
+        intelligence_state = "not_ready"
     brief_state = (
         "completed"
         if record.brief_generated_at is not None
@@ -105,6 +122,10 @@ def _response(record: InteractionRecord) -> InteractionResponse:
             "meeting_id": record.meeting_id,
             "brief_state": brief_state,
             "brief_generated_at": record.brief_generated_at,
+            "duration_seconds": duration_seconds,
+            "capture_methods": record.capture_methods,
+            "intelligence_state": intelligence_state,
+            "recording_available": "recording" in record.capture_methods,
         }
     )
 

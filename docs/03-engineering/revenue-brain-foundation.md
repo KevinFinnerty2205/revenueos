@@ -111,6 +111,13 @@ search, new prompts, provider calls and transcript analysis.
 schema-version-2 Interaction snapshots whose source Evidence is still verified
 and available. The account UI shows source label, support classification and a
 link to the Interaction; it never embeds raw image bytes in Revenue Brain.
+
+`GET /api/v1/accounts/{account_id}/brain/reported-interactions` exposes the latest
+validated post-interaction snapshots, including phone calls. Each item retains the
+`Reported by you` label and its recording comparison state; revoked or deleted source
+Evidence fails closed and is omitted. The account page renders this as a separate
+reviewed Interaction timeline, so it cannot be mistaken for customer-direct Meeting
+Intelligence.
 Business cards and seller-context-only material do not create these snapshots.
 
 WO-013 adds `RevenueBrainInteractionSnapshot` as an immutable additive subtype for
@@ -133,3 +140,12 @@ semantics.
 Cross-version composition and deletion impact require separately approved work. See
 the [Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md)
 and [ADR 0026](../08-decisions/0026-interaction-intelligence-platform.md).
+
+## WO-017 phone-call continuity
+
+A connected phone call with accepted debrief candidates creates the same immutable
+`RevenueBrainInteractionSnapshot` used by other reviewed post-interaction reports.
+The content preserves the **Reported by you** origin and reconciliation state; it
+does not copy a recording or transcript. Retry reuses the completed debrief and does
+not append duplicate snapshots. No-answer, voicemail and cancelled calls append no
+customer-intelligence snapshot and are not interpreted as relationship decline.

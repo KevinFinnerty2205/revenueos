@@ -27,6 +27,11 @@ test.beforeEach(async ({ page }) => {
       });
     },
   );
+  await page.route("http://localhost:8000/api/v1/contacts**", async (route) => {
+    await route.fulfill({
+      json: { items: [], page: 1, pageSize: 100, total: 0, pages: 0 },
+    });
+  });
 });
 
 test("landing page explains the current product honestly", async ({ page }) => {
@@ -1148,25 +1153,97 @@ test("a presentation supports browser image upload, explicit review and intellig
   await expect(page.getByRole("button", { name: /record/i })).toHaveCount(0);
 });
 
-test("a completed phone call supports a typed debrief, review and source-aware update", async ({
+test("an unrecorded phone call flows from compact brief to Workspace and Revenue Brain", async ({
   page,
 }) => {
-  const interaction = interactionRecord({
+  let interaction: Record<string, unknown> = interactionRecord({
     id: "interaction-debrief",
     title: "Pricing follow-up call",
     interactionType: "phone_call",
-    lifecycleStatus: "completed",
-    actualEndAt: "2026-08-14T02:00:00Z",
+    companyId: "company-1",
+    opportunityId: "opportunity-1",
+    contactId: "contact-1",
+    callDirection: "outbound",
   });
-  let debrief = debriefSession("collecting");
+  let briefReviewed = false;
+  let workspaceReads = 0;
+  let debrief = debriefSession("collecting", {
+    maxQuestions: 2,
+    currentQuestion: {
+      status: "ask",
+      question: "What changed?",
+      reason: "Start with the most important change from this call.",
+      target: "other",
+      priority: "high",
+    },
+  });
+
+  await page.route(
+    "http://localhost:8000/api/v1/beta/capabilities",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          featureFlags: {
+            openaiProvider: false,
+            revenueBrain: true,
+            opportunityWorkspace: true,
+            aiCompanion: true,
+            aiDebrief: true,
+            voiceJournal: true,
+            visualEvidence: false,
+            presentationMode: false,
+            recordingCapture: true,
+            transcription: true,
+            autoGenerateIntelligenceAfterTranscription: false,
+            dataExport: true,
+            organisationDeletion: false,
+          },
+          noticeVersion: 1,
+          maxTranscriptCharacters: 200000,
+        },
+      });
+    },
+  );
 
   await page.route(
     "http://localhost:8000/api/v1/interactions/interaction-debrief**",
     async (route) => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
+      if (path.endsWith("/companion/brief/review")) {
+        briefReviewed = true;
+        await route.fulfill({ json: companionBrief("phone_call", true) });
+        return;
+      }
       if (path.endsWith("/companion/brief")) {
-        await route.fulfill({ json: emptyBriefResponse() });
+        await route.fulfill({
+          json: companionBrief("phone_call", briefReviewed),
+        });
+        return;
+      }
+      if (path.endsWith("/recordings") && request.method() === "GET") {
+        await route.fulfill({ json: [] });
+        return;
+      }
+      if (path.endsWith("/start") && request.method() === "POST") {
+        interaction = {
+          ...interaction,
+          lifecycleStatus: "in_progress",
+          actualStartAt: "2026-08-14T01:57:00Z",
+        };
+        await route.fulfill({ json: interaction });
+        return;
+      }
+      if (path.endsWith("/complete") && request.method() === "POST") {
+        expect(request.postDataJSON()).toEqual({ callOutcome: "connected" });
+        interaction = {
+          ...interaction,
+          lifecycleStatus: "completed",
+          callOutcome: "connected",
+          durationSeconds: 180,
+          actualEndAt: "2026-08-14T02:00:00Z",
+        };
+        await route.fulfill({ json: interaction });
         return;
       }
       if (path.endsWith("/debrief") && request.method() === "POST") {
@@ -1239,14 +1316,153 @@ test("a completed phone call supports a typed debrief, review and source-aware u
     },
   );
 
+  await page.route(
+    "http://localhost:8000/api/v1/opportunities/opportunity-1/workspace",
+    async (route) => {
+      workspaceReads += 1;
+      await route.fulfill({
+        json: {
+          ...opportunityWorkspace(false, false),
+          reportedIntelligence:
+            debrief.lifecycleStatus === "completed"
+              ? {
+                  id: "intelligence-1",
+                  interactionId: "interaction-debrief",
+                  generatedAt: "2026-08-14T02:05:00Z",
+                  sourceLabel: "Reported by you",
+                  items: [
+                    {
+                      evidenceId: "evidence-accepted",
+                      category: "budget",
+                      statement: "Jordan confirmed the budget owner.",
+                      origin: "salesperson_reported",
+                      sourceLabel: "Reported by you",
+                      validationState: "verified",
+                      conflictState: "not_assessed",
+                    },
+                  ],
+                }
+              : null,
+        },
+      });
+    },
+  );
+  await page.route("http://localhost:8000/api/v1/meetings**", async (route) => {
+    await route.fulfill({
+      json: { items: [], page: 1, pageSize: 100, total: 0, pages: 0 },
+    });
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/companies/company-1",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          id: "company-1",
+          organisationId: "organisation-1",
+          name: "Acme Australia",
+          website: null,
+          industry: "Technology",
+          employeeCount: 120,
+          status: "active",
+          ownerUserId: "user-1",
+          createdAt: "2026-07-01T00:00:00Z",
+          updatedAt: "2026-08-14T02:05:00Z",
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/accounts/company-1/brain**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/reasoning")) {
+        await route.fulfill({
+          json: {
+            state: "insufficient_history",
+            message: "More history is required.",
+            latest: null,
+            history: [],
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/reported-interactions")) {
+        await route.fulfill({
+          json:
+            debrief.lifecycleStatus === "completed"
+              ? [
+                  {
+                    id: "brain-1",
+                    interactionId: "interaction-debrief",
+                    opportunityId: "opportunity-1",
+                    interactionTitle: "Pricing follow-up call",
+                    interactionType: "phone_call",
+                    interactionDate: "2026-08-14T02:00:00Z",
+                    createdAt: "2026-08-14T02:05:00Z",
+                    sourceLabel: "Reported by you",
+                    items: [
+                      {
+                        evidenceId: "evidence-accepted",
+                        category: "budget",
+                        statement: "Jordan confirmed the budget owner.",
+                        origin: "salesperson_reported",
+                        sourceLabel: "Reported by you",
+                        validationState: "verified",
+                        conflictState: "not_assessed",
+                      },
+                    ],
+                  },
+                ]
+              : [],
+        });
+        return;
+      }
+      await route.fulfill({ json: [] });
+    },
+  );
+
   await page.goto("/interactions/interaction-debrief");
+  await expect(page.getByText("Compact call brief")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Purpose and desired next step" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Mark as reviewed" }).click();
+  await page.getByRole("button", { name: "Start call" }).click();
+  await expect(
+    page.getByRole("status", { name: "Interaction lifecycle status" }),
+  ).toHaveText("In Progress");
+  await expect(
+    page.getByText(/does not intercept cellular calls/i),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "End connected call" }).click();
   await expect(
     page.getByRole("heading", {
-      name: "Capture what changed while it is fresh",
+      name: "Capture this call while it’s fresh",
     }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Start AI Debrief" }),
+  ).toBeVisible();
+  await expect(page.getByText("Add Voice Journal")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Type Notes" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Add Recording" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Finish for now" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/did not record or monitor the call/i),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /record phone call/i }),
+  ).toHaveCount(0);
+  if (process.env.CAPTURE_WO_017_SCREENSHOT === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-017-phone-call-intelligence.png",
+      fullPage: true,
+    });
+  }
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Start typed debrief" }).click();
+  await page.getByRole("button", { name: "Type notes" }).click();
   await page
     .getByLabel("Your answer")
     .fill("Jordan confirmed the budget and I will send the proposal.");
@@ -1261,6 +1477,420 @@ test("a completed phone call supports a typed debrief, review and source-aware u
     .click();
   await expect(page.getByText("Debrief complete")).toBeVisible();
   await expect(page.getByText(/Reported by you/)).toBeVisible();
+  await page.goto("/opportunities/opportunity-1");
+  await expect(
+    page.getByRole("heading", { name: "Latest post-interaction report" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Jordan confirmed the budget owner."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Refresh workspace" }).click();
+  expect(workspaceReads).toBeGreaterThanOrEqual(2);
+
+  await page.goto("/companies/company-1");
+  await expect(
+    page.getByRole("heading", { name: "Reviewed interaction intelligence" }),
+  ).toBeVisible();
+  await expect(page.getByText("Pricing follow-up call")).toBeVisible();
+  await expect(page.getByText("Reported by you · phone call")).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByText("Jordan confirmed the budget owner."),
+  ).toBeVisible();
+  await expect(page.getByText(/upload a transcript/i)).toHaveCount(0);
+});
+
+test("an authorised imported call recording uses the existing transcription and gap-fill path", async ({
+  page,
+}) => {
+  const interaction = interactionRecord({
+    id: "interaction-imported-call",
+    title: "Imported procurement call",
+    interactionType: "phone_call",
+    lifecycleStatus: "completed",
+    companyId: "company-1",
+    opportunityId: "opportunity-1",
+    contactId: "contact-1",
+    callDirection: "inbound",
+    callOutcome: "connected",
+    durationSeconds: 75,
+    actualStartAt: "2026-08-14T03:00:00Z",
+    actualEndAt: "2026-08-14T03:01:15Z",
+  });
+  let imported = false;
+  let transcriptionReady = false;
+  let createPayload: Record<string, unknown> | null = null;
+  let debrief = debriefSession("collecting", {
+    interactionId: "interaction-imported-call",
+    maxQuestions: 2,
+    currentQuestion: {
+      status: "ask",
+      question: "What important outcome might the recording have missed?",
+      reason: "Fill the remaining capture gaps.",
+      target: "other",
+      priority: "high",
+    },
+  });
+  const importedRecording = () => ({
+    id: "recording-imported-call",
+    interactionId: "interaction-imported-call",
+    captureSessionId: "capture-imported-call",
+    recordingType: "imported_audio_recording",
+    recordingSource: "customer_call_recording",
+    lifecycleStatus: imported ? "uploaded" : "created",
+    consentState: "acknowledged",
+    startedAt: "2026-08-14T03:02:00Z",
+    stoppedAt: "2026-08-14T03:02:01Z",
+    durationSeconds: 75,
+    expectedMimeType: "audio/webm",
+    finalMimeType: imported ? "audio/webm" : null,
+    totalBytes: imported ? 20 : 0,
+    chunkCount: imported ? 1 : 0,
+    uploadCompletedAt: imported ? "2026-08-14T03:02:01Z" : null,
+    transcriptionStatus: transcriptionReady ? "completed" : "queued",
+    transcriptionAttempts: transcriptionReady ? 1 : 0,
+    failureCode: null,
+    autoIntelligenceStatus: "disabled",
+    sessionExpiresAt: "2026-08-15T03:02:00Z",
+    providerMode: "mock",
+    externalProcessing: false,
+    createdAt: "2026-08-14T03:02:00Z",
+    updatedAt: "2026-08-14T03:03:00Z",
+  });
+
+  await page.route(
+    "http://localhost:8000/api/v1/beta/capabilities",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          featureFlags: {
+            openaiProvider: false,
+            revenueBrain: true,
+            opportunityWorkspace: true,
+            aiCompanion: true,
+            aiDebrief: true,
+            voiceJournal: true,
+            visualEvidence: false,
+            presentationMode: false,
+            recordingCapture: true,
+            transcription: true,
+            autoGenerateIntelligenceAfterTranscription: false,
+            dataExport: true,
+            organisationDeletion: false,
+          },
+          noticeVersion: 1,
+          maxTranscriptCharacters: 200000,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/interactions/interaction-imported-call**",
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith("/companion/brief")) {
+        await route.fulfill({ json: emptyBriefResponse() });
+        return;
+      }
+      if (path.endsWith("/recordings") && request.method() === "GET") {
+        if (imported) transcriptionReady = true;
+        await route.fulfill({ json: imported ? [importedRecording()] : [] });
+        return;
+      }
+      if (path.endsWith("/recordings") && request.method() === "POST") {
+        createPayload = request.postDataJSON() as Record<string, unknown>;
+        await route.fulfill({ status: 201, json: importedRecording() });
+        return;
+      }
+      if (path.endsWith("/recording-imported-call/start")) {
+        await route.fulfill({
+          json: { ...importedRecording(), lifecycleStatus: "uploading" },
+        });
+        return;
+      }
+      if (path.endsWith("/recording-imported-call/chunks")) {
+        await route.fulfill({
+          status: 201,
+          json: {
+            id: "chunk-imported-call",
+            recordingSessionId: "recording-imported-call",
+            sequenceNumber: 0,
+            byteSize: 20,
+            checksumSha256: "0".repeat(64),
+            uploadState: "pending",
+            uploadedAt: null,
+            createdAt: "2026-08-14T03:02:00Z",
+            uploadUrl: `${path}/chunk-imported-call/content?token=synthetic`,
+            uploadExpiresAt: "2026-08-14T03:07:00Z",
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/chunk-imported-call/content")) {
+        await route.fulfill({ status: 204, body: "" });
+        return;
+      }
+      if (path.endsWith("/chunk-imported-call/complete")) {
+        await route.fulfill({
+          json: { uploadState: "verified", checksumSha256: "0".repeat(64) },
+        });
+        return;
+      }
+      if (path.endsWith("/recording-imported-call/finalize")) {
+        imported = true;
+        await route.fulfill({ json: importedRecording() });
+        return;
+      }
+      if (path.endsWith("/debrief") && request.method() === "POST") {
+        await route.fulfill({ status: 201, json: debrief });
+        return;
+      }
+      if (path.endsWith("/response")) {
+        debrief = debriefSession("collecting", {
+          interactionId: "interaction-imported-call",
+          maxQuestions: 2,
+          questionCount: 1,
+          currentQuestion: {
+            status: "complete",
+            question: null,
+            reason: "The recording and gap-fill answer are sufficient.",
+            target: null,
+            priority: null,
+          },
+          canFinish: true,
+          turns: [
+            {
+              id: "turn-imported-call",
+              turnNumber: 1,
+              question: debrief.currentQuestion,
+              answerText: "Jordan owns the procurement decision.",
+              inputMode: "text",
+              createdAt: "2026-08-14T03:04:00Z",
+            },
+          ],
+        });
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      if (path.endsWith("/finish")) {
+        debrief = debriefSession("review", {
+          interactionId: "interaction-imported-call",
+          maxQuestions: 2,
+          currentQuestion: null,
+          candidates: [
+            {
+              ...reportedCandidate(),
+              evidenceCategory: "stakeholder",
+              statement: "Jordan owns the procurement decision.",
+              originalStatement: "Jordan owns the procurement decision.",
+              conflictState: "corroborated",
+            },
+          ],
+        });
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      if (path.endsWith("/review")) {
+        debrief = debriefSession("completed", {
+          interactionId: "interaction-imported-call",
+          maxQuestions: 2,
+          currentQuestion: null,
+          candidates: [
+            {
+              ...reportedCandidate(),
+              evidenceCategory: "stakeholder",
+              statement: "Jordan owns the procurement decision.",
+              originalStatement: "Jordan owns the procurement decision.",
+              conflictState: "corroborated",
+              validationState: "verified",
+              userReviewState: "accepted",
+              acceptedEvidenceId: "evidence-imported-call",
+            },
+          ],
+          interactionIntelligenceId: "intelligence-imported-call",
+          revenueBrainSnapshotId: "brain-imported-call",
+          acceptedCount: 1,
+          rejectedCount: 0,
+          interactionUpdated: true,
+          revenueBrainUpdated: true,
+          completedAt: "2026-08-14T03:05:00Z",
+        });
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      if (path.includes("/debrief/session-1")) {
+        await route.fulfill({ json: debrief });
+        return;
+      }
+      await route.fulfill({ json: interaction });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/opportunities/opportunity-1/workspace",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          ...opportunityWorkspace(false, false),
+          reportedIntelligence:
+            debrief.lifecycleStatus === "completed"
+              ? {
+                  id: "intelligence-imported-call",
+                  interactionId: "interaction-imported-call",
+                  generatedAt: "2026-08-14T03:05:00Z",
+                  sourceLabel: "Reported by you",
+                  items: [
+                    {
+                      evidenceId: "evidence-imported-call",
+                      category: "stakeholder",
+                      statement: "Jordan owns the procurement decision.",
+                      origin: "salesperson_reported",
+                      sourceLabel: "Reported by you",
+                      validationState: "verified",
+                      conflictState: "corroborated",
+                    },
+                  ],
+                }
+              : null,
+        },
+      });
+    },
+  );
+  await page.route("http://localhost:8000/api/v1/meetings**", async (route) => {
+    await route.fulfill({
+      json: { items: [], page: 1, pageSize: 100, total: 0, pages: 0 },
+    });
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/companies/company-1",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          id: "company-1",
+          organisationId: "organisation-1",
+          name: "Acme Australia",
+          website: null,
+          industry: "Technology",
+          employeeCount: 120,
+          status: "active",
+          ownerUserId: "user-1",
+          createdAt: "2026-07-01T00:00:00Z",
+          updatedAt: "2026-08-14T03:05:00Z",
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/accounts/company-1/brain**",
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/reasoning")) {
+        await route.fulfill({
+          json: {
+            state: "insufficient_history",
+            message: "More history is required.",
+            latest: null,
+            history: [],
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/reported-interactions")) {
+        await route.fulfill({
+          json:
+            debrief.lifecycleStatus === "completed"
+              ? [
+                  {
+                    id: "brain-imported-call",
+                    interactionId: "interaction-imported-call",
+                    opportunityId: "opportunity-1",
+                    interactionTitle: "Imported procurement call",
+                    interactionType: "phone_call",
+                    interactionDate: "2026-08-14T03:01:15Z",
+                    createdAt: "2026-08-14T03:05:00Z",
+                    sourceLabel: "Reported by you",
+                    items: [
+                      {
+                        evidenceId: "evidence-imported-call",
+                        category: "stakeholder",
+                        statement: "Jordan owns the procurement decision.",
+                        origin: "salesperson_reported",
+                        sourceLabel: "Reported by you",
+                        validationState: "verified",
+                        conflictState: "corroborated",
+                      },
+                    ],
+                  },
+                ]
+              : [],
+        });
+        return;
+      }
+      await route.fulfill({ json: [] });
+    },
+  );
+
+  await page.goto("/interactions/interaction-imported-call");
+  await expect(
+    page.getByRole("heading", { name: "Add Recording" }),
+  ).toBeVisible();
+  await page.getByLabel("Audio file").setInputFiles({
+    name: "authorised-call.webm",
+    mimeType: "audio/webm",
+    buffer: Buffer.from("synthetic-authorised-call"),
+  });
+  await page
+    .getByLabel("Recording source")
+    .selectOption("customer_call_recording");
+  await page.getByLabel("Call duration in seconds").fill("75");
+  await page.getByLabel(/authorised business interaction/i).check();
+  await page.getByRole("button", { name: "Import recording" }).click();
+  await expect(page.getByText("Recording imported securely")).toBeVisible();
+  expect(createPayload).toMatchObject({
+    recordingType: "imported_audio_recording",
+    recordingSource: "customer_call_recording",
+    consentMethod: "contractual_authority",
+    userAttestedAuthority: true,
+  });
+  await page.getByRole("button", { name: "Refresh recording status" }).click();
+  await expect(
+    page.getByText(/Customer Call Recording · transcription Completed/i),
+  ).toBeVisible();
+
+  await page.getByRole("checkbox", { name: /safely stopped/i }).check();
+  await page.getByRole("button", { name: "Start AI Debrief" }).click();
+  await expect(
+    page.getByText("What important outcome might the recording have missed?"),
+  ).toBeVisible();
+  await page
+    .getByLabel("Your answer")
+    .fill("Jordan owns the procurement decision.");
+  await page.getByRole("button", { name: "Save answer" }).click();
+  await page.getByRole("button", { name: "Review captured evidence" }).click();
+  await expect(
+    page.getByText(/Recording comparison: Corroborated/i),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Finish review and update intelligence" })
+    .click();
+  await expect(page.getByText("Debrief complete")).toBeVisible();
+  await expect(page.getByText(/Reported by you/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /play/i })).toHaveCount(0);
+  await page.goto("/opportunities/opportunity-1");
+  await expect(
+    page.getByText("Jordan owns the procurement decision."),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Recording comparison: Corroborated/i),
+  ).toBeVisible();
+  await page.goto("/companies/company-1");
+  await expect(page.getByText("Imported procurement call")).toBeVisible();
+  await expect(
+    page.getByText("Jordan owns the procurement decision."),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Recording comparison: corroborated/i),
+  ).toBeVisible();
 });
 
 test("mobile Companion recording path persists a consented transcript into existing intelligence surfaces", async ({
@@ -1779,6 +2409,10 @@ test("mobile Companion recording path persists a consented transcript into exist
         return;
       }
       if (path.endsWith("/visual-evidence")) {
+        await route.fulfill({ json: [] });
+        return;
+      }
+      if (path.endsWith("/reported-interactions")) {
         await route.fulfill({ json: [] });
         return;
       }
@@ -3088,6 +3722,7 @@ function interactionRecord(overrides: Record<string, unknown>) {
     organisationId: "organisation-1",
     companyId: "company-1",
     opportunityId: null,
+    contactId: null,
     meetingId: null,
     interactionType: "manual_interaction",
     lifecycleStatus: "planned",
@@ -3096,6 +3731,12 @@ function interactionRecord(overrides: Record<string, unknown>) {
     scheduledEndAt: null,
     actualStartAt: null,
     actualEndAt: null,
+    callDirection: null,
+    callOutcome: null,
+    durationSeconds: null,
+    captureMethods: [],
+    intelligenceState: "not_ready",
+    recordingAvailable: false,
     timezone: "Australia/Sydney",
     creationOrigin: "manual",
     createdByUserId: "user-1",
@@ -3117,6 +3758,7 @@ function reportedCandidate() {
     sourceLabel: "Reported by you",
     supportClassification: "reported",
     validationState: "unreviewed",
+    conflictState: "not_assessed",
     userReviewState: "pending",
     sourceCaptureSessionId: "session-1",
     evidenceFragmentId: "fragment-1",

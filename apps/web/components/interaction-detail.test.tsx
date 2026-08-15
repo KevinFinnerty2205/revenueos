@@ -98,4 +98,64 @@ describe("InteractionDetail", () => {
       "Interaction not found.",
     );
   });
+
+  it("starts and ends a normal phone-system call without offering browser call recording", async () => {
+    let phone: Record<string, unknown> = {
+      ...interaction,
+      id: "phone-1",
+      meetingId: null,
+      interactionType: "phone_call",
+      lifecycleStatus: "planned",
+      title: "Jordan commercial call",
+      contactId: "contact-1",
+      callDirection: "outbound",
+      callOutcome: null,
+      durationSeconds: null,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/start") && init?.method === "POST") {
+        phone = { ...phone, lifecycleStatus: "in_progress" };
+      }
+      if (path.endsWith("/complete") && init?.method === "POST") {
+        phone = {
+          ...phone,
+          lifecycleStatus: "completed",
+          callOutcome: "connected",
+          durationSeconds: 62,
+        };
+      }
+      if (path.includes("/beta/capabilities")) {
+        return Promise.resolve(jsonResponse({ featureFlags: {} }));
+      }
+      return Promise.resolve(jsonResponse(phone));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionDetail interactionId="phone-1" />);
+    await screen.findByRole("heading", { name: "Jordan commercial call" });
+    expect(screen.getByText("Use your normal phone")).toBeVisible();
+    expect(
+      screen.getByText(/does not intercept cellular calls/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /record phone call/i }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start call" }));
+    expect(
+      await screen.findByRole("button", { name: "End connected call" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "End connected call" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("status", { name: "Interaction lifecycle status" }),
+      ).toHaveTextContent("Completed"),
+    );
+    const completion = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/complete"),
+    );
+    expect(JSON.parse(String(completion?.[1]?.body))).toEqual({
+      callOutcome: "connected",
+    });
+  });
 });

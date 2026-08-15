@@ -619,6 +619,20 @@ class Interaction(TimestampMixin, Base):
             name="ck_interactions_creation_origin",
         ),
         CheckConstraint(
+            "call_direction IS NULL OR call_direction IN ('inbound', 'outbound', 'unknown')",
+            name="ck_interactions_call_direction",
+        ),
+        CheckConstraint(
+            "call_outcome IS NULL OR call_outcome IN ('connected', 'no_answer', 'voicemail', 'cancelled')",
+            name="ck_interactions_call_outcome",
+        ),
+        CheckConstraint(
+            "(interaction_type = 'phone_call' AND call_direction IS NOT NULL) OR "
+            "(interaction_type <> 'phone_call' AND contact_id IS NULL AND "
+            "call_direction IS NULL AND call_outcome IS NULL)",
+            name="ck_interactions_phone_metadata_scope",
+        ),
+        CheckConstraint(
             "scheduled_end_at IS NULL OR scheduled_start_at IS NULL OR scheduled_end_at >= scheduled_start_at",
             name="ck_interactions_scheduled_range",
         ),
@@ -639,6 +653,12 @@ class Interaction(TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_interactions_contact_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["organisation_id", "created_by_user_id"],
             [
                 "organisation_memberships.organisation_id",
@@ -653,6 +673,7 @@ class Interaction(TimestampMixin, Base):
         Index("ix_interactions_organisation_type", "organisation_id", "interaction_type"),
         Index("ix_interactions_organisation_company", "organisation_id", "company_id"),
         Index("ix_interactions_organisation_opportunity", "organisation_id", "opportunity_id"),
+        Index("ix_interactions_organisation_contact", "organisation_id", "contact_id"),
         Index("ix_interactions_organisation_deleted", "organisation_id", "deleted_at"),
     )
 
@@ -664,6 +685,7 @@ class Interaction(TimestampMixin, Base):
     )
     company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     interaction_type: Mapped[str] = mapped_column(
         String(40),
         nullable=False,
@@ -688,6 +710,8 @@ class Interaction(TimestampMixin, Base):
         default=InteractionCreationOrigin.MANUAL.value,
         server_default=InteractionCreationOrigin.MANUAL.value,
     )
+    call_direction: Mapped[str | None] = mapped_column(String(20))
+    call_outcome: Mapped[str | None] = mapped_column(String(20))
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -1518,6 +1542,17 @@ class RecordingSession(TimestampMixin, Base):
             name="ck_recording_sessions_type",
         ),
         CheckConstraint(
+            "recording_source IS NULL OR recording_source IN ("
+            "'customer_call_recording', 'business_phone_recording', 'user_uploaded_recording', "
+            "'external_provider_recording')",
+            name="ck_recording_sessions_source",
+        ),
+        CheckConstraint(
+            "(recording_type = 'live_audio_recording' AND recording_source IS NULL) OR "
+            "(recording_type <> 'live_audio_recording' AND recording_source IS NOT NULL)",
+            name="ck_recording_sessions_import_source",
+        ),
+        CheckConstraint(
             "lifecycle_status IN ('created', 'recording', 'uploading', 'uploaded', 'transcribing', "
             "'completed', 'failed', 'cancelled', 'deleting', 'deleted')",
             name="ck_recording_sessions_lifecycle",
@@ -1627,6 +1662,7 @@ class RecordingSession(TimestampMixin, Base):
     transcript_evidence_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     recording_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    recording_source: Mapped[str | None] = mapped_column(String(40))
     lifecycle_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="created", server_default="created"
     )
@@ -2283,6 +2319,10 @@ class CandidateEvidence(TimestampMixin, Base):
             name="ck_candidate_evidence_review_state",
         ),
         CheckConstraint(
+            "conflict_state IN ('not_assessed', 'conflicting', 'unresolved', 'corroborated')",
+            name="ck_candidate_evidence_conflict_state",
+        ),
+        CheckConstraint(
             "length(trim(statement)) BETWEEN 1 AND 1000 AND length(trim(original_statement)) BETWEEN 1 AND 1000",
             name="ck_candidate_evidence_statements",
         ),
@@ -2370,6 +2410,9 @@ class CandidateEvidence(TimestampMixin, Base):
     entity_reference: Mapped[str | None] = mapped_column(String(200))
     explicitly_reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    conflict_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="not_assessed", server_default="not_assessed"
+    )
     reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

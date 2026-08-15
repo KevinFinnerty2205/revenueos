@@ -2,6 +2,10 @@
 
 **Status:** Current WO-015 implementation. Browser-first batch capture only.
 
+WO-017 adds an `imported_audio_recording` browser client for completed phone
+Interactions and a required controlled `recording_source`. It reuses every lifecycle,
+storage, quota, consent and transcription boundary in this guide.
+
 ## Boundary
 
 Recording is an optional Interaction Capture Session. AI Debrief, Voice Journal,

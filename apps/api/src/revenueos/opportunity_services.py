@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import Literal, cast
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -200,6 +201,15 @@ class OpportunityWorkspaceService:
                                 origin="salesperson_reported",
                                 source_label="Reported by you",
                                 validation_state="verified",
+                                conflict_state=cast(
+                                    Literal[
+                                        "not_assessed",
+                                        "conflicting",
+                                        "unresolved",
+                                        "corroborated",
+                                    ],
+                                    item.get("conflictState", "not_assessed"),
+                                ),
                             )
                         )
                     except ValueError:

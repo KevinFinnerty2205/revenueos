@@ -58,6 +58,12 @@ def project_meeting_to_interaction(meeting: Meeting, interaction: Interaction) -
     interaction.company_id = meeting.company_id
     interaction.opportunity_id = meeting.opportunity_id
     interaction.interaction_type = interaction_type_for_meeting(meeting.meeting_type)
+    if interaction.interaction_type == "phone_call":
+        interaction.call_direction = interaction.call_direction or "unknown"
+    else:
+        interaction.contact_id = None
+        interaction.call_direction = None
+        interaction.call_outcome = None
     interaction.lifecycle_status = interaction_status_for_meeting(meeting.status)
     interaction.scheduled_start_at = meeting.meeting_date
     if meeting.status == "completed":

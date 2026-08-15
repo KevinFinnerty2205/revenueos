@@ -9,6 +9,8 @@ from pydantic import StringConstraints, field_validator, model_validator
 from revenueos.business_contracts import Name200, UpdateRequest
 from revenueos.contracts import APIModel
 from revenueos.domain import (
+    CallDirection,
+    CallOutcome,
     InteractionCreationOrigin,
     InteractionLifecycleStatus,
     InteractionType,
@@ -41,6 +43,9 @@ class InteractionCreate(APIModel):
     lifecycle_status: InteractionLifecycleStatus = InteractionLifecycleStatus.PLANNED
     company_id: UUID | None = None
     opportunity_id: UUID | None = None
+    contact_id: UUID | None = None
+    call_direction: CallDirection | None = None
+    call_outcome: CallOutcome | None = None
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
     actual_start_at: datetime | None = None
@@ -73,6 +78,9 @@ class InteractionUpdate(UpdateRequest):
     lifecycle_status: InteractionLifecycleStatus | None = None
     company_id: UUID | None = None
     opportunity_id: UUID | None = None
+    contact_id: UUID | None = None
+    call_direction: CallDirection | None = None
+    call_outcome: CallOutcome | None = None
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
     actual_start_at: datetime | None = None
@@ -89,6 +97,7 @@ class InteractionUpdate(UpdateRequest):
 
 class InteractionComplete(APIModel):
     actual_end_at: datetime | None = None
+    call_outcome: CallOutcome | None = None
 
     @field_validator("actual_end_at")
     @classmethod
@@ -110,6 +119,7 @@ class InteractionResponse(APIModel):
     organisation_id: UUID
     company_id: UUID | None
     opportunity_id: UUID | None
+    contact_id: UUID | None
     meeting_id: UUID | None = None
     interaction_type: InteractionType
     lifecycle_status: InteractionLifecycleStatus
@@ -120,6 +130,12 @@ class InteractionResponse(APIModel):
     actual_end_at: datetime | None
     timezone: str | None
     creation_origin: InteractionCreationOrigin
+    call_direction: CallDirection | None
+    call_outcome: CallOutcome | None
+    duration_seconds: int | None = None
+    capture_methods: tuple[Literal["debrief", "voice_journal", "recording"], ...] = ()
+    intelligence_state: Literal["not_ready", "processing", "review_required", "ready", "not_applicable"] = "not_ready"
+    recording_available: bool = False
     created_by_user_id: UUID
     brief_state: Literal["unavailable", "not_generated", "completed"] = "unavailable"
     brief_generated_at: datetime | None = None

@@ -63,6 +63,7 @@ CandidateEvidenceCategory = Literal[
 ]
 CandidateValidationState = Literal["unreviewed", "verified", "rejected"]
 CandidateReviewState = Literal["pending", "accepted", "rejected"]
+CandidateConflictState = Literal["not_assessed", "conflicting", "unresolved", "corroborated"]
 BoundedIdempotencyKey = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
@@ -207,6 +208,7 @@ class CandidateEvidenceResponse(APIModel):
     support_classification: Literal["reported"]
     validation_state: CandidateValidationState
     user_review_state: CandidateReviewState
+    conflict_state: CandidateConflictState
     source_capture_session_id: UUID
     evidence_fragment_id: UUID
     accepted_evidence_id: UUID | None

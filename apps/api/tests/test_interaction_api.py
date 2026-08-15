@@ -21,7 +21,7 @@ from .conftest import (
     SECONDARY_USER_ID,
     TEST_DB_URL,
 )
-from .test_business_api import create_company, create_opportunity
+from .test_business_api import create_company, create_contact, create_opportunity
 from .test_meeting_api import cast_auth_dependency, create_meeting, secondary_user
 
 
@@ -32,6 +32,8 @@ def create_interaction(
     interaction_type: str = "workshop",
     company_id: str | None = None,
     opportunity_id: str | None = None,
+    contact_id: str | None = None,
+    call_direction: str | None = None,
 ) -> dict[str, object]:
     response = client.post(
         "/api/v1/interactions",
@@ -41,6 +43,8 @@ def create_interaction(
             "lifecycleStatus": "planned",
             "companyId": company_id,
             "opportunityId": opportunity_id,
+            **({"contactId": contact_id} if contact_id is not None else {}),
+            **({"callDirection": call_direction} if call_direction is not None else {}),
             "scheduledStartAt": "2026-08-12T09:00:00+10:00",
             "scheduledEndAt": "2026-08-12T11:00:00+10:00",
             "timezone": "Australia/Sydney",
@@ -48,6 +52,129 @@ def create_interaction(
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def test_phone_call_metadata_contact_tenant_safety_outcomes_and_duration(client: TestClient) -> None:
+    company_id = str(create_company(client, name="Phone account")["id"])
+    contact_id = str(create_contact(client, company_id, first_name="Priya")["id"])
+    opportunity_id = str(create_opportunity(client, company_id, name="Phone opportunity")["id"])
+    call = create_interaction(
+        client,
+        title="Pricing follow-up call",
+        interaction_type="phone_call",
+        company_id=company_id,
+        opportunity_id=opportunity_id,
+        contact_id=contact_id,
+        call_direction="outbound",
+    )
+    call_id = str(call["id"])
+    assert call["contactId"] == contact_id
+    assert call["callDirection"] == "outbound"
+    assert call["callOutcome"] is None
+    assert call["recordingAvailable"] is False
+    assert call["captureMethods"] == []
+
+    inbound = client.patch(
+        f"/api/v1/interactions/{call_id}",
+        json={"callDirection": "inbound"},
+    )
+    assert inbound.status_code == 200, inbound.text
+    assert inbound.json()["callDirection"] == "inbound"
+    unknown = client.patch(
+        f"/api/v1/interactions/{call_id}",
+        json={"callDirection": "unknown"},
+    )
+    assert unknown.status_code == 200, unknown.text
+    assert unknown.json()["callDirection"] == "unknown"
+
+    started = client.post(
+        f"/api/v1/interactions/{call_id}/start",
+        json={"actualStartAt": "2026-08-12T09:00:00+10:00"},
+    )
+    assert started.status_code == 200, started.text
+    completed = client.post(
+        f"/api/v1/interactions/{call_id}/complete",
+        json={
+            "actualEndAt": "2026-08-12T09:02:30+10:00",
+            "callOutcome": "connected",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["durationSeconds"] == 150
+    assert completed.json()["callOutcome"] == "connected"
+
+    invalid_non_call = client.post(
+        "/api/v1/interactions",
+        json={
+            "title": "Not a phone call",
+            "interactionType": "workshop",
+            "contactId": contact_id,
+            "callDirection": "inbound",
+        },
+    )
+    assert invalid_non_call.status_code == 422
+    assert invalid_non_call.json()["code"] == "invalid_phone_metadata"
+
+
+def test_phone_contact_company_consistency_and_cross_tenant_hiding(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    company_id = str(create_company(client, name="Primary phone company")["id"])
+    opportunity_id = str(create_opportunity(client, company_id, name="Primary phone opportunity")["id"])
+    other_company_id = str(create_company(client, name="Different phone company")["id"])
+    other_contact_id = str(create_contact(client, other_company_id, first_name="Morgan")["id"])
+    mismatch = client.post(
+        "/api/v1/interactions",
+        json={
+            "title": "Mismatched contact call",
+            "interactionType": "phone_call",
+            "companyId": company_id,
+            "opportunityId": opportunity_id,
+            "contactId": other_contact_id,
+            "callDirection": "unknown",
+        },
+    )
+    assert mismatch.status_code == 422
+    assert mismatch.json()["code"] == "inconsistent_relationship"
+
+    app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
+    hidden_company_id = str(create_company(client, name="Hidden phone company")["id"])
+    hidden_contact_id = str(create_contact(client, hidden_company_id, first_name="Hidden")["id"])
+    app.dependency_overrides.pop(get_current_user)
+    hidden = client.post(
+        "/api/v1/interactions",
+        json={
+            "title": "Cross-tenant phone contact",
+            "interactionType": "phone_call",
+            "contactId": hidden_contact_id,
+            "callDirection": "unknown",
+        },
+    )
+    assert hidden.status_code == 404
+    assert hidden.json()["code"] == "contact_not_found"
+
+
+@pytest.mark.parametrize("outcome", ["no_answer", "voicemail", "cancelled"])
+def test_phone_non_connection_outcomes_remain_events_without_intelligence(
+    client: TestClient,
+    outcome: str,
+) -> None:
+    interaction = create_interaction(
+        client,
+        title=f"Phone call {outcome}",
+        interaction_type="phone_call",
+        call_direction="unknown",
+    )
+
+    completed = client.post(
+        f"/api/v1/interactions/{interaction['id']}/complete",
+        json={"callOutcome": outcome},
+    )
+
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["callOutcome"] == outcome
+    assert completed.json()["intelligenceState"] == "not_applicable"
 
 
 def test_interaction_crud_filters_completion_and_terminal_lifecycle(client: TestClient) -> None:

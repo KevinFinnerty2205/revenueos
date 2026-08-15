@@ -430,7 +430,9 @@ export function PostInteractionCapture({
       setMessage(
         next.revenueBrainUpdated
           ? "Reviewed evidence saved to the interaction and Revenue Brain."
-          : "Review completed. Rejected items were not added to intelligence.",
+          : interactionType === "phone_call" && !next.interactionUpdated
+            ? "Your notes were saved. A call that did not connect does not create customer Interaction Intelligence."
+            : "Review completed. Rejected items were not added to intelligence.",
       );
     } catch (requestError: unknown) {
       setError(
@@ -458,12 +460,14 @@ export function PostInteractionCapture({
             id="post-interaction-title"
             className="mt-2 text-2xl font-semibold text-slate-950"
           >
-            Capture what changed while it is fresh
+            {interactionType === "phone_call"
+              ? "Capture this call while it’s fresh"
+              : "Capture what changed while it is fresh"}
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            A short debrief for this {humanise(interactionType).toLowerCase()}{" "}
-            turns your own report into reviewable evidence. It does not record
-            the customer interaction.
+            {interactionType === "phone_call"
+              ? "Use AI Debrief, Voice Journal, typed notes or an authorised recording import. RevenueOS did not record or monitor the call."
+              : `A short debrief for this ${humanise(interactionType).toLowerCase()} turns your own report into reviewable evidence. It does not record the customer interaction.`}
           </p>
         </div>
         {session ? (
@@ -501,6 +505,7 @@ export function PostInteractionCapture({
 
       {!session ? (
         <StartCapture
+          phoneCall={interactionType === "phone_call"}
           working={working}
           safetyConfirmed={safetyConfirmed}
           voiceAcknowledged={voiceAcknowledged}
@@ -508,6 +513,11 @@ export function PostInteractionCapture({
           onSafetyChange={setSafetyConfirmed}
           onVoiceAcknowledgementChange={setVoiceAcknowledged}
           onStart={(type, nextPreference) => void start(type, nextPreference)}
+          onFinishForNow={() =>
+            setMessage(
+              "Finished for now. You can return to capture this call later.",
+            )
+          }
         />
       ) : null}
 
@@ -645,6 +655,7 @@ export function PostInteractionCapture({
 }
 
 function StartCapture({
+  phoneCall,
   working,
   safetyConfirmed,
   voiceAcknowledged,
@@ -652,7 +663,9 @@ function StartCapture({
   onSafetyChange,
   onVoiceAcknowledgementChange,
   onStart,
+  onFinishForNow,
 }: {
+  phoneCall: boolean;
   working: boolean;
   safetyConfirmed: boolean;
   voiceAcknowledged: boolean;
@@ -660,6 +673,7 @@ function StartCapture({
   onSafetyChange(value: boolean): void;
   onVoiceAcknowledgementChange(value: boolean): void;
   onStart(type: DebriefCaptureType, preference: InputPreference): void;
+  onFinishForNow(): void;
 }) {
   return (
     <div className="mt-6 space-y-5">
@@ -698,7 +712,7 @@ function StartCapture({
         <StartOption
           title="Start AI Debrief"
           description="A short, guided conversation that asks only the most useful follow-up questions."
-          action="Start guided debrief"
+          action="Start AI Debrief"
           disabled={working || !safetyConfirmed}
           onClick={() => onStart("ai_debrief", "guided")}
         />
@@ -722,13 +736,27 @@ function StartCapture({
           }
         />
         <StartOption
-          title="Type Debrief"
+          title={phoneCall ? "Type Notes" : "Type Debrief"}
           description="Use the same bounded evidence workflow without enabling the microphone."
-          action="Start typed debrief"
+          action={phoneCall ? "Type notes" : "Start typed debrief"}
           disabled={working || !safetyConfirmed}
           onClick={() => onStart("ai_debrief", "typed")}
         />
       </div>
+      {phoneCall ? (
+        <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-5">
+          <a className="secondary-button" href="#recording">
+            Add Recording
+          </a>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onFinishForNow}
+          >
+            Finish for now
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -899,6 +927,28 @@ function EvidenceReview({
                   Reported by you
                 </span>
               </div>
+              {candidate.conflictState &&
+              candidate.conflictState !== "not_assessed" ? (
+                <p
+                  role={
+                    candidate.conflictState === "conflicting"
+                      ? "alert"
+                      : undefined
+                  }
+                  className={`mt-3 rounded-xl p-3 text-sm font-semibold ${
+                    candidate.conflictState === "conflicting"
+                      ? "bg-rose-50 text-rose-900"
+                      : candidate.conflictState === "corroborated"
+                        ? "bg-emerald-50 text-emerald-900"
+                        : "bg-amber-50 text-amber-950"
+                  }`}
+                >
+                  Recording comparison: {humanise(candidate.conflictState)}.
+                  {candidate.conflictState === "conflicting"
+                    ? " Keep both sources visible and resolve the difference during review."
+                    : " The debrief remains salesperson-reported evidence."}
+                </p>
+              ) : null}
               <label
                 className="mt-4 block text-sm font-semibold text-slate-800"
                 htmlFor={`candidate-${candidate.id}`}

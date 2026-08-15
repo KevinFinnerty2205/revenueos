@@ -58,6 +58,7 @@ List parameters: `search`, `status`, `industry`, `sortBy` (`name`, `created_at`,
 | Method | Path                                                 | Purpose                                                          |
 | ------ | ---------------------------------------------------- | ---------------------------------------------------------------- |
 | `GET`  | `/api/v1/accounts/{accountId}/brain`                 | List the account's immutable Revenue Brain snapshot compositions |
+| `GET`  | `/api/v1/accounts/{accountId}/brain/reported-interactions` | List reviewed salesperson-reported Interaction snapshots |
 | `GET`  | `/api/v1/accounts/{accountId}/brain/visual-evidence` | List current reviewed visual Interaction snapshots               |
 | `POST` | `/api/v1/accounts/{accountId}/brain/reasoning`       | Create or reuse deterministic account comparisons                |
 | `GET`  | `/api/v1/accounts/{accountId}/brain/reasoning`       | Read the latest account comparison and bounded history           |
@@ -85,7 +86,9 @@ capability labels and structured evidence. It contains no outcome score,
 probability, forecast, prompt/provider/job fields or raw source content. See
 [Revenue Brain longitudinal reasoning](revenue-brain-reasoning.md).
 
-The visual-evidence read returns source labels and reviewed statements only
+The reported-interactions read returns only accepted, still-available Evidence with
+its salesperson-reported source label and recording comparison state. The
+visual-evidence read returns source labels and reviewed statements only
 while every referenced Evidence row remains verified and available. It never
 contains raw image bytes or signed object URLs.
 
@@ -159,6 +162,7 @@ A task may be general or linked to records. If company, contact or opportunity l
 | `POST`  | `/api/v1/interactions`                          | Create a manual Interaction          |
 | `GET`   | `/api/v1/interactions/{interactionId}`          | Read an active Interaction           |
 | `PATCH` | `/api/v1/interactions/{interactionId}`          | Update metadata/lifecycle            |
+| `POST`  | `/api/v1/interactions/{interactionId}/start`    | Idempotently start an Interaction    |
 | `POST`  | `/api/v1/interactions/{interactionId}/complete` | Idempotently complete an Interaction |
 
 List filters are `search`, `companyId`, `opportunityId`, `interactionType`,
@@ -166,6 +170,12 @@ List filters are `search`, `companyId`, `opportunityId`, `interactionType`,
 is bounded and deterministic. Organisation context is server-authoritative;
 cross-tenant resources are hidden. See [Interaction API](interaction-api.md) for
 the complete contract and lifecycle behaviour.
+
+`phone_call` create/update supports tenant-validated `contactId`, controlled
+`callDirection` and controlled completion `callOutcome`. Responses add derived
+duration, capture methods, recording availability and intelligence readiness.
+Imported call recordings use the recording endpoints below with required controlled
+`recordingSource` and authority attestation; there is no telephony-capture endpoint.
 
 ### Post-interaction debrief
 

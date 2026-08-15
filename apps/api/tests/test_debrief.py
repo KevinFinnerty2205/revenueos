@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -36,7 +37,7 @@ from revenueos.models import (
 )
 
 from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL
-from .test_business_api import create_company, create_opportunity
+from .test_business_api import create_company, create_contact, create_opportunity
 from .test_interaction_api import create_interaction
 from .test_meeting_api import cast_auth_dependency, secondary_user
 
@@ -58,6 +59,20 @@ def test_recording_gap_fill_suppresses_supported_questions_and_prioritises_marke
     )
     assert question.target == "objection"
     assert question.question == "Did the customer raise or resolve an important concern?"
+    assert (
+        reasoning.reconcile_statement(
+            "They said the budget is approved.",
+            "Customer: The budget has not been approved.",
+        )
+        == "conflicting"
+    )
+    assert (
+        reasoning.reconcile_statement(
+            "They agreed to send the proposal tomorrow.",
+            "Customer agreed to send the proposal tomorrow.",
+        )
+        == "corroborated"
+    )
 
 
 def _completed_interaction(
@@ -179,6 +194,14 @@ def test_ai_debrief_is_bounded_idempotent_reviewed_and_source_aware(client: Test
     assert accepted["validationState"] == "verified"
     assert accepted["acceptedEvidenceId"] is not None
 
+    replacement_contact_id = str(create_contact(client, str(create_company(client, name="Unrelated")["id"]))["id"])
+    locked_association = client.patch(
+        f"/api/v1/interactions/{interaction_id}",
+        json={"contactId": replacement_contact_id},
+    )
+    assert locked_association.status_code == 409
+    assert locked_association.json()["code"] == "interaction_intelligence_locked"
+
     repeated_review = client.post(
         f"/api/v1/interactions/{interaction_id}/debrief/{session_id}/review",
         json={"decisions": decisions, "idempotencyKey": "review-2"},
@@ -193,6 +216,15 @@ def test_ai_debrief_is_bounded_idempotent_reviewed_and_source_aware(client: Test
     assert reported["items"][0]["statement"] == "Jordan is the confirmed economic buyer."
     assert reported["items"][0]["validationState"] == "verified"
     assert "probability" not in workspace.text.lower()
+
+    interaction = client.get(f"/api/v1/interactions/{interaction_id}").json()
+    account_id = interaction["companyId"]
+    account_brain = client.get(f"/api/v1/accounts/{account_id}/brain/reported-interactions")
+    assert account_brain.status_code == 200, account_brain.text
+    assert len(account_brain.json()) == 1
+    assert account_brain.json()[0]["interactionType"] == "phone_call"
+    assert account_brain.json()[0]["sourceLabel"] == "Reported by you"
+    assert account_brain.json()[0]["items"][0]["statement"] == "Jordan is the confirmed economic buyer."
 
     async def verify_persistence() -> tuple[int, int, int, int, list[dict[str, object]]]:
         engine = create_async_engine(TEST_DB_URL)
@@ -228,6 +260,243 @@ def test_ai_debrief_is_bounded_idempotent_reviewed_and_source_aware(client: Test
     assert all(answer_text not in str(metadata) for metadata in event_metadata)
     assert not {"audio", "audio_bytes", "audio_blob", "recording"} & set(DebriefTurn.__table__.columns)
     assert not {"audio", "audio_bytes", "audio_blob", "recording"} & set(EvidenceFragment.__table__.columns)
+
+
+def test_reviewed_phone_calls_advance_brain_history_without_duplicate_snapshots(
+    client: TestClient,
+) -> None:
+    company_id = str(create_company(client, name="Longitudinal call account")["id"])
+    opportunity_id = str(create_opportunity(client, company_id, name="Longitudinal call opportunity")["id"])
+
+    def review_call(*, title: str, answer: str, key: str) -> tuple[str, str, list[dict[str, object]]]:
+        interaction = create_interaction(
+            client,
+            title=title,
+            interaction_type="phone_call",
+            company_id=company_id,
+            opportunity_id=opportunity_id,
+        )
+        interaction_id = str(interaction["id"])
+        completed = client.post(
+            f"/api/v1/interactions/{interaction_id}/complete",
+            json={"callOutcome": "connected"},
+        )
+        assert completed.status_code == 200, completed.text
+        started = _start(client, interaction_id, key=f"{key}-start")
+        session_id = str(started["id"])
+        answered = client.post(
+            f"/api/v1/interactions/{interaction_id}/debrief/{session_id}/response",
+            json={"answerText": answer, "idempotencyKey": f"{key}-answer"},
+        )
+        assert answered.status_code == 200, answered.text
+        finished = client.post(
+            f"/api/v1/interactions/{interaction_id}/debrief/{session_id}/finish",
+            json={"idempotencyKey": f"{key}-finish", "finishEarly": True},
+        )
+        assert finished.status_code == 200, finished.text
+        candidates = finished.json()["candidates"]
+        decisions = [
+            {
+                "candidateId": candidate["id"],
+                "decision": "accept" if index == 0 else "reject",
+            }
+            for index, candidate in enumerate(candidates)
+        ]
+        reviewed = client.post(
+            f"/api/v1/interactions/{interaction_id}/debrief/{session_id}/review",
+            json={"decisions": decisions, "idempotencyKey": f"{key}-review"},
+        )
+        assert reviewed.status_code == 200, reviewed.text
+        assert reviewed.json()["revenueBrainUpdated"] is True
+        return interaction_id, session_id, decisions
+
+    first_interaction_id, _, _ = review_call(
+        title="Initial discovery call",
+        answer="Jordan confirmed the evaluation and I will send the proposal tomorrow.",
+        key="longitudinal-first",
+    )
+    second_interaction_id, second_session_id, second_decisions = review_call(
+        title="Commercial follow-up call",
+        answer="Jordan approved the proposal and asked us to begin implementation next week.",
+        key="longitudinal-second",
+    )
+    repeated = client.post(
+        f"/api/v1/interactions/{second_interaction_id}/debrief/{second_session_id}/review",
+        json={"decisions": second_decisions, "idempotencyKey": "longitudinal-second-review-retry"},
+    )
+    assert repeated.status_code == 200, repeated.text
+
+    timeline = client.get(f"/api/v1/accounts/{company_id}/brain/reported-interactions")
+    assert timeline.status_code == 200, timeline.text
+    assert {item["interactionId"] for item in timeline.json()} == {
+        first_interaction_id,
+        second_interaction_id,
+    }
+    assert {item["sourceLabel"] for item in timeline.json()} == {"Reported by you"}
+
+    async def verify_history() -> list[tuple[int, str]]:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            snapshots = list(
+                await session.scalars(
+                    select(RevenueBrainInteractionSnapshot)
+                    .where(
+                        RevenueBrainInteractionSnapshot.organisation_id == PRIMARY_ORGANISATION_ID,
+                        RevenueBrainInteractionSnapshot.opportunity_id == UUID(opportunity_id),
+                    )
+                    .order_by(RevenueBrainInteractionSnapshot.version)
+                )
+            )
+        await engine.dispose()
+        return [(snapshot.version, str(snapshot.interaction_id)) for snapshot in snapshots]
+
+    assert asyncio.run(verify_history()) == [
+        (1, first_interaction_id),
+        (2, second_interaction_id),
+    ]
+
+
+def test_short_phone_call_uses_one_answer_and_at_most_one_follow_up(client: TestClient) -> None:
+    company_id = str(create_company(client, name="Short call account")["id"])
+    opportunity_id = str(create_opportunity(client, company_id, name="Short call opportunity")["id"])
+    interaction = create_interaction(
+        client,
+        title="Two minute check-in",
+        interaction_type="phone_call",
+        company_id=company_id,
+        opportunity_id=opportunity_id,
+    )
+    interaction_id = str(interaction["id"])
+    assert (
+        client.post(
+            f"/api/v1/interactions/{interaction_id}/start",
+            json={"actualStartAt": "2026-08-12T09:00:00Z"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/v1/interactions/{interaction_id}/complete",
+            json={"actualEndAt": "2026-08-12T09:02:00Z", "callOutcome": "connected"},
+        ).status_code
+        == 200
+    )
+    started = _start(client, interaction_id, key="short-call-start")
+    assert started["maxQuestions"] == 2
+    assert started["currentQuestion"]["question"] == "What changed?"  # type: ignore[index]
+    first = client.post(
+        f"/api/v1/interactions/{interaction_id}/debrief/{started['id']}/response",
+        json={"answerText": "They asked for a proposal.", "idempotencyKey": "short-call-answer-1"},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["questionCount"] == 2
+    second = client.post(
+        f"/api/v1/interactions/{interaction_id}/debrief/{started['id']}/response",
+        json={"answerText": "I will send it tomorrow.", "idempotencyKey": "short-call-answer-2"},
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["currentQuestion"]["status"] == "complete"
+    assert len(second.json()["turns"]) == 2
+
+
+def test_phone_call_question_depth_adapts_for_normal_voice_and_high_value_calls(
+    client: TestClient,
+) -> None:
+    company_id = str(create_company(client, name="Adaptive call account")["id"])
+    opportunity_id = str(create_opportunity(client, company_id, name="Strategic renewal")["id"])
+
+    normal = create_interaction(
+        client,
+        title="Normal customer call",
+        interaction_type="phone_call",
+        company_id=company_id,
+        opportunity_id=opportunity_id,
+    )
+    normal_id = str(normal["id"])
+    assert (
+        client.post(
+            f"/api/v1/interactions/{normal_id}/complete",
+            json={"callOutcome": "connected"},
+        ).status_code
+        == 200
+    )
+    assert _start(client, normal_id, key="normal-phone-depth")["maxQuestions"] == 4
+    assert (
+        _start(
+            client,
+            normal_id,
+            capture_type="voice_journal",
+            key="normal-phone-voice-depth",
+        )["maxQuestions"]
+        == 2
+    )
+
+    strategic = create_interaction(
+        client,
+        title="Strategic renewal negotiation",
+        interaction_type="phone_call",
+        company_id=company_id,
+        opportunity_id=opportunity_id,
+    )
+    strategic_id = str(strategic["id"])
+    assert (
+        client.post(
+            f"/api/v1/interactions/{strategic_id}/start",
+            json={"actualStartAt": "2026-08-12T09:00:00Z"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/v1/interactions/{strategic_id}/complete",
+            json={"actualEndAt": "2026-08-12T09:20:00Z", "callOutcome": "connected"},
+        ).status_code
+        == 200
+    )
+    assert _start(client, strategic_id, key="strategic-phone-depth")["maxQuestions"] == 5
+
+
+def test_missed_phone_call_note_does_not_create_customer_intelligence(client: TestClient) -> None:
+    company_id = str(create_company(client, name="Missed call account")["id"])
+    opportunity_id = str(create_opportunity(client, company_id, name="Missed call opportunity")["id"])
+    interaction = create_interaction(
+        client,
+        title="Missed procurement call",
+        interaction_type="phone_call",
+        company_id=company_id,
+        opportunity_id=opportunity_id,
+    )
+    interaction_id = str(interaction["id"])
+    completed = client.post(
+        f"/api/v1/interactions/{interaction_id}/complete",
+        json={"callOutcome": "no_answer"},
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["intelligenceState"] == "not_applicable"
+    started = _start(client, interaction_id, key="missed-call-start")
+    assert started["maxQuestions"] == 1
+    answered = client.post(
+        f"/api/v1/interactions/{interaction_id}/debrief/{started['id']}/response",
+        json={"answerText": "No answer; I will try again tomorrow.", "idempotencyKey": "missed-call-answer"},
+    )
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["currentQuestion"]["status"] == "complete"
+    finished = client.post(
+        f"/api/v1/interactions/{interaction_id}/debrief/{started['id']}/finish",
+        json={"idempotencyKey": "missed-call-finish", "finishEarly": True},
+    )
+    candidates = finished.json()["candidates"]
+    reviewed = client.post(
+        f"/api/v1/interactions/{interaction_id}/debrief/{started['id']}/review",
+        json={
+            "idempotencyKey": "missed-call-review",
+            "decisions": [{"candidateId": candidate["id"], "decision": "accept"} for candidate in candidates],
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["interactionUpdated"] is False
+    assert reviewed.json()["revenueBrainUpdated"] is False
+    assert client.get(f"/api/v1/opportunities/{opportunity_id}/workspace").json()["reportedIntelligence"] is None
 
 
 def test_presentation_debrief_prioritises_customer_reaction_and_filters_seller_deck_claims(
@@ -382,9 +651,11 @@ def test_debrief_fails_closed_for_lifecycle_feature_and_tenant(
     assert lifecycle.json()["code"] == "interaction_not_completed"
 
     interaction_id, _ = _completed_interaction(client, interaction_type="presentation")
+    company_id = client.get(f"/api/v1/interactions/{interaction_id}").json()["companyId"]
     started = _start(client, interaction_id, key="tenant-start")
     app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
     assert client.get(f"/api/v1/interactions/{interaction_id}/debrief/{started['id']}").status_code == 404
+    assert client.get(f"/api/v1/accounts/{company_id}/brain/reported-interactions").status_code == 404
     app.dependency_overrides.pop(get_current_user)
 
     disabled = Settings(

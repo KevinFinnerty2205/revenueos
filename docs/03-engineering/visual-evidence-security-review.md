@@ -33,7 +33,7 @@
 
 - Individual deletion removes the private object first, then marks source Evidence deleted and suppresses derived current views. A storage failure leaves retryable `delete_failed` state and is not reported as complete.
 - Retention and organisation deletion use the same object-first ordering. Reconciliation detects missing and orphaned tenant objects without logging content.
-- Export version 7 excludes storage keys, signed URLs and provider request IDs. Image bytes are omitted unless a separately approved server setting enables them for an authorised admin export.
+- Export version 8 excludes storage keys, signed URLs and provider request IDs. Image bytes are omitted unless a separately approved server setting enables them for an authorised admin export.
 
 ## Residual risks
 

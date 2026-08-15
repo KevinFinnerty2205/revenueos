@@ -2,7 +2,8 @@
 
 - **Status:** WO-016 implements the responsive browser Companion across the
   persisted planned, in-progress and completed Interaction lifecycle. The richer
-  product-state diagram below remains a target model, not a database enum.
+  product-state diagram below remains a target model, not a database enum. WO-017
+  applies the same lifecycle to ordinary phone calls with controlled outcomes.
 - **Primary surfaces:** responsive web first; PWA or native capture remains a later,
   separately authorised decision where reliability evidence justifies it.
 
@@ -60,6 +61,7 @@ never required to complete a preparation checklist before meeting the customer.
 | Site visit             | safety constraints, authorised photo zones, technical questions and offline expectation              |
 | Executive lunch        | relationship context and a discreet non-recording default                                            |
 | Conference interaction | rapid account matching, badge/business-card permission and very short objectives                     |
+| Phone call             | Contact/role, purpose, commitment, objection/timeline, recent change and desired next step            |
 
 ## During the interaction
 
@@ -235,6 +237,18 @@ type, ownership and authority confirmation. Upload and analysis have semantic
 progress, restore/list states, safe errors and bounded retry. Review cards
 require accept/edit/reject decisions for every suggestion before intelligence
 updates. Saved visuals retain explicit ownership and AI/user-review labels.
+
+## Implemented phone-call lifecycle
+
+WO-017 keeps normal calls passive: **Start call** records only an Interaction start,
+and end controls record `connected`, `no_answer`, `voicemail` or `cancelled` plus an
+optional elapsed Interaction duration. The browser does not dial, request the
+microphone, inspect device call logs or show **Record phone call**. Connected calls
+open **Capture this call while it’s fresh**; missed/voicemail/cancelled calls remain
+timeline events and cannot create customer Interaction Intelligence.
+
+See [Phone Call Intelligence](phone-call-intelligence-guide.md) and
+[Browser phone-call workflow](browser-phone-call-workflow.md).
 
 ## Related documents
 

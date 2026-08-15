@@ -38,6 +38,12 @@ recording/passive choice, supports authorised photos and metadata-only markers,
 and directs AFTER into the existing reviewed debrief. It remains a foreground
 browser workflow rather than a native or live-intelligence product.
 
+WO-017 adds the current browser-first phone-call workflow. A user can link a
+same-tenant Contact/company/opportunity, scan a compact brief, manually start/end an
+ordinary call, record its direction/outcome and capture fresh reported evidence.
+An existing authorised recording can enter the same WO-015 private upload and batch
+transcription pipeline. RevenueOS does not dial, intercept or monitor the call.
+
 ## Current product surface
 
 The current implementation provides:
@@ -78,10 +84,15 @@ The current implementation provides:
 - a mobile-first browser Companion with BEFORE/DURING/AFTER phases, deliberate
   passive capture, controlled quick markers, capture summary and Opportunity
   Workspace status.
+- a first-class phone-call path with compact preparation, explicit direction and
+  outcome, Contact association, adaptive AI Debrief/Voice Journal/typed notes,
+  recording import and source-aware downstream updates.
 
-The current product accepts only deliberately entered meeting metadata and
-plain-text transcripts. The default provider is a deterministic no-network
-mock; an explicitly configured server-side OpenAI adapter can process Executive
+The current product accepts only deliberately supplied or explicitly armed inputs:
+record metadata, pasted transcripts, reviewed visual evidence, post-interaction
+reports and optional private recording uploads/capture. It does not ingest ambient
+calls, meetings, device history or connected-system data. The default provider is a
+deterministic no-network mock; an explicitly configured server-side OpenAI adapter can process Executive
 Summary, Buying Signals, Objections & Competitive Signals, Stakeholder
 Intelligence, Decisions, Action Items, Risks & Blockers and Open Questions and
 sends the selected transcript externally. Buying Signals reports qualitative

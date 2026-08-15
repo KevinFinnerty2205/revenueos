@@ -14,6 +14,12 @@ The browser cannot claim same-device call capture or reliable meeting
 system-audio capture. Unsent chunks remain only in the current tab's memory;
 verified server chunks continue to use the durable lifecycle below.
 
+WO-017 adds only an explicit import client for an already authorised phone-call
+recording. It creates `imported_audio_recording` with a required controlled
+`recording_source`, then reuses the same grants, chunks, finalisation, worker and
+transcript versioning below. It does not add direct telephony capture or a second
+pipeline.
+
 - **Status:** WO-015 current implementation for browser-first recording, resumable
   private upload and batch transcription. Near-real-time, native and connector
   paths remain target architecture.
@@ -130,6 +136,10 @@ retry.
   record. No broker or second queue was introduced.
 - Transcript: immutable `transcript_versions` plus ordered `transcript_segments`;
   the current Meeting `transcripts` row remains the compatibility read model.
+- Non-live recording provenance: `customer_call_recording`,
+  `business_phone_recording`, `user_uploaded_recording` or
+  `external_provider_recording`; the source is required and does not by itself
+  establish legality or speaker identity.
 
 ## Processing stages
 

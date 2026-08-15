@@ -87,6 +87,19 @@ class InteractionCreationOrigin(StrEnum):
     IMPORTED_EXTERNAL = "imported_external"
 
 
+class CallDirection(StrEnum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+    UNKNOWN = "unknown"
+
+
+class CallOutcome(StrEnum):
+    CONNECTED = "connected"
+    NO_ANSWER = "no_answer"
+    VOICEMAIL = "voicemail"
+    CANCELLED = "cancelled"
+
+
 class InteractionAuditAction(StrEnum):
     CREATED = "created"
     UPDATED = "updated"

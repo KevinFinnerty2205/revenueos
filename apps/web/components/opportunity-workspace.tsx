@@ -378,6 +378,17 @@ export function OpportunityWorkspace({
                 <p className="mt-2 text-sm leading-6 text-slate-800">
                   {item.statement}
                 </p>
+                {item.conflictState && item.conflictState !== "not_assessed" ? (
+                  <p
+                    className={`mt-2 text-xs font-semibold ${
+                      item.conflictState === "conflicting"
+                        ? "text-rose-800"
+                        : "text-teal-800"
+                    }`}
+                  >
+                    Recording comparison: {humanise(item.conflictState)}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>

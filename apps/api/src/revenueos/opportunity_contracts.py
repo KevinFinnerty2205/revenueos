@@ -92,6 +92,7 @@ class ReportedIntelligenceItemResponse(APIModel):
     origin: Literal["salesperson_reported"]
     source_label: Literal["Reported by you"]
     validation_state: Literal["verified"]
+    conflict_state: Literal["not_assessed", "conflicting", "unresolved", "corroborated"]
 
 
 class ReportedInteractionIntelligenceResponse(APIModel):

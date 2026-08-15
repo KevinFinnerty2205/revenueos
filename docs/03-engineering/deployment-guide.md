@@ -111,6 +111,12 @@ object-first deletion and raw-retention drill before tenant enablement. OpenAI
 transcription additionally requires approved provider terms, server-only key/model
 and the OpenAI flag; mock remains the no-network default.
 
+WO-017 requires current head `0027_phone_call_intelligence`. Apply it before the
+matching API/web release and verify phone metadata/source backfills, composite
+Contact tenancy, constraints, downgrade/re-upgrade and a single Alembic head. The
+work order adds no provider credential. Keep recording/transcription flags off until
+the existing storage, consent, region and operational gates are approved.
+
 ## Rollback
 
 Prefer application rollback while retaining `0025`. Disable recording,

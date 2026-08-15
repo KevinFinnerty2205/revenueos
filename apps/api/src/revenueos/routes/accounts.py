@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from revenueos.beta_dependencies import require_revenue_brain_feature
 from revenueos.revenue_brain import RevenueBrainService
 from revenueos.revenue_brain_contracts import (
+    RevenueBrainReportedSnapshotResponse,
     RevenueBrainSnapshotResponse,
     RevenueBrainVisualSnapshotResponse,
 )
@@ -54,6 +55,22 @@ async def get_revenue_brain_visual_evidence(
     responses = [
         RevenueBrainVisualSnapshotResponse.from_timeline_item(item)
         for item in await service.list_account_visual_snapshots(account_id)
+    ]
+    return [response for response in responses if response is not None]
+
+
+@router.get(
+    "/{account_id}/brain/reported-interactions",
+    response_model=list[RevenueBrainReportedSnapshotResponse],
+    dependencies=[Depends(require_revenue_brain_feature)],
+)
+async def get_revenue_brain_reported_interactions(
+    account_id: UUID,
+    service: Service,
+) -> list[RevenueBrainReportedSnapshotResponse]:
+    responses = [
+        RevenueBrainReportedSnapshotResponse.from_timeline_item(item)
+        for item in await service.list_account_reported_snapshots(account_id)
     ]
     return [response for response in responses if response is not None]
 

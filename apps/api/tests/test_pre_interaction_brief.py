@@ -26,7 +26,7 @@ from .conftest import (
     SECONDARY_ORGANISATION_ID,
     TEST_DB_URL,
 )
-from .test_business_api import create_company, create_opportunity
+from .test_business_api import create_company, create_contact, create_opportunity
 from .test_interaction_api import create_interaction
 from .test_meeting_api import cast_auth_dependency, create_meeting, secondary_user
 from .test_meeting_intelligence_workspace import _run_worker_once
@@ -214,6 +214,34 @@ def test_deterministic_brief_supports_every_interaction_type(
         assert "concise" in body["brief"]["interactionGuidance"].lower()
     if interaction_type == "presentation":
         assert "seller-prepared material" in body["brief"]["interactionGuidance"]
+
+
+def test_phone_brief_prioritises_the_explicit_linked_contact_and_role(client: TestClient) -> None:
+    company_id = str(create_company(client, name="Phone brief account")["id"])
+    contact = create_contact(
+        client,
+        company_id,
+        first_name="Jordan",
+    )
+    interaction = create_interaction(
+        client,
+        title="Commercial alignment call",
+        interaction_type="phone_call",
+        company_id=company_id,
+        contact_id=str(contact["id"]),
+        call_direction="outbound",
+    )
+
+    generated = client.post(_brief_url(str(interaction["id"])))
+
+    assert generated.status_code == 200, generated.text
+    stakeholder = generated.json()["brief"]["stakeholderFocus"][0]
+    assert stakeholder == {
+        "name": "Jordan Lee",
+        "role": "Revenue Director",
+        "focus": "Confirm Jordan Lee's priorities and role in this interaction.",
+    }
+    assert "+61 400 000 000" not in generated.text
 
 
 def test_generation_is_versioned_idempotent_reviewable_and_visible_in_list(

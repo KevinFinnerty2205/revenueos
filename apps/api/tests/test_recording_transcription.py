@@ -47,6 +47,8 @@ from revenueos.transcription_provider import (
 )
 
 from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL, TEST_VISUAL_STORAGE
+from .test_business_api import create_company, create_opportunity
+from .test_interaction_api import create_interaction
 from .test_meeting_api import cast_auth_dependency, create_meeting, secondary_user
 
 
@@ -214,6 +216,95 @@ def test_recording_creation_is_consent_gated_idempotent_and_tenant_scoped(
     hidden = recording_client.get(f"/api/v1/interactions/{interaction_id}/recordings/{created['id']}")
     assert hidden.status_code == 404
     recording_app.dependency_overrides.clear()
+
+
+def test_authorised_phone_recording_import_preserves_source_and_reuses_batch_transcription(
+    recording_client: TestClient,
+) -> None:
+    company_id = str(create_company(recording_client, name="Imported call account")["id"])
+    opportunity_id = str(create_opportunity(recording_client, company_id, name="Imported call opportunity")["id"])
+    interaction = create_interaction(
+        recording_client,
+        title="Imported customer call",
+        interaction_type="phone_call",
+        company_id=company_id,
+        opportunity_id=opportunity_id,
+        call_direction="inbound",
+    )
+    interaction_id = str(interaction["id"])
+    assert (
+        recording_client.post(
+            f"/api/v1/interactions/{interaction_id}/complete",
+            json={"callOutcome": "connected"},
+        ).status_code
+        == 200
+    )
+    payload = {
+        "recordingType": "imported_audio_recording",
+        "recordingSource": "user_uploaded_recording",
+        "expectedMimeType": "audio/webm",
+        "language": "en-AU",
+        "noticeVersion": 1,
+        "consentMethod": "contractual_authority",
+        "userAttestedAuthority": True,
+        "idempotencyKey": "imported-call-1",
+    }
+    missing_source = {key: value for key, value in payload.items() if key != "recordingSource"}
+    assert (
+        recording_client.post(
+            f"/api/v1/interactions/{interaction_id}/recordings",
+            json=missing_source,
+        ).status_code
+        == 422
+    )
+    created = recording_client.post(
+        f"/api/v1/interactions/{interaction_id}/recordings",
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    recording = created.json()
+    recording_id = str(recording["id"])
+    assert recording["recordingSource"] == "user_uploaded_recording"
+    repeated = recording_client.post(
+        f"/api/v1/interactions/{interaction_id}/recordings",
+        json=payload,
+    )
+    assert repeated.status_code == 201
+    assert repeated.json()["id"] == recording_id
+
+    started = recording_client.post(
+        f"/api/v1/interactions/{interaction_id}/recordings/{recording_id}/start",
+        json={"idempotencyKey": "start-imported-call"},
+    )
+    assert started.status_code == 200, started.text
+    assert started.json()["lifecycleStatus"] == "uploading"
+    audio = b"\x1aE\xdf\xa3MOCK_TRANSCRIPT:Customer confirmed the next step."
+    _upload_chunk(recording_client, interaction_id, recording_id, 0, audio)
+    finalised = _finalize(
+        recording_client,
+        interaction_id,
+        recording_id,
+        last_sequence_number=0,
+        duration_seconds=45,
+    )
+    assert finalised.status_code == 200  # type: ignore[attr-defined]
+
+    async def run_worker() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            worker = RecordingWorkerService(factory, recording_settings())
+            assert await worker.run_once() is True
+        finally:
+            await engine.dispose()
+
+    asyncio.run(run_worker())
+    transcription = recording_client.get(
+        f"/api/v1/interactions/{interaction_id}/recordings/{recording_id}/transcription"
+    )
+    assert transcription.status_code == 200, transcription.text
+    assert transcription.json()["source"] == "imported_audio"
+    assert transcription.json()["text"] == "Customer confirmed the next step."
 
 
 def test_resumable_chunks_detect_gaps_tampering_and_duplicate_completion(

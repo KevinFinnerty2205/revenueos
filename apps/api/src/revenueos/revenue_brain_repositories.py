@@ -184,6 +184,30 @@ class RevenueBrainRepository:
         organisation_id: UUID,
         company_id: UUID,
     ) -> list[RevenueBrainInteractionTimelineItem]:
+        return await self._list_interaction_snapshots_for_company(
+            organisation_id,
+            company_id,
+            schema_version=2,
+        )
+
+    async def list_reported_for_company(
+        self,
+        organisation_id: UUID,
+        company_id: UUID,
+    ) -> list[RevenueBrainInteractionTimelineItem]:
+        return await self._list_interaction_snapshots_for_company(
+            organisation_id,
+            company_id,
+            schema_version=1,
+        )
+
+    async def _list_interaction_snapshots_for_company(
+        self,
+        organisation_id: UUID,
+        company_id: UUID,
+        *,
+        schema_version: int,
+    ) -> list[RevenueBrainInteractionTimelineItem]:
         result = await self.session.execute(
             select(RevenueBrainInteractionSnapshot, Interaction)
             .join(
@@ -196,7 +220,7 @@ class RevenueBrainRepository:
             .where(
                 RevenueBrainInteractionSnapshot.organisation_id == organisation_id,
                 RevenueBrainInteractionSnapshot.company_id == company_id,
-                RevenueBrainInteractionSnapshot.schema_version == 2,
+                RevenueBrainInteractionSnapshot.schema_version == schema_version,
                 Interaction.deleted_at.is_(None),
             )
             .order_by(

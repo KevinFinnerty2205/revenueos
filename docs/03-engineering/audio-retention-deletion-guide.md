@@ -17,10 +17,11 @@ through reconciliation.
 
 ## Export
 
-Export version 7 includes recording metadata, consents, a content-free chunk
+Export version 8 includes recording metadata and controlled phone-call source,
+consents, a content-free chunk
 manifest, transcript versions and ordered segments. Raw audio is excluded from the
 synchronous archive and declared `excluded_manifest_only`; no signed URL, storage
-key or provider request ID is exported. Version 7 also includes metadata-only
+key or provider request ID is exported. Version 8 also includes metadata-only
 Companion markers without their internal idempotency keys. An authorised operator needing raw audio
 must use a separately approved short-lived object workflow.
 
