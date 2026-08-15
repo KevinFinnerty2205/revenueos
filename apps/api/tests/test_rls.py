@@ -608,10 +608,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  :opportunity_id, :interaction_id, 'document',
                                  :document_source_id, :evidence_id,
                                  '[]'::json,
-                                 '{"schemaVersion":1,"items":[]}'::json, 1, 1)
+                                 CAST(:source_snapshot_content_json AS json), 1, 1)
                             """
                         ),
-                        identity_parameters,
+                        {
+                            **identity_parameters,
+                            "source_snapshot_content_json": ('{"schemaVersion":1,"items":[]}'),
+                        },
                     )
                     await connection.execute(
                         text(
