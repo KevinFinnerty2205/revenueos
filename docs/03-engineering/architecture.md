@@ -345,6 +345,20 @@ See the [Companion lifecycle](companion-state-lifecycle-guide.md),
 [recording UX](mobile-browser-recording-ux-guide.md) and
 [security review](companion-security-review.md).
 
+## WO-020 Live Interaction Intelligence extension
+
+The modular monolith now includes a separate tenant-owned live aggregate and focused
+repository/service/provider boundary. The browser polls bounded endpoints; the API
+owns the progressive-segment cursor, overlap, dedupe, quotas and lifecycle. The
+detector is deterministic and no-network. No broker, WebSocket platform, cache or
+second worker was introduced.
+
+Live sessions/signals/progress are separate from immutable final Interaction
+Intelligence and Revenue Brain models. Completion freezes the live session and final
+reconciliation annotates only that live history. See the
+[provisional/final architecture](live-intelligence-provisional-final-architecture.md)
+and [ADR 0032](../08-decisions/0032-separate-polled-live-intelligence-aggregate.md).
+
 WO-010 defines the target direction and WO-011 implements the first additive
 foundation: Interaction is the source-neutral logical parent and Meeting remains a
 compatible projection. Capture Session and metadata-only Evidence separate customer
@@ -354,8 +368,9 @@ existing Meeting IDs/APIs, AI artefacts, Opportunity Workspace and immutable Rev
 Brain history remain unchanged. See the
 [Interaction domain architecture](interaction-domain-architecture.md),
 [evidence and provenance model](evidence-and-provenance-model.md) and
-[migration strategy](interaction-intelligence-migration-strategy.md). Capture
-execution and generic Interaction Intelligence remain future work.
+[migration strategy](interaction-intelligence-migration-strategy.md). Later generic
+Interaction Intelligence breadth and external/live provider integrations remain
+future work.
 
 Future, separately authorised Meeting or Interaction Intelligence work can add additional
 immutable prompt/schema pairs or providers on top of the durable worker. It must

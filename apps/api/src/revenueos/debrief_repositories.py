@@ -17,8 +17,10 @@ from revenueos.models import (
     Interaction,
     InteractionIntelligenceSnapshot,
     InteractionMarker,
+    LiveInteractionSession,
     Opportunity,
     PreInteractionBrief,
+    ProvisionalSignal,
     RevenueBrainInsight,
     RevenueBrainInteractionSnapshot,
     RevenueBrainSnapshot,
@@ -200,19 +202,50 @@ class DebriefRepository:
             .order_by(PreInteractionBrief.brief_version.desc())
             .limit(1)
         )
-        if record is None:
-            return ()
-        raw = record.content_json.get("questions_to_ask", record.content_json.get("questionsToAsk", []))
-        if not isinstance(raw, list):
-            return ()
+        raw = (
+            record.content_json.get("questions_to_ask", record.content_json.get("questionsToAsk", []))
+            if record is not None
+            else []
+        )
         questions: list[str] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            value = item.get("question")
-            if isinstance(value, str) and value.strip():
-                questions.append(value.strip()[:300])
-        return tuple(questions[:8])
+        if isinstance(raw, list):
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                value = item.get("question")
+                if isinstance(value, str) and value.strip():
+                    questions.append(value.strip()[:300])
+        live_gap_types = list(
+            (
+                await self.session.scalars(
+                    select(ProvisionalSignal.signal_type)
+                    .join(
+                        LiveInteractionSession,
+                        and_(
+                            LiveInteractionSession.organisation_id == ProvisionalSignal.organisation_id,
+                            LiveInteractionSession.id == ProvisionalSignal.live_session_id,
+                        ),
+                    )
+                    .where(
+                        ProvisionalSignal.organisation_id == organisation_id,
+                        ProvisionalSignal.interaction_id == interaction_id,
+                        ProvisionalSignal.resolution_status == "unresolved",
+                        ProvisionalSignal.lifecycle_status.not_in(("dismissed", "expired", "superseded")),
+                    )
+                    .distinct()
+                )
+            ).all()
+        )
+        live_gap_questions = {
+            "procurement": "Procurement came up, but final evidence was ambiguous. Did you establish who owns it?",
+            "stakeholder": "A stakeholder may have been mentioned, but final evidence was ambiguous. Who was involved?",
+            "timeline": "The timeline may have changed, but final evidence was ambiguous. What timing did you establish?",
+            "risk": "A possible risk emerged, but final evidence did not resolve it. What should be retained?",
+            "security_legal": "Security or legal review came up, but final evidence was ambiguous. What was established?",
+            "decision": "A possible decision emerged, but final evidence was ambiguous. Was a decision actually made?",
+        }
+        questions.extend(live_gap_questions[item] for item in sorted(set(live_gap_types)) if item in live_gap_questions)
+        return tuple(dict.fromkeys(questions[:8]))
 
     async def normalised_start_context(
         self,

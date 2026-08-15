@@ -39,6 +39,11 @@ marker types and the names of semantic targets covered by completed direct recor
 evidence so already-covered gaps can be suppressed. It does not pass recording or
 raw transcript content into the debrief provider input.
 
+WO-020 adds only controlled gap targets for non-dismissed live signals that final
+reconciliation leaves pending, unsupported or unresolved. Confirmed/revised targets
+are suppressed. The debrief question context receives a generic category target,
+never the provisional statement, speaker/customer name or transcript excerpt.
+
 `ai_debrief_question` and `ai_debrief_evidence` are explicit structured-output
 allowlist entries with prompt/schema version 1. The default mock follows the same
 strict contract with no network. OpenAI is available only through the existing
@@ -81,7 +86,7 @@ external-provider request guardrail. Finish consumes the existing generation quo
 Salesperson memory can be incomplete or biased. Accepted content remains labelled
 “Reported by you” and is never silently upgraded to customer-direct evidence. There
 is no background recording, phone interception, live diarisation, email/document
-ingestion, CRM automation, live intelligence or native mobile application. WO-016
+ingestion, CRM automation or native mobile application. WO-016
 may route the user into this flow after optional foreground recording or visual
 capture, but accepted debrief content remains separately labelled
 salesperson-reported evidence. Production data remains subject to private-beta

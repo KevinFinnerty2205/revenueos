@@ -18,9 +18,9 @@ not-found response and cannot be enumerated.
 | `GET`    | `/interactions/{interactionId}/companion/brief`                                    | Read product-safe preparation state/result                    |
 | `POST`   | `/interactions/{interactionId}/companion/brief`                                    | Create or reuse a deterministic brief                         |
 | `POST`   | `/interactions/{interactionId}/companion/brief/review`                             | Mark the latest completed brief reviewed                      |
-| `POST`   | `/interactions/{interactionId}/companion/markers`                                 | Create/reuse a controlled metadata-only quick marker          |
-| `GET`    | `/interactions/{interactionId}/companion/markers`                                 | List active quick-marker metadata                             |
-| `DELETE` | `/interactions/{interactionId}/companion/markers/{markerId}`                      | Soft-delete a marker before Interaction completion            |
+| `POST`   | `/interactions/{interactionId}/companion/markers`                                  | Create/reuse a controlled metadata-only quick marker          |
+| `GET`    | `/interactions/{interactionId}/companion/markers`                                  | List active quick-marker metadata                             |
+| `DELETE` | `/interactions/{interactionId}/companion/markers/{markerId}`                       | Soft-delete a marker before Interaction completion            |
 | `POST`   | `/interactions/{interactionId}/visual-evidence/uploads`                            | Create/reuse a private visual upload grant                    |
 | `PUT`    | `/interactions/{interactionId}/visual-evidence/{visualId}/content`                 | Upload bytes through the local private adapter                |
 | `POST`   | `/interactions/{interactionId}/visual-evidence/{visualId}/complete`                | Verify and sanitise the uploaded image                        |
@@ -162,3 +162,19 @@ Examples include `invalid_request`, `invalid_time_range`,
 `opportunity_not_found`, `interaction_not_found` and
 `persistence_unavailable`. Responses and logs contain no database details,
 transcript, evidence body, prompt, provider response or raw exception.
+
+## Live Interaction Intelligence
+
+| Method | Path                                                             | Purpose                                                |
+| ------ | ---------------------------------------------------------------- | ------------------------------------------------------ |
+| `GET`  | `/api/v1/interactions/{id}/live-intelligence`                    | Read availability or persisted live state              |
+| `POST` | `/api/v1/interactions/{id}/live-intelligence/start`              | Explicitly enable for an in-progress authorised source |
+| `POST` | `/api/v1/interactions/{id}/live-intelligence/process`            | Idempotently process the next bounded segment window   |
+| `POST` | `/api/v1/interactions/{id}/live-intelligence/stop`               | Disable and freeze this Interaction’s live state       |
+| `POST` | `/api/v1/interactions/{id}/live-intelligence/{signalId}/dismiss` | Dismiss one tenant-owned provisional signal            |
+| `POST` | `/api/v1/interactions/{id}/live-intelligence/reconcile`          | Compare frozen live state with final intelligence      |
+
+Responses expose possible signals, brief progress and exact source sequence ranges,
+but no transcript text, fingerprints, prompt, provider/model/request metadata or
+confidence score. The tenant and cursor are always server-derived. See the
+[signal schema](live-intelligence-signal-schema.md).

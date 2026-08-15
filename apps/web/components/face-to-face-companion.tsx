@@ -12,6 +12,7 @@ import type {
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PostInteractionCapture } from "@/components/post-interaction-capture";
+import { LiveInteractionIntelligence } from "@/components/live-interaction-intelligence";
 import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
 import {
   RecordingFoundation,
@@ -505,6 +506,13 @@ export function FaceToFaceCompanion({
             interactionType={interaction.interactionType}
           />
         </div>
+      ) : null}
+      {capabilities?.featureFlags.liveInteractionIntelligence === true ? (
+        <LiveInteractionIntelligence
+          interactionId={interactionId}
+          interactionInProgress={phase === "DURING"}
+          interactionCompleted={phase === "AFTER"}
+        />
       ) : null}
     </main>
   );

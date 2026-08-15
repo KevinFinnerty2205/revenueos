@@ -41,6 +41,7 @@ from revenueos.demo_data import (
     demo_debrief_ids,
     demo_ids,
     demo_interaction_ids,
+    demo_live_ids,
     demo_marker_ids,
     demo_source_evidence_ids,
     demo_visual_ids,
@@ -62,12 +63,15 @@ from revenueos.models import (
     Interaction,
     InteractionIntelligenceSnapshot,
     InteractionMarker,
+    LiveBriefProgress,
+    LiveInteractionSession,
     Meeting,
     OnlineMeetingMetadata,
     OnlineMeetingTranscriptImport,
     Organisation,
     OrganisationMembership,
     PreInteractionBrief,
+    ProvisionalSignal,
     RecordingSession,
     RevenueBrainSourceSnapshot,
     SourceCandidateEvidence,
@@ -548,6 +552,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         visual_ids = demo_visual_ids(PRIMARY_ORGANISATION_ID)
         source_evidence_ids = demo_source_evidence_ids(PRIMARY_ORGANISATION_ID)
         marker_ids = demo_marker_ids(PRIMARY_ORGANISATION_ID)
+        live_ids = demo_live_ids(PRIMARY_ORGANISATION_ID)
         debrief_interaction_ids = debrief_ids[:5]
         companion_interaction_ids, companion_meeting_ids, _, brief_ids = demo_companion_ids(PRIMARY_ORGANISATION_ID)
         async with factory() as session:
@@ -643,6 +648,13 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
                 ]
             )
             assert all([await session.get(InteractionMarker, marker_id) is not None for marker_id in marker_ids])
+            live_session = await session.get(LiveInteractionSession, live_ids["session"])
+            assert live_session is not None
+            assert live_session.status == "completed"
+            assert await session.get(ProvisionalSignal, live_ids["buying-signal"]) is not None
+            live_progress = await session.get(LiveBriefProgress, live_ids["brief-progress"])
+            assert live_progress is not None
+            assert live_progress.progress_status == "possibly_addressed"
             metadata_rows = [
                 await session.scalar(
                     select(OnlineMeetingMetadata).where(
@@ -717,6 +729,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
                 ]
             )
             assert all([await session.get(InteractionMarker, marker_id) is None for marker_id in marker_ids])
+            assert await session.get(LiveInteractionSession, live_ids["session"]) is None
             assert not (TEST_VISUAL_STORAGE / visual.storage_key).exists()
         await engine.dispose()
 
@@ -1179,7 +1192,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 10
+        assert payload["exportVersion"] == 11
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1229,7 +1242,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 10
+        assert download.json()["exportVersion"] == 11
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

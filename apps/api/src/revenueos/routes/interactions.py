@@ -42,6 +42,7 @@ from revenueos.interaction_dependencies import (
     get_companion_service,
     get_debrief_service,
     get_interaction_service,
+    get_live_intelligence_service,
     get_online_meeting_service,
     get_pre_interaction_brief_service,
     get_recording_service,
@@ -49,6 +50,16 @@ from revenueos.interaction_dependencies import (
 )
 from revenueos.interaction_repositories import InteractionRecord
 from revenueos.interaction_services import InteractionService
+from revenueos.live_intelligence_contracts import (
+    LiveDismissRequest,
+    LiveIntelligenceResponse,
+    LiveProcessRequest,
+    LiveProcessResponse,
+    LiveReconcileResponse,
+    LiveStartRequest,
+    LiveStopRequest,
+)
+from revenueos.live_intelligence_services import LiveInteractionIntelligenceService
 from revenueos.online_meeting_contracts import (
     OnlineMeetingCapabilitiesResponse,
     OnlineMeetingTranscriptImportRequest,
@@ -95,6 +106,10 @@ Visuals = Annotated[VisualEvidenceService, Depends(get_visual_evidence_service)]
 Recordings = Annotated[RecordingService, Depends(get_recording_service)]
 Companion = Annotated[CompanionService, Depends(get_companion_service)]
 OnlineMeetings = Annotated[OnlineMeetingService, Depends(get_online_meeting_service)]
+LiveIntelligence = Annotated[
+    LiveInteractionIntelligenceService,
+    Depends(get_live_intelligence_service),
+]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -243,6 +258,77 @@ async def start_interaction(
     service: Interactions,
 ) -> InteractionResponse:
     return _response(await service.start_interaction(interaction_id, request))
+
+
+@router.get(
+    "/{interaction_id}/live-intelligence",
+    response_model=LiveIntelligenceResponse,
+)
+async def get_live_intelligence(
+    interaction_id: UUID,
+    service: LiveIntelligence,
+) -> LiveIntelligenceResponse:
+    return await service.get(interaction_id)
+
+
+@router.post(
+    "/{interaction_id}/live-intelligence/start",
+    response_model=LiveIntelligenceResponse,
+)
+async def start_live_intelligence(
+    interaction_id: UUID,
+    request: LiveStartRequest,
+    service: LiveIntelligence,
+) -> LiveIntelligenceResponse:
+    return await service.start(interaction_id, request)
+
+
+@router.post(
+    "/{interaction_id}/live-intelligence/process",
+    response_model=LiveProcessResponse,
+)
+async def process_live_intelligence(
+    interaction_id: UUID,
+    request: LiveProcessRequest,
+    service: LiveIntelligence,
+) -> LiveProcessResponse:
+    return await service.process(interaction_id, request)
+
+
+@router.post(
+    "/{interaction_id}/live-intelligence/stop",
+    response_model=LiveIntelligenceResponse,
+)
+async def stop_live_intelligence(
+    interaction_id: UUID,
+    request: LiveStopRequest,
+    service: LiveIntelligence,
+) -> LiveIntelligenceResponse:
+    return await service.stop(interaction_id, request)
+
+
+@router.post(
+    "/{interaction_id}/live-intelligence/{signal_id}/dismiss",
+    response_model=LiveIntelligenceResponse,
+)
+async def dismiss_live_signal(
+    interaction_id: UUID,
+    signal_id: UUID,
+    request: LiveDismissRequest,
+    service: LiveIntelligence,
+) -> LiveIntelligenceResponse:
+    return await service.dismiss(interaction_id, signal_id, request)
+
+
+@router.post(
+    "/{interaction_id}/live-intelligence/reconcile",
+    response_model=LiveReconcileResponse,
+)
+async def reconcile_live_intelligence(
+    interaction_id: UUID,
+    service: LiveIntelligence,
+) -> LiveReconcileResponse:
+    return await service.reconcile(interaction_id)
 
 
 @router.get(

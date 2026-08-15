@@ -41,6 +41,8 @@ from revenueos.domain import (
     InteractionCreationOrigin,
     InteractionLifecycleStatus,
     InteractionType,
+    LiveInteractionStatus,
+    LiveSignalResolution,
     MeetingStatus,
     MeetingType,
     OnlineMeetingIngestionState,
@@ -49,10 +51,12 @@ from revenueos.domain import (
     OpportunityStage,
     OpportunityStatus,
     ParticipantRole,
+    ProvisionalSignalLifecycle,
     TaskPriority,
     TaskStatus,
     TranscriptProvenance,
     TranscriptSource,
+    TranscriptSpeakerRole,
 )
 
 
@@ -1228,10 +1232,10 @@ class TranscriptVersion(Base):
         CheckConstraint("length(trim(raw_text)) > 0", name="ck_transcript_versions_raw_text"),
         CheckConstraint(
             "source IN ('manual', 'upload', 'recorded_audio', 'uploaded_audio', 'imported_audio', "
-            "'platform_generated', 'user_uploaded', 'externally_generated', 'manually_pasted')",
+            "'platform_generated', 'user_uploaded', 'externally_generated', 'manually_pasted', 'progressive')",
             name="ck_transcript_versions_source",
         ),
-        CheckConstraint("status IN ('final', 'deleted')", name="ck_transcript_versions_status"),
+        CheckConstraint("status IN ('provisional', 'final', 'deleted')", name="ck_transcript_versions_status"),
         CheckConstraint(
             "transcript_id IS NOT NULL OR recording_session_id IS NOT NULL",
             name="ck_transcript_versions_trace",
@@ -1322,6 +1326,10 @@ class TranscriptSegment(Base):
             name="ck_transcript_segments_speaker_label",
         ),
         CheckConstraint(
+            "speaker_role IS NULL OR speaker_role IN ('customer', 'salesperson', 'unknown')",
+            name="ck_transcript_segments_speaker_role",
+        ),
+        CheckConstraint(
             "source_confidence IS NULL OR (source_confidence >= 0 AND source_confidence <= 1)",
             name="ck_transcript_segments_confidence",
         ),
@@ -1357,10 +1365,322 @@ class TranscriptSegment(Base):
     start_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     end_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     speaker_label: Mapped[str | None] = mapped_column(String(80))
+    speaker_role: Mapped[str | None] = mapped_column(
+        String(20),
+        default=TranscriptSpeakerRole.UNKNOWN.value,
+        server_default=TranscriptSpeakerRole.UNKNOWN.value,
+    )
     text: Mapped[str] = mapped_column(Text, nullable=False)
     source_confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LiveInteractionSession(TimestampMixin, Base):
+    __tablename__ = "live_interaction_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'processing', 'stopped', 'completed', 'failed', 'expired')",
+            name="ck_live_interaction_sessions_status",
+        ),
+        CheckConstraint(
+            "source_kind = 'progressive_transcript'",
+            name="ck_live_interaction_sessions_source",
+        ),
+        CheckConstraint("last_processed_sequence >= -1", name="ck_live_interaction_sessions_cursor"),
+        CheckConstraint("processed_character_count >= 0", name="ck_live_interaction_sessions_characters"),
+        CheckConstraint("processing_request_count >= 0", name="ck_live_interaction_sessions_requests"),
+        CheckConstraint(
+            "failure_code IS NULL OR length(trim(failure_code)) BETWEEN 1 AND 100",
+            name="ck_live_interaction_sessions_failure_code",
+        ),
+        CheckConstraint(
+            "stopped_at IS NULL OR stopped_at >= started_at",
+            name="ck_live_interaction_sessions_time_range",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_live_interaction_sessions_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_version_id"],
+            ["transcript_versions.organisation_id", "transcript_versions.id"],
+            name="fk_live_interaction_sessions_transcript_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "brief_id"],
+            ["pre_interaction_briefs.organisation_id", "pre_interaction_briefs.id"],
+            name="fk_live_interaction_sessions_brief_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_live_interaction_sessions_creator_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "final_intelligence_id"],
+            ["interaction_intelligence_snapshots.organisation_id", "interaction_intelligence_snapshots.id"],
+            name="fk_live_interaction_sessions_final_intelligence_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_live_interaction_sessions_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            name="uq_live_interaction_sessions_interaction",
+        ),
+        Index(
+            "ix_live_sessions_org_status_updated",
+            "organisation_id",
+            "status",
+            "updated_at",
+        ),
+        Index(
+            "ix_live_sessions_org_retention",
+            "organisation_id",
+            "retention_expires_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    brief_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    final_intelligence_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=LiveInteractionStatus.ACTIVE.value,
+        server_default=LiveInteractionStatus.ACTIVE.value,
+    )
+    source_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="progressive_transcript", server_default="progressive_transcript"
+    )
+    last_processed_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=-1, server_default="-1")
+    last_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    current_window_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    processed_character_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    processing_request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retention_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LiveProcessingWindow(Base):
+    __tablename__ = "live_processing_windows"
+    __table_args__ = (
+        CheckConstraint("first_sequence >= 0", name="ck_live_processing_windows_first_sequence"),
+        CheckConstraint("last_sequence >= first_sequence", name="ck_live_processing_windows_last_sequence"),
+        CheckConstraint("segment_count BETWEEN 1 AND 50", name="ck_live_processing_windows_segment_count"),
+        CheckConstraint(
+            "character_count BETWEEN 1 AND 50000",
+            name="ck_live_processing_windows_character_count",
+        ),
+        CheckConstraint(
+            "status IN ('processing', 'completed', 'no_signal', 'failed')",
+            name="ck_live_processing_windows_status",
+        ),
+        CheckConstraint("length(window_fingerprint) = 64", name="ck_live_processing_windows_fingerprint"),
+        CheckConstraint("signal_count >= 0", name="ck_live_processing_windows_signals"),
+        ForeignKeyConstraint(
+            ["organisation_id", "live_session_id"],
+            ["live_interaction_sessions.organisation_id", "live_interaction_sessions.id"],
+            name="fk_live_processing_windows_session_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_live_processing_windows_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "live_session_id",
+            "window_fingerprint",
+            name="uq_live_processing_windows_fingerprint",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "live_session_id",
+            "trigger_idempotency_key",
+            name="uq_live_processing_windows_trigger",
+        ),
+        Index(
+            "ix_live_windows_org_created",
+            "organisation_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    live_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    trigger_idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    window_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    first_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    segment_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    character_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="processing", server_default="processing")
+    signal_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProvisionalSignal(TimestampMixin, Base):
+    __tablename__ = "provisional_signals"
+    __table_args__ = (
+        CheckConstraint(
+            "signal_type IN ('buying_signal', 'objection', 'stakeholder', 'decision', 'action_item', "
+            "'risk', 'timeline', 'procurement', 'security_legal', 'customer_request', 'commercial_intent', "
+            "'objective_progress', 'open_question_progress', 'other')",
+            name="ck_provisional_signals_type",
+        ),
+        CheckConstraint(
+            "lifecycle_status IN ('detected', 'updated', 'superseded', 'dismissed', 'promoted_candidate', 'expired')",
+            name="ck_provisional_signals_lifecycle",
+        ),
+        CheckConstraint("is_provisional = true", name="ck_provisional_signals_provisional"),
+        CheckConstraint("priority IN ('high', 'normal')", name="ck_provisional_signals_priority"),
+        CheckConstraint(
+            "evidence_strength IN ('customer_attributed', 'speaker_uncertain', 'context_only')",
+            name="ck_provisional_signals_strength",
+        ),
+        CheckConstraint(
+            "resolution_status IN ('pending', 'confirmed', 'revised', 'unsupported', 'unresolved')",
+            name="ck_provisional_signals_resolution",
+        ),
+        CheckConstraint("length(trim(statement)) BETWEEN 1 AND 500", name="ck_provisional_signals_statement"),
+        CheckConstraint("source_sequence_start >= 0", name="ck_provisional_signals_source_start"),
+        CheckConstraint(
+            "source_sequence_end >= source_sequence_start",
+            name="ck_provisional_signals_source_end",
+        ),
+        CheckConstraint("length(signal_fingerprint) = 64", name="ck_provisional_signals_fingerprint"),
+        CheckConstraint("length(subject_fingerprint) = 64", name="ck_provisional_signals_subject"),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_provisional_signals_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "live_session_id"],
+            ["live_interaction_sessions.organisation_id", "live_interaction_sessions.id"],
+            name="fk_provisional_signals_session_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_version_id"],
+            ["transcript_versions.organisation_id", "transcript_versions.id"],
+            name="fk_provisional_signals_transcript_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "superseded_by_id"],
+            ["provisional_signals.organisation_id", "provisional_signals.id"],
+            name="fk_provisional_signals_superseded_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_provisional_signals_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "live_session_id",
+            "signal_fingerprint",
+            name="uq_provisional_signals_fingerprint",
+        ),
+        Index(
+            "ix_provisional_signals_org_interaction_status",
+            "organisation_id",
+            "interaction_id",
+            "lifecycle_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    live_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    signal_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    statement: Mapped[str] = mapped_column(String(500), nullable=False)
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=ProvisionalSignalLifecycle.DETECTED.value,
+        server_default=ProvisionalSignalLifecycle.DETECTED.value,
+    )
+    is_provisional: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    priority: Mapped[str] = mapped_column(String(12), nullable=False, default="normal", server_default="normal")
+    evidence_strength: Mapped[str] = mapped_column(String(24), nullable=False)
+    resolution_status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=LiveSignalResolution.PENDING.value,
+        server_default=LiveSignalResolution.PENDING.value,
+    )
+    signal_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    subject_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_sequence_start: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_sequence_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LiveBriefProgress(TimestampMixin, Base):
+    __tablename__ = "live_brief_progress"
+    __table_args__ = (
+        CheckConstraint("item_type IN ('objective', 'open_question')", name="ck_live_brief_progress_type"),
+        CheckConstraint("item_index BETWEEN 0 AND 20", name="ck_live_brief_progress_index"),
+        CheckConstraint("length(item_fingerprint) = 64", name="ck_live_brief_progress_fingerprint"),
+        CheckConstraint(
+            "progress_status IN ('unresolved', 'possibly_addressed', 'possibly_answered')",
+            name="ck_live_brief_progress_status",
+        ),
+        CheckConstraint(
+            "source_sequence_end IS NULL OR source_sequence_end >= 0",
+            name="ck_live_brief_progress_source",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "live_session_id"],
+            ["live_interaction_sessions.organisation_id", "live_interaction_sessions.id"],
+            name="fk_live_brief_progress_session_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_live_brief_progress_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "live_session_id",
+            "item_type",
+            "item_index",
+            name="uq_live_brief_progress_item",
+        ),
+        Index("ix_live_brief_progress_org_session", "organisation_id", "live_session_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    live_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    item_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    item_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    progress_status: Mapped[str] = mapped_column(String(24), nullable=False, default="unresolved")
+    source_sequence_end: Mapped[int | None] = mapped_column(Integer)
 
 
 class OnlineMeetingTranscriptImport(Base):

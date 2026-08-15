@@ -12,8 +12,8 @@ Longitudinal Reasoning, WO-009 Private Beta Readiness, WO-011 Interaction
 Domain Foundation, WO-012 AI Companion preparation, WO-013 AI Debrief/Voice
 Journal, WO-014 Visual Evidence/Presentation Mode, WO-015 Recording &
 Transcription Foundation, WO-016 Browser Face-to-Face Companion, WO-017 Phone
-Call Intelligence, WO-018 Online Meeting Capture and WO-019 Documents & Email
-Evidence. Interactions, Meetings,
+Call Intelligence, WO-018 Online Meeting Capture, WO-019 Documents & Email
+Evidence and WO-020 Live Interaction Intelligence. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -67,6 +67,12 @@ Opportunity Workspace and Revenue Brain. Seller documents and outbound email sta
 context rather than customer confirmation. DOCX, OCR, attachments, mailbox/drive
 sync, legal interpretation and automatic opportunity-field writes are not
 implemented.
+WO-020 adds an optional quiet Live Companion over an already authorised progressive
+transcript source. Server-owned cursors process bounded overlapping windows into a
+separate provisional aggregate, show possible signals and brief progress, then
+reconcile against final Interaction Intelligence. The default detector is
+deterministic/no-network; both live flags default off. Provisional state never writes
+final Opportunity Workspace intelligence or Revenue Brain.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
@@ -91,16 +97,18 @@ implements browser-only visual evidence and bounded Presentation Mode, WO-015
 implements the browser-first recording/batch-transcription foundation, and WO-016
 implements the thin browser Companion orchestration and gap-fill hand-off,
 WO-017 implements the browser-first phone-call path and compliant recording import,
-WO-018 implements the provider-neutral online-meeting import path, and WO-019
-implements first-party document/email evidence without an external connector.
-Native/background capture, mobile client, meeting bot, telephony provider, production connector, live
-transcription and live intelligence remain unimplemented.
+WO-018 implements the provider-neutral online-meeting import path, WO-019
+implements first-party document/email evidence without an external connector, and
+WO-020 implements bounded provisional processing over an authorised progressive
+source. Production progressive transcription, external live AI, native/background
+capture, mobile client, meeting bot, telephony provider and production connectors
+remain unimplemented.
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013, WO-014, WO-015, WO-016, WO-017, WO-018 and WO-019.
+WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019 and WO-020.
 WO-010 remains the blueprint; later roadmap work remains unauthorised.
 
 ## Prerequisites
@@ -194,6 +202,7 @@ Protected routes:
 - `/interactions`
 - `/interactions/new`
 - `/interactions/{id}`
+- `/interactions/{id}/companion`
 - `/tasks`
 - `/tasks/new`
 - `/tasks/{id}/edit`
@@ -247,6 +256,9 @@ API routes:
 - `POST /api/v1/interactions/{interactionId}/start` — idempotently enter the DURING phase
 - create/list/delete metadata-only markers under
   `/api/v1/interactions/{interactionId}/companion/markers`
+- read/start/process/stop provisional Live Intelligence, dismiss a signal and
+  reconcile after final processing under
+  `/api/v1/interactions/{interactionId}/live-intelligence`
 - `GET /api/v1/accounts/{accountId}/brain` — retrieve ordered immutable snapshot compositions without content
 - account and opportunity `POST/GET .../brain/reasoning` — create/reuse and read deterministic longitudinal comparisons
 - deliberate document/email evidence under `/api/v1/evidence`, including
@@ -344,6 +356,14 @@ default. Optional `openai` mode requires the same server-only key plus
 upload/storage/page/text/daily quotas and processing retries are listed in
 [`apps/api/.env.example`](apps/api/.env.example). No mailbox or drive credential is
 accepted.
+
+Live Interaction Intelligence uses the deterministic no-network detector in this
+work order. `API_FEATURE_LIVE_INTERACTION_INTELLIGENCE_ENABLED` and
+`API_FEATURE_LIVE_INTERACTION_EXTERNAL_AI_ENABLED` both default off; the external
+flag does not configure a provider and fails safely if enabled. Cadence, window,
+request, character, concurrency, provider-call and 30-day live-retention controls
+are documented in the [product guide](docs/01-product/live-interaction-intelligence.md)
+and [`apps/api/.env.example`](apps/api/.env.example).
 
 ## Private beta operations
 

@@ -446,6 +446,108 @@ export interface InteractionMarker {
   createdAt: string;
 }
 
+export type LiveIntelligenceAvailability =
+  | "available"
+  | "unavailable"
+  | "disabled";
+export type LiveIntelligenceState =
+  | "available"
+  | "unavailable"
+  | "disabled"
+  | "active"
+  | "processing"
+  | "completed"
+  | "failed";
+export type LiveSignalType =
+  | "buying_signal"
+  | "objection"
+  | "stakeholder"
+  | "decision"
+  | "action_item"
+  | "risk"
+  | "timeline"
+  | "procurement"
+  | "security_legal"
+  | "customer_request"
+  | "commercial_intent"
+  | "objective_progress"
+  | "open_question_progress"
+  | "other";
+export type LiveSignalLifecycle =
+  | "detected"
+  | "updated"
+  | "superseded"
+  | "dismissed"
+  | "promoted_candidate"
+  | "expired";
+export type LiveSignalResolution =
+  | "pending"
+  | "confirmed"
+  | "revised"
+  | "unsupported"
+  | "unresolved";
+
+export interface LiveSourceReference {
+  transcriptVersionId: string;
+  sequenceStart: number;
+  sequenceEnd: number;
+}
+
+export interface ProvisionalLiveSignal {
+  id: string;
+  signalType: LiveSignalType;
+  statement: string;
+  lifecycleStatus: LiveSignalLifecycle;
+  provisional: true;
+  priority: "high" | "normal";
+  evidenceStrength:
+    | "customer_attributed"
+    | "speaker_uncertain"
+    | "context_only";
+  resolutionStatus: LiveSignalResolution;
+  source: LiveSourceReference;
+  detectedAt: string;
+  lastUpdatedAt: string;
+  supersededBy: string | null;
+}
+
+export interface LiveBriefProgress {
+  itemType: "objective" | "open_question";
+  itemIndex: number;
+  label: string;
+  progressStatus:
+    | "unresolved"
+    | "possibly_addressed"
+    | "possibly_answered";
+}
+
+export interface LiveReconciliationSummary {
+  confirmed: number;
+  revised: number;
+  unsupported: number;
+  unresolved: number;
+}
+
+export interface LiveIntelligenceResponse {
+  availability: LiveIntelligenceAvailability;
+  state: LiveIntelligenceState;
+  safeMessage: string;
+  sourceKind: "progressive_transcript" | null;
+  sessionId: string | null;
+  signals: ProvisionalLiveSignal[];
+  objectives: LiveBriefProgress[];
+  openQuestions: LiveBriefProgress[];
+  reconciliation: LiveReconciliationSummary | null;
+  generatedAt: string | null;
+  updatedAt: string | null;
+  nextPollSeconds: number;
+}
+
+export interface LiveProcessResponse extends LiveIntelligenceResponse {
+  processed: boolean;
+  newSegmentCount: number;
+}
+
 export type DebriefCaptureType = "ai_debrief" | "voice_journal";
 export type DebriefInputMode = "text" | "voice";
 export type DebriefLifecycleStatus =

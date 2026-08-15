@@ -212,6 +212,13 @@ Legal hold, contractual retention and backup expiry need customer/legal decision
 The UI must distinguish active-store deletion, provider deletion, offline-device
 risk and backup expiry.
 
+WO-020 provisional state has a separate 30-day default expiry. Export includes the
+bounded live statement, source sequence range, lifecycle and final comparison but no
+raw transcript, window fingerprint, prompt or provider metadata. Interaction/source
+deletion removes live sessions and dependants before the parent. Live enablement does
+not imply recording consent: the progressive source must already be authorised, and
+external processing would require its own acknowledgement and approved adapter.
+
 ## Sensitive and restricted content
 
 Organisation policy can block capture, provider processing, visual evidence or broad

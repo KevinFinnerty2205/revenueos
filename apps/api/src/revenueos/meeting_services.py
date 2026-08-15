@@ -16,6 +16,7 @@ from revenueos.interaction_compatibility import (
     interaction_type_for_meeting,
     project_meeting_to_interaction,
 )
+from revenueos.live_intelligence_maintenance import delete_live_intelligence
 from revenueos.meeting_contracts import (
     MeetingCreate,
     MeetingParticipantCreate,
@@ -493,6 +494,11 @@ class MeetingService(_MeetingDomainService):
                     version=transcript.version,
                 )
             )
+        await delete_live_intelligence(
+            self.repository.session,
+            self.tenant.organisation_id,
+            interaction_ids=(interaction.id,),
+        )
         self.repository.add(
             InteractionAuditEvent(
                 organisation_id=self.tenant.organisation_id,
@@ -814,7 +820,7 @@ class TranscriptService(_MeetingDomainService):
         )
 
     async def delete_transcript(self, meeting_id: UUID) -> None:
-        await self._get_meeting_for_update(meeting_id)
+        meeting = await self._get_meeting_for_update(meeting_id)
         transcript = await self.repository.get_transcript(
             self.tenant.organisation_id,
             meeting_id,
@@ -822,6 +828,11 @@ class TranscriptService(_MeetingDomainService):
         )
         if transcript is None:
             raise self._not_found("transcript")
+        await delete_live_intelligence(
+            self.repository.session,
+            self.tenant.organisation_id,
+            interaction_ids=(meeting.interaction_id,),
+        )
         transcript.deleted_at = datetime.now(UTC)
         self.repository.add(
             self._audit(

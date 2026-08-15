@@ -51,12 +51,24 @@ Quick markers contain only a controlled type, creator, timestamp and optional
 recording offset. They do not contain free text and never become intelligence
 without a later reviewed evidence workflow.
 
+When the server advertises WO-020 and an authorised progressive source exists, DURING
+also shows an optional **Enable Live Intelligence** action. The live panel is quiet,
+collapsible and labelled **Provisional · needs review**. It may show brief objectives,
+open questions and a small list of material “Possible …” signals. Users can disable
+the session or dismiss one signal. No audio, modal, toast, vibration, score or
+coaching prompt is used.
+
 ## AFTER
 
 The summary shows recording duration and transcription state, photo count and
 marker count. The user can start the existing AI Debrief or Voice Journal, add
 visual evidence, open the Opportunity Workspace or Revenue Brain, or finish.
 The Companion does not render a scrolling transcript during or after capture.
+
+If live state existed, AFTER can compare it with separately produced final
+Interaction Intelligence and show confirmed/revised/unsupported/unresolved counts.
+The final surface remains authoritative and the live panel cannot update Opportunity
+Workspace final intelligence or Revenue Brain.
 
 When a completed direct recording transcript exists, the deterministic debrief
 opening becomes a gap-fill prompt. Transcript-covered targets are suppressed
@@ -86,3 +98,4 @@ See also:
 - [Companion lifecycle](../03-engineering/companion-state-lifecycle-guide.md)
 - [Quick markers](../03-engineering/quick-marker-guide.md)
 - [Companion security review](../03-engineering/companion-security-review.md)
+- [Live Interaction Intelligence](../01-product/live-interaction-intelligence.md)

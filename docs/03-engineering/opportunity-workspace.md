@@ -33,6 +33,12 @@ missed, voicemail or cancelled call creates no reported Interaction Intelligence
 The Interaction timeline remains the place for its call direction, Contact,
 duration, outcome and capture readiness; there is no phone-only workspace.
 
+WO-020 live sessions do not appear in the final intelligence projection and do not
+mutate Opportunity fields. During an Interaction the live service writes only its
+separate provisional tables. After normal final processing, reconciliation annotates
+the live history; the workspace continues to read only its established validated
+Meeting/Interaction/source snapshots.
+
 ## Opportunity domain
 
 `Opportunity` remains a tenant-owned business entity with these current fields:
@@ -315,6 +321,7 @@ endpoints and does not trigger Meeting Intelligence generation. An Interaction
 without an opportunity may use company scope, but one with an opportunity never
 mixes another opportunity at the same company. See
 [Pre-Interaction source grounding](pre-interaction-source-grounding.md).
+
 ## Reviewed document and email evidence
 
 Opportunity Detail now includes a Customer evidence panel. A user can add an

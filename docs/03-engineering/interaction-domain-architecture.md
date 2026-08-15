@@ -311,6 +311,18 @@ execution using content-minimised metadata.
 
 ## Related documents
 
+## Implemented WO-020 provisional aggregate
+
+`LiveInteractionSession` is a subordinate aggregate of one Interaction and one
+immutable progressive transcript version. Processing windows, provisional signals
+and Pre-Interaction Brief progress are tenant-owned dependants. The server cursor is
+authoritative and completion freezes the aggregate.
+
+This aggregate is not an `InteractionIntelligenceSnapshot`. It cannot be selected by
+Opportunity Workspace or Revenue Brain. Final evidence follows the existing normal
+path and reconciliation stores only a comparison outcome on the live history. See
+[Live provisional-versus-final architecture](live-intelligence-provisional-final-architecture.md).
+
 ## Implemented WO-014 visual capture
 
 `visual_capture` is now an implemented Capture Session type. Its source Evidence
@@ -337,6 +349,7 @@ and adds no new customer Interaction subtype, native client, bot or telephony pa
 - [Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md)
 - [Recording and transcription architecture](recording-and-transcription-architecture.md)
 - [ADR 0026](../08-decisions/0026-interaction-intelligence-platform.md)
+
 ## Implemented WO-019 document and email sources
 
 Documents and emails use `CaptureSession` and `Evidence` without fabricating a

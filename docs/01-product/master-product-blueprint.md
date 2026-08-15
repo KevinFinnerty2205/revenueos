@@ -5,8 +5,9 @@
   Workspace, deterministic Revenue Brain, private-beta controls, Interaction
   foundation, Pre-Interaction Brief and reviewed AI Debrief/Voice Journal through
   WO-013, browser-first visual evidence and Presentation Mode through WO-014, and
-  optional browser recording/batch transcription through WO-015 and the
-  mobile-first foreground browser Companion through WO-016
+  optional browser recording/batch transcription through WO-015, the
+  mobile-first foreground browser Companion through WO-016, phone/online/document
+  capture through WO-017–019 and provisional Live Intelligence through WO-020
 - **Scope notation:** **Current** exists in the repository; **Pilot** is required for the first five design-partner companies; **Beta** is required before private beta; **Later** is deliberately deferred; **Future** is directional only.
 
 This is the primary product blueprint. It defines outcomes and boundaries, not an
@@ -24,10 +25,11 @@ customer interaction, transforms that evidence into trusted intelligence, and he
 sales teams build stronger customer relationships over time.
 
 WO-010 expands the future direction beyond uploaded meeting transcripts and
-recordings. WO-011 through WO-016 implement the initial Interaction identity,
+recordings. WO-011 through WO-020 implement the initial Interaction identity,
 preparation, reviewed salesperson-reported post-interaction slice and reviewed
 browser visual plus consented audio evidence foundations and the thin
-BEFORE/DURING/AFTER field Companion orchestration. The
+BEFORE/DURING/AFTER field Companion orchestration, deliberate phone/online/document
+sources and a separate opt-in provisional live aggregate. The
 [Interaction Intelligence vision](interaction-intelligence-vision.md)
 and [product blueprint](interaction-intelligence-product-blueprint.md) define the
 Capture → Intelligence → Action lifecycle and face-to-face priority. They do not

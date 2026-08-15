@@ -292,6 +292,14 @@ of lawful authority or a legal determination. Future conversation capture must:
 - disclose processing providers, purpose, retention and deletion;
 - never use customer content for training without a separate explicit opt-in.
 
+WO-020 grants no new capture authority. Live start requires an existing authorised
+progressive transcript source and an explicit per-Interaction user action. The panel
+is visibly provisional and stoppable. The deterministic detector is no-network;
+external live AI has a separate default-off flag and acknowledgement boundary. Logs
+allow only tenant/Interaction/session IDs, controlled states, counts and safe error
+codes—never statements, source text, names, brief text or provider payloads. See the
+[Live Intelligence security review](live-intelligence-security-review.md).
+
 Normal Meeting deletion remains soft deletion and also soft-deletes its linked
 Interaction. The separate beta retention command hard-deletes eligible
 Meeting/transcript/intelligence/Revenue Brain dependencies and eligible standalone

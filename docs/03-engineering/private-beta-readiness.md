@@ -179,25 +179,27 @@ is reported as unavailable; RevenueOS makes no hard-coded pricing claim.
 The following environment flags are server-authoritative and have safe
 defaults:
 
-| Flag                                        | Default |
-| ------------------------------------------- | ------- |
-| `API_FEATURE_OPENAI_PROVIDER_ENABLED`       | `false` |
-| `API_FEATURE_REVENUE_BRAIN_ENABLED`         | `true`  |
-| `API_FEATURE_OPPORTUNITY_WORKSPACE_ENABLED` | `true`  |
-| `API_FEATURE_AI_COMPANION_ENABLED`          | `true`  |
-| `API_FEATURE_AI_DEBRIEF_ENABLED`            | `true`  |
-| `API_FEATURE_VOICE_JOURNAL_ENABLED`         | `true`  |
-| `API_FEATURE_VISUAL_EVIDENCE_ENABLED`       | `true`  |
-| `API_FEATURE_PRESENTATION_MODE_ENABLED`     | `true`  |
-| `API_FEATURE_RECORDING_CAPTURE_ENABLED`     | `false` |
-| `API_FEATURE_TRANSCRIPTION_ENABLED`         | `false` |
+| Flag                                                         | Default |
+| ------------------------------------------------------------ | ------- |
+| `API_FEATURE_OPENAI_PROVIDER_ENABLED`                        | `false` |
+| `API_FEATURE_REVENUE_BRAIN_ENABLED`                          | `true`  |
+| `API_FEATURE_OPPORTUNITY_WORKSPACE_ENABLED`                  | `true`  |
+| `API_FEATURE_AI_COMPANION_ENABLED`                           | `true`  |
+| `API_FEATURE_AI_DEBRIEF_ENABLED`                             | `true`  |
+| `API_FEATURE_VOICE_JOURNAL_ENABLED`                          | `true`  |
+| `API_FEATURE_VISUAL_EVIDENCE_ENABLED`                        | `true`  |
+| `API_FEATURE_PRESENTATION_MODE_ENABLED`                      | `true`  |
+| `API_FEATURE_RECORDING_CAPTURE_ENABLED`                      | `false` |
+| `API_FEATURE_TRANSCRIPTION_ENABLED`                          | `false` |
 | `API_FEATURE_AUTO_GENERATE_INTELLIGENCE_AFTER_TRANSCRIPTION` | `false` |
-| `API_FEATURE_ONLINE_MEETING_CAPTURE_ENABLED` | `true` |
-| `API_FEATURE_ONLINE_MEETING_IMPORT_ENABLED` | `true` |
-| `API_FEATURE_ONLINE_MEETING_NATIVE_INTEGRATION_ENABLED` | `false` |
-| `API_FEATURE_ONLINE_MEETING_AUTO_INGEST_ENABLED` | `false` |
-| `API_FEATURE_DATA_EXPORT_ENABLED`           | `true`  |
-| `API_FEATURE_ORGANISATION_DELETION_ENABLED` | `false` |
+| `API_FEATURE_ONLINE_MEETING_CAPTURE_ENABLED`                 | `true`  |
+| `API_FEATURE_ONLINE_MEETING_IMPORT_ENABLED`                  | `true`  |
+| `API_FEATURE_ONLINE_MEETING_NATIVE_INTEGRATION_ENABLED`      | `false` |
+| `API_FEATURE_ONLINE_MEETING_AUTO_INGEST_ENABLED`             | `false` |
+| `API_FEATURE_LIVE_INTERACTION_INTELLIGENCE_ENABLED`          | `false` |
+| `API_FEATURE_LIVE_INTERACTION_EXTERNAL_AI_ENABLED`           | `false` |
+| `API_FEATURE_DATA_EXPORT_ENABLED`                            | `true`  |
+| `API_FEATURE_ORGANISATION_DELETION_ENABLED`                  | `false` |
 
 OpenAI selection is invalid unless its flag is enabled. Disabled API routes
 fail closed with a product-safe `404`; browser feature gates do not render the
@@ -208,7 +210,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-Alembic head `0028_online_meeting_capture`, identity configuration, selected
+  Alembic head `0030_live_interaction_intel`, identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
@@ -362,6 +364,24 @@ and one Google Meet Debrief fallback; no external call or credential is used.
 - Synthetic demo version 10 adds a customer RFP, seller proposal, verified inbound
   customer email and outbound seller email. All content is visibly synthetic and
   provider calls remain zero.
+
+## WO-020 Live Intelligence controls
+
+- Both live flags are independent server-side kill switches and default off. The
+  external-live flag requires the base flag, acknowledgement and a separately
+  configured adapter; no such adapter is implemented in WO-020.
+- Default cadence/limits are 15 seconds, two new segments or 160 characters, 12
+  segments/8,000 characters per window, four requests/minute, 120
+  requests/Interaction, 200,000 processed characters/Interaction, three concurrent
+  live Interactions/organisation and 200 external provider calls/day.
+- Live data expires after 30 days by default. Export v11 includes bounded signal,
+  source-range, progress and reconciliation metadata but excludes processing
+  windows/fingerprints, raw transcript and provider internals.
+- Meeting, recording-source, Interaction and organisation deletion remove live
+  dependants before referenced source parents. Synthetic demo version 11 includes
+  one completed/reconciled live Interaction and an online no-source fallback.
+- The deterministic detector makes no network request and usage reservation reaches
+  the existing provider counter only for an adapter declaring external processing.
 
 - Private beta only; production customer data is prohibited unless separately
   approved.
