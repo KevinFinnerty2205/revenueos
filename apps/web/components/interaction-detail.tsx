@@ -139,6 +139,12 @@ export function InteractionDetail({
           </p>
         ) : null}
         <div className="mt-8 flex flex-wrap gap-3">
+          <Link
+            className="primary-button"
+            href={`/interactions/${interaction.id}/companion`}
+          >
+            Open mobile Companion
+          </Link>
           {canComplete ? (
             <button
               type="button"
@@ -163,6 +169,7 @@ export function InteractionDetail({
         <BetaFeatureGate feature="recordingCapture">
           <RecordingFoundation
             interactionId={interaction.id}
+            interactionType={interaction.interactionType}
             lifecycleStatus={interaction.lifecycleStatus}
           />
         </BetaFeatureGate>

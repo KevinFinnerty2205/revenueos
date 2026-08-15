@@ -269,6 +269,7 @@ function workspace(
     },
     reportedIntelligence: null,
     visualIntelligence: null,
+    latestInteractionCapture: null,
     latestMeeting: {
       id: "meeting-1",
       title: "Expansion review",
@@ -510,6 +511,45 @@ describe("OpportunityWorkspace", () => {
       screen.getByText("The loading bay may require a narrower frame."),
     ).toBeVisible();
     expect(screen.queryByText(/buying probability/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the latest interaction capture status and Companion navigation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          response(
+            workspace({
+              latestInteractionCapture: {
+                interactionId: "interaction-1",
+                title: "On-site renewal workshop",
+                interactionType: "face_to_face_meeting",
+                lifecycleStatus: "completed",
+                captureStatus: "processing_transcription",
+                recordingStatus: "transcribing",
+                recordingDurationSeconds: 840,
+                debriefStatus: null,
+                visualCount: 2,
+                markerCount: 3,
+                updatedAt: "2026-08-15T03:00:00Z",
+              },
+            }),
+          ),
+        )
+        .mockResolvedValueOnce(response(meetingPage([]))),
+    );
+    render(<OpportunityWorkspace opportunityId="opportunity-1" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "On-site renewal workshop",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText("Processing Transcription")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Open interaction Companion" }),
+    ).toHaveAttribute("href", "/interactions/interaction-1/companion");
   });
 
   it("associates a selected same-organisation meeting with an optimistic token", async () => {

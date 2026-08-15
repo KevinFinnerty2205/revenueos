@@ -25,6 +25,10 @@ the approved release record. Repository completion is not production approval.
 - [ ] Visual export byte inclusion remains disabled unless separately approved.
 - [ ] Recording consent, limits, resumability, raw retention, object-first deletion
       and tenant-scoped reconciliation are exercised with synthetic audio.
+- [ ] Companion markers are verified as type/timestamp metadata only; tenant
+      isolation, idempotency, export and soft-deletion pass with synthetic data.
+- [ ] Phone and online interaction types show passive-only browser capture copy and
+      never request the microphone.
 - [ ] OpenAI is disabled initially or separately approved and restricted.
 - [ ] Feature flags are reviewed and unknown/disabled routes fail closed.
 
@@ -34,22 +38,26 @@ the approved release record. Repository completion is not production approval.
 - [ ] TLS and explicit CORS origins are configured.
 - [ ] Encrypted database backup completed.
 - [ ] Non-production restore drill completed, including RLS verification.
-- [ ] Migration `0025_recording_transcription` applied exactly once; recording,
-      visual/debrief review and snapshot guards, tenant constraints and forced RLS
-      are verified.
+- [ ] Migration `0026_face_to_face_companion` applied exactly once; its marker
+      constraints, immutable-content/soft-delete guard and forced RLS are verified,
+      alongside prior recording, visual/debrief review and snapshot guards.
 - [ ] API liveness/readiness are green.
 - [ ] Worker starts after the compatible migration and processes mock work.
 - [ ] Web sign-in, organisation selection and beta journey are green.
 - [ ] Daily retention and expired-export schedules are installed and observed.
 - [ ] Private visual object lifecycle and tenant-scoped reconciliation are observed.
 - [ ] Private recording lifecycle, retention and report-only reconciliation are observed.
+- [ ] Supported mobile browsers exercise foreground start/pause/resume/stop,
+      permission denial, connectivity loss, queued retry and interrupted recovery.
+- [ ] Device-lock/background limitations and the best-effort wake-lock wording are
+      included in beta onboarding and support responses.
 - [ ] Rollback release and decision owner are identified.
 
 ## Operations and incident readiness
 
 - [ ] Central safe JSON logs are collected and reviewed for content leakage.
 - [ ] Alerts cover API readiness, worker backlog/retries and maintenance failures.
-- [ ] Twelve operational runbooks have named owners and escalation contacts.
+- [ ] Required operational runbooks have named owners and escalation contacts.
 - [ ] Secret-exposure and tenant-isolation incident contacts are reachable.
 - [ ] Synthetic demo seed/reset, reviewed presentation visual and full two-meeting journey are tested.
 - [ ] GitHub Actions and the complete local validation gate are green.

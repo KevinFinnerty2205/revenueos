@@ -104,15 +104,47 @@ class RecordingService:
                 )
             return self._response(existing)
 
-        interaction = await self.repository.get_interaction(self.tenant.organisation_id, interaction_id)
+        interaction = await self.repository.get_interaction(
+            self.tenant.organisation_id,
+            interaction_id,
+            for_update=True,
+        )
         if interaction is None:
             raise PublicAPIError("interaction_not_found", "The requested interaction was not found.", 404)
+        existing = await self.repository.find_idempotent_recording(
+            self.tenant.organisation_id,
+            interaction_id,
+            self.tenant.user_id,
+            request.idempotency_key,
+        )
+        if existing is not None:
+            if (
+                existing.recording_type != request.recording_type
+                or existing.expected_mime_type != request.expected_mime_type
+                or existing.language != request.language
+            ):
+                raise PublicAPIError(
+                    "idempotency_conflict",
+                    "That request key was already used for a different recording.",
+                    409,
+                )
+            return self._response(existing)
         if interaction.lifecycle_status == "cancelled":
             raise PublicAPIError("interaction_not_recordable", "A cancelled interaction cannot be recorded.", 409)
         if request.recording_type == "live_audio_recording" and interaction.lifecycle_status == "completed":
             raise PublicAPIError(
                 "interaction_not_recordable",
                 "A completed interaction cannot start a new live recording. Upload authorised audio instead.",
+                409,
+            )
+        active_for_interaction = await self.repository.active_recording_for_interaction(
+            self.tenant.organisation_id,
+            interaction_id,
+        )
+        if active_for_interaction is not None:
+            raise PublicAPIError(
+                "recording_already_active",
+                "This interaction already has an active recording session. Return to it or cancel it before starting another.",
                 409,
             )
         if await self.repository.active_recording_count(self.tenant.organisation_id) >= (

@@ -15,7 +15,7 @@ emit metadata counts/opaque IDs only.
 
 ## Procedure
 
-1. Confirm release SHA, migration `0025_recording_transcription`, worker/API parity,
+1. Confirm release SHA, migration `0026_face_to_face_companion`, worker/API parity,
    trusted organisation ID and private storage connectivity.
 2. Disable recording capture for the affected tenant/release if new writes could
    race repair.

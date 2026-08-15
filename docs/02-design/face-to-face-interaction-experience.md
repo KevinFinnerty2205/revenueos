@@ -1,5 +1,11 @@
 # Face-to-face interaction experience
 
+**Implementation status:** WO-016 delivers the browser-first responsive Companion
+for the core before/during/after loop. Foreground browser recording is optional and
+labelled with its limitations; passive markers, visuals and debrief remain usable
+without it. Native, background and offline-media capabilities below remain target
+design only.
+
 - **Status:** WO-012 implements responsive face-to-face preparation; capture,
   AI Debrief and Voice Journal remain target design
 - **MVP:** Prepared, non-recording customer office meeting followed by immediate
@@ -262,6 +268,10 @@ Every face-to-face flow follows these rules:
 - **Mobile and risks:** Background policies, calls, battery, thermal limits and OS
   termination are major risks.
 
+The WO-016 browser Companion does not satisfy a screen-lock continuity requirement.
+Its wake lock is best effort while the page is visible, unuploaded chunks are held
+only in memory, and the user is told to keep the page open and device awake.
+
 ## Workflow 11 — Multiple customer speakers
 
 - **Preparation:** Collect likely attendees but allow unknown or late participants.
@@ -327,5 +337,6 @@ The first face-to-face release is usable only when:
 - [Interaction lifecycle and UX](interaction-lifecycle-and-ux.md)
 - [AI Companion and debrief](ai-companion-and-debrief.md)
 - [Mobile companion strategy](mobile-companion-strategy.md)
+- [Browser Face-to-Face Companion guide](browser-face-to-face-companion-guide.md)
 - [Evidence and provenance model](../03-engineering/evidence-and-provenance-model.md)
 - [Interaction platform risk register](../03-engineering/interaction-platform-risk-register.md)

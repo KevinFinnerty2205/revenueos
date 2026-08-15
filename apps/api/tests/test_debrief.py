@@ -22,6 +22,7 @@ from revenueos.ai_prompt_registry import (
 from revenueos.auth import get_current_user
 from revenueos.config import Settings
 from revenueos.debrief_ai import StructuredDebriefReasoning
+from revenueos.debrief_reasoning import DeterministicDebriefReasoning
 from revenueos.main import create_app
 from revenueos.models import (
     BetaSystemEvent,
@@ -38,6 +39,25 @@ from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL
 from .test_business_api import create_company, create_opportunity
 from .test_interaction_api import create_interaction
 from .test_meeting_api import cast_auth_dependency, secondary_user
+
+
+def test_recording_gap_fill_suppresses_supported_questions_and_prioritises_markers() -> None:
+    reasoning = DeterministicDebriefReasoning()
+    opening = reasoning.opening_question(gap_fill=True)
+    assert opening.question == "What important outcome might the recording have missed?"
+    question = reasoning.next_question(
+        interaction_type="face_to_face_meeting",
+        capture_type="ai_debrief",
+        answers=("The recording covered the discussion, but one detail may be missing.",),
+        asked_targets=("other",),
+        question_count=1,
+        max_questions=6,
+        brief_questions=(),
+        direct_supported_targets=("next_step", "stakeholder", "decision", "timeline", "commercial_intent"),
+        marker_targets=("objection",),
+    )
+    assert question.target == "objection"
+    assert question.question == "Did the customer raise or resolve an important concern?"
 
 
 def _completed_interaction(

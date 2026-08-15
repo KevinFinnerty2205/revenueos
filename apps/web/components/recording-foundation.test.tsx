@@ -110,6 +110,7 @@ describe("RecordingFoundation", () => {
     render(
       <RecordingFoundation
         interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
         lifecycleStatus="planned"
       />,
     );
@@ -119,6 +120,28 @@ describe("RecordingFoundation", () => {
     expect(
       screen.getByRole("link", { name: "Use AI Debrief instead" }),
     ).toHaveAttribute("href", "#debrief");
+  });
+
+  it("does not offer misleading browser audio capture for a phone call", async () => {
+    installSupportedBrowser(() => Promise.reject(new Error("not requested")));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(jsonResponse([]))),
+    );
+    render(
+      <RecordingFoundation
+        interactionId="interaction-1"
+        interactionType="phone_call"
+        lifecycleStatus="in_progress"
+      />,
+    );
+
+    expect(
+      await screen.findByText(/cannot reliably record the same phone call/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Start recording" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not begin until consent succeeds and reports denied microphone permission", async () => {
@@ -132,6 +155,7 @@ describe("RecordingFoundation", () => {
     render(
       <RecordingFoundation
         interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
         lifecycleStatus="planned"
       />,
     );
@@ -157,7 +181,20 @@ describe("RecordingFoundation", () => {
         getTracks: () => [{ stop: stopTrack }],
       } as unknown as MediaStream),
     );
+    const releaseWakeLock = vi.fn(() => Promise.resolve());
+    const requestWakeLock = vi.fn(() =>
+      Promise.resolve({
+        released: false,
+        release: releaseWakeLock,
+        addEventListener: vi.fn(),
+      }),
+    );
+    Object.defineProperty(navigator, "wakeLock", {
+      configurable: true,
+      value: { request: requestWakeLock },
+    });
     let finalized = false;
+    let uploadAttempts = 0;
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? "GET";
@@ -209,6 +246,15 @@ describe("RecordingFoundation", () => {
         );
       }
       if (url.endsWith("/recording-upload") && method === "PUT") {
+        uploadAttempts += 1;
+        if (uploadAttempts === 1) {
+          return Promise.resolve(
+            jsonResponse(
+              { code: "temporary", message: "Temporary connection loss." },
+              503,
+            ),
+          );
+        }
         return Promise.resolve(new Response(null, { status: 204 }));
       }
       if (url.endsWith("/complete")) {
@@ -267,6 +313,7 @@ describe("RecordingFoundation", () => {
     render(
       <RecordingFoundation
         interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
         lifecycleStatus="planned"
       />,
     );
@@ -283,6 +330,21 @@ describe("RecordingFoundation", () => {
       ),
     ).toBeVisible();
     await waitFor(() => expect(stopTrack).toHaveBeenCalled());
+    expect(requestWakeLock).toHaveBeenCalledWith("screen");
+    expect(releaseWakeLock).toHaveBeenCalled();
+    const chunkCreateBodies = fetchMock.mock.calls
+      .filter(
+        ([input, init]) =>
+          String(input).endsWith("/chunks") && init?.method === "POST",
+      )
+      .map(
+        ([, init]) =>
+          JSON.parse(String(init?.body)) as { idempotencyKey: string },
+      );
+    expect(chunkCreateBodies).toHaveLength(2);
+    expect(
+      new Set(chunkCreateBodies.map((body) => body.idempotencyKey)).size,
+    ).toBe(1);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/finalize"),
       expect.objectContaining({ method: "POST" }),
@@ -353,6 +415,7 @@ describe("RecordingFoundation", () => {
     render(
       <RecordingFoundation
         interactionId="interaction-1"
+        interactionType="face_to_face_meeting"
         lifecycleStatus="planned"
       />,
     );

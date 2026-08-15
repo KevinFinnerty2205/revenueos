@@ -1,10 +1,11 @@
 # Mobile companion strategy
 
-- **Status:** WO-012 implements responsive mobile-web preparation; no mobile
-  application, PWA, recording or background capture capability is implemented
-- **Recommendation:** responsive web for the debrief MVP, a constrained PWA for
-  convenience/offline experiments, then a cross-platform native capture client only
-  when background recording requirements are validated
+- **Status:** WO-016 implements the browser-first responsive Companion, including
+  foreground recording, passive markers, visual evidence and post-interaction
+  debrief entry. No mobile application, PWA or background capture is implemented.
+- **Recommendation:** validate the complete face-to-face loop in responsive web;
+  consider PWA convenience or native capture only when observed demand and a
+  separate platform spike justify their privacy, reliability and operating cost.
 
 ## Capability comparison
 
@@ -42,11 +43,14 @@ customer's mobile-device management.
 
 ### Stage 1 — Responsive Companion
 
-Deliver the pre-interaction brief, manual association, foreground Voice Journal or
-typed debrief, review and visual selection in responsive web. Keep the voice session
-short and foreground. State clearly that closing/locking the browser may interrupt
-capture. This is sufficient to validate the face-to-face value proposition and does
-not require native code.
+**Implemented by WO-016.** The responsive route provides a concise brief, an
+explicit recording/passive choice, foreground consent-gated browser recording,
+metadata-only markers, visual capture, a capture summary and the existing Voice
+Journal/typed debrief and review. It uses a best-effort screen wake lock where
+supported, but states clearly that closing, locking or backgrounding the browser may
+interrupt capture. Phone calls and online meetings are forced to passive mode
+because browser microphone capture is not reliable same-device or system-audio
+capture.
 
 ### Stage 2 — PWA convenience and offline spike
 

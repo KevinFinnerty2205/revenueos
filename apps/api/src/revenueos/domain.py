@@ -96,6 +96,23 @@ class InteractionAuditAction(StrEnum):
     MEETING_LINKED = "meeting_linked"
 
 
+class InteractionMarkerType(StrEnum):
+    BUYING_SIGNAL = "buying_signal"
+    OBJECTION = "objection"
+    DECISION = "decision"
+    ACTION_ITEM = "action_item"
+    RISK = "risk"
+    STAKEHOLDER = "stakeholder"
+    TIMELINE = "timeline"
+    BUDGET = "budget"
+    PROCUREMENT = "procurement"
+    FOLLOW_UP = "follow_up"
+    IMPORTANT_MOMENT = "important_moment"
+    CUSTOMER_QUESTION = "customer_question"
+    REQUESTED_MATERIAL = "requested_material"
+    STRONG_ENGAGEMENT = "strong_engagement"
+
+
 class EvidenceType(StrEnum):
     TRANSCRIPT = "transcript"
     USER_OBSERVATION = "user_observation"

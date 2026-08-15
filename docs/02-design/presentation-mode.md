@@ -1,12 +1,14 @@
 # Presentation mode
 
-**Implementation status:** WO-014 implements the browser-first preparation,
-visual capture/review and bounded presentation debrief described here. Live
-coaching, slide authoring, recording and native mobile remain future scope.
+**Implementation status:** WO-014 implements browser-first visual capture/review
+and bounded presentation debrief. WO-016 now assembles these with the existing brief
+and optional WO-015 foreground recording inside the responsive Companion. Live
+coaching, slide authoring and native mobile remain future scope.
 
-- **Status:** WO-012 implements presentation-specific preparation guidance and
-  WO-014 implements browser-image capture, review and a bounded debrief; full
-  deck ingestion and live presentation assistance remain target design
+- **Status:** WO-012 implements presentation-specific preparation guidance,
+  WO-014 implements browser-image capture/review and bounded debrief, and WO-016
+  provides the coherent BEFORE/DURING/AFTER browser route. Full deck ingestion and
+  live presentation assistance remain target design.
 - **Principle:** Prepared seller content is context, not evidence of customer intent
 
 ## Why presentation mode is distinct

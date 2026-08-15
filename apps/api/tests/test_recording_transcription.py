@@ -200,6 +200,12 @@ def test_recording_creation_is_consent_gated_idempotent_and_tenant_scoped(
     created = _create_recording(recording_client, interaction_id)
     repeated = _create_recording(recording_client, interaction_id)
     assert repeated["id"] == created["id"]
+    duplicate_tab = recording_client.post(
+        f"/api/v1/interactions/{interaction_id}/recordings",
+        json=_recording_payload("recording-session-second-tab"),
+    )
+    assert duplicate_tab.status_code == 409
+    assert duplicate_tab.json()["code"] == "recording_already_active"
     assert created["expectedMimeType"] == "audio/webm"
     assert created["consentState"] == "acknowledged"
     assert "transcriptionRequestId" not in created

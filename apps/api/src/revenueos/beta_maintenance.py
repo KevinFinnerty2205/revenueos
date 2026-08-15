@@ -37,6 +37,7 @@ from revenueos.models import (
     Interaction,
     InteractionAuditEvent,
     InteractionIntelligenceSnapshot,
+    InteractionMarker,
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
@@ -69,7 +70,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 6
+EXPORT_VERSION = 7
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -854,6 +855,19 @@ async def _interaction_deletion_counts_from_select(
             )
             or 0
         ),
+        "interaction_markers": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(InteractionMarker)
+                    .where(
+                        InteractionMarker.organisation_id == organisation_id,
+                        InteractionMarker.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
         "pre_interaction_briefs": int(
             (
                 await session.scalar(
@@ -1128,6 +1142,12 @@ async def _delete_interaction_batch(
         )
     )
     await session.execute(
+        delete(InteractionMarker).where(
+            InteractionMarker.organisation_id == organisation_id,
+            InteractionMarker.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
         delete(InteractionAuditEvent).where(
             InteractionAuditEvent.organisation_id == organisation_id,
             InteractionAuditEvent.interaction_id.in_(interaction_ids),
@@ -1241,6 +1261,11 @@ async def _export_payload(
     meetings = await rows(select(Meeting).where(Meeting.organisation_id == organisation_id).order_by(Meeting.id))
     interactions = await rows(
         select(Interaction).where(Interaction.organisation_id == organisation_id).order_by(Interaction.id)
+    )
+    interaction_markers = await rows(
+        select(InteractionMarker)
+        .where(InteractionMarker.organisation_id == organisation_id)
+        .order_by(InteractionMarker.interaction_id, InteractionMarker.created_at, InteractionMarker.id)
     )
     capture_sessions = await rows(
         select(CaptureSession).where(CaptureSession.organisation_id == organisation_id).order_by(CaptureSession.id)
@@ -1532,6 +1557,21 @@ async def _export_payload(
                 ),
             )
             for item in interactions
+        ],
+        "interactionMarkers": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "created_by_user_id",
+                    "marker_type",
+                    "recording_offset_ms",
+                    "created_at",
+                    "deleted_at",
+                ),
+            )
+            for item in interaction_markers
         ],
         "captureSessions": [
             _columns(

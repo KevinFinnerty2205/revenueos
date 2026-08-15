@@ -2,6 +2,7 @@
 
 import type {
   InteractionLifecycleStatus,
+  InteractionType,
   RecordingChunkUpload,
   RecordingMimeType,
   RecordingSession,
@@ -24,8 +25,9 @@ const MIME_PREFERENCES = [
 ] as const;
 const CHUNK_INTERVAL_MS = 5_000;
 const NOTICE_VERSION = 1;
+const UPLOAD_RETRY_DELAYS_MS = [0, 300, 1_000] as const;
 
-type RecorderState =
+export type RecorderState =
   | "checking"
   | "ready"
   | "requesting_permission"
@@ -38,6 +40,24 @@ type RecorderState =
   | "unsupported"
   | "permission_denied"
   | "failed";
+
+type MicrophoneState = "inactive" | "active" | "muted" | "ended";
+
+interface PendingChunk {
+  blob: Blob;
+  sequenceNumber: number;
+  checksumSha256: string | null;
+  createIdempotencyKey: string;
+  completeIdempotencyKey: string;
+}
+
+export interface RecordingActivity {
+  state: RecorderState;
+  active: boolean;
+  blocksInteractionCompletion: boolean;
+  elapsedSeconds: number;
+  recording: RecordingSession | null;
+}
 
 export function selectSupportedRecordingMimeType(
   mediaRecorder: Pick<typeof MediaRecorder, "isTypeSupported"> | undefined,
@@ -79,12 +99,30 @@ function elapsedLabel(seconds: number): string {
     .join(":");
 }
 
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 export function RecordingFoundation({
   interactionId,
+  interactionType,
   lifecycleStatus,
+  showTranscript = true,
+  fallbackHref = "#debrief",
+  fallbackLabel = "Use AI Debrief instead",
+  onActivityChange,
+  onElapsedSecondsChange,
+  onFinalized,
 }: {
   interactionId: string;
+  interactionType: InteractionType;
   lifecycleStatus: InteractionLifecycleStatus;
+  showTranscript?: boolean;
+  fallbackHref?: string;
+  fallbackLabel?: string;
+  onActivityChange?: (activity: RecordingActivity) => void;
+  onElapsedSecondsChange?: (seconds: number) => void;
+  onFinalized?: (recording: RecordingSession) => void;
 }) {
   const [state, setState] = useState<RecorderState>("checking");
   const [recording, setRecording] = useState<RecordingSession | null>(null);
@@ -93,6 +131,14 @@ export function RecordingFoundation({
   const [consentConfirmed, setConsentConfirmed] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [uploadedChunks, setUploadedChunks] = useState(0);
+  const [pendingChunkCount, setPendingChunkCount] = useState(0);
+  const [online, setOnline] = useState(
+    typeof navigator === "undefined" || navigator.onLine !== false,
+  );
+  const [microphoneState, setMicrophoneState] =
+    useState<MicrophoneState>("inactive");
+  const [wakeLockActive, setWakeLockActive] = useState(false);
+  const [pauseSupported, setPauseSupported] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -103,9 +149,12 @@ export function RecordingFoundation({
   const pausedDurationRef = useRef(0);
   const nextSequenceRef = useRef(0);
   const uploadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingChunksRef = useRef<Map<number, PendingChunk>>(new Map());
   const controlQueueRef = useRef<Promise<void>>(Promise.resolve());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cancelledRef = useRef(false);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const recorderActiveRef = useRef(false);
 
   const load = useCallback(async () => {
     const recordings = await apiRequest<RecordingSession[]>(
@@ -153,9 +202,9 @@ export function RecordingFoundation({
         selectSupportedRecordingMimeType(globalThis.MediaRecorder) !== null;
       if (!supported) {
         if (!cancelled) setState("unsupported");
-        return;
+      } else if (!cancelled) {
+        setState("ready");
       }
-      if (!cancelled) setState("ready");
       try {
         await load();
       } catch (requestError: unknown) {
@@ -174,6 +223,17 @@ export function RecordingFoundation({
   }, [load]);
 
   useEffect(() => {
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     if (
       !recording ||
       !["uploaded", "transcribing"].includes(recording.lifecycleStatus)
@@ -187,20 +247,79 @@ export function RecordingFoundation({
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (["recording", "paused", "uploading"].includes(state)) {
+      if (
+        ["recording", "paused", "uploading"].includes(state) ||
+        pendingChunkCount > 0
+      ) {
         event.preventDefault();
+        event.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [state]);
+  }, [pendingChunkCount, state]);
+
+  const releaseWakeLock = useCallback(async () => {
+    const sentinel = wakeLockRef.current;
+    wakeLockRef.current = null;
+    setWakeLockActive(false);
+    if (sentinel && !sentinel.released) {
+      await sentinel.release().catch(() => undefined);
+    }
+  }, []);
+
+  const requestWakeLock = useCallback(async () => {
+    const wakeLock = navigator.wakeLock;
+    if (!wakeLock || document.visibilityState !== "visible") return;
+    try {
+      const sentinel = await wakeLock.request("screen");
+      wakeLockRef.current = sentinel;
+      setWakeLockActive(true);
+      sentinel.addEventListener("release", () => setWakeLockActive(false), {
+        once: true,
+      });
+    } catch {
+      setWakeLockActive(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (
+        document.visibilityState === "visible" &&
+        recorderActiveRef.current &&
+        !wakeLockRef.current
+      ) {
+        void requestWakeLock();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
+  }, [requestWakeLock]);
+
+  useEffect(() => {
+    const active = ["recording", "paused", "uploading"].includes(state);
+    onActivityChange?.({
+      state,
+      active,
+      blocksInteractionCompletion: active || pendingChunkCount > 0,
+      elapsedSeconds,
+      recording,
+    });
+  }, [elapsedSeconds, onActivityChange, pendingChunkCount, recording, state]);
+
+  useEffect(() => {
+    onElapsedSecondsChange?.(elapsedSeconds);
+  }, [elapsedSeconds, onElapsedSecondsChange]);
 
   useEffect(
     () => () => {
       if (timerRef.current) clearInterval(timerRef.current);
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      void releaseWakeLock();
     },
-    [],
+    [releaseWakeLock],
   );
 
   function measuredElapsedSeconds(): number {
@@ -224,29 +343,27 @@ export function RecordingFoundation({
     setElapsedSeconds(measuredElapsedSeconds());
   }
 
-  async function uploadChunk(
-    blob: Blob,
-    sequenceNumber: number,
-  ): Promise<void> {
+  async function uploadChunkOnce(item: PendingChunk): Promise<void> {
     const current = recordingRef.current;
-    if (!current || blob.size === 0 || cancelledRef.current) return;
-    const checksum = await sha256(blob);
+    if (!current || item.blob.size === 0 || cancelledRef.current) return;
+    const checksum = item.checksumSha256 ?? (await sha256(item.blob));
+    item.checksumSha256 = checksum;
     const chunk = await apiRequest<RecordingChunkUpload>(
       `/api/v1/interactions/${interactionId}/recordings/${current.id}/chunks`,
       {
         method: "POST",
         body: JSON.stringify({
-          sequenceNumber,
-          byteSize: blob.size,
+          sequenceNumber: item.sequenceNumber,
+          byteSize: item.blob.size,
           checksumSha256: checksum,
-          idempotencyKey: requestKey(`recording-chunk-${sequenceNumber}`),
+          idempotencyKey: item.createIdempotencyKey,
         }),
       },
     );
     await apiUpload(
       chunk.uploadUrl,
-      blob,
-      normaliseMimeType(mimeTypeRef.current ?? blob.type),
+      item.blob,
+      normaliseMimeType(mimeTypeRef.current ?? item.blob.type),
     );
     await apiRequest(
       `/api/v1/interactions/${interactionId}/recordings/${current.id}/chunks/${chunk.id}/complete`,
@@ -254,11 +371,75 @@ export function RecordingFoundation({
         method: "POST",
         body: JSON.stringify({
           checksumSha256: checksum,
-          idempotencyKey: requestKey(`recording-complete-${sequenceNumber}`),
+          idempotencyKey: item.completeIdempotencyKey,
         }),
       },
     );
-    setUploadedChunks(sequenceNumber + 1);
+    setUploadedChunks((count) => Math.max(count, item.sequenceNumber + 1));
+  }
+
+  async function uploadChunkWithRetry(item: PendingChunk): Promise<void> {
+    let lastError: unknown = null;
+    for (const delay of UPLOAD_RETRY_DELAYS_MS) {
+      if (cancelledRef.current) return;
+      if (delay) await wait(delay);
+      try {
+        await uploadChunkOnce(item);
+        pendingChunksRef.current.delete(item.sequenceNumber);
+        setPendingChunkCount(pendingChunksRef.current.size);
+        return;
+      } catch (requestError: unknown) {
+        lastError = requestError;
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("An audio chunk could not be uploaded.");
+  }
+
+  function queueChunk(blob: Blob, sequenceNumber: number) {
+    const item: PendingChunk = {
+      blob,
+      sequenceNumber,
+      checksumSha256: null,
+      createIdempotencyKey: requestKey(`recording-chunk-${sequenceNumber}`),
+      completeIdempotencyKey: requestKey(
+        `recording-complete-${sequenceNumber}`,
+      ),
+    };
+    pendingChunksRef.current.set(sequenceNumber, item);
+    setPendingChunkCount(pendingChunksRef.current.size);
+    uploadQueueRef.current = uploadQueueRef.current
+      .catch(() => undefined)
+      .then(() => uploadChunkWithRetry(item))
+      .catch((requestError: unknown) => {
+        setError(
+          requestError instanceof Error
+            ? `${requestError.message} The audio remains queued in this tab.`
+            : "Audio is queued in this tab and needs another upload attempt.",
+        );
+      });
+  }
+
+  async function retryQueuedChunks() {
+    setState("uploading");
+    setError(null);
+    for (const item of [...pendingChunksRef.current.values()].sort(
+      (left, right) => left.sequenceNumber - right.sequenceNumber,
+    )) {
+      try {
+        await uploadChunkWithRetry(item);
+      } catch (requestError: unknown) {
+        setState("failed");
+        setError(
+          requestError instanceof Error
+            ? `${requestError.message} Keep this tab open and retry when the connection is stable.`
+            : "Queued audio could not be uploaded yet.",
+        );
+        return;
+      }
+    }
+    await finishUpload();
   }
 
   async function start() {
@@ -277,6 +458,13 @@ export function RecordingFoundation({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      const [audioTrack] = stream.getAudioTracks?.() ?? [];
+      if (audioTrack) {
+        setMicrophoneState(audioTrack.muted ? "muted" : "active");
+        audioTrack.onmute = () => setMicrophoneState("muted");
+        audioTrack.onunmute = () => setMicrophoneState("active");
+        audioTrack.onended = () => setMicrophoneState("ended");
+      }
       const created = await apiRequest<RecordingSession>(
         `/api/v1/interactions/${interactionId}/recordings`,
         {
@@ -305,6 +493,8 @@ export function RecordingFoundation({
       recordingRef.current = started;
       mimeTypeRef.current = mimeType;
       nextSequenceRef.current = 0;
+      pendingChunksRef.current.clear();
+      setPendingChunkCount(0);
       uploadQueueRef.current = Promise.resolve();
       controlQueueRef.current = Promise.resolve();
       const recorder = new MediaRecorder(stream, {
@@ -312,12 +502,14 @@ export function RecordingFoundation({
         audioBitsPerSecond: 16_000,
       });
       recorderRef.current = recorder;
+      setPauseSupported(
+        typeof recorder.pause === "function" &&
+          typeof recorder.resume === "function",
+      );
       recorder.ondataavailable = ({ data }) => {
         if (!data.size || cancelledRef.current) return;
         const sequence = nextSequenceRef.current++;
-        uploadQueueRef.current = uploadQueueRef.current.then(() =>
-          uploadChunk(data, sequence),
-        );
+        queueChunk(data, sequence);
       };
       recorder.onerror = () => {
         setError(
@@ -330,9 +522,12 @@ export function RecordingFoundation({
       recorder.start(CHUNK_INTERVAL_MS);
       timerRef.current = setInterval(updateElapsed, 1_000);
       setElapsedSeconds(1);
+      recorderActiveRef.current = true;
+      void requestWakeLock();
       setState("recording");
     } catch (requestError: unknown) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      setMicrophoneState("inactive");
       const denied =
         requestError instanceof DOMException &&
         ["NotAllowedError", "SecurityError"].includes(requestError.name);
@@ -404,6 +599,11 @@ export function RecordingFoundation({
     updateElapsed();
     try {
       await Promise.all([uploadQueueRef.current, controlQueueRef.current]);
+      if (pendingChunksRef.current.size > 0) {
+        throw new Error(
+          "Some audio is still queued in this tab and must upload before finalisation.",
+        );
+      }
       const durationSeconds = measuredElapsedSeconds();
       const stopped = await apiRequest<RecordingSession>(
         `/api/v1/interactions/${interactionId}/recordings/${current.id}/stop`,
@@ -434,6 +634,7 @@ export function RecordingFoundation({
       setRecording(finalized);
       recordingRef.current = finalized;
       setState("processing");
+      onFinalized?.(finalized);
       await load();
     } catch (requestError: unknown) {
       setState("failed");
@@ -443,8 +644,11 @@ export function RecordingFoundation({
           : "The recording upload could not be finalised.",
       );
     } finally {
+      recorderActiveRef.current = false;
+      await releaseWakeLock();
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      setMicrophoneState("inactive");
     }
   }
 
@@ -497,10 +701,13 @@ export function RecordingFoundation({
 
   async function cancel() {
     cancelledRef.current = true;
+    recorderActiveRef.current = false;
     if (timerRef.current) clearInterval(timerRef.current);
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== "inactive") recorder.stop();
     streamRef.current?.getTracks().forEach((track) => track.stop());
+    await releaseWakeLock();
+    setMicrophoneState("inactive");
     const current = recordingRef.current;
     if (current) {
       try {
@@ -525,6 +732,8 @@ export function RecordingFoundation({
     setRecording(null);
     setElapsedSeconds(0);
     setUploadedChunks(0);
+    pendingChunksRef.current.clear();
+    setPendingChunkCount(0);
     setConsentConfirmed(false);
     setState("ready");
   }
@@ -537,6 +746,9 @@ export function RecordingFoundation({
         recording.lifecycleStatus,
       ));
   const canRecord = ["planned", "in_progress"].includes(lifecycleStatus);
+  const browserCaptureApplies = !["phone_call", "online_meeting"].includes(
+    interactionType,
+  );
   return (
     <section className="form-card" aria-labelledby="recording-foundation-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -561,7 +773,19 @@ export function RecordingFoundation({
         until the session expires.
       </p>
 
-      {!canRecord ? (
+      {!browserCaptureApplies ? (
+        <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">
+          <p role="status" className="font-semibold">
+            {interactionType === "phone_call"
+              ? "A browser cannot reliably record the same phone call running on this device."
+              : "Browser microphone recording does not capture online-meeting system audio reliably."}
+          </p>
+          <p className="mt-2">
+            Continue without recording, then use AI Debrief, Voice Journal, or
+            an authorised import when available.
+          </p>
+        </div>
+      ) : !canRecord ? (
         <p
           role="status"
           className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700"
@@ -577,10 +801,10 @@ export function RecordingFoundation({
               : error}
           </p>
           <Link
-            href="#debrief"
+            href={fallbackHref}
             className="mt-3 inline-block font-bold text-teal-800 hover:underline"
           >
-            Use AI Debrief instead
+            {fallbackLabel}
           </Link>
         </div>
       ) : (
@@ -632,6 +856,32 @@ export function RecordingFoundation({
                 uploaded
               </p>
             ) : null}
+            <dl className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-300 sm:grid-cols-3">
+              <div>
+                <dt>Connection</dt>
+                <dd className="mt-1 font-bold text-white">
+                  {online ? "Online" : "Offline"}
+                </dd>
+              </div>
+              <div>
+                <dt>Microphone</dt>
+                <dd className="mt-1 font-bold capitalize text-white">
+                  {microphoneState}
+                </dd>
+              </div>
+              <div>
+                <dt>Screen wake</dt>
+                <dd className="mt-1 font-bold text-white">
+                  {wakeLockActive ? "Requested" : "Not guaranteed"}
+                </dd>
+              </div>
+            </dl>
+            {pendingChunkCount > 0 ? (
+              <p className="mt-3 text-sm font-semibold text-amber-200">
+                {pendingChunkCount} audio chunk
+                {pendingChunkCount === 1 ? "" : "s"} queued in this tab
+              </p>
+            ) : null}
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
@@ -645,7 +895,7 @@ export function RecordingFoundation({
                 Start recording
               </button>
             ) : null}
-            {state === "recording" ? (
+            {state === "recording" && pauseSupported ? (
               <button
                 type="button"
                 className="secondary-button min-h-12 px-6"
@@ -683,6 +933,16 @@ export function RecordingFoundation({
                 Retry finalisation
               </button>
             ) : null}
+            {state === "failed" && pendingChunkCount > 0 ? (
+              <button
+                type="button"
+                className="primary-button min-h-12 px-6"
+                disabled={!online}
+                onClick={() => void retryQueuedChunks()}
+              >
+                Retry queued audio
+              </button>
+            ) : null}
             {canCancel ? (
               <button
                 type="button"
@@ -716,7 +976,7 @@ export function RecordingFoundation({
           <p role="status" className="font-semibold text-teal-950">
             {transcription.safeMessage}
           </p>
-          {transcription.text ? (
+          {showTranscript && transcription.text ? (
             <div className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-slate-800">
               {transcription.text}
             </div>

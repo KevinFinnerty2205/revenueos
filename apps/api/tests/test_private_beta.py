@@ -39,6 +39,7 @@ from revenueos.demo_data import (
     demo_debrief_ids,
     demo_ids,
     demo_interaction_ids,
+    demo_marker_ids,
     demo_visual_ids,
     reset_demo_data,
     seed_demo_data,
@@ -55,6 +56,7 @@ from revenueos.models import (
     Evidence,
     Interaction,
     InteractionIntelligenceSnapshot,
+    InteractionMarker,
     Meeting,
     Organisation,
     OrganisationMembership,
@@ -187,7 +189,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0025_recording_transcription"
+    assert EXPECTED_MIGRATION_HEAD == "0026_face_to_face_companion"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -531,6 +533,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         interaction_ids = demo_interaction_ids(PRIMARY_ORGANISATION_ID)
         debrief_ids = demo_debrief_ids(PRIMARY_ORGANISATION_ID)
         visual_ids = demo_visual_ids(PRIMARY_ORGANISATION_ID)
+        marker_ids = demo_marker_ids(PRIMARY_ORGANISATION_ID)
         debrief_interaction_ids = debrief_ids[:5]
         companion_interaction_ids, companion_meeting_ids, _, brief_ids = demo_companion_ids(PRIMARY_ORGANISATION_ID)
         async with factory() as session:
@@ -582,6 +585,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             assert visual_snapshot is not None
             assert visual_snapshot.schema_version == 2
             assert visual_snapshot.content_json["sourceLabel"] == "customer whiteboard"
+            assert all([await session.get(InteractionMarker, marker_id) is not None for marker_id in marker_ids])
             assert (TEST_VISUAL_STORAGE / visual.storage_key).is_file()
             assert not any(
                 [
@@ -607,6 +611,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             )
             assert all([await session.get(PreInteractionBrief, brief_id) is None for brief_id in brief_ids])
             assert await session.get(VisualAsset, visual_ids[0]) is None
+            assert all([await session.get(InteractionMarker, marker_id) is None for marker_id in marker_ids])
             assert not (TEST_VISUAL_STORAGE / visual.storage_key).exists()
         await engine.dispose()
 
@@ -949,6 +954,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         factory = async_sessionmaker(engine, expire_on_commit=False)
         capture_session_id = uuid.uuid4()
         evidence_id = uuid.uuid4()
+        marker_id = uuid.uuid4()
         async with factory() as session, session.begin():
             session.add(
                 CaptureSession(
@@ -974,11 +980,25 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
                     lifecycle_status="available",
                 )
             )
+            session.add(
+                InteractionMarker(
+                    id=marker_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    interaction_id=UUID(interaction.json()["id"]),
+                    created_by_user_id=PRIMARY_USER_ID,
+                    marker_type="decision",
+                    recording_offset_ms=15_000,
+                    idempotency_key="export-marker-internal-key",
+                )
+            )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 6
+        assert payload["exportVersion"] == 7
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
+        exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
+        assert exported_marker["marker_type"] == "decision"
+        assert "idempotency_key" not in exported_marker
         assert payload["captureSessions"][0]["id"] == str(capture_session_id)
         assert payload["evidence"][0]["id"] == str(evidence_id)
         assert payload["evidence"][0]["origin_class"] == "salesperson_reported"
@@ -1010,7 +1030,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 6
+        assert download.json()["exportVersion"] == 7
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

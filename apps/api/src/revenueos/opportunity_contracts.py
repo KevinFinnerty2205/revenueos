@@ -6,11 +6,29 @@ from typing import Literal
 from uuid import UUID
 
 from revenueos.contracts import APIModel
-from revenueos.domain import MeetingStatus, OpportunityStage, OpportunityStatus
+from revenueos.domain import (
+    InteractionLifecycleStatus,
+    InteractionType,
+    MeetingStatus,
+    OpportunityStage,
+    OpportunityStatus,
+)
 from revenueos.intelligence_contracts import MeetingIntelligenceResponse
 from revenueos.revenue_brain_reasoning_contracts import RevenueBrainReasoningResponse
 
 IntelligenceReadiness = Literal["unavailable", "not_generated", "partial", "ready"]
+InteractionCaptureStatus = Literal[
+    "planned",
+    "interaction_in_progress",
+    "processing_transcription",
+    "recording_needs_attention",
+    "debrief_review_required",
+    "mixed_capture_complete",
+    "recorded_and_processed",
+    "debrief_completed",
+    "visual_evidence_captured",
+    "interaction_completed",
+]
 
 
 class OpportunityListItemResponse(APIModel):
@@ -110,6 +128,20 @@ class VisualInteractionIntelligenceResponse(APIModel):
     items: list[VisualIntelligenceItemResponse]
 
 
+class OpportunityInteractionCaptureStatusResponse(APIModel):
+    interaction_id: UUID
+    title: str
+    interaction_type: InteractionType
+    lifecycle_status: InteractionLifecycleStatus
+    capture_status: InteractionCaptureStatus
+    recording_status: str | None
+    recording_duration_seconds: int | None
+    debrief_status: str | None
+    visual_count: int
+    marker_count: int
+    updated_at: datetime
+
+
 class OpportunityWorkspaceResponse(APIModel):
     opportunity: OpportunityWorkspaceOpportunityResponse
     reasoning: RevenueBrainReasoningResponse
@@ -118,6 +150,7 @@ class OpportunityWorkspaceResponse(APIModel):
     intelligence: MeetingIntelligenceResponse | None
     reported_intelligence: ReportedInteractionIntelligenceResponse | None = None
     visual_intelligence: VisualInteractionIntelligenceResponse | None = None
+    latest_interaction_capture: OpportunityInteractionCaptureStatusResponse | None = None
     intelligence_sections_available: int
     partial_data: bool
     generated_at: datetime

@@ -112,10 +112,12 @@ WO-012 migration `0022_pre_interaction_brief` follows `0021`, and WO-013 migrati
 brief persistence and no worker/provider
 configuration. See [Pre-Interaction Brief engineering](pre-interaction-brief.md).
 
-WO-014 migration `0024_visual_evidence` is followed by current head
-`0025_recording_transcription`. The latter adds forced-RLS Recording Session,
-Consent, Chunk, usage and immutable Transcript Version/Segment tables. `0024` adds forced-RLS
-visual asset and candidate tables, composite tenant relationships, review
+WO-014 migration `0024_visual_evidence` is followed by WO-015 migration
+`0025_recording_transcription` and the current head
+`0026_face_to_face_companion`. WO-015 adds forced-RLS Recording Session,
+Consent, Chunk, usage and immutable Transcript Version/Segment tables. `0026`
+adds tenant-isolated metadata-only Interaction markers with forced RLS. `0024`
+adds forced-RLS visual asset and candidate tables, composite tenant relationships, review
 guards, private storage lifecycle metadata, schema-v2 visual snapshots and the
 `observed` support class. Its downgrade deletes visual metadata; object cleanup
 must be completed before an explicitly approved downgrade.

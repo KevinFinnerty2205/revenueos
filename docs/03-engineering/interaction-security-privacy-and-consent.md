@@ -1,5 +1,18 @@
 # Interaction security, privacy and consent
 
+## WO-016 browser Companion controls
+
+The Companion derives organisation context only from verified authentication
+and adds no browser-supplied tenant selector. Metadata-only markers are
+controlled, immutable, tenant-predicated and forced-RLS; they contain no notes
+and do not become evidence or intelligence automatically. Export version 7 and
+organisation deletion include their lifecycle.
+
+Recording remains explicitly armed after participant notice/authority
+attestation. Page wake and retry are best effort, foreground-only behaviours.
+Phone calls and online meetings remain passive to avoid false capture claims.
+See the [Companion security review](companion-security-review.md).
+
 - **Status:** Target controls plus implemented WO-011–015 capture foundations.
   Recording-specific controls and residual risks are in the
   [WO-015 recording security review](recording-security-review.md).

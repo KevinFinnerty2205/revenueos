@@ -31,6 +31,7 @@ from revenueos.models import (
     EvidenceFragment,
     Interaction,
     InteractionIntelligenceSnapshot,
+    InteractionMarker,
     Meeting,
     MeetingParticipant,
     Opportunity,
@@ -46,6 +47,7 @@ from revenueos.models import (
 from revenueos.pre_interaction_contracts import (
     BriefInteractionType,
     BriefObjective,
+    BriefParticipant,
     BriefQuestion,
     BriefStakeholder,
     PreInteractionBriefContent,
@@ -157,6 +159,14 @@ def demo_visual_ids(organisation_id: UUID) -> tuple[UUID, ...]:
     return tuple(uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:{label}") for label in labels)
 
 
+def demo_marker_ids(organisation_id: UUID) -> tuple[UUID, UUID]:
+    prefix = str(organisation_id)
+    return (
+        uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-marker-decision"),
+        uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:companion-marker-follow-up"),
+    )
+
+
 def _demo_brief_content(interaction_id: UUID, interaction_type: BriefInteractionType) -> dict[str, object]:
     variants = {
         "face_to_face_meeting": {
@@ -221,6 +231,10 @@ def _demo_brief_content(interaction_id: UUID, interaction_type: BriefInteraction
         success_criteria=(variant["success"],),
         interaction_guidance=variant["guidance"],
         confidence=0.55,
+        company_name="[DEMO] Southern Cross Operations",
+        opportunity_name="[DEMO] Revenue workflow pilot",
+        participants=(BriefParticipant(name="[DEMO] Alex Morgan", role="attendee"),),
+        next_best_action="Confirm one owned and dated next step.",
     ).as_json()
 
 
@@ -278,6 +292,7 @@ async def seed_demo_data(
     interaction_ids = demo_interaction_ids(organisation_id)
     debrief_ids = demo_debrief_ids(organisation_id)
     visual_ids = demo_visual_ids(organisation_id)
+    marker_ids = demo_marker_ids(organisation_id)
     companion_interaction_ids, companion_meeting_ids, participant_ids, brief_ids = demo_companion_ids(organisation_id)
     seeded_at = datetime.now(UTC)
     async with session_factory() as session, session.begin():
@@ -314,6 +329,7 @@ async def seed_demo_data(
                 )
             )
         await session.flush()
+
         linked_interaction_ids: list[UUID] = []
         for index, meeting_id in enumerate(meeting_ids):
             meeting = await session.get(Meeting, meeting_id)
@@ -448,7 +464,7 @@ async def seed_demo_data(
                 )
             if await session.get(PreInteractionBrief, brief_ids[index]) is None:
                 fingerprint = hashlib.sha256(
-                    f"demo-v4:{organisation_id}:{interaction_id}:{interaction_type}".encode()
+                    f"demo-v5:{organisation_id}:{interaction_id}:{interaction_type}".encode()
                 ).hexdigest()
                 session.add(
                     PreInteractionBrief(
@@ -459,7 +475,7 @@ async def seed_demo_data(
                         opportunity_id=opportunity_id,
                         source_context_fingerprint=fingerprint,
                         brief_version=1,
-                        schema_version=1,
+                        schema_version=2,
                         status="completed",
                         content_json=_demo_brief_content(interaction_id, interaction_type),
                         source_references_json=_demo_brief_sources(
@@ -501,6 +517,25 @@ async def seed_demo_data(
                     )
                 )
         await session.flush()
+
+        executive_interaction_id = debrief_interaction_ids[3]
+        marker_fixtures = (
+            (marker_ids[0], "decision", 480_000, "demo-companion-decision"),
+            (marker_ids[1], "follow_up", None, "demo-companion-follow-up"),
+        )
+        for marker_id, marker_type, offset_ms, idempotency_key in marker_fixtures:
+            if await session.get(InteractionMarker, marker_id) is None:
+                session.add(
+                    InteractionMarker(
+                        id=marker_id,
+                        organisation_id=organisation_id,
+                        interaction_id=executive_interaction_id,
+                        created_by_user_id=user_id,
+                        marker_type=marker_type,
+                        recording_offset_ms=offset_ms,
+                        idempotency_key=idempotency_key,
+                    )
+                )
 
         (
             phone_interaction_id,
@@ -903,11 +938,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 6},
+                    metadata_json={"dataset_version": 7},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 6}
+            event.metadata_json = {"dataset_version": 7}
     return {
         "status": "ready",
         "company_id": company_id,
@@ -918,6 +953,7 @@ async def seed_demo_data(
         "debrief_interaction_ids": debrief_interaction_ids,
         "debrief_session_ids": (phone_session_id, trade_show_session_id),
         "visual_ids": visual_ids,
+        "marker_ids": marker_ids,
         "provider_calls": 0,
     }
 

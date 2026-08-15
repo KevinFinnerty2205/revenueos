@@ -96,6 +96,15 @@ class InteractionComplete(APIModel):
         return _timezone_aware(value)
 
 
+class InteractionStart(APIModel):
+    actual_start_at: datetime | None = None
+
+    @field_validator("actual_start_at")
+    @classmethod
+    def actual_start_must_include_timezone(cls, value: datetime | None) -> datetime | None:
+        return _timezone_aware(value)
+
+
 class InteractionResponse(APIModel):
     id: UUID
     organisation_id: UUID

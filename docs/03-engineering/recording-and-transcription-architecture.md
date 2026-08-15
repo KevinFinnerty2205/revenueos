@@ -1,5 +1,19 @@
 # Recording and transcription architecture
 
+## WO-016 Companion orchestration
+
+The mobile browser Companion reuses this recording domain without changing its
+server lifecycle or provider boundary. It adds stable client-side chunk
+idempotency across bounded retry, online/microphone indicators, a page-leave
+warning that includes queued bytes, best-effort Screen Wake Lock and a hard
+interlock before Interaction completion. A tenant-scoped service rule rejects a
+second active recording session for the same Interaction.
+
+Phone calls and online meetings do not expose Companion recording controls.
+The browser cannot claim same-device call capture or reliable meeting
+system-audio capture. Unsent chunks remain only in the current tab's memory;
+verified server chunks continue to use the durable lifecycle below.
+
 - **Status:** WO-015 current implementation for browser-first recording, resumable
   private upload and batch transcription. Near-real-time, native and connector
   paths remain target architecture.

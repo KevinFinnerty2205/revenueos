@@ -692,6 +692,73 @@ class Interaction(TimestampMixin, Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class InteractionMarker(Base):
+    __tablename__ = "interaction_markers"
+    __table_args__ = (
+        CheckConstraint(
+            "marker_type IN ('buying_signal', 'objection', 'decision', 'action_item', "
+            "'risk', 'stakeholder', 'timeline', 'budget', 'procurement', 'follow_up', "
+            "'important_moment', 'customer_question', 'requested_material', 'strong_engagement')",
+            name="ck_interaction_markers_type",
+        ),
+        CheckConstraint(
+            "recording_offset_ms IS NULL OR recording_offset_ms BETWEEN 0 AND 14400000",
+            name="ck_interaction_markers_offset",
+        ),
+        CheckConstraint(
+            "length(trim(idempotency_key)) BETWEEN 1 AND 200",
+            name="ck_interaction_markers_idempotency",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_interaction_markers_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_interaction_markers_creator_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_interaction_markers_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "created_by_user_id",
+            "idempotency_key",
+            name="uq_interaction_markers_idempotency",
+        ),
+        Index(
+            "ix_interaction_markers_organisation_interaction_created",
+            "organisation_id",
+            "interaction_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    marker_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    recording_offset_ms: Mapped[int | None] = mapped_column(Integer)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class PreInteractionBrief(Base):
     __tablename__ = "pre_interaction_briefs"
     __table_args__ = (

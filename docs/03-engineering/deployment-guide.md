@@ -101,7 +101,7 @@ tenant-scoped storage lifecycle. Production visual capture additionally
 requires private S3-compatible storage, a deployment-specific signing secret
 and explicit `visualEvidence`/`presentationMode` flag review.
 
-WO-015 requires current head `0025_recording_transcription`. Apply it once before
+WO-016 requires current head `0026_face_to_face_companion`. Apply it once before
 the matching API/web/worker release and verify six new forced-RLS tables, transcript
 history backfill, the worker organisation-discovery function and object storage.
 Keep recording/transcription/automatic-intelligence flags false initially. Production

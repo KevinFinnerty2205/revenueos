@@ -565,7 +565,7 @@ Not every listed integration is a prerequisite for the first pilot or private be
 
 ## Next sequencing decision
 
-WO-015 is the current implemented baseline. WO-009 supplies the smallest verified
+WO-016 is the current implemented baseline. WO-009 supplies the smallest verified
 identity, organisation-administration and operational controls needed for a
 controlled beta, so the older Sprint 4 description below is retained as target
 roadmap history rather than an instruction to rebuild that surface. Production
@@ -575,8 +575,8 @@ scope still requires a separately approved work order.
 
 WO-011 Interaction Domain Foundation, WO-012 preparation, WO-013 reviewed
 non-recording AI Debrief/Voice Journal and WO-014 browser-first visual evidence and
-Presentation Mode, plus WO-015 optional browser recording and batch transcription,
-are complete. Any recommended next work must be separately
+Presentation Mode, WO-015 optional browser recording and batch transcription,
+plus WO-016 foreground browser Companion orchestration are complete. Any recommended next work must be separately
 authorised from the Interaction Intelligence roadmap.
 The older Sprint 4–26 entries remain useful integration/release-gate context but must
 be reconciled into the Interaction work orders rather than implemented in parallel

@@ -922,6 +922,7 @@ test("a presentation supports browser image upload, explicit review and intellig
                 }
               : null,
           visualIntelligence: visualIntelligencePayload(),
+          latestInteractionCapture: null,
         },
       });
     },
@@ -1262,7 +1263,7 @@ test("a completed phone call supports a typed debrief, review and source-aware u
   await expect(page.getByText(/Reported by you/)).toBeVisible();
 });
 
-test("browser recording persists a consented transcript into existing intelligence surfaces", async ({
+test("mobile Companion recording path persists a consented transcript into existing intelligence surfaces", async ({
   page,
 }) => {
   let interaction: Record<string, unknown> = interactionRecord({
@@ -1279,7 +1280,20 @@ test("browser recording persists a consented transcript into existing intelligen
   let recordingCreated = false;
   let recordingLifecycle = "created";
   let transcriptionReads = 0;
+  let chunkUploadAttempts = 0;
   let intelligenceGenerated = false;
+  const markers: Array<Record<string, unknown>> = [];
+  const visuals: Array<Record<string, unknown>> = [];
+  let recordingDebrief = debriefSession("collecting", {
+    interactionId: "interaction-recording",
+    currentQuestion: {
+      status: "ask",
+      question: "What important outcome might the recording have missed?",
+      reason: "Fill the remaining capture gaps.",
+      target: "other",
+      priority: "high",
+    },
+  });
 
   const recording = () => ({
     id: "recording-1",
@@ -1378,7 +1392,7 @@ test("browser recording persists a consented transcript into existing intelligen
             aiCompanion: true,
             aiDebrief: true,
             voiceJournal: true,
-            visualEvidence: false,
+            visualEvidence: true,
             presentationMode: false,
             recordingCapture: true,
             transcription: true,
@@ -1408,6 +1422,70 @@ test("browser recording persists a consented transcript into existing intelligen
         await route.fulfill({
           json: companionBrief("face_to_face_meeting", briefReviewed),
         });
+        return;
+      }
+      if (path.endsWith("/companion/markers")) {
+        if (request.method() === "POST") {
+          const body = request.postDataJSON() as {
+            markerType: string;
+            recordingOffsetMs: number | null;
+          };
+          const marker = {
+            id: `marker-${markers.length + 1}`,
+            interactionId: "interaction-recording",
+            createdByUserId: "user-1",
+            markerType: body.markerType,
+            recordingOffsetMs: body.recordingOffsetMs,
+            createdAt: "2026-08-14T02:11:00Z",
+          };
+          markers.push(marker);
+          await route.fulfill({ status: 201, json: marker });
+        } else {
+          await route.fulfill({ json: markers });
+        }
+        return;
+      }
+      if (path.endsWith("/visual-evidence/uploads")) {
+        await route.fulfill({
+          status: 201,
+          json: visualEvidence("uploading", {
+            interactionId: "interaction-recording",
+            uploadUrl: `${path}/visual-1/content?token=recording-test`,
+            uploadExpiresAt: "2026-08-14T02:20:00Z",
+          }),
+        });
+        return;
+      }
+      if (path.endsWith("/visual-evidence/visual-1/complete")) {
+        await route.fulfill({
+          json: visualEvidence("uploaded", {
+            interactionId: "interaction-recording",
+          }),
+        });
+        return;
+      }
+      if (path.endsWith("/visual-evidence/visual-1/process")) {
+        const completedVisual = visualEvidence("completed", {
+          interactionId: "interaction-recording",
+        });
+        visuals.splice(0, visuals.length, completedVisual);
+        await route.fulfill({ json: completedVisual });
+        return;
+      }
+      if (path.endsWith("/visual-evidence")) {
+        await route.fulfill({ json: visuals });
+        return;
+      }
+      if (
+        path === "/api/v1/interactions/interaction-recording/start" &&
+        request.method() === "POST"
+      ) {
+        interaction = {
+          ...interaction,
+          lifecycleStatus: "in_progress",
+          actualStartAt: "2026-08-14T02:10:00Z",
+        };
+        await route.fulfill({ json: interaction });
         return;
       }
       if (
@@ -1464,7 +1542,14 @@ test("browser recording persists a consented transcript into existing intelligen
         return;
       }
       if (path.endsWith("/content") && request.method() === "PUT") {
-        await route.fulfill({ status: 204 });
+        if (path.includes("/chunks/")) {
+          chunkUploadAttempts += 1;
+          await route.fulfill({
+            status: chunkUploadAttempts === 1 ? 503 : 204,
+          });
+        } else {
+          await route.fulfill({ status: 204 });
+        }
         return;
       }
       if (path.endsWith("/complete") && path.includes("/chunks/")) {
@@ -1518,6 +1603,72 @@ test("browser recording persists a consented transcript into existing intelligen
               : "Transcription is processing.",
           },
         });
+        return;
+      }
+      if (path.endsWith("/debrief") && request.method() === "POST") {
+        await route.fulfill({ status: 201, json: recordingDebrief });
+        return;
+      }
+      if (path.endsWith("/response")) {
+        recordingDebrief = debriefSession("collecting", {
+          interactionId: "interaction-recording",
+          questionCount: 1,
+          currentQuestion: {
+            status: "complete",
+            question: null,
+            reason: "The remaining gap is captured.",
+            target: null,
+            priority: null,
+          },
+          canFinish: true,
+          turns: [
+            {
+              id: "recording-turn-1",
+              turnNumber: 1,
+              question: recordingDebrief.currentQuestion,
+              answerText: "Morgan owns the final security review.",
+              inputMode: "text",
+              createdAt: "2026-08-14T02:16:00Z",
+            },
+          ],
+        });
+        await route.fulfill({ json: recordingDebrief });
+        return;
+      }
+      if (path.endsWith("/finish")) {
+        recordingDebrief = debriefSession("review", {
+          interactionId: "interaction-recording",
+          currentQuestion: null,
+          candidates: [reportedCandidate()],
+        });
+        await route.fulfill({ json: recordingDebrief });
+        return;
+      }
+      if (path.endsWith("/review")) {
+        recordingDebrief = debriefSession("completed", {
+          interactionId: "interaction-recording",
+          currentQuestion: null,
+          candidates: [
+            {
+              ...reportedCandidate(),
+              validationState: "verified",
+              userReviewState: "accepted",
+              acceptedEvidenceId: "recording-gap-evidence",
+            },
+          ],
+          interactionIntelligenceId: "recording-gap-intelligence",
+          revenueBrainSnapshotId: "recording-gap-brain",
+          completedAt: "2026-08-14T02:18:00Z",
+          acceptedCount: 1,
+          rejectedCount: 0,
+          interactionUpdated: true,
+          revenueBrainUpdated: true,
+        });
+        await route.fulfill({ json: recordingDebrief });
+        return;
+      }
+      if (path.includes("/debrief/session-1")) {
+        await route.fulfill({ json: recordingDebrief });
         return;
       }
       await route.fulfill({ json: interaction });
@@ -1663,11 +1814,10 @@ test("browser recording persists a consented transcript into existing intelligen
   await page
     .getByRole("link", { name: "Continue with development identity" })
     .click();
-  await page.goto("/interactions/interaction-recording");
-  await expect(
-    page.getByRole("heading", { name: "Prepare for this interaction" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Mark as reviewed" }).click();
+  await page.goto("/interactions/interaction-recording/companion");
+  await expect(page.getByText("30-second brief")).toBeVisible();
+  await page.getByRole("button", { name: "Start interaction" }).click();
+  await page.getByRole("button", { name: "Record interaction" }).click();
   await page
     .getByRole("checkbox", { name: /participants have received/i })
     .check();
@@ -1684,15 +1834,36 @@ test("browser recording persists a consented transcript into existing intelligen
     page.getByText(
       "The customer approved the pilot and confirmed procurement ownership.",
     ),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  if (process.env.CAPTURE_WO_016_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-016-companion-recording.png",
+      fullPage: true,
+    });
+  }
   if (process.env.CAPTURE_WO_015_SCREENSHOT === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-015-recording-transcription.png",
       fullPage: true,
     });
   }
-  await page.reload();
-  await expect(page.getByText("Transcription is ready.")).toBeVisible();
+  await page.getByRole("button", { name: "Add marker" }).click();
+  await page.getByRole("button", { name: "Decision" }).click();
+  await expect(page.getByText("Decision marked.")).toBeVisible();
+  await page.getByRole("button", { name: "Add photo" }).click();
+  await page.getByLabel("Choose an image").setInputFiles({
+    name: "recording-whiteboard.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52,
+    ]),
+  });
+  await page
+    .getByRole("checkbox", { name: /authorised to upload this image/i })
+    .check();
+  await page.getByRole("button", { name: "Upload and prepare review" }).click();
+  await expect(page.getByText(/Image saved/i)).toBeVisible();
   for (const prohibited of [
     "providerRequestId",
     "transcriptionRequestId",
@@ -1703,13 +1874,34 @@ test("browser recording persists a consented transcript into existing intelligen
     await expect(page.getByText(prohibited, { exact: false })).toHaveCount(0);
   }
 
-  await page.getByRole("button", { name: "Complete interaction" }).click();
+  await page.getByRole("button", { name: "End interaction" }).click();
   await expect(
     page.getByRole("heading", {
-      name: "Capture what changed while it is fresh",
+      name: "Fill the gaps while they are fresh",
     }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Open Meeting Intelligence" }).click();
+  await page.getByRole("checkbox", { name: /safely stopped/i }).check();
+  await page.getByRole("button", { name: "Start typed debrief" }).click();
+  await expect(
+    page.getByText("What important outcome might the recording have missed?"),
+  ).toBeVisible();
+  await page
+    .getByLabel("Your answer")
+    .fill("Morgan owns the final security review.");
+  await page.getByRole("button", { name: "Save answer" }).click();
+  await page.getByRole("button", { name: "Review captured evidence" }).click();
+  await page
+    .getByRole("button", { name: "Finish review and update intelligence" })
+    .click();
+  await expect(page.getByText("Debrief complete")).toBeVisible();
+  await expect(
+    page.getByText(
+      /Reviewed evidence saved to the interaction and Revenue Brain/i,
+    ),
+  ).toBeVisible();
+  expect(chunkUploadAttempts).toBeGreaterThan(1);
+  expect(visuals).toHaveLength(1);
+  await page.goto("/meetings/meeting-1");
   await page.getByRole("tab", { name: "Intelligence" }).click();
   await page
     .getByRole("button", { name: "Generate Meeting Intelligence" })
@@ -1722,7 +1914,265 @@ test("browser recording persists a consented transcript into existing intelligen
   await page.goto("/companies/company-1");
   await expect(page.getByText("Meeting snapshot")).toBeVisible();
   expect(intelligenceGenerated).toBe(true);
-  expect(briefReviewed).toBe(true);
+});
+
+test("mobile Companion passive path captures a marker and photo before a reviewed debrief", async ({
+  page,
+}) => {
+  let interaction: Record<string, unknown> = interactionRecord({
+    id: "interaction-passive",
+    title: "Executive renewal lunch",
+    interactionType: "executive_lunch",
+    opportunityId: "opportunity-1",
+    briefState: "completed",
+    briefGeneratedAt: "2026-08-14T02:00:00Z",
+  });
+  const markers: Array<Record<string, unknown>> = [];
+  const visuals: Array<Record<string, unknown>> = [];
+  let passiveDebrief = debriefSession("collecting", {
+    interactionId: "interaction-passive",
+  });
+  let recordingPostCount = 0;
+
+  await page.route(
+    "http://localhost:8000/api/v1/beta/capabilities",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          featureFlags: {
+            aiCompanion: true,
+            aiDebrief: true,
+            voiceJournal: true,
+            visualEvidence: true,
+            recordingCapture: true,
+          },
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/interactions/interaction-passive**",
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith("/companion/brief")) {
+        await route.fulfill({
+          json: companionBrief("executive_lunch", false),
+        });
+        return;
+      }
+      if (path.endsWith("/companion/markers")) {
+        if (request.method() === "POST") {
+          const body = request.postDataJSON() as { markerType: string };
+          const marker = {
+            id: `passive-marker-${markers.length + 1}`,
+            interactionId: "interaction-passive",
+            createdByUserId: "user-1",
+            markerType: body.markerType,
+            recordingOffsetMs: null,
+            createdAt: "2026-08-14T02:15:00Z",
+          };
+          markers.push(marker);
+          await route.fulfill({ status: 201, json: marker });
+        } else {
+          await route.fulfill({ json: markers });
+        }
+        return;
+      }
+      if (path.endsWith("/visual-evidence/uploads")) {
+        await route.fulfill({
+          status: 201,
+          json: visualEvidence("uploading", {
+            interactionId: "interaction-passive",
+            uploadUrl: `${path}/visual-1/content?token=passive-test`,
+            uploadExpiresAt: "2026-08-14T02:20:00Z",
+          }),
+        });
+        return;
+      }
+      if (path.endsWith("/content") && request.method() === "PUT") {
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      if (path.endsWith("/visual-evidence/visual-1/complete")) {
+        await route.fulfill({
+          json: visualEvidence("uploaded", {
+            interactionId: "interaction-passive",
+          }),
+        });
+        return;
+      }
+      if (path.endsWith("/visual-evidence/visual-1/process")) {
+        const completedVisual = visualEvidence("completed", {
+          interactionId: "interaction-passive",
+        });
+        visuals.splice(0, visuals.length, completedVisual);
+        await route.fulfill({ json: completedVisual });
+        return;
+      }
+      if (path.endsWith("/visual-evidence")) {
+        await route.fulfill({ json: visuals });
+        return;
+      }
+      if (path.endsWith("/recordings")) {
+        if (request.method() === "POST") recordingPostCount += 1;
+        await route.fulfill({ json: [] });
+        return;
+      }
+      if (
+        path === "/api/v1/interactions/interaction-passive/start" &&
+        request.method() === "POST"
+      ) {
+        interaction = {
+          ...interaction,
+          lifecycleStatus: "in_progress",
+          actualStartAt: "2026-08-14T02:10:00Z",
+        };
+        await route.fulfill({ json: interaction });
+        return;
+      }
+      if (
+        path === "/api/v1/interactions/interaction-passive/complete" &&
+        request.method() === "POST"
+      ) {
+        interaction = {
+          ...interaction,
+          lifecycleStatus: "completed",
+          actualEndAt: "2026-08-14T03:00:00Z",
+        };
+        await route.fulfill({ json: interaction });
+        return;
+      }
+      if (path.endsWith("/debrief") && request.method() === "POST") {
+        await route.fulfill({ status: 201, json: passiveDebrief });
+        return;
+      }
+      if (path.endsWith("/response")) {
+        passiveDebrief = debriefSession("collecting", {
+          interactionId: "interaction-passive",
+          questionCount: 1,
+          currentQuestion: {
+            status: "complete",
+            question: null,
+            reason: "The reported outcome is ready for review.",
+            target: null,
+            priority: null,
+          },
+          canFinish: true,
+          turns: [
+            {
+              id: "passive-turn-1",
+              turnNumber: 1,
+              question: passiveDebrief.currentQuestion,
+              answerText: "The customer asked for a revised rollout plan.",
+              inputMode: "text",
+              createdAt: "2026-08-14T03:02:00Z",
+            },
+          ],
+        });
+        await route.fulfill({ json: passiveDebrief });
+        return;
+      }
+      if (path.endsWith("/finish")) {
+        passiveDebrief = debriefSession("review", {
+          interactionId: "interaction-passive",
+          currentQuestion: null,
+          candidates: [reportedCandidate()],
+        });
+        await route.fulfill({ json: passiveDebrief });
+        return;
+      }
+      if (path.endsWith("/review")) {
+        passiveDebrief = debriefSession("completed", {
+          interactionId: "interaction-passive",
+          currentQuestion: null,
+          candidates: [
+            {
+              ...reportedCandidate(),
+              validationState: "verified",
+              userReviewState: "accepted",
+              acceptedEvidenceId: "passive-evidence",
+            },
+          ],
+          interactionIntelligenceId: "passive-intelligence",
+          revenueBrainSnapshotId: "passive-brain",
+          completedAt: "2026-08-14T03:05:00Z",
+          acceptedCount: 1,
+          rejectedCount: 0,
+          interactionUpdated: true,
+          revenueBrainUpdated: true,
+        });
+        await route.fulfill({ json: passiveDebrief });
+        return;
+      }
+      if (path.includes("/debrief/session-1")) {
+        await route.fulfill({ json: passiveDebrief });
+        return;
+      }
+      await route.fulfill({ json: interaction });
+    },
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/interactions/interaction-passive/companion");
+  await page.getByRole("button", { name: "Start interaction" }).click();
+  await expect(
+    page.getByText(/Passive Companion is recommended/i),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Continue without recording" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "No recording or listening" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Add marker" }).click();
+  await page.getByRole("button", { name: "Question", exact: true }).click();
+  await page.getByRole("button", { name: "Add photo" }).click();
+  await page.getByLabel("Choose an image").setInputFiles({
+    name: "lunch-whiteboard.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52,
+    ]),
+  });
+  await page
+    .getByRole("checkbox", { name: /authorised to upload this image/i })
+    .check();
+  await page.getByRole("button", { name: "Upload and prepare review" }).click();
+  await expect(page.getByText(/Image saved/i)).toBeVisible();
+
+  await page.getByRole("button", { name: "End interaction" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Fill the gaps while they are fresh" }),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_016_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-016-companion-passive-after.png",
+      fullPage: true,
+    });
+  }
+  await page.getByRole("checkbox", { name: /safely stopped/i }).check();
+  await page.getByRole("button", { name: "Start typed debrief" }).click();
+  await expect(page.getByText("How did it go?")).toBeVisible();
+  await page
+    .getByLabel("Your answer")
+    .fill("The customer asked for a revised rollout plan.");
+  await page.getByRole("button", { name: "Save answer" }).click();
+  await page.getByRole("button", { name: "Review captured evidence" }).click();
+  await page
+    .getByRole("button", { name: "Finish review and update intelligence" })
+    .click();
+  await expect(page.getByText("Debrief complete")).toBeVisible();
+  await expect(
+    page.getByText(
+      /Reviewed evidence saved to the interaction and Revenue Brain/i,
+    ),
+  ).toBeVisible();
+  expect(recordingPostCount).toBe(0);
+  expect(markers).toHaveLength(1);
+  expect(visuals).toHaveLength(1);
 });
 
 test("meeting detail orchestrates and persists the unified Meeting Intelligence workspace", async ({
@@ -2872,6 +3322,10 @@ function companionBrief(interactionType: string, reviewed: boolean) {
           ? "Keep the call concise, lead with the objective and close with a confirmed next step."
           : "Keep the objective, stakeholder priorities and success criteria easy to scan before the meeting.",
       confidence: 0.82,
+      companyName: "Southern Cross Operations",
+      opportunityName: "Evaluation-stage pilot",
+      participants: [{ name: "Alex Morgan", role: "champion" }],
+      nextBestAction: "Confirm procurement ownership.",
     },
   };
 }

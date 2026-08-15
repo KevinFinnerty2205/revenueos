@@ -375,6 +375,31 @@ export interface Interaction extends TenantEntity {
   briefGeneratedAt: string | null;
 }
 
+export type InteractionMarkerType =
+  | "buying_signal"
+  | "objection"
+  | "decision"
+  | "action_item"
+  | "risk"
+  | "stakeholder"
+  | "timeline"
+  | "budget"
+  | "procurement"
+  | "follow_up"
+  | "important_moment"
+  | "customer_question"
+  | "requested_material"
+  | "strong_engagement";
+
+export interface InteractionMarker {
+  id: string;
+  interactionId: string;
+  createdByUserId: string;
+  markerType: InteractionMarkerType;
+  recordingOffsetMs: number | null;
+  createdAt: string;
+}
+
 export type DebriefCaptureType = "ai_debrief" | "voice_journal";
 export type DebriefInputMode = "text" | "voice";
 export type DebriefLifecycleStatus =
@@ -515,6 +540,10 @@ export interface PreInteractionBriefContent {
   successCriteria: string[];
   interactionGuidance: string;
   confidence: number;
+  companyName: string | null;
+  opportunityName: string | null;
+  participants: Array<{ name: string; role: string }>;
+  nextBestAction: string | null;
 }
 
 export interface BriefVersionSummary {
@@ -1489,7 +1518,34 @@ export interface OpportunityWorkspaceResponse {
   intelligence: MeetingIntelligenceResponse | null;
   reportedIntelligence: ReportedInteractionIntelligence | null;
   visualIntelligence: VisualInteractionIntelligence | null;
+  latestInteractionCapture: OpportunityInteractionCaptureStatus | null;
   intelligenceSectionsAvailable: number;
   partialData: boolean;
   generatedAt: string;
+}
+
+export type InteractionCaptureStatus =
+  | "planned"
+  | "interaction_in_progress"
+  | "processing_transcription"
+  | "recording_needs_attention"
+  | "debrief_review_required"
+  | "mixed_capture_complete"
+  | "recorded_and_processed"
+  | "debrief_completed"
+  | "visual_evidence_captured"
+  | "interaction_completed";
+
+export interface OpportunityInteractionCaptureStatus {
+  interactionId: string;
+  title: string;
+  interactionType: InteractionType;
+  lifecycleStatus: InteractionLifecycleStatus;
+  captureStatus: InteractionCaptureStatus;
+  recordingStatus: string | null;
+  recordingDurationSeconds: number | null;
+  debriefStatus: string | null;
+  visualCount: number;
+  markerCount: number;
+  updatedAt: string;
 }

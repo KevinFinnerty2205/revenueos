@@ -180,7 +180,15 @@ class DeterministicDebriefReasoning:
     """Application-owned v1 question and extraction policy with strict output contracts."""
 
     @staticmethod
-    def opening_question() -> DebriefQuestion:
+    def opening_question(*, gap_fill: bool = False) -> DebriefQuestion:
+        if gap_fill:
+            return DebriefQuestion(
+                status="ask",
+                question="What important outcome might the recording have missed?",
+                reason="A final recording is available, so this debrief focuses on gaps rather than repeating the interaction.",
+                target="other",
+                priority="high",
+            )
         return DebriefQuestion(
             status="ask",
             question="How did it go?",
@@ -199,13 +207,26 @@ class DeterministicDebriefReasoning:
         question_count: int,
         max_questions: int,
         brief_questions: tuple[str, ...],
+        direct_supported_targets: tuple[str, ...] = (),
+        marker_targets: tuple[str, ...] = (),
     ) -> DebriefQuestion:
         if question_count >= max_questions or self._user_finished(answers[-1]):
             return self.complete_question("The configured question limit or the user’s finish signal was reached.")
         reported = " ".join(answers).lower()
         templates = (*TYPE_QUESTIONS.get(interaction_type, ()), *GENERAL_QUESTIONS)
+        marker_template_targets = set(marker_targets) - set(direct_supported_targets) - set(asked_targets)
+        templates = (
+            *(item for item in templates if item.target in marker_template_targets),
+            *templates,
+        )
+        visited_targets: set[str] = set()
         for template in templates:
+            if template.target in visited_targets:
+                continue
+            visited_targets.add(template.target)
             if template.target in asked_targets:
+                continue
+            if template.target in direct_supported_targets:
                 continue
             if any(term in reported for term in template.answer_terms):
                 continue

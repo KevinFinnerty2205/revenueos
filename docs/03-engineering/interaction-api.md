@@ -14,9 +14,13 @@ not-found response and cannot be enumerated.
 | `GET`    | `/interactions/{interactionId}`                                                    | Read one active Interaction                                   |
 | `PATCH`  | `/interactions/{interactionId}`                                                    | Update supplied fields and lifecycle                          |
 | `POST`   | `/interactions/{interactionId}/complete`                                           | Idempotently complete an Interaction                          |
+| `POST`   | `/interactions/{interactionId}/start`                                              | Idempotently enter the Companion DURING phase                 |
 | `GET`    | `/interactions/{interactionId}/companion/brief`                                    | Read product-safe preparation state/result                    |
 | `POST`   | `/interactions/{interactionId}/companion/brief`                                    | Create or reuse a deterministic brief                         |
 | `POST`   | `/interactions/{interactionId}/companion/brief/review`                             | Mark the latest completed brief reviewed                      |
+| `POST`   | `/interactions/{interactionId}/companion/markers`                                 | Create/reuse a controlled metadata-only quick marker          |
+| `GET`    | `/interactions/{interactionId}/companion/markers`                                 | List active quick-marker metadata                             |
+| `DELETE` | `/interactions/{interactionId}/companion/markers/{markerId}`                      | Soft-delete a marker before Interaction completion            |
 | `POST`   | `/interactions/{interactionId}/visual-evidence/uploads`                            | Create/reuse a private visual upload grant                    |
 | `PUT`    | `/interactions/{interactionId}/visual-evidence/{visualId}/content`                 | Upload bytes through the local private adapter                |
 | `POST`   | `/interactions/{interactionId}/visual-evidence/{visualId}/complete`                | Verify and sanitise the uploaded image                        |
@@ -45,6 +49,15 @@ not-found response and cannot be enumerated.
 There is deliberately no generic public Capture Session or Evidence endpoint.
 Visual routes expose the narrow reviewed workflow only; they never expose a
 freely supplied organisation ID or durable storage key.
+
+## Browser Companion contract
+
+The Companion route is a web orchestration surface; the API continues to expose
+narrow capability endpoints. Start stores the first actual start time and is
+idempotent once `in_progress`. Markers use a controlled type, creator/time and
+optional recording offset, with no free text. They can be created/deleted only
+while `in_progress`, never create evidence automatically, and remain read-only
+after completion. See the [Companion lifecycle guide](companion-state-lifecycle-guide.md).
 
 ## Recording contract
 

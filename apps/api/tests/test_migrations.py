@@ -77,9 +77,10 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "recording_chunks",
             "transcript_versions",
             "transcript_segments",
+            "interaction_markers",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
@@ -107,6 +108,13 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         assert interaction_columns["interaction_type"] == 1
         assert interaction_columns["lifecycle_status"] == 1
         assert interaction_columns["created_by_user_id"] == 1
+        marker_columns = {
+            row[1]: row[3] for row in connection.execute("PRAGMA table_info(interaction_markers)").fetchall()
+        }
+        assert marker_columns["organisation_id"] == 1
+        assert marker_columns["interaction_id"] == 1
+        assert marker_columns["marker_type"] == 1
+        assert marker_columns["recording_offset_ms"] == 0
         brief_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(pre_interaction_briefs)").fetchall()
         }
@@ -787,7 +795,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
         connection.execute(
             """
@@ -841,7 +849,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
         connection.execute(
             """
@@ -887,7 +895,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
@@ -903,7 +911,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
 
     command.downgrade(configuration, "0003_meeting_domain")
@@ -941,7 +949,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
 
     command.downgrade(configuration, "0002_core_business_entities")
@@ -1008,7 +1016,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_insights",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
 
     command.downgrade(configuration, "0018_revenue_brain")
@@ -1028,7 +1036,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
 
 
@@ -1042,11 +1050,11 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
     assert [revision.revision for revision in script.walk_revisions()][:3] == [
+        "0026_face_to_face_companion",
         "0025_recording_transcription",
         "0024_visual_evidence",
-        "0023_ai_debrief_voice_journal",
     ]
-    assert script.get_heads() == ["0025_recording_transcription"]
+    assert script.get_heads() == ["0026_face_to_face_companion"]
     command.upgrade(configuration, "0020_private_beta_readiness")
 
     organisation_a = uuid.uuid4()
@@ -1156,7 +1164,7 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
         assert {row[0]: row[1] for row in connection.execute("SELECT id, interaction_id FROM meetings")} == expected
         assert connection.execute("SELECT count(*) FROM interactions").fetchone() == (3,)
@@ -1272,7 +1280,7 @@ def test_pre_interaction_brief_migration_is_immutable_and_reupgrades_cleanly(
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM pre_interaction_briefs").fetchone() == (0,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
 
 
@@ -1402,7 +1410,7 @@ def test_visual_evidence_migration_review_guard_and_downgrade_reupgrade(
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM visual_assets").fetchone() == (0,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
 
 
@@ -1470,7 +1478,7 @@ def test_recording_transcription_migration_backfills_history_and_reupgrades_clea
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
         )
         assert connection.execute("SELECT transcript_id, version, raw_text FROM transcript_versions").fetchone() == (
             transcript_id,
@@ -1500,7 +1508,88 @@ def test_recording_transcription_migration_backfills_history_and_reupgrades_clea
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM transcript_versions").fetchone() == (1,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0025_recording_transcription",
+            "0026_face_to_face_companion",
+        )
+
+
+def test_face_to_face_companion_marker_migration_is_immutable_and_reupgrades_cleanly(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "face-to-face-companion-migration.db"
+    monkeypatch.setenv(  # type: ignore[attr-defined]
+        "DATABASE_URL",
+        f"sqlite+aiosqlite:///{database_path}",
+    )
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "0025_recording_transcription")
+    organisation_id = uuid.uuid4().hex
+    user_id = uuid.uuid4().hex
+    interaction_id = uuid.uuid4().hex
+    marker_id = uuid.uuid4().hex
+
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Marker tenant', ?)",
+            (organisation_id, f"marker-{organisation_id}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Marker user')",
+            (user_id, f"marker-user-{user_id}", f"{user_id}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO interactions
+                (id, organisation_id, interaction_type, lifecycle_status, title,
+                 creation_origin, created_by_user_id)
+            VALUES (?, ?, 'face_to_face_meeting', 'in_progress', 'Marker interaction', 'manual', ?)
+            """,
+            (interaction_id, organisation_id, user_id),
+        )
+        connection.commit()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            """
+            INSERT INTO interaction_markers
+                (id, organisation_id, interaction_id, created_by_user_id,
+                 marker_type, recording_offset_ms, idempotency_key)
+            VALUES (?, ?, ?, ?, 'buying_signal', 12000, 'marker-key')
+            """,
+            (marker_id, organisation_id, interaction_id, user_id),
+        )
+        with pytest.raises(IntegrityError, match="immutable"):
+            connection.execute(
+                "UPDATE interaction_markers SET marker_type = 'risk' WHERE id = ?",
+                (marker_id,),
+            )
+        connection.execute(
+            "UPDATE interaction_markers SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (marker_id,),
+        )
+        with pytest.raises(IntegrityError, match="immutable"):
+            connection.execute(
+                "UPDATE interaction_markers SET deleted_at = NULL WHERE id = ?",
+                (marker_id,),
+            )
+
+    command.downgrade(configuration, "0025_recording_transcription")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "interaction_markers" not in tables
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT count(*) FROM interaction_markers").fetchone() == (0,)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0026_face_to_face_companion",
         )
 
 
@@ -1543,7 +1632,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0025_recording_transcription"
+                    assert version == "0026_face_to_face_companion"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

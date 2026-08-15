@@ -136,6 +136,10 @@ class DebriefService:
             if request.capture_type == "voice_journal"
             else self.settings.private_beta_debrief_question_cap
         )
+        start_context = await self.repository.normalised_start_context(
+            self.tenant.organisation_id,
+            interaction,
+        )
         debrief = DebriefSession(
             id=session_id,
             organisation_id=self.tenant.organisation_id,
@@ -145,7 +149,9 @@ class DebriefService:
             idempotency_key=request.idempotency_key,
             question_count=0,
             max_questions=max_questions,
-            current_question_json=self.reasoning.opening_question().model_dump(mode="json", by_alias=False),
+            current_question_json=self.reasoning.opening_question(
+                gap_fill=start_context.get("directRecordingAvailable") is True
+            ).model_dump(mode="json", by_alias=False),
             safety_confirmed_at=now,
             voice_processing_acknowledged_at=now if request.voice_processing_acknowledged else None,
         )

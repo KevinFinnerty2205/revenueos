@@ -24,16 +24,23 @@ class RecordingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_interaction(self, organisation_id: UUID, interaction_id: UUID) -> Interaction | None:
+    async def get_interaction(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> Interaction | None:
+        statement = select(Interaction).where(
+            Interaction.organisation_id == organisation_id,
+            Interaction.id == interaction_id,
+            Interaction.deleted_at.is_(None),
+        )
+        if for_update:
+            statement = statement.with_for_update()
         return cast(
             Interaction | None,
-            await self.session.scalar(
-                select(Interaction).where(
-                    Interaction.organisation_id == organisation_id,
-                    Interaction.id == interaction_id,
-                    Interaction.deleted_at.is_(None),
-                )
-            ),
+            await self.session.scalar(statement),
         )
 
     async def get_meeting_for_interaction(self, organisation_id: UUID, interaction_id: UUID) -> Meeting | None:
@@ -114,6 +121,28 @@ class RecordingRepository:
                 )
             )
             or 0
+        )
+
+    async def active_recording_for_interaction(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+    ) -> RecordingSession | None:
+        return cast(
+            RecordingSession | None,
+            await self.session.scalar(
+                select(RecordingSession)
+                .where(
+                    RecordingSession.organisation_id == organisation_id,
+                    RecordingSession.interaction_id == interaction_id,
+                    RecordingSession.lifecycle_status.in_(
+                        ("created", "recording", "uploading", "uploaded", "transcribing")
+                    ),
+                    RecordingSession.deleted_at.is_(None),
+                )
+                .order_by(RecordingSession.created_at.desc(), RecordingSession.id.desc())
+                .limit(1)
+            ),
         )
 
     async def find_chunk(

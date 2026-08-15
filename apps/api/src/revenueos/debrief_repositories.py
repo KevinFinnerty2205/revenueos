@@ -16,11 +16,13 @@ from revenueos.models import (
     EvidenceFragment,
     Interaction,
     InteractionIntelligenceSnapshot,
+    InteractionMarker,
     Opportunity,
     PreInteractionBrief,
     RevenueBrainInsight,
     RevenueBrainInteractionSnapshot,
     RevenueBrainSnapshot,
+    TranscriptVersion,
 )
 
 
@@ -272,6 +274,7 @@ class DebriefRepository:
             if interaction.opportunity_id is not None
             else None
         )
+        recording_context = await self._recording_context(organisation_id, interaction.id)
         return {
             "interaction": {
                 "id": str(interaction.id),
@@ -310,7 +313,66 @@ class DebriefRepository:
                 brain_insight.content_json if brain_insight is not None else None
             ),
             "previousValidatedReportedIntelligence": reported.content_json if reported is not None else None,
+            "directRecordingAvailable": recording_context[0],
+            "directRecordingCoverage": list(recording_context[1]),
+            "markerTargets": list(recording_context[2]),
         }
+
+    async def _recording_context(
+        self,
+        organisation_id: UUID,
+        interaction_id: UUID,
+    ) -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
+        transcript = await self.session.scalar(
+            select(TranscriptVersion.raw_text)
+            .where(
+                TranscriptVersion.organisation_id == organisation_id,
+                TranscriptVersion.interaction_id == interaction_id,
+                TranscriptVersion.recording_session_id.is_not(None),
+                TranscriptVersion.status == "final",
+                TranscriptVersion.deleted_at.is_(None),
+            )
+            .order_by(TranscriptVersion.created_at.desc(), TranscriptVersion.id.desc())
+            .limit(1)
+        )
+        marker_values = list(
+            (
+                await self.session.scalars(
+                    select(InteractionMarker.marker_type)
+                    .where(
+                        InteractionMarker.organisation_id == organisation_id,
+                        InteractionMarker.interaction_id == interaction_id,
+                        InteractionMarker.deleted_at.is_(None),
+                    )
+                    .distinct()
+                )
+            ).all()
+        )
+        marker_map = {
+            "buying_signal": "commercial_intent",
+            "customer_question": "open_question",
+            "follow_up": "next_step",
+            "requested_material": "action_item",
+        }
+        marker_targets = tuple(sorted({marker_map.get(value, value) for value in marker_values}))
+        if not isinstance(transcript, str) or not transcript.strip():
+            return False, (), marker_targets
+        normalised = transcript.casefold()
+        target_terms = {
+            "action_item": ("send", "follow up", "action", "owner"),
+            "budget": ("budget", "funding", "price"),
+            "commercial_intent": ("purchase", "buy", "proposal", "move forward"),
+            "decision": ("decided", "decision", "approved", "agreed"),
+            "next_step": ("next step", "follow up", "will send", "schedule"),
+            "objection": ("objection", "concern", "blocker", "hesitant"),
+            "open_question": ("question", "unanswered", "unclear"),
+            "procurement": ("procurement", "purchasing"),
+            "security_legal": ("security", "legal", "privacy", "contract"),
+            "stakeholder": ("stakeholder", "decision maker", "champion", "procurement"),
+            "timeline": ("timeline", "deadline", "date", "quarter"),
+        }
+        supported = tuple(target for target, terms in target_terms.items() if any(term in normalised for term in terms))
+        return True, supported, marker_targets
 
     async def intelligence_for_session(
         self,
