@@ -211,6 +211,22 @@ owner.
 6. Validate one synthetic mock WebM flow, one transcript version, no orphan object,
    forced RLS and content-free logs before re-enabling.
 
+## 15. Browser Companion or marker failure
+
+1. Disable `aiCompanion` to hide the orchestration route; independently disable
+   `recordingCapture`, `visualEvidence` or `aiDebrief` only when that underlying
+   capability is affected.
+2. Confirm the Interaction lifecycle and tenant identifier using metadata only.
+   Never request transcript, audio, photo or debrief content for a marker issue.
+3. A duplicate-tab recording conflict is expected safe behaviour. Close or
+   cancel/finalise the active session before retrying.
+4. For in-tab upload loss, keep the tab open, restore connectivity and use
+   `Retry queued audio`. A discarded tab cannot recover unsent memory bytes.
+5. Marker rows are immutable. Correct an accidental marker only through the
+   pre-completion soft-delete route; do not edit it in place.
+6. Validate forced RLS, export version 7, deletion ordering and content-free logs
+   before re-enabling a disabled Companion path.
+
 - **Detection:** release regression, readiness failure, unsafe privacy/security
   behaviour or incompatible worker/API contract.
 - **Immediate containment:** stop rollout and worker claims; disable the

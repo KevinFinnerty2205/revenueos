@@ -6,6 +6,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from revenueos.business_contracts import Page
+from revenueos.companion_contracts import (
+    InteractionMarkerCreateRequest,
+    InteractionMarkerDeleteResponse,
+    InteractionMarkerResponse,
+)
+from revenueos.companion_services import CompanionService
 from revenueos.debrief_contracts import (
     DebriefAnswerRequest,
     DebriefCancelRequest,
@@ -23,9 +29,11 @@ from revenueos.interaction_contracts import (
     InteractionComplete,
     InteractionCreate,
     InteractionResponse,
+    InteractionStart,
     InteractionUpdate,
 )
 from revenueos.interaction_dependencies import (
+    get_companion_service,
     get_debrief_service,
     get_interaction_service,
     get_pre_interaction_brief_service,
@@ -72,6 +80,7 @@ Briefs = Annotated[PreInteractionBriefService, Depends(get_pre_interaction_brief
 Debriefs = Annotated[DebriefService, Depends(get_debrief_service)]
 Visuals = Annotated[VisualEvidenceService, Depends(get_visual_evidence_service)]
 Recordings = Annotated[RecordingService, Depends(get_recording_service)]
+Companion = Annotated[CompanionService, Depends(get_companion_service)]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -166,6 +175,51 @@ async def complete_interaction(
     service: Interactions,
 ) -> InteractionResponse:
     return _response(await service.complete_interaction(interaction_id, request))
+
+
+@router.post("/{interaction_id}/start", response_model=InteractionResponse)
+async def start_interaction(
+    interaction_id: UUID,
+    request: InteractionStart,
+    service: Interactions,
+) -> InteractionResponse:
+    return _response(await service.start_interaction(interaction_id, request))
+
+
+@router.post(
+    "/{interaction_id}/companion/markers",
+    response_model=InteractionMarkerResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_interaction_marker(
+    interaction_id: UUID,
+    request: InteractionMarkerCreateRequest,
+    service: Companion,
+) -> InteractionMarkerResponse:
+    return await service.create_marker(interaction_id, request)
+
+
+@router.get(
+    "/{interaction_id}/companion/markers",
+    response_model=list[InteractionMarkerResponse],
+)
+async def list_interaction_markers(
+    interaction_id: UUID,
+    service: Companion,
+) -> list[InteractionMarkerResponse]:
+    return await service.list_markers(interaction_id)
+
+
+@router.delete(
+    "/{interaction_id}/companion/markers/{marker_id}",
+    response_model=InteractionMarkerDeleteResponse,
+)
+async def delete_interaction_marker(
+    interaction_id: UUID,
+    marker_id: UUID,
+    service: Companion,
+) -> InteractionMarkerDeleteResponse:
+    return await service.delete_marker(interaction_id, marker_id)
 
 
 @router.post(

@@ -14,6 +14,7 @@ from revenueos.models import OpportunityAuditEvent
 
 from .conftest import TEST_DB_URL
 from .test_business_api import create_company, create_opportunity
+from .test_interaction_api import create_interaction
 from .test_meeting_api import cast_auth_dependency, create_meeting, secondary_user
 from .test_meeting_intelligence_workspace import _run_worker_once
 
@@ -84,6 +85,53 @@ def test_list_and_workspace_are_product_safe_without_meetings(client: TestClient
     ):
         assert prohibited not in response.text
     assert _audit_actions(str(opportunity["id"])) == ["created"]
+
+
+def test_workspace_projects_latest_interaction_capture_status(client: TestClient) -> None:
+    company_id = str(create_company(client)["id"])
+    opportunity = create_opportunity(client, company_id)
+    interaction = create_interaction(
+        client,
+        title="On-site renewal workshop",
+        interaction_type="face_to_face_meeting",
+        company_id=company_id,
+        opportunity_id=str(opportunity["id"]),
+    )
+    interaction_id = str(interaction["id"])
+
+    started = client.post(f"/api/v1/interactions/{interaction_id}/start", json={})
+    assert started.status_code == 200, started.text
+    in_progress = client.get(f"/api/v1/opportunities/{opportunity['id']}/workspace")
+    assert in_progress.status_code == 200, in_progress.text
+    assert in_progress.json()["latestInteractionCapture"]["captureStatus"] == "interaction_in_progress"
+
+    marker = client.post(
+        f"/api/v1/interactions/{interaction_id}/companion/markers",
+        json={
+            "markerType": "decision",
+            "recordingOffsetMs": None,
+            "idempotencyKey": "workspace-capture-marker",
+        },
+    )
+    assert marker.status_code == 201, marker.text
+    assert client.post(f"/api/v1/interactions/{interaction_id}/complete", json={}).status_code == 200
+
+    completed = client.get(f"/api/v1/opportunities/{opportunity['id']}/workspace")
+    assert completed.status_code == 200, completed.text
+    capture = completed.json()["latestInteractionCapture"]
+    assert capture == {
+        "interactionId": interaction_id,
+        "title": "On-site renewal workshop",
+        "interactionType": "face_to_face_meeting",
+        "lifecycleStatus": "completed",
+        "captureStatus": "interaction_completed",
+        "recordingStatus": None,
+        "recordingDurationSeconds": None,
+        "debriefStatus": None,
+        "visualCount": 0,
+        "markerCount": 1,
+        "updatedAt": capture["updatedAt"],
+    }
 
 
 def test_association_disassociation_stale_writes_and_audits(client: TestClient) -> None:
@@ -337,7 +385,7 @@ def test_workspace_query_count_is_bounded_as_recent_meetings_grow(
     # Longitudinal reasoning and reviewed visual provenance add only bounded
     # snapshot/artefact/evidence reads; query count remains constant as the
     # number of recent meetings grows.
-    assert select_count <= 10
+    assert select_count <= 11
 
 
 def test_latest_meeting_navigation_telemetry_is_tenant_validated_and_metadata_only(

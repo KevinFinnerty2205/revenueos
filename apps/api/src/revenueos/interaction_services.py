@@ -16,7 +16,7 @@ from revenueos.interaction_compatibility import (
     meeting_type_for_interaction,
     project_interaction_to_meeting,
 )
-from revenueos.interaction_contracts import InteractionComplete, InteractionCreate, InteractionUpdate
+from revenueos.interaction_contracts import InteractionComplete, InteractionCreate, InteractionStart, InteractionUpdate
 from revenueos.interaction_repositories import InteractionRecord, InteractionRepository
 from revenueos.models import Interaction, InteractionAuditEvent
 from revenueos.tenant import TenantContext
@@ -200,6 +200,49 @@ class InteractionService:
                 "organisation_id": str(self.tenant.organisation_id),
                 "interaction_id": str(interaction.id),
                 "lifecycle_status": interaction.lifecycle_status,
+            },
+        )
+        return InteractionRecord(interaction=interaction, meeting_id=record.meeting_id)
+
+    async def start_interaction(
+        self,
+        interaction_id: UUID,
+        request: InteractionStart,
+    ) -> InteractionRecord:
+        record = await self._get_for_update(interaction_id)
+        interaction = record.interaction
+        if interaction.lifecycle_status == InteractionLifecycleStatus.IN_PROGRESS.value:
+            return record
+        self._require_transition(interaction.lifecycle_status, InteractionLifecycleStatus.IN_PROGRESS.value)
+        actual_start_at = request.actual_start_at or datetime.now(UTC)
+        interaction.lifecycle_status = InteractionLifecycleStatus.IN_PROGRESS.value
+        interaction.actual_start_at = interaction.actual_start_at or actual_start_at
+        interaction.actual_end_at = None
+        interaction.updated_at = datetime.now(UTC)
+        if record.meeting_id is not None:
+            meeting = await self.repository.get_meeting_for_update(self.tenant.organisation_id, record.meeting_id)
+            if meeting is None:
+                raise PublicAPIError("compatibility_conflict", "The linked Meeting is unavailable.", 409)
+            project_interaction_to_meeting(
+                interaction,
+                meeting,
+                updated_by=self.tenant.user_id,
+                updated_at=interaction.updated_at,
+            )
+        self.session.add(
+            self._audit(
+                interaction.id,
+                InteractionAuditAction.UPDATED,
+                ["actual_start_at", "lifecycle_status"],
+            )
+        )
+        await self._commit(interaction)
+        logger.info(
+            "interaction_started",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "interaction_id": str(interaction.id),
+                "interaction_type": interaction.interaction_type,
             },
         )
         return InteractionRecord(interaction=interaction, meeting_id=record.meeting_id)

@@ -267,7 +267,7 @@ The recommended sequence is:
 3. AI Debrief and Voice Journal;
 4. Visual Evidence Capture;
 5. Recording and Transcription Foundation;
-6. Face-to-Face Mobile Capture;
+6. Browser Face-to-Face Companion;
 7. Online Meeting Capture;
 8. Document and Email Evidence;
 9. Live Interaction Intelligence; and

@@ -32,6 +32,12 @@ they are not customer interactions. WO-015 adds optional explicitly consented
 Recording Capture Sessions and final batch transcripts; it does not make recording
 mandatory.
 
+WO-016 adds the current mobile-first browser Companion. It derives phase from
+the Interaction lifecycle, presents the concise brief, requires a deliberate
+recording/passive choice, supports authorised photos and metadata-only markers,
+and directs AFTER into the existing reviewed debrief. It remains a foreground
+browser workflow rather than a native or live-intelligence product.
+
 ## Current product surface
 
 The current implementation provides:
@@ -69,6 +75,9 @@ The current implementation provides:
   resumable private WebM/MP4 chunks, durable batch transcription, immutable
   transcript versions/segments and Debrief fallback. All recording flags default
   off.
+- a mobile-first browser Companion with BEFORE/DURING/AFTER phases, deliberate
+  passive capture, controlled quick markers, capture summary and Opportunity
+  Workspace status.
 
 The current product accepts only deliberately entered meeting metadata and
 plain-text transcripts. The default provider is a deterministic no-network

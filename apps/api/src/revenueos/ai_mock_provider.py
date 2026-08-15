@@ -322,6 +322,10 @@ class DeterministicMockAIProvider:
                     question_count=int(cast(int, payload["question_count"])),
                     max_questions=int(cast(int, payload["max_questions"])),
                     brief_questions=tuple(str(value) for value in cast(list[object], payload["context_questions"])),
+                    direct_supported_targets=tuple(
+                        str(value) for value in cast(list[object], payload.get("direct_supported_targets", []))
+                    ),
+                    marker_targets=tuple(str(value) for value in cast(list[object], payload.get("marker_targets", []))),
                 )
             except (KeyError, TypeError, ValueError) as exc:
                 raise InvalidProviderRequestError from exc

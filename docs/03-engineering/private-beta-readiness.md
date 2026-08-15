@@ -122,7 +122,7 @@ Admins queue a versioned JSON export in Settings. An operator runs:
 uv --directory apps/api run revenueos-beta-maintenance export --organisation-id <UUID> --request-id <UUID>
 ```
 
-Export version 6 has deterministic sections/order and a safe UUID filename. It may
+Export version 7 has deterministic sections/order and a safe UUID filename. It may
 contain authorised transcripts and validated intelligence, so store it only in
 the restricted directory configured by `API_PRIVATE_BETA_EXPORT_DIRECTORY`.
 It includes Interaction, Capture Session, Evidence, Interaction audit metadata and
@@ -197,7 +197,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  Alembic head `0025_recording_transcription`, identity configuration, selected
+Alembic head `0026_face_to_face_companion`, identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
@@ -219,7 +219,8 @@ deterministic brief. A reviewed phone AI Debrief supplies “Reported by you”
 Interaction/Revenue Brain state and a trade-show Voice Journal remains resumable.
 The completed presentation includes a synthetic, reviewed customer-whiteboard
 visual in private storage and a provenance-labelled schema-v2 Interaction and
-Revenue Brain projection. It makes no provider call. The completed
+Revenue Brain projection. The completed executive lunch includes two
+metadata-only Companion markers for the AFTER summary. It makes no provider call. The completed
 Meetings retain synthetic transcripts, so
 the default retention policy does not immediately expire the walkthrough. Its
 IDs and content are deterministic, it is tenant-scoped and idempotent, and it
@@ -243,7 +244,7 @@ uv --directory apps/api run revenueos-demo-data reset --organisation-id <UUID>
 ```
 
 Reset removes every fixed demo Interaction, its three briefs, debrief/evidence
-state, the visual object and its lineage, and the established Meeting/Brain rows.
+state, Companion markers, the visual object and its lineage, and the established Meeting/Brain rows.
 Never run the seed automatically or use it to overwrite a real record.
 
 ## Feedback handling
@@ -290,10 +291,19 @@ server-authoritative and default off. Production validation requires private
 S3-compatible storage and a deployment signing secret when recording is enabled.
 
 Retention and organisation/Interaction deletion remove recording objects before
-database lineage. Export version 6 adds recording/consent metadata, a content-free
+database lineage. Export version 7 adds recording/consent metadata, a content-free
 chunk manifest, transcript versions and segments; raw audio, storage keys, signed
 URLs and provider request IDs are excluded. Reconciliation is tenant-scoped and
 metadata-only.
+
+## WO-016 Companion controls
+
+The browser Companion is governed by `aiCompanion`; its reused recording,
+visual and debrief capabilities keep their independent server flags and quotas.
+Quick markers have no content or provider cost and therefore add no separate
+usage quota. They are bounded by controlled type, lifecycle, tenant scope and
+Interaction retention. Export version 7 adds active marker metadata without the
+idempotency key. Organisation deletion removes markers before Interactions.
 
 - Private beta only; production customer data is prohibited unless separately
   approved.

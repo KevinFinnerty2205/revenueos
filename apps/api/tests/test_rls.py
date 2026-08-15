@@ -95,6 +95,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "opportunity_audit_events",
         "tasks",
         "interactions",
+        "interaction_markers",
         "pre_interaction_briefs",
         "capture_sessions",
         "evidence",
@@ -170,6 +171,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "recording_chunk_id": uuid.uuid4(),
         "recording_transcript_version_id": uuid.uuid4(),
         "recording_segment_id": uuid.uuid4(),
+        "marker_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -212,6 +214,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "recording_chunk_id": uuid.uuid4(),
         "recording_transcript_version_id": uuid.uuid4(),
         "recording_segment_id": uuid.uuid4(),
+        "marker_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -364,6 +367,24 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         {
                             **identity_parameters,
                             "interaction_title": f"RLS Interaction {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO interaction_markers
+                                (id, organisation_id, interaction_id,
+                                 created_by_user_id, marker_type,
+                                 recording_offset_ms, idempotency_key)
+                            VALUES
+                                (:marker_id, :organisation_id,
+                                 :interaction_id, :user_id,
+                                 'buying_signal', 1000, :marker_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "marker_key": f"rls-marker-{suffix.lower()}",
                         },
                     )
                     await connection.execute(
@@ -1063,6 +1084,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'opportunity_audit_events',
                                     'tasks',
                                     'interactions',
+                                    'interaction_markers',
                                     'pre_interaction_briefs',
                                     'capture_sessions',
                                     'evidence',
@@ -1476,6 +1498,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "evidence",
                     "capture_sessions",
                     "interaction_audit_events",
+                    "interaction_markers",
                     "meeting_audit_events",
                     "transcripts",
                     "meeting_participants",

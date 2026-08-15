@@ -1,9 +1,10 @@
 # Interaction lifecycle and UX
 
-- **Status:** Target lifecycle; WO-011 implements basic Interaction lifecycle and
-  WO-012 implements preparation-only Companion briefs, not capture/debrief UX
-- **Primary surfaces:** responsive web first, followed by a constrained mobile
-  companion and later native capture where justified
+- **Status:** WO-016 implements the responsive browser Companion across the
+  persisted planned, in-progress and completed Interaction lifecycle. The richer
+  product-state diagram below remains a target model, not a database enum.
+- **Primary surfaces:** responsive web first; PWA or native capture remains a later,
+  separately authorised decision where reliability evidence justifies it.
 
 ## Lifecycle model
 
@@ -73,8 +74,8 @@ The during state is deliberately quiet. The default surface shows only:
 
 There is no default live coaching panel, scrolling transcript or requirement to
 identify every speaker in real time. Important status cannot depend on colour alone.
-Recording indicators remain visible whenever the app is foregrounded and use native
-OS indicators where available.
+Recording indicators remain visible whenever the browser is foregrounded and are
+reinforced by the browser/OS microphone indicator where available.
 
 ### Quick capture
 
@@ -212,7 +213,19 @@ Measure lifecycle utility through aggregate, tenant-governed events:
 Do not measure keystrokes, continuous location, private conversation duration as a
 performance proxy, individual rankings or covert employee activity.
 
-## Related documents
+## Implemented browser Companion
+
+WO-016 maps `planned`, `in_progress` and terminal lifecycle states to BEFORE,
+DURING and AFTER on `/interactions/{interactionId}/companion`. Start and complete
+are explicit and idempotent. During capture stays intentionally sparse: recording
+status when chosen, metadata-only quick markers, visual evidence and one clear End
+interaction action. Active recording or queued chunks block completion. AFTER shows
+what was captured and reuses the existing source-aware debrief/review flows.
+
+The browser stores pending audio chunks only in memory for the open page. Stable
+idempotency keys and bounded retry protect duplicate upload, but reload, device lock
+or OS termination can still lose an unuploaded chunk. The UI never describes the
+screen wake lock as a background-recording guarantee.
 
 ## Implemented visual capture and review
 
@@ -223,8 +236,11 @@ progress, restore/list states, safe errors and bounded retry. Review cards
 require accept/edit/reject decisions for every suggestion before intelligence
 updates. Saved visuals retain explicit ownership and AI/user-review labels.
 
+## Related documents
+
 - [Face-to-face interaction experience](face-to-face-interaction-experience.md)
 - [AI Companion and debrief](ai-companion-and-debrief.md)
+- [Browser Face-to-Face Companion guide](browser-face-to-face-companion-guide.md)
 - [Presentation mode](presentation-mode.md)
 - [Mobile companion strategy](mobile-companion-strategy.md)
 - [Interaction security, privacy and consent](../03-engineering/interaction-security-privacy-and-consent.md)

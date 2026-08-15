@@ -1,9 +1,10 @@
 # AI Companion and debrief
 
-- **Status:** WO-012 implements the preparation-only Companion brief; debrief,
-  voice capture and live Companion remain target design
-- **First release:** preparation brief plus post-interaction Voice Journal and
-  targeted AI Debrief
+- **Status:** WO-016 implements the responsive BEFORE/DURING/AFTER Companion by
+  orchestrating the WO-012 brief, WO-013 debrief/Voice Journal, WO-014 visuals and
+  WO-015 foreground recording foundations. Live intelligence remains target design.
+- **First release:** concise preparation, explicitly chosen foreground recording or
+  passive capture, then source-aware targeted debrief and review.
 
 ## Clear product boundaries
 
@@ -40,10 +41,13 @@ preference or dismissal, not silently promoted to relationship fact.
 
 ## During: passive companion
 
-The companion stays quiet by default. It can expose optional start/stop recording,
-quick markers and visual capture. No default live coaching, continuous prompts or
-screen attention is required. A future live-intelligence panel must be explicitly
-enabled, visibly provisional and suppressible.
+The implemented browser Companion stays quiet by default. It exposes an explicit
+recording/passive choice, optional start/pause/resume/stop foreground recording,
+metadata-only quick markers and visual capture. No default live coaching,
+continuous prompts, dense transcript or screen attention is required. Phone calls
+and online meetings use passive mode because browser microphone capture is not a
+truthful same-device or system-audio solution. A future live-intelligence panel
+must be explicitly enabled, visibly provisional and suppressible.
 
 ## After: debrief sequence
 

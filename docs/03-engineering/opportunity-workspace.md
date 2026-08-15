@@ -15,6 +15,12 @@ Intelligence wording is explicitly scoped to the latest meeting. The separate
 **Longitudinal Changes** section reads a current immutable WO-008B comparison
 when present and offers one explicit deterministic generation action.
 
+WO-016 adds a separate `latestInteractionCapture` metadata projection for the
+most recent active linked Interaction. It reports lifecycle/capture state,
+recording and debrief state, visual count and marker count, with direct
+Companion navigation. It does not read transcript content or create
+intelligence.
+
 ## Opportunity domain
 
 `Opportunity` remains a tenant-owned business entity with these current fields:
@@ -137,7 +143,8 @@ Meeting Intelligence. See
 - `GET /api/v1/opportunities/{opportunityId}/workspace` returns opportunity
   display metadata, latest meeting, up to 20 recent meetings, the latest
   product-safe Meeting Intelligence view, available-section count, partial
-  state, current safe Revenue Brain reasoning and a generated timestamp.
+  state, current safe Revenue Brain reasoning, latest linked Interaction
+  capture status and a generated timestamp.
 - `POST /api/v1/opportunities/{opportunityId}/brain/reasoning` creates or
   reuses deterministic `latest_change` or `recent_history` comparisons.
 - `GET /api/v1/opportunities/{opportunityId}/brain/reasoning` reads the current
@@ -161,7 +168,8 @@ Cross-tenant identifiers use the established safe `404` behaviour.
   protection; and
 - `/opportunities/{opportunityId}` — Opportunity Workspace.
 
-The workspace presents the opportunity header, **Longitudinal Changes**,
+The workspace presents the opportunity header, latest field-Interaction capture
+status, **Longitudinal Changes**,
 prominent **Latest Next Best Action**, latest-meeting momentum and buying signals, objections and competitive
 signals, latest-meeting stakeholders, risks, open questions, action items, key
 decisions, latest Executive Summary, read-only Follow-up Email with Copy and

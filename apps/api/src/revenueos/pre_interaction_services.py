@@ -32,6 +32,7 @@ from revenueos.pre_interaction_contracts import (
     BriefCommitment,
     BriefInteractionType,
     BriefObjective,
+    BriefParticipant,
     BriefPriority,
     BriefQuestion,
     BriefRecentChange,
@@ -54,7 +55,7 @@ from revenueos.revenue_brain_reasoning_contracts import RevenueBrainInsightConte
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.pre_interaction_briefs")
-PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 1
+PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 2
 PRE_INTERACTION_BRIEF_HISTORY_LIMIT = 6
 ValidatedModel = TypeVar("ValidatedModel", bound=BaseModel)
 
@@ -522,6 +523,14 @@ class PreInteractionBriefService:
             success_criteria=success_criteria,
             interaction_guidance=self._guidance(interaction_type),
             confidence=self._confidence(context),
+            company_name=(context.records.company.name if context.records.company is not None else None),
+            opportunity_name=(context.records.opportunity.name if context.records.opportunity is not None else None),
+            participants=tuple(
+                BriefParticipant(name=item.name, role=item.role) for item in context.records.participants[:20]
+            ),
+            next_best_action=(
+                context.next_best_action.overall_recommendation if context.next_best_action is not None else None
+            ),
         )
 
     def _account_context(self, context: ValidatedBriefContext) -> str:

@@ -2,11 +2,12 @@
 
 ## Implemented boundary
 
-WO-012 implements the **before** phase of AI Companion as a deterministic,
-interaction-scoped preparation capability. It supports all ten initial Interaction
-types and does not require recording. Later work orders add reviewed AI Debrief,
-Voice Journal, visual evidence and optional consent-gated recording with batch
-transcription; Live Companion and phone integration remain unimplemented.
+WO-012 implements the deterministic, interaction-scoped brief. WO-016 now presents
+its bounded high-value fields in the **BEFORE** phase of the browser Companion and
+links to the full brief. It supports all ten initial Interaction types and does not
+require recording. The brief includes explicit company/opportunity/participant
+labels and the current Next Best Action where available. It never reads recording
+or transcript content.
 
 `PreInteractionBriefService` owns access validation, source loading, normalisation,
 composition, strict validation, versioning, persistence and product-safe responses.

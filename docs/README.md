@@ -17,6 +17,7 @@ This is the canonical product and engineering documentation index. Documents dis
 11. [AI Debrief engineering guide](03-engineering/ai-debrief.md) — current WO-013 boundary
 12. [Visual Evidence engineering guide](03-engineering/visual-evidence-engineering-guide.md) — current WO-014 boundary
 13. [Recording foundation engineering guide](03-engineering/recording-foundation-engineering-guide.md) — current WO-015 boundary
+14. [Browser face-to-face Companion guide](02-design/browser-face-to-face-companion-guide.md) — current WO-016 field workflow
 
 ## 00 — Company
 
@@ -43,6 +44,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Presentation mode](02-design/presentation-mode.md)
 - [Presentation Mode implementation guide](02-design/presentation-mode-guide.md)
 - [Mobile companion strategy](02-design/mobile-companion-strategy.md)
+- [Browser face-to-face Companion guide](02-design/browser-face-to-face-companion-guide.md)
 - [Phone-call preparation](02-design/phone-call-preparation.md)
 - [Presentation preparation](02-design/presentation-preparation.md)
 - [Voice Journal guide](02-design/voice-journal-guide.md)
@@ -114,6 +116,14 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Audio retention, export and deletion](03-engineering/audio-retention-deletion-guide.md)
 - [Recording security review](03-engineering/recording-security-review.md)
 - [Recording storage reconciliation runbook](03-engineering/recording-storage-reconciliation-runbook.md)
+- [Companion state and lifecycle](03-engineering/companion-state-lifecycle-guide.md)
+- [Mobile browser recording UX](03-engineering/mobile-browser-recording-ux-guide.md)
+- [Recording fallback strategy](03-engineering/recording-fallback-strategy.md)
+- [Quick marker guide](03-engineering/quick-marker-guide.md)
+- [Mobile browser support matrix](03-engineering/mobile-browser-support-matrix.md)
+- [Screen wake lock decision](03-engineering/wake-lock-decision.md)
+- [Local audio buffering decision](03-engineering/local-buffering-decision.md)
+- [Browser Companion security review](03-engineering/companion-security-review.md)
 
 ### Target through beta
 
@@ -175,6 +185,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-013: AI Debrief and Voice Journal](07-sprints/wo-013-ai-debrief-voice-journal.md)
 - [WO-014: Visual Evidence and Presentation Mode](07-sprints/wo-014-visual-evidence-presentation-mode.md)
 - [WO-015: Recording & Transcription Foundation](07-sprints/wo-015-recording-transcription-foundation.md)
+- [WO-016: Browser Face-to-Face Companion](07-sprints/wo-016-browser-face-to-face-companion.md)
 
 ## 08 — Decision records
 
@@ -207,10 +218,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0027: deterministic Pre-Interaction Briefs](08-decisions/0027-deterministic-pre-interaction-briefs.md)
 - [ADR 0028: bounded foreground debrief reasoning and ephemeral browser voice](08-decisions/0028-bounded-foreground-debrief-reasoning.md)
 - [ADR 0029: private visual evidence storage and mandatory review](08-decisions/0029-private-visual-evidence-storage-and-review.md)
+- [ADR 0030: foreground browser Companion orchestration](08-decisions/0030-browser-companion-foreground-capture.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -245,8 +257,8 @@ WO-012 adds preparation-only AI Companion briefs for every initial Interaction
 type. The bounded deterministic composer uses linked metadata and validated
 current-version intelligence, never transcript text, and never calls OpenAI.
 Briefs are immutable, source-aware, versioned, reviewable and covered by beta
-quota, retention, export, deletion and synthetic demo operations. Live Companion
-remains unimplemented.
+quota, retention, export, deletion and synthetic demo operations. WO-016 now
+orchestrates them in the browser Companion without adding live intelligence.
 
 WO-013 adds post-interaction AI Debrief and foreground-only Voice Journal with
 typed fallback, short-segment transcription, strict structured question/extraction,
@@ -270,6 +282,13 @@ raw-audio retention/deletion/export handling and reconciliation. The default moc
 performs no network request. Native/background capture, meeting bots, telephony,
 online connectors, streaming transcription and biometric speaker identification
 remain unimplemented.
+
+WO-016 adds a mobile-first browser Companion over the existing Interaction
+lifecycle. Users deliberately choose recording or passive capture, can add
+authorised photos and metadata-only quick markers, and then enter a gap-fill
+debrief. Phone calls and online meetings remain passive; screen wake and local
+retry are best effort and foreground-only. Native/background capture, call or
+system-audio interception and automatic live intelligence remain unimplemented.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

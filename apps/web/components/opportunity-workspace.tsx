@@ -277,6 +277,54 @@ export function OpportunityWorkspace({
         ) : null}
       </header>
 
+      {workspace.latestInteractionCapture ? (
+        <section
+          aria-labelledby="latest-interaction-capture-title"
+          className="form-card"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+                Latest field interaction
+              </p>
+              <h2
+                id="latest-interaction-capture-title"
+                className="form-legend mt-2"
+              >
+                {workspace.latestInteractionCapture.title}
+              </h2>
+            </div>
+            <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-900">
+              {humanise(workspace.latestInteractionCapture.captureStatus)}
+            </span>
+          </div>
+          <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-4">
+            <HeaderDetail label="Recording">
+              {workspace.latestInteractionCapture.recordingStatus
+                ? humanise(workspace.latestInteractionCapture.recordingStatus)
+                : "Not recorded"}
+            </HeaderDetail>
+            <HeaderDetail label="Debrief">
+              {workspace.latestInteractionCapture.debriefStatus
+                ? humanise(workspace.latestInteractionCapture.debriefStatus)
+                : "Not started"}
+            </HeaderDetail>
+            <HeaderDetail label="Photos">
+              {String(workspace.latestInteractionCapture.visualCount)}
+            </HeaderDetail>
+            <HeaderDetail label="Markers">
+              {String(workspace.latestInteractionCapture.markerCount)}
+            </HeaderDetail>
+          </dl>
+          <Link
+            className="secondary-button mt-5 inline-flex"
+            href={`/interactions/${workspace.latestInteractionCapture.interactionId}/companion`}
+          >
+            Open interaction Companion
+          </Link>
+        </section>
+      ) : null}
+
       <AssociationPanel
         meetings={availableMeetings}
         selectedMeetingId={selectedMeetingId}

@@ -17,6 +17,13 @@ Brain snapshots. Raw audio is never persisted and existing Meeting Intelligence 
 unchanged. See [AI Debrief](ai-debrief.md) and
 [ADR 0028](../08-decisions/0028-bounded-foreground-debrief-reasoning.md).
 
+WO-014 adds private visual-evidence capture/review and WO-015 adds optional,
+consent-gated browser audio chunks plus batch transcription through the existing
+worker. WO-016 composes those capabilities with the brief and debrief on one
+responsive Companion route, adds metadata-only Interaction markers and projects the
+latest capture state into Opportunity Workspace. It adds no service, broker,
+datastore, native/PWA client or new AI provider path.
+
 WO-006A/WO-006B/WO-006C/WO-006D/WO-007/WO-008A/WO-008B keep the Sprint 3 modular monolith and
 WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 and WO-005 baseline. The durable worker runs
 its infrastructure test plus current-transcript Executive Summary, Decisions,
@@ -46,9 +53,9 @@ metadata and the latest associated meeting's stored current-version artefacts.
 That path selects transcript identity/version metadata only, performs no AI
 work and labels every result as latest-meeting evidence. Revenue Brain records
 the meeting's explicit opportunity association when present and never infers
-one. There is no email-send integration, later intelligence schema, question-
-answering workflow, recording/media pipeline, connector, billing service or
-mobile application.
+one. There is no email-send integration, later intelligence schema, question-answering
+workflow, connector, billing service or mobile application. Browser media capture
+is foreground-only and private binary storage continues through narrow adapters.
 
 ```text
 Browser
@@ -253,11 +260,13 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0025_recording_transcription` is the head migration.
-It adds forced-RLS recording/consent/chunk/usage and immutable transcript
-version/segment tables, after `0024_visual_evidence` added forced-RLS visual
-asset/candidate metadata, review guards, storage lifecycle state and the
-`observed` evidence support class. `0024` follows
+source exists. Migration `0026_face_to_face_companion` is the head migration.
+It adds forced-RLS, tenant-isolated, metadata-only Interaction markers and their
+append-only/soft-delete guard. Migration `0025_recording_transcription` added
+forced-RLS recording/consent/chunk/usage and immutable transcript version/segment
+tables, after `0024_visual_evidence` added forced-RLS visual asset/candidate
+metadata, review guards, storage lifecycle state and the `observed` evidence support
+class. `0024` follows
 `0023_ai_debrief_voice_journal`, which
 follows `0021_interaction_foundation` and adds immutable, forced-RLS
 Pre-Interaction Brief persistence with composite tenant keys and source-fingerprint
@@ -317,6 +326,24 @@ the durable queue input; no broker or second worker service was added. Audio rem
 outside PostgreSQL and is streamed to bounded temporary disk during assembly.
 Immutable transcript versions and segments feed the current Meeting transcript/read
 model without duplicating Meeting Intelligence.
+
+## WO-016 browser Companion extension
+
+The web app adds a thin `/interactions/{id}/companion` orchestrator over existing
+services. Phase is derived from Interaction lifecycle rather than persisted as a
+second state machine. `CompanionService` owns marker policy and tenant-explicit
+persistence; the core Interaction service owns idempotent start/complete changes.
+The recording client retains stable per-chunk idempotency keys during bounded retry,
+reports interruption and connectivity state, and blocks Interaction completion while
+recording or queued chunks remain. The Wake Lock API is best effort only.
+
+Migration `0026_face_to_face_companion` adds only metadata marker persistence.
+Marker text is not accepted: the contract permits a controlled marker type,
+Interaction timestamp, optional recording offset and idempotency key. Markers are
+included in export and approved deletion/reset paths but excluded from content logs.
+See the [Companion lifecycle](companion-state-lifecycle-guide.md),
+[recording UX](mobile-browser-recording-ux-guide.md) and
+[security review](companion-security-review.md).
 
 WO-010 defines the target direction and WO-011 implements the first additive
 foundation: Interaction is the source-neutral logical parent and Meeting remains a

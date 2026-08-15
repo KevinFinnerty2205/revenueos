@@ -12,6 +12,8 @@ from revenueos.ai_contracts import BuyingSignalsArtifactContent, NextBestActionA
 from revenueos.business_repositories import PageResult
 from revenueos.domain import (
     InteractionAuditAction,
+    InteractionLifecycleStatus,
+    InteractionType,
     MeetingAuditAction,
     MeetingAuditEntityType,
     MeetingStatus,
@@ -25,6 +27,8 @@ from revenueos.meeting_contracts import MeetingOpportunityUpdate
 from revenueos.models import AIArtifact, InteractionAuditEvent, Meeting, MeetingAuditEvent, OpportunityAuditEvent
 from revenueos.opportunity_contracts import (
     IntelligenceReadiness,
+    InteractionCaptureStatus,
+    OpportunityInteractionCaptureStatusResponse,
     OpportunityListItemResponse,
     OpportunityMeetingSummaryResponse,
     OpportunityWorkspaceOpportunityResponse,
@@ -35,6 +39,7 @@ from revenueos.opportunity_contracts import (
     VisualInteractionIntelligenceResponse,
 )
 from revenueos.opportunity_repositories import (
+    LatestInteractionCaptureRecord,
     MeetingSummaryRecord,
     OpportunityDisplayRecord,
     OpportunityWorkspaceRepository,
@@ -137,6 +142,10 @@ class OpportunityWorkspaceService:
             limit=20,
         )
         latest = recent[0] if recent else None
+        latest_capture_record = await self.repository.latest_interaction_capture(
+            self.tenant.organisation_id,
+            opportunity_id,
+        )
         readiness_artifacts = await self.repository.current_completed_artifacts(
             self.tenant.organisation_id,
             recent,
@@ -248,6 +257,7 @@ class OpportunityWorkspaceService:
             intelligence=intelligence,
             reported_intelligence=reported_intelligence,
             visual_intelligence=visual_intelligence,
+            latest_interaction_capture=self._interaction_capture_status(latest_capture_record),
             intelligence_sections_available=available_count,
             partial_data=(latest is not None and available_count < len(CAPABILITIES)),
             generated_at=datetime.now(UTC),
@@ -269,6 +279,50 @@ class OpportunityWorkspaceService:
         if response.partial_data:
             logger.info("opportunity_workspace_partial_data", extra=context)
         return response
+
+    @staticmethod
+    def _interaction_capture_status(
+        record: LatestInteractionCaptureRecord | None,
+    ) -> OpportunityInteractionCaptureStatusResponse | None:
+        if record is None:
+            return None
+        interaction = record.interaction
+        recording_status = record.recording_status
+        debrief_status = record.debrief_status
+        capture_status: InteractionCaptureStatus
+        if interaction.lifecycle_status == "planned":
+            capture_status = "planned"
+        elif interaction.lifecycle_status == "in_progress":
+            capture_status = "interaction_in_progress"
+        elif recording_status in {"created", "recording", "uploading", "uploaded", "transcribing"}:
+            capture_status = "processing_transcription"
+        elif recording_status == "failed":
+            capture_status = "recording_needs_attention"
+        elif debrief_status == "review":
+            capture_status = "debrief_review_required"
+        elif recording_status == "completed" and debrief_status == "completed" and record.visual_count > 0:
+            capture_status = "mixed_capture_complete"
+        elif debrief_status == "completed":
+            capture_status = "debrief_completed"
+        elif recording_status == "completed":
+            capture_status = "recorded_and_processed"
+        elif record.visual_count > 0:
+            capture_status = "visual_evidence_captured"
+        else:
+            capture_status = "interaction_completed"
+        return OpportunityInteractionCaptureStatusResponse(
+            interaction_id=interaction.id,
+            title=interaction.title,
+            interaction_type=InteractionType(interaction.interaction_type),
+            lifecycle_status=InteractionLifecycleStatus(interaction.lifecycle_status),
+            capture_status=capture_status,
+            recording_status=recording_status,
+            recording_duration_seconds=record.recording_duration_seconds,
+            debrief_status=debrief_status,
+            visual_count=record.visual_count,
+            marker_count=record.marker_count,
+            updated_at=interaction.updated_at,
+        )
 
     async def record_latest_meeting_navigation(self, opportunity_id: UUID) -> None:
         record = await self.repository.get_opportunity(

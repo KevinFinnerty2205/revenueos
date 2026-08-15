@@ -260,43 +260,54 @@ No reliable screen-lock/background mobile recording, streaming transcript, bot,
 advanced diarisation or live signal. Selected users can test authorised foreground
 or uploaded recordings plus the established debrief fallback.
 
-## WO-016 — Face-to-Face Mobile Capture
+## WO-016 — Browser Face-to-Face Companion
+
+**Delivery status:** Implemented by WO-016. Native/PWA capture remains a separate,
+evidence-led future decision rather than part of this work order.
 
 ### Objective and user value
 
-Provide a constrained cross-platform native companion for reliable long face-to-face
-recording, offline encrypted buffering, screen lock, interruptions, visual capture
-and push-triggered debrief.
+Deliver the smallest coherent browser-first Companion for the full face-to-face
+loop: a concise brief before, an intentionally chosen recording or passive mode
+during, and immediate evidence-gap capture after the interaction.
 
 ### Impacts and dependencies
 
-| Area         | Scope                                                                                                              |
-| ------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Dependencies | WO-013/014/015, successful framework/platform spike, mobile threat model and store-policy review                   |
-| Data model   | Device/client metadata class, push token reference, local/server sync state and revoke/delete receipts             |
-| Backend      | Mobile session/auth, background transfer, sync reconciliation, push trigger and device revocation                  |
-| Frontend     | Existing web review remains; shared contracts/design system where useful                                           |
-| Mobile       | Native audio session, encrypted chunks, offline queue, calls/lock/battery/storage/Bluetooth, camera, accessibility |
-| AI           | No new intelligence requirement; consumes recording/debrief paths                                                  |
-| Privacy      | OS permission/indicator, offline loss, notification privacy, MDM/shared responsibility, store disclosures          |
-| Operations   | Device matrix, crash/sync diagnostics without content, store release, compatibility and revoke runbooks            |
+| Area         | Scope                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Dependencies | WO-012/013/014/015 brief, debrief, visual-evidence and recording foundations                                                     |
+| Data model   | Tenant-isolated metadata-only quick markers with type, creator, interaction time and optional recording offset                 |
+| Backend      | Idempotent Interaction start, marker CRUD, recording concurrency protection and capture-status projection                      |
+| Frontend     | Responsive `/interactions/{id}/companion` with BEFORE, DURING and AFTER phases; no dense live transcript or coaching           |
+| Mobile       | Foreground browser recording only; bounded retry and recovery, screen wake lock where available, honest screen-lock/background limits |
+| AI           | Reuses existing deterministic brief and reviewed debrief; gap prompts suppress targets already covered by direct evidence     |
+| Privacy      | Explicit recording/passive choice, consent gate, content-free markers, truthful phone/online limitations and no implicit listening |
+| Operations   | Browser support matrix, safe logs, quota/retention controls, interrupted-session recovery and synthetic end-to-end coverage    |
 
 ### Acceptance criteria
 
-- Platform matrix passes long sessions, screen lock, calls, OS termination, restart,
-  battery/storage/network and Bluetooth cases.
-- Local evidence is encrypted, quota-bound and deleted after verified upload/policy.
-- Partial/gap/upload states are honest and debrief fallback works.
-- Push is optional, deduplicated, quiet-hour aware and content-free.
-- Accessibility and store/privacy requirements are verified against current policy.
-- Lost-device revocation and next-contact deletion are tested without a false remote
-  wipe claim.
+- The browser route carries the user through BEFORE, DURING and AFTER without
+  creating a second interaction or duplicating the underlying services.
+- Recording remains optional, consent-gated and foreground-only; passive mode,
+  markers and visual evidence work without microphone access.
+- Pending chunks retain stable idempotency keys across bounded retry, and completion
+  is blocked while recording or queued upload work remains.
+- Phone calls and online meetings never present browser microphone capture as a
+  reliable way to capture the same-device call or system audio.
+- Metadata-only markers are tenant-isolated, idempotent, soft-deletable and excluded
+  from logs; export/deletion/demo maintenance paths include them.
+- The AFTER phase exposes capture state, targeted debrief, visual review and links
+  back to Opportunity Workspace and Revenue Brain.
+- Mobile viewport, keyboard, semantic accessibility and recording/passive paths are
+  covered by unit and browser tests.
 
 ### Out of scope and testing availability
 
-No live coaching, universal device support, guaranteed offline remote wipe or desktop
-capture. Approved pilot users can test reliable face-to-face mobile capture within
-the supported device/policy matrix.
+No native/PWA application, background or screen-lock guarantee, offline media
+buffer, live transcript, live coaching, bot, phone interception, reliable online
+system-audio capture, push notification or autonomous action. Approved beta users
+can test the labelled foreground browser flow with synthetic data and authorised
+capture only.
 
 ## WO-017 — Online Meeting Capture
 

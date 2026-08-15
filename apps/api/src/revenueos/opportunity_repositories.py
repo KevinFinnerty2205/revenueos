@@ -14,14 +14,18 @@ from revenueos.models import (
     AIJob,
     Base,
     Company,
+    DebriefSession,
     Evidence,
     Interaction,
     InteractionIntelligenceSnapshot,
+    InteractionMarker,
     Meeting,
     MeetingParticipant,
     Opportunity,
+    RecordingSession,
     Transcript,
     User,
+    VisualAsset,
 )
 
 
@@ -43,11 +47,120 @@ class MeetingSummaryRecord:
     transcript_version: int | None
 
 
+@dataclass(frozen=True)
+class LatestInteractionCaptureRecord:
+    interaction: Interaction
+    recording_status: str | None
+    recording_duration_seconds: int | None
+    debrief_status: str | None
+    visual_count: int
+    marker_count: int
+
+
 class OpportunityWorkspaceRepository:
     """Bounded tenant-scoped reads for opportunity pages and association writes."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def latest_interaction_capture(
+        self,
+        organisation_id: UUID,
+        opportunity_id: UUID,
+    ) -> LatestInteractionCaptureRecord | None:
+        latest_recording_status = (
+            select(RecordingSession.lifecycle_status)
+            .where(
+                RecordingSession.organisation_id == organisation_id,
+                RecordingSession.interaction_id == Interaction.id,
+                RecordingSession.deleted_at.is_(None),
+            )
+            .order_by(RecordingSession.created_at.desc(), RecordingSession.id.desc())
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        latest_recording_duration = (
+            select(RecordingSession.duration_seconds)
+            .where(
+                RecordingSession.organisation_id == organisation_id,
+                RecordingSession.interaction_id == Interaction.id,
+                RecordingSession.deleted_at.is_(None),
+            )
+            .order_by(RecordingSession.created_at.desc(), RecordingSession.id.desc())
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        latest_debrief_status = (
+            select(DebriefSession.lifecycle_status)
+            .where(
+                DebriefSession.organisation_id == organisation_id,
+                DebriefSession.interaction_id == Interaction.id,
+            )
+            .order_by(DebriefSession.created_at.desc(), DebriefSession.id.desc())
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        visual_count = (
+            select(func.count(VisualAsset.id))
+            .where(
+                VisualAsset.organisation_id == organisation_id,
+                VisualAsset.interaction_id == Interaction.id,
+                VisualAsset.deleted_at.is_(None),
+            )
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        marker_count = (
+            select(func.count(InteractionMarker.id))
+            .where(
+                InteractionMarker.organisation_id == organisation_id,
+                InteractionMarker.interaction_id == Interaction.id,
+                InteractionMarker.deleted_at.is_(None),
+            )
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        row = (
+            await self.session.execute(
+                select(
+                    Interaction,
+                    latest_recording_status,
+                    latest_recording_duration,
+                    latest_debrief_status,
+                    visual_count,
+                    marker_count,
+                )
+                .where(
+                    Interaction.organisation_id == organisation_id,
+                    Interaction.opportunity_id == opportunity_id,
+                    Interaction.deleted_at.is_(None),
+                    Interaction.lifecycle_status != "cancelled",
+                )
+                .order_by(
+                    func.coalesce(
+                        Interaction.actual_end_at,
+                        Interaction.actual_start_at,
+                        Interaction.scheduled_start_at,
+                        Interaction.created_at,
+                    ).desc(),
+                    Interaction.id.desc(),
+                )
+                .limit(1)
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return LatestInteractionCaptureRecord(
+            interaction=row[0],
+            recording_status=row[1],
+            recording_duration_seconds=row[2],
+            debrief_status=row[3],
+            visual_count=int(row[4] or 0),
+            marker_count=int(row[5] or 0),
+        )
 
     async def list_opportunities(
         self,

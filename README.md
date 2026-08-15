@@ -10,8 +10,8 @@ Signals, WO-006C Stakeholder Intelligence, WO-006D Next Best Action, WO-007
 Opportunity Workspace, WO-008A Revenue Brain Foundation, WO-008B Revenue Brain
 Longitudinal Reasoning, WO-009 Private Beta Readiness, WO-011 Interaction
 Domain Foundation, WO-012 AI Companion preparation, WO-013 AI Debrief/Voice
-Journal, WO-014 Visual Evidence/Presentation Mode and WO-015 Recording &
-Transcription Foundation. Interactions, Meetings,
+Journal, WO-014 Visual Evidence/Presentation Mode, WO-015 Recording &
+Transcription Foundation and WO-016 Browser Face-to-Face Companion. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -44,6 +44,11 @@ WO-015 adds optional explicitly consented foreground browser recording,
 resumable private WebM/MP4 chunk upload, durable batch transcription and immutable
 transcript versions/segments. The deterministic mock makes no network call; all
 recording flags default off and AI Debrief/manual capture remain first-class.
+WO-016 adds a mobile-first BEFORE/DURING/AFTER Companion that deliberately
+chooses recording or passive mode, reuses visual/debrief capture, stores only
+controlled metadata quick markers and shows capture state in Opportunity
+Workspace. Browser wake/retry is best effort and foreground-only; phone and
+online-meeting Interactions remain passive.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
@@ -64,16 +69,17 @@ Intelligence and Action. WO-011 now implements the tenant-isolated Interaction,
 Capture Session and metadata-only Evidence foundation plus one-to-one Meeting
 compatibility. WO-012 implements the preparation-only AI Companion slice,
 WO-013 implements reviewed post-interaction AI Debrief/Voice Journal, WO-014
-implements browser-only visual evidence and bounded Presentation Mode, and WO-015
-implements the browser-first recording/batch-transcription foundation.
+implements browser-only visual evidence and bounded Presentation Mode, WO-015
+implements the browser-first recording/batch-transcription foundation, and WO-016
+implements the thin browser Companion orchestration and gap-fill hand-off.
 Native/background capture, mobile client, meeting bot, telephony, connector, live
-transcription and live Companion remain unimplemented.
+transcription and live intelligence remain unimplemented.
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013, WO-014 and WO-015.
+WO-013, WO-014, WO-015 and WO-016.
 WO-010 remains the blueprint; later roadmap work remains unauthorised.
 
 ## Prerequisites
@@ -191,7 +197,9 @@ non-Meeting interactions, completes them and shows source-aware preparation
 brief readiness. Interaction Detail can create/reuse and review a responsive
 brief for every initial Interaction type. Linked Meeting and Interaction
 pages navigate to each other while the established Meeting workflow remains
-unchanged.
+unchanged. A mobile-first Companion route derives BEFORE/DURING/AFTER from the
+same lifecycle, offers explicit recording or passive capture where truthful,
+and hands completed interactions into gap-fill debrief.
 
 API routes:
 
@@ -212,6 +220,9 @@ API routes:
 - list/create/read/update/complete under `/api/v1/interactions`
 - read/create/review Pre-Interaction Briefs under
   `/api/v1/interactions/{interactionId}/companion/brief`
+- `POST /api/v1/interactions/{interactionId}/start` — idempotently enter the DURING phase
+- create/list/delete metadata-only markers under
+  `/api/v1/interactions/{interactionId}/companion/markers`
 - `GET /api/v1/accounts/{accountId}/brain` — retrieve ordered immutable snapshot compositions without content
 - account and opportunity `POST/GET .../brain/reasoning` — create/reuse and read deterministic longitudinal comparisons
 - nested participant CRUD under `/api/v1/meetings/{meetingId}/participants`

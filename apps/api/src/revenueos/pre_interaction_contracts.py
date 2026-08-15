@@ -121,6 +121,11 @@ class BriefStakeholder(StrictBriefModel):
     focus: ItemText
 
 
+class BriefParticipant(StrictBriefModel):
+    name: ShortText
+    role: ShortText
+
+
 class BriefCommitment(StrictBriefModel):
     commitment: ItemText
     owner: ShortText | None
@@ -147,6 +152,10 @@ class PreInteractionBriefContent(StrictBriefModel):
     success_criteria: tuple[ItemText, ...] = Field(max_length=5)
     interaction_guidance: ItemText
     confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    company_name: ShortText | None = None
+    opportunity_name: ShortText | None = None
+    participants: tuple[BriefParticipant, ...] = Field(default=(), max_length=20)
+    next_best_action: ItemText | None = None
 
     @field_validator(
         "recent_changes",
@@ -156,6 +165,7 @@ class PreInteractionBriefContent(StrictBriefModel):
         "open_commitments",
         "risks_to_watch",
         "success_criteria",
+        "participants",
         mode="before",
     )
     @classmethod

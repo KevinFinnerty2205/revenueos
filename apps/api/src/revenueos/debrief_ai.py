@@ -95,6 +95,8 @@ class StructuredDebriefReasoning:
                 "question_count": question_count,
                 "max_questions": max_questions,
                 "context_questions": list(context_questions),
+                "direct_supported_targets": list(cast(list[object], context.get("directRecordingCoverage", []))),
+                "marker_targets": list(cast(list[object], context.get("markerTargets", []))),
             }
         )
         return await self._execute(

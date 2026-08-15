@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from revenueos.auth import AuthenticatedUser, get_current_user
-from revenueos.models import CaptureSession, Evidence, Interaction
+from revenueos.models import CaptureSession, Evidence, Interaction, InteractionIntelligenceSnapshot, InteractionMarker
 
 from .conftest import (
     PRIMARY_ORGANISATION_ID,
@@ -110,6 +110,88 @@ def test_interaction_crud_filters_completion_and_terminal_lifecycle(client: Test
     assert invalid.json()["code"] == "invalid_lifecycle_transition"
 
 
+def test_companion_start_and_markers_are_idempotent_immutable_and_not_evidence(client: TestClient) -> None:
+    interaction = create_interaction(client, interaction_type="face_to_face_meeting")
+    interaction_id = str(interaction["id"])
+
+    started = client.post(f"/api/v1/interactions/{interaction_id}/start", json={})
+    assert started.status_code == 200, started.text
+    assert started.json()["lifecycleStatus"] == "in_progress"
+    actual_start_at = started.json()["actualStartAt"]
+    repeated_start = client.post(f"/api/v1/interactions/{interaction_id}/start", json={})
+    assert repeated_start.status_code == 200
+    assert repeated_start.json()["actualStartAt"] == actual_start_at
+
+    payload = {
+        "markerType": "buying_signal",
+        "recordingOffsetMs": 12_000,
+        "idempotencyKey": "companion-marker-1",
+    }
+    created = client.post(f"/api/v1/interactions/{interaction_id}/companion/markers", json=payload)
+    assert created.status_code == 201, created.text
+    marker_id = created.json()["id"]
+    assert created.json()["markerType"] == "buying_signal"
+    assert created.json()["recordingOffsetMs"] == 12_000
+
+    repeated = client.post(f"/api/v1/interactions/{interaction_id}/companion/markers", json=payload)
+    assert repeated.status_code == 201
+    assert repeated.json()["id"] == marker_id
+    conflict = client.post(
+        f"/api/v1/interactions/{interaction_id}/companion/markers",
+        json={**payload, "markerType": "risk"},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["code"] == "idempotency_conflict"
+    assert (
+        client.post(
+            f"/api/v1/interactions/{interaction_id}/companion/markers",
+            json={"markerType": "unsupported", "idempotencyKey": "invalid-marker"},
+        ).status_code
+        == 422
+    )
+
+    listed = client.get(f"/api/v1/interactions/{interaction_id}/companion/markers")
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()] == [marker_id]
+
+    async def verify_not_evidence() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            markers = list(
+                (
+                    await session.scalars(
+                        select(InteractionMarker).where(InteractionMarker.interaction_id == UUID(interaction_id))
+                    )
+                ).all()
+            )
+            snapshots = list(
+                (
+                    await session.scalars(
+                        select(InteractionIntelligenceSnapshot).where(
+                            InteractionIntelligenceSnapshot.interaction_id == UUID(interaction_id)
+                        )
+                    )
+                ).all()
+            )
+            assert [str(item.id) for item in markers] == [marker_id]
+            assert snapshots == []
+        await engine.dispose()
+
+    asyncio.run(verify_not_evidence())
+    assert client.delete(f"/api/v1/interactions/{interaction_id}/companion/markers/{marker_id}").status_code == 200
+    assert client.get(f"/api/v1/interactions/{interaction_id}/companion/markers").json() == []
+
+    second = client.post(
+        f"/api/v1/interactions/{interaction_id}/companion/markers",
+        json={"markerType": "risk", "idempotencyKey": "companion-marker-2"},
+    )
+    assert second.status_code == 201
+    assert client.post(f"/api/v1/interactions/{interaction_id}/complete", json={}).status_code == 200
+    immutable = client.delete(f"/api/v1/interactions/{interaction_id}/companion/markers/{second.json()['id']}")
+    assert immutable.status_code == 409
+    assert immutable.json()["code"] == "marker_immutable"
+
+
 def test_meeting_and_interaction_compatibility_stays_transactionally_aligned(client: TestClient) -> None:
     meeting = create_meeting(client, title="Compatibility discovery")
     meeting_id = str(meeting["id"])
@@ -172,6 +254,8 @@ def test_interactions_are_tenant_scoped_and_relationship_spoofing_is_hidden(
     app.dependency_overrides.pop(get_current_user)
 
     assert client.get(f"/api/v1/interactions/{other_interaction_id}").status_code == 404
+    assert client.post(f"/api/v1/interactions/{other_interaction_id}/start", json={}).status_code == 404
+    assert client.get(f"/api/v1/interactions/{other_interaction_id}/companion/markers").status_code == 404
     assert (
         client.patch(
             f"/api/v1/interactions/{other_interaction_id}",
