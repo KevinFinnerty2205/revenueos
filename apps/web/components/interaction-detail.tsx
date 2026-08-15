@@ -12,6 +12,7 @@ import { PostInteractionCapture } from "@/components/post-interaction-capture";
 import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
 import { RecordingFoundation } from "@/components/recording-foundation";
 import { ImportedCallRecording } from "@/components/imported-call-recording";
+import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
 
 export function InteractionDetail({
   interactionId,
@@ -63,7 +64,7 @@ export function InteractionDetail({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "The call could not be started.",
+          : "The interaction could not be started.",
       );
     } finally {
       setStarting(false);
@@ -180,6 +181,31 @@ export function InteractionDetail({
               </div>
             </>
           ) : null}
+          {interaction.interactionType === "online_meeting" ? (
+            <>
+              <div>
+                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Platform
+                </dt>
+                <dd className="mt-1 text-slate-800">
+                  {humanise(interaction.meetingPlatform ?? "other")}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Capture
+                </dt>
+                <dd className="mt-1 text-slate-800">
+                  {interaction.captureSource
+                    ? humanise(interaction.captureSource)
+                    : "Choose after meeting"}
+                  {interaction.ingestionState
+                    ? ` · ${humanise(interaction.ingestionState)}`
+                    : ""}
+                </dd>
+              </div>
+            </>
+          ) : null}
         </dl>
         {error ? (
           <p
@@ -207,14 +233,32 @@ export function InteractionDetail({
               {starting ? "Starting…" : "Start call"}
             </button>
           ) : null}
-          {canComplete && interaction.interactionType !== "phone_call" ? (
+          {interaction.interactionType === "online_meeting" &&
+          interaction.lifecycleStatus === "planned" ? (
+            <button
+              type="button"
+              className="primary-button"
+              disabled={starting || completing}
+              onClick={() => void start()}
+            >
+              {starting ? "Starting…" : "Start meeting"}
+            </button>
+          ) : null}
+          {canComplete &&
+          interaction.interactionType !== "phone_call" &&
+          (interaction.interactionType !== "online_meeting" ||
+            interaction.lifecycleStatus === "in_progress") ? (
             <button
               type="button"
               className="primary-button"
               disabled={completing}
               onClick={() => void complete()}
             >
-              {completing ? "Completing…" : "Complete interaction"}
+              {completing
+                ? "Completing…"
+                : interaction.interactionType === "online_meeting"
+                  ? "End meeting"
+                  : "Complete interaction"}
             </button>
           ) : null}
           {canComplete && interaction.interactionType === "phone_call" ? (
@@ -263,6 +307,17 @@ export function InteractionDetail({
               Open Meeting Intelligence
             </Link>
           ) : null}
+          {interaction.interactionType === "online_meeting" &&
+          interaction.meetingUrl ? (
+            <a
+              className="secondary-button"
+              href={interaction.meetingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open meeting
+            </a>
+          ) : null}
         </div>
       </div>
       <div className="mt-6" id="preparation">
@@ -284,7 +339,26 @@ export function InteractionDetail({
         </div>
       ) : null}
       <div className="mt-6" id="recording">
-        {interaction.interactionType === "phone_call" ? (
+        {interaction.interactionType === "online_meeting" ? (
+          interaction.lifecycleStatus === "completed" ? (
+            <OnlineMeetingCapture interaction={interaction} />
+          ) : (
+            <section
+              className="form-card"
+              aria-labelledby="online-capture-boundary"
+            >
+              <h2 id="online-capture-boundary" className="form-legend">
+                Use your meeting platform
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                RevenueOS remains passive while the meeting runs. It does not
+                join, record system audio, monitor the browser or run a meeting
+                bot. End the meeting here, then choose an authorised recording,
+                transcript, AI Debrief or Voice Journal capture path.
+              </p>
+            </section>
+          )
+        ) : interaction.interactionType === "phone_call" ? (
           interaction.lifecycleStatus === "completed" ? (
             <BetaFeatureGate feature="recordingCapture">
               <ImportedCallRecording interactionId={interaction.id} />

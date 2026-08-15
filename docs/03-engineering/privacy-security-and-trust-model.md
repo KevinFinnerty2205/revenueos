@@ -1,5 +1,11 @@
 # Privacy, security and trust model
 
+WO-018 stores only normalised online-meeting metadata, strips meeting-link queries
+and fragments, never server-fetches a supplied link, and requires authority plus an
+external-processing acknowledgement for import. Native OAuth/webhook processing is
+not implemented. Local erasure does not imply deletion of the upstream Teams, Zoom
+or Meet artefact.
+
 **Status:** Target controls through private beta. The [current security baseline](security-and-privacy.md) remains the truthful description of implemented controls.
 
 No production customer data should be used until the production readiness gates in this document are met. Current mock authentication is development/test-only and must never protect a public or production deployment.

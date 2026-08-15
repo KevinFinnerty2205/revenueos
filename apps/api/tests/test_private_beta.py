@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -58,9 +59,12 @@ from revenueos.models import (
     InteractionIntelligenceSnapshot,
     InteractionMarker,
     Meeting,
+    OnlineMeetingMetadata,
+    OnlineMeetingTranscriptImport,
     Organisation,
     OrganisationMembership,
     PreInteractionBrief,
+    RecordingSession,
     Transcript,
     TranscriptVersion,
     User,
@@ -189,7 +193,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0027_phone_call_intelligence"
+    assert EXPECTED_MIGRATION_HEAD == "0028_online_meeting_capture"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -529,6 +533,8 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         second = await seed_demo_data(factory, PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, settings)
         assert first == second
         assert first["provider_calls"] == 0
+        online_interaction_ids = first["online_meeting_interaction_ids"]
+        assert isinstance(online_interaction_ids, tuple)
         _, _, meeting_ids, _ = demo_ids(PRIMARY_ORGANISATION_ID)
         interaction_ids = demo_interaction_ids(PRIMARY_ORGANISATION_ID)
         debrief_ids = demo_debrief_ids(PRIMARY_ORGANISATION_ID)
@@ -586,6 +592,42 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             assert visual_snapshot.schema_version == 2
             assert visual_snapshot.content_json["sourceLabel"] == "customer whiteboard"
             assert all([await session.get(InteractionMarker, marker_id) is not None for marker_id in marker_ids])
+            metadata_rows = [
+                await session.scalar(
+                    select(OnlineMeetingMetadata).where(
+                        OnlineMeetingMetadata.organisation_id == PRIMARY_ORGANISATION_ID,
+                        OnlineMeetingMetadata.interaction_id == interaction_id,
+                    )
+                )
+                for interaction_id in online_interaction_ids
+            ]
+            assert [item.meeting_platform for item in metadata_rows if item is not None] == [
+                "microsoft_teams",
+                "zoom",
+                "google_meet",
+            ]
+            assert [item.capture_source for item in metadata_rows if item is not None] == [
+                "platform_transcript",
+                "platform_recording",
+                "ai_debrief",
+            ]
+            assert (
+                await session.scalar(
+                    select(OnlineMeetingTranscriptImport).where(
+                        OnlineMeetingTranscriptImport.organisation_id == PRIMARY_ORGANISATION_ID
+                    )
+                )
+                is not None
+            )
+            assert (
+                await session.scalar(
+                    select(RecordingSession).where(
+                        RecordingSession.organisation_id == PRIMARY_ORGANISATION_ID,
+                        RecordingSession.recording_source == "platform_recording",
+                    )
+                )
+                is not None
+            )
             assert (TEST_VISUAL_STORAGE / visual.storage_key).is_file()
             assert not any(
                 [
@@ -934,17 +976,32 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         interaction = client.post(
             "/api/v1/interactions",
             json={
-                "title": "Export test workshop",
-                "interactionType": "workshop",
+                "title": "Export test online meeting",
+                "interactionType": "online_meeting",
                 "lifecycleStatus": "completed",
                 "companyId": company.json()["id"],
                 "actualEndAt": "2026-07-25T05:00:00Z",
+                "meetingPlatform": "google_meet",
+                "meetingUrl": "https://meet.google.com/abc-defg-hij?authuser=secret",
             },
         )
         assert interaction.status_code == 201
         brief = client.post(f"/api/v1/interactions/{interaction.json()['id']}/companion/brief")
         assert brief.status_code == 200
         assert brief.json()["state"] == "completed"
+        transcript_import = client.post(
+            f"/api/v1/interactions/{interaction.json()['id']}/online-meeting/transcript",
+            json={
+                "fileName": "export-meeting.txt",
+                "contentBase64": base64.b64encode(b"Customer: Export-safe transcript").decode(),
+                "provenance": "platform_generated",
+                "language": "en-AU",
+                "userAttestedAuthority": True,
+                "externalProcessingAcknowledged": True,
+                "idempotencyKey": "export-online-transcript",
+            },
+        )
+        assert transcript_import.status_code == 201, transcript_import.text
         request = client.post("/api/v1/beta/admin/exports")
         assert request.status_code == 202
         request_id = UUID(request.json()["id"])
@@ -993,15 +1050,16 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 8
+        assert payload["exportVersion"] == 9
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
         assert exported_marker["marker_type"] == "decision"
         assert "idempotency_key" not in exported_marker
-        assert payload["captureSessions"][0]["id"] == str(capture_session_id)
-        assert payload["evidence"][0]["id"] == str(evidence_id)
-        assert payload["evidence"][0]["origin_class"] == "salesperson_reported"
+        exported_capture = next(item for item in payload["captureSessions"] if item["id"] == str(capture_session_id))
+        assert exported_capture["status"] == "completed"
+        exported_evidence = next(item for item in payload["evidence"] if item["id"] == str(evidence_id))
+        assert exported_evidence["origin_class"] == "salesperson_reported"
         assert payload["preInteractionBriefs"][0]["interaction_id"] == interaction.json()["id"]
         assert payload["preInteractionBriefs"][0]["source_references_json"]
         assert payload["debriefSessions"] == []
@@ -1012,6 +1070,10 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert payload["visualCandidateEvidence"] == []
         assert payload["interactionIntelligenceSnapshots"] == []
         assert payload["revenueBrainInteractionSnapshots"] == []
+        assert payload["onlineMeetingMetadata"][0]["meeting_platform"] == "google_meet"
+        assert payload["onlineMeetingMetadata"][0]["safe_meeting_url"] == ("https://meet.google.com/abc-defg-hij")
+        assert payload["onlineMeetingTranscriptImports"][0]["provenance"] == "platform_generated"
+        assert "idempotency_key" not in payload["onlineMeetingTranscriptImports"][0]
         exported_text = path.read_text(encoding="utf-8")
         assert str(SECONDARY_ORGANISATION_ID) not in exported_text
         forbidden = {"worker_id", "lease_expires_at", "last_error_message_safe", "provider_request_id"}
@@ -1030,7 +1092,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 8
+        assert download.json()["exportVersion"] == 9
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

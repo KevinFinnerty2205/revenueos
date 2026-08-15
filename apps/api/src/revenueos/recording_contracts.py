@@ -19,6 +19,7 @@ RecordingSource = Literal[
     "business_phone_recording",
     "user_uploaded_recording",
     "external_provider_recording",
+    "platform_recording",
 ]
 RecordingLifecycleStatus = Literal[
     "created",

@@ -1,5 +1,11 @@
 # Product overview
 
+WO-018 makes Microsoft Teams, Zoom, Google Meet and other online meetings a
+current browser-first Interaction workflow: existing preparation, safe meeting
+navigation, passive Companion timing and deliberate recording/transcript import or
+AI Debrief/Voice Journal fallback. It does not add a native connector, meeting bot
+or system-audio capture.
+
 ## Product definition
 
 RevenueOS AI is a multi-tenant relationship-intelligence platform. Sales Brain will help relationship-driven revenue professionals prepare for conversations, capture useful context, reduce administration and follow through thoughtfully.

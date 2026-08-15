@@ -10,6 +10,7 @@ from revenueos.debrief_services import DebriefService
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_repositories import InteractionRepository
 from revenueos.interaction_services import InteractionService
+from revenueos.online_meeting_services import OnlineMeetingService
 from revenueos.pre_interaction_services import PreInteractionBriefService
 from revenueos.recording_services import RecordingService
 from revenueos.tenant import TenantContext, get_tenant_context
@@ -79,3 +80,14 @@ async def get_recording_service(
     if not await InteractionRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
         raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
     yield RecordingService(session, tenant, settings)
+
+
+async def get_online_meeting_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[OnlineMeetingService]:
+    await set_tenant_database_context(session, tenant.organisation_id)
+    if not await InteractionRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
+        raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
+    yield OnlineMeetingService(session, tenant, settings)

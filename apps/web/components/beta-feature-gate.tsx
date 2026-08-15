@@ -11,7 +11,8 @@ type BetaFeature =
   | "voiceJournal"
   | "visualEvidence"
   | "presentationMode"
-  | "recordingCapture";
+  | "recordingCapture"
+  | "onlineMeetingCapture";
 
 interface Capabilities {
   featureFlags: Record<string, boolean>;

@@ -1,5 +1,8 @@
 # Interaction lifecycle and UX
 
+WO-018 applies this lifecycle to online meetings with safe Open Meeting navigation,
+a passive During state and capability-driven post-meeting import/debrief choices.
+
 - **Status:** WO-016 implements the responsive browser Companion across the
   persisted planned, in-progress and completed Interaction lifecycle. The richer
   product-state diagram below remains a target model, not a database enum. WO-017

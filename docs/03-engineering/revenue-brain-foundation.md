@@ -1,5 +1,10 @@
 # Revenue Brain foundation
 
+WO-018 does not add a Revenue Brain path. Once imported online-meeting evidence is
+reviewed and processed by existing Interaction Intelligence, the established
+Meeting-linked snapshot composition, provenance and idempotency rules apply. An
+import retry cannot itself create a second snapshot.
+
 ## Product behaviour
 
 WO-008A adds an append-only account timeline of immutable meeting-intelligence

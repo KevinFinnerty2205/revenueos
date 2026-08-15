@@ -23,6 +23,7 @@ from revenueos.models import (
     BetaSystemEvent,
     Evidence,
     MeetingAuditEvent,
+    OnlineMeetingMetadata,
     Organisation,
     RecordingSession,
     RecordingUsageCounter,
@@ -162,6 +163,12 @@ class RecordingWorkerService:
                 ):
                     recording.lifecycle_status = transition_recording(recording.lifecycle_status, "failed")
                     recording.failure_code = "daily_transcription_minutes_limit_exceeded"
+                    await self._set_online_meeting_ingestion_state(
+                        session,
+                        recording.organisation_id,
+                        recording.interaction_id,
+                        "failed",
+                    )
                     self._event(
                         session,
                         recording,
@@ -350,6 +357,12 @@ class RecordingWorkerService:
             if existing_version is not None:
                 if recording.lifecycle_status != "completed":
                     recording.lifecycle_status = "completed"
+                await self._set_online_meeting_ingestion_state(
+                    session,
+                    recording.organisation_id,
+                    recording.interaction_id,
+                    "ready",
+                )
                 return existing_version.meeting_id
             if recording.lifecycle_status != "transcribing":
                 return None
@@ -461,6 +474,12 @@ class RecordingWorkerService:
             recording.transcription_request_id = result.provider_request_id
             recording.transcription_completed_at = now
             recording.failure_code = None
+            await self._set_online_meeting_ingestion_state(
+                session,
+                recording.organisation_id,
+                recording.interaction_id,
+                "ready",
+            )
             self._event(
                 session,
                 recording,
@@ -507,6 +526,12 @@ class RecordingWorkerService:
                 recording.lifecycle_status = transition_recording(recording.lifecycle_status, "uploaded")
             else:
                 recording.lifecycle_status = transition_recording(recording.lifecycle_status, "failed")
+                await self._set_online_meeting_ingestion_state(
+                    session,
+                    recording.organisation_id,
+                    recording.interaction_id,
+                    "failed",
+                )
             recording.failure_code = code
             self._event(
                 session,
@@ -568,6 +593,23 @@ class RecordingWorkerService:
             "uploaded_audio_recording": "uploaded_audio",
             "imported_audio_recording": "imported_audio",
         }[recording_type]
+
+    @staticmethod
+    async def _set_online_meeting_ingestion_state(
+        session: AsyncSession,
+        organisation_id: UUID,
+        interaction_id: UUID,
+        state: str,
+    ) -> None:
+        metadata = await session.scalar(
+            select(OnlineMeetingMetadata).where(
+                OnlineMeetingMetadata.organisation_id == organisation_id,
+                OnlineMeetingMetadata.interaction_id == interaction_id,
+            )
+        )
+        if metadata is not None:
+            metadata.ingestion_state = state
+            metadata.updated_at = datetime.now(UTC)
 
     @staticmethod
     def _event(

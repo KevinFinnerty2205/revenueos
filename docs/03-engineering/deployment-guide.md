@@ -117,6 +117,13 @@ Contact tenancy, constraints, downgrade/re-upgrade and a single Alembic head. Th
 work order adds no provider credential. Keep recording/transcription flags off until
 the existing storage, consent, region and operational gates are approved.
 
+WO-018 requires current head `0028_online_meeting_capture`. Verify both new tables,
+source constraint changes, deterministic backfill, forced RLS, downgrade/re-upgrade
+and a single head. `API_FEATURE_ONLINE_MEETING_NATIVE_INTEGRATION_ENABLED` and
+`API_FEATURE_ONLINE_MEETING_AUTO_INGEST_ENABLED` remain false. No meeting-provider
+credential is required; deliberate import reuses existing transcript/recording
+storage, consent, quota, export and deletion gates.
+
 ## Rollback
 
 Prefer application rollback while retaining `0025`. Disable recording,

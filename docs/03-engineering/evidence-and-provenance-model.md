@@ -1,5 +1,10 @@
 # Evidence and provenance model
 
+WO-018 distinguishes platform/user transcript and recording sources while
+preserving imported provider, declared provenance, timestamp and speaker-label
+availability. Speaker labels are not identities and imported content is not marked
+customer-confirmed.
+
 - **Status:** Approved model; WO-011 implements the metadata envelope, WO-013/014
   implement reviewed reported/visual evidence, WO-015 implements recorded
   transcript evidence with immutable versions/segments, and WO-017 retains

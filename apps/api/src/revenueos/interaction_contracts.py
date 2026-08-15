@@ -14,7 +14,11 @@ from revenueos.domain import (
     InteractionCreationOrigin,
     InteractionLifecycleStatus,
     InteractionType,
+    OnlineMeetingCaptureSource,
+    OnlineMeetingIngestionState,
+    OnlineMeetingPlatform,
 )
+from revenueos.online_meeting_contracts import BoundedExternalMeetingId, BoundedMeetingReference
 
 TimezoneName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
 
@@ -46,6 +50,9 @@ class InteractionCreate(APIModel):
     contact_id: UUID | None = None
     call_direction: CallDirection | None = None
     call_outcome: CallOutcome | None = None
+    meeting_platform: OnlineMeetingPlatform | None = None
+    meeting_url: BoundedMeetingReference | None = None
+    external_meeting_id: BoundedExternalMeetingId | None = None
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
     actual_start_at: datetime | None = None
@@ -67,6 +74,12 @@ class InteractionCreate(APIModel):
             self.actual_start_at,
             self.actual_end_at,
         )
+        if self.interaction_type != InteractionType.ONLINE_MEETING and any(
+            value is not None for value in (self.meeting_platform, self.meeting_url, self.external_meeting_id)
+        ):
+            raise ValueError("Online-meeting metadata is available only for online meetings.")
+        if self.meeting_url is not None and self.meeting_platform in {None, OnlineMeetingPlatform.OTHER}:
+            raise ValueError("Choose Teams, Zoom or Google Meet before adding a meeting link.")
         return self
 
 
@@ -81,6 +94,9 @@ class InteractionUpdate(UpdateRequest):
     contact_id: UUID | None = None
     call_direction: CallDirection | None = None
     call_outcome: CallOutcome | None = None
+    meeting_platform: OnlineMeetingPlatform | None = None
+    meeting_url: BoundedMeetingReference | None = None
+    external_meeting_id: BoundedExternalMeetingId | None = None
     scheduled_start_at: datetime | None = None
     scheduled_end_at: datetime | None = None
     actual_start_at: datetime | None = None
@@ -132,8 +148,13 @@ class InteractionResponse(APIModel):
     creation_origin: InteractionCreationOrigin
     call_direction: CallDirection | None
     call_outcome: CallOutcome | None
+    meeting_platform: OnlineMeetingPlatform | None = None
+    meeting_url: str | None = None
+    external_meeting_id: str | None = None
+    capture_source: OnlineMeetingCaptureSource | None = None
+    ingestion_state: OnlineMeetingIngestionState | None = None
     duration_seconds: int | None = None
-    capture_methods: tuple[Literal["debrief", "voice_journal", "recording"], ...] = ()
+    capture_methods: tuple[Literal["debrief", "voice_journal", "recording", "transcript"], ...] = ()
     intelligence_state: Literal["not_ready", "processing", "review_required", "ready", "not_applicable"] = "not_ready"
     recording_available: bool = False
     created_by_user_id: UUID

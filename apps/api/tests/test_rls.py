@@ -95,6 +95,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "opportunity_audit_events",
         "tasks",
         "interactions",
+        "online_meeting_metadata",
+        "online_meeting_transcript_imports",
         "interaction_markers",
         "pre_interaction_briefs",
         "capture_sessions",
@@ -172,6 +174,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "recording_transcript_version_id": uuid.uuid4(),
         "recording_segment_id": uuid.uuid4(),
         "marker_id": uuid.uuid4(),
+        "online_meeting_metadata_id": uuid.uuid4(),
+        "online_meeting_transcript_import_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -215,6 +219,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "recording_transcript_version_id": uuid.uuid4(),
         "recording_segment_id": uuid.uuid4(),
         "marker_id": uuid.uuid4(),
+        "online_meeting_metadata_id": uuid.uuid4(),
+        "online_meeting_transcript_import_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -386,6 +392,21 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             **identity_parameters,
                             "marker_key": f"rls-marker-{suffix.lower()}",
                         },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO online_meeting_metadata
+                                (id, organisation_id, interaction_id,
+                                 meeting_platform, capture_source,
+                                 ingestion_state)
+                            VALUES
+                                (:online_meeting_metadata_id,
+                                 :organisation_id, :interaction_id,
+                                 'google_meet', 'platform_transcript', 'ready')
+                            """
+                        ),
+                        identity_parameters,
                     )
                     await connection.execute(
                         text(
@@ -784,6 +805,33 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await connection.execute(
                         text(
                             """
+                            INSERT INTO online_meeting_transcript_imports
+                                (id, organisation_id, interaction_id,
+                                 capture_session_id, evidence_id,
+                                 transcript_version_id, imported_by_user_id,
+                                 provenance, source_format, language,
+                                 content_sha256, character_count,
+                                 timestamps_present, speaker_labels_present,
+                                 idempotency_key)
+                            VALUES
+                                (:online_meeting_transcript_import_id,
+                                 :organisation_id, :interaction_id,
+                                 :capture_session_id, :evidence_id,
+                                 :recording_transcript_version_id, :user_id,
+                                 'platform_generated', 'vtt', 'en-AU',
+                                 :online_transcript_checksum, 25, true, true,
+                                 :online_transcript_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "online_transcript_checksum": suffix.lower() * 64,
+                            "online_transcript_key": f"rls-online-transcript-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
                             UPDATE recording_sessions
                             SET transcript_version_id = :recording_transcript_version_id
                             WHERE organisation_id = :organisation_id
@@ -1084,6 +1132,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'opportunity_audit_events',
                                     'tasks',
                                     'interactions',
+                                    'online_meeting_metadata',
+                                    'online_meeting_transcript_imports',
                                     'interaction_markers',
                                     'pre_interaction_briefs',
                                     'capture_sessions',
@@ -1486,6 +1536,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "candidate_evidence",
                     "visual_candidate_evidence",
                     "visual_assets",
+                    "online_meeting_transcript_imports",
                     "transcript_segments",
                     "transcript_versions",
                     "recording_chunks",
@@ -1503,6 +1554,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "transcripts",
                     "meeting_participants",
                     "meetings",
+                    "online_meeting_metadata",
                     "interactions",
                     "tasks",
                     "contacts",

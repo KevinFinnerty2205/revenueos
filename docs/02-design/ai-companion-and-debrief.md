@@ -1,5 +1,8 @@
 # AI Companion and debrief
 
+WO-018 reuses preparation and debrief for online meetings while the During
+Companion remains passive. Live online audio/intelligence remains unimplemented.
+
 - **Status:** WO-016 implements the responsive BEFORE/DURING/AFTER Companion by
   orchestrating the WO-012 brief, WO-013 debrief/Voice Journal, WO-014 visuals and
   WO-015 foreground recording foundations. WO-017 adds adaptive phone-call

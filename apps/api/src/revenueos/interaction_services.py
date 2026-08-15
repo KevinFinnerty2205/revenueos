@@ -3,13 +3,19 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.business_repositories import PageResult
-from revenueos.domain import CallDirection, InteractionAuditAction, InteractionLifecycleStatus, InteractionType
+from revenueos.domain import (
+    CallDirection,
+    InteractionAuditAction,
+    InteractionLifecycleStatus,
+    InteractionType,
+    OnlineMeetingPlatform,
+)
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_compatibility import (
     interaction_transition_is_allowed,
@@ -18,7 +24,16 @@ from revenueos.interaction_compatibility import (
 )
 from revenueos.interaction_contracts import InteractionComplete, InteractionCreate, InteractionStart, InteractionUpdate
 from revenueos.interaction_repositories import InteractionRecord, InteractionRepository
-from revenueos.models import Contact, Interaction, InteractionAuditEvent, Opportunity
+from revenueos.models import (
+    Contact,
+    Interaction,
+    InteractionAuditEvent,
+    Meeting,
+    MeetingAuditEvent,
+    OnlineMeetingMetadata,
+    Opportunity,
+)
+from revenueos.online_meeting_provider import UnsafeMeetingReference, normalize_meeting_reference
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.interactions")
@@ -82,6 +97,7 @@ class InteractionService:
         await self._validate_relationships(request.company_id, request.opportunity_id, request.contact_id)
         self._validate_lifecycle_times(request.lifecycle_status.value, request.actual_end_at)
         interaction = Interaction(
+            id=uuid4(),
             organisation_id=self.tenant.organisation_id,
             company_id=request.company_id,
             opportunity_id=request.opportunity_id,
@@ -104,8 +120,80 @@ class InteractionService:
             created_by_user_id=self.tenant.user_id,
         )
         self.session.add(interaction)
+        if request.interaction_type == InteractionType.ONLINE_MEETING:
+            platform = request.meeting_platform or OnlineMeetingPlatform.OTHER
+            safe_url, meeting_host = self._safe_meeting_reference(platform, request.meeting_url)
+            self.session.add_all(
+                (
+                    OnlineMeetingMetadata(
+                        id=uuid4(),
+                        organisation_id=self.tenant.organisation_id,
+                        interaction_id=interaction.id,
+                        meeting_platform=platform.value,
+                        safe_meeting_url=safe_url,
+                        meeting_host=meeting_host,
+                        external_meeting_id=request.external_meeting_id,
+                        ingestion_state="not_started",
+                    ),
+                    Meeting(
+                        id=uuid4(),
+                        organisation_id=self.tenant.organisation_id,
+                        interaction_id=interaction.id,
+                        title=interaction.title,
+                        description=None,
+                        meeting_date=(
+                            interaction.scheduled_start_at or interaction.actual_start_at or datetime.now(UTC)
+                        ),
+                        meeting_type="remote",
+                        status=(
+                            "completed"
+                            if interaction.lifecycle_status == InteractionLifecycleStatus.COMPLETED.value
+                            else (
+                                "cancelled"
+                                if interaction.lifecycle_status == InteractionLifecycleStatus.CANCELLED.value
+                                else "scheduled"
+                            )
+                        ),
+                        company_id=interaction.company_id,
+                        opportunity_id=interaction.opportunity_id,
+                        owner_user_id=self.tenant.user_id,
+                        created_by=self.tenant.user_id,
+                        updated_by=self.tenant.user_id,
+                    ),
+                )
+            )
         await self._flush()
         self.session.add(self._audit(interaction.id, InteractionAuditAction.CREATED, self._create_fields()))
+        if request.interaction_type == InteractionType.ONLINE_MEETING:
+            self.session.add(
+                self._audit(
+                    interaction.id,
+                    InteractionAuditAction.MEETING_LINKED,
+                    ["meeting_id"],
+                )
+            )
+            linked = await self.repository.get_interaction(self.tenant.organisation_id, interaction.id)
+            if linked is not None and linked.meeting_id is not None:
+                self.session.add(
+                    MeetingAuditEvent(
+                        id=uuid4(),
+                        organisation_id=self.tenant.organisation_id,
+                        meeting_id=linked.meeting_id,
+                        actor_user_id=self.tenant.user_id,
+                        action="created",
+                        entity_type="meeting",
+                        entity_id=linked.meeting_id,
+                        changed_fields=[
+                            "company_id",
+                            "meeting_date",
+                            "meeting_type",
+                            "opportunity_id",
+                            "owner_user_id",
+                            "status",
+                            "title",
+                        ],
+                    )
+                )
         await self._commit(interaction)
         logger.info(
             "phone_call_created" if interaction.interaction_type == "phone_call" else "interaction_created",
@@ -124,6 +212,11 @@ class InteractionService:
         record = await self._get_for_update(interaction_id)
         interaction = record.interaction
         values = request.model_dump(exclude_unset=True)
+        online_values = {
+            field_name: values.pop(field_name)
+            for field_name in ("meeting_platform", "meeting_url", "external_meeting_id")
+            if field_name in values
+        }
         for enum_field in ("interaction_type", "lifecycle_status", "call_direction", "call_outcome"):
             if enum_field in values and values[enum_field] is not None:
                 values[enum_field] = values[enum_field].value
@@ -133,6 +226,7 @@ class InteractionService:
         opportunity_id = values.get("opportunity_id", interaction.opportunity_id)
         contact_id = values.get("contact_id", interaction.contact_id)
         target_type = values.get("interaction_type", interaction.interaction_type)
+        await self._apply_online_meeting_update(record, target_type, online_values)
         if target_type == InteractionType.PHONE_CALL.value:
             if values.get("call_direction", interaction.call_direction) is None:
                 values["call_direction"] = CallDirection.UNKNOWN.value
@@ -182,10 +276,44 @@ class InteractionService:
             setattr(interaction, field_name, value)
         now = datetime.now(UTC)
         interaction.updated_at = now
-        if record.meeting_id is not None:
+        meeting: Meeting | None = None
+        if target_type == InteractionType.ONLINE_MEETING.value and record.meeting_id is None:
+            meeting = Meeting(
+                id=uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                interaction_id=interaction.id,
+                title=interaction.title,
+                description=None,
+                meeting_date=interaction.scheduled_start_at or interaction.actual_start_at or now,
+                meeting_type="remote",
+                status=(
+                    "completed"
+                    if interaction.lifecycle_status == InteractionLifecycleStatus.COMPLETED.value
+                    else (
+                        "cancelled"
+                        if interaction.lifecycle_status == InteractionLifecycleStatus.CANCELLED.value
+                        else "scheduled"
+                    )
+                ),
+                company_id=interaction.company_id,
+                opportunity_id=interaction.opportunity_id,
+                owner_user_id=self.tenant.user_id,
+                created_by=self.tenant.user_id,
+                updated_by=self.tenant.user_id,
+            )
+            self.session.add(meeting)
+            self.session.add(
+                self._audit(
+                    interaction.id,
+                    InteractionAuditAction.MEETING_LINKED,
+                    ["meeting_id"],
+                )
+            )
+        elif record.meeting_id is not None:
             meeting = await self.repository.get_meeting_for_update(self.tenant.organisation_id, record.meeting_id)
             if meeting is None:
                 raise PublicAPIError("compatibility_conflict", "The linked Meeting is unavailable.", 409)
+        if meeting is not None:
             project_interaction_to_meeting(
                 interaction,
                 meeting,
@@ -197,7 +325,7 @@ class InteractionService:
             if values.get("lifecycle_status") == InteractionLifecycleStatus.CANCELLED.value
             else InteractionAuditAction.UPDATED
         )
-        self.session.add(self._audit(interaction.id, action, list(values)))
+        self.session.add(self._audit(interaction.id, action, [*values, *online_values]))
         await self._commit(interaction)
         return await self.get_interaction(interaction.id)
 
@@ -390,6 +518,64 @@ class InteractionService:
                 "Contact, call direction and call outcome are available only for phone calls.",
                 422,
             )
+
+    async def _apply_online_meeting_update(
+        self,
+        record: InteractionRecord,
+        target_type: str,
+        values: dict[str, Any],
+    ) -> None:
+        metadata = record.online_meeting_metadata
+        if target_type != InteractionType.ONLINE_MEETING.value:
+            if any(value is not None for value in values.values()):
+                raise PublicAPIError(
+                    "invalid_online_meeting_metadata",
+                    "Online-meeting metadata is available only for online meetings.",
+                    422,
+                )
+            if metadata is not None:
+                await self.session.delete(metadata)
+            return
+        platform_value = values.get(
+            "meeting_platform",
+            metadata.meeting_platform if metadata is not None else OnlineMeetingPlatform.OTHER.value,
+        )
+        if hasattr(platform_value, "value"):
+            platform_value = platform_value.value
+        platform = OnlineMeetingPlatform(platform_value)
+        meeting_url = values.get(
+            "meeting_url",
+            metadata.safe_meeting_url if metadata is not None else None,
+        )
+        safe_url, meeting_host = self._safe_meeting_reference(platform, meeting_url)
+        if metadata is None:
+            metadata = OnlineMeetingMetadata(
+                id=uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                interaction_id=record.interaction.id,
+                meeting_platform=platform.value,
+                ingestion_state="not_started",
+            )
+            self.session.add(metadata)
+        metadata.meeting_platform = platform.value
+        metadata.safe_meeting_url = safe_url
+        metadata.meeting_host = meeting_host
+        if "external_meeting_id" in values:
+            metadata.external_meeting_id = values["external_meeting_id"]
+        metadata.updated_at = datetime.now(UTC)
+
+    @staticmethod
+    def _safe_meeting_reference(
+        platform: OnlineMeetingPlatform,
+        meeting_url: str | None,
+    ) -> tuple[str | None, str | None]:
+        if meeting_url is None:
+            return None, None
+        try:
+            normalised = normalize_meeting_reference(platform, meeting_url)
+        except UnsafeMeetingReference as exc:
+            raise PublicAPIError("unsafe_meeting_url", str(exc), 422) from exc
+        return normalised.safe_url, normalised.host
 
     @staticmethod
     def _require_transition(current: str, target: str) -> None:

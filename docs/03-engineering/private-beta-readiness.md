@@ -1,5 +1,12 @@
 # Private beta readiness guide
 
+WO-018 adds a 512 KiB online transcript-import ceiling and server-authoritative
+`ONLINE_MEETING_CAPTURE`, `ONLINE_MEETING_IMPORT`,
+`ONLINE_MEETING_NATIVE_INTEGRATION` and `ONLINE_MEETING_AUTO_INGEST` flags. Capture
+and deliberate import default on locally; native and auto-ingestion default off.
+Recording bytes, transcription minutes/requests and AI generation limits are
+reused—there is no billing or native-fetch quota.
+
 ## Status and boundary
 
 WO-009 prepares RevenueOS for a controlled private beta with approximately
@@ -122,7 +129,7 @@ Admins queue a versioned JSON export in Settings. An operator runs:
 uv --directory apps/api run revenueos-beta-maintenance export --organisation-id <UUID> --request-id <UUID>
 ```
 
-Export version 8 has deterministic sections/order and a safe UUID filename. It may
+Export version 9 has deterministic sections/order and a safe UUID filename. It may
 contain authorised transcripts and validated intelligence, so store it only in
 the restricted directory configured by `API_PRIVATE_BETA_EXPORT_DIRECTORY`.
 It includes Interaction, Capture Session, Evidence, Interaction audit metadata and
@@ -185,6 +192,10 @@ defaults:
 | `API_FEATURE_RECORDING_CAPTURE_ENABLED`     | `false` |
 | `API_FEATURE_TRANSCRIPTION_ENABLED`         | `false` |
 | `API_FEATURE_AUTO_GENERATE_INTELLIGENCE_AFTER_TRANSCRIPTION` | `false` |
+| `API_FEATURE_ONLINE_MEETING_CAPTURE_ENABLED` | `true` |
+| `API_FEATURE_ONLINE_MEETING_IMPORT_ENABLED` | `true` |
+| `API_FEATURE_ONLINE_MEETING_NATIVE_INTEGRATION_ENABLED` | `false` |
+| `API_FEATURE_ONLINE_MEETING_AUTO_INGEST_ENABLED` | `false` |
 | `API_FEATURE_DATA_EXPORT_ENABLED`           | `true`  |
 | `API_FEATURE_ORGANISATION_DELETION_ENABLED` | `false` |
 
@@ -197,7 +208,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-Alembic head `0026_face_to_face_companion`, identity configuration, selected
+Alembic head `0028_online_meeting_capture`, identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
@@ -218,6 +229,8 @@ executive and trade-show variants. Each upcoming Interaction has an immutable
 deterministic brief. A reviewed phone AI Debrief supplies “Reported by you”
 Interaction/Revenue Brain state. The upcoming and completed phone calls link the
 same synthetic Contact with outbound direction; a trade-show Voice Journal remains resumable.
+The online-meeting set adds deterministic Teams platform-transcript, Zoom
+platform-recording and Google Meet AI-Debrief fallback paths.
 The completed presentation includes a synthetic, reviewed customer-whiteboard
 visual in private storage and a provenance-labelled schema-v2 Interaction and
 Revenue Brain projection. The completed executive lunch includes two
@@ -292,7 +305,7 @@ server-authoritative and default off. Production validation requires private
 S3-compatible storage and a deployment signing secret when recording is enabled.
 
 Retention and organisation/Interaction deletion remove recording objects before
-database lineage. Export version 8 adds recording/consent metadata, a content-free
+database lineage. Export version 9 includes recording/consent metadata, a content-free
 chunk manifest, transcript versions and segments; raw audio, storage keys, signed
 URLs and provider request IDs are excluded. Reconciliation is tenant-scoped and
 metadata-only.
@@ -316,6 +329,16 @@ transcription-minute limits. Export version 8 adds Contact/direction/outcome,
 recording-source and reconciliation-state metadata. Synthetic demo data includes an
 outbound Contact-linked call and reviewed reported intelligence; it contains no real
 number, customer content or provider call.
+
+## WO-018 online-meeting controls
+
+The import service reuses recording, transcription and AI generation quotas and
+adds only `API_PRIVATE_BETA_MAX_ONLINE_MEETING_TRANSCRIPT_BYTES` (512 KiB by
+default). Native and auto-ingestion flags default off. Export version 9 includes
+normalised metadata and authorised transcript import lineage. Organisation deletion
+removes local metadata/imports/objects and derived evidence but does not delete a
+provider's upstream artefact. Demo data has one Teams transcript, one Zoom recording
+and one Google Meet Debrief fallback; no external call or credential is used.
 
 - Private beta only; production customer data is prohibited unless separately
   approved.

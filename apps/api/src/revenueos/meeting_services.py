@@ -32,6 +32,7 @@ from revenueos.models import (
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
+    OnlineMeetingMetadata,
     Transcript,
     TranscriptVersion,
 )
@@ -250,6 +251,16 @@ class MeetingService(_MeetingDomainService):
         try:
             self.repository.add(interaction)
             self.repository.add(meeting)
+            if request.meeting_type.value == "remote":
+                self.repository.add(
+                    OnlineMeetingMetadata(
+                        id=uuid4(),
+                        organisation_id=self.tenant.organisation_id,
+                        interaction_id=interaction.id,
+                        meeting_platform="other",
+                        ingestion_state="not_started",
+                    )
+                )
             await self.repository.flush()
             participants = [
                 self._participant_from_create(meeting.id, participant_request)

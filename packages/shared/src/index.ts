@@ -80,7 +80,7 @@ export type InteractionCreationOrigin =
 export type CallDirection = "inbound" | "outbound" | "unknown";
 export type CallOutcome = "connected" | "no_answer" | "voicemail" | "cancelled";
 export type InteractionCaptureMethod =
-  "debrief" | "voice_journal" | "recording";
+  "debrief" | "voice_journal" | "recording" | "transcript";
 export type InteractionIntelligenceState =
   "not_ready" | "processing" | "review_required" | "ready" | "not_applicable";
 export type PreInteractionBriefState =
@@ -94,7 +94,35 @@ export type PreInteractionBriefState =
 export type BriefPriority = "high" | "medium" | "low";
 export type AttendanceStatus = "invited" | "attended" | "absent" | "unknown";
 export type ParticipantRole = "host" | "attendee";
-export type TranscriptSource = "manual" | "upload";
+export type TranscriptSource =
+  | "manual"
+  | "upload"
+  | "recorded_audio"
+  | "uploaded_audio"
+  | "imported_audio"
+  | "platform_generated"
+  | "user_uploaded"
+  | "externally_generated"
+  | "manually_pasted";
+export type OnlineMeetingPlatform =
+  "microsoft_teams" | "zoom" | "google_meet" | "other";
+export type OnlineMeetingCaptureSource =
+  | "platform_recording"
+  | "platform_transcript"
+  | "user_uploaded_recording"
+  | "user_uploaded_transcript"
+  | "native_integration"
+  | "meeting_bot"
+  | "ai_debrief"
+  | "voice_journal"
+  | "manual_notes";
+export type OnlineMeetingIngestionState =
+  "not_started" | "uploading" | "processing" | "ready" | "failed";
+export type TranscriptProvenance =
+  | "platform_generated"
+  | "user_uploaded"
+  | "externally_generated"
+  | "manually_pasted";
 export type MeetingAuditAction =
   | "created"
   | "updated"
@@ -379,6 +407,11 @@ export interface Interaction extends TenantEntity {
   creationOrigin: InteractionCreationOrigin;
   callDirection: CallDirection | null;
   callOutcome: CallOutcome | null;
+  meetingPlatform?: OnlineMeetingPlatform | null;
+  meetingUrl?: string | null;
+  externalMeetingId?: string | null;
+  captureSource?: OnlineMeetingCaptureSource | null;
+  ingestionState?: OnlineMeetingIngestionState | null;
   durationSeconds: number | null;
   captureMethods: InteractionCaptureMethod[];
   intelligenceState: InteractionIntelligenceState;
@@ -1467,7 +1500,8 @@ export type RecordingSource =
   | "customer_call_recording"
   | "business_phone_recording"
   | "user_uploaded_recording"
-  | "external_provider_recording";
+  | "external_provider_recording"
+  | "platform_recording";
 export type RecordingLifecycleStatus =
   | "created"
   | "recording"
@@ -1550,6 +1584,47 @@ export interface RecordingTranscription {
   text: string | null;
   segments: RecordingTranscriptSegment[];
   completedAt: string | null;
+  safeMessage: string;
+}
+
+export interface OnlineMeetingCapabilities {
+  meetingPlatform: OnlineMeetingPlatform;
+  recordingImport: boolean;
+  transcriptImport: boolean;
+  nativeFetch: false;
+  aiDebrief: boolean;
+  voiceJournal: boolean;
+  nativeConnectionState: "not_configured";
+  safeMessage: string;
+}
+
+export interface OnlineMeetingTranscriptSegment {
+  sequenceNumber: number;
+  startMs: number;
+  endMs: number;
+  speakerLabel: string | null;
+  text: string;
+}
+
+export interface OnlineMeetingTranscriptImport {
+  id: string;
+  interactionId: string;
+  captureSessionId: string;
+  meetingId: string;
+  transcriptVersionId: string;
+  transcriptId: string;
+  meetingPlatform: OnlineMeetingPlatform;
+  provenance: TranscriptProvenance;
+  sourceFormat: "txt" | "vtt" | "srt";
+  language: string;
+  version: number;
+  characterCount: number;
+  timestampsPresent: boolean;
+  speakerLabelsPresent: boolean;
+  importedAt: string;
+  duplicate: boolean;
+  text: string;
+  segments: OnlineMeetingTranscriptSegment[];
   safeMessage: string;
 }
 

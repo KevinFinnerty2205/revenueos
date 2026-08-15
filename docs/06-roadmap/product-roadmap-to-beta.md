@@ -576,8 +576,9 @@ scope still requires a separately approved work order.
 WO-011 Interaction Domain Foundation, WO-012 preparation, WO-013 reviewed
 non-recording AI Debrief/Voice Journal and WO-014 browser-first visual evidence and
 Presentation Mode, WO-015 optional browser recording and batch transcription,
-WO-016 foreground browser Companion orchestration and WO-017 browser-first phone
-calls are complete. Any recommended next work must be separately
+WO-016 foreground browser Companion orchestration, WO-017 browser-first phone
+calls and WO-018 provider-neutral online-meeting capture are complete. Any
+recommended next work must be separately
 authorised from the Interaction Intelligence roadmap.
 The older Sprint 4–26 entries remain useful integration/release-gate context but must
 be reconciled into the Interaction work orders rather than implemented in parallel

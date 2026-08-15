@@ -42,6 +42,8 @@ from revenueos.models import (
     MeetingAuditEvent,
     MeetingParticipant,
     OnboardingProgress,
+    OnlineMeetingMetadata,
+    OnlineMeetingTranscriptImport,
     Opportunity,
     OpportunityAuditEvent,
     Organisation,
@@ -70,7 +72,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 8
+EXPORT_VERSION = 9
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -492,6 +494,11 @@ async def _delete_organisation_records(
             .values(transcript_version_id=None)
         )
         await session.execute(delete(TranscriptSegment).where(TranscriptSegment.organisation_id == organisation_id))
+        await session.execute(
+            delete(OnlineMeetingTranscriptImport).where(
+                OnlineMeetingTranscriptImport.organisation_id == organisation_id
+            )
+        )
         await session.execute(delete(TranscriptVersion).where(TranscriptVersion.organisation_id == organisation_id))
         await session.execute(delete(Transcript).where(Transcript.organisation_id == organisation_id))
         await session.execute(delete(Meeting).where(Meeting.organisation_id == organisation_id))
@@ -514,6 +521,9 @@ async def _delete_organisation_records(
         await session.execute(delete(PreInteractionBrief).where(PreInteractionBrief.organisation_id == organisation_id))
         await session.execute(
             delete(InteractionAuditEvent).where(InteractionAuditEvent.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(OnlineMeetingMetadata).where(OnlineMeetingMetadata.organisation_id == organisation_id)
         )
         await session.execute(delete(Interaction).where(Interaction.organisation_id == organisation_id))
         await session.execute(
@@ -811,6 +821,32 @@ async def _interaction_deletion_counts_from_select(
                     .where(
                         Interaction.organisation_id == organisation_id,
                         Interaction.id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "online_meeting_metadata": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(OnlineMeetingMetadata)
+                    .where(
+                        OnlineMeetingMetadata.organisation_id == organisation_id,
+                        OnlineMeetingMetadata.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "online_meeting_transcript_imports": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(OnlineMeetingTranscriptImport)
+                    .where(
+                        OnlineMeetingTranscriptImport.organisation_id == organisation_id,
+                        OnlineMeetingTranscriptImport.interaction_id.in_(interaction_ids),
                     )
                 )
             )
@@ -1160,6 +1196,12 @@ async def _delete_interaction_batch(
         )
     )
     await session.execute(
+        delete(OnlineMeetingMetadata).where(
+            OnlineMeetingMetadata.organisation_id == organisation_id,
+            OnlineMeetingMetadata.interaction_id.in_(interaction_ids),
+        )
+    )
+    await session.execute(
         delete(Interaction).where(
             Interaction.organisation_id == organisation_id,
             Interaction.id.in_(interaction_ids),
@@ -1195,6 +1237,12 @@ async def _delete_recording_database_rows(
         delete(TranscriptSegment).where(
             TranscriptSegment.organisation_id == organisation_id,
             TranscriptSegment.transcript_version_id.in_(version_ids),
+        )
+    )
+    await session.execute(
+        delete(OnlineMeetingTranscriptImport).where(
+            OnlineMeetingTranscriptImport.organisation_id == organisation_id,
+            OnlineMeetingTranscriptImport.interaction_id.in_(interaction_ids),
         )
     )
     await session.execute(
@@ -1261,6 +1309,20 @@ async def _export_payload(
     meetings = await rows(select(Meeting).where(Meeting.organisation_id == organisation_id).order_by(Meeting.id))
     interactions = await rows(
         select(Interaction).where(Interaction.organisation_id == organisation_id).order_by(Interaction.id)
+    )
+    online_meeting_metadata = await rows(
+        select(OnlineMeetingMetadata)
+        .where(OnlineMeetingMetadata.organisation_id == organisation_id)
+        .order_by(OnlineMeetingMetadata.interaction_id)
+    )
+    online_meeting_transcript_imports = await rows(
+        select(OnlineMeetingTranscriptImport)
+        .where(OnlineMeetingTranscriptImport.organisation_id == organisation_id)
+        .order_by(
+            OnlineMeetingTranscriptImport.interaction_id,
+            OnlineMeetingTranscriptImport.imported_at,
+            OnlineMeetingTranscriptImport.id,
+        )
     )
     interaction_markers = await rows(
         select(InteractionMarker)
@@ -1560,6 +1622,24 @@ async def _export_payload(
                 ),
             )
             for item in interactions
+        ],
+        "onlineMeetingMetadata": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "meeting_platform",
+                    "safe_meeting_url",
+                    "meeting_host",
+                    "external_meeting_id",
+                    "capture_source",
+                    "ingestion_state",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in online_meeting_metadata
         ],
         "interactionMarkers": [
             _columns(
@@ -1918,6 +1998,28 @@ async def _export_payload(
                 ),
             )
             for item in transcript_versions
+        ],
+        "onlineMeetingTranscriptImports": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "capture_session_id",
+                    "evidence_id",
+                    "transcript_version_id",
+                    "imported_by_user_id",
+                    "provenance",
+                    "source_format",
+                    "language",
+                    "content_sha256",
+                    "character_count",
+                    "timestamps_present",
+                    "speaker_labels_present",
+                    "imported_at",
+                ),
+            )
+            for item in online_meeting_transcript_imports
         ],
         "transcriptSegments": [
             _columns(
