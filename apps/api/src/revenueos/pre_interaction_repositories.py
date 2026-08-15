@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.intelligence_workspace import CAPABILITIES
 from revenueos.models import (
+    ActionProposal,
+    ActionProposalVersion,
     AIArtifact,
     AIJob,
     Company,
@@ -49,6 +51,12 @@ class ParticipantContextRecord:
 
 
 @dataclass(frozen=True)
+class BriefActionRecord:
+    proposal: ActionProposal
+    version: ActionProposalVersion
+
+
+@dataclass(frozen=True)
 class PreInteractionSourceRecords:
     interaction: Interaction
     linked_meeting_id: UUID | None
@@ -58,6 +66,7 @@ class PreInteractionSourceRecords:
     participants: tuple[ParticipantContextRecord, ...]
     artifacts: dict[str, AIArtifact]
     revenue_brain_insight: RevenueBrainInsight | None
+    actions: tuple[BriefActionRecord, ...]
 
 
 class PreInteractionBriefRepository:
@@ -116,6 +125,10 @@ class PreInteractionBriefRepository:
             opportunity_id=interaction.opportunity_id,
             company_id=interaction.company_id or (opportunity.company_id if opportunity is not None else None),
         )
+        actions = await self._current_actions(
+            organisation_id,
+            interaction.opportunity_id,
+        )
         return PreInteractionSourceRecords(
             interaction=interaction,
             linked_meeting_id=linked_meeting_id,
@@ -125,6 +138,7 @@ class PreInteractionBriefRepository:
             participants=participants,
             artifacts=artifacts,
             revenue_brain_insight=insight,
+            actions=actions,
         )
 
     async def get_equivalent_brief(
@@ -422,3 +436,35 @@ class PreInteractionBriefRepository:
             limit=1,
         )
         return insights[0] if insights else None
+
+    async def _current_actions(
+        self,
+        organisation_id: UUID,
+        opportunity_id: UUID | None,
+    ) -> tuple[BriefActionRecord, ...]:
+        if opportunity_id is None:
+            return ()
+        rows = (
+            await self.session.execute(
+                select(ActionProposal, ActionProposalVersion)
+                .join(
+                    ActionProposalVersion,
+                    and_(
+                        ActionProposalVersion.organisation_id == ActionProposal.organisation_id,
+                        ActionProposalVersion.action_id == ActionProposal.id,
+                        ActionProposalVersion.version == ActionProposal.current_version,
+                    ),
+                )
+                .where(
+                    ActionProposal.organisation_id == organisation_id,
+                    ActionProposal.opportunity_id == opportunity_id,
+                    ActionProposal.status.in_(("proposed", "edited", "approved")),
+                )
+                .order_by(
+                    ActionProposal.generated_at.desc(),
+                    ActionProposal.id.desc(),
+                )
+                .limit(8)
+            )
+        ).all()
+        return tuple(BriefActionRecord(proposal=row[0], version=row[1]) for row in rows)

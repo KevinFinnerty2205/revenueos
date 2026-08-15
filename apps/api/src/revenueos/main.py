@@ -23,6 +23,7 @@ from revenueos.errors import (
 from revenueos.observability import configure_logging
 from revenueos.routes import (
     accounts,
+    actions,
     beta,
     companies,
     contacts,
@@ -136,6 +137,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(interactions.router)
     app.include_router(meetings.router)
     app.include_router(accounts.router)
+    app.include_router(actions.router)
     return app
 
 

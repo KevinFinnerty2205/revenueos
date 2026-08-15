@@ -182,3 +182,10 @@ ingestion.
 - Customer content is confidential and tenant-isolated.
 - Mocks are clearly labelled and never presented as live.
 - Shared platform foundations support future products without pre-building them.
+
+## Action Layer now implemented
+
+RevenueOS can turn final validated intelligence into reviewable opportunity Actions.
+Users can revise, approve or reject proposals with clear sources and risk labels.
+Approval never sends, syncs, schedules or changes a business record. This provides
+durable human intent while keeping future execution integrations out of current scope.

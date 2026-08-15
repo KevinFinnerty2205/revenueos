@@ -181,3 +181,10 @@ and raw exceptions.
 - WO-009 supplies production identity, versioned consent acknowledgement and
   beta-grade retention/export/erasure and operational controls. Launch approval
   remains incomplete; production customer data is prohibited.
+
+## Action Layer consumer
+
+WO-021 can wrap the current completed Follow-up Email artefact in a customer-facing
+draft proposal. The typed payload preserves the draft artefact reference, subject,
+body and optional validated Contact recipient. Recipient confirmation defaults off,
+approval revalidates the Contact/email pair, and no send operation exists.

@@ -22,6 +22,7 @@ This is the canonical product and engineering documentation index. Documents dis
 16. [Online Meeting Capture guide](02-design/online-meeting-capture-guide.md) — current WO-018 browser-first workflow
 17. [Document Evidence guide](03-engineering/document-evidence-guide.md) and [Email Evidence guide](03-engineering/email-evidence-guide.md) — current WO-019 source workflow
 18. [Live Interaction Intelligence product guide](01-product/live-interaction-intelligence.md) — current WO-020 provisional workflow
+19. [Action Layer product guide](01-product/action-layer.md) — current WO-021 review-only workflow
 
 ## 00 — Company
 
@@ -37,6 +38,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Interaction Intelligence product blueprint](01-product/interaction-intelligence-product-blueprint.md)
 - [AI Companion preparation](01-product/ai-companion-preparation.md)
 - [Live Interaction Intelligence product guide](01-product/live-interaction-intelligence.md)
+- [Action Layer product guide](01-product/action-layer.md)
 
 ## 02 — Design
 
@@ -144,6 +146,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Live-to-final reconciliation guide](03-engineering/live-intelligence-reconciliation.md)
 - [Live speaker and provenance safety](03-engineering/live-intelligence-speaker-provenance-safety.md)
 - [Live Intelligence security review](03-engineering/live-intelligence-security-review.md)
+- [Action proposal architecture](03-engineering/action-proposal-architecture.md)
+- [Action lifecycle](03-engineering/action-lifecycle.md)
+- [Action review and approval](03-engineering/action-review-approval.md)
+- [Customer-facing Action safety](03-engineering/customer-facing-action-safety.md)
+- [Action Layer security review](03-engineering/action-layer-security-review.md)
 
 ### Target through beta
 
@@ -177,6 +184,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Google Meet online-meeting assessment](05-integrations/google-meet-online-meeting-assessment.md)
 - [Meeting-bot assessment](05-integrations/meeting-bot-assessment.md)
 - [Document and email provider boundary](05-integrations/document-email-provider-boundary.md)
+- [Action execution boundary](05-integrations/action-execution-boundary.md)
+- [CRM-ready Action payloads](05-integrations/crm-ready-action-payloads.md)
 
 ## 06 — Roadmap
 
@@ -222,6 +231,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-018: Online Meeting Capture](07-sprints/wo-018-online-meeting-capture.md)
 - [WO-019: Documents and Email Evidence](07-sprints/wo-019-document-email-evidence.md)
 - [WO-020: Live Interaction Intelligence](07-sprints/wo-020-live-interaction-intelligence.md)
+- [WO-021: Action Layer](07-sprints/wo-021-action-layer.md)
 
 ## 08 — Decision records
 
@@ -257,6 +267,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0030: foreground browser Companion orchestration](08-decisions/0030-browser-companion-foreground-capture.md)
 - [ADR 0031: provider-neutral online-meeting ingestion](08-decisions/0031-provider-neutral-online-meeting-ingestion.md)
 - [ADR 0032: separate polled Live Intelligence aggregate](08-decisions/0032-separate-polled-live-intelligence-aggregate.md)
+- [ADR 0033: versioned review-only Action Layer](08-decisions/0033-versioned-review-only-action-layer.md)
 
 ## Current delivery boundary
 
@@ -356,6 +367,11 @@ disabled or have one signal dismissed. Final reconciliation remains separate; no
 live result writes Opportunity Workspace final intelligence or Revenue Brain. The
 current detector and tests are deterministic/no-network, and production progressive
 transcription/external live AI remain disabled.
+
+WO-021 adds deterministic, typed Action proposals over final validated intelligence.
+Users can inspect sources, revise, approve, reject and manually complete safe internal
+Actions. Approval is intent only: there is no email, CRM, calendar or task-system
+execution, and provisional Live Intelligence cannot generate an Action.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

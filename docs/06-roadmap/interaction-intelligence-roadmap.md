@@ -529,3 +529,10 @@ review—before broadening architecture.
 - [Interaction platform risk register](../03-engineering/interaction-platform-risk-register.md)
 - [Interaction Intelligence migration strategy](../03-engineering/interaction-intelligence-migration-strategy.md)
 - [WO-010 sprint record](../07-sprints/wo-010-interaction-intelligence-blueprint.md)
+
+## Implemented Action milestone
+
+WO-021 implements the review-only Action Layer: typed proposals, immutable revisions,
+human approval/rejection, internal manual completion, Opportunity Workspace review
+and brief feedback. External execution, connectors and autonomous workflows remain
+future work and require a separate approved work order.

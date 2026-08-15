@@ -146,3 +146,10 @@ raw exceptions.
 - WO-009 supplies production identity, versioned consent acknowledgement and
   beta-grade retention/export/erasure and operational controls. Launch approval
   remains incomplete; production customer data is prohibited.
+
+## Action Layer consumer
+
+WO-021 may translate a current completed Next Best Action recommendation into a
+typed proposal with source references. The original intelligence remains unchanged.
+The Action proposal has its own review/version lifecycle and cannot execute the
+recommendation. Stale Next Best Action sources invalidate approval.

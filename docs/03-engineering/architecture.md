@@ -406,3 +406,12 @@ The future Interaction direction is governed by
 current provider-free preparation path is documented in the
 [Pre-Interaction Brief guide](pre-interaction-brief.md) and
 [ADR 0027](../08-decisions/0027-deterministic-pre-interaction-briefs.md).
+
+## WO-021 Action Layer
+
+The modular monolith now includes tenant-scoped Action routes, a deterministic
+service and repositories over `action_proposals`, immutable
+`action_proposal_versions` and metadata-only `action_audit_events`. The service
+reads final validated sources only. It does not call a provider or external
+system. See [Action proposal architecture](action-proposal-architecture.md) and
+[ADR 0033](../08-decisions/0033-versioned-review-only-action-layer.md).

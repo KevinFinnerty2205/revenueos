@@ -473,6 +473,17 @@ class PreInteractionBriefService:
                 if revenue_brain is not None and records.revenue_brain_insight is not None
                 else None
             ),
+            "current_actions": [
+                {
+                    "id": str(item.proposal.id),
+                    "status": item.proposal.status,
+                    "version": item.proposal.current_version,
+                    "title": item.version.title,
+                    "due_at": self._iso(item.version.proposed_due_at),
+                    "payload": item.version.payload_json,
+                }
+                for item in records.actions
+            ],
         }
         fingerprint = hashlib.sha256(
             json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
@@ -813,6 +824,22 @@ class PreInteractionBriefService:
     @staticmethod
     def _commitments(context: ValidatedBriefContext) -> tuple[BriefCommitment, ...]:
         values: list[BriefCommitment] = []
+        for action in context.records.actions:
+            payload = action.version.payload_json
+            owner_value = payload.get("ownerName")
+            due_value = action.version.proposed_due_at
+            due_date: str | None
+            if due_value is None and isinstance(payload.get("dueAt"), str):
+                due_date = str(payload["dueAt"])
+            else:
+                due_date = due_value.isoformat() if due_value is not None else None
+            values.append(
+                BriefCommitment(
+                    commitment=action.version.title,
+                    owner=owner_value if isinstance(owner_value, str) else None,
+                    due_date=due_date,
+                )
+            )
         if context.action_items is not None:
             values.extend(
                 BriefCommitment(commitment=item.task, owner=item.owner, due_date=item.due_date)
@@ -1015,6 +1042,17 @@ class PreInteractionBriefService:
                     validation_status="completed",
                 )
             )
+        for action in records.actions:
+            values.append(
+                PreInteractionSourceReference(
+                    section="open_commitments",
+                    capability="action_layer",
+                    source_id=action.proposal.id,
+                    scope="opportunity",
+                    source_classification="recommendation",
+                    validation_status=("completed" if action.proposal.status == "approved" else "not_applicable"),
+                )
+            )
         unique: dict[tuple[str, str, UUID], PreInteractionSourceReference] = {}
         for reference in values:
             unique[(reference.section, reference.capability, reference.source_id)] = reference
@@ -1140,6 +1178,8 @@ class PreInteractionBriefService:
             labels.append("Company record")
         if "opportunity_metadata" in capabilities:
             labels.append("Opportunity record")
+        if "action_layer" in capabilities:
+            labels.append("Current pending or approved Actions")
         if "meeting_participants" in capabilities:
             labels.append("Participant details")
         if capabilities & {

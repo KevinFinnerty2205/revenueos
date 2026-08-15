@@ -70,3 +70,11 @@ section counts only—never brief text, names, questions, commitments or risks.
 See [source grounding](pre-interaction-source-grounding.md), the
 [security review](pre-interaction-security-review.md) and the
 [Interaction API](interaction-api.md).
+
+## Current Actions as preparation context
+
+WO-021 adds current `proposed`, `edited` and `approved` opportunity Actions to the
+brief source fingerprint and open commitments. Each reference is labelled
+`action_layer`; approved Actions use completed validation status and pending Actions
+remain recommendations. Rejected, superseded and manually completed Actions are
+excluded. Brief generation still performs no provider call and no execution.

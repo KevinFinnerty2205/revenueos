@@ -56,6 +56,7 @@ BriefSourceCapability = Literal[
     "open_questions",
     "next_best_action",
     "revenue_brain",
+    "action_layer",
 ]
 BriefSourceScope = Literal["interaction", "meeting", "opportunity", "account"]
 BriefSourceClassification = Literal[

@@ -90,6 +90,7 @@ class Settings(BaseSettings):
         le=20_000_000_000,
     )
     private_beta_max_email_analyses_per_day: int = Field(default=50, ge=1, le=2_000)
+    private_beta_max_action_generations_per_day: int = Field(default=100, ge=1, le=5_000)
     private_beta_live_processing_interval_seconds: int = Field(default=15, ge=5, le=60)
     private_beta_live_min_new_segments: int = Field(default=2, ge=1, le=10)
     private_beta_live_min_new_characters: int = Field(default=160, ge=40, le=2_000)
@@ -129,6 +130,8 @@ class Settings(BaseSettings):
     feature_email_evidence_enabled: bool = True
     feature_live_interaction_intelligence_enabled: bool = False
     feature_live_interaction_external_ai_enabled: bool = False
+    feature_action_layer_enabled: bool = True
+    feature_action_manual_completion_enabled: bool = True
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -387,6 +390,8 @@ class Settings(BaseSettings):
             "emailEvidence": self.feature_email_evidence_enabled,
             "liveInteractionIntelligence": self.feature_live_interaction_intelligence_enabled,
             "liveInteractionExternalAi": self.feature_live_interaction_external_ai_enabled,
+            "actionLayer": self.feature_action_layer_enabled,
+            "actionManualCompletion": self.feature_action_manual_completion_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

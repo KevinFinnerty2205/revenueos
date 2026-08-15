@@ -11,3 +11,7 @@ External integrations are not currently implemented. No CRM, ATS, email, calenda
 Future adapters require least-privilege credentials, explicit user authority, idempotency, receipts, reconciliation, audit and a real sandbox test before being called complete.
 
 The [integration strategy](integration-strategy.md) defines provider value, data direction, source-of-truth, approval, authentication, recovery, deletion and phased rollout through beta.
+
+WO-021 adds [the Action execution boundary](action-execution-boundary.md) and
+[CRM-ready Action payloads](crm-ready-action-payloads.md). These documents describe
+reviewable intent only; no outbound connector is implemented.

@@ -324,6 +324,10 @@ function meetingPage(items: Meeting[] = [meeting]) {
   };
 }
 
+function actionPage() {
+  return { items: [], total: 0 };
+}
+
 function evidenceCapabilities() {
   return {
     documentEvidence: true,
@@ -346,6 +350,7 @@ describe("OpportunityWorkspace", () => {
         .fn()
         .mockResolvedValueOnce(response(workspace()))
         .mockResolvedValueOnce(response(meetingPage()))
+        .mockResolvedValueOnce(response(actionPage()))
         .mockResolvedValueOnce(response([]))
         .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
@@ -369,6 +374,9 @@ describe("OpportunityWorkspace", () => {
     expect(
       screen.getByText("Confirm the economic buyer and procurement owner."),
     ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Recommended Actions" }),
+    ).toBeVisible();
     for (const heading of [
       "Latest Meeting Momentum & Buying Signals",
       "Objections & Competitive Signals",
@@ -390,7 +398,9 @@ describe("OpportunityWorkspace", () => {
       screen.getByRole("link", { name: "Expansion review" }),
     ).toHaveAttribute("href", "/meetings/meeting-1");
     expect(
-      screen.queryByRole("button", { name: /generate|regenerate/i }),
+      screen.queryByRole("button", {
+        name: /generate meeting intelligence|run worker/i,
+      }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(
@@ -415,6 +425,7 @@ describe("OpportunityWorkspace", () => {
           ),
         )
         .mockResolvedValueOnce(response(meetingPage([])))
+        .mockResolvedValueOnce(response(actionPage()))
         .mockResolvedValueOnce(response([]))
         .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
@@ -463,6 +474,7 @@ describe("OpportunityWorkspace", () => {
           ),
         )
         .mockResolvedValueOnce(response(meetingPage([])))
+        .mockResolvedValueOnce(response(actionPage()))
         .mockResolvedValueOnce(response([]))
         .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
@@ -516,6 +528,7 @@ describe("OpportunityWorkspace", () => {
           ),
         )
         .mockResolvedValueOnce(response(meetingPage([])))
+        .mockResolvedValueOnce(response(actionPage()))
         .mockResolvedValueOnce(response([]))
         .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
@@ -559,6 +572,7 @@ describe("OpportunityWorkspace", () => {
           ),
         )
         .mockResolvedValueOnce(response(meetingPage([])))
+        .mockResolvedValueOnce(response(actionPage()))
         .mockResolvedValueOnce(response([]))
         .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
@@ -587,13 +601,15 @@ describe("OpportunityWorkspace", () => {
       .fn()
       .mockResolvedValueOnce(response(noMeeting))
       .mockResolvedValueOnce(response(meetingPage([available])))
+      .mockResolvedValueOnce(response(actionPage()))
       .mockResolvedValueOnce(response([]))
       .mockResolvedValueOnce(response(evidenceCapabilities()))
       .mockResolvedValueOnce(
         response({ ...available, opportunityId: "opportunity-1" }),
       )
       .mockResolvedValueOnce(response(workspace()))
-      .mockResolvedValueOnce(response(meetingPage()));
+      .mockResolvedValueOnce(response(meetingPage()))
+      .mockResolvedValueOnce(response(actionPage()));
     vi.stubGlobal("fetch", fetchMock);
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
@@ -601,8 +617,8 @@ describe("OpportunityWorkspace", () => {
       target: { value: "meeting-1" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Associate meeting" }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(7));
-    const patchCall = fetchMock.mock.calls[4];
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(9));
+    const patchCall = fetchMock.mock.calls[5];
     expect(String(patchCall?.[0])).toContain(
       "/api/v1/meetings/meeting-1/opportunity",
     );
@@ -638,6 +654,7 @@ describe("OpportunityWorkspace", () => {
           ),
         )
         .mockResolvedValueOnce(response(meetingPage()))
+        .mockResolvedValueOnce(response(actionPage()))
         .mockResolvedValueOnce(response([]))
         .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
@@ -674,6 +691,7 @@ describe("OpportunityWorkspace", () => {
       .fn()
       .mockResolvedValueOnce(response(notGenerated))
       .mockResolvedValueOnce(response(meetingPage()))
+      .mockResolvedValueOnce(response(actionPage()))
       .mockResolvedValueOnce(response([]))
       .mockResolvedValueOnce(response(evidenceCapabilities()))
       .mockResolvedValueOnce(
@@ -683,18 +701,19 @@ describe("OpportunityWorkspace", () => {
         }),
       )
       .mockResolvedValueOnce(response(workspace()))
-      .mockResolvedValueOnce(response(meetingPage()));
+      .mockResolvedValueOnce(response(meetingPage()))
+      .mockResolvedValueOnce(response(actionPage()));
     vi.stubGlobal("fetch", fetchMock);
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Generate changes" }),
     );
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(7));
-    expect(String(fetchMock.mock.calls[4]?.[0])).toContain(
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(9));
+    expect(String(fetchMock.mock.calls[5]?.[0])).toContain(
       "/api/v1/opportunities/opportunity-1/brain/reasoning",
     );
-    expect(fetchMock.mock.calls[4]?.[1]).toMatchObject({ method: "POST" });
+    expect(fetchMock.mock.calls[5]?.[1]).toMatchObject({ method: "POST" });
     expect(
       await screen.findByText("Champion evidence strengthened"),
     ).toBeVisible();
