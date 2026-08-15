@@ -1750,8 +1750,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     text("DELETE FROM organisations WHERE id IN (:organisation_a, :organisation_b)"),
                     cleanup_parameters,
                 )
-                await connection.exec_driver_sql(f'DROP OWNED BY "{role_name}"')
-                await connection.exec_driver_sql(f'DROP ROLE IF EXISTS "{role_name}"')
+                role_exists = await connection.scalar(
+                    text("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :role_name)"),
+                    {"role_name": role_name},
+                )
+                if role_exists:
+                    await connection.exec_driver_sql(f'DROP OWNED BY "{role_name}"')
+                    await connection.exec_driver_sql(f'DROP ROLE "{role_name}"')
             await engine.dispose()
 
     asyncio.run(scenario())
