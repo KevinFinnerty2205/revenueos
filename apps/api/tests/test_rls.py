@@ -583,11 +583,17 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  'RLS customer requirement',
                                  'RLS customer requirement', :statement_fingerprint,
                                  'ai_inferred', 'customer_direct', 'direct',
-                                 '{"reference":"Paragraph 1","paragraphIndex":0}'::json,
+                                 CAST(:source_location_json AS json),
                                  'unreviewed', 'pending', 'not_assessed')
                             """
                         ),
-                        {**identity_parameters, "statement_fingerprint": "f" * 64},
+                        {
+                            **identity_parameters,
+                            "statement_fingerprint": "f" * 64,
+                            "source_location_json": (
+                                '{"reference":"Paragraph 1","pageNumber":null,"section":null,"paragraphIndex":0}'
+                            ),
+                        },
                     )
                     await connection.execute(
                         text(
