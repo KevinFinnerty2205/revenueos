@@ -55,12 +55,12 @@ List parameters: `search`, `status`, `industry`, `sortBy` (`name`, `created_at`,
 
 ## Revenue Brain
 
-| Method | Path                                           | Purpose                                                          |
-| ------ | ---------------------------------------------- | ---------------------------------------------------------------- |
-| `GET`  | `/api/v1/accounts/{accountId}/brain`           | List the account's immutable Revenue Brain snapshot compositions |
-| `GET`  | `/api/v1/accounts/{accountId}/brain/visual-evidence` | List current reviewed visual Interaction snapshots            |
-| `POST` | `/api/v1/accounts/{accountId}/brain/reasoning` | Create or reuse deterministic account comparisons                |
-| `GET`  | `/api/v1/accounts/{accountId}/brain/reasoning` | Read the latest account comparison and bounded history           |
+| Method | Path                                                 | Purpose                                                          |
+| ------ | ---------------------------------------------------- | ---------------------------------------------------------------- |
+| `GET`  | `/api/v1/accounts/{accountId}/brain`                 | List the account's immutable Revenue Brain snapshot compositions |
+| `GET`  | `/api/v1/accounts/{accountId}/brain/visual-evidence` | List current reviewed visual Interaction snapshots               |
+| `POST` | `/api/v1/accounts/{accountId}/brain/reasoning`       | Create or reuse deterministic account comparisons                |
+| `GET`  | `/api/v1/accounts/{accountId}/brain/reasoning`       | Read the latest account comparison and bounded history           |
 
 The response is a JSON array ordered by meeting date descending, then snapshot
 creation and ID descending. Each item contains the snapshot ownership/trace,
@@ -188,22 +188,32 @@ See [AI Debrief](ai-debrief.md).
 
 ### Visual evidence
 
-| Method   | Path                                                                                | Purpose                                      |
-| -------- | ----------------------------------------------------------------------------------- | -------------------------------------------- |
-| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/uploads`                      | Create/reuse a private upload grant          |
-| `PUT`    | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/content`            | Upload bytes in local-storage mode           |
-| `GET`    | `/api/v1/interactions/{interactionId}/visual-evidence`                              | List current visual metadata/review state    |
-| `GET`    | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}`                   | Read one visual metadata/review record       |
-| `GET`    | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/content`            | Download with a short-lived private grant    |
-| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/complete`           | Verify, sanitise and finalise an upload      |
-| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/process`            | Run bounded strict visual analysis           |
-| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/review`             | Apply complete accept/edit/reject review     |
-| `DELETE` | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}`                   | Delete object and invalidate current sources |
+| Method   | Path                                                                       | Purpose                                      |
+| -------- | -------------------------------------------------------------------------- | -------------------------------------------- |
+| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/uploads`             | Create/reuse a private upload grant          |
+| `PUT`    | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/content`  | Upload bytes in local-storage mode           |
+| `GET`    | `/api/v1/interactions/{interactionId}/visual-evidence`                     | List current visual metadata/review state    |
+| `GET`    | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}`          | Read one visual metadata/review record       |
+| `GET`    | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/content`  | Download with a short-lived private grant    |
+| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/complete` | Verify, sanitise and finalise an upload      |
+| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/process`  | Run bounded strict visual analysis           |
+| `POST`   | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}/review`   | Apply complete accept/edit/reject review     |
+| `DELETE` | `/api/v1/interactions/{interactionId}/visual-evidence/{visualId}`          | Delete object and invalidate current sources |
 
 Requests accept JPEG/PNG only and enforce checksum, size, dimension, pixel,
 source-ownership, consent and idempotency constraints. Relative local upload
 URLs require API auth; absolute S3-compatible signed URLs receive no RevenueOS
 bearer token. See [Visual Evidence engineering guide](visual-evidence-engineering-guide.md).
+
+### Recording and transcription
+
+The Interaction API exposes consent-gated recording create/start/pause/resume/stop,
+resumable chunk create/list/upload/complete, idempotent finalise/cancel/delete and
+product-safe transcription status routes. WebM/Opus and MP4/M4A are allowlisted;
+bytes remain in private object storage and batch transcription runs in the existing
+worker. The complete route table and safe error boundary are documented in
+[Interaction API](interaction-api.md) and the
+[recording foundation guide](recording-foundation-engineering-guide.md).
 
 ## Meetings
 
@@ -247,7 +257,15 @@ A participant requires at least one of a same-tenant contact, display name or va
 | `PATCH`  | `/api/v1/meetings/{meetingId}/transcript` | Correct transcript text/language |
 | `DELETE` | `/api/v1/meetings/{meetingId}/transcript` | Soft-delete the transcript       |
 
-There is at most one transcript row per meeting. Plain text is required and limited to one million characters. Source is `manual` or `upload`; `upload` means the web form read a user-selected `.txt` file, not that RevenueOS stored a file. `PATCH` requires the current positive `version`, increments it on success and returns `409 transcript_version_conflict` for stale writes. Transcript permissions are inherited from the active tenant-scoped meeting.
+There is at most one current transcript row per meeting. Plain text is required and
+limited to one million characters. Source is `manual`, `upload`, `recorded_audio`,
+`uploaded_audio` or `imported_audio`; `upload` means the web form read a
+user-selected `.txt` file. Every current revision has an immutable
+`transcript_versions` history record; recorded versions may also have ordered
+timestamp segments and Recording Session traceability. `PATCH` requires the current
+positive `version`, increments it on success and returns
+`409 transcript_version_conflict` for stale writes. Transcript permissions are
+inherited from the active tenant-scoped meeting.
 
 ## Unified Meeting Intelligence
 

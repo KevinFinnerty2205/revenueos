@@ -28,7 +28,9 @@ Meeting domain remains compatible through an additive migration. WO-011 now
 implements that Interaction identity, Meeting compatibility link and a metadata-only
 Evidence/Capture Session foundation. WO-013 now executes AI Debrief and Voice
 Journal as supporting capture sessions that produce reviewed reported evidence;
-they are not customer interactions.
+they are not customer interactions. WO-015 adds optional explicitly consented
+Recording Capture Sessions and final batch transcripts; it does not make recording
+mandatory.
 
 ## Current product surface
 
@@ -63,6 +65,10 @@ The current implementation provides:
 - Capture Session and Evidence foundations with explicit origin, support and
   validation classification. Debrief text is deliberately supplied; raw voice audio
   is never stored.
+- optional foreground browser recording with explicit participant notice/authority,
+  resumable private WebM/MP4 chunks, durable batch transcription, immutable
+  transcript versions/segments and Debrief fallback. All recording flags default
+  off.
 
 The current product accepts only deliberately entered meeting metadata and
 plain-text transcripts. The default provider is a deterministic no-network
@@ -80,10 +86,12 @@ qualitative supported changes, never probability, forecast or deal health. The
 Pre-Interaction Brief is likewise provider-free and reads only validated
 structured intelligence plus linked record metadata; it never reads transcript
 text. Source completeness is not a success forecast. The
-application does not answer or assign customer questions, record customers or
-meetings, store media, connect external systems or process payments. It transcribes
-only bounded, deliberately submitted post-interaction voice segments. Production customer
-data remains prohibited unless separately approved. See the
+application does not answer or assign customer questions, connect external systems
+or process payments. It can record an explicitly armed supported-browser
+Interaction and privately retain bounded audio for batch transcription; it never
+records implicitly and does not guarantee background/screen-lock capture. It also
+transcribes bounded, deliberately submitted post-interaction voice segments.
+Production customer data remains prohibited unless separately approved. See the
 [private beta readiness guide](../03-engineering/private-beta-readiness.md).
 
 ## Product principles
@@ -95,8 +103,9 @@ an Interaction, shows a local preview before confirmation, stores sanitised
 bytes privately and requires review of every AI-suggested item. Presentation
 Mode keeps seller-created slides as context, business cards as unsaved contact
 candidates and site photos as observations. Reviewed eligible evidence appears
-in Opportunity Workspace and Revenue Brain with source labels. This is not
-live capture, recording, video, native mobile or general document ingestion.
+in Opportunity Workspace and Revenue Brain with source labels. This remains
+separate from WO-015 recording and is not video, native mobile or general document
+ingestion.
 
 - Human judgement remains accountable.
 - Evidence and uncertainty are visible.

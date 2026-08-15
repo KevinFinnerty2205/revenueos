@@ -7,29 +7,55 @@ not-found response and cannot be enumerated.
 
 ## Endpoints
 
-| Method  | Path                                                   | Purpose                                                     |
-| ------- | ------------------------------------------------------ | ----------------------------------------------------------- |
-| `GET`   | `/interactions`                                        | List active Interactions with stable pagination and filters |
-| `POST`  | `/interactions`                                        | Create one manual Interaction                               |
-| `GET`   | `/interactions/{interactionId}`                        | Read one active Interaction                                 |
-| `PATCH` | `/interactions/{interactionId}`                        | Update supplied fields and lifecycle                        |
-| `POST`  | `/interactions/{interactionId}/complete`               | Idempotently complete an Interaction                        |
-| `GET`   | `/interactions/{interactionId}/companion/brief`        | Read product-safe preparation state/result                  |
-| `POST`  | `/interactions/{interactionId}/companion/brief`        | Create or reuse a deterministic brief                       |
-| `POST`  | `/interactions/{interactionId}/companion/brief/review` | Mark the latest completed brief reviewed                    |
-| `POST`  | `/interactions/{interactionId}/visual-evidence/uploads` | Create/reuse a private visual upload grant                  |
-| `PUT`   | `/interactions/{interactionId}/visual-evidence/{visualId}/content` | Upload bytes through the local private adapter      |
-| `POST`  | `/interactions/{interactionId}/visual-evidence/{visualId}/complete` | Verify and sanitise the uploaded image             |
-| `POST`  | `/interactions/{interactionId}/visual-evidence/{visualId}/process` | Produce bounded review candidates                   |
-| `POST`  | `/interactions/{interactionId}/visual-evidence/{visualId}/review` | Accept/edit/reject every candidate                  |
-| `GET`   | `/interactions/{interactionId}/visual-evidence`          | List visual metadata and review state                        |
-| `GET`   | `/interactions/{interactionId}/visual-evidence/{visualId}` | Read one visual metadata/review record                      |
-| `GET`   | `/interactions/{interactionId}/visual-evidence/{visualId}/content` | Download through a short-lived private grant      |
-| `DELETE` | `/interactions/{interactionId}/visual-evidence/{visualId}` | Delete bytes and invalidate current lineage                |
+| Method   | Path                                                                               | Purpose                                                       |
+| -------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `GET`    | `/interactions`                                                                    | List active Interactions with stable pagination and filters   |
+| `POST`   | `/interactions`                                                                    | Create one manual Interaction                                 |
+| `GET`    | `/interactions/{interactionId}`                                                    | Read one active Interaction                                   |
+| `PATCH`  | `/interactions/{interactionId}`                                                    | Update supplied fields and lifecycle                          |
+| `POST`   | `/interactions/{interactionId}/complete`                                           | Idempotently complete an Interaction                          |
+| `GET`    | `/interactions/{interactionId}/companion/brief`                                    | Read product-safe preparation state/result                    |
+| `POST`   | `/interactions/{interactionId}/companion/brief`                                    | Create or reuse a deterministic brief                         |
+| `POST`   | `/interactions/{interactionId}/companion/brief/review`                             | Mark the latest completed brief reviewed                      |
+| `POST`   | `/interactions/{interactionId}/visual-evidence/uploads`                            | Create/reuse a private visual upload grant                    |
+| `PUT`    | `/interactions/{interactionId}/visual-evidence/{visualId}/content`                 | Upload bytes through the local private adapter                |
+| `POST`   | `/interactions/{interactionId}/visual-evidence/{visualId}/complete`                | Verify and sanitise the uploaded image                        |
+| `POST`   | `/interactions/{interactionId}/visual-evidence/{visualId}/process`                 | Produce bounded review candidates                             |
+| `POST`   | `/interactions/{interactionId}/visual-evidence/{visualId}/review`                  | Accept/edit/reject every candidate                            |
+| `GET`    | `/interactions/{interactionId}/visual-evidence`                                    | List visual metadata and review state                         |
+| `GET`    | `/interactions/{interactionId}/visual-evidence/{visualId}`                         | Read one visual metadata/review record                        |
+| `GET`    | `/interactions/{interactionId}/visual-evidence/{visualId}/content`                 | Download through a short-lived private grant                  |
+| `DELETE` | `/interactions/{interactionId}/visual-evidence/{visualId}`                         | Delete bytes and invalidate current lineage                   |
+| `POST`   | `/interactions/{interactionId}/recordings`                                         | Create/reuse an explicitly consented recording session        |
+| `GET`    | `/interactions/{interactionId}/recordings`                                         | List recording session state without storage/provider secrets |
+| `GET`    | `/interactions/{interactionId}/recordings/{recordingId}`                           | Read one recording state                                      |
+| `POST`   | `/interactions/{interactionId}/recordings/{recordingId}/start`                     | Mark browser capture started                                  |
+| `POST`   | `/interactions/{interactionId}/recordings/{recordingId}/pause`                     | Record a metadata-only browser pause event                    |
+| `POST`   | `/interactions/{interactionId}/recordings/{recordingId}/resume`                    | Record a metadata-only browser resume event                   |
+| `POST`   | `/interactions/{interactionId}/recordings/{recordingId}/stop`                      | Mark capture stopped and uploading                            |
+| `POST`   | `/interactions/{interactionId}/recordings/{recordingId}/chunks`                    | Create/reuse one bounded chunk grant                          |
+| `GET`    | `/interactions/{interactionId}/recordings/{recordingId}/chunks`                    | Read the resumable verified manifest                          |
+| `PUT`    | `/interactions/{interactionId}/recordings/{recordingId}/chunks/{chunkId}/content`  | Upload local-adapter bytes                                    |
+| `POST`   | `/interactions/{interactionId}/recordings/{recordingId}/chunks/{chunkId}/complete` | Verify checksum and receipt                                   |
+| `POST`   | `/interactions/{interactionId}/recordings/{recordingId}/finalize`                  | Reject gaps and idempotently queue batch transcription        |
+| `POST`   | `/interactions/{interactionId}/recordings/{recordingId}/cancel`                    | Cancel capture and schedule object deletion                   |
+| `GET`    | `/interactions/{interactionId}/recordings/{recordingId}/transcription`             | Read product-safe processing/final transcript state           |
+| `DELETE` | `/interactions/{interactionId}/recordings/{recordingId}`                           | Perform object-first recording deletion                       |
 
 There is deliberately no generic public Capture Session or Evidence endpoint.
 Visual routes expose the narrow reviewed workflow only; they never expose a
 freely supplied organisation ID or durable storage key.
+
+## Recording contract
+
+Recording creation is server-flagged and requires notice version, consent method,
+user authority attestation and an idempotency key. The server normalises MIME,
+derives tenant storage scope and returns short-lived exact-object upload grants.
+Finalisation locks the session, validates a contiguous verified manifest and is
+idempotent. Transcription happens only in the existing worker. Public responses
+exclude storage keys, signatures, provider request IDs and credentials. Cross-tenant
+IDs are hidden as not found. See the
+[recording foundation guide](recording-foundation-engineering-guide.md).
 
 ## Visual evidence contract
 

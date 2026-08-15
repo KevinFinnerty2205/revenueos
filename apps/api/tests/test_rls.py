@@ -100,6 +100,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "evidence",
         "visual_assets",
         "visual_candidate_evidence",
+        "recording_usage_counters",
+        "recording_sessions",
+        "recording_consents",
+        "recording_chunks",
+        "transcript_versions",
+        "transcript_segments",
         "debrief_sessions",
         "debrief_turns",
         "evidence_fragments",
@@ -159,6 +165,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "feedback_id": uuid.uuid4(),
         "data_request_id": uuid.uuid4(),
         "system_event_id": uuid.uuid4(),
+        "recording_id": uuid.uuid4(),
+        "recording_consent_id": uuid.uuid4(),
+        "recording_chunk_id": uuid.uuid4(),
+        "recording_transcript_version_id": uuid.uuid4(),
+        "recording_segment_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -196,6 +207,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "feedback_id": uuid.uuid4(),
         "data_request_id": uuid.uuid4(),
         "system_event_id": uuid.uuid4(),
+        "recording_id": uuid.uuid4(),
+        "recording_consent_id": uuid.uuid4(),
+        "recording_chunk_id": uuid.uuid4(),
+        "recording_transcript_version_id": uuid.uuid4(),
+        "recording_segment_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -639,6 +655,137 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await connection.execute(
                         text(
                             """
+                            INSERT INTO recording_sessions
+                                (id, organisation_id, interaction_id,
+                                 capture_session_id, source_evidence_id,
+                                 created_by_user_id, recording_type,
+                                 lifecycle_status, consent_state,
+                                 duration_seconds, expected_mime_type,
+                                 final_mime_type, total_bytes, chunk_count,
+                                 idempotency_key, upload_completed_at,
+                                 transcription_completed_at, session_expires_at)
+                            VALUES
+                                (:recording_id, :organisation_id,
+                                 :interaction_id, :capture_session_id,
+                                 :evidence_id, :user_id,
+                                 'live_audio_recording', 'completed',
+                                 'acknowledged', 60, 'audio/webm',
+                                 'audio/webm', 4, 1,
+                                 :recording_idempotency_key, now(), now(),
+                                 now() + interval '1 day')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "recording_idempotency_key": f"rls-recording-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO recording_consents
+                                (id, organisation_id, interaction_id,
+                                 recording_session_id, user_id, notice_version,
+                                 consent_method, user_attested_authority)
+                            VALUES
+                                (:recording_consent_id, :organisation_id,
+                                 :interaction_id, :recording_id, :user_id, 1,
+                                 'participant_notice_confirmed', true)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO recording_chunks
+                                (id, organisation_id, recording_session_id,
+                                 sequence_number, byte_size, checksum_sha256,
+                                 storage_key, upload_state,
+                                 upload_idempotency_key, upload_expires_at,
+                                 uploaded_at)
+                            VALUES
+                                (:recording_chunk_id, :organisation_id,
+                                 :recording_id, 0, 4, :recording_checksum,
+                                 :recording_storage_key, 'verified',
+                                 :recording_chunk_key, now() + interval '1 day',
+                                 now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "recording_checksum": suffix.lower() * 64,
+                            "recording_storage_key": (
+                                f"recordings/{tenant['organisation_id']}/{tenant['recording_id']}/rls.part"
+                            ),
+                            "recording_chunk_key": f"rls-recording-chunk-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO transcript_versions
+                                (id, organisation_id, interaction_id,
+                                 meeting_id, transcript_id,
+                                 recording_session_id, evidence_id, version,
+                                 raw_text, language, source, status,
+                                 provider_name)
+                            VALUES
+                                (:recording_transcript_version_id,
+                                 :organisation_id, :interaction_id,
+                                 :meeting_id, :transcript_id, :recording_id,
+                                 :evidence_id, 1, :raw_text, 'en',
+                                 'recorded_audio', 'final', 'mock')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "raw_text": f"RLS recorded transcript {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO transcript_segments
+                                (id, organisation_id, transcript_version_id,
+                                 sequence_number, start_ms, end_ms, text)
+                            VALUES
+                                (:recording_segment_id, :organisation_id,
+                                 :recording_transcript_version_id, 0, 0, 60000,
+                                 :segment_text)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "segment_text": f"RLS recorded transcript {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE recording_sessions
+                            SET transcript_version_id = :recording_transcript_version_id
+                            WHERE organisation_id = :organisation_id
+                              AND id = :recording_id
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO recording_usage_counters
+                                (organisation_id, usage_date, uploaded_bytes,
+                                 transcription_minutes,
+                                 transcription_request_count)
+                            VALUES (:organisation_id, CURRENT_DATE, 4, 1, 1)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
                             INSERT INTO meeting_audit_events
                                 (id, organisation_id, meeting_id, actor_user_id, action,
                                  entity_type, entity_id, changed_fields)
@@ -874,6 +1021,33 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     )
                 await savepoint.rollback()
 
+                savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO recording_chunks
+                                (id, organisation_id, recording_session_id,
+                                 sequence_number, byte_size, checksum_sha256,
+                                 storage_key, upload_state,
+                                 upload_idempotency_key, upload_expires_at)
+                            VALUES
+                                (:id, :organisation_id,
+                                 :recording_session_id, 9, 4,
+                                 :checksum, :storage_key, 'pending',
+                                 'cross-tenant-recording-chunk', now())
+                            """
+                        ),
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_a["organisation_id"],
+                            "recording_session_id": tenant_b["recording_id"],
+                            "checksum": "c" * 64,
+                            "storage_key": (f"recordings/{tenant_a['organisation_id']}/cross-tenant.part"),
+                        },
+                    )
+                await savepoint.rollback()
+
                 rls_state = {
                     row.relname: (row.relrowsecurity, row.relforcerowsecurity)
                     for row in (
@@ -894,6 +1068,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'evidence',
                                     'visual_assets',
                                     'visual_candidate_evidence',
+                                    'recording_usage_counters',
+                                    'recording_sessions',
+                                    'recording_consents',
+                                    'recording_chunks',
+                                    'transcript_versions',
+                                    'transcript_segments',
                                     'debrief_sessions',
                                     'debrief_turns',
                                     'evidence_fragments',
@@ -1255,6 +1435,16 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         "DISABLE TRIGGER revenue_brain_interaction_snapshots_immutable"
                     )
                 )
+                await connection.execute(
+                    text(
+                        "UPDATE recording_sessions SET transcript_version_id = NULL "
+                        "WHERE organisation_id IN (:organisation_a, :organisation_b)"
+                    ),
+                    {
+                        "organisation_a": tenant_a["organisation_id"],
+                        "organisation_b": tenant_b["organisation_id"],
+                    },
+                )
                 for table in (
                     "beta_system_events",
                     "beta_data_requests",
@@ -1274,6 +1464,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "candidate_evidence",
                     "visual_candidate_evidence",
                     "visual_assets",
+                    "transcript_segments",
+                    "transcript_versions",
+                    "recording_chunks",
+                    "recording_consents",
+                    "recording_sessions",
+                    "recording_usage_counters",
                     "evidence_fragments",
                     "debrief_turns",
                     "debrief_sessions",

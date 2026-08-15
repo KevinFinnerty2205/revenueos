@@ -10,7 +10,8 @@ Signals, WO-006C Stakeholder Intelligence, WO-006D Next Best Action, WO-007
 Opportunity Workspace, WO-008A Revenue Brain Foundation, WO-008B Revenue Brain
 Longitudinal Reasoning, WO-009 Private Beta Readiness, WO-011 Interaction
 Domain Foundation, WO-012 AI Companion preparation, WO-013 AI Debrief/Voice
-Journal and WO-014 Visual Evidence/Presentation Mode. Interactions, Meetings,
+Journal, WO-014 Visual Evidence/Presentation Mode and WO-015 Recording &
+Transcription Foundation. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -39,11 +40,15 @@ deterministic or optional strict visual analysis, complete human review, and
 provenance-labelled Opportunity Workspace/Revenue Brain updates. Seller
 presentation material is context only; business cards never create Contacts;
 site-photo output is labelled observed.
+WO-015 adds optional explicitly consented foreground browser recording,
+resumable private WebM/MP4 chunk upload, durable batch transcription and immutable
+transcript versions/segments. The deterministic mock makes no network call; all
+recording flags default off and AI Debrief/manual capture remain first-class.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
-scoring, forecasting, privileged browser database access, customer/meeting or
-background recording, general media ingestion beyond the reviewed visual path,
+scoring, forecasting, privileged browser database access, background recording
+guarantees, general media ingestion beyond the reviewed visual/audio paths,
 sending/integration or billing is implemented.
 
 ## Product blueprint
@@ -58,18 +63,17 @@ positioned as the AI operating system for customer interactions across Capture,
 Intelligence and Action. WO-011 now implements the tenant-isolated Interaction,
 Capture Session and metadata-only Evidence foundation plus one-to-one Meeting
 compatibility. WO-012 implements the preparation-only AI Companion slice,
-WO-013 implements reviewed post-interaction AI Debrief/Voice Journal and WO-014
-implements browser-only visual evidence and the bounded Presentation Mode
-specialisation.
-Customer recording, background capture, mobile client, connector, live Companion and
-generic source-neutral intelligence beyond this reviewed reported-evidence slice
-remain unimplemented.
+WO-013 implements reviewed post-interaction AI Debrief/Voice Journal, WO-014
+implements browser-only visual evidence and bounded Presentation Mode, and WO-015
+implements the browser-first recording/batch-transcription foundation.
+Native/background capture, mobile client, meeting bot, telephony, connector, live
+transcription and live Companion remain unimplemented.
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013 and WO-014.
+WO-013, WO-014 and WO-015.
 WO-010 remains the blueprint; later roadmap work remains unauthorised.
 
 ## Prerequisites

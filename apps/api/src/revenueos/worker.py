@@ -9,6 +9,7 @@ from revenueos.ai_worker_services import AIWorkerService
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory
 from revenueos.observability import configure_logging
+from revenueos.recording_worker import RecordingWorkerService
 
 logger = logging.getLogger("revenueos.ai_worker")
 
@@ -19,10 +20,12 @@ class AIWorker:
         service: AIWorkerService,
         settings: Settings,
         *,
+        recording_service: RecordingWorkerService | None = None,
         worker_id: str | None = None,
     ) -> None:
         self._service = service
         self._settings = settings
+        self._recording_service = recording_service
         resolved_worker_id = (worker_id or f"worker-{uuid.uuid4().hex}").strip()
         if not resolved_worker_id or len(resolved_worker_id) > 200:
             raise ValueError("Worker identity must contain 1 to 200 characters.")
@@ -46,8 +49,9 @@ class AIWorker:
             logger.info("worker_stopped", extra={"worker_id": self.worker_id})
 
     async def run_once(self) -> bool:
+        recording_processed = await self._recording_service.run_once() if self._recording_service is not None else False
         organisations = await self._service.discover_eligible_organisations()
-        processed = False
+        processed = recording_processed
         for organisation_id in organisations:
             cancelled = await self._service.cancel_pending_jobs(organisation_id)
             recovered = await self._service.recover_abandoned_jobs(organisation_id)
@@ -77,6 +81,7 @@ async def run_worker(settings: Settings | None = None) -> None:
     worker = AIWorker(
         AIWorkerService(session_factory, resolved_settings),
         resolved_settings,
+        recording_service=RecordingWorkerService(session_factory, resolved_settings),
     )
     try:
         await worker.run(stop)

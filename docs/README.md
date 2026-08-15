@@ -16,6 +16,7 @@ This is the canonical product and engineering documentation index. Documents dis
 10. [Pre-Interaction Brief engineering guide](03-engineering/pre-interaction-brief.md) — current WO-012 boundary
 11. [AI Debrief engineering guide](03-engineering/ai-debrief.md) — current WO-013 boundary
 12. [Visual Evidence engineering guide](03-engineering/visual-evidence-engineering-guide.md) — current WO-014 boundary
+13. [Recording foundation engineering guide](03-engineering/recording-foundation-engineering-guide.md) — current WO-015 boundary
 
 ## 00 — Company
 
@@ -103,6 +104,16 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Site photo handling](03-engineering/site-photo-handling.md)
 - [Visual Evidence security review](03-engineering/visual-evidence-security-review.md)
 - [Visual storage lifecycle](03-engineering/visual-storage-lifecycle.md)
+- [Recording and transcription architecture](03-engineering/recording-and-transcription-architecture.md)
+- [Recording foundation engineering guide](03-engineering/recording-foundation-engineering-guide.md)
+- [Transcription provider guide](03-engineering/transcription-provider-guide.md)
+- [Recording lifecycle guide](03-engineering/recording-lifecycle-guide.md)
+- [Chunk and resumable-upload guide](03-engineering/chunk-resumable-upload-guide.md)
+- [Browser recording compatibility](03-engineering/browser-recording-compatibility.md)
+- [Recording consent guide](03-engineering/recording-consent-guide.md)
+- [Audio retention, export and deletion](03-engineering/audio-retention-deletion-guide.md)
+- [Recording security review](03-engineering/recording-security-review.md)
+- [Recording storage reconciliation runbook](03-engineering/recording-storage-reconciliation-runbook.md)
 
 ### Target through beta
 
@@ -110,7 +121,6 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Privacy, security and trust model](03-engineering/privacy-security-and-trust-model.md)
 - [Interaction domain architecture](03-engineering/interaction-domain-architecture.md)
 - [Evidence and provenance model](03-engineering/evidence-and-provenance-model.md)
-- [Recording and transcription architecture](03-engineering/recording-and-transcription-architecture.md)
 - [Interaction Intelligence migration strategy](03-engineering/interaction-intelligence-migration-strategy.md)
 - [Interaction security, privacy and consent](03-engineering/interaction-security-privacy-and-consent.md)
 - [Interaction platform risk register](03-engineering/interaction-platform-risk-register.md)
@@ -164,6 +174,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-012: AI Companion and Pre-Interaction Brief](07-sprints/wo-012-ai-companion-pre-interaction-brief.md)
 - [WO-013: AI Debrief and Voice Journal](07-sprints/wo-013-ai-debrief-voice-journal.md)
 - [WO-014: Visual Evidence and Presentation Mode](07-sprints/wo-014-visual-evidence-presentation-mode.md)
+- [WO-015: Recording & Transcription Foundation](07-sprints/wo-015-recording-transcription-foundation.md)
 
 ## 08 — Decision records
 
@@ -199,7 +210,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -218,9 +229,10 @@ associated meeting's existing current-version artefacts. WO-008B adds
 deterministic, on-demand account and opportunity comparisons over immutable
 snapshots and their referenced artefacts. It performs no transcript read,
 extraction, provider call, prediction or forecast. There is no send,
-external-action approval, general question answering, provider UI,
-customer/meeting recording, media storage, external integration, billing or
-mobile application. WO-009
+external-action approval, general question answering, provider configuration UI,
+external integration, billing or mobile application. The later WO-014/WO-015
+binary-evidence paths are deliberately bounded to private visual assets and
+consent-gated audio; they are not general media storage. WO-009
 adds verified Clerk organisation sessions, versioned acknowledgement,
 retention/export/deletion maintenance, quotas, flags, onboarding, feedback and
 safe beta administration. Completed account-linked meetings can now append one
@@ -233,13 +245,16 @@ WO-012 adds preparation-only AI Companion briefs for every initial Interaction
 type. The bounded deterministic composer uses linked metadata and validated
 current-version intelligence, never transcript text, and never calls OpenAI.
 Briefs are immutable, source-aware, versioned, reviewable and covered by beta
-quota, retention, export, deletion and synthetic demo operations. Live Companion,
+quota, retention, export, deletion and synthetic demo operations. Live Companion
+remains unimplemented.
+
 WO-013 adds post-interaction AI Debrief and foreground-only Voice Journal with
 typed fallback, short-segment transcription, strict structured question/extraction,
 complete candidate review and source-aware Opportunity Workspace/Revenue Brain
-updates. Raw audio is never persisted. Customer/meeting recording, background
-capture, call interception, live intelligence and general media storage remain
-unimplemented.
+updates. The WO-013 path never persists raw audio. Customer/meeting recording, background
+capture, call interception, live intelligence and general media storage were
+outside the WO-013 boundary; WO-015 later adds only the consent-gated browser
+recording and batch-transcription slice described below.
 
 WO-014 adds deliberately supplied JPEG/PNG visual evidence with private object
 storage, metadata stripping, strict mock/optional OpenAI analysis, mandatory
@@ -248,6 +263,13 @@ Presentation Mode keeps seller-created slides as context rather than customer
 signals; business cards do not auto-create Contacts; site photos remain
 observed evidence. Native capture, live recording, video and general document
 ingestion remain unimplemented.
+
+WO-015 adds optional consent-gated foreground browser recording, resumable private
+audio chunks, durable batch transcription, immutable transcript versions/segments,
+raw-audio retention/deletion/export handling and reconciliation. The default mock
+performs no network request. Native/background capture, meeting bots, telephony,
+online connectors, streaming transcription and biometric speaker identification
+remain unimplemented.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

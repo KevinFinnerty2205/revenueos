@@ -29,6 +29,7 @@ from revenueos.interaction_dependencies import (
     get_debrief_service,
     get_interaction_service,
     get_pre_interaction_brief_service,
+    get_recording_service,
     get_visual_evidence_service,
 )
 from revenueos.interaction_repositories import InteractionRecord
@@ -38,6 +39,21 @@ from revenueos.pre_interaction_contracts import (
     PreInteractionBriefResponse,
 )
 from revenueos.pre_interaction_services import PreInteractionBriefService
+from revenueos.recording_contracts import (
+    RecordingCancelRequest,
+    RecordingChunkCompleteRequest,
+    RecordingChunkCreateRequest,
+    RecordingChunkCreateResponse,
+    RecordingChunkResponse,
+    RecordingCreateRequest,
+    RecordingDeleteResponse,
+    RecordingFinalizeRequest,
+    RecordingSessionResponse,
+    RecordingStartRequest,
+    RecordingStopRequest,
+    RecordingTranscriptionResponse,
+)
+from revenueos.recording_services import RecordingService
 from revenueos.visual_contracts import (
     VisualDeleteResponse,
     VisualEvidenceResponse,
@@ -55,6 +71,7 @@ Interactions = Annotated[InteractionService, Depends(get_interaction_service)]
 Briefs = Annotated[PreInteractionBriefService, Depends(get_pre_interaction_brief_service)]
 Debriefs = Annotated[DebriefService, Depends(get_debrief_service)]
 Visuals = Annotated[VisualEvidenceService, Depends(get_visual_evidence_service)]
+Recordings = Annotated[RecordingService, Depends(get_recording_service)]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -272,6 +289,219 @@ async def cancel_debrief(
     service: Debriefs,
 ) -> DebriefSessionResponse:
     return await service.cancel(interaction_id, session_id, request)
+
+
+@router.post(
+    "/{interaction_id}/recordings",
+    response_model=RecordingSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_recording(
+    interaction_id: UUID,
+    request: RecordingCreateRequest,
+    service: Recordings,
+) -> RecordingSessionResponse:
+    return await service.create(interaction_id, request)
+
+
+@router.get(
+    "/{interaction_id}/recordings",
+    response_model=list[RecordingSessionResponse],
+)
+async def list_recordings(
+    interaction_id: UUID,
+    service: Recordings,
+) -> list[RecordingSessionResponse]:
+    return await service.list_recordings(interaction_id)
+
+
+@router.get(
+    "/{interaction_id}/recordings/{recording_id}",
+    response_model=RecordingSessionResponse,
+)
+async def get_recording(
+    interaction_id: UUID,
+    recording_id: UUID,
+    service: Recordings,
+) -> RecordingSessionResponse:
+    return await service.get(interaction_id, recording_id)
+
+
+@router.post(
+    "/{interaction_id}/recordings/{recording_id}/start",
+    response_model=RecordingSessionResponse,
+)
+async def start_recording(
+    interaction_id: UUID,
+    recording_id: UUID,
+    request: RecordingStartRequest,
+    service: Recordings,
+) -> RecordingSessionResponse:
+    return await service.start(interaction_id, recording_id, request)
+
+
+@router.post(
+    "/{interaction_id}/recordings/{recording_id}/pause",
+    response_model=RecordingSessionResponse,
+)
+async def pause_recording(
+    interaction_id: UUID,
+    recording_id: UUID,
+    request: RecordingStartRequest,
+    service: Recordings,
+) -> RecordingSessionResponse:
+    return await service.pause(interaction_id, recording_id, request)
+
+
+@router.post(
+    "/{interaction_id}/recordings/{recording_id}/resume",
+    response_model=RecordingSessionResponse,
+)
+async def resume_recording(
+    interaction_id: UUID,
+    recording_id: UUID,
+    request: RecordingStartRequest,
+    service: Recordings,
+) -> RecordingSessionResponse:
+    return await service.resume(interaction_id, recording_id, request)
+
+
+@router.post(
+    "/{interaction_id}/recordings/{recording_id}/stop",
+    response_model=RecordingSessionResponse,
+)
+async def stop_recording(
+    interaction_id: UUID,
+    recording_id: UUID,
+    request: RecordingStopRequest,
+    service: Recordings,
+) -> RecordingSessionResponse:
+    return await service.stop(interaction_id, recording_id, request)
+
+
+@router.post(
+    "/{interaction_id}/recordings/{recording_id}/chunks",
+    response_model=RecordingChunkCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_recording_chunk(
+    interaction_id: UUID,
+    recording_id: UUID,
+    request: RecordingChunkCreateRequest,
+    service: Recordings,
+) -> RecordingChunkCreateResponse:
+    return await service.create_chunk(interaction_id, recording_id, request)
+
+
+@router.get(
+    "/{interaction_id}/recordings/{recording_id}/chunks",
+    response_model=list[RecordingChunkResponse],
+)
+async def list_recording_chunks(
+    interaction_id: UUID,
+    recording_id: UUID,
+    service: Recordings,
+) -> list[RecordingChunkResponse]:
+    return await service.list_chunks(interaction_id, recording_id)
+
+
+@router.put(
+    "/{interaction_id}/recordings/{recording_id}/chunks/{chunk_id}/content",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def upload_recording_chunk_content(
+    interaction_id: UUID,
+    recording_id: UUID,
+    chunk_id: UUID,
+    token: Annotated[str, Query(min_length=10, max_length=200)],
+    request: Request,
+    service: Recordings,
+) -> Response:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > service.settings.private_beta_max_recording_chunk_bytes:
+                raise PublicAPIError("recording_chunk_too_large", "The recording chunk is too large.", 413)
+        except ValueError as exc:
+            raise PublicAPIError("invalid_content_length", "The upload Content-Length is invalid.", 400) from exc
+    content = bytearray()
+    async for part in request.stream():
+        content.extend(part)
+        if len(content) > service.settings.private_beta_max_recording_chunk_bytes:
+            raise PublicAPIError("recording_chunk_too_large", "The recording chunk is too large.", 413)
+    await service.upload_chunk_content(
+        interaction_id,
+        recording_id,
+        chunk_id,
+        token=token,
+        content=bytes(content),
+        content_type=request.headers.get("content-type"),
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{interaction_id}/recordings/{recording_id}/chunks/{chunk_id}/complete",
+    response_model=RecordingChunkResponse,
+)
+async def complete_recording_chunk(
+    interaction_id: UUID,
+    recording_id: UUID,
+    chunk_id: UUID,
+    request: RecordingChunkCompleteRequest,
+    service: Recordings,
+) -> RecordingChunkResponse:
+    return await service.complete_chunk(interaction_id, recording_id, chunk_id, request)
+
+
+@router.post(
+    "/{interaction_id}/recordings/{recording_id}/finalize",
+    response_model=RecordingSessionResponse,
+)
+async def finalize_recording(
+    interaction_id: UUID,
+    recording_id: UUID,
+    request: RecordingFinalizeRequest,
+    service: Recordings,
+) -> RecordingSessionResponse:
+    return await service.finalize(interaction_id, recording_id, request)
+
+
+@router.post(
+    "/{interaction_id}/recordings/{recording_id}/cancel",
+    response_model=RecordingSessionResponse,
+)
+async def cancel_recording(
+    interaction_id: UUID,
+    recording_id: UUID,
+    request: RecordingCancelRequest,
+    service: Recordings,
+) -> RecordingSessionResponse:
+    return await service.cancel(interaction_id, recording_id, request)
+
+
+@router.get(
+    "/{interaction_id}/recordings/{recording_id}/transcription",
+    response_model=RecordingTranscriptionResponse,
+)
+async def get_recording_transcription(
+    interaction_id: UUID,
+    recording_id: UUID,
+    service: Recordings,
+) -> RecordingTranscriptionResponse:
+    return await service.transcription(interaction_id, recording_id)
+
+
+@router.delete(
+    "/{interaction_id}/recordings/{recording_id}",
+    response_model=RecordingDeleteResponse,
+)
+async def delete_recording(
+    interaction_id: UUID,
+    recording_id: UUID,
+    service: Recordings,
+) -> RecordingDeleteResponse:
+    return await service.delete(interaction_id, recording_id)
 
 
 @router.post(

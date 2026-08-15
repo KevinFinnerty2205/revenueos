@@ -369,7 +369,7 @@ class VisualEvidenceService:
                 429,
             )
         if self.provider.provider_name == "openai":
-            await self.beta.reserve_provider_request()
+            await self.beta.reserve_provider_request(self.provider.provider_name)
         visual.processing_status = "processing"
         visual.processing_attempts += 1
         visual.failure_code = None

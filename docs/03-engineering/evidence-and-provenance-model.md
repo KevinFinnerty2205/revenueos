@@ -1,7 +1,8 @@
 # Evidence and provenance model
 
-- **Status:** Approved target model; WO-011 implements only the metadata envelope
-  subset documented in the
+- **Status:** Approved model; WO-011 implements the metadata envelope, WO-013/014
+  implement reviewed reported/visual evidence and WO-015 implements recorded
+  transcript evidence with immutable versions/segments. See the
   [Evidence foundation implementation guide](evidence-foundation-implementation.md)
 - **Goal:** Let RevenueOS explain what it believes, why, what conflicts and how the
   conclusion was validated without pretending every source is equally authoritative

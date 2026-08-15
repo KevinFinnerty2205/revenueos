@@ -24,7 +24,7 @@ const dashboardSections = [
   {
     title: "AI Insights",
     description:
-      "No AI provider or meeting-analysis workflow is connected in this foundation.",
+      "Meeting Intelligence is available from each meeting; a dashboard insight summary is not implemented.",
   },
 ] as const;
 
@@ -34,7 +34,7 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow="Development workspace"
         title="A calm place for the work ahead."
-        description="Core business and deliberate meeting records are available. Recording, connected conversations and AI capabilities remain unimplemented."
+        description="Core business records, deliberate meetings and optional consent-gated browser recording are available. Connected conversations and live assistance remain unimplemented."
       />
       <section aria-labelledby="dashboard-sections-title">
         <h2 id="dashboard-sections-title" className="sr-only">

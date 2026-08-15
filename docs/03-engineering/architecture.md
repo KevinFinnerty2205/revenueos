@@ -253,9 +253,11 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0024_visual_evidence` is the head migration. It adds
-forced-RLS visual asset/candidate metadata, review guards, storage lifecycle
-state and the `observed` evidence support class. It follows
+source exists. Migration `0025_recording_transcription` is the head migration.
+It adds forced-RLS recording/consent/chunk/usage and immutable transcript
+version/segment tables, after `0024_visual_evidence` added forced-RLS visual
+asset/candidate metadata, review guards, storage lifecycle state and the
+`observed` evidence support class. `0024` follows
 `0023_ai_debrief_voice_journal`, which
 follows `0021_interaction_foundation` and adds immutable, forced-RLS
 Pre-Interaction Brief persistence with composite tenant keys and source-fingerprint
@@ -305,6 +307,16 @@ credentials and does not write directly to the database.
 Migration `0024_visual_evidence` adds metadata/candidate tables with forced RLS
 and composite tenant relationships. Image bytes remain outside the application
 database. A separate media service, queue or datastore was not introduced.
+
+## WO-015 recording and transcription extension
+
+The modular monolith now includes a Recording Service/repository, private chunk
+storage through the established binary adapter, a focused Transcription Provider
+port and Recording Worker stages in the existing worker. Recording Session state is
+the durable queue input; no broker or second worker service was added. Audio remains
+outside PostgreSQL and is streamed to bounded temporary disk during assembly.
+Immutable transcript versions and segments feed the current Meeting transcript/read
+model without duplicating Meeting Intelligence.
 
 WO-010 defines the target direction and WO-011 implements the first additive
 foundation: Interaction is the source-neutral logical parent and Meeting remains a

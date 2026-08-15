@@ -293,8 +293,8 @@ class BetaService:
                 429,
             )
 
-    async def reserve_provider_request(self) -> None:
-        if self.settings.ai_provider_name != "openai":
+    async def reserve_provider_request(self, provider_name: str | None = None) -> None:
+        if (provider_name or self.settings.ai_provider_name) != "openai":
             return
         insert = postgresql_insert if self.session.get_bind().dialect.name == "postgresql" else sqlite_insert
         base_statement = insert(AIUsageCounter).values(

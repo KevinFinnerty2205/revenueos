@@ -4,8 +4,9 @@
 
 WO-012 implements the **before** phase of AI Companion as a deterministic,
 interaction-scoped preparation capability. It supports all ten initial Interaction
-types and does not require recording. Live Companion, AI Debrief, Voice Journal,
-recording, transcription, phone integration and visual capture remain unimplemented.
+types and does not require recording. Later work orders add reviewed AI Debrief,
+Voice Journal, visual evidence and optional consent-gated recording with batch
+transcription; Live Companion and phone integration remain unimplemented.
 
 `PreInteractionBriefService` owns access validation, source loading, normalisation,
 composition, strict validation, versioning, persistence and product-safe responses.

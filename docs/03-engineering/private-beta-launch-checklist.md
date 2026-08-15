@@ -23,6 +23,8 @@ the approved release record. Repository completion is not production approval.
 - [ ] Usage and transcript limits are tested at the boundary.
 - [ ] Visual count/byte/analysis limits, private signed access and image sanitisation are tested.
 - [ ] Visual export byte inclusion remains disabled unless separately approved.
+- [ ] Recording consent, limits, resumability, raw retention, object-first deletion
+      and tenant-scoped reconciliation are exercised with synthetic audio.
 - [ ] OpenAI is disabled initially or separately approved and restricted.
 - [ ] Feature flags are reviewed and unknown/disabled routes fail closed.
 
@@ -32,13 +34,15 @@ the approved release record. Repository completion is not production approval.
 - [ ] TLS and explicit CORS origins are configured.
 - [ ] Encrypted database backup completed.
 - [ ] Non-production restore drill completed, including RLS verification.
-- [ ] Migration `0024_visual_evidence` applied exactly once; visual/debrief
-      review and snapshot guards, tenant constraints and forced RLS are verified.
+- [ ] Migration `0025_recording_transcription` applied exactly once; recording,
+      visual/debrief review and snapshot guards, tenant constraints and forced RLS
+      are verified.
 - [ ] API liveness/readiness are green.
 - [ ] Worker starts after the compatible migration and processes mock work.
 - [ ] Web sign-in, organisation selection and beta journey are green.
 - [ ] Daily retention and expired-export schedules are installed and observed.
 - [ ] Private visual object lifecycle and tenant-scoped reconciliation are observed.
+- [ ] Private recording lifecycle, retention and report-only reconciliation are observed.
 - [ ] Rollback release and decision owner are identified.
 
 ## Operations and incident readiness

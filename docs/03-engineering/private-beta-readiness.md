@@ -122,7 +122,7 @@ Admins queue a versioned JSON export in Settings. An operator runs:
 uv --directory apps/api run revenueos-beta-maintenance export --organisation-id <UUID> --request-id <UUID>
 ```
 
-Export version 3 has deterministic sections/order and a safe UUID filename. It may
+Export version 6 has deterministic sections/order and a safe UUID filename. It may
 contain authorised transcripts and validated intelligence, so store it only in
 the restricted directory configured by `API_PRIVATE_BETA_EXPORT_DIRECTORY`.
 It includes Interaction, Capture Session, Evidence, Interaction audit metadata and
@@ -158,6 +158,10 @@ Daily PostgreSQL counters are tenant scoped and updated atomically:
 - Existing `API_AI_STRUCTURED_OUTPUT_MAX_ATTEMPTS` and
   `API_WORKER_DEFAULT_MAX_ATTEMPTS` bound validation attempts and durable
   retries.
+- Recording guardrails separately bound active sessions, three-hour/512 MiB
+  recordings, 8 MiB chunks, 4,096 chunks, bytes/day, transcription minutes and
+  requests/day, simultaneous transcriptions and three durable attempts. Recording
+  usage has its own tenant/day counter.
 
 Counters use the UTC calendar date and reset by selecting the next date row;
 they are not mutated at midnight. Admin Settings shows counts and limits. Cost
@@ -176,6 +180,11 @@ defaults:
 | `API_FEATURE_AI_COMPANION_ENABLED`          | `true`  |
 | `API_FEATURE_AI_DEBRIEF_ENABLED`            | `true`  |
 | `API_FEATURE_VOICE_JOURNAL_ENABLED`         | `true`  |
+| `API_FEATURE_VISUAL_EVIDENCE_ENABLED`       | `true`  |
+| `API_FEATURE_PRESENTATION_MODE_ENABLED`     | `true`  |
+| `API_FEATURE_RECORDING_CAPTURE_ENABLED`     | `false` |
+| `API_FEATURE_TRANSCRIPTION_ENABLED`         | `false` |
+| `API_FEATURE_AUTO_GENERATE_INTELLIGENCE_AFTER_TRANSCRIPTION` | `false` |
 | `API_FEATURE_DATA_EXPORT_ENABLED`           | `true`  |
 | `API_FEATURE_ORGANISATION_DELETION_ENABLED` | `false` |
 
@@ -188,7 +197,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  Alembic head `0024_visual_evidence`, identity configuration, selected
+  Alembic head `0025_recording_transcription`, identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
@@ -271,6 +280,20 @@ bytes remain disabled unless `API_PRIVATE_BETA_EXPORT_VISUAL_IMAGES_ENABLED`
 has received separate approval. Telemetry records counts, type, ownership,
 attempt and safe error codes only—not bytes, OCR, context labels, statements,
 signed URLs or provider payloads.
+
+## WO-015 recording-data controls
+
+Recording uses distinct consent, active-session, size/duration/chunk, daily bytes,
+transcription minutes/request, concurrency, retry, expiry and seven-day raw-audio
+limits. Recording, transcription and automatic intelligence are independently
+server-authoritative and default off. Production validation requires private
+S3-compatible storage and a deployment signing secret when recording is enabled.
+
+Retention and organisation/Interaction deletion remove recording objects before
+database lineage. Export version 6 adds recording/consent metadata, a content-free
+chunk manifest, transcript versions and segments; raw audio, storage keys, signed
+URLs and provider request IDs are excluded. Reconciliation is tenant-scoped and
+metadata-only.
 
 - Private beta only; production customer data is prohibited unless separately
   approved.

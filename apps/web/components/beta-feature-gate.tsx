@@ -10,7 +10,8 @@ type BetaFeature =
   | "aiDebrief"
   | "voiceJournal"
   | "visualEvidence"
-  | "presentationMode";
+  | "presentationMode"
+  | "recordingCapture";
 
 interface Capabilities {
   featureFlags: Record<string, boolean>;
