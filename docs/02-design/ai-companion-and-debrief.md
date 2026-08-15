@@ -2,7 +2,8 @@
 
 - **Status:** WO-016 implements the responsive BEFORE/DURING/AFTER Companion by
   orchestrating the WO-012 brief, WO-013 debrief/Voice Journal, WO-014 visuals and
-  WO-015 foreground recording foundations. Live intelligence remains target design.
+  WO-015 foreground recording foundations. WO-017 adds adaptive phone-call
+  preparation/debrief and recording import. Live intelligence remains target design.
 - **First release:** concise preparation, explicitly chosen foreground recording or
   passive capture, then source-aware targeted debrief and review.
 
@@ -176,6 +177,15 @@ conversations use a much shorter flow.
 The model can select among allowed question intents and render natural wording, but
 application policy owns the cap, prohibited topics, already-answered check and
 session lifecycle.
+
+### Phone-call adaptation
+
+Phone calls begin with **What changed?** when known to be three minutes or less and
+allow at most one follow-up. Normal guided calls use at most four questions; a
+linked opportunity call of at least 15 minutes may use five; Voice Journal uses two.
+Missed, voicemail and cancelled calls use one question and never produce customer
+Interaction Intelligence. Recording coverage suppresses already-covered gaps and
+deterministic conflict/corroboration state stays visible at review.
 
 ## Safety and privacy
 

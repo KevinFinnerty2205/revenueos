@@ -1,7 +1,9 @@
 "use client";
 
 import type {
+  CallDirection,
   Company,
+  Contact,
   EntityPage,
   Interaction,
   InteractionType,
@@ -18,6 +20,7 @@ export function InteractionForm() {
   const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -27,6 +30,8 @@ export function InteractionForm() {
     useState<InteractionType>("manual_interaction");
   const [companyId, setCompanyId] = useState("");
   const [opportunityId, setOpportunityId] = useState("");
+  const [contactId, setContactId] = useState("");
+  const [callDirection, setCallDirection] = useState<CallDirection>("unknown");
   const [scheduledStartAt, setScheduledStartAt] = useState("");
   const [scheduledEndAt, setScheduledEndAt] = useState("");
 
@@ -40,10 +45,14 @@ export function InteractionForm() {
         "/api/v1/opportunities?pageSize=100",
         { signal: controller.signal },
       ),
+      apiRequest<EntityPage<Contact>>("/api/v1/contacts?pageSize=100", {
+        signal: controller.signal,
+      }),
     ])
-      .then(([companyPage, opportunityPage]) => {
+      .then(([companyPage, opportunityPage, contactPage]) => {
         setCompanies(companyPage.items);
         setOpportunities(opportunityPage.items);
+        setContacts(contactPage.items);
       })
       .catch((requestError: unknown) => {
         if (
@@ -79,6 +88,10 @@ export function InteractionForm() {
             lifecycleStatus: "planned",
             companyId: companyId || null,
             opportunityId: opportunityId || null,
+            contactId:
+              interactionType === "phone_call" ? contactId || null : null,
+            callDirection:
+              interactionType === "phone_call" ? callDirection : null,
             scheduledStartAt: scheduledStartAt
               ? new Date(scheduledStartAt).toISOString()
               : null,
@@ -167,7 +180,17 @@ export function InteractionForm() {
               <select
                 className="form-control"
                 value={companyId}
-                onChange={(event) => setCompanyId(event.target.value)}
+                onChange={(event) => {
+                  const nextCompanyId = event.target.value;
+                  setCompanyId(nextCompanyId);
+                  if (
+                    contactId &&
+                    contacts.find((contact) => contact.id === contactId)
+                      ?.companyId !== nextCompanyId
+                  ) {
+                    setContactId("");
+                  }
+                }}
               >
                 <option value="">No company</option>
                 {companies.map((company) => (
@@ -193,6 +216,53 @@ export function InteractionForm() {
               </select>
             </label>
           </div>
+          {interactionType === "phone_call" ? (
+            <fieldset className="grid gap-5 rounded-2xl border border-teal-200 bg-teal-50 p-5 sm:grid-cols-2">
+              <legend className="px-2 text-sm font-bold text-teal-950">
+                Phone call
+              </legend>
+              <p className="sm:col-span-2 text-sm leading-6 text-teal-950">
+                Use the phone system you already have. RevenueOS prepares and
+                times the interaction; it does not intercept or record a normal
+                cellular call.
+              </p>
+              <label className="grid gap-2 text-sm font-bold text-slate-800">
+                Call direction
+                <select
+                  className="form-control"
+                  value={callDirection}
+                  onChange={(event) =>
+                    setCallDirection(event.target.value as CallDirection)
+                  }
+                >
+                  <option value="unknown">Unknown</option>
+                  <option value="outbound">Outbound</option>
+                  <option value="inbound">Inbound</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm font-bold text-slate-800">
+                Contact
+                <select
+                  className="form-control"
+                  value={contactId}
+                  onChange={(event) => setContactId(event.target.value)}
+                >
+                  <option value="">No contact</option>
+                  {contacts
+                    .filter(
+                      (contact) =>
+                        !companyId || contact.companyId === companyId,
+                    )
+                    .map((contact) => (
+                      <option key={contact.id} value={contact.id}>
+                        {contact.firstName} {contact.lastName}
+                        {contact.jobTitle ? ` · ${contact.jobTitle}` : ""}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </fieldset>
+          ) : null}
           <div className="grid gap-5 sm:grid-cols-2">
             <label className="grid gap-2 text-sm font-bold text-slate-800">
               Scheduled start

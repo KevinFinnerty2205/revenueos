@@ -51,6 +51,9 @@ function BriefSection({
 }
 
 function BriefContent({ content }: { content: PreInteractionBriefContent }) {
+  if (content.interactionType === "phone_call") {
+    return <PhoneCallBriefContent content={content} />;
+  }
   return (
     <div className="mt-6 space-y-4">
       <div className="rounded-2xl bg-slate-950 p-5 text-white">
@@ -216,6 +219,106 @@ function BriefContent({ content }: { content: PreInteractionBriefContent }) {
           {content.interactionGuidance}
         </p>
       </div>
+    </div>
+  );
+}
+
+function PhoneCallBriefContent({
+  content,
+}: {
+  content: PreInteractionBriefContent;
+}) {
+  return (
+    <div className="mt-6 space-y-4">
+      <div className="rounded-2xl bg-slate-950 p-5 text-white">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">
+          Compact call brief
+        </p>
+        <p className="mt-3 text-lg font-semibold">{content.headline}</p>
+        <p className="mt-2 text-sm leading-6 text-slate-300">
+          {content.accountContext}
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <BriefSection
+          title="Contact and role"
+          empty={!content.stakeholderFocus.length}
+        >
+          <ul className="mt-3 space-y-3">
+            {content.stakeholderFocus.slice(0, 2).map((item) => (
+              <li key={`${item.name}-${item.role}`}>
+                <p className="font-semibold text-slate-900">
+                  {item.name} · {item.role}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">{item.focus}</p>
+              </li>
+            ))}
+          </ul>
+        </BriefSection>
+        <BriefSection
+          title="Purpose and desired next step"
+          empty={!content.objectives.length && !content.successCriteria.length}
+        >
+          <p className="mt-3 font-semibold text-slate-900">
+            {content.objectives[0]?.objective}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {content.successCriteria[0]}
+          </p>
+        </BriefSection>
+        <BriefSection
+          title="Latest commitment"
+          empty={!content.openCommitments.length}
+        >
+          {content.openCommitments.slice(0, 1).map((item) => (
+            <div className="mt-3" key={item.commitment}>
+              <p className="font-semibold text-slate-900">{item.commitment}</p>
+              <p className="mt-1 text-sm text-slate-600">
+                {item.owner ?? "Owner not confirmed"}
+                {item.dueDate ? ` · ${item.dueDate}` : ""}
+              </p>
+            </div>
+          ))}
+        </BriefSection>
+        <BriefSection
+          title="Objection or timeline issue"
+          empty={!content.risksToWatch.length}
+        >
+          {content.risksToWatch.slice(0, 2).map((item) => (
+            <p
+              className="mt-3 text-sm leading-6 text-slate-700"
+              key={item.risk}
+            >
+              {item.risk}
+            </p>
+          ))}
+        </BriefSection>
+      </div>
+      {content.recentChanges.length ? (
+        <p className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
+          <strong>Recent Revenue Brain change:</strong>{" "}
+          {content.recentChanges[0].change}
+        </p>
+      ) : null}
+      <BriefSection
+        title="Recommended questions"
+        empty={!content.questionsToAsk.length}
+      >
+        <ol className="mt-3 space-y-3">
+          {content.questionsToAsk.slice(0, 3).map((item, index) => (
+            <li
+              key={item.question}
+              className="flex gap-3 text-sm text-slate-800"
+            >
+              <span className="font-bold text-teal-700">{index + 1}.</span>
+              <span>{item.question}</span>
+            </li>
+          ))}
+        </ol>
+      </BriefSection>
+      <p className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-sm leading-6 text-teal-950">
+        {content.interactionGuidance}
+      </p>
     </div>
   );
 }

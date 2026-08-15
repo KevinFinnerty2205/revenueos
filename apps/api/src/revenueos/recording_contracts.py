@@ -14,6 +14,12 @@ RecordingType = Literal[
     "uploaded_audio_recording",
     "imported_audio_recording",
 ]
+RecordingSource = Literal[
+    "customer_call_recording",
+    "business_phone_recording",
+    "user_uploaded_recording",
+    "external_provider_recording",
+]
 RecordingLifecycleStatus = Literal[
     "created",
     "recording",
@@ -78,6 +84,7 @@ class StrictRecordingModel(APIModel):
 
 class RecordingCreateRequest(APIModel):
     recording_type: RecordingType
+    recording_source: RecordingSource | None = None
     expected_mime_type: str = Field(min_length=1, max_length=100)
     language: str | None = Field(
         default=None,
@@ -94,6 +101,14 @@ class RecordingCreateRequest(APIModel):
     @classmethod
     def validate_mime_type(cls, value: str) -> str:
         return normalise_recording_mime_type(value)
+
+    @model_validator(mode="after")
+    def validate_recording_source(self) -> RecordingCreateRequest:
+        if self.recording_type == "live_audio_recording" and self.recording_source is not None:
+            raise ValueError("Live browser recordings do not use imported recording provenance.")
+        if self.recording_type != "live_audio_recording" and self.recording_source is None:
+            raise ValueError("Imported recordings require a controlled recording source.")
+        return self
 
 
 class RecordingStartRequest(APIModel):
@@ -161,6 +176,7 @@ class RecordingSessionResponse(APIModel):
     interaction_id: UUID
     capture_session_id: UUID
     recording_type: RecordingType
+    recording_source: RecordingSource | None
     lifecycle_status: RecordingLifecycleStatus
     consent_state: Literal["acknowledged"]
     started_at: datetime | None

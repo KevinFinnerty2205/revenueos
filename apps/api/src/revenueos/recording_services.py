@@ -94,6 +94,7 @@ class RecordingService:
         if existing is not None:
             if (
                 existing.recording_type != request.recording_type
+                or existing.recording_source != request.recording_source
                 or existing.expected_mime_type != request.expected_mime_type
                 or existing.language != request.language
             ):
@@ -120,6 +121,7 @@ class RecordingService:
         if existing is not None:
             if (
                 existing.recording_type != request.recording_type
+                or existing.recording_source != request.recording_source
                 or existing.expected_mime_type != request.expected_mime_type
                 or existing.language != request.language
             ):
@@ -192,6 +194,7 @@ class RecordingService:
             source_evidence_id=evidence_id,
             created_by_user_id=self.tenant.user_id,
             recording_type=request.recording_type,
+            recording_source=request.recording_source,
             lifecycle_status="created",
             consent_state="acknowledged",
             expected_mime_type=request.expected_mime_type,
@@ -224,7 +227,14 @@ class RecordingService:
                 409,
             ) from exc
         self.session.add(consent)
-        self._event("recording_created", recording_id, {"recording_type": request.recording_type})
+        self._event(
+            "recording_imported" if request.recording_type != "live_audio_recording" else "recording_created",
+            recording_id,
+            {
+                "recording_type": request.recording_type,
+                "recording_source": request.recording_source,
+            },
+        )
         await self._commit("The recording session could not be created.", refresh=recording)
         return self._response(recording)
 
@@ -855,6 +865,7 @@ class RecordingService:
                 "interaction_id": recording.interaction_id,
                 "capture_session_id": recording.capture_session_id,
                 "recording_type": recording.recording_type,
+                "recording_source": recording.recording_source,
                 "lifecycle_status": recording.lifecycle_status,
                 "consent_state": "acknowledged",
                 "started_at": recording.started_at,

@@ -110,4 +110,74 @@ describe("InteractionForm", () => {
       screen.queryByRole("button", { name: "Create interaction" }),
     ).not.toBeInTheDocument();
   });
+
+  it("creates a phone call with an explicit direction and selected contact", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ id: "phone-call-1" }, 201));
+      }
+      if (path.includes("/contacts")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [
+              {
+                id: "contact-1",
+                companyId: "company-1",
+                firstName: "Jordan",
+                lastName: "Lee",
+                jobTitle: "Commercial Director",
+              },
+            ],
+          }),
+        );
+      }
+      if (path.includes("/companies")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...emptyPage,
+            items: [{ id: "company-1", name: "Acme Australia" }],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(emptyPage));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<InteractionForm />);
+    await screen.findByRole("heading", { name: "Create interaction" });
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Commercial check-in" },
+    });
+    fireEvent.change(screen.getByLabelText("Interaction type"), {
+      target: { value: "phone_call" },
+    });
+    expect(screen.getByText(/does not intercept or record/i)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Company"), {
+      target: { value: "company-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Call direction"), {
+      target: { value: "outbound" },
+    });
+    fireEvent.change(screen.getByLabelText("Contact"), {
+      target: { value: "contact-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create interaction" }));
+
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith("/interactions/phone-call-1"),
+    );
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/interactions") &&
+        init?.method === "POST",
+    );
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      interactionType: "phone_call",
+      companyId: "company-1",
+      contactId: "contact-1",
+      callDirection: "outbound",
+    });
+  });
 });

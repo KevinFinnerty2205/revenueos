@@ -1,8 +1,9 @@
 # Evidence and provenance model
 
 - **Status:** Approved model; WO-011 implements the metadata envelope, WO-013/014
-  implement reviewed reported/visual evidence and WO-015 implements recorded
-  transcript evidence with immutable versions/segments. See the
+  implement reviewed reported/visual evidence, WO-015 implements recorded
+  transcript evidence with immutable versions/segments, and WO-017 retains
+  phone-recording source plus deterministic debrief reconciliation state. See the
   [Evidence foundation implementation guide](evidence-foundation-implementation.md)
 - **Goal:** Let RevenueOS explain what it believes, why, what conflicts and how the
   conclusion was validated without pretending every source is equally authoritative
@@ -292,6 +293,16 @@ Seller-created presentation material is context only; business-card contact
 details do not enter current intelligence; site photos use observed support.
 Deleting a source suppresses derived current Opportunity/Revenue Brain reads.
 See [Visual provenance rules](visual-provenance-rules.md).
+
+## WO-017 phone-call reconciliation
+
+Imported call recordings retain a controlled source independently from transcript
+and Debrief origin. The transcript remains imported/direct Evidence; AI Debrief and
+Voice Journal remain salesperson-reported Evidence. Focused deterministic comparison
+marks reported candidates `corroborated`, `conflicting`, `unresolved` or
+`not_assessed`. Review and immutable downstream snapshots retain that state. The
+system does not silently overwrite either source or turn recollection into
+customer-direct evidence. See [Phone-call provenance](phone-call-provenance.md).
 
 - [Interaction domain architecture](interaction-domain-architecture.md)
 - [Recording and transcription architecture](recording-and-transcription-architecture.md)

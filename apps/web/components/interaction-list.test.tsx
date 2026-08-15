@@ -47,6 +47,21 @@ const companyPage = {
   pages: 1,
 };
 
+const contactPage = {
+  items: [
+    {
+      id: "contact-1",
+      companyId: "company-1",
+      firstName: "Jordan",
+      lastName: "Lee",
+    },
+  ],
+  page: 1,
+  pageSize: 100,
+  total: 1,
+  pages: 1,
+};
+
 describe("InteractionList", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -140,10 +155,12 @@ describe("InteractionList", () => {
         ),
       )
       .mockResolvedValueOnce(jsonResponse(companyPage))
+      .mockResolvedValueOnce(jsonResponse(contactPage))
       .mockResolvedValueOnce(
         jsonResponse({ ...interactionPage, items: [], total: 0, pages: 0 }),
       )
-      .mockResolvedValueOnce(jsonResponse(companyPage));
+      .mockResolvedValueOnce(jsonResponse(companyPage))
+      .mockResolvedValueOnce(jsonResponse(contactPage));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<InteractionList />);
@@ -153,6 +170,56 @@ describe("InteractionList", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(
       await screen.findByRole("heading", { name: "No interactions found" }),
+    ).toBeVisible();
+  });
+
+  it("shows phone direction, contact, duration, capture and intelligence readiness", async () => {
+    const phonePage = {
+      ...interactionPage,
+      items: [
+        {
+          ...interactionPage.items[0],
+          id: "phone-1",
+          title: "Commercial call",
+          meetingId: null,
+          contactId: "contact-1",
+          interactionType: "phone_call",
+          lifecycleStatus: "completed",
+          callDirection: "outbound",
+          callOutcome: "connected",
+          durationSeconds: 185,
+          captureMethods: ["debrief", "recording"],
+          intelligenceState: "ready",
+          recordingAvailable: true,
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/interactions")) {
+          return Promise.resolve(jsonResponse(phonePage));
+        }
+        if (path.includes("/contacts")) {
+          return Promise.resolve(jsonResponse(contactPage));
+        }
+        return Promise.resolve(jsonResponse(companyPage));
+      }),
+    );
+
+    render(<InteractionList />);
+    expect(
+      await screen.findByRole("heading", { name: "Commercial call" }),
+    ).toBeVisible();
+    expect(screen.getByText("Outbound")).toBeVisible();
+    expect(screen.getByText("Jordan Lee")).toBeVisible();
+    expect(screen.getByText("· 3m 5s")).toBeVisible();
+    expect(screen.getByText("· Connected")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Capture: Debrief · Recording · Intelligence ready · Recording available",
+      ),
     ).toBeVisible();
   });
 });

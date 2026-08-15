@@ -4,6 +4,7 @@ import type {
   Company,
   RevenueBrainReasoningRequestResponse,
   RevenueBrainReasoningResponse,
+  RevenueBrainReportedSnapshot,
   RevenueBrainSnapshot,
   RevenueBrainVisualSnapshot,
 } from "@revenueos/shared";
@@ -21,6 +22,9 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
     useState<RevenueBrainReasoningResponse | null>(null);
   const [visualSnapshots, setVisualSnapshots] = useState<
     RevenueBrainVisualSnapshot[] | null
+  >(null);
+  const [reportedSnapshots, setReportedSnapshots] = useState<
+    RevenueBrainReportedSnapshot[] | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [reasoningError, setReasoningError] = useState<string | null>(null);
@@ -45,6 +49,10 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
         `/api/v1/accounts/${accountId}/brain/visual-evidence`,
         { signal: controller.signal },
       ),
+      apiRequest<RevenueBrainReportedSnapshot[]>(
+        `/api/v1/accounts/${accountId}/brain/reported-interactions`,
+        { signal: controller.signal },
+      ),
     ])
       .then(
         ([
@@ -52,11 +60,13 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
           loadedSnapshots,
           loadedReasoning,
           loadedVisualSnapshots,
+          loadedReportedSnapshots,
         ]) => {
           setCompany(loadedCompany);
           setSnapshots(loadedSnapshots);
           setReasoning(loadedReasoning);
           setVisualSnapshots(loadedVisualSnapshots);
+          setReportedSnapshots(loadedReportedSnapshots);
         },
       )
       .catch((requestError: unknown) => {
@@ -126,7 +136,13 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
     }
   }
 
-  if (!company || !snapshots || !reasoning || !visualSnapshots) {
+  if (
+    !company ||
+    !snapshots ||
+    !reasoning ||
+    !visualSnapshots ||
+    !reportedSnapshots
+  ) {
     return (
       <div
         role="status"
@@ -166,6 +182,79 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
         requestError={reasoningError}
         onRequest={() => void requestReasoning()}
       />
+
+      <section
+        aria-labelledby="revenue-brain-reported-title"
+        className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+      >
+        <h2
+          id="revenue-brain-reported-title"
+          className="text-2xl font-semibold tracking-tight text-slate-950"
+        >
+          Reviewed interaction intelligence
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Accepted post-interaction reports stay labelled as
+          salesperson-reported evidence and are never promoted to
+          customer-direct evidence.
+        </p>
+        {reportedSnapshots.length === 0 ? (
+          <p className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+            No reviewed post-interaction reports yet.
+          </p>
+        ) : (
+          <ol
+            aria-label="Reported interaction timeline"
+            className="mt-6 space-y-5"
+          >
+            {reportedSnapshots.slice(0, 10).map((snapshot) => (
+              <li
+                key={snapshot.id}
+                className="border-l-2 border-indigo-200 pl-5"
+              >
+                <p className="font-semibold text-slate-950">
+                  {snapshot.interactionTitle}
+                </p>
+                <p className="mt-1 text-xs font-bold uppercase tracking-wide text-indigo-700">
+                  {snapshot.sourceLabel} ·{" "}
+                  {snapshot.interactionType.replaceAll("_", " ")}
+                </p>
+                <time
+                  dateTime={snapshot.interactionDate}
+                  className="mt-1 block text-sm text-slate-600"
+                >
+                  {formatMeetingDate(snapshot.interactionDate)}
+                </time>
+                <ul className="mt-3 space-y-2">
+                  {snapshot.items.map((item) => (
+                    <li
+                      key={item.evidenceId}
+                      className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700"
+                    >
+                      <span className="font-bold text-slate-900">
+                        {item.category.replaceAll("_", " ")}:{" "}
+                      </span>
+                      {item.statement}
+                      {item.conflictState !== "not_assessed" ? (
+                        <span className="mt-1 block text-xs text-slate-500">
+                          Recording comparison:{" "}
+                          {item.conflictState.replaceAll("_", " ")}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href={`/interactions/${snapshot.interactionId}`}
+                  className="mt-3 inline-flex text-sm font-bold text-teal-800 underline underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                >
+                  Open interaction
+                </Link>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
 
       <section
         aria-labelledby="revenue-brain-visual-title"

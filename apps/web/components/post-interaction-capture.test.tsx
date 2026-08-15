@@ -45,6 +45,37 @@ describe("PostInteractionCapture", () => {
     window.localStorage.clear();
   });
 
+  it("shows the immediate phone-call capture choices without a call-recording claim", async () => {
+    render(
+      <PostInteractionCapture
+        interactionId="interaction-1"
+        interactionType="phone_call"
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Capture this call while it’s fresh",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Start AI Debrief" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Start AI Debrief" }),
+    ).toBeDisabled();
+    expect(screen.getByText("Add Voice Journal")).toBeVisible();
+    expect(screen.getByText("Type Notes")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Add Recording" })).toHaveAttribute(
+      "href",
+      "#recording",
+    );
+    expect(
+      screen.getByRole("button", { name: "Finish for now" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Record phone call")).not.toBeInTheDocument();
+  });
+
   it("keeps a typed Voice Journal path when browser recording is unsupported", async () => {
     vi.stubGlobal("MediaRecorder", undefined);
     const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -100,6 +131,7 @@ describe("PostInteractionCapture", () => {
       sourceLabel: "Reported by you" as const,
       supportClassification: "reported" as const,
       validationState: "unreviewed" as const,
+      conflictState: "not_assessed" as const,
       userReviewState: "pending" as const,
       sourceCaptureSessionId: "session-1",
       evidenceFragmentId: "fragment-1",

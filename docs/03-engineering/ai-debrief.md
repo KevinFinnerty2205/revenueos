@@ -15,8 +15,8 @@ or autonomous action system.
 
 1. The user confirms they are safely stopped and starts `ai_debrief` or
    `voice_journal` with an idempotency key.
-2. RevenueOS creates one Capture Session and one Debrief Session. The fixed opening
-   is “How did it go?”.
+2. RevenueOS creates one Capture Session and one Debrief Session. The standard
+   opening is “How did it go?”; a short phone call uses “What changed?”.
 3. Each answer becomes an unreviewed `Evidence` row, a `DebriefTurn` and a source
    `EvidenceFragment` before structured reasoning runs.
 4. The versioned `ai_debrief_question` prompt/schema selects one useful next
@@ -67,6 +67,11 @@ candidates, accepted Evidence and intelligence composition.
 - `API_PRIVATE_BETA_DEBRIEF_QUESTION_CAP=6` (allowed 1–10)
 - `API_PRIVATE_BETA_MAX_DEBRIEF_AUDIO_SECONDS=120`
 - `API_PRIVATE_BETA_MAX_DEBRIEF_AUDIO_BYTES=8000000`
+
+Phone calls reuse these flags and quotas. Their server-owned caps are one question
+for no-answer/voicemail/cancelled, two for a call up to three minutes or Voice
+Journal, four for a normal connected call and five for a linked opportunity call of
+at least 15 minutes, always bounded by the configured global cap.
 
 OpenAI question/extraction requests additionally consume the organisation’s existing
 external-provider request guardrail. Finish consumes the existing generation quota.

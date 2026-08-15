@@ -10,12 +10,17 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from revenueos.business_repositories import PageResult
 from revenueos.models import (
+    CaptureSession,
     Company,
+    Contact,
+    DebriefSession,
     Interaction,
+    InteractionIntelligenceSnapshot,
     Meeting,
     Opportunity,
     OrganisationMembership,
     PreInteractionBrief,
+    RecordingSession,
 )
 
 
@@ -24,6 +29,10 @@ class InteractionRecord:
     interaction: Interaction
     meeting_id: UUID | None
     brief_generated_at: datetime | None = None
+    capture_methods: tuple[str, ...] = ()
+    latest_debrief_status: str | None = None
+    latest_recording_status: str | None = None
+    intelligence_snapshot_exists: bool = False
 
 
 class InteractionRepository:
@@ -58,6 +67,28 @@ class InteractionRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def get_contact(self, organisation_id: UUID, contact_id: UUID) -> Contact | None:
+        result = await self.session.execute(
+            select(Contact).where(
+                Contact.organisation_id == organisation_id,
+                Contact.id == contact_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def intelligence_exists(self, organisation_id: UUID, interaction_id: UUID) -> bool:
+        return (
+            await self.session.scalar(
+                select(InteractionIntelligenceSnapshot.id)
+                .where(
+                    InteractionIntelligenceSnapshot.organisation_id == organisation_id,
+                    InteractionIntelligenceSnapshot.interaction_id == interaction_id,
+                )
+                .limit(1)
+            )
+            is not None
+        )
 
     async def list_interactions(
         self,
@@ -113,9 +144,10 @@ class InteractionRepository:
             .group_by(PreInteractionBrief.organisation_id, PreInteractionBrief.interaction_id)
             .subquery()
         )
+        capture_columns = self._capture_columns(organisation_id)
         rows = (
             await self.session.execute(
-                select(Interaction, Meeting.id, brief_summary.c.generated_at)
+                select(Interaction, Meeting.id, brief_summary.c.generated_at, *capture_columns)
                 .outerjoin(
                     Meeting,
                     and_(
@@ -143,6 +175,10 @@ class InteractionRepository:
                     interaction=row[0],
                     meeting_id=row[1],
                     brief_generated_at=row[2],
+                    capture_methods=self._capture_methods(row[3], row[4], row[5]),
+                    latest_debrief_status=row[6],
+                    latest_recording_status=row[7],
+                    intelligence_snapshot_exists=bool(row[8]),
                 )
                 for row in rows
             ],
@@ -169,8 +205,9 @@ class InteractionRepository:
             .group_by(PreInteractionBrief.organisation_id, PreInteractionBrief.interaction_id)
             .subquery()
         )
+        capture_columns = self._capture_columns(organisation_id)
         statement = (
-            select(Interaction, Meeting.id, brief_summary.c.generated_at)
+            select(Interaction, Meeting.id, brief_summary.c.generated_at, *capture_columns)
             .outerjoin(
                 Meeting,
                 and_(
@@ -200,6 +237,93 @@ class InteractionRepository:
             interaction=row[0],
             meeting_id=row[1],
             brief_generated_at=row[2],
+            capture_methods=self._capture_methods(row[3], row[4], row[5]),
+            latest_debrief_status=row[6],
+            latest_recording_status=row[7],
+            intelligence_snapshot_exists=bool(row[8]),
+        )
+
+    @staticmethod
+    def _capture_methods(
+        debrief_count: int,
+        voice_journal_count: int,
+        recording_count: int,
+    ) -> tuple[str, ...]:
+        methods: list[str] = []
+        if debrief_count:
+            methods.append("debrief")
+        if voice_journal_count:
+            methods.append("voice_journal")
+        if recording_count:
+            methods.append("recording")
+        return tuple(methods)
+
+    @staticmethod
+    def _capture_columns(organisation_id: UUID) -> tuple[object, ...]:
+        def capture_count(capture_type: str) -> object:
+            return (
+                select(func.count(CaptureSession.id))
+                .where(
+                    CaptureSession.organisation_id == organisation_id,
+                    CaptureSession.interaction_id == Interaction.id,
+                    CaptureSession.capture_type == capture_type,
+                    CaptureSession.status.not_in(("abandoned", "failed")),
+                    CaptureSession.deleted_at.is_(None),
+                )
+                .correlate(Interaction)
+                .scalar_subquery()
+            )
+
+        recording_count = (
+            select(func.count(RecordingSession.id))
+            .where(
+                RecordingSession.organisation_id == organisation_id,
+                RecordingSession.interaction_id == Interaction.id,
+                RecordingSession.lifecycle_status.not_in(("cancelled", "deleted")),
+                RecordingSession.deleted_at.is_(None),
+            )
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        latest_debrief_status = (
+            select(DebriefSession.lifecycle_status)
+            .where(
+                DebriefSession.organisation_id == organisation_id,
+                DebriefSession.interaction_id == Interaction.id,
+            )
+            .order_by(DebriefSession.created_at.desc(), DebriefSession.id.desc())
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        latest_recording_status = (
+            select(RecordingSession.lifecycle_status)
+            .where(
+                RecordingSession.organisation_id == organisation_id,
+                RecordingSession.interaction_id == Interaction.id,
+                RecordingSession.deleted_at.is_(None),
+            )
+            .order_by(RecordingSession.created_at.desc(), RecordingSession.id.desc())
+            .limit(1)
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        intelligence_count = (
+            select(func.count(InteractionIntelligenceSnapshot.id))
+            .where(
+                InteractionIntelligenceSnapshot.organisation_id == organisation_id,
+                InteractionIntelligenceSnapshot.interaction_id == Interaction.id,
+            )
+            .correlate(Interaction)
+            .scalar_subquery()
+        )
+        return (
+            capture_count("ai_debrief"),
+            capture_count("voice_journal"),
+            recording_count,
+            latest_debrief_status,
+            latest_recording_status,
+            intelligence_count,
         )
 
     async def get_meeting_for_update(self, organisation_id: UUID, meeting_id: UUID) -> Meeting | None:

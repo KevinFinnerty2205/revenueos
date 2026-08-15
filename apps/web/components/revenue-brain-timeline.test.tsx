@@ -117,12 +117,14 @@ describe("RevenueBrainTimeline", () => {
             ? jsonResponse(completedReasoning())
             : path.endsWith("/brain/visual-evidence")
               ? jsonResponse([])
-              : path.endsWith("/brain")
-                ? jsonResponse([
-                    snapshot("new", "2026-07-20T10:00:00Z"),
-                    snapshot("old", "2026-07-10T10:00:00Z"),
-                  ])
-                : jsonResponse(company),
+              : path.endsWith("/brain/reported-interactions")
+                ? jsonResponse([])
+                : path.endsWith("/brain")
+                  ? jsonResponse([
+                      snapshot("new", "2026-07-20T10:00:00Z"),
+                      snapshot("old", "2026-07-10T10:00:00Z"),
+                    ])
+                  : jsonResponse(company),
         );
       }),
     );
@@ -161,9 +163,11 @@ describe("RevenueBrainTimeline", () => {
             ? jsonResponse(insufficientReasoning)
             : path.endsWith("/brain/visual-evidence")
               ? jsonResponse([])
-              : path.endsWith("/brain")
+              : path.endsWith("/brain/reported-interactions")
                 ? jsonResponse([])
-                : jsonResponse(company),
+                : path.endsWith("/brain")
+                  ? jsonResponse([])
+                  : jsonResponse(company),
         );
       }),
     );
@@ -212,6 +216,9 @@ describe("RevenueBrainTimeline", () => {
             ]),
           );
         }
+        if (path.endsWith("/brain/reported-interactions")) {
+          return Promise.resolve(jsonResponse([]));
+        }
         return Promise.resolve(
           path.endsWith("/brain") ? jsonResponse([]) : jsonResponse(company),
         );
@@ -231,6 +238,67 @@ describe("RevenueBrainTimeline", () => {
     ).toHaveAttribute("href", "/interactions/interaction-1");
   });
 
+  it("shows reviewed phone-call reports with provenance and conflict state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/brain/reasoning")) {
+          return Promise.resolve(jsonResponse(insufficientReasoning));
+        }
+        if (path.endsWith("/brain/visual-evidence")) {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (path.endsWith("/brain/reported-interactions")) {
+          return Promise.resolve(
+            jsonResponse([
+              {
+                id: "reported-snapshot-1",
+                interactionId: "interaction-phone-1",
+                opportunityId: "opportunity-1",
+                interactionTitle: "Pricing follow-up call",
+                interactionType: "phone_call",
+                interactionDate: "2026-08-14T02:00:00Z",
+                createdAt: "2026-08-14T02:05:00Z",
+                sourceLabel: "Reported by you",
+                items: [
+                  {
+                    evidenceId: "evidence-1",
+                    category: "budget",
+                    statement: "Jordan confirmed the budget owner.",
+                    origin: "salesperson_reported",
+                    sourceLabel: "Reported by you",
+                    validationState: "verified",
+                    conflictState: "corroborated",
+                  },
+                ],
+              },
+            ]),
+          );
+        }
+        return Promise.resolve(
+          path.endsWith("/brain") ? jsonResponse([]) : jsonResponse(company),
+        );
+      }),
+    );
+
+    render(<RevenueBrainTimeline accountId="company-1" />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Reviewed interaction intelligence",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText("Pricing follow-up call")).toBeVisible();
+    expect(screen.getByText(/Reported by you · phone call/i)).toBeVisible();
+    expect(
+      screen.getByText("Jordan confirmed the budget owner."),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Recording comparison: corroborated/i),
+    ).toBeVisible();
+  });
+
   it("shows a recoverable error state", async () => {
     const fetchMock = vi
       .fn()
@@ -243,9 +311,11 @@ describe("RevenueBrainTimeline", () => {
       )
       .mockResolvedValueOnce(jsonResponse(insufficientReasoning))
       .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse(company))
       .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse(insufficientReasoning))
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);
 

@@ -234,3 +234,21 @@ class RevenueBrainService:
             self.tenant.organisation_id,
             account_id,
         )
+
+    async def list_account_reported_snapshots(
+        self,
+        account_id: UUID,
+    ) -> list[RevenueBrainInteractionTimelineItem]:
+        if not await self.repository.company_exists(
+            self.tenant.organisation_id,
+            account_id,
+        ):
+            raise PublicAPIError(
+                "not_found",
+                "The requested account was not found.",
+                404,
+            )
+        return await self.repository.list_reported_for_company(
+            self.tenant.organisation_id,
+            account_id,
+        )

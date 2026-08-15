@@ -25,6 +25,7 @@ from revenueos.models import (
     CandidateEvidence,
     CaptureSession,
     Company,
+    Contact,
     DebriefSession,
     DebriefTurn,
     Evidence,
@@ -84,6 +85,10 @@ def demo_ids(organisation_id: UUID) -> tuple[UUID, UUID, tuple[UUID, UUID], tupl
             uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:transcript-evaluation"),
         ),
     )
+
+
+def demo_phone_contact_id(organisation_id: UUID) -> UUID:
+    return uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:phone-contact")
 
 
 def demo_companion_ids(
@@ -289,6 +294,7 @@ async def seed_demo_data(
 ) -> dict[str, object]:
     active_settings = settings or get_settings()
     company_id, opportunity_id, meeting_ids, transcript_ids = demo_ids(organisation_id)
+    phone_contact_id = demo_phone_contact_id(organisation_id)
     interaction_ids = demo_interaction_ids(organisation_id)
     debrief_ids = demo_debrief_ids(organisation_id)
     visual_ids = demo_visual_ids(organisation_id)
@@ -329,6 +335,21 @@ async def seed_demo_data(
                 )
             )
         await session.flush()
+        if await session.get(Contact, phone_contact_id) is None:
+            session.add(
+                Contact(
+                    id=phone_contact_id,
+                    organisation_id=organisation_id,
+                    company_id=company_id,
+                    first_name="[DEMO] Jordan",
+                    last_name="Lee",
+                    email="jordan.lee@example.test",
+                    phone="+61 400 000 017",
+                    job_title="Finance approver",
+                    owner_user_id=user_id,
+                )
+            )
+            await session.flush()
 
         linked_interaction_ids: list[UUID] = []
         for index, meeting_id in enumerate(meeting_ids):
@@ -424,7 +445,9 @@ async def seed_demo_data(
                         organisation_id=organisation_id,
                         company_id=company_id,
                         opportunity_id=opportunity_id,
+                        contact_id=phone_contact_id if interaction_type == "phone_call" else None,
                         interaction_type=interaction_type,
+                        call_direction="outbound" if interaction_type == "phone_call" else None,
                         lifecycle_status="planned",
                         title=title,
                         scheduled_start_at=seeded_at + timedelta(days=days_ahead),
@@ -464,7 +487,7 @@ async def seed_demo_data(
                 )
             if await session.get(PreInteractionBrief, brief_ids[index]) is None:
                 fingerprint = hashlib.sha256(
-                    f"demo-v5:{organisation_id}:{interaction_id}:{interaction_type}".encode()
+                    f"demo-v6:{organisation_id}:{interaction_id}:{interaction_type}".encode()
                 ).hexdigest()
                 session.add(
                     PreInteractionBrief(
@@ -505,7 +528,10 @@ async def seed_demo_data(
                         organisation_id=organisation_id,
                         company_id=company_id,
                         opportunity_id=opportunity_id,
+                        contact_id=phone_contact_id if debrief_type == "phone_call" else None,
                         interaction_type=debrief_type,
+                        call_direction="outbound" if debrief_type == "phone_call" else None,
+                        call_outcome="connected" if debrief_type == "phone_call" else None,
                         lifecycle_status="completed",
                         title=title,
                         scheduled_start_at=completed_at - timedelta(minutes=30),
@@ -580,7 +606,7 @@ async def seed_demo_data(
                     lifecycle_status="completed",
                     idempotency_key="demo-phone-debrief",
                     question_count=1,
-                    max_questions=6,
+                    max_questions=5,
                     current_question_json=None,
                     safety_confirmed_at=seeded_at - timedelta(minutes=20),
                     finished_early=True,
@@ -938,15 +964,16 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 7},
+                    metadata_json={"dataset_version": 8},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 7}
+            event.metadata_json = {"dataset_version": 8}
     return {
         "status": "ready",
         "company_id": company_id,
         "opportunity_id": opportunity_id,
+        "contact_id": phone_contact_id,
         "meeting_ids": meeting_ids,
         "interaction_ids": (*linked_interaction_ids, *companion_interaction_ids),
         "brief_ids": brief_ids,
@@ -965,6 +992,7 @@ async def reset_demo_data(
 ) -> dict[str, object]:
     active_settings = settings or get_settings()
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
+    phone_contact_id = demo_phone_contact_id(organisation_id)
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
     debrief_interaction_ids = list(demo_debrief_ids(organisation_id)[:5])
     async with session_factory() as session, session.begin():
@@ -992,6 +1020,12 @@ async def reset_demo_data(
             delete(Opportunity).where(
                 Opportunity.organisation_id == organisation_id,
                 Opportunity.id == opportunity_id,
+            )
+        )
+        await session.execute(
+            delete(Contact).where(
+                Contact.organisation_id == organisation_id,
+                Contact.id == phone_contact_id,
             )
         )
         await session.execute(

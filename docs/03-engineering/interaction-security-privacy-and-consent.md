@@ -1,11 +1,21 @@
 # Interaction security, privacy and consent
 
+## WO-017 phone-call controls
+
+The ordinary phone workflow never reads device call logs, dials, intercepts or
+records a cellular call and never activates a microphone in the background. It
+stores no duplicate phone number on Interaction and logs no number or Contact name.
+Imported audio requires explicit business authority, controlled source provenance
+and the existing private WO-015 upload policy. Export version 8 and existing
+object-first deletion include the new metadata. See the
+[phone-call security review](phone-call-security-privacy-review.md).
+
 ## WO-016 browser Companion controls
 
 The Companion derives organisation context only from verified authentication
 and adds no browser-supplied tenant selector. Metadata-only markers are
 controlled, immutable, tenant-predicated and forced-RLS; they contain no notes
-and do not become evidence or intelligence automatically. Export version 7 and
+and do not become evidence or intelligence automatically. Export version 8 and
 organisation deletion include their lifecycle.
 
 Recording remains explicitly armed after participant notice/authority

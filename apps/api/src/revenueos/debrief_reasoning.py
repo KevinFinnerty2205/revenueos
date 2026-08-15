@@ -180,12 +180,20 @@ class DeterministicDebriefReasoning:
     """Application-owned v1 question and extraction policy with strict output contracts."""
 
     @staticmethod
-    def opening_question(*, gap_fill: bool = False) -> DebriefQuestion:
+    def opening_question(*, gap_fill: bool = False, short_phone_call: bool = False) -> DebriefQuestion:
         if gap_fill:
             return DebriefQuestion(
                 status="ask",
                 question="What important outcome might the recording have missed?",
                 reason="A final recording is available, so this debrief focuses on gaps rather than repeating the interaction.",
+                target="other",
+                priority="high",
+            )
+        if short_phone_call:
+            return DebriefQuestion(
+                status="ask",
+                question="What changed?",
+                reason="Short calls should take one concise answer before any high-value follow-up.",
                 target="other",
                 priority="high",
             )
@@ -278,6 +286,50 @@ class DeterministicDebriefReasoning:
                     if len(items) >= 100:
                         return CandidateEvidenceExtraction(items=tuple(items))
         return CandidateEvidenceExtraction(items=tuple(items))
+
+    @classmethod
+    def reconcile_statement(cls, statement: str, recording_text: str | None) -> str:
+        """Return a deterministic visible state without choosing a winning source."""
+
+        if recording_text is None or not recording_text.strip():
+            return "not_assessed"
+        reported = cls._normalise(statement)
+        direct = cls._normalise(recording_text)
+        polarity_pairs = (
+            (
+                ("budget is approved", "budget was approved", "approved budget"),
+                ("budget has not been approved", "budget hasn t been approved", "budget not approved"),
+            ),
+            (
+                ("they agreed", "customer agreed", "agreed to"),
+                ("they did not agree", "customer did not agree", "not agreed"),
+            ),
+            (
+                ("timeline is confirmed", "confirmed the timeline"),
+                ("timeline is not confirmed", "timeline remains unclear", "timeline is unclear"),
+            ),
+        )
+        for positive, negative in polarity_pairs:
+            if (any(value in reported for value in positive) and any(value in direct for value in negative)) or (
+                any(value in reported for value in negative) and any(value in direct for value in positive)
+            ):
+                return "conflicting"
+        domain_terms = {
+            "budget",
+            "timeline",
+            "procurement",
+            "security",
+            "legal",
+            "decision",
+            "commitment",
+            "proposal",
+            "approved",
+            "agreed",
+        }
+        shared = set(reported.split()) & set(direct.split())
+        if len(shared) >= 3 and shared & domain_terms:
+            return "corroborated"
+        return "unresolved"
 
     @staticmethod
     def complete_question(reason: str) -> DebriefQuestion:

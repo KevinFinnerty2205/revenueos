@@ -439,6 +439,7 @@ describe("OpportunityWorkspace", () => {
                     origin: "salesperson_reported",
                     sourceLabel: "Reported by you",
                     validationState: "verified",
+                    conflictState: "not_assessed",
                   },
                 ],
               },

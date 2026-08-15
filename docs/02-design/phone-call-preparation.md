@@ -2,10 +2,10 @@
 
 ## Current experience
 
-`phone_call` is a first-class AI Companion preparation type. The mobile layout puts
-the concise objective and suggested questions first, followed by stakeholder role,
-prior open commitments, risks, success criteria and a recommended close. Suggested
-questions are capped at five.
+`phone_call` is a first-class AI Companion preparation type. WO-017 renders a compact
+Contact-first layout: Contact/role, purpose and desired next step, latest commitment,
+current objection or timeline issue, recent Revenue Brain change and up to three
+recommended questions. The underlying brief contract remains capped at five.
 
 The brief is intended for a quick scan before dialling. It does not provide a dial
 button, telephony, cellular interception, VoIP, recording or live coaching, and it

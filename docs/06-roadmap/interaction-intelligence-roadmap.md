@@ -2,7 +2,8 @@
 
 - **Status:** Recommended sequence; each stage requires a separate approved work
   order before implementation
-- **Current baseline:** Work through WO-014 is complete; WO-010 is the approved blueprint
+- **Current baseline:** Work through WO-017 Phone Call Intelligence is complete;
+  WO-010 remains the approved blueprint
 - **Primary optimisation:** Earliest trustworthy use for real face-to-face sales
   interactions without requiring recording or transcript upload
 
@@ -15,19 +16,21 @@ flowchart LR
     C --> D["WO-014: Visual evidence"]
     D --> E["WO-015: Recording and transcription"]
     E --> F["WO-016: Face-to-face mobile"]
-    F --> G["WO-017: Online capture"]
-    G --> H["WO-019: Documents and email"]
-    H --> I["WO-018: Live intelligence"]
-    I --> J["WO-020: Interaction Platform Beta"]
+    F --> G["WO-017: Phone calls"]
+    G --> H["WO-018: Online capture"]
+    H --> I["WO-019: Documents and email"]
+    I --> J["WO-020: Live intelligence"]
+    J --> K["WO-021: Interaction Platform Beta"]
 ```
 
 The Gantt uses relative sequence only; it is not an estimate. Delivery may overlap
 independent validation work, but acceptance dependencies remain.
 
 Recommended delivery order: **WO-011, WO-012, WO-013, WO-014, WO-015, WO-016,
-WO-017, WO-019, WO-018, WO-020**. Document/email evidence precedes live intelligence
-because multi-source reconciliation is more valuable and less operationally risky
-than real-time processing. WO-017 and WO-019 may swap based on design-partner needs.
+WO-017, WO-018, WO-019, WO-020, WO-021**. Phone calls are the implemented
+browser-first bridge between field Companion and future provider capture.
+Document/email evidence precedes live intelligence because multi-source
+reconciliation is more valuable and less operationally risky than real-time processing.
 
 ## Stage gates
 
@@ -309,7 +312,19 @@ system-audio capture, push notification or autonomous action. Approved beta user
 can test the labelled foreground browser flow with synthetic data and authorised
 capture only.
 
-## WO-017 — Online Meeting Capture
+## WO-017 — Phone Call Intelligence
+
+**Delivery status:** Implemented by WO-017. Telephony providers and cellular
+interception remain excluded.
+
+Phone calls now use the existing Interaction lifecycle, compact brief, adaptive
+reviewed Debrief/Voice Journal and optional authorised recording import. Controlled
+direction/outcome, tenant-safe Contact association, timeline readiness and
+recording/debrief reconciliation feed the existing Opportunity Workspace and Revenue
+Brain without a phone silo. See the
+[WO-017 sprint record](../07-sprints/wo-017-phone-call-intelligence.md).
+
+## WO-018 — Online Meeting Capture
 
 ### Objective and user value
 
@@ -382,7 +397,7 @@ No full mailbox/drive ingestion, silent contact creation, contract/legal advice,
 automatic CRM write or arbitrary enterprise document coverage. Users can test the
 selected source path and multi-source reconciliation.
 
-## WO-018 — Live Interaction Intelligence
+## WO-020 — Live Interaction Intelligence
 
 ### Objective and user value
 
@@ -420,7 +435,7 @@ No broad live coach, emotion analysis, autonomous action, universal platform or
 guaranteed real-time result. Only explicit pilot users test the selected provisional
 use case.
 
-## WO-020 — Interaction Platform Beta
+## WO-021 — Interaction Platform Beta
 
 ### Objective and user value
 

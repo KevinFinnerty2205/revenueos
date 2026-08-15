@@ -18,6 +18,7 @@ This is the canonical product and engineering documentation index. Documents dis
 12. [Visual Evidence engineering guide](03-engineering/visual-evidence-engineering-guide.md) — current WO-014 boundary
 13. [Recording foundation engineering guide](03-engineering/recording-foundation-engineering-guide.md) — current WO-015 boundary
 14. [Browser face-to-face Companion guide](02-design/browser-face-to-face-companion-guide.md) — current WO-016 field workflow
+15. [Phone Call Intelligence guide](02-design/phone-call-intelligence-guide.md) — current WO-017 normal-phone workflow
 
 ## 00 — Company
 
@@ -46,6 +47,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Mobile companion strategy](02-design/mobile-companion-strategy.md)
 - [Browser face-to-face Companion guide](02-design/browser-face-to-face-companion-guide.md)
 - [Phone-call preparation](02-design/phone-call-preparation.md)
+- [Phone Call Intelligence guide](02-design/phone-call-intelligence-guide.md)
+- [Browser phone-call workflow](02-design/browser-phone-call-workflow.md)
 - [Presentation preparation](02-design/presentation-preparation.md)
 - [Voice Journal guide](02-design/voice-journal-guide.md)
 - [Phone-call debrief](02-design/phone-call-debrief.md)
@@ -124,6 +127,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Screen wake lock decision](03-engineering/wake-lock-decision.md)
 - [Local audio buffering decision](03-engineering/local-buffering-decision.md)
 - [Browser Companion security review](03-engineering/companion-security-review.md)
+- [Imported-call recording guide](03-engineering/imported-call-recording-guide.md)
+- [Phone-call provenance](03-engineering/phone-call-provenance.md)
+- [Phone-call security and privacy review](03-engineering/phone-call-security-privacy-review.md)
 
 ### Target through beta
 
@@ -145,6 +151,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 - [Integrations documentation index](05-integrations/README.md)
 - [Integration strategy](05-integrations/integration-strategy.md)
+- [Telephony integration boundary](05-integrations/telephony-integration-boundary.md)
 
 ## 06 — Roadmap
 
@@ -186,6 +193,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-014: Visual Evidence and Presentation Mode](07-sprints/wo-014-visual-evidence-presentation-mode.md)
 - [WO-015: Recording & Transcription Foundation](07-sprints/wo-015-recording-transcription-foundation.md)
 - [WO-016: Browser Face-to-Face Companion](07-sprints/wo-016-browser-face-to-face-companion.md)
+- [WO-017: Phone Call Intelligence](07-sprints/wo-017-phone-call-intelligence.md)
 
 ## 08 — Decision records
 
@@ -289,6 +297,13 @@ authorised photos and metadata-only quick markers, and then enter a gap-fill
 debrief. Phone calls and online meetings remain passive; screen wake and local
 retry are best effort and foreground-only. Native/background capture, call or
 system-audio interception and automatic live intelligence remain unimplemented.
+
+WO-017 makes phone calls first-class without changing that boundary. It adds a
+Contact-scoped compact brief, controlled direction/outcome, manual start/end,
+duration-aware post-call debrief and explicitly authorised recording import through
+WO-015. Debrief evidence remains **Reported by you**; recording/debrief conflicts
+remain visible. There is no dialler, cellular interception, call-log ingestion,
+telephony provider, phone enrichment, hidden microphone or native app.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

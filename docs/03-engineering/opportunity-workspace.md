@@ -21,6 +21,13 @@ recording and debrief state, visual count and marker count, with direct
 Companion navigation. It does not read transcript content or create
 intelligence.
 
+WO-017 phone calls use the same `reportedIntelligence` projection after complete
+candidate review. Each item now also carries deterministic `conflictState`, which
+the workspace renders without choosing between recording and Debrief sources. A
+missed, voicemail or cancelled call creates no reported Interaction Intelligence.
+The Interaction timeline remains the place for its call direction, Contact,
+duration, outcome and capture readiness; there is no phone-only workspace.
+
 ## Opportunity domain
 
 `Opportunity` remains a tenant-owned business entity with these current fields:

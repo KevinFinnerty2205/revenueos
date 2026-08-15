@@ -1,6 +1,6 @@
 "use client";
 
-import type { Interaction } from "@revenueos/shared";
+import type { CallOutcome, Interaction } from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
@@ -11,6 +11,7 @@ import { PreInteractionBrief } from "@/components/pre-interaction-brief";
 import { PostInteractionCapture } from "@/components/post-interaction-capture";
 import { VisualEvidenceCapture } from "@/components/visual-evidence-capture";
 import { RecordingFoundation } from "@/components/recording-foundation";
+import { ImportedCallRecording } from "@/components/imported-call-recording";
 
 export function InteractionDetail({
   interactionId,
@@ -21,6 +22,7 @@ export function InteractionDetail({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -47,14 +49,38 @@ export function InteractionDetail({
     return () => controller.abort();
   }, [interactionId]);
 
-  async function complete() {
+  async function start() {
+    setStarting(true);
+    setError(null);
+    try {
+      setInteraction(
+        await apiRequest<Interaction>(
+          `/api/v1/interactions/${interactionId}/start`,
+          { method: "POST", body: "{}" },
+        ),
+      );
+    } catch (requestError: unknown) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The call could not be started.",
+      );
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  async function complete(callOutcome?: CallOutcome) {
     setCompleting(true);
     setError(null);
     try {
       setInteraction(
         await apiRequest<Interaction>(
           `/api/v1/interactions/${interactionId}/complete`,
-          { method: "POST", body: "{}" },
+          {
+            method: "POST",
+            body: JSON.stringify(callOutcome ? { callOutcome } : {}),
+          },
         ),
       );
     } catch (requestError: unknown) {
@@ -112,7 +138,7 @@ export function InteractionDetail({
         >
           {interaction.title}
         </h1>
-        <dl className="mt-8 grid gap-5 sm:grid-cols-2">
+        <dl className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
               Scheduled
@@ -129,6 +155,31 @@ export function InteractionDetail({
               {formatInteractionDate(interaction.actualEndAt)}
             </dd>
           </div>
+          {interaction.interactionType === "phone_call" ? (
+            <>
+              <div>
+                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Direction
+                </dt>
+                <dd className="mt-1 text-slate-800">
+                  {humanise(interaction.callDirection ?? "unknown")}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Outcome · duration
+                </dt>
+                <dd className="mt-1 text-slate-800">
+                  {interaction.callOutcome
+                    ? humanise(interaction.callOutcome)
+                    : "Not set"}
+                  {interaction.durationSeconds !== null
+                    ? ` · ${formatDuration(interaction.durationSeconds)}`
+                    : ""}
+                </dd>
+              </div>
+            </>
+          ) : null}
         </dl>
         {error ? (
           <p
@@ -145,15 +196,64 @@ export function InteractionDetail({
           >
             Open mobile Companion
           </Link>
-          {canComplete ? (
+          {interaction.interactionType === "phone_call" &&
+          interaction.lifecycleStatus === "planned" ? (
+            <button
+              type="button"
+              className="primary-button"
+              disabled={starting || completing}
+              onClick={() => void start()}
+            >
+              {starting ? "Starting…" : "Start call"}
+            </button>
+          ) : null}
+          {canComplete && interaction.interactionType !== "phone_call" ? (
             <button
               type="button"
               className="primary-button"
               disabled={completing}
-              onClick={complete}
+              onClick={() => void complete()}
             >
               {completing ? "Completing…" : "Complete interaction"}
             </button>
+          ) : null}
+          {canComplete && interaction.interactionType === "phone_call" ? (
+            <>
+              {interaction.lifecycleStatus === "in_progress" ? (
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={completing}
+                  onClick={() => void complete("connected")}
+                >
+                  {completing ? "Ending…" : "End connected call"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={completing}
+                onClick={() => void complete("no_answer")}
+              >
+                No answer
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={completing}
+                onClick={() => void complete("voicemail")}
+              >
+                Left voicemail
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={completing}
+                onClick={() => void complete("cancelled")}
+              >
+                Cancel call
+              </button>
+            </>
           ) : null}
           {interaction.meetingId ? (
             <Link
@@ -164,24 +264,6 @@ export function InteractionDetail({
             </Link>
           ) : null}
         </div>
-      </div>
-      <div className="mt-6" id="recording">
-        <BetaFeatureGate feature="recordingCapture">
-          <RecordingFoundation
-            interactionId={interaction.id}
-            interactionType={interaction.interactionType}
-            lifecycleStatus={interaction.lifecycleStatus}
-          />
-        </BetaFeatureGate>
-      </div>
-      <div className="mt-6" id="visual-evidence">
-        <BetaFeatureGate feature="visualEvidence">
-          <VisualEvidenceCapture
-            interactionId={interaction.id}
-            interactionType={interaction.interactionType}
-            lifecycleStatus={interaction.lifecycleStatus}
-          />
-        </BetaFeatureGate>
       </div>
       <div className="mt-6" id="preparation">
         <BetaFeatureGate feature="aiCompanion">
@@ -201,6 +283,56 @@ export function InteractionDetail({
           </BetaFeatureGate>
         </div>
       ) : null}
+      <div className="mt-6" id="recording">
+        {interaction.interactionType === "phone_call" ? (
+          interaction.lifecycleStatus === "completed" ? (
+            <BetaFeatureGate feature="recordingCapture">
+              <ImportedCallRecording interactionId={interaction.id} />
+            </BetaFeatureGate>
+          ) : (
+            <section
+              className="form-card"
+              aria-labelledby="phone-capture-boundary"
+            >
+              <h2 id="phone-capture-boundary" className="form-legend">
+                Use your normal phone
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                RevenueOS does not intercept cellular calls, read device call
+                logs, activate the microphone in the background or record this
+                call. Complete it in your existing phone system, then capture
+                the outcome while it is fresh.
+              </p>
+            </section>
+          )
+        ) : (
+          <BetaFeatureGate feature="recordingCapture">
+            <RecordingFoundation
+              interactionId={interaction.id}
+              interactionType={interaction.interactionType}
+              lifecycleStatus={interaction.lifecycleStatus}
+            />
+          </BetaFeatureGate>
+        )}
+      </div>
+      {interaction.interactionType !== "phone_call" ? (
+        <div className="mt-6" id="visual-evidence">
+          <BetaFeatureGate feature="visualEvidence">
+            <VisualEvidenceCapture
+              interactionId={interaction.id}
+              interactionType={interaction.interactionType}
+              lifecycleStatus={interaction.lifecycleStatus}
+            />
+          </BetaFeatureGate>
+        </div>
+      ) : null}
     </section>
   );
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }

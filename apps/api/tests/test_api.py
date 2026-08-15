@@ -135,6 +135,7 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/api/v1/beta/admin/exports/{request_id}/download",
         "/api/v1/beta/admin/organisation-deletion",
         "/api/v1/accounts/{account_id}/brain",
+        "/api/v1/accounts/{account_id}/brain/reported-interactions",
         "/api/v1/accounts/{account_id}/brain/visual-evidence",
         "/api/v1/accounts/{account_id}/brain/reasoning",
         "/api/v1/companies",

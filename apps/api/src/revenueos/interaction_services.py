@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.business_repositories import PageResult
-from revenueos.domain import InteractionAuditAction, InteractionLifecycleStatus
+from revenueos.domain import CallDirection, InteractionAuditAction, InteractionLifecycleStatus, InteractionType
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_compatibility import (
     interaction_transition_is_allowed,
@@ -18,7 +18,7 @@ from revenueos.interaction_compatibility import (
 )
 from revenueos.interaction_contracts import InteractionComplete, InteractionCreate, InteractionStart, InteractionUpdate
 from revenueos.interaction_repositories import InteractionRecord, InteractionRepository
-from revenueos.models import Interaction, InteractionAuditEvent
+from revenueos.models import Contact, Interaction, InteractionAuditEvent, Opportunity
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.interactions")
@@ -73,12 +73,19 @@ class InteractionService:
         return record
 
     async def create_interaction(self, request: InteractionCreate) -> InteractionRecord:
-        await self._validate_relationships(request.company_id, request.opportunity_id)
+        self._validate_phone_metadata(
+            request.interaction_type.value,
+            request.contact_id,
+            request.call_direction.value if request.call_direction is not None else None,
+            request.call_outcome.value if request.call_outcome is not None else None,
+        )
+        await self._validate_relationships(request.company_id, request.opportunity_id, request.contact_id)
         self._validate_lifecycle_times(request.lifecycle_status.value, request.actual_end_at)
         interaction = Interaction(
             organisation_id=self.tenant.organisation_id,
             company_id=request.company_id,
             opportunity_id=request.opportunity_id,
+            contact_id=request.contact_id,
             interaction_type=request.interaction_type.value,
             lifecycle_status=request.lifecycle_status.value,
             title=request.title,
@@ -88,6 +95,12 @@ class InteractionService:
             actual_end_at=request.actual_end_at,
             timezone=request.timezone,
             creation_origin="manual",
+            call_direction=(
+                (request.call_direction or CallDirection.UNKNOWN).value
+                if request.interaction_type == InteractionType.PHONE_CALL
+                else None
+            ),
+            call_outcome=request.call_outcome.value if request.call_outcome is not None else None,
             created_by_user_id=self.tenant.user_id,
         )
         self.session.add(interaction)
@@ -95,28 +108,56 @@ class InteractionService:
         self.session.add(self._audit(interaction.id, InteractionAuditAction.CREATED, self._create_fields()))
         await self._commit(interaction)
         logger.info(
-            "interaction_created",
+            "phone_call_created" if interaction.interaction_type == "phone_call" else "interaction_created",
             extra={
                 "organisation_id": str(self.tenant.organisation_id),
                 "interaction_id": str(interaction.id),
                 "interaction_type": interaction.interaction_type,
                 "lifecycle_status": interaction.lifecycle_status,
+                "call_direction": interaction.call_direction,
+                "call_outcome": interaction.call_outcome,
             },
         )
-        return InteractionRecord(interaction=interaction, meeting_id=None)
+        return await self.get_interaction(interaction.id)
 
     async def update_interaction(self, interaction_id: UUID, request: InteractionUpdate) -> InteractionRecord:
         record = await self._get_for_update(interaction_id)
         interaction = record.interaction
         values = request.model_dump(exclude_unset=True)
-        if "interaction_type" in values:
-            values["interaction_type"] = values["interaction_type"].value
+        for enum_field in ("interaction_type", "lifecycle_status", "call_direction", "call_outcome"):
+            if enum_field in values and values[enum_field] is not None:
+                values[enum_field] = values[enum_field].value
         if "lifecycle_status" in values:
-            values["lifecycle_status"] = values["lifecycle_status"].value
             self._require_transition(interaction.lifecycle_status, values["lifecycle_status"])
         company_id = values.get("company_id", interaction.company_id)
         opportunity_id = values.get("opportunity_id", interaction.opportunity_id)
-        await self._validate_relationships(company_id, opportunity_id)
+        contact_id = values.get("contact_id", interaction.contact_id)
+        target_type = values.get("interaction_type", interaction.interaction_type)
+        if target_type == InteractionType.PHONE_CALL.value:
+            if values.get("call_direction", interaction.call_direction) is None:
+                values["call_direction"] = CallDirection.UNKNOWN.value
+        else:
+            values.update({"contact_id": None, "call_direction": None, "call_outcome": None})
+            contact_id = None
+        self._validate_phone_metadata(
+            target_type,
+            contact_id,
+            values.get("call_direction", interaction.call_direction),
+            values.get("call_outcome", interaction.call_outcome),
+        )
+        if any(field in values for field in ("company_id", "opportunity_id", "contact_id")):
+            changed = (
+                company_id != interaction.company_id
+                or opportunity_id != interaction.opportunity_id
+                or contact_id != interaction.contact_id
+            )
+            if changed and await self.repository.intelligence_exists(self.tenant.organisation_id, interaction_id):
+                raise PublicAPIError(
+                    "interaction_intelligence_locked",
+                    "Associations cannot change after final interaction intelligence has been created.",
+                    409,
+                )
+        await self._validate_relationships(company_id, opportunity_id, contact_id)
         merged = {
             "scheduled_start_at": interaction.scheduled_start_at,
             "scheduled_end_at": interaction.scheduled_end_at,
@@ -158,7 +199,7 @@ class InteractionService:
         )
         self.session.add(self._audit(interaction.id, action, list(values)))
         await self._commit(interaction)
-        return InteractionRecord(interaction=interaction, meeting_id=record.meeting_id)
+        return await self.get_interaction(interaction.id)
 
     async def complete_interaction(
         self,
@@ -175,6 +216,14 @@ class InteractionService:
             raise PublicAPIError("invalid_time_range", "actualEndAt cannot be before actualStartAt.", 422)
         interaction.lifecycle_status = InteractionLifecycleStatus.COMPLETED.value
         interaction.actual_end_at = actual_end_at
+        if request.call_outcome is not None:
+            if interaction.interaction_type != InteractionType.PHONE_CALL.value:
+                raise PublicAPIError(
+                    "invalid_phone_metadata",
+                    "callOutcome is available only for phone-call interactions.",
+                    422,
+                )
+            interaction.call_outcome = request.call_outcome.value
         interaction.updated_at = datetime.now(UTC)
         if record.meeting_id is not None:
             meeting = await self.repository.get_meeting_for_update(self.tenant.organisation_id, record.meeting_id)
@@ -190,19 +239,24 @@ class InteractionService:
             self._audit(
                 interaction.id,
                 InteractionAuditAction.COMPLETED,
-                ["actual_end_at", "lifecycle_status"],
+                [
+                    "actual_end_at",
+                    "lifecycle_status",
+                    *(["call_outcome"] if request.call_outcome is not None else []),
+                ],
             )
         )
         await self._commit(interaction)
         logger.info(
-            "interaction_completed",
+            "call_completed" if interaction.interaction_type == "phone_call" else "interaction_completed",
             extra={
                 "organisation_id": str(self.tenant.organisation_id),
                 "interaction_id": str(interaction.id),
                 "lifecycle_status": interaction.lifecycle_status,
+                "call_outcome": interaction.call_outcome,
             },
         )
-        return InteractionRecord(interaction=interaction, meeting_id=record.meeting_id)
+        return await self.get_interaction(interaction.id)
 
     async def start_interaction(
         self,
@@ -238,14 +292,14 @@ class InteractionService:
         )
         await self._commit(interaction)
         logger.info(
-            "interaction_started",
+            "call_started" if interaction.interaction_type == "phone_call" else "interaction_started",
             extra={
                 "organisation_id": str(self.tenant.organisation_id),
                 "interaction_id": str(interaction.id),
                 "interaction_type": interaction.interaction_type,
             },
         )
-        return InteractionRecord(interaction=interaction, meeting_id=record.meeting_id)
+        return await self.get_interaction(interaction.id)
 
     async def _get_for_update(self, interaction_id: UUID) -> InteractionRecord:
         record = await self.repository.get_interaction(
@@ -274,16 +328,34 @@ class InteractionService:
             raise self._not_found()
         return locked
 
-    async def _validate_relationships(self, company_id: UUID | None, opportunity_id: UUID | None) -> None:
+    async def _validate_relationships(
+        self,
+        company_id: UUID | None,
+        opportunity_id: UUID | None,
+        contact_id: UUID | None,
+    ) -> None:
         if company_id is not None:
             await self._require_company(company_id)
-        if opportunity_id is None:
-            return
-        opportunity = await self._require_opportunity(opportunity_id)
-        if company_id is not None and opportunity.company_id is not None and company_id != opportunity.company_id:
+        opportunity = await self._require_opportunity(opportunity_id) if opportunity_id is not None else None
+        if (
+            opportunity is not None
+            and company_id is not None
+            and opportunity.company_id is not None
+            and company_id != opportunity.company_id
+        ):
             raise PublicAPIError(
                 "inconsistent_relationship",
                 "The interaction and opportunity must refer to the same company.",
+                422,
+            )
+        if contact_id is None:
+            return
+        contact = await self._require_contact(contact_id)
+        relationship_company_id = company_id or (opportunity.company_id if opportunity is not None else None)
+        if relationship_company_id is not None and contact.company_id != relationship_company_id:
+            raise PublicAPIError(
+                "inconsistent_relationship",
+                "The phone-call contact, company and opportunity must refer to the same company.",
                 422,
             )
 
@@ -291,11 +363,33 @@ class InteractionService:
         if await self.repository.get_company(self.tenant.organisation_id, company_id) is None:
             raise PublicAPIError("company_not_found", "The requested company was not found.", 404)
 
-    async def _require_opportunity(self, opportunity_id: UUID) -> Any:
+    async def _require_opportunity(self, opportunity_id: UUID) -> Opportunity:
         opportunity = await self.repository.get_opportunity(self.tenant.organisation_id, opportunity_id)
         if opportunity is None:
             raise PublicAPIError("opportunity_not_found", "The requested opportunity was not found.", 404)
         return opportunity
+
+    async def _require_contact(self, contact_id: UUID) -> Contact:
+        contact = await self.repository.get_contact(self.tenant.organisation_id, contact_id)
+        if contact is None:
+            raise PublicAPIError("contact_not_found", "The requested contact was not found.", 404)
+        return contact
+
+    @staticmethod
+    def _validate_phone_metadata(
+        interaction_type: str,
+        contact_id: UUID | None,
+        call_direction: str | None,
+        call_outcome: str | None,
+    ) -> None:
+        if interaction_type != InteractionType.PHONE_CALL.value and any(
+            value is not None for value in (contact_id, call_direction, call_outcome)
+        ):
+            raise PublicAPIError(
+                "invalid_phone_metadata",
+                "Contact, call direction and call outcome are available only for phone calls.",
+                422,
+            )
 
     @staticmethod
     def _require_transition(current: str, target: str) -> None:
@@ -368,6 +462,9 @@ class InteractionService:
             "actual_end_at",
             "actual_start_at",
             "company_id",
+            "contact_id",
+            "call_direction",
+            "call_outcome",
             "interaction_type",
             "lifecycle_status",
             "opportunity_id",

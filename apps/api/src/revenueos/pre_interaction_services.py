@@ -406,6 +406,8 @@ class PreInteractionBriefService:
                 "scheduled_start_at": self._iso(records.interaction.scheduled_start_at),
                 "scheduled_end_at": self._iso(records.interaction.scheduled_end_at),
                 "company_id": str(records.interaction.company_id) if records.interaction.company_id else None,
+                "contact_id": str(records.interaction.contact_id) if records.interaction.contact_id else None,
+                "call_direction": records.interaction.call_direction,
                 "opportunity_id": (
                     str(records.interaction.opportunity_id) if records.interaction.opportunity_id else None
                 ),

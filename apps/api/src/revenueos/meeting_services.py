@@ -224,6 +224,7 @@ class MeetingService(_MeetingDomainService):
             company_id=request.company_id,
             opportunity_id=request.opportunity_id,
             interaction_type=interaction_type_for_meeting(request.meeting_type.value),
+            call_direction="unknown" if request.meeting_type.value == "phone" else None,
             lifecycle_status=interaction_status_for_meeting(request.status.value),
             title=request.title,
             scheduled_start_at=request.meeting_date,

@@ -224,7 +224,7 @@ owner.
    `Retry queued audio`. A discarded tab cannot recover unsent memory bytes.
 5. Marker rows are immutable. Correct an accidental marker only through the
    pre-completion soft-delete route; do not edit it in place.
-6. Validate forced RLS, export version 7, deletion ordering and content-free logs
+6. Validate forced RLS, export version 8, deletion ordering and content-free logs
    before re-enabling a disabled Companion path.
 
 - **Detection:** release regression, readiness failure, unsafe privacy/security

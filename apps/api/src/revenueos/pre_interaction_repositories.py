@@ -105,7 +105,11 @@ class PreInteractionBriefRepository:
             company_id=interaction.company_id or (opportunity.company_id if opportunity is not None else None),
             before_at=interaction.scheduled_start_at,
         )
-        participants = await self._participants(organisation_id, linked_meeting_id)
+        participants = await self._participants(
+            organisation_id,
+            linked_meeting_id,
+            interaction.contact_id,
+        )
         artifacts = await self._completed_current_artifacts(organisation_id, source_meeting)
         insight = await self._latest_revenue_brain_insight(
             organisation_id,
@@ -271,9 +275,30 @@ class PreInteractionBriefRepository:
         self,
         organisation_id: UUID,
         meeting_id: UUID | None,
+        contact_id: UUID | None,
     ) -> tuple[ParticipantContextRecord, ...]:
+        selected: list[ParticipantContextRecord] = []
+        selected_names: set[str] = set()
+        if contact_id is not None:
+            contact = await self.session.scalar(
+                select(Contact).where(
+                    Contact.organisation_id == organisation_id,
+                    Contact.id == contact_id,
+                )
+            )
+            if contact is not None:
+                name = f"{contact.first_name} {contact.last_name}".strip()
+                selected.append(
+                    ParticipantContextRecord(
+                        participant_id=contact.id,
+                        name=name,
+                        role="contact",
+                        job_title=contact.job_title,
+                    )
+                )
+                selected_names.add(name.casefold())
         if meeting_id is None:
-            return ()
+            return tuple(selected)
         rows = (
             await self.session.execute(
                 select(MeetingParticipant, Contact.first_name, Contact.last_name, Contact.job_title)
@@ -293,11 +318,10 @@ class PreInteractionBriefRepository:
                 .order_by(MeetingParticipant.created_at.asc(), MeetingParticipant.id.asc())
             )
         ).all()
-        selected: list[ParticipantContextRecord] = []
         for participant, first_name, last_name, job_title in rows:
             contact_name = " ".join(value for value in (first_name, last_name) if value)
             name = contact_name or participant.display_name or participant.email
-            if name:
+            if name and name.casefold() not in selected_names:
                 selected.append(
                     ParticipantContextRecord(
                         participant_id=participant.id,
@@ -306,6 +330,7 @@ class PreInteractionBriefRepository:
                         job_title=job_title,
                     )
                 )
+                selected_names.add(name.casefold())
         return tuple(selected[:8])
 
     async def _completed_current_artifacts(

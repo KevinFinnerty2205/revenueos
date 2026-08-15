@@ -124,14 +124,20 @@ describe("PreInteractionBrief", () => {
         name: "Confirm procurement ownership and agree the next step.",
       }),
     ).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Objectives" })).toBeVisible();
+    expect(screen.getByText("Compact call brief")).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Questions to ask" }),
+      screen.getByRole("heading", { name: "Contact and role" }),
     ).toBeVisible();
-    expect(screen.getByText("Open commitments")).toBeVisible();
-    expect(screen.getByText("Risks to watch")).toBeVisible();
-    expect(screen.getByText("Success criteria")).toBeVisible();
-    expect(screen.getByText("Source completeness 82%")).toBeVisible();
+    expect(screen.getByText("Alex Morgan · champion")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Purpose and desired next step" }),
+    ).toBeVisible();
+    expect(screen.getByText("Latest commitment")).toBeVisible();
+    expect(screen.getByText("Objection or timeline issue")).toBeVisible();
+    expect(screen.getByText(/Recent Revenue Brain change:/)).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Recommended questions" }),
+    ).toBeVisible();
     expect(screen.getByText(/Sources: Interaction details/)).toHaveTextContent(
       "Prior validated Meeting Intelligence",
     );

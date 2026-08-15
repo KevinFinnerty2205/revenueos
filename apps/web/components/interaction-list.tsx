@@ -2,6 +2,7 @@
 
 import type {
   Company,
+  Contact,
   EntityPage,
   Interaction,
   InteractionLifecycleStatus,
@@ -20,6 +21,7 @@ import {
 export function InteractionList() {
   const [result, setResult] = useState<EntityPage<Interaction> | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -50,10 +52,14 @@ export function InteractionList() {
       apiRequest<EntityPage<Company>>("/api/v1/companies?pageSize=100", {
         signal: controller.signal,
       }),
+      apiRequest<EntityPage<Contact>>("/api/v1/contacts?pageSize=100", {
+        signal: controller.signal,
+      }),
     ])
-      .then(([interactions, companyPage]) => {
+      .then(([interactions, companyPage, contactPage]) => {
         setResult(interactions);
         setCompanies(companyPage.items);
+        setContacts(contactPage.items);
       })
       .catch((requestError: unknown) => {
         if (
@@ -77,6 +83,16 @@ export function InteractionList() {
   const companyNames = useMemo(
     () => new Map(companies.map((company) => [company.id, company.name])),
     [companies],
+  );
+  const contactNames = useMemo(
+    () =>
+      new Map(
+        contacts.map((contact) => [
+          contact.id,
+          `${contact.firstName} ${contact.lastName}`,
+        ]),
+      ),
+    [contacts],
   );
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -104,9 +120,9 @@ export function InteractionList() {
             Interactions
           </h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-            Keep customer meetings, workshops, presentations and field activity
-            in one timeline. Existing Meeting Intelligence remains available
-            from each linked meeting.
+            Keep phone calls, customer meetings, workshops, presentations and
+            field activity in one timeline. Existing Meeting Intelligence
+            remains available from each linked meeting.
           </p>
         </div>
         <Link className="primary-button" href="/interactions/new">
@@ -239,6 +255,11 @@ export function InteractionList() {
                       ? "Not prepared"
                       : "Link context"}
                 </span>
+                {interaction.interactionType === "phone_call" ? (
+                  <span className="rounded-full bg-indigo-50 px-3 py-1 text-indigo-800">
+                    {humanise(interaction.callDirection ?? "unknown")}
+                  </span>
+                ) : null}
               </div>
               <h2 className="mt-4 text-xl font-semibold text-slate-950">
                 <Link
@@ -259,6 +280,38 @@ export function InteractionList() {
                     "Linked company")
                   : "No company linked"}
               </p>
+              {interaction.interactionType === "phone_call" ? (
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+                  <span>
+                    {interaction.contactId
+                      ? (contactNames.get(interaction.contactId) ??
+                        "Linked contact")
+                      : "No contact linked"}
+                  </span>
+                  {interaction.durationSeconds !== null &&
+                  interaction.durationSeconds !== undefined ? (
+                    <span>· {formatDuration(interaction.durationSeconds)}</span>
+                  ) : null}
+                  {interaction.callOutcome ? (
+                    <span>· {humanise(interaction.callOutcome)}</span>
+                  ) : null}
+                </div>
+              ) : null}
+              {interaction.interactionType === "phone_call" ||
+              interaction.captureMethods?.length ? (
+                <p className="mt-3 text-xs font-semibold text-teal-800">
+                  Capture:{" "}
+                  {interaction.captureMethods?.length
+                    ? interaction.captureMethods.map(humanise).join(" · ")
+                    : "None yet"}
+                  {interaction.intelligenceState
+                    ? ` · Intelligence ${humanise(interaction.intelligenceState).toLowerCase()}`
+                    : ""}
+                  {interaction.recordingAvailable
+                    ? " · Recording available"
+                    : ""}
+                </p>
+              ) : null}
               {interaction.meetingId ? (
                 <Link
                   className="mt-4 inline-block text-sm font-bold text-teal-800 underline-offset-4 hover:underline"
@@ -283,4 +336,10 @@ export function InteractionList() {
       ) : null}
     </section>
   );
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m${seconds % 60 ? ` ${seconds % 60}s` : ""}`;
 }

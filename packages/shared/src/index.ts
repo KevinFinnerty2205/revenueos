@@ -77,6 +77,12 @@ export type InteractionLifecycleStatus =
   "planned" | "in_progress" | "completed" | "cancelled";
 export type InteractionCreationOrigin =
   "manual" | "meeting_compatibility" | "imported_external";
+export type CallDirection = "inbound" | "outbound" | "unknown";
+export type CallOutcome = "connected" | "no_answer" | "voicemail" | "cancelled";
+export type InteractionCaptureMethod =
+  "debrief" | "voice_journal" | "recording";
+export type InteractionIntelligenceState =
+  "not_ready" | "processing" | "review_required" | "ready" | "not_applicable";
 export type PreInteractionBriefState =
   | "unavailable"
   | "not_generated"
@@ -360,6 +366,7 @@ export interface Meeting extends TenantEntity {
 export interface Interaction extends TenantEntity {
   companyId: string | null;
   opportunityId: string | null;
+  contactId: string | null;
   meetingId: string | null;
   interactionType: InteractionType;
   lifecycleStatus: InteractionLifecycleStatus;
@@ -370,6 +377,12 @@ export interface Interaction extends TenantEntity {
   actualEndAt: string | null;
   timezone: string | null;
   creationOrigin: InteractionCreationOrigin;
+  callDirection: CallDirection | null;
+  callOutcome: CallOutcome | null;
+  durationSeconds: number | null;
+  captureMethods: InteractionCaptureMethod[];
+  intelligenceState: InteractionIntelligenceState;
+  recordingAvailable: boolean;
   createdByUserId: string;
   briefState: "unavailable" | "not_generated" | "completed";
   briefGeneratedAt: string | null;
@@ -456,6 +469,7 @@ export interface CandidateEvidence {
   supportClassification: "reported";
   validationState: "unreviewed" | "verified" | "rejected";
   userReviewState: "pending" | "accepted" | "rejected";
+  conflictState: "not_assessed" | "conflicting" | "unresolved" | "corroborated";
   sourceCaptureSessionId: string;
   evidenceFragmentId: string;
   acceptedEvidenceId: string | null;
@@ -613,6 +627,28 @@ export interface RevenueBrainVisualSnapshot {
   sourceLabel: string;
   visualType: VisualType;
   items: RevenueBrainVisualEvidenceItem[];
+}
+
+export interface RevenueBrainReportedEvidenceItem {
+  evidenceId: string;
+  category: string;
+  statement: string;
+  origin: "salesperson_reported";
+  sourceLabel: "Reported by you";
+  validationState: "verified";
+  conflictState: "not_assessed" | "conflicting" | "unresolved" | "corroborated";
+}
+
+export interface RevenueBrainReportedSnapshot {
+  id: string;
+  interactionId: string;
+  opportunityId: string | null;
+  interactionTitle: string;
+  interactionType: string;
+  interactionDate: string;
+  createdAt: string;
+  sourceLabel: "Reported by you";
+  items: RevenueBrainReportedEvidenceItem[];
 }
 
 export type RevenueBrainScope = "account" | "opportunity";
@@ -1278,6 +1314,7 @@ export interface ReportedIntelligenceItem {
   origin: "salesperson_reported";
   sourceLabel: "Reported by you";
   validationState: "verified";
+  conflictState: "not_assessed" | "conflicting" | "unresolved" | "corroborated";
 }
 
 export interface ReportedInteractionIntelligence {
@@ -1426,6 +1463,11 @@ export type RecordingType =
   | "live_audio_recording"
   | "uploaded_audio_recording"
   | "imported_audio_recording";
+export type RecordingSource =
+  | "customer_call_recording"
+  | "business_phone_recording"
+  | "user_uploaded_recording"
+  | "external_provider_recording";
 export type RecordingLifecycleStatus =
   | "created"
   | "recording"
@@ -1446,6 +1488,7 @@ export interface RecordingSession {
   interactionId: string;
   captureSessionId: string;
   recordingType: RecordingType;
+  recordingSource: RecordingSource | null;
   lifecycleStatus: RecordingLifecycleStatus;
   consentState: "acknowledged";
   startedAt: string | null;

@@ -23,7 +23,7 @@ inherits the WO-013 debrief, WO-014 visual and WO-015 recording controls.
   covers active and queued capture.
 - Transcript bodies are not shown in the live Companion. Debrief gap-fill
   receives bounded semantic coverage categories, not raw transcript text.
-- Markers are included in export version 7 and organisation deletion; soft
+- Markers are included in export version 8 and organisation deletion; soft
   deletion remains visible to metadata audit without exposing content.
 - Opportunity capture status is a bounded metadata projection with no transcript,
   prompt, provider or storage identifiers.

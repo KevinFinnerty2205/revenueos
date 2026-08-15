@@ -70,6 +70,11 @@ exclude storage keys, signatures, provider request IDs and credentials. Cross-te
 IDs are hidden as not found. See the
 [recording foundation guide](recording-foundation-engineering-guide.md).
 
+For a non-live recording, create additionally requires `recordingSource` as one of
+`customer_call_recording`, `business_phone_recording`,
+`user_uploaded_recording` or `external_provider_recording`. Live browser recording
+must not supply an imported source. The authority acknowledgement remains mandatory.
+
 ## Visual evidence contract
 
 The browser supplies one authorised JPEG/PNG (10 MB default maximum), explicit
@@ -95,6 +100,14 @@ active tenant and must not conflict. Optional `scheduledStartAt`, `scheduledEndA
 UTC. End values cannot precede starts. `timezone` is an optional label up to 64
 characters.
 
+For `phone_call`, optional `contactId` must resolve in the active tenant and agree
+with the selected company/opportunity. `callDirection` is `inbound`, `outbound` or
+`unknown` and defaults to `unknown`. Completion may set `callOutcome` to
+`connected`, `no_answer`, `voicemail` or `cancelled`. These fields are rejected for
+other Interaction types. Association changes are rejected after final Interaction
+Intelligence exists. No phone number or provider call identifier is copied onto the
+Interaction.
+
 The server owns `id`, `organisationId`, `creationOrigin`, `createdByUserId`,
 timestamps and the optional compatibility `meetingId`. Patch accepts only mutable
 domain fields. Complete accepts optional timezone-aware `actualEndAt`; when omitted,
@@ -116,7 +129,9 @@ List responses use `{items, page, pageSize, total, pages}`. `page` starts at 1 a
 Sorting always adds the Interaction UUID as a stable tie-breaker. Soft-deleted rows
 are hidden. Each item also returns `briefState` (`unavailable`, `not_generated` or
 `completed`) and nullable `briefGeneratedAt`; no brief body or internal trace is
-joined into the list.
+joined into the list. Items additionally project derived `durationSeconds`,
+`captureMethods`, `intelligenceState` and `recordingAvailable`; the projection
+contains no transcript, recording URL or provider internals.
 
 ## Preparation brief contract
 

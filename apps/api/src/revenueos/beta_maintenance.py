@@ -70,7 +70,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 7
+EXPORT_VERSION = 8
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -1541,7 +1541,10 @@ async def _export_payload(
                     "id",
                     "company_id",
                     "opportunity_id",
+                    "contact_id",
                     "interaction_type",
+                    "call_direction",
+                    "call_outcome",
                     "lifecycle_status",
                     "title",
                     "scheduled_start_at",
@@ -1666,6 +1669,7 @@ async def _export_payload(
                     "entity_reference",
                     "explicitly_reported_at",
                     "review_state",
+                    "conflict_state",
                     "reviewed_by_user_id",
                     "reviewed_at",
                     "created_at",
@@ -1832,6 +1836,7 @@ async def _export_payload(
                         "transcript_evidence_id",
                         "created_by_user_id",
                         "recording_type",
+                        "recording_source",
                         "lifecycle_status",
                         "consent_state",
                         "started_at",

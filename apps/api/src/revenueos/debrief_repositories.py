@@ -218,8 +218,10 @@ class DebriefRepository:
         self,
         organisation_id: UUID,
         interaction: Interaction,
+        *,
+        include_reconciliation_text: bool = False,
     ) -> dict[str, object]:
-        """Return bounded, tenant-scoped context without transcript or recording content."""
+        """Return bounded context, with transcript text only for trusted reconciliation."""
 
         brief = await self.session.scalar(
             select(PreInteractionBrief)
@@ -275,7 +277,7 @@ class DebriefRepository:
             else None
         )
         recording_context = await self._recording_context(organisation_id, interaction.id)
-        return {
+        context: dict[str, object] = {
             "interaction": {
                 "id": str(interaction.id),
                 "type": interaction.interaction_type,
@@ -317,12 +319,15 @@ class DebriefRepository:
             "directRecordingCoverage": list(recording_context[1]),
             "markerTargets": list(recording_context[2]),
         }
+        if include_reconciliation_text and recording_context[3] is not None:
+            context["_recordingReconciliationText"] = recording_context[3]
+        return context
 
     async def _recording_context(
         self,
         organisation_id: UUID,
         interaction_id: UUID,
-    ) -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
+    ) -> tuple[bool, tuple[str, ...], tuple[str, ...], str | None]:
         transcript = await self.session.scalar(
             select(TranscriptVersion.raw_text)
             .where(
@@ -356,7 +361,7 @@ class DebriefRepository:
         }
         marker_targets = tuple(sorted({marker_map.get(value, value) for value in marker_values}))
         if not isinstance(transcript, str) or not transcript.strip():
-            return False, (), marker_targets
+            return False, (), marker_targets, None
         normalised = transcript.casefold()
         target_terms = {
             "action_item": ("send", "follow up", "action", "owner"),
@@ -372,7 +377,7 @@ class DebriefRepository:
             "timeline": ("timeline", "deadline", "date", "quarter"),
         }
         supported = tuple(target for target, terms in target_terms.items() if any(term in normalised for term in terms))
-        return True, supported, marker_targets
+        return True, supported, marker_targets, transcript
 
     async def intelligence_for_session(
         self,

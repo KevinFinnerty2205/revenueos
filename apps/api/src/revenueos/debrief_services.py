@@ -4,7 +4,7 @@ import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime, time
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -131,11 +131,8 @@ class DebriefService:
             started_by_user_id=self.tenant.user_id,
             started_at=now,
         )
-        max_questions = (
-            min(2, self.settings.private_beta_debrief_question_cap)
-            if request.capture_type == "voice_journal"
-            else self.settings.private_beta_debrief_question_cap
-        )
+        short_phone_call = self._short_phone_call(interaction)
+        max_questions = self._question_limit(interaction, request.capture_type)
         start_context = await self.repository.normalised_start_context(
             self.tenant.organisation_id,
             interaction,
@@ -147,10 +144,11 @@ class DebriefService:
             started_by_user_id=self.tenant.user_id,
             lifecycle_status="collecting",
             idempotency_key=request.idempotency_key,
-            question_count=0,
+            question_count=1 if interaction.interaction_type == "phone_call" else 0,
             max_questions=max_questions,
             current_question_json=self.reasoning.opening_question(
-                gap_fill=start_context.get("directRecordingAvailable") is True
+                gap_fill=start_context.get("directRecordingAvailable") is True,
+                short_phone_call=short_phone_call,
             ).model_dump(mode="json", by_alias=False),
             safety_confirmed_at=now,
             voice_processing_acknowledged_at=now if request.voice_processing_acknowledged else None,
@@ -272,7 +270,13 @@ class DebriefService:
                 409,
             )
         interaction = await self._require_completed_interaction(interaction_id)
-        context = await self.repository.normalised_start_context(self.tenant.organisation_id, interaction)
+        context = await self.repository.normalised_start_context(
+            self.tenant.organisation_id,
+            interaction,
+            include_reconciliation_text=True,
+        )
+        recording_text_value = context.pop("_recordingReconciliationText", None)
+        recording_text = recording_text_value if isinstance(recording_text_value, str) else None
         await self.beta.reserve_generation()
         if self.structured_reasoning.uses_external_provider:
             await self.beta.reserve_provider_request()
@@ -328,6 +332,7 @@ class DebriefService:
                     entity_reference=item.entity_reference,
                     explicitly_reported_at=item.explicitly_reported_at,
                     review_state="pending",
+                    conflict_state=self.reasoning.reconcile_statement(item.statement, recording_text),
                 )
             )
         debrief.lifecycle_status = "review"
@@ -433,7 +438,11 @@ class DebriefService:
         interaction = await self._require_completed_interaction(interaction_id)
         intelligence_id: UUID | None = None
         brain_id: UUID | None = None
-        if accepted:
+        customer_intelligence_eligible = not (
+            interaction.interaction_type == "phone_call"
+            and interaction.call_outcome in {"no_answer", "voicemail", "cancelled"}
+        )
+        if accepted and customer_intelligence_eligible:
             intelligence_id, brain_id = await self._create_snapshots(interaction, session_id, accepted)
         debrief.lifecycle_status = "completed"
         debrief.completed_at = now
@@ -448,6 +457,7 @@ class DebriefService:
                 "interaction_updated": intelligence_id is not None,
                 "revenue_brain_updated": brain_id is not None,
                 "interaction_type": interaction.interaction_type,
+                "customer_intelligence_eligible": customer_intelligence_eligible,
             },
         )
         await self._commit("The reviewed evidence could not be applied.")
@@ -638,6 +648,7 @@ class DebriefService:
                     "statement": item.statement,
                     "origin": "salesperson_reported",
                     "validationState": "verified",
+                    "conflictState": item.conflict_state,
                 }
                 for item in accepted
             ],
@@ -790,6 +801,10 @@ class DebriefService:
             support_classification="reported",
             validation_state=cast(CandidateValidationState, item.validation_state),
             user_review_state=cast(CandidateReviewState, item.review_state),
+            conflict_state=cast(
+                Literal["not_assessed", "conflicting", "unresolved", "corroborated"],
+                item.conflict_state,
+            ),
             source_capture_session_id=item.session_id,
             evidence_fragment_id=item.source_fragment_id,
             accepted_evidence_id=item.accepted_evidence_id,
@@ -866,6 +881,44 @@ class DebriefService:
     def _fingerprint(statement: str) -> str:
         normalised = " ".join(statement.lower().split())
         return hashlib.sha256(normalised.encode("utf-8")).hexdigest()
+
+    def _question_limit(self, interaction: Interaction, capture_type: DebriefCaptureType) -> int:
+        configured = self.settings.private_beta_debrief_question_cap
+        if interaction.interaction_type != "phone_call":
+            return min(2, configured) if capture_type == "voice_journal" else configured
+        if interaction.call_outcome in {"no_answer", "voicemail", "cancelled"}:
+            return 1
+        duration = self._interaction_duration_seconds(interaction)
+        if duration is not None and duration <= 180:
+            return min(2, configured)
+        if interaction.opportunity_id is not None and duration is not None and duration >= 900:
+            return min(5, configured)
+        return min(2 if capture_type == "voice_journal" else 4, configured)
+
+    @classmethod
+    def _short_phone_call(cls, interaction: Interaction) -> bool:
+        if interaction.interaction_type != "phone_call":
+            return False
+        if interaction.call_outcome in {"no_answer", "voicemail", "cancelled"}:
+            return True
+        duration = cls._interaction_duration_seconds(interaction)
+        return duration is not None and duration <= 180
+
+    @staticmethod
+    def _interaction_duration_seconds(interaction: Interaction) -> int | None:
+        if interaction.actual_start_at is None or interaction.actual_end_at is None:
+            return None
+        start = (
+            interaction.actual_start_at
+            if interaction.actual_start_at.tzinfo is not None
+            else interaction.actual_start_at.replace(tzinfo=UTC)
+        )
+        end = (
+            interaction.actual_end_at
+            if interaction.actual_end_at.tzinfo is not None
+            else interaction.actual_end_at.replace(tzinfo=UTC)
+        )
+        return max(0, int((end - start).total_seconds()))
 
     @staticmethod
     def _invalid_state(action: str, state: str) -> PublicAPIError:
