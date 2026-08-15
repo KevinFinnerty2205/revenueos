@@ -324,6 +324,18 @@ function meetingPage(items: Meeting[] = [meeting]) {
   };
 }
 
+function evidenceCapabilities() {
+  return {
+    documentEvidence: true,
+    emailEvidence: true,
+    supportedDocumentMimeTypes: ["application/pdf", "text/plain"],
+    emailProviderImport: false,
+    documentProviderImport: false,
+    safeMessage:
+      "Select only evidence you are authorised to process. Gmail, Outlook and drive synchronisation are not connected.",
+  };
+}
+
 describe("OpportunityWorkspace", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -333,7 +345,9 @@ describe("OpportunityWorkspace", () => {
       vi
         .fn()
         .mockResolvedValueOnce(response(workspace()))
-        .mockResolvedValueOnce(response(meetingPage())),
+        .mockResolvedValueOnce(response(meetingPage()))
+        .mockResolvedValueOnce(response([]))
+        .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
@@ -400,7 +414,9 @@ describe("OpportunityWorkspace", () => {
             }),
           ),
         )
-        .mockResolvedValueOnce(response(meetingPage([]))),
+        .mockResolvedValueOnce(response(meetingPage([])))
+        .mockResolvedValueOnce(response([]))
+        .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
@@ -446,7 +462,9 @@ describe("OpportunityWorkspace", () => {
             }),
           ),
         )
-        .mockResolvedValueOnce(response(meetingPage([]))),
+        .mockResolvedValueOnce(response(meetingPage([])))
+        .mockResolvedValueOnce(response([]))
+        .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
@@ -497,7 +515,9 @@ describe("OpportunityWorkspace", () => {
             }),
           ),
         )
-        .mockResolvedValueOnce(response(meetingPage([]))),
+        .mockResolvedValueOnce(response(meetingPage([])))
+        .mockResolvedValueOnce(response([]))
+        .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
@@ -538,7 +558,9 @@ describe("OpportunityWorkspace", () => {
             }),
           ),
         )
-        .mockResolvedValueOnce(response(meetingPage([]))),
+        .mockResolvedValueOnce(response(meetingPage([])))
+        .mockResolvedValueOnce(response([]))
+        .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
@@ -565,6 +587,8 @@ describe("OpportunityWorkspace", () => {
       .fn()
       .mockResolvedValueOnce(response(noMeeting))
       .mockResolvedValueOnce(response(meetingPage([available])))
+      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response(evidenceCapabilities()))
       .mockResolvedValueOnce(
         response({ ...available, opportunityId: "opportunity-1" }),
       )
@@ -577,8 +601,8 @@ describe("OpportunityWorkspace", () => {
       target: { value: "meeting-1" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Associate meeting" }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
-    const patchCall = fetchMock.mock.calls[2];
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(7));
+    const patchCall = fetchMock.mock.calls[4];
     expect(String(patchCall?.[0])).toContain(
       "/api/v1/meetings/meeting-1/opportunity",
     );
@@ -613,7 +637,9 @@ describe("OpportunityWorkspace", () => {
             }),
           ),
         )
-        .mockResolvedValueOnce(response(meetingPage())),
+        .mockResolvedValueOnce(response(meetingPage()))
+        .mockResolvedValueOnce(response([]))
+        .mockResolvedValueOnce(response(evidenceCapabilities())),
     );
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
@@ -648,6 +674,8 @@ describe("OpportunityWorkspace", () => {
       .fn()
       .mockResolvedValueOnce(response(notGenerated))
       .mockResolvedValueOnce(response(meetingPage()))
+      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response(evidenceCapabilities()))
       .mockResolvedValueOnce(
         response({
           ...workspace().reasoning,
@@ -662,11 +690,11 @@ describe("OpportunityWorkspace", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Generate changes" }),
     );
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
-    expect(String(fetchMock.mock.calls[2]?.[0])).toContain(
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(7));
+    expect(String(fetchMock.mock.calls[4]?.[0])).toContain(
       "/api/v1/opportunities/opportunity-1/brain/reasoning",
     );
-    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: "POST" });
+    expect(fetchMock.mock.calls[4]?.[1]).toMatchObject({ method: "POST" });
     expect(
       await screen.findByText("Champion evidence strengthened"),
     ).toBeVisible();

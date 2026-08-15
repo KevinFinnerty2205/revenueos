@@ -13,8 +13,10 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.beta_maintenance import (
+    _delete_document_objects,
     _delete_interaction_batch,
     _delete_meeting_batch,
+    _delete_source_database_rows,
     _delete_visual_objects,
 )
 from revenueos.config import Settings, get_settings
@@ -28,6 +30,9 @@ from revenueos.models import (
     Contact,
     DebriefSession,
     DebriefTurn,
+    DocumentFragment,
+    DocumentSource,
+    EmailSource,
     Evidence,
     EvidenceFragment,
     Interaction,
@@ -44,6 +49,8 @@ from revenueos.models import (
     RecordingConsent,
     RecordingSession,
     RevenueBrainInteractionSnapshot,
+    RevenueBrainSourceSnapshot,
+    SourceCandidateEvidence,
     Transcript,
     TranscriptVersion,
     VisualAsset,
@@ -73,6 +80,474 @@ TRANSCRIPTS = (
 DEMO_VISUAL_IMAGE = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 )
+
+DEMO_DOCUMENTS = {
+    "customer-rfp": (
+        "rfp",
+        "customer_provided",
+        "[DEMO] Customer RFP.txt",
+        "SYNTHETIC DEMO DOCUMENT — no real customer data.\nThe pilot budget is approved.\nThe implementation must begin in October.",
+        "budget",
+        "The pilot budget is approved.",
+        "customer_direct",
+        "direct",
+        "Customer-provided document",
+    ),
+    "seller-proposal": (
+        "proposal",
+        "salesperson_provided",
+        "[DEMO] Seller proposal.txt",
+        "SYNTHETIC DEMO DOCUMENT — no real customer data.\nRevenueOS proposes a four-week pilot.\nPricing remains subject to customer acceptance.",
+        "implementation",
+        "The seller proposes a four-week pilot.",
+        "seller_prepared",
+        "context",
+        "Seller-provided document",
+    ),
+}
+
+DEMO_EMAILS = {
+    "customer-inbound": (
+        "customer_sent",
+        "inbound",
+        "[DEMO] Pilot timing",
+        "SYNTHETIC DEMO EMAIL — no real customer data. We need the security response by Friday.",
+        "customer_request",
+        "The customer requests the security response by Friday.",
+        "customer_direct",
+        "direct",
+        "Verified inbound customer email",
+    ),
+    "seller-outbound": (
+        "salesperson_sent",
+        "outbound",
+        "[DEMO] Proposed next step",
+        "SYNTHETIC DEMO EMAIL — no real customer data. I propose a pilot workshop next Tuesday.",
+        "action_item",
+        "The seller proposes a pilot workshop next Tuesday.",
+        "salesperson_reported",
+        "context",
+        "Outbound salesperson email",
+    ),
+}
+
+
+def demo_source_evidence_ids(organisation_id: UUID) -> dict[str, UUID]:
+    prefix = str(organisation_id)
+    labels = (
+        "customer-rfp",
+        "seller-proposal",
+        "customer-inbound",
+        "seller-outbound",
+    )
+    ids: dict[str, UUID] = {}
+    for label in labels:
+        for suffix in ("source", "capture", "source-evidence", "accepted-evidence", "candidate", "snapshot"):
+            ids[f"{label}:{suffix}"] = uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:{label}:{suffix}")
+        if label in DEMO_DOCUMENTS:
+            ids[f"{label}:fragment"] = uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:{label}:fragment")
+    return ids
+
+
+async def _seed_document_email_evidence(
+    session: AsyncSession,
+    settings: Settings,
+    organisation_id: UUID,
+    user_id: UUID,
+    company_id: UUID,
+    opportunity_id: UUID,
+    contact_id: UUID,
+    seeded_at: datetime,
+) -> tuple[UUID, ...]:
+    ids = demo_source_evidence_ids(organisation_id)
+    storage = create_visual_storage(settings)
+    source_ids: list[UUID] = []
+
+    for index, (label, spec) in enumerate(DEMO_DOCUMENTS.items()):
+        (
+            document_type,
+            ownership,
+            filename,
+            content_text,
+            category,
+            statement,
+            origin_class,
+            support_class,
+            source_label,
+        ) = spec
+        source_id = ids[f"{label}:source"]
+        source_ids.append(source_id)
+        content = content_text.encode("utf-8")
+        storage_key = f"{organisation_id}/documents/{source_id.hex}.txt"
+        await storage.write(storage_key, content, "text/plain")
+        if (
+            await session.scalar(
+                select(DocumentSource.id).where(
+                    DocumentSource.organisation_id == organisation_id,
+                    DocumentSource.id == source_id,
+                )
+            )
+            is not None
+        ):
+            continue
+        occurred_at = seeded_at - timedelta(days=6 - index)
+        capture_id = ids[f"{label}:capture"]
+        source_evidence_id = ids[f"{label}:source-evidence"]
+        accepted_evidence_id = ids[f"{label}:accepted-evidence"]
+        fragment_id = ids[f"{label}:fragment"]
+        candidate_id = ids[f"{label}:candidate"]
+        session.add_all(
+            (
+                CaptureSession(
+                    id=capture_id,
+                    organisation_id=organisation_id,
+                    interaction_id=None,
+                    capture_type="document_import",
+                    status="completed",
+                    started_by_user_id=user_id,
+                    started_at=occurred_at,
+                    completed_at=occurred_at,
+                ),
+                Evidence(
+                    id=source_evidence_id,
+                    organisation_id=organisation_id,
+                    interaction_id=None,
+                    capture_session_id=capture_id,
+                    evidence_type="document",
+                    origin_class=origin_class,
+                    support_class=support_class,
+                    validation_state="verified",
+                    captured_by_user_id=user_id,
+                    captured_at=occurred_at,
+                    lifecycle_status="available",
+                    retention_class="inherited",
+                ),
+            )
+        )
+        await session.flush()
+        session.add(
+            DocumentSource(
+                id=source_id,
+                organisation_id=organisation_id,
+                company_id=company_id,
+                opportunity_id=opportunity_id,
+                interaction_id=None,
+                capture_session_id=capture_id,
+                source_evidence_id=source_evidence_id,
+                uploaded_by_user_id=user_id,
+                document_type=document_type,
+                source_ownership=ownership,
+                display_filename=filename,
+                storage_key=storage_key,
+                mime_type="text/plain",
+                byte_size=len(content),
+                checksum_sha256=hashlib.sha256(content).hexdigest(),
+                document_at=occurred_at,
+                idempotency_key=f"demo-{label}",
+                processing_status="completed",
+                storage_status="available",
+                processing_attempts=1,
+                page_count=1,
+                extracted_character_count=len(content_text),
+                provider_name="mock",
+                provider_request_id=f"demo-{label}",
+                authority_confirmed_at=occurred_at,
+                external_processing_acknowledged_at=occurred_at,
+                processed_at=occurred_at,
+            )
+        )
+        await session.flush()
+        session.add_all(
+            (
+                DocumentFragment(
+                    id=fragment_id,
+                    organisation_id=organisation_id,
+                    document_source_id=source_id,
+                    source_evidence_id=source_evidence_id,
+                    page_number=None,
+                    section=None,
+                    paragraph_index=0,
+                    content_text=content_text,
+                ),
+                Evidence(
+                    id=accepted_evidence_id,
+                    organisation_id=organisation_id,
+                    interaction_id=None,
+                    capture_session_id=capture_id,
+                    evidence_type="document",
+                    origin_class=origin_class,
+                    support_class=support_class,
+                    validation_state="verified",
+                    captured_by_user_id=user_id,
+                    captured_at=occurred_at,
+                    lifecycle_status="available",
+                    retention_class="inherited",
+                ),
+            )
+        )
+        await session.flush()
+        location: dict[str, object] = {
+            "reference": "Paragraph 1",
+            "pageNumber": None,
+            "section": None,
+            "paragraphIndex": 0,
+        }
+        session.add(
+            SourceCandidateEvidence(
+                id=candidate_id,
+                organisation_id=organisation_id,
+                source_kind="document",
+                document_source_id=source_id,
+                email_source_id=None,
+                source_evidence_id=source_evidence_id,
+                document_fragment_id=fragment_id,
+                accepted_evidence_id=accepted_evidence_id,
+                evidence_category=category,
+                statement=statement,
+                original_statement=statement,
+                statement_fingerprint=hashlib.sha256(statement.lower().encode()).hexdigest(),
+                interpretation_origin="ai_inferred",
+                origin_class=origin_class,
+                support_class=support_class,
+                source_location_json=location,
+                validation_state="verified",
+                review_state="accepted",
+                conflict_state="not_assessed",
+                reviewed_by_user_id=user_id,
+                reviewed_at=occurred_at + timedelta(minutes=1),
+            )
+        )
+        await session.flush()
+        snapshot_id = ids[f"{label}:snapshot"]
+        session.add(
+            RevenueBrainSourceSnapshot(
+                id=snapshot_id,
+                organisation_id=organisation_id,
+                company_id=company_id,
+                opportunity_id=opportunity_id,
+                interaction_id=None,
+                source_kind="document",
+                document_source_id=source_id,
+                email_source_id=None,
+                source_evidence_id=source_evidence_id,
+                source_evidence_ids=[str(accepted_evidence_id)],
+                content_json={
+                    "schemaVersion": 1,
+                    "sourceKind": "document",
+                    "sourceId": str(source_id),
+                    "sourceType": document_type,
+                    "sourceLabel": source_label,
+                    "sourceOrigin": ownership,
+                    "occurredAt": occurred_at.isoformat(),
+                    "items": [
+                        {
+                            "candidateId": str(candidate_id),
+                            "evidenceId": str(accepted_evidence_id),
+                            "category": category,
+                            "statement": statement,
+                            "sourceKind": "document",
+                            "sourceId": str(source_id),
+                            "sourceType": document_type,
+                            "sourceLabel": source_label,
+                            "sourceOrigin": ownership,
+                            "originClass": origin_class,
+                            "supportClass": support_class,
+                            "conflictState": "not_assessed",
+                            "location": location,
+                        }
+                    ],
+                },
+                schema_version=1,
+                version=1,
+                created_at=occurred_at + timedelta(minutes=1),
+            )
+        )
+
+    for index, (label, spec) in enumerate(DEMO_EMAILS.items()):
+        (
+            source_type,
+            direction,
+            subject,
+            body,
+            category,
+            statement,
+            origin_class,
+            support_class,
+            source_label,
+        ) = spec
+        source_id = ids[f"{label}:source"]
+        source_ids.append(source_id)
+        if (
+            await session.scalar(
+                select(EmailSource.id).where(
+                    EmailSource.organisation_id == organisation_id,
+                    EmailSource.id == source_id,
+                )
+            )
+            is not None
+        ):
+            continue
+        occurred_at = seeded_at - timedelta(days=3 - index)
+        capture_id = ids[f"{label}:capture"]
+        source_evidence_id = ids[f"{label}:source-evidence"]
+        accepted_evidence_id = ids[f"{label}:accepted-evidence"]
+        candidate_id = ids[f"{label}:candidate"]
+        session.add_all(
+            (
+                CaptureSession(
+                    id=capture_id,
+                    organisation_id=organisation_id,
+                    interaction_id=None,
+                    capture_type="email_import",
+                    status="completed",
+                    started_by_user_id=user_id,
+                    started_at=occurred_at,
+                    completed_at=occurred_at,
+                ),
+                Evidence(
+                    id=source_evidence_id,
+                    organisation_id=organisation_id,
+                    interaction_id=None,
+                    capture_session_id=capture_id,
+                    evidence_type="email",
+                    origin_class=origin_class,
+                    support_class=support_class,
+                    validation_state="verified",
+                    captured_by_user_id=user_id,
+                    captured_at=occurred_at,
+                    lifecycle_status="available",
+                    retention_class="inherited",
+                ),
+            )
+        )
+        await session.flush()
+        session.add(
+            EmailSource(
+                id=source_id,
+                organisation_id=organisation_id,
+                company_id=company_id,
+                opportunity_id=opportunity_id,
+                interaction_id=None,
+                capture_session_id=capture_id,
+                source_evidence_id=source_evidence_id,
+                submitted_by_user_id=user_id,
+                sender_contact_id=contact_id if direction == "inbound" else None,
+                source_type=source_type,
+                direction=direction,
+                sender_identity_state="verified_contact" if direction == "inbound" else "unknown",
+                origin_class=origin_class,
+                support_class=support_class,
+                subject=subject,
+                body_text=body,
+                normalized_body_text=body,
+                quote_handling="none",
+                message_at=occurred_at,
+                content_sha256=hashlib.sha256(f"{subject}\n{body}".encode()).hexdigest(),
+                idempotency_key=f"demo-{label}",
+                processing_status="completed",
+                processing_attempts=1,
+                provider_name="mock",
+                provider_request_id=f"demo-{label}",
+                authority_confirmed_at=occurred_at,
+                external_processing_acknowledged_at=occurred_at,
+                processed_at=occurred_at,
+            )
+        )
+        await session.flush()
+        session.add(
+            Evidence(
+                id=accepted_evidence_id,
+                organisation_id=organisation_id,
+                interaction_id=None,
+                capture_session_id=capture_id,
+                evidence_type="email",
+                origin_class=origin_class,
+                support_class=support_class,
+                validation_state="verified",
+                captured_by_user_id=user_id,
+                captured_at=occurred_at,
+                lifecycle_status="available",
+                retention_class="inherited",
+            )
+        )
+        await session.flush()
+        location = {
+            "reference": "Message paragraph 1",
+            "pageNumber": None,
+            "section": None,
+            "paragraphIndex": 0,
+        }
+        session.add(
+            SourceCandidateEvidence(
+                id=candidate_id,
+                organisation_id=organisation_id,
+                source_kind="email",
+                document_source_id=None,
+                email_source_id=source_id,
+                source_evidence_id=source_evidence_id,
+                document_fragment_id=None,
+                accepted_evidence_id=accepted_evidence_id,
+                evidence_category=category,
+                statement=statement,
+                original_statement=statement,
+                statement_fingerprint=hashlib.sha256(statement.lower().encode()).hexdigest(),
+                interpretation_origin="ai_inferred",
+                origin_class=origin_class,
+                support_class=support_class,
+                source_location_json=location,
+                validation_state="verified",
+                review_state="accepted",
+                conflict_state="not_assessed",
+                reviewed_by_user_id=user_id,
+                reviewed_at=occurred_at + timedelta(minutes=1),
+            )
+        )
+        await session.flush()
+        snapshot_id = ids[f"{label}:snapshot"]
+        session.add(
+            RevenueBrainSourceSnapshot(
+                id=snapshot_id,
+                organisation_id=organisation_id,
+                company_id=company_id,
+                opportunity_id=opportunity_id,
+                interaction_id=None,
+                source_kind="email",
+                document_source_id=None,
+                email_source_id=source_id,
+                source_evidence_id=source_evidence_id,
+                source_evidence_ids=[str(accepted_evidence_id)],
+                content_json={
+                    "schemaVersion": 1,
+                    "sourceKind": "email",
+                    "sourceId": str(source_id),
+                    "sourceType": source_type,
+                    "sourceLabel": source_label,
+                    "sourceOrigin": source_type,
+                    "occurredAt": occurred_at.isoformat(),
+                    "items": [
+                        {
+                            "candidateId": str(candidate_id),
+                            "evidenceId": str(accepted_evidence_id),
+                            "category": category,
+                            "statement": statement,
+                            "sourceKind": "email",
+                            "sourceId": str(source_id),
+                            "sourceType": source_type,
+                            "sourceLabel": source_label,
+                            "sourceOrigin": source_type,
+                            "originClass": origin_class,
+                            "supportClass": support_class,
+                            "conflictState": "not_assessed",
+                            "location": location,
+                        }
+                    ],
+                },
+                schema_version=1,
+                version=1,
+                created_at=occurred_at + timedelta(minutes=1),
+            )
+        )
+    return tuple(source_ids)
 
 
 def demo_ids(organisation_id: UUID) -> tuple[UUID, UUID, tuple[UUID, UUID], tuple[UUID, UUID]]:
@@ -1195,6 +1670,16 @@ async def seed_demo_data(
                     source_evidence_ids=[str(visual_accepted_evidence_id)],
                 )
             )
+        source_evidence_ids = await _seed_document_email_evidence(
+            session,
+            active_settings,
+            organisation_id,
+            user_id,
+            company_id,
+            opportunity_id,
+            phone_contact_id,
+            seeded_at,
+        )
         event = await session.scalar(
             select(BetaSystemEvent).where(
                 BetaSystemEvent.organisation_id == organisation_id,
@@ -1209,11 +1694,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 9},
+                    metadata_json={"dataset_version": 10},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 9}
+            event.metadata_json = {"dataset_version": 10}
     return {
         "status": "ready",
         "company_id": company_id,
@@ -1230,6 +1715,7 @@ async def seed_demo_data(
         "debrief_interaction_ids": debrief_interaction_ids,
         "debrief_session_ids": (phone_session_id, trade_show_session_id),
         "visual_ids": visual_ids,
+        "source_evidence_ids": source_evidence_ids,
         "marker_ids": marker_ids,
         "provider_calls": 0,
     }
@@ -1246,6 +1732,9 @@ async def reset_demo_data(
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
     google_meeting_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-google-meeting")
     debrief_interaction_ids = list(demo_debrief_ids(organisation_id)[:5])
+    source_ids = demo_source_evidence_ids(organisation_id)
+    document_ids = [source_ids[f"{label}:source"] for label in DEMO_DOCUMENTS]
+    email_ids = [source_ids[f"{label}:source"] for label in DEMO_EMAILS]
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
         if session.get_bind().dialect.name == "postgresql":
@@ -1265,6 +1754,8 @@ async def reset_demo_data(
         )
         await _delete_visual_objects(session, active_settings, organisation_id, debrief_interaction_ids)
         await _delete_interaction_batch(session, organisation_id, debrief_interaction_ids)
+        await _delete_document_objects(session, active_settings, organisation_id, document_ids)
+        await _delete_source_database_rows(session, organisation_id, document_ids, email_ids)
         await session.execute(
             delete(OpportunityAuditEvent).where(
                 OpportunityAuditEvent.organisation_id == organisation_id,

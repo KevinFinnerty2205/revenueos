@@ -540,6 +540,33 @@ contain product-safe source labels but no raw source IDs, transcript, raw artefa
 prompt, schema-registry, provider or worker metadata. See the
 [Pre-Interaction Brief guide](pre-interaction-brief.md).
 
+## Document and email evidence
+
+All routes require the trusted active organisation; callers never supply an
+organisation ID.
+
+| Method | Route | Behaviour |
+| --- | --- | --- |
+| GET | `/api/v1/evidence/capabilities` | Flags, supported media and honest connector availability |
+| POST | `/api/v1/evidence/documents` | Deliberate PDF/TXT upload with checksum and authority acknowledgements |
+| GET | `/api/v1/evidence/documents/{id}` | Metadata, processing state and candidates; no content |
+| GET | `/api/v1/evidence/documents/{id}/content` | Authenticated short-lived private download |
+| POST | `/api/v1/evidence/documents/{id}/process` | Bounded parse/extract transition |
+| POST | `/api/v1/evidence/documents/{id}/review` | Complete accept/edit/reject review |
+| DELETE | `/api/v1/evidence/documents/{id}` | Object-first deletion and lineage removal |
+| POST | `/api/v1/evidence/emails` | Deliberate plain-text paste with source/direction |
+| GET | `/api/v1/evidence/emails/{id}` | Metadata and candidates; no body |
+| POST | `/api/v1/evidence/emails/{id}/process` | Normalised strict extraction |
+| POST | `/api/v1/evidence/emails/{id}/review` | Complete accept/edit/reject review |
+| DELETE | `/api/v1/evidence/emails/{id}` | Body clearing and lineage removal |
+| GET | `/api/v1/evidence/opportunities/{id}` | Reviewed accepted source evidence |
+| GET | `/api/v1/evidence/accounts/{id}/brain` | Immutable reviewed source snapshots |
+
+Create requests require an idempotency key, source time, at least one association,
+`authorityConfirmed=true` and `externalProcessingAcknowledged=true`. Review must
+decide every pending candidate, including an explicit empty decision list for a
+zero-finding source. Safe errors contain a code, message and request ID.
+
 ## Scope boundary
 
 There are no generic AI job/artefact, provider configuration/model listing,

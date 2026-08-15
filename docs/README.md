@@ -20,6 +20,7 @@ This is the canonical product and engineering documentation index. Documents dis
 14. [Browser face-to-face Companion guide](02-design/browser-face-to-face-companion-guide.md) — current WO-016 field workflow
 15. [Phone Call Intelligence guide](02-design/phone-call-intelligence-guide.md) — current WO-017 normal-phone workflow
 16. [Online Meeting Capture guide](02-design/online-meeting-capture-guide.md) — current WO-018 browser-first workflow
+17. [Document Evidence guide](03-engineering/document-evidence-guide.md) and [Email Evidence guide](03-engineering/email-evidence-guide.md) — current WO-019 source workflow
 
 ## 00 — Company
 
@@ -145,6 +146,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Interaction Intelligence migration strategy](03-engineering/interaction-intelligence-migration-strategy.md)
 - [Interaction security, privacy and consent](03-engineering/interaction-security-privacy-and-consent.md)
 - [Interaction platform risk register](03-engineering/interaction-platform-risk-register.md)
+- [Document Evidence guide](03-engineering/document-evidence-guide.md)
+- [Email Evidence guide](03-engineering/email-evidence-guide.md)
+- [Document parsing and security](03-engineering/document-parsing-security-guide.md)
+- [Email sanitisation and security](03-engineering/email-sanitisation-security-guide.md)
+- [Document and email provenance](03-engineering/document-email-provenance.md)
 
 ## 04 — AI
 
@@ -162,6 +168,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Zoom online-meeting assessment](05-integrations/zoom-online-meeting-assessment.md)
 - [Google Meet online-meeting assessment](05-integrations/google-meet-online-meeting-assessment.md)
 - [Meeting-bot assessment](05-integrations/meeting-bot-assessment.md)
+- [Document and email provider boundary](05-integrations/document-email-provider-boundary.md)
 
 ## 06 — Roadmap
 
@@ -205,6 +212,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-016: Browser Face-to-Face Companion](07-sprints/wo-016-browser-face-to-face-companion.md)
 - [WO-017: Phone Call Intelligence](07-sprints/wo-017-phone-call-intelligence.md)
 - [WO-018: Online Meeting Capture](07-sprints/wo-018-online-meeting-capture.md)
+- [WO-019: Documents and Email Evidence](07-sprints/wo-019-document-email-evidence.md)
 
 ## 08 — Decision records
 
@@ -242,7 +250,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -321,6 +329,13 @@ WO-018 makes Teams, Zoom, Meet and other online meetings first-class through saf
 navigation, passive Companion timing, authorised recording/transcript import and
 Debrief fallback. Provider-native and auto-ingestion flags remain off; there is no
 meeting bot, system-audio interception, extension, native app or real provider call.
+
+WO-019 adds explicitly selected PDF/TXT documents and pasted plain-text email with
+private storage, bounded parsing, exact provenance and a complete human review
+gate. Accepted findings augment Opportunity Workspace and the Revenue Brain source
+timeline. Seller-created or outbound material remains contextual. There is no
+DOCX/OCR/attachment support, mailbox or drive sync, legal interpretation, silent
+Contact creation or automatic opportunity-field write.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

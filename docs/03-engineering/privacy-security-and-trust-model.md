@@ -218,6 +218,26 @@ No production customer content until all applicable gates pass:
 - No demonstration, test or evaluation uses production customer data without explicit authorised handling.
 - Product claims, availability labels and limitations match implemented adapters and controls.
 
+## WO-019 document and email controls
+
+The current document/email path is deliberate and first-party. Authority and
+external-processing acknowledgement are required for every source. PDF/TXT
+parsing is local, bounded and rejects active/embedded PDF features, password
+protection, unsafe controls, malformed structure and configured limits. Files are
+private, tenant-prefixed and downloaded only through authenticated short-lived
+grants. Production cannot use local filesystem storage.
+
+Email is manually pasted plain text only. HTML, attachments, remote content and
+mailbox sync are absent. Sender identity requires an exact existing tenant/account
+Contact; no address is inferred and no Contact is created. Subjects, bodies,
+document text, prompts, provider payloads and addresses are excluded from logs and
+operational events.
+
+Accepted evidence preserves customer/seller/import origin. Seller documents and
+outbound/internal email remain context. Object-first deletion, authorised export
+v10 and retention handle both raw source and derived lineage. Upstream deletion is
+not applicable because no upstream connector exists.
+
 ## Current high-priority gaps
 
 - WO-009 implements Clerk JWT verification and production fails closed, but the

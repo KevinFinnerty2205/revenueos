@@ -103,6 +103,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "evidence",
         "visual_assets",
         "visual_candidate_evidence",
+        "document_sources",
+        "document_fragments",
+        "email_sources",
+        "source_candidate_evidence",
+        "revenue_brain_source_snapshots",
         "recording_usage_counters",
         "recording_sessions",
         "recording_consents",
@@ -176,6 +181,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "marker_id": uuid.uuid4(),
         "online_meeting_metadata_id": uuid.uuid4(),
         "online_meeting_transcript_import_id": uuid.uuid4(),
+        "document_source_id": uuid.uuid4(),
+        "document_fragment_id": uuid.uuid4(),
+        "email_source_id": uuid.uuid4(),
+        "source_candidate_id": uuid.uuid4(),
+        "source_snapshot_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -221,6 +231,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "marker_id": uuid.uuid4(),
         "online_meeting_metadata_id": uuid.uuid4(),
         "online_meeting_transcript_import_id": uuid.uuid4(),
+        "document_source_id": uuid.uuid4(),
+        "document_fragment_id": uuid.uuid4(),
+        "email_source_id": uuid.uuid4(),
+        "source_candidate_id": uuid.uuid4(),
+        "source_snapshot_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -475,6 +490,119 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  :capture_session_id, 'system_metadata',
                                  'system_metadata', 'direct', 'not_applicable',
                                  'available')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO document_sources
+                                (id, organisation_id, company_id, opportunity_id,
+                                 interaction_id, capture_session_id, source_evidence_id,
+                                 uploaded_by_user_id, document_type, source_ownership,
+                                 display_filename, storage_key, mime_type, byte_size,
+                                 checksum_sha256, document_at, idempotency_key,
+                                 authority_confirmed_at,
+                                 external_processing_acknowledged_at)
+                            VALUES
+                                (:document_source_id, :organisation_id, :company_id,
+                                 :opportunity_id, :interaction_id, :capture_session_id,
+                                 :evidence_id, :user_id, 'rfp', 'customer_provided',
+                                 'rls-requirements.txt', :document_storage_key,
+                                 'text/plain', 12, :document_checksum, now(),
+                                 :document_idempotency_key, now(), now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "document_storage_key": (
+                                f"{tenant['organisation_id']}/documents/{tenant['document_source_id']}.txt"
+                            ),
+                            "document_checksum": "d" * 64,
+                            "document_idempotency_key": f"rls-document-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO document_fragments
+                                (id, organisation_id, document_source_id,
+                                 source_evidence_id, paragraph_index, content_text)
+                            VALUES
+                                (:document_fragment_id, :organisation_id,
+                                 :document_source_id, :evidence_id, 0,
+                                 'RLS customer requirement')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO email_sources
+                                (id, organisation_id, company_id, opportunity_id,
+                                 interaction_id, capture_session_id, source_evidence_id,
+                                 submitted_by_user_id, sender_contact_id, source_type,
+                                 direction, sender_identity_state, origin_class,
+                                 support_class, subject, body_text, normalized_body_text,
+                                 quote_handling, message_at, content_sha256,
+                                 idempotency_key, authority_confirmed_at,
+                                 external_processing_acknowledged_at)
+                            VALUES
+                                (:email_source_id, :organisation_id, :company_id,
+                                 :opportunity_id, :interaction_id, :capture_session_id,
+                                 :evidence_id, :user_id, :contact_id, 'customer_sent',
+                                 'inbound', 'verified_contact', 'customer_direct',
+                                 'direct', 'RLS email', 'Please proceed',
+                                 'Please proceed', 'none', now(), :email_checksum,
+                                 :email_idempotency_key, now(), now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "email_checksum": "e" * 64,
+                            "email_idempotency_key": f"rls-email-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO source_candidate_evidence
+                                (id, organisation_id, source_kind,
+                                 document_source_id, source_evidence_id,
+                                 document_fragment_id, evidence_category, statement,
+                                 original_statement, statement_fingerprint,
+                                 interpretation_origin, origin_class, support_class,
+                                 source_location_json, validation_state, review_state,
+                                 conflict_state)
+                            VALUES
+                                (:source_candidate_id, :organisation_id, 'document',
+                                 :document_source_id, :evidence_id,
+                                 :document_fragment_id, 'technical_requirement',
+                                 'RLS customer requirement',
+                                 'RLS customer requirement', :statement_fingerprint,
+                                 'ai_inferred', 'customer_direct', 'direct',
+                                 '{"reference":"Paragraph 1","paragraphIndex":0}'::json,
+                                 'unreviewed', 'pending', 'not_assessed')
+                            """
+                        ),
+                        {**identity_parameters, "statement_fingerprint": "f" * 64},
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO revenue_brain_source_snapshots
+                                (id, organisation_id, company_id, opportunity_id,
+                                 interaction_id, source_kind, document_source_id,
+                                 source_evidence_id, source_evidence_ids, content_json,
+                                 schema_version, version)
+                            VALUES
+                                (:source_snapshot_id, :organisation_id, :company_id,
+                                 :opportunity_id, :interaction_id, 'document',
+                                 :document_source_id, :evidence_id,
+                                 '[]'::json,
+                                 '{"schemaVersion":1,"items":[]}'::json, 1, 1)
                             """
                         ),
                         identity_parameters,
@@ -1140,6 +1268,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'evidence',
                                     'visual_assets',
                                     'visual_candidate_evidence',
+                                    'document_sources',
+                                    'document_fragments',
+                                    'email_sources',
+                                    'source_candidate_evidence',
+                                    'revenue_brain_source_snapshots',
                                     'recording_usage_counters',
                                     'recording_sessions',
                                     'recording_consents',
@@ -1534,6 +1667,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "opportunity_audit_events",
                     "pre_interaction_briefs",
                     "candidate_evidence",
+                    "revenue_brain_source_snapshots",
+                    "source_candidate_evidence",
+                    "document_fragments",
+                    "document_sources",
+                    "email_sources",
                     "visual_candidate_evidence",
                     "visual_assets",
                     "online_meeting_transcript_imports",

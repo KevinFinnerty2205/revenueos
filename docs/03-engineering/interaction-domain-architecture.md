@@ -337,3 +337,17 @@ and adds no new customer Interaction subtype, native client, bot or telephony pa
 - [Interaction Intelligence migration strategy](interaction-intelligence-migration-strategy.md)
 - [Recording and transcription architecture](recording-and-transcription-architecture.md)
 - [ADR 0026](../08-decisions/0026-interaction-intelligence-platform.md)
+## Implemented WO-019 document and email sources
+
+Documents and emails use `CaptureSession` and `Evidence` without fabricating a
+Meeting or Interaction: `interaction_id` is nullable for these two deliberate
+source imports. `DocumentSource`/`DocumentFragment` and `EmailSource` own source-
+specific data; `SourceCandidateEvidence` separates AI interpretation from source
+origin; immutable `RevenueBrainSourceSnapshot` rows carry only reviewed evidence
+references downstream.
+
+Every source must still attach to at least one real tenant-owned account,
+opportunity or optional Interaction. Composite tenant foreign keys and explicit
+repository predicates prevent cross-organisation attachment. Documents use the
+existing private-storage adapter; email content remains in PostgreSQL. Neither
+path changes the Meeting compatibility model.

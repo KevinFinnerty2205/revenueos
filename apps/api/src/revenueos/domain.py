@@ -182,6 +182,7 @@ class EvidenceOriginClass(StrEnum):
 class EvidenceSupportClass(StrEnum):
     DIRECT = "direct"
     REPORTED = "reported"
+    CONTEXT = "context"
     INFERRED = "inferred"
     CORROBORATED = "corroborated"
     VERIFIED = "verified"
@@ -223,6 +224,8 @@ class CaptureSessionType(StrEnum):
     UPLOADED_RECORDING = "uploaded_recording"
     UPLOADED_AUDIO_RECORDING = "uploaded_audio_recording"
     IMPORTED_AUDIO_RECORDING = "imported_audio_recording"
+    DOCUMENT_IMPORT = "document_import"
+    EMAIL_IMPORT = "email_import"
     MANUAL_NOTES = "manual_notes"
 
 
@@ -255,6 +258,47 @@ class VisualSourceOwnership(StrEnum):
     SALESPERSON_CREATED = "salesperson_created"
     JOINTLY_CREATED = "jointly_created"
     UNKNOWN_ORIGIN = "unknown_origin"
+
+
+class DocumentType(StrEnum):
+    PROPOSAL = "proposal"
+    RFP = "rfp"
+    RFQ = "rfq"
+    REQUIREMENTS = "requirements"
+    CONTRACT = "contract"
+    SOW = "sow"
+    PRICING = "pricing"
+    PROCUREMENT = "procurement"
+    SECURITY_QUESTIONNAIRE = "security_questionnaire"
+    IMPLEMENTATION_PLAN = "implementation_plan"
+    TECHNICAL_SPECIFICATION = "technical_specification"
+    CUSTOMER_PRESENTATION = "customer_presentation"
+    SALES_MATERIAL = "sales_material"
+    OTHER = "other"
+
+
+class DocumentSourceOwnership(StrEnum):
+    CUSTOMER_PROVIDED = "customer_provided"
+    SALESPERSON_PROVIDED = "salesperson_provided"
+    JOINTLY_CREATED = "jointly_created"
+    EXTERNALLY_GENERATED = "externally_generated"
+    SYSTEM_IMPORTED = "system_imported"
+    UNKNOWN = "unknown"
+
+
+class EmailSourceType(StrEnum):
+    CUSTOMER_SENT = "customer_sent"
+    SALESPERSON_SENT = "salesperson_sent"
+    INTERNAL_FORWARD = "internal_forward"
+    MANUALLY_PASTED = "manually_pasted"
+    EXTERNAL_PROVIDER_IMPORT = "external_provider_import"
+
+
+class EmailDirection(StrEnum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+    INTERNAL = "internal"
+    UNKNOWN = "unknown"
 
 
 class AttendanceStatus(StrEnum):

@@ -12,7 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql import Select
 
@@ -32,6 +32,9 @@ from revenueos.models import (
     DataNoticeAcknowledgement,
     DebriefSession,
     DebriefTurn,
+    DocumentFragment,
+    DocumentSource,
+    EmailSource,
     Evidence,
     EvidenceFragment,
     Interaction,
@@ -57,6 +60,8 @@ from revenueos.models import (
     RevenueBrainInsight,
     RevenueBrainInteractionSnapshot,
     RevenueBrainSnapshot,
+    RevenueBrainSourceSnapshot,
+    SourceCandidateEvidence,
     Task,
     Transcript,
     TranscriptSegment,
@@ -72,7 +77,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 9
+EXPORT_VERSION = 10
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -174,10 +179,44 @@ async def run_retention(
             if remaining
             else []
         )
+        source_capacity = max(0, bounded_batch_size - len(meeting_ids) - len(interaction_ids))
+        document_ids = list(
+            (
+                await session.scalars(
+                    select(DocumentSource.id)
+                    .where(
+                        DocumentSource.organisation_id == organisation_id,
+                        DocumentSource.created_at < cutoff,
+                        DocumentSource.deleted_at.is_(None),
+                    )
+                    .order_by(DocumentSource.created_at, DocumentSource.id)
+                    .limit(source_capacity)
+                )
+            ).all()
+        )
+        email_capacity = max(0, source_capacity - len(document_ids))
+        email_ids = list(
+            (
+                await session.scalars(
+                    select(EmailSource.id)
+                    .where(
+                        EmailSource.organisation_id == organisation_id,
+                        EmailSource.created_at < cutoff,
+                        EmailSource.deleted_at.is_(None),
+                    )
+                    .order_by(EmailSource.created_at, EmailSource.id)
+                    .limit(email_capacity)
+                )
+            ).all()
+        )
         counts = await _meeting_deletion_counts(session, organisation_id, meeting_ids)
         interaction_counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
         counts = _merge_counts(counts, interaction_counts)
-        if dry_run or (not meeting_ids and not interaction_ids):
+        counts = _merge_counts(
+            counts,
+            {"document_sources": len(document_ids), "email_sources": len(email_ids)},
+        )
+        if dry_run or (not meeting_ids and not interaction_ids and not document_ids and not email_ids):
             return RetentionResult(
                 organisation_id,
                 dry_run,
@@ -208,7 +247,16 @@ async def run_retention(
             organisation_id,
             [*meeting_interaction_ids, *interaction_ids],
         )
+        interaction_source_ids = await _source_ids_for_interactions(
+            session,
+            organisation_id,
+            [*meeting_interaction_ids, *interaction_ids],
+        )
+        all_document_ids = list(dict.fromkeys([*document_ids, *interaction_source_ids[0]]))
+        all_email_ids = list(dict.fromkeys([*email_ids, *interaction_source_ids[1]]))
+        await _delete_document_objects(session, settings, organisation_id, all_document_ids)
         await _enable_approved_deletion(session)
+        await _delete_source_database_rows(session, organisation_id, all_document_ids, all_email_ids)
         removed = await _delete_meeting_batch(session, organisation_id, meeting_ids)
         removed = _merge_counts(
             removed,
@@ -445,7 +493,19 @@ async def _delete_organisation_records(
         )
         await _delete_visual_objects(session, settings, organisation_id, interaction_ids)
         await delete_recording_objects(session, settings, organisation_id, interaction_ids)
+        document_ids = list(
+            (
+                await session.scalars(
+                    select(DocumentSource.id).where(DocumentSource.organisation_id == organisation_id)
+                )
+            ).all()
+        )
+        email_ids = list(
+            (await session.scalars(select(EmailSource.id).where(EmailSource.organisation_id == organisation_id))).all()
+        )
+        await _delete_document_objects(session, settings, organisation_id, document_ids)
         await _enable_approved_deletion(session)
+        await _delete_source_database_rows(session, organisation_id, document_ids, email_ids)
         user_ids = list(
             (
                 await session.scalars(
@@ -637,6 +697,171 @@ async def _delete_visual_objects(
             await storage.delete(key)
     except VisualStorageError as exc:
         raise RuntimeError("Visual object deletion did not complete; database deletion was stopped.") from exc
+
+
+async def _source_ids_for_interactions(
+    session: AsyncSession,
+    organisation_id: UUID,
+    interaction_ids: list[UUID],
+) -> tuple[list[UUID], list[UUID]]:
+    if not interaction_ids:
+        return [], []
+    document_ids = list(
+        (
+            await session.scalars(
+                select(DocumentSource.id).where(
+                    DocumentSource.organisation_id == organisation_id,
+                    DocumentSource.interaction_id.in_(interaction_ids),
+                )
+            )
+        ).all()
+    )
+    email_ids = list(
+        (
+            await session.scalars(
+                select(EmailSource.id).where(
+                    EmailSource.organisation_id == organisation_id,
+                    EmailSource.interaction_id.in_(interaction_ids),
+                )
+            )
+        ).all()
+    )
+    return document_ids, email_ids
+
+
+async def _delete_document_objects(
+    session: AsyncSession,
+    settings: Settings,
+    organisation_id: UUID,
+    document_ids: list[UUID],
+) -> None:
+    if not document_ids:
+        return
+    keys = list(
+        (
+            await session.scalars(
+                select(DocumentSource.storage_key).where(
+                    DocumentSource.organisation_id == organisation_id,
+                    DocumentSource.id.in_(document_ids),
+                    DocumentSource.storage_status != "deleted",
+                )
+            )
+        ).all()
+    )
+    storage = create_visual_storage(settings)
+    try:
+        for key in keys:
+            await storage.delete(key)
+    except VisualStorageError as exc:
+        raise RuntimeError("Document object deletion did not complete; database deletion was stopped.") from exc
+
+
+async def _delete_source_database_rows(
+    session: AsyncSession,
+    organisation_id: UUID,
+    document_ids: list[UUID],
+    email_ids: list[UUID],
+) -> None:
+    if not document_ids and not email_ids:
+        return
+    candidate_conditions = []
+    snapshot_conditions = []
+    if document_ids:
+        candidate_conditions.append(SourceCandidateEvidence.document_source_id.in_(document_ids))
+        snapshot_conditions.append(RevenueBrainSourceSnapshot.document_source_id.in_(document_ids))
+    if email_ids:
+        candidate_conditions.append(SourceCandidateEvidence.email_source_id.in_(email_ids))
+        snapshot_conditions.append(RevenueBrainSourceSnapshot.email_source_id.in_(email_ids))
+    candidates = list(
+        (
+            await session.scalars(
+                select(SourceCandidateEvidence).where(
+                    SourceCandidateEvidence.organisation_id == organisation_id,
+                    or_(*candidate_conditions),
+                )
+            )
+        ).all()
+    )
+    accepted_evidence_ids = [item.accepted_evidence_id for item in candidates if item.accepted_evidence_id]
+    candidate_ids = [item.id for item in candidates]
+    source_rows: list[DocumentSource | EmailSource] = []
+    if document_ids:
+        source_rows.extend(
+            (
+                await session.scalars(
+                    select(DocumentSource).where(
+                        DocumentSource.organisation_id == organisation_id,
+                        DocumentSource.id.in_(document_ids),
+                    )
+                )
+            ).all()
+        )
+    if email_ids:
+        source_rows.extend(
+            (
+                await session.scalars(
+                    select(EmailSource).where(
+                        EmailSource.organisation_id == organisation_id,
+                        EmailSource.id.in_(email_ids),
+                    )
+                )
+            ).all()
+        )
+    source_evidence_ids = [item.source_evidence_id for item in source_rows]
+    capture_session_ids = [item.capture_session_id for item in source_rows]
+    await session.execute(
+        delete(RevenueBrainSourceSnapshot).where(
+            RevenueBrainSourceSnapshot.organisation_id == organisation_id,
+            or_(*snapshot_conditions),
+        )
+    )
+    if candidate_ids:
+        await session.execute(
+            update(SourceCandidateEvidence)
+            .where(
+                SourceCandidateEvidence.organisation_id == organisation_id,
+                SourceCandidateEvidence.supersedes_candidate_id.in_(candidate_ids),
+            )
+            .values(supersedes_candidate_id=None)
+        )
+    await session.execute(
+        delete(SourceCandidateEvidence).where(
+            SourceCandidateEvidence.organisation_id == organisation_id,
+            or_(*candidate_conditions),
+        )
+    )
+    if document_ids:
+        await session.execute(
+            delete(DocumentFragment).where(
+                DocumentFragment.organisation_id == organisation_id,
+                DocumentFragment.document_source_id.in_(document_ids),
+            )
+        )
+        await session.execute(
+            delete(DocumentSource).where(
+                DocumentSource.organisation_id == organisation_id,
+                DocumentSource.id.in_(document_ids),
+            )
+        )
+    if email_ids:
+        await session.execute(
+            delete(EmailSource).where(
+                EmailSource.organisation_id == organisation_id,
+                EmailSource.id.in_(email_ids),
+            )
+        )
+    evidence_ids = [*source_evidence_ids, *accepted_evidence_ids]
+    if evidence_ids:
+        await session.execute(
+            delete(Evidence).where(Evidence.organisation_id == organisation_id, Evidence.id.in_(evidence_ids))
+        )
+    if capture_session_ids:
+        await session.execute(
+            delete(CaptureSession).where(
+                CaptureSession.organisation_id == organisation_id,
+                CaptureSession.id.in_(capture_session_ids),
+            )
+        )
 
 
 async def _meeting_deletion_counts(
@@ -1357,6 +1582,27 @@ async def _export_payload(
         .where(VisualCandidateEvidence.organisation_id == organisation_id)
         .order_by(VisualCandidateEvidence.id)
     )
+    document_sources = await rows(
+        select(DocumentSource).where(DocumentSource.organisation_id == organisation_id).order_by(DocumentSource.id)
+    )
+    document_fragments = await rows(
+        select(DocumentFragment)
+        .where(DocumentFragment.organisation_id == organisation_id)
+        .order_by(DocumentFragment.document_source_id, DocumentFragment.paragraph_index)
+    )
+    email_sources = await rows(
+        select(EmailSource).where(EmailSource.organisation_id == organisation_id).order_by(EmailSource.id)
+    )
+    source_candidates = await rows(
+        select(SourceCandidateEvidence)
+        .where(SourceCandidateEvidence.organisation_id == organisation_id)
+        .order_by(SourceCandidateEvidence.id)
+    )
+    source_snapshots = await rows(
+        select(RevenueBrainSourceSnapshot)
+        .where(RevenueBrainSourceSnapshot.organisation_id == organisation_id)
+        .order_by(RevenueBrainSourceSnapshot.id)
+    )
     interaction_intelligence = await rows(
         select(InteractionIntelligenceSnapshot)
         .where(InteractionIntelligenceSnapshot.organisation_id == organisation_id)
@@ -1478,6 +1724,49 @@ async def _export_payload(
                 ),
                 "imageExportStatus": image_export_status,
                 **({"imageBase64": image_base64} if image_base64 is not None else {}),
+            }
+        )
+    exported_documents: list[dict[str, object]] = []
+    for document_item in document_sources:
+        content_base64: str | None = None
+        content_export_status = "deleted" if document_item.storage_status == "deleted" else "unavailable"
+        if document_item.storage_status == "available":
+            try:
+                content_base64 = base64.b64encode(await storage.read(document_item.storage_key)).decode("ascii")
+                content_export_status = "included"
+            except VisualStorageError:
+                content_export_status = "unavailable"
+        exported_documents.append(
+            {
+                **_columns(
+                    document_item,
+                    (
+                        "id",
+                        "company_id",
+                        "opportunity_id",
+                        "interaction_id",
+                        "capture_session_id",
+                        "source_evidence_id",
+                        "uploaded_by_user_id",
+                        "document_type",
+                        "source_ownership",
+                        "display_filename",
+                        "mime_type",
+                        "byte_size",
+                        "checksum_sha256",
+                        "document_at",
+                        "processing_status",
+                        "storage_status",
+                        "page_count",
+                        "extracted_character_count",
+                        "failure_code",
+                        "created_at",
+                        "updated_at",
+                        "deleted_at",
+                    ),
+                ),
+                "contentExportStatus": content_export_status,
+                **({"contentBase64": content_base64} if content_base64 is not None else {}),
             }
         )
     return {
@@ -1787,6 +2076,107 @@ async def _export_payload(
                 ),
             )
             for item in visual_candidates
+        ],
+        "documentSources": exported_documents,
+        "documentFragments": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "document_source_id",
+                    "source_evidence_id",
+                    "page_number",
+                    "section",
+                    "paragraph_index",
+                    "content_text",
+                    "created_at",
+                    "deleted_at",
+                ),
+            )
+            for item in document_fragments
+        ],
+        "emailSources": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "company_id",
+                    "opportunity_id",
+                    "interaction_id",
+                    "capture_session_id",
+                    "source_evidence_id",
+                    "submitted_by_user_id",
+                    "sender_contact_id",
+                    "source_type",
+                    "direction",
+                    "sender_identity_state",
+                    "origin_class",
+                    "support_class",
+                    "subject",
+                    "body_text",
+                    "normalized_body_text",
+                    "quote_handling",
+                    "message_at",
+                    "content_sha256",
+                    "processing_status",
+                    "failure_code",
+                    "created_at",
+                    "updated_at",
+                    "deleted_at",
+                ),
+            )
+            for item in email_sources
+        ],
+        "sourceCandidateEvidence": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "source_kind",
+                    "document_source_id",
+                    "email_source_id",
+                    "source_evidence_id",
+                    "document_fragment_id",
+                    "accepted_evidence_id",
+                    "evidence_category",
+                    "statement",
+                    "original_statement",
+                    "interpretation_origin",
+                    "origin_class",
+                    "support_class",
+                    "source_location_json",
+                    "validation_state",
+                    "review_state",
+                    "conflict_state",
+                    "supersedes_candidate_id",
+                    "reviewed_by_user_id",
+                    "reviewed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in source_candidates
+        ],
+        "revenueBrainSourceSnapshots": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "company_id",
+                    "opportunity_id",
+                    "interaction_id",
+                    "source_kind",
+                    "document_source_id",
+                    "email_source_id",
+                    "source_evidence_id",
+                    "source_evidence_ids",
+                    "content_json",
+                    "schema_version",
+                    "version",
+                    "created_at",
+                ),
+            )
+            for item in source_snapshots
         ],
         "evidence": [
             _columns(

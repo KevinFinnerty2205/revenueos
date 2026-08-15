@@ -154,3 +154,15 @@ The content preserves the **Reported by you** origin and reconciliation state; i
 does not copy a recording or transcript. Retry reuses the completed debrief and does
 not append duplicate snapshots. No-answer, voicemail and cancelled calls append no
 customer-intelligence snapshot and are not interpreted as relationship decline.
+## WO-019 source timeline
+
+The account Revenue Brain now reads immutable `RevenueBrainSourceSnapshot` rows in
+addition to Interaction snapshots. Each row is created only after complete human
+review and contains structured accepted statements, Evidence IDs, source label,
+type, ownership, occurred-at time, provenance and exact source location. It does
+not contain raw documents or email bodies.
+
+Source rows are reference-only and are never recomputed in the read path. Deleting
+the source removes its candidates, accepted Evidence and source snapshots, so it
+cannot continue influencing the timeline. This slice does not score, forecast,
+perform longitudinal inference across source types or mutate opportunity fields.

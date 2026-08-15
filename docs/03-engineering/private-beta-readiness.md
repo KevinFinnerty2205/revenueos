@@ -231,6 +231,9 @@ Interaction/Revenue Brain state. The upcoming and completed phone calls link the
 same synthetic Contact with outbound direction; a trade-show Voice Journal remains resumable.
 The online-meeting set adds deterministic Teams platform-transcript, Zoom
 platform-recording and Google Meet AI-Debrief fallback paths.
+Document/email evidence adds a customer RFP, seller proposal, verified inbound
+customer email and outbound seller email with reviewed, provenance-labelled source
+snapshots.
 The completed presentation includes a synthetic, reviewed customer-whiteboard
 visual in private storage and a provenance-labelled schema-v2 Interaction and
 Revenue Brain projection. The completed executive lunch includes two
@@ -257,8 +260,9 @@ Reset only that organisation's fixed demo IDs:
 uv --directory apps/api run revenueos-demo-data reset --organisation-id <UUID>
 ```
 
-Reset removes every fixed demo Interaction, its three briefs, phone Contact, debrief/evidence
-state, Companion markers, the visual object and its lineage, and the established Meeting/Brain rows.
+Reset removes every fixed demo Interaction, its three briefs, phone Contact,
+debrief/evidence state, Companion markers, visual and document objects, email
+content and all established Meeting/Brain rows.
 Never run the seed automatically or use it to overwrite a real record.
 
 ## Feedback handling
@@ -339,6 +343,25 @@ normalised metadata and authorised transcript import lineage. Organisation delet
 removes local metadata/imports/objects and derived evidence but does not delete a
 provider's upstream artefact. Demo data has one Teams transcript, one Zoom recording
 and one Google Meet Debrief fallback; no external call or credential is used.
+
+## WO-019 document and email controls
+
+- `API_FEATURE_DOCUMENT_EVIDENCE_ENABLED` and
+  `API_FEATURE_EMAIL_EVIDENCE_ENABLED` are
+  independent kill switches. Capability responses continue to state that provider
+  import is unavailable.
+- Documents are limited by bytes, pages, extracted characters, uploads per day and
+  total organisation storage. Emails are limited per organisation/day and by the
+  plain-text contract. Processing retries are bounded separately.
+- `API_EVIDENCE_EXTRACTION_PROVIDER_NAME=mock` is deterministic and makes no network call. Optional
+  OpenAI mode requires explicit server configuration and shares the production
+  customer-data approval boundary.
+- Export format v10 contains authorised raw document/email source data plus
+  fragments, candidates and source snapshots. Retention and organisation deletion
+  delete document objects before database lineage and clear email content.
+- Synthetic demo version 10 adds a customer RFP, seller proposal, verified inbound
+  customer email and outbound seller email. All content is visibly synthetic and
+  provider calls remain zero.
 
 - Private beta only; production customer data is prohibited unless separately
   approved.

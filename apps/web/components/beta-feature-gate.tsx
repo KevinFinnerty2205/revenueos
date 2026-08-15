@@ -12,7 +12,9 @@ type BetaFeature =
   | "visualEvidence"
   | "presentationMode"
   | "recordingCapture"
-  | "onlineMeetingCapture";
+  | "onlineMeetingCapture"
+  | "documentEvidence"
+  | "emailEvidence";
 
 interface Capabilities {
   featureFlags: Record<string, boolean>;

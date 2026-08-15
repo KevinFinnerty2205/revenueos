@@ -26,6 +26,7 @@ import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { formatMeetingDate } from "@/lib/meetings";
 import { RevenueBrainInsightPanel } from "@/components/revenue-brain-insight";
+import { CustomerEvidencePanel } from "@/components/customer-evidence-panel";
 
 export function OpportunityWorkspace({
   opportunityId,
@@ -333,6 +334,11 @@ export function OpportunityWorkspace({
         message={associationMessage}
         onSelect={setSelectedMeetingId}
         onAssociate={() => void associateSelected()}
+      />
+
+      <CustomerEvidencePanel
+        opportunityId={opportunity.id}
+        companyId={opportunity.companyId}
       />
 
       <RevenueBrainInsightPanel

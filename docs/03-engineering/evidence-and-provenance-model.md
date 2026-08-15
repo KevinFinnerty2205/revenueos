@@ -313,3 +313,17 @@ customer-direct evidence. See [Phone-call provenance](phone-call-provenance.md).
 - [Recording and transcription architecture](recording-and-transcription-architecture.md)
 - [Interaction security, privacy and consent](interaction-security-privacy-and-consent.md)
 - [AI system blueprint](../04-ai/ai-system-blueprint.md)
+## WO-019 document and email evidence
+
+WO-019 extends the envelope with `document` and `email` evidence and a `context`
+support class. A source Evidence row represents the deliberately supplied item; a
+separate accepted Evidence row is created for each reviewed finding. Page/
+paragraph or message/line locators live with the candidate, while immutable source
+snapshots reference only accepted Evidence IDs.
+
+Source origin and interpretation origin are independent. A customer document or
+verified inbound customer email can be direct, but extraction remains
+`ai_inferred` until review. Seller documents and outbound/internal email are
+seller-prepared or salesperson-reported context even after acceptance. Edited,
+rejected, conflicting and superseding states remain traceable; no accepted row is
+silently overwritten. See [document and email provenance](document-email-provenance.md).

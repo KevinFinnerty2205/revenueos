@@ -9,6 +9,7 @@ AuthMode = Literal["mock", "clerk"]
 AIProviderName = Literal["mock", "openai"]
 TranscriptionProviderName = Literal["mock", "openai"]
 VisualProviderName = Literal["mock", "openai"]
+EvidenceExtractionProviderName = Literal["mock", "openai"]
 VisualStorageBackend = Literal["local", "s3_compatible"]
 
 
@@ -79,6 +80,18 @@ class Settings(BaseSettings):
         ge=10_000,
         le=2_000_000,
     )
+    private_beta_max_document_bytes: int = Field(default=15_000_000, ge=10_000, le=50_000_000)
+    private_beta_max_document_pages: int = Field(default=100, ge=1, le=500)
+    private_beta_max_document_text_characters: int = Field(default=500_000, ge=1_000, le=2_000_000)
+    private_beta_max_document_uploads_per_day: int = Field(default=25, ge=1, le=1_000)
+    private_beta_max_document_bytes_per_organisation: int = Field(
+        default=1_000_000_000,
+        ge=1_000_000,
+        le=20_000_000_000,
+    )
+    private_beta_max_email_analyses_per_day: int = Field(default=50, ge=1, le=2_000)
+    private_beta_document_processing_retries: int = Field(default=3, ge=1, le=5)
+    private_beta_email_processing_retries: int = Field(default=3, ge=1, le=5)
     private_beta_recording_session_expiry_hours: int = Field(default=24, ge=1, le=168)
     private_beta_raw_recording_retention_days: int = Field(default=7, ge=1, le=30)
     private_beta_feedback_per_user_per_day: int = Field(default=20, ge=1, le=1_000)
@@ -100,6 +113,8 @@ class Settings(BaseSettings):
     feature_online_meeting_import_enabled: bool = True
     feature_online_meeting_native_integration_enabled: bool = False
     feature_online_meeting_auto_ingest_enabled: bool = False
+    feature_document_evidence_enabled: bool = True
+    feature_email_evidence_enabled: bool = True
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -178,6 +193,14 @@ class Settings(BaseSettings):
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
     )
     visual_provider_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    evidence_extraction_provider_name: EvidenceExtractionProviderName = "mock"
+    evidence_extraction_model_identifier: str = Field(
+        default="mock-evidence-extraction-v1",
+        min_length=1,
+        max_length=200,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+    )
+    evidence_extraction_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     visual_storage_backend: VisualStorageBackend = "local"
     visual_storage_directory: str = Field(default="/tmp/revenueos-visual-evidence", min_length=1)
     visual_storage_signing_secret: SecretStr = Field(
@@ -236,6 +259,7 @@ class Settings(BaseSettings):
             self.ai_provider_name == "openai"
             or self.transcription_provider_name == "openai"
             or self.visual_provider_name == "openai"
+            or self.evidence_extraction_provider_name == "openai"
         ):
             if self.openai_api_key is None:
                 raise ValueError("OPENAI_API_KEY is required when an OpenAI processing path is enabled.")
@@ -251,6 +275,11 @@ class Settings(BaseSettings):
                 raise ValueError("OpenAI visual processing requires a non-mock VISUAL_PROVIDER_MODEL_IDENTIFIER.")
             if not self.feature_openai_provider_enabled:
                 raise ValueError("OpenAI visual processing requires the server-side beta feature flag.")
+        if self.evidence_extraction_provider_name == "openai":
+            if self.evidence_extraction_model_identifier.startswith("mock-"):
+                raise ValueError("OpenAI evidence extraction requires a non-mock model identifier.")
+            if not self.feature_openai_provider_enabled:
+                raise ValueError("OpenAI evidence extraction requires the server-side beta feature flag.")
         if self.visual_storage_backend == "s3_compatible" and not all(
             (
                 self.visual_s3_endpoint,
@@ -262,7 +291,9 @@ class Settings(BaseSettings):
         ):
             raise ValueError("S3-compatible visual storage requires endpoint, bucket, region and credentials.")
         if self.environment == "production" and (
-            self.feature_visual_evidence_enabled or self.feature_recording_capture_enabled
+            self.feature_visual_evidence_enabled
+            or self.feature_recording_capture_enabled
+            or self.feature_document_evidence_enabled
         ):
             if self.visual_storage_backend != "s3_compatible":
                 raise ValueError("Production binary evidence requires private S3-compatible object storage.")
@@ -332,6 +363,8 @@ class Settings(BaseSettings):
             "onlineMeetingImport": self.feature_online_meeting_import_enabled,
             "onlineMeetingNativeIntegration": self.feature_online_meeting_native_integration_enabled,
             "onlineMeetingAutoIngest": self.feature_online_meeting_auto_ingest_enabled,
+            "documentEvidence": self.feature_document_evidence_enabled,
+            "emailEvidence": self.feature_email_evidence_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

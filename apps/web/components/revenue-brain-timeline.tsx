@@ -5,6 +5,7 @@ import type {
   RevenueBrainReasoningRequestResponse,
   RevenueBrainReasoningResponse,
   RevenueBrainReportedSnapshot,
+  RevenueBrainSourceSnapshot,
   RevenueBrainSnapshot,
   RevenueBrainVisualSnapshot,
 } from "@revenueos/shared";
@@ -26,6 +27,10 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
   const [reportedSnapshots, setReportedSnapshots] = useState<
     RevenueBrainReportedSnapshot[] | null
   >(null);
+  const [sourceSnapshots, setSourceSnapshots] = useState<
+    RevenueBrainSourceSnapshot[] | null
+  >(null);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reasoningError, setReasoningError] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
@@ -53,6 +58,24 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
         `/api/v1/accounts/${accountId}/brain/reported-interactions`,
         { signal: controller.signal },
       ),
+      apiRequest<RevenueBrainSourceSnapshot[]>(
+        `/api/v1/evidence/accounts/${accountId}/brain`,
+        { signal: controller.signal },
+      )
+        .then((loadedSourceSnapshots) => {
+          setSourceError(null);
+          return loadedSourceSnapshots;
+        })
+        .catch((requestError: unknown) => {
+          if (
+            requestError instanceof DOMException &&
+            requestError.name === "AbortError"
+          ) {
+            throw requestError;
+          }
+          setSourceError("Document and email evidence could not be loaded.");
+          return [];
+        }),
     ])
       .then(
         ([
@@ -61,12 +84,14 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
           loadedReasoning,
           loadedVisualSnapshots,
           loadedReportedSnapshots,
+          loadedSourceSnapshots,
         ]) => {
           setCompany(loadedCompany);
           setSnapshots(loadedSnapshots);
           setReasoning(loadedReasoning);
           setVisualSnapshots(loadedVisualSnapshots);
           setReportedSnapshots(loadedReportedSnapshots);
+          setSourceSnapshots(loadedSourceSnapshots);
         },
       )
       .catch((requestError: unknown) => {
@@ -141,7 +166,8 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
     !snapshots ||
     !reasoning ||
     !visualSnapshots ||
-    !reportedSnapshots
+    !reportedSnapshots ||
+    !sourceSnapshots
   ) {
     return (
       <div
@@ -182,6 +208,96 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
         requestError={reasoningError}
         onRequest={() => void requestReasoning()}
       />
+
+      <section
+        aria-labelledby="revenue-brain-source-evidence-title"
+        className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+      >
+        <h2
+          id="revenue-brain-source-evidence-title"
+          className="text-2xl font-semibold tracking-tight text-slate-950"
+        >
+          Document and email evidence
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Only user-accepted findings appear here. Every item keeps its source,
+          ownership, support class and location; seller-created material is not
+          presented as customer-confirmed evidence.
+        </p>
+        {sourceError ? (
+          <div
+            role="alert"
+            className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950"
+          >
+            <p>{sourceError}</p>
+            <button
+              type="button"
+              onClick={() => setRetryKey((key) => key + 1)}
+              className="mt-3 min-h-11 rounded-lg border border-amber-400 bg-white px-4 py-2 font-bold focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-2"
+            >
+              Retry evidence
+            </button>
+          </div>
+        ) : sourceSnapshots.length === 0 ? (
+          <p className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+            No reviewed document or email evidence yet.
+          </p>
+        ) : (
+          <ol
+            aria-label="Document and email evidence timeline"
+            className="mt-6 space-y-5"
+          >
+            {sourceSnapshots.slice(0, 10).map((snapshot) => (
+              <li
+                key={snapshot.id}
+                className="border-l-2 border-amber-200 pl-5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-950">
+                    {snapshot.sourceLabel}
+                  </p>
+                  <time
+                    dateTime={snapshot.occurredAt}
+                    className="text-sm text-slate-600"
+                  >
+                    {formatMeetingDate(snapshot.occurredAt)}
+                  </time>
+                </div>
+                <p className="mt-1 text-xs font-bold uppercase tracking-wide text-amber-800">
+                  {snapshot.sourceKind} ·{" "}
+                  {snapshot.sourceType.replaceAll("_", " ")} ·{" "}
+                  {snapshot.sourceOrigin.replaceAll("_", " ")}
+                </p>
+                <ul className="mt-3 space-y-2">
+                  {snapshot.items.map((item) => (
+                    <li
+                      key={item.evidenceId}
+                      className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700"
+                    >
+                      <span className="font-bold text-slate-900">
+                        {item.category.replaceAll("_", " ")}:{" "}
+                      </span>
+                      {item.statement}
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {item.location.reference} ·{" "}
+                        {item.supportClass.replaceAll("_", " ")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {snapshot.opportunityId ? (
+                  <Link
+                    href={`/opportunities/${snapshot.opportunityId}`}
+                    className="mt-3 inline-flex text-sm font-bold text-teal-800 underline underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                  >
+                    Open opportunity
+                  </Link>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
 
       <section
         aria-labelledby="revenue-brain-reported-title"
