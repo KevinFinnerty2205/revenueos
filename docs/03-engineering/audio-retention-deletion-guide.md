@@ -1,5 +1,10 @@
 # Audio retention, export and deletion guide
 
+For online meetings, recording import follows these same limits and deletion jobs.
+Transcript-only imports follow the organisation transcript retention policy and
+export v9. Deletion removes RevenueOS metadata, local objects and derived content;
+it does not delete the source artefact held by Teams, Zoom or Google Meet.
+
 Raw audio has a shorter policy than validated transcript evidence. The default raw
 retention window is seven days after successful transcription plus the safety
 window; it is never deleted before a completed transcript version exists. Recording

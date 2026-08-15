@@ -1,5 +1,10 @@
 # Opportunity Workspace
 
+WO-018 online meetings create/reuse the existing compatibility Meeting and feed the
+same versioned transcript and source-aware intelligence path. Their validated
+outputs therefore appear here without a provider-specific read model or direct
+transcript read.
+
 ## Purpose and current boundary
 
 WO-007 adds the first opportunity-centred product read model. WO-008B extends

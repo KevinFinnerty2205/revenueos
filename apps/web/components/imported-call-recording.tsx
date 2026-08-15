@@ -14,10 +14,16 @@ const MAX_RECORDING_BYTES = 512 * 1024 * 1024;
 const CHUNK_BYTES = 8 * 1024 * 1024;
 const NOTICE_VERSION = 1;
 
-const recordingSources: RecordingSource[] = [
+const callRecordingSources: RecordingSource[] = [
   "user_uploaded_recording",
   "customer_call_recording",
   "business_phone_recording",
+  "external_provider_recording",
+];
+
+const onlineMeetingRecordingSources: RecordingSource[] = [
+  "platform_recording",
+  "user_uploaded_recording",
   "external_provider_recording",
 ];
 
@@ -68,13 +74,17 @@ export function selectedRecordingMimeType(
 
 export function ImportedCallRecording({
   interactionId,
+  context = "phone_call",
 }: {
   interactionId: string;
+  context?: "phone_call" | "online_meeting";
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [durationSeconds, setDurationSeconds] = useState("");
   const [recordingSource, setRecordingSource] = useState<RecordingSource>(
-    "user_uploaded_recording",
+    context === "online_meeting"
+      ? "platform_recording"
+      : "user_uploaded_recording",
   );
   const [authorityConfirmed, setAuthorityConfirmed] = useState(false);
   const [working, setWorking] = useState(false);
@@ -172,7 +182,7 @@ export function ImportedCallRecording({
             noticeVersion: NOTICE_VERSION,
             consentMethod: "contractual_authority",
             userAttestedAuthority: true,
-            idempotencyKey: requestKey("call-import"),
+            idempotencyKey: requestKey(`${context}-import`),
           }),
         },
       );
@@ -181,7 +191,7 @@ export function ImportedCallRecording({
         {
           method: "POST",
           body: JSON.stringify({
-            idempotencyKey: requestKey("call-import-start"),
+            idempotencyKey: requestKey(`${context}-import-start`),
           }),
         },
       );
@@ -205,7 +215,9 @@ export function ImportedCallRecording({
               sequenceNumber,
               byteSize: chunkBlob.size,
               checksumSha256,
-              idempotencyKey: requestKey(`call-import-chunk-${sequenceNumber}`),
+              idempotencyKey: requestKey(
+                `${context}-import-chunk-${sequenceNumber}`,
+              ),
             }),
           },
         );
@@ -217,7 +229,7 @@ export function ImportedCallRecording({
             body: JSON.stringify({
               checksumSha256,
               idempotencyKey: requestKey(
-                `call-import-complete-${sequenceNumber}`,
+                `${context}-import-complete-${sequenceNumber}`,
               ),
             }),
           },
@@ -232,7 +244,7 @@ export function ImportedCallRecording({
             lastSequenceNumber: chunkCount - 1,
             durationSeconds: duration,
             finalMimeType: mimeType,
-            idempotencyKey: requestKey("call-import-finalise"),
+            idempotencyKey: requestKey(`${context}-import-finalise`),
           }),
         },
       );
@@ -253,20 +265,23 @@ export function ImportedCallRecording({
   }
 
   return (
-    <section aria-labelledby="add-call-recording-title" className="form-card">
+    <section
+      aria-labelledby={`add-${context}-recording-title`}
+      className="form-card"
+    >
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
         Compliant recording import
       </p>
       <h2
-        id="add-call-recording-title"
+        id={`add-${context}-recording-title`}
         className="mt-2 text-2xl font-semibold text-slate-950"
       >
         Add Recording
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-        Add an existing authorised business-call recording. This uses the same
-        private upload and transcription path as other Interaction recordings;
-        it does not record or monitor your phone.
+        {context === "online_meeting"
+          ? "Add an authorised recording exported from your meeting platform. RevenueOS privately uploads it for batch transcription; it does not join the meeting, capture system audio or run a bot."
+          : "Add an existing authorised business-call recording. This uses the same private upload and transcription path as other Interaction recordings; it does not record or monitor your phone."}
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -340,7 +355,10 @@ export function ImportedCallRecording({
                   setRecordingSource(event.target.value as RecordingSource)
                 }
               >
-                {recordingSources.map((source) => (
+                {(context === "online_meeting"
+                  ? onlineMeetingRecordingSources
+                  : callRecordingSources
+                ).map((source) => (
                   <option key={source} value={source}>
                     {humanise(source)}
                   </option>
@@ -348,7 +366,9 @@ export function ImportedCallRecording({
               </select>
             </label>
             <label className="grid gap-2 text-sm font-bold text-slate-800">
-              Call duration in seconds
+              {context === "online_meeting"
+                ? "Meeting duration in seconds"
+                : "Call duration in seconds"}
               <input
                 className="form-control"
                 type="number"

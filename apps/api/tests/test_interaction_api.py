@@ -34,6 +34,9 @@ def create_interaction(
     opportunity_id: str | None = None,
     contact_id: str | None = None,
     call_direction: str | None = None,
+    meeting_platform: str | None = None,
+    meeting_url: str | None = None,
+    external_meeting_id: str | None = None,
 ) -> dict[str, object]:
     response = client.post(
         "/api/v1/interactions",
@@ -45,6 +48,9 @@ def create_interaction(
             "opportunityId": opportunity_id,
             **({"contactId": contact_id} if contact_id is not None else {}),
             **({"callDirection": call_direction} if call_direction is not None else {}),
+            **({"meetingPlatform": meeting_platform} if meeting_platform is not None else {}),
+            **({"meetingUrl": meeting_url} if meeting_url is not None else {}),
+            **({"externalMeetingId": external_meeting_id} if external_meeting_id is not None else {}),
             "scheduledStartAt": "2026-08-12T09:00:00+10:00",
             "scheduledEndAt": "2026-08-12T11:00:00+10:00",
             "timezone": "Australia/Sydney",

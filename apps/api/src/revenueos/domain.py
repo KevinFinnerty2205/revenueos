@@ -74,6 +74,40 @@ class InteractionType(StrEnum):
     MANUAL_INTERACTION = "manual_interaction"
 
 
+class OnlineMeetingPlatform(StrEnum):
+    MICROSOFT_TEAMS = "microsoft_teams"
+    ZOOM = "zoom"
+    GOOGLE_MEET = "google_meet"
+    OTHER = "other"
+
+
+class OnlineMeetingCaptureSource(StrEnum):
+    PLATFORM_RECORDING = "platform_recording"
+    PLATFORM_TRANSCRIPT = "platform_transcript"
+    USER_UPLOADED_RECORDING = "user_uploaded_recording"
+    USER_UPLOADED_TRANSCRIPT = "user_uploaded_transcript"
+    NATIVE_INTEGRATION = "native_integration"
+    MEETING_BOT = "meeting_bot"
+    AI_DEBRIEF = "ai_debrief"
+    VOICE_JOURNAL = "voice_journal"
+    MANUAL_NOTES = "manual_notes"
+
+
+class OnlineMeetingIngestionState(StrEnum):
+    NOT_STARTED = "not_started"
+    UPLOADING = "uploading"
+    PROCESSING = "processing"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class TranscriptProvenance(StrEnum):
+    PLATFORM_GENERATED = "platform_generated"
+    USER_UPLOADED = "user_uploaded"
+    EXTERNALLY_GENERATED = "externally_generated"
+    MANUALLY_PASTED = "manually_pasted"
+
+
 class InteractionLifecycleStatus(StrEnum):
     PLANNED = "planned"
     IN_PROGRESS = "in_progress"
@@ -241,6 +275,10 @@ class TranscriptSource(StrEnum):
     RECORDED_AUDIO = "recorded_audio"
     UPLOADED_AUDIO = "uploaded_audio"
     IMPORTED_AUDIO = "imported_audio"
+    PLATFORM_GENERATED = "platform_generated"
+    USER_UPLOADED = "user_uploaded"
+    EXTERNALLY_GENERATED = "externally_generated"
+    MANUALLY_PASTED = "manually_pasted"
 
 
 class MeetingAuditAction(StrEnum):

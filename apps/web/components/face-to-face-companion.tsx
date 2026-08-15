@@ -12,6 +12,7 @@ import type {
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PostInteractionCapture } from "@/components/post-interaction-capture";
+import { OnlineMeetingCapture } from "@/components/online-meeting-capture";
 import {
   RecordingFoundation,
   type RecordingActivity,
@@ -182,7 +183,11 @@ export function FaceToFaceCompanion({
         },
       );
       setInteraction(started);
-      setMessage("Interaction started. Choose how you want Companion to help.");
+      setMessage(
+        started.interactionType === "online_meeting"
+          ? "Meeting started. Passive Companion is active; RevenueOS is not recording or listening."
+          : "Interaction started. Choose how you want Companion to help.",
+      );
     } catch (requestError: unknown) {
       setError(
         requestError instanceof Error
@@ -283,7 +288,9 @@ export function FaceToFaceCompanion({
       );
       setInteraction(completed);
       setMessage(
-        "Interaction completed. Capture anything the recording missed.",
+        completed.interactionType === "online_meeting"
+          ? "Meeting ended. Choose an authorised capture path while the context is fresh."
+          : "Interaction completed. Capture anything the recording missed.",
       );
       applyLoaded(await fetchCompanion());
     } catch (requestError: unknown) {
@@ -440,6 +447,11 @@ export function FaceToFaceCompanion({
               onAddMarker={(type) => void addMarker(type)}
               onDeleteMarker={(marker) => void deleteMarker(marker)}
               onEnd={() => void endInteraction()}
+              endLabel={
+                interaction.interactionType === "online_meeting"
+                  ? "End meeting"
+                  : "End interaction"
+              }
               endDisabled={
                 working ||
                 recordingActivity?.blocksInteractionCompletion === true
@@ -477,6 +489,13 @@ export function FaceToFaceCompanion({
             interactionType={interaction.interactionType}
             lifecycleStatus={interaction.lifecycleStatus}
           />
+        </div>
+      ) : null}
+      {phase === "AFTER" &&
+      interaction.interactionType === "online_meeting" &&
+      capabilities?.featureFlags.onlineMeetingCapture === true ? (
+        <div className="mt-5" id="online-meeting-capture">
+          <OnlineMeetingCapture interaction={interaction} />
         </div>
       ) : null}
       {phase === "AFTER" && capabilities?.featureFlags.aiDebrief === true ? (
@@ -600,8 +619,23 @@ function BeforePhase({
           disabled={working}
           onClick={onStart}
         >
-          {working ? "Starting…" : "Start interaction"}
+          {working
+            ? "Starting…"
+            : interaction.interactionType === "online_meeting"
+              ? "Start meeting"
+              : "Start interaction"}
         </button>
+        {interaction.interactionType === "online_meeting" &&
+        interaction.meetingUrl ? (
+          <a
+            className="secondary-button min-h-14 text-center text-base"
+            href={interaction.meetingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open meeting
+          </a>
+        ) : null}
         <Link
           className="secondary-button min-h-14 text-center text-base"
           href={`/interactions/${interaction.id}#preparation`}
@@ -716,6 +750,7 @@ function CompanionControls({
   onDeleteMarker,
   onEnd,
   endDisabled,
+  endLabel,
 }: {
   markers: InteractionMarker[];
   working: boolean;
@@ -727,6 +762,7 @@ function CompanionControls({
   onDeleteMarker(marker: InteractionMarker): void;
   onEnd(): void;
   endDisabled: boolean;
+  endLabel: string;
 }) {
   return (
     <section
@@ -756,7 +792,7 @@ function CompanionControls({
           disabled={endDisabled}
           onClick={onEnd}
         >
-          End interaction
+          {endLabel}
         </button>
       </div>
       {endDisabled ? (

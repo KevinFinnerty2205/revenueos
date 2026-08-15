@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     private_beta_max_transcription_requests_per_day: int = Field(default=25, ge=1, le=1_000)
     private_beta_max_simultaneous_transcriptions: int = Field(default=2, ge=1, le=20)
     private_beta_transcription_retries: int = Field(default=3, ge=1, le=5)
+    private_beta_max_online_meeting_transcript_bytes: int = Field(
+        default=524_288,
+        ge=10_000,
+        le=2_000_000,
+    )
     private_beta_recording_session_expiry_hours: int = Field(default=24, ge=1, le=168)
     private_beta_raw_recording_retention_days: int = Field(default=7, ge=1, le=30)
     private_beta_feedback_per_user_per_day: int = Field(default=20, ge=1, le=1_000)
@@ -91,6 +96,10 @@ class Settings(BaseSettings):
     feature_recording_capture_enabled: bool = False
     feature_transcription_enabled: bool = False
     feature_auto_generate_intelligence_after_transcription: bool = False
+    feature_online_meeting_capture_enabled: bool = True
+    feature_online_meeting_import_enabled: bool = True
+    feature_online_meeting_native_integration_enabled: bool = False
+    feature_online_meeting_auto_ingest_enabled: bool = False
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -261,6 +270,15 @@ class Settings(BaseSettings):
                 raise ValueError("Production binary evidence requires a deployment-specific signing secret.")
         if self.feature_auto_generate_intelligence_after_transcription and not self.feature_transcription_enabled:
             raise ValueError("Automatic intelligence after transcription requires transcription to be enabled.")
+        if self.feature_online_meeting_import_enabled and not self.feature_online_meeting_capture_enabled:
+            raise ValueError("Online-meeting import requires online-meeting capture to be enabled.")
+        if self.feature_online_meeting_native_integration_enabled and not self.feature_online_meeting_capture_enabled:
+            raise ValueError("Online-meeting native integration requires online-meeting capture to be enabled.")
+        if (
+            self.feature_online_meeting_auto_ingest_enabled
+            and not self.feature_online_meeting_native_integration_enabled
+        ):
+            raise ValueError("Online-meeting auto-ingest requires a native integration to be enabled.")
         return self
 
     @property
@@ -310,6 +328,10 @@ class Settings(BaseSettings):
             "recordingCapture": self.feature_recording_capture_enabled,
             "transcription": self.feature_transcription_enabled,
             "autoGenerateIntelligenceAfterTranscription": (self.feature_auto_generate_intelligence_after_transcription),
+            "onlineMeetingCapture": self.feature_online_meeting_capture_enabled,
+            "onlineMeetingImport": self.feature_online_meeting_import_enabled,
+            "onlineMeetingNativeIntegration": self.feature_online_meeting_native_integration_enabled,
+            "onlineMeetingAutoIngest": self.feature_online_meeting_auto_ingest_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

@@ -43,12 +43,15 @@ from revenueos.domain import (
     InteractionType,
     MeetingStatus,
     MeetingType,
+    OnlineMeetingIngestionState,
+    OnlineMeetingPlatform,
     OpportunityAuditAction,
     OpportunityStage,
     OpportunityStatus,
     ParticipantRole,
     TaskPriority,
     TaskStatus,
+    TranscriptProvenance,
     TranscriptSource,
 )
 
@@ -716,6 +719,80 @@ class Interaction(TimestampMixin, Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class OnlineMeetingMetadata(TimestampMixin, Base):
+    __tablename__ = "online_meeting_metadata"
+    __table_args__ = (
+        CheckConstraint(
+            "meeting_platform IN ('microsoft_teams', 'zoom', 'google_meet', 'other')",
+            name="ck_online_meeting_metadata_platform",
+        ),
+        CheckConstraint(
+            "capture_source IS NULL OR capture_source IN ("
+            "'platform_recording', 'platform_transcript', 'user_uploaded_recording', "
+            "'user_uploaded_transcript', 'native_integration', 'meeting_bot', "
+            "'ai_debrief', 'voice_journal', 'manual_notes')",
+            name="ck_online_meeting_metadata_capture_source",
+        ),
+        CheckConstraint(
+            "ingestion_state IN ('not_started', 'uploading', 'processing', 'ready', 'failed')",
+            name="ck_online_meeting_metadata_ingestion_state",
+        ),
+        CheckConstraint(
+            "safe_meeting_url IS NULL OR length(trim(safe_meeting_url)) BETWEEN 1 AND 1000",
+            name="ck_online_meeting_metadata_safe_url",
+        ),
+        CheckConstraint(
+            "meeting_host IS NULL OR length(trim(meeting_host)) BETWEEN 1 AND 255",
+            name="ck_online_meeting_metadata_host",
+        ),
+        CheckConstraint(
+            "external_meeting_id IS NULL OR length(trim(external_meeting_id)) BETWEEN 1 AND 255",
+            name="ck_online_meeting_metadata_external_id",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_online_meeting_metadata_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_online_meeting_metadata_organisation_id_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            name="uq_online_meeting_metadata_interaction",
+        ),
+        Index(
+            "ix_online_meeting_metadata_organisation_platform",
+            "organisation_id",
+            "meeting_platform",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    meeting_platform: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=OnlineMeetingPlatform.OTHER.value,
+        server_default=OnlineMeetingPlatform.OTHER.value,
+    )
+    safe_meeting_url: Mapped[str | None] = mapped_column(String(1000))
+    meeting_host: Mapped[str | None] = mapped_column(String(255))
+    external_meeting_id: Mapped[str | None] = mapped_column(String(255))
+    capture_source: Mapped[str | None] = mapped_column(String(40))
+    ingestion_state: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=OnlineMeetingIngestionState.NOT_STARTED.value,
+        server_default=OnlineMeetingIngestionState.NOT_STARTED.value,
+    )
+
+
 class InteractionMarker(Base):
     __tablename__ = "interaction_markers"
     __table_args__ = (
@@ -1089,7 +1166,8 @@ class Transcript(TimestampMixin, Base):
         CheckConstraint("length(trim(raw_text)) > 0", name="ck_transcripts_raw_text"),
         CheckConstraint("version > 0", name="ck_transcripts_version"),
         CheckConstraint(
-            "source IN ('manual', 'upload', 'recorded_audio', 'uploaded_audio', 'imported_audio')",
+            "source IN ('manual', 'upload', 'recorded_audio', 'uploaded_audio', 'imported_audio', "
+            "'platform_generated', 'user_uploaded', 'externally_generated', 'manually_pasted')",
             name="ck_transcripts_source",
         ),
         ForeignKeyConstraint(
@@ -1149,7 +1227,8 @@ class TranscriptVersion(Base):
         CheckConstraint("version > 0", name="ck_transcript_versions_version"),
         CheckConstraint("length(trim(raw_text)) > 0", name="ck_transcript_versions_raw_text"),
         CheckConstraint(
-            "source IN ('manual', 'upload', 'recorded_audio', 'uploaded_audio', 'imported_audio')",
+            "source IN ('manual', 'upload', 'recorded_audio', 'uploaded_audio', 'imported_audio', "
+            "'platform_generated', 'user_uploaded', 'externally_generated', 'manually_pasted')",
             name="ck_transcript_versions_source",
         ),
         CheckConstraint("status IN ('final', 'deleted')", name="ck_transcript_versions_status"),
@@ -1282,6 +1361,121 @@ class TranscriptSegment(Base):
     source_confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OnlineMeetingTranscriptImport(Base):
+    __tablename__ = "online_meeting_transcript_imports"
+    __table_args__ = (
+        CheckConstraint(
+            "provenance IN ('platform_generated', 'user_uploaded', 'externally_generated', 'manually_pasted')",
+            name="ck_online_meeting_transcript_imports_provenance",
+        ),
+        CheckConstraint(
+            "source_format IN ('txt', 'vtt', 'srt')",
+            name="ck_online_meeting_transcript_imports_format",
+        ),
+        CheckConstraint(
+            "character_count BETWEEN 1 AND 1000000",
+            name="ck_online_meeting_transcript_imports_character_count",
+        ),
+        CheckConstraint(
+            "length(content_sha256) = 64 AND content_sha256 = lower(content_sha256)",
+            name="ck_online_meeting_transcript_imports_checksum",
+        ),
+        CheckConstraint(
+            "length(trim(idempotency_key)) BETWEEN 1 AND 200",
+            name="ck_online_meeting_transcript_imports_idempotency",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_online_meeting_transcript_imports_interaction_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "capture_session_id"],
+            ["capture_sessions.organisation_id", "capture_sessions.id"],
+            name="fk_online_meeting_transcript_imports_capture_tenant",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_online_meeting_transcript_imports_evidence_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_version_id"],
+            ["transcript_versions.organisation_id", "transcript_versions.id"],
+            name="fk_online_meeting_transcript_imports_version_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "imported_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_online_meeting_transcript_imports_user_tenant",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            name="uq_online_meeting_transcript_imports_organisation_id_id",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "imported_by_user_id",
+            "idempotency_key",
+            name="uq_online_meeting_transcript_imports_idempotency",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "interaction_id",
+            "content_sha256",
+            name="uq_online_meeting_transcript_imports_content",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "transcript_version_id",
+            name="uq_online_meeting_transcript_imports_version",
+        ),
+        Index(
+            "ix_online_meeting_transcript_imports_organisation_interaction_imported",
+            "organisation_id",
+            "interaction_id",
+            "imported_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interaction_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    capture_session_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    evidence_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    transcript_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    imported_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provenance: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=TranscriptProvenance.USER_UPLOADED.value,
+        server_default=TranscriptProvenance.USER_UPLOADED.value,
+    )
+    source_format: Mapped[str] = mapped_column(String(8), nullable=False)
+    language: Mapped[str] = mapped_column(String(16), nullable=False, default="en", server_default="en")
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    character_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    timestamps_present: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    speaker_labels_present: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
 
 
 class MeetingAuditEvent(Base):
@@ -1544,7 +1738,7 @@ class RecordingSession(TimestampMixin, Base):
         CheckConstraint(
             "recording_source IS NULL OR recording_source IN ("
             "'customer_call_recording', 'business_phone_recording', 'user_uploaded_recording', "
-            "'external_provider_recording')",
+            "'external_provider_recording', 'platform_recording')",
             name="ck_recording_sessions_source",
         ),
         CheckConstraint(

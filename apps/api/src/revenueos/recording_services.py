@@ -22,6 +22,7 @@ from revenueos.models import (
     BetaSystemEvent,
     CaptureSession,
     Evidence,
+    OnlineMeetingMetadata,
     RecordingChunk,
     RecordingConsent,
     RecordingSession,
@@ -133,6 +134,21 @@ class RecordingService:
             return self._response(existing)
         if interaction.lifecycle_status == "cancelled":
             raise PublicAPIError("interaction_not_recordable", "A cancelled interaction cannot be recorded.", 409)
+        if request.recording_type == "live_audio_recording" and interaction.interaction_type == "phone_call":
+            raise PublicAPIError(
+                "browser_audio_capture_unsupported",
+                "Browser microphone capture is not a supported full-audio path for phone calls.",
+                409,
+            )
+        if request.recording_source == "platform_recording" and interaction.interaction_type != "online_meeting":
+            raise PublicAPIError(
+                "invalid_recording_source",
+                "Platform recording provenance is available only for online meetings.",
+                422,
+            )
+        if interaction.interaction_type == "online_meeting" and request.recording_type != "live_audio_recording":
+            self.beta.require_feature("onlineMeetingCapture")
+            self.beta.require_feature("onlineMeetingImport")
         if request.recording_type == "live_audio_recording" and interaction.lifecycle_status == "completed":
             raise PublicAPIError(
                 "interaction_not_recordable",
@@ -227,6 +243,20 @@ class RecordingService:
                 409,
             ) from exc
         self.session.add(consent)
+        if interaction.interaction_type == "online_meeting" and request.recording_type != "live_audio_recording":
+            metadata = await self.session.scalar(
+                select(OnlineMeetingMetadata).where(
+                    OnlineMeetingMetadata.organisation_id == self.tenant.organisation_id,
+                    OnlineMeetingMetadata.interaction_id == interaction_id,
+                )
+            )
+            if metadata is not None:
+                metadata.capture_source = (
+                    "platform_recording"
+                    if request.recording_source == "platform_recording"
+                    else "user_uploaded_recording"
+                )
+                metadata.ingestion_state = "uploading"
         self._event(
             "recording_imported" if request.recording_type != "live_audio_recording" else "recording_created",
             recording_id,
@@ -591,6 +621,15 @@ class RecordingService:
         if capture is not None:
             capture.status = "completed"
             capture.completed_at = now
+        metadata = await self.session.scalar(
+            select(OnlineMeetingMetadata).where(
+                OnlineMeetingMetadata.organisation_id == self.tenant.organisation_id,
+                OnlineMeetingMetadata.interaction_id == interaction_id,
+            )
+        )
+        if metadata is not None:
+            metadata.ingestion_state = "processing" if self.settings.feature_transcription_enabled else "ready"
+            metadata.updated_at = now
         self._event(
             "upload_finalized",
             recording.id,

@@ -23,7 +23,13 @@ from revenueos.debrief_contracts import (
     DebriefVoiceAnswerRequest,
 )
 from revenueos.debrief_services import DebriefService
-from revenueos.domain import InteractionLifecycleStatus, InteractionType
+from revenueos.domain import (
+    InteractionLifecycleStatus,
+    InteractionType,
+    OnlineMeetingCaptureSource,
+    OnlineMeetingIngestionState,
+    OnlineMeetingPlatform,
+)
 from revenueos.errors import PublicAPIError
 from revenueos.interaction_contracts import (
     InteractionComplete,
@@ -36,12 +42,19 @@ from revenueos.interaction_dependencies import (
     get_companion_service,
     get_debrief_service,
     get_interaction_service,
+    get_online_meeting_service,
     get_pre_interaction_brief_service,
     get_recording_service,
     get_visual_evidence_service,
 )
 from revenueos.interaction_repositories import InteractionRecord
 from revenueos.interaction_services import InteractionService
+from revenueos.online_meeting_contracts import (
+    OnlineMeetingCapabilitiesResponse,
+    OnlineMeetingTranscriptImportRequest,
+    OnlineMeetingTranscriptImportResponse,
+)
+from revenueos.online_meeting_services import OnlineMeetingService
 from revenueos.pre_interaction_contracts import (
     PreInteractionBriefRequestResponse,
     PreInteractionBriefResponse,
@@ -81,6 +94,7 @@ Debriefs = Annotated[DebriefService, Depends(get_debrief_service)]
 Visuals = Annotated[VisualEvidenceService, Depends(get_visual_evidence_service)]
 Recordings = Annotated[RecordingService, Depends(get_recording_service)]
 Companion = Annotated[CompanionService, Depends(get_companion_service)]
+OnlineMeetings = Annotated[OnlineMeetingService, Depends(get_online_meeting_service)]
 
 
 def _require_timezone(value: datetime | None, field_name: str) -> datetime | None:
@@ -126,6 +140,30 @@ def _response(record: InteractionRecord) -> InteractionResponse:
             "capture_methods": record.capture_methods,
             "intelligence_state": intelligence_state,
             "recording_available": "recording" in record.capture_methods,
+            "meeting_platform": (
+                OnlineMeetingPlatform(record.online_meeting_metadata.meeting_platform)
+                if record.online_meeting_metadata is not None
+                else None
+            ),
+            "meeting_url": (
+                record.online_meeting_metadata.safe_meeting_url if record.online_meeting_metadata is not None else None
+            ),
+            "external_meeting_id": (
+                record.online_meeting_metadata.external_meeting_id
+                if record.online_meeting_metadata is not None
+                else None
+            ),
+            "capture_source": (
+                OnlineMeetingCaptureSource(record.online_meeting_metadata.capture_source)
+                if record.online_meeting_metadata is not None
+                and record.online_meeting_metadata.capture_source is not None
+                else None
+            ),
+            "ingestion_state": (
+                OnlineMeetingIngestionState(record.online_meeting_metadata.ingestion_state)
+                if record.online_meeting_metadata is not None
+                else None
+            ),
         }
     )
 
@@ -205,6 +243,41 @@ async def start_interaction(
     service: Interactions,
 ) -> InteractionResponse:
     return _response(await service.start_interaction(interaction_id, request))
+
+
+@router.get(
+    "/{interaction_id}/online-meeting/capabilities",
+    response_model=OnlineMeetingCapabilitiesResponse,
+)
+async def get_online_meeting_capabilities(
+    interaction_id: UUID,
+    service: OnlineMeetings,
+) -> OnlineMeetingCapabilitiesResponse:
+    return await service.capabilities(interaction_id)
+
+
+@router.post(
+    "/{interaction_id}/online-meeting/transcript",
+    response_model=OnlineMeetingTranscriptImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_online_meeting_transcript(
+    interaction_id: UUID,
+    request: OnlineMeetingTranscriptImportRequest,
+    service: OnlineMeetings,
+) -> OnlineMeetingTranscriptImportResponse:
+    return await service.import_transcript(interaction_id, request)
+
+
+@router.get(
+    "/{interaction_id}/online-meeting/transcripts",
+    response_model=list[OnlineMeetingTranscriptImportResponse],
+)
+async def list_online_meeting_transcripts(
+    interaction_id: UUID,
+    service: OnlineMeetings,
+) -> list[OnlineMeetingTranscriptImportResponse]:
+    return await service.list_transcripts(interaction_id)
 
 
 @router.post(

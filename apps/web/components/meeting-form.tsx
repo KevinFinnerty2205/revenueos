@@ -9,6 +9,7 @@ import type {
   MeetingStatus,
   MeetingType,
   Transcript,
+  TranscriptSource,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -64,9 +65,8 @@ export function MeetingForm({ meetingId }: { meetingId?: string }) {
   >([]);
   const [transcript, setTranscript] = useState("");
   const [language, setLanguage] = useState("en");
-  const [transcriptSource, setTranscriptSource] = useState<"manual" | "upload">(
-    "manual",
-  );
+  const [transcriptSource, setTranscriptSource] =
+    useState<TranscriptSource>("manual");
   const [originalTranscript, setOriginalTranscript] =
     useState<Transcript | null>(null);
   const [loading, setLoading] = useState(true);
@@ -506,7 +506,9 @@ export function MeetingForm({ meetingId }: { meetingId?: string }) {
             <legend className="form-legend">Transcript</legend>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Optional. Paste plain text or deliberately choose a .txt file.
-              RevenueOS does not record or transcribe meetings in this sprint.
+              RevenueOS does not record or transcribe from this form. Online
+              meetings also support provenance-aware TXT, VTT and SRT import
+              from their Interaction capture page.
             </p>
             <div className="mt-5 grid gap-5 sm:grid-cols-[minmax(0,1fr)_12rem]">
               <label className="text-sm font-bold text-slate-800">
@@ -806,7 +808,7 @@ async function syncTranscript(
   original: Transcript | null,
   rawText: string,
   language: string,
-  source: "manual" | "upload",
+  source: TranscriptSource,
 ) {
   const trimmedText = rawText.trim();
   if (!trimmedText && original) {

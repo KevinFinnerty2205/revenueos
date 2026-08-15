@@ -2,6 +2,12 @@
 
 **Status:** Target strategy; no production integration is implemented today. Deterministic mocks are test infrastructure, not connected capability.
 
+WO-018 now provides provider-neutral, user-authorised meeting recording/transcript
+import for Teams, Zoom and Meet plus a deterministic adapter fake. Native and
+auto-ingestion remain disabled. If pilot ecosystems do not dictate another choice,
+Google Meet v2 is the recommended first technical spike; production selection still
+requires design-partner entitlement and least-privilege testing.
+
 RevenueOS integrates as an intelligence and workflow layer while the connected provider remains authoritative. The first five design partners use one selected productivity ecosystem and one selected CRM; breadth follows demonstrated need. CRM updates and external communications require explicit user approval throughout beta.
 
 ## Integration contract

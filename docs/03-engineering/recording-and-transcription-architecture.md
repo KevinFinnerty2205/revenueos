@@ -1,5 +1,17 @@
 # Recording and transcription architecture
 
+## WO-018 online-meeting import
+
+Authorised online-meeting recordings use the WO-015 session, private-storage,
+quota, worker and transcription lifecycle with `platform_recording` or
+`user_uploaded_recording` provenance. Authorised TXT/VTT/SRT transcript import
+creates the same immutable transcript versions/segments directly, plus Capture and
+Evidence records; it does not create a second transcript or intelligence system.
+The new online-meeting UI never offers browser microphone capture as platform/system
+audio; the explicitly consented WO-015 foreground recording API remains compatible
+for established Meeting flows. Native fetch and auto-ingestion are disabled pending
+a selected, reviewed provider adapter.
+
 ## WO-016 Companion orchestration
 
 The mobile browser Companion reuses this recording domain without changing its

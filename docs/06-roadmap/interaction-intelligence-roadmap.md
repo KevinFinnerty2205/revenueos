@@ -1,8 +1,13 @@
 # Interaction Intelligence roadmap
 
+The current baseline now includes WO-018 deliberate online-meeting
+recording/transcript import and Debrief fallback. A first native adapter remains a
+separately approved, design-partner-driven increment; Google Meet v2 is the
+conditional first technical spike, not a committed production integration.
+
 - **Status:** Recommended sequence; each stage requires a separate approved work
   order before implementation
-- **Current baseline:** Work through WO-017 Phone Call Intelligence is complete;
+- **Current baseline:** Work through WO-018 Online Meeting Capture is complete;
   WO-010 remains the approved blueprint
 - **Primary optimisation:** Earliest trustworthy use for real face-to-face sales
   interactions without requiring recording or transcript upload
@@ -27,8 +32,8 @@ The Gantt uses relative sequence only; it is not an estimate. Delivery may overl
 independent validation work, but acceptance dependencies remain.
 
 Recommended delivery order: **WO-011, WO-012, WO-013, WO-014, WO-015, WO-016,
-WO-017, WO-018, WO-019, WO-020, WO-021**. Phone calls are the implemented
-browser-first bridge between field Companion and future provider capture.
+WO-017, WO-018, WO-019, WO-020, WO-021**. Phone calls and deliberate online
+meeting import are the implemented browser-first bridge to a future provider adapter.
 Document/email evidence precedes live intelligence because multi-source
 reconciliation is more valuable and less operationally risky than real-time processing.
 
@@ -326,40 +331,40 @@ Brain without a phone silo. See the
 
 ## WO-018 — Online Meeting Capture
 
+**Delivery status:** Implemented by WO-018 with provider-neutral manual import. A
+production native adapter remains a separate, design-partner-driven increment.
+
 ### Objective and user value
 
-Ingest authorised recording/transcript and attendance context from the selected
-design-partner online meeting platform, with user-operated import as fallback.
+Ingest authorised recording/transcript evidence for Teams, Zoom, Meet or other
+online meetings, with AI Debrief/Voice Journal fallback.
 
 ### Impacts and dependencies
 
 | Area         | Scope                                                                                                                      |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Dependencies | WO-015, selected platform/customer stack, connector/auth foundation and platform policy review                             |
-| Data model   | Tenant connection/external identity, meeting asset/version, sync cursor/state, participant candidates and deletion receipt |
-| Backend      | One native platform adapter or platform-provided import, webhook/poll reconciliation, idempotent ingest and auth health    |
-| Frontend     | Connect/select/import, capture visibility, match/review and failure recovery                                               |
+| Dependencies | WO-012 through WO-017; no connector credential required                                                                  |
+| Data model   | Tenant-owned normalised meeting metadata and transcript-import provenance                                                |
+| Backend      | Safe references, capabilities, idempotent TXT/VTT/SRT import, WO-015 recording reuse and deterministic adapter fake         |
+| Frontend     | Safe open, passive meeting state, capability-driven import and Debrief/Voice Journal fallback                           |
 | Mobile       | None required; existing Companion surfaces consume results                                                                 |
 | AI           | Reuse transcription only when source lacks an approved transcript; no new live capability                                  |
-| Privacy      | Least scopes, participant notice, platform indicator, region/retention and revocation                                      |
-| Operations   | Token/webhook health, rate limits, waiting/processing delay, duplicate/deletion runbooks                                   |
+| Privacy      | Authority notice, URL/token minimisation, tenant/RLS isolation and local/upstream deletion boundary                      |
+| Operations   | Existing recording/transcription quotas, metadata-only state and import retry/deduplication                              |
 
 ### Acceptance criteria
 
-- One selected platform works end to end with deterministic mocks and real sandbox or
-  approved test evidence.
-- External objects are tenant/version scoped and duplicates are reconciled.
-- Platform/user deletion and auth revocation propagate.
-- Missing recording, delayed transcript, participant mismatch and partial source are
-  usable states.
+- Teams, Zoom, Meet and other use one normalised Interaction workflow.
+- User-authorised imports are tenant/version scoped and duplicates are reconciled.
+- Missing artefacts and participant ambiguity remain usable, honest states.
 - User-operated import and non-recording debrief remain fallbacks.
 - No bot is described as working unless separately implemented and visibly tested.
 
 ### Out of scope and testing availability
 
-No universal Zoom/Teams/Meet support, calendar-triggered bot, browser-only universal
-audio or live intelligence. Users on the selected platform can test automated or
-explicit import; others retain manual/debrief paths.
+No production Teams/Zoom/Meet connector, calendar-triggered bot, universal browser
+audio or live intelligence. All providers use explicit import or Debrief fallback;
+Google Meet v2 is only the conditional first technical-spike recommendation.
 
 ## WO-019 — Document and Email Evidence
 

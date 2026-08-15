@@ -11,8 +11,8 @@ Opportunity Workspace, WO-008A Revenue Brain Foundation, WO-008B Revenue Brain
 Longitudinal Reasoning, WO-009 Private Beta Readiness, WO-011 Interaction
 Domain Foundation, WO-012 AI Companion preparation, WO-013 AI Debrief/Voice
 Journal, WO-014 Visual Evidence/Presentation Mode, WO-015 Recording &
-Transcription Foundation, WO-016 Browser Face-to-Face Companion and WO-017 Phone
-Call Intelligence. Interactions, Meetings,
+Transcription Foundation, WO-016 Browser Face-to-Face Companion, WO-017 Phone
+Call Intelligence and WO-018 Online Meeting Capture. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -55,6 +55,11 @@ direction/outcome, Contact association, compact brief, manual elapsed duration,
 adaptive post-call capture and authorised recording import through the existing
 WO-015 pipeline. It adds no dialler, phone interception, call-log access, telephony
 provider or background microphone monitoring.
+WO-018 makes Teams, Zoom, Google Meet and other online meetings first-class,
+browser-first Interactions. It adds safe meeting navigation, passive timing,
+server-negotiated post-meeting choices, authorised TXT/VTT/SRT transcript import
+and WO-015 recording import reuse. Native provider and auto-ingestion flags remain
+off, and no connector, meeting bot or system-audio capture is implemented.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
@@ -77,16 +82,17 @@ compatibility. WO-012 implements the preparation-only AI Companion slice,
 WO-013 implements reviewed post-interaction AI Debrief/Voice Journal, WO-014
 implements browser-only visual evidence and bounded Presentation Mode, WO-015
 implements the browser-first recording/batch-transcription foundation, and WO-016
-implements the thin browser Companion orchestration and gap-fill hand-off, and
-WO-017 implements the browser-first phone-call path and compliant recording import.
-Native/background capture, mobile client, meeting bot, telephony provider, connector, live
+implements the thin browser Companion orchestration and gap-fill hand-off,
+WO-017 implements the browser-first phone-call path and compliant recording import,
+and WO-018 implements the provider-neutral online-meeting import path.
+Native/background capture, mobile client, meeting bot, telephony provider, production connector, live
 transcription and live intelligence remain unimplemented.
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013, WO-014, WO-015, WO-016 and WO-017.
+WO-013, WO-014, WO-015, WO-016, WO-017 and WO-018.
 WO-010 remains the blueprint; later roadmap work remains unauthorised.
 
 ## Prerequisites

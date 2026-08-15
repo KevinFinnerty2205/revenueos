@@ -19,6 +19,7 @@ This is the canonical product and engineering documentation index. Documents dis
 13. [Recording foundation engineering guide](03-engineering/recording-foundation-engineering-guide.md) — current WO-015 boundary
 14. [Browser face-to-face Companion guide](02-design/browser-face-to-face-companion-guide.md) — current WO-016 field workflow
 15. [Phone Call Intelligence guide](02-design/phone-call-intelligence-guide.md) — current WO-017 normal-phone workflow
+16. [Online Meeting Capture guide](02-design/online-meeting-capture-guide.md) — current WO-018 browser-first workflow
 
 ## 00 — Company
 
@@ -52,6 +53,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Presentation preparation](02-design/presentation-preparation.md)
 - [Voice Journal guide](02-design/voice-journal-guide.md)
 - [Phone-call debrief](02-design/phone-call-debrief.md)
+- [Online Meeting Capture guide](02-design/online-meeting-capture-guide.md)
 - [Presentation debrief](02-design/presentation-debrief.md)
 
 ## 03 — Engineering
@@ -130,6 +132,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Imported-call recording guide](03-engineering/imported-call-recording-guide.md)
 - [Phone-call provenance](03-engineering/phone-call-provenance.md)
 - [Phone-call security and privacy review](03-engineering/phone-call-security-privacy-review.md)
+- [Online Meeting transcript import](03-engineering/online-meeting-transcript-import.md)
+- [Online Meeting URL security](03-engineering/online-meeting-url-security.md)
+- [Online Meeting security and privacy review](03-engineering/online-meeting-security-privacy-review.md)
 
 ### Target through beta
 
@@ -152,6 +157,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Integrations documentation index](05-integrations/README.md)
 - [Integration strategy](05-integrations/integration-strategy.md)
 - [Telephony integration boundary](05-integrations/telephony-integration-boundary.md)
+- [Online Meeting provider adapter](05-integrations/online-meeting-provider-adapter.md)
+- [Microsoft Teams online-meeting assessment](05-integrations/microsoft-teams-online-meeting-assessment.md)
+- [Zoom online-meeting assessment](05-integrations/zoom-online-meeting-assessment.md)
+- [Google Meet online-meeting assessment](05-integrations/google-meet-online-meeting-assessment.md)
+- [Meeting-bot assessment](05-integrations/meeting-bot-assessment.md)
 
 ## 06 — Roadmap
 
@@ -194,6 +204,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-015: Recording & Transcription Foundation](07-sprints/wo-015-recording-transcription-foundation.md)
 - [WO-016: Browser Face-to-Face Companion](07-sprints/wo-016-browser-face-to-face-companion.md)
 - [WO-017: Phone Call Intelligence](07-sprints/wo-017-phone-call-intelligence.md)
+- [WO-018: Online Meeting Capture](07-sprints/wo-018-online-meeting-capture.md)
 
 ## 08 — Decision records
 
@@ -227,10 +238,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0028: bounded foreground debrief reasoning and ephemeral browser voice](08-decisions/0028-bounded-foreground-debrief-reasoning.md)
 - [ADR 0029: private visual evidence storage and mandatory review](08-decisions/0029-private-visual-evidence-storage-and-review.md)
 - [ADR 0030: foreground browser Companion orchestration](08-decisions/0030-browser-companion-foreground-capture.md)
+- [ADR 0031: provider-neutral online-meeting ingestion](08-decisions/0031-provider-neutral-online-meeting-ingestion.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -304,6 +316,11 @@ duration-aware post-call debrief and explicitly authorised recording import thro
 WO-015. Debrief evidence remains **Reported by you**; recording/debrief conflicts
 remain visible. There is no dialler, cellular interception, call-log ingestion,
 telephony provider, phone enrichment, hidden microphone or native app.
+
+WO-018 makes Teams, Zoom, Meet and other online meetings first-class through safe
+navigation, passive Companion timing, authorised recording/transcript import and
+Debrief fallback. Provider-native and auto-ingestion flags remain off; there is no
+meeting bot, system-audio interception, extension, native app or real provider call.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

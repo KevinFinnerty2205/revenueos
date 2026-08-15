@@ -1,5 +1,15 @@
 # API reference
 
+WO-018 adds `meetingPlatform`, normalised `meetingUrl`, `externalMeetingId`,
+`captureSource` and `ingestionState` to online Interaction contracts. It adds:
+
+- `GET /api/v1/interactions/{id}/online-meeting/capabilities`;
+- `POST /api/v1/interactions/{id}/online-meeting/transcript`; and
+- `GET /api/v1/interactions/{id}/online-meeting/transcripts`.
+
+Recording import continues through the existing recording-session routes. No
+native-fetch endpoint is exposed because no provider connection is implemented.
+
 FastAPI's generated OpenAPI document at `/openapi.json` is canonical. Swagger
 UI is available at `/docs` outside production; production disables Swagger and
 ReDoc. JSON fields use camel case; database and Python fields use snake case.

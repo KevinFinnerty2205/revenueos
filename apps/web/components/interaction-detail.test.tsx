@@ -33,19 +33,24 @@ describe("InteractionDetail", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("completes a planned interaction and keeps Meeting Intelligence available", async () => {
-    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
-      Promise.resolve(
-        jsonResponse(
-          init?.method === "POST"
-            ? {
-                ...interaction,
-                lifecycleStatus: "completed",
-                actualEndAt: "2026-08-01T01:00:00Z",
-              }
-            : interaction,
-        ),
-      ),
-    );
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith("/start") && init?.method === "POST") {
+        return Promise.resolve(
+          jsonResponse({ ...interaction, lifecycleStatus: "in_progress" }),
+        );
+      }
+      if (path.endsWith("/complete") && init?.method === "POST") {
+        return Promise.resolve(
+          jsonResponse({
+            ...interaction,
+            lifecycleStatus: "completed",
+            actualEndAt: "2026-08-01T01:00:00Z",
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(interaction));
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<InteractionDetail interactionId="interaction-1" />);
@@ -59,12 +64,14 @@ describe("InteractionDetail", () => {
     expect(
       screen.getByRole("link", { name: "Open Meeting Intelligence" }),
     ).toHaveAttribute("href", "/meetings/meeting-1");
-    fireEvent.click(
-      screen.getByRole("button", { name: "Complete interaction" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start meeting" }));
+    expect(
+      await screen.findByRole("button", { name: "End meeting" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "End meeting" }));
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: "Complete interaction" }),
+        screen.queryByRole("button", { name: "End meeting" }),
       ).not.toBeInTheDocument(),
     );
     expect(

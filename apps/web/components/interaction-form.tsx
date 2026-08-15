@@ -7,6 +7,7 @@ import type {
   EntityPage,
   Interaction,
   InteractionType,
+  OnlineMeetingPlatform,
   Opportunity,
 } from "@revenueos/shared";
 import Link from "next/link";
@@ -32,6 +33,9 @@ export function InteractionForm() {
   const [opportunityId, setOpportunityId] = useState("");
   const [contactId, setContactId] = useState("");
   const [callDirection, setCallDirection] = useState<CallDirection>("unknown");
+  const [meetingPlatform, setMeetingPlatform] =
+    useState<OnlineMeetingPlatform>("microsoft_teams");
+  const [meetingUrl, setMeetingUrl] = useState("");
   const [scheduledStartAt, setScheduledStartAt] = useState("");
   const [scheduledEndAt, setScheduledEndAt] = useState("");
 
@@ -92,6 +96,12 @@ export function InteractionForm() {
               interactionType === "phone_call" ? contactId || null : null,
             callDirection:
               interactionType === "phone_call" ? callDirection : null,
+            meetingPlatform:
+              interactionType === "online_meeting" ? meetingPlatform : null,
+            meetingUrl:
+              interactionType === "online_meeting"
+                ? meetingUrl.trim() || null
+                : null,
             scheduledStartAt: scheduledStartAt
               ? new Date(scheduledStartAt).toISOString()
               : null,
@@ -127,9 +137,9 @@ export function InteractionForm() {
           Create interaction
         </h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Add a customer event without recording, transcription or AI
-          processing. Meetings can continue to be created from the existing
-          Meeting workflow.
+          Add a customer event and choose how to capture it after it happens.
+          Online meeting links are stored only as safe, query-free navigation
+          links; RevenueOS does not join or fetch them.
         </p>
       </div>
 
@@ -261,6 +271,54 @@ export function InteractionForm() {
                     ))}
                 </select>
               </label>
+            </fieldset>
+          ) : null}
+          {interactionType === "online_meeting" ? (
+            <fieldset className="grid gap-5 rounded-2xl border border-teal-200 bg-teal-50 p-5 sm:grid-cols-2">
+              <legend className="px-2 text-sm font-bold text-teal-950">
+                Online meeting
+              </legend>
+              <p className="sm:col-span-2 text-sm leading-6 text-teal-950">
+                Use your normal meeting app. RevenueOS stores a safe link for
+                you to open and offers authorised import or debrief choices
+                afterwards. It does not join, record system audio or run a bot.
+              </p>
+              <label className="grid gap-2 text-sm font-bold text-slate-800">
+                Meeting platform
+                <select
+                  className="form-control"
+                  value={meetingPlatform}
+                  onChange={(event) => {
+                    const nextPlatform = event.target
+                      .value as OnlineMeetingPlatform;
+                    setMeetingPlatform(nextPlatform);
+                    if (nextPlatform === "other") setMeetingUrl("");
+                  }}
+                >
+                  <option value="microsoft_teams">Microsoft Teams</option>
+                  <option value="zoom">Zoom</option>
+                  <option value="google_meet">Google Meet</option>
+                  <option value="other">Other or not known</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm font-bold text-slate-800">
+                Meeting link (optional)
+                <input
+                  className="form-control"
+                  type="url"
+                  inputMode="url"
+                  maxLength={1000}
+                  placeholder="https://…"
+                  value={meetingUrl}
+                  disabled={meetingPlatform === "other"}
+                  onChange={(event) => setMeetingUrl(event.target.value)}
+                />
+              </label>
+              <p className="sm:col-span-2 text-xs leading-5 text-slate-600">
+                Query parameters and fragments are removed before storage.
+                Choose a supported platform before adding a link; for other
+                platforms, create the interaction without one.
+              </p>
             </fieldset>
           ) : null}
           <div className="grid gap-5 sm:grid-cols-2">

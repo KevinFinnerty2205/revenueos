@@ -462,12 +462,16 @@ export function PostInteractionCapture({
           >
             {interactionType === "phone_call"
               ? "Capture this call while it’s fresh"
-              : "Capture what changed while it is fresh"}
+              : interactionType === "online_meeting"
+                ? "Capture this meeting while it’s fresh"
+                : "Capture what changed while it is fresh"}
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             {interactionType === "phone_call"
               ? "Use AI Debrief, Voice Journal, typed notes or an authorised recording import. RevenueOS did not record or monitor the call."
-              : `A short debrief for this ${humanise(interactionType).toLowerCase()} turns your own report into reviewable evidence. It does not record the customer interaction.`}
+              : interactionType === "online_meeting"
+                ? "Use AI Debrief, Voice Journal or typed notes when no authorised recording or transcript is available. RevenueOS did not join, record or monitor the meeting."
+                : `A short debrief for this ${humanise(interactionType).toLowerCase()} turns your own report into reviewable evidence. It does not record the customer interaction.`}
           </p>
         </div>
         {session ? (
@@ -515,7 +519,7 @@ export function PostInteractionCapture({
           onStart={(type, nextPreference) => void start(type, nextPreference)}
           onFinishForNow={() =>
             setMessage(
-              "Finished for now. You can return to capture this call later.",
+              "Finished for now. You can return to capture this interaction later.",
             )
           }
         />

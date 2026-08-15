@@ -17,6 +17,7 @@ from revenueos.models import (
     Interaction,
     InteractionIntelligenceSnapshot,
     Meeting,
+    OnlineMeetingMetadata,
     Opportunity,
     OrganisationMembership,
     PreInteractionBrief,
@@ -28,6 +29,7 @@ from revenueos.models import (
 class InteractionRecord:
     interaction: Interaction
     meeting_id: UUID | None
+    online_meeting_metadata: OnlineMeetingMetadata | None = None
     brief_generated_at: datetime | None = None
     capture_methods: tuple[str, ...] = ()
     latest_debrief_status: str | None = None
@@ -147,12 +149,19 @@ class InteractionRepository:
         capture_columns = self._capture_columns(organisation_id)
         rows = (
             await self.session.execute(
-                select(Interaction, Meeting.id, brief_summary.c.generated_at, *capture_columns)
+                select(Interaction, Meeting.id, OnlineMeetingMetadata, brief_summary.c.generated_at, *capture_columns)
                 .outerjoin(
                     Meeting,
                     and_(
                         Meeting.organisation_id == Interaction.organisation_id,
                         Meeting.interaction_id == Interaction.id,
+                    ),
+                )
+                .outerjoin(
+                    OnlineMeetingMetadata,
+                    and_(
+                        OnlineMeetingMetadata.organisation_id == Interaction.organisation_id,
+                        OnlineMeetingMetadata.interaction_id == Interaction.id,
                     ),
                 )
                 .outerjoin(
@@ -174,11 +183,12 @@ class InteractionRepository:
                 InteractionRecord(
                     interaction=row[0],
                     meeting_id=row[1],
-                    brief_generated_at=row[2],
-                    capture_methods=self._capture_methods(row[3], row[4], row[5]),
-                    latest_debrief_status=row[6],
-                    latest_recording_status=row[7],
-                    intelligence_snapshot_exists=bool(row[8]),
+                    online_meeting_metadata=row[2],
+                    brief_generated_at=row[3],
+                    capture_methods=self._capture_methods(row[4], row[5], row[6], row[7]),
+                    latest_debrief_status=row[8],
+                    latest_recording_status=row[9],
+                    intelligence_snapshot_exists=bool(row[10]),
                 )
                 for row in rows
             ],
@@ -207,12 +217,19 @@ class InteractionRepository:
         )
         capture_columns = self._capture_columns(organisation_id)
         statement = (
-            select(Interaction, Meeting.id, brief_summary.c.generated_at, *capture_columns)
+            select(Interaction, Meeting.id, OnlineMeetingMetadata, brief_summary.c.generated_at, *capture_columns)
             .outerjoin(
                 Meeting,
                 and_(
                     Meeting.organisation_id == Interaction.organisation_id,
                     Meeting.interaction_id == Interaction.id,
+                ),
+            )
+            .outerjoin(
+                OnlineMeetingMetadata,
+                and_(
+                    OnlineMeetingMetadata.organisation_id == Interaction.organisation_id,
+                    OnlineMeetingMetadata.interaction_id == Interaction.id,
                 ),
             )
             .outerjoin(
@@ -236,11 +253,12 @@ class InteractionRepository:
         return InteractionRecord(
             interaction=row[0],
             meeting_id=row[1],
-            brief_generated_at=row[2],
-            capture_methods=self._capture_methods(row[3], row[4], row[5]),
-            latest_debrief_status=row[6],
-            latest_recording_status=row[7],
-            intelligence_snapshot_exists=bool(row[8]),
+            online_meeting_metadata=row[2],
+            brief_generated_at=row[3],
+            capture_methods=self._capture_methods(row[4], row[5], row[6], row[7]),
+            latest_debrief_status=row[8],
+            latest_recording_status=row[9],
+            intelligence_snapshot_exists=bool(row[10]),
         )
 
     @staticmethod
@@ -248,6 +266,7 @@ class InteractionRepository:
         debrief_count: int,
         voice_journal_count: int,
         recording_count: int,
+        transcript_count: int,
     ) -> tuple[str, ...]:
         methods: list[str] = []
         if debrief_count:
@@ -256,6 +275,8 @@ class InteractionRepository:
             methods.append("voice_journal")
         if recording_count:
             methods.append("recording")
+        if transcript_count:
+            methods.append("transcript")
         return tuple(methods)
 
     @staticmethod
@@ -321,6 +342,7 @@ class InteractionRepository:
             capture_count("ai_debrief"),
             capture_count("voice_journal"),
             recording_count,
+            capture_count("uploaded_transcript"),
             latest_debrief_status,
             latest_recording_status,
             intelligence_count,

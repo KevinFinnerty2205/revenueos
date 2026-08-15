@@ -35,10 +35,14 @@ from revenueos.models import (
     InteractionMarker,
     Meeting,
     MeetingParticipant,
+    OnlineMeetingMetadata,
+    OnlineMeetingTranscriptImport,
     Opportunity,
     OpportunityAuditEvent,
     OrganisationMembership,
     PreInteractionBrief,
+    RecordingConsent,
+    RecordingSession,
     RevenueBrainInteractionSnapshot,
     Transcript,
     TranscriptVersion,
@@ -406,7 +410,7 @@ async def seed_demo_data(
                     raw_text=TRANSCRIPTS[index],
                     language="en-AU",
                     version=1,
-                    source="manual",
+                    source="platform_generated" if index == 0 else "imported_audio",
                 )
                 session.add(transcript)
                 await session.flush()
@@ -425,10 +429,251 @@ async def seed_demo_data(
                         version=1,
                         raw_text=TRANSCRIPTS[index],
                         language="en-AU",
-                        source="manual",
+                        source="platform_generated" if index == 0 else "imported_audio",
                         status="final",
                     )
                 )
+        await session.flush()
+
+        teams_metadata_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-metadata-teams")
+        zoom_metadata_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-metadata-zoom")
+        for metadata_id, interaction_id, platform, capture_source in (
+            (
+                teams_metadata_id,
+                linked_interaction_ids[0],
+                "microsoft_teams",
+                "platform_transcript",
+            ),
+            (
+                zoom_metadata_id,
+                linked_interaction_ids[1],
+                "zoom",
+                "platform_recording",
+            ),
+        ):
+            if await session.get(OnlineMeetingMetadata, metadata_id) is None:
+                session.add(
+                    OnlineMeetingMetadata(
+                        id=metadata_id,
+                        organisation_id=organisation_id,
+                        interaction_id=interaction_id,
+                        meeting_platform=platform,
+                        capture_source=capture_source,
+                        ingestion_state="ready",
+                    )
+                )
+
+        transcript_import_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-transcript-import")
+        transcript_capture_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-transcript-capture")
+        transcript_evidence_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-transcript-evidence")
+        transcript_version_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:transcript-version-1")
+        if await session.get(OnlineMeetingTranscriptImport, transcript_import_id) is None:
+            session.add_all(
+                (
+                    CaptureSession(
+                        id=transcript_capture_id,
+                        organisation_id=organisation_id,
+                        interaction_id=linked_interaction_ids[0],
+                        capture_type="uploaded_transcript",
+                        status="completed",
+                        started_by_user_id=user_id,
+                        started_at=seeded_at - timedelta(days=14),
+                        completed_at=seeded_at - timedelta(days=14),
+                    ),
+                    Evidence(
+                        id=transcript_evidence_id,
+                        organisation_id=organisation_id,
+                        interaction_id=linked_interaction_ids[0],
+                        capture_session_id=transcript_capture_id,
+                        evidence_type="transcript",
+                        origin_class="imported_external",
+                        support_class="direct",
+                        validation_state="unreviewed",
+                        captured_by_user_id=user_id,
+                        captured_at=seeded_at - timedelta(days=14),
+                        lifecycle_status="available",
+                        retention_class="inherited",
+                    ),
+                )
+            )
+            await session.flush()
+            session.add(
+                OnlineMeetingTranscriptImport(
+                    id=transcript_import_id,
+                    organisation_id=organisation_id,
+                    interaction_id=linked_interaction_ids[0],
+                    capture_session_id=transcript_capture_id,
+                    evidence_id=transcript_evidence_id,
+                    transcript_version_id=transcript_version_id,
+                    imported_by_user_id=user_id,
+                    provenance="platform_generated",
+                    source_format="txt",
+                    language="en-AU",
+                    content_sha256=hashlib.sha256(TRANSCRIPTS[0].encode()).hexdigest(),
+                    character_count=len(TRANSCRIPTS[0]),
+                    timestamps_present=False,
+                    speaker_labels_present=True,
+                    idempotency_key="demo-teams-transcript-import",
+                    imported_at=seeded_at - timedelta(days=14),
+                )
+            )
+
+        recording_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-recording-import")
+        recording_capture_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-recording-capture")
+        recording_evidence_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-recording-evidence")
+        recording_consent_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-recording-consent")
+        if await session.get(RecordingSession, recording_id) is None:
+            session.add_all(
+                (
+                    CaptureSession(
+                        id=recording_capture_id,
+                        organisation_id=organisation_id,
+                        interaction_id=linked_interaction_ids[1],
+                        capture_type="imported_audio_recording",
+                        status="completed",
+                        started_by_user_id=user_id,
+                        started_at=seeded_at - timedelta(days=7),
+                        completed_at=seeded_at - timedelta(days=7),
+                    ),
+                    Evidence(
+                        id=recording_evidence_id,
+                        organisation_id=organisation_id,
+                        interaction_id=linked_interaction_ids[1],
+                        capture_session_id=recording_capture_id,
+                        evidence_type="recording",
+                        origin_class="imported_external",
+                        support_class="direct",
+                        validation_state="unreviewed",
+                        captured_by_user_id=user_id,
+                        captured_at=seeded_at - timedelta(days=7),
+                        lifecycle_status="available",
+                        retention_class="inherited",
+                    ),
+                )
+            )
+            await session.flush()
+            session.add(
+                RecordingSession(
+                    id=recording_id,
+                    organisation_id=organisation_id,
+                    interaction_id=linked_interaction_ids[1],
+                    capture_session_id=recording_capture_id,
+                    source_evidence_id=recording_evidence_id,
+                    created_by_user_id=user_id,
+                    recording_type="imported_audio_recording",
+                    recording_source="platform_recording",
+                    lifecycle_status="completed",
+                    consent_state="acknowledged",
+                    started_at=seeded_at - timedelta(days=7, minutes=30),
+                    stopped_at=seeded_at - timedelta(days=7),
+                    duration_seconds=1800,
+                    expected_mime_type="audio/mp4",
+                    final_mime_type="audio/mp4",
+                    language="en-AU",
+                    total_bytes=0,
+                    chunk_count=0,
+                    idempotency_key="demo-zoom-recording-import",
+                    upload_completed_at=seeded_at - timedelta(days=7),
+                    transcription_completed_at=seeded_at - timedelta(days=7),
+                    session_expires_at=seeded_at + timedelta(days=1),
+                    auto_intelligence_status="disabled",
+                )
+            )
+            await session.flush()
+            session.add(
+                RecordingConsent(
+                    id=recording_consent_id,
+                    organisation_id=organisation_id,
+                    interaction_id=linked_interaction_ids[1],
+                    recording_session_id=recording_id,
+                    user_id=user_id,
+                    notice_version=1,
+                    acknowledged_at=seeded_at - timedelta(days=7),
+                    consent_method="contractual_authority",
+                    user_attested_authority=True,
+                )
+            )
+
+        google_interaction_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-google-debrief")
+        google_meeting_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-google-meeting")
+        google_metadata_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-metadata-google")
+        google_debrief_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-google-debrief-session")
+        if await session.get(Interaction, google_interaction_id) is None:
+            completed_at = seeded_at - timedelta(days=2)
+            session.add_all(
+                (
+                    Interaction(
+                        id=google_interaction_id,
+                        organisation_id=organisation_id,
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        interaction_type="online_meeting",
+                        lifecycle_status="completed",
+                        title="[DEMO] Google Meet debrief fallback",
+                        actual_start_at=completed_at - timedelta(minutes=25),
+                        actual_end_at=completed_at,
+                        timezone="Australia/Sydney",
+                        creation_origin="manual",
+                        created_by_user_id=user_id,
+                    ),
+                    Meeting(
+                        id=google_meeting_id,
+                        organisation_id=organisation_id,
+                        interaction_id=google_interaction_id,
+                        title="[DEMO] Google Meet debrief fallback",
+                        description="Synthetic no-artefact scenario captured by AI Debrief.",
+                        meeting_date=completed_at,
+                        meeting_type="remote",
+                        status="completed",
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        owner_user_id=user_id,
+                        created_by=user_id,
+                        updated_by=user_id,
+                    ),
+                )
+            )
+            await session.flush()
+        if await session.get(OnlineMeetingMetadata, google_metadata_id) is None:
+            session.add(
+                OnlineMeetingMetadata(
+                    id=google_metadata_id,
+                    organisation_id=organisation_id,
+                    interaction_id=google_interaction_id,
+                    meeting_platform="google_meet",
+                    capture_source="ai_debrief",
+                    ingestion_state="ready",
+                )
+            )
+        if await session.get(DebriefSession, google_debrief_id) is None:
+            session.add(
+                CaptureSession(
+                    id=google_debrief_id,
+                    organisation_id=organisation_id,
+                    interaction_id=google_interaction_id,
+                    capture_type="ai_debrief",
+                    status="completed",
+                    started_by_user_id=user_id,
+                    started_at=seeded_at - timedelta(days=2),
+                    completed_at=seeded_at - timedelta(days=2),
+                )
+            )
+            await session.flush()
+            session.add(
+                DebriefSession(
+                    id=google_debrief_id,
+                    organisation_id=organisation_id,
+                    interaction_id=google_interaction_id,
+                    started_by_user_id=user_id,
+                    lifecycle_status="completed",
+                    idempotency_key="demo-google-debrief-fallback",
+                    question_count=0,
+                    max_questions=5,
+                    safety_confirmed_at=seeded_at - timedelta(days=2),
+                    finished_early=True,
+                    completed_at=seeded_at - timedelta(days=2),
+                )
+            )
         companion_variants: tuple[tuple[BriefInteractionType, str, str, int], ...] = (
             ("face_to_face_meeting", "in_person", "[DEMO] On-site pilot planning", 1),
             ("phone_call", "phone", "[DEMO] Pilot next-step call", 2),
@@ -964,11 +1209,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 8},
+                    metadata_json={"dataset_version": 9},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 8}
+            event.metadata_json = {"dataset_version": 9}
     return {
         "status": "ready",
         "company_id": company_id,
@@ -976,6 +1221,11 @@ async def seed_demo_data(
         "contact_id": phone_contact_id,
         "meeting_ids": meeting_ids,
         "interaction_ids": (*linked_interaction_ids, *companion_interaction_ids),
+        "online_meeting_interaction_ids": (
+            linked_interaction_ids[0],
+            linked_interaction_ids[1],
+            google_interaction_id,
+        ),
         "brief_ids": brief_ids,
         "debrief_interaction_ids": debrief_interaction_ids,
         "debrief_session_ids": (phone_session_id, trade_show_session_id),
@@ -994,6 +1244,7 @@ async def reset_demo_data(
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
     phone_contact_id = demo_phone_contact_id(organisation_id)
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
+    google_meeting_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-google-meeting")
     debrief_interaction_ids = list(demo_debrief_ids(organisation_id)[:5])
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
@@ -1007,7 +1258,11 @@ async def reset_demo_data(
             )
             .values(opportunity_id=None)
         )
-        await _delete_meeting_batch(session, organisation_id, [*meeting_ids, *companion_meeting_ids])
+        await _delete_meeting_batch(
+            session,
+            organisation_id,
+            [*meeting_ids, *companion_meeting_ids, google_meeting_id],
+        )
         await _delete_visual_objects(session, active_settings, organisation_id, debrief_interaction_ids)
         await _delete_interaction_batch(session, organisation_id, debrief_interaction_ids)
         await session.execute(
