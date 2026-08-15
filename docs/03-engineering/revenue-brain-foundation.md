@@ -5,6 +5,11 @@ reviewed and processed by existing Interaction Intelligence, the established
 Meeting-linked snapshot composition, provenance and idempotency rules apply. An
 import retry cannot itself create a second snapshot.
 
+WO-020 likewise adds no provisional Revenue Brain path. Live signals and brief
+progress are never snapshot inputs. Only separately finalised and validated normal
+Interaction Intelligence may create the existing immutable Brain composition;
+live-to-final reconciliation updates only the live history.
+
 ## Product behaviour
 
 WO-008A adds an append-only account timeline of immutable meeting-intelligence
@@ -154,6 +159,7 @@ The content preserves the **Reported by you** origin and reconciliation state; i
 does not copy a recording or transcript. Retry reuses the completed debrief and does
 not append duplicate snapshots. No-answer, voicemail and cancelled calls append no
 customer-intelligence snapshot and are not interpreted as relationship decline.
+
 ## WO-019 source timeline
 
 The account Revenue Brain now reads immutable `RevenueBrainSourceSnapshot` rows in

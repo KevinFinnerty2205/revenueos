@@ -90,6 +90,18 @@ class Settings(BaseSettings):
         le=20_000_000_000,
     )
     private_beta_max_email_analyses_per_day: int = Field(default=50, ge=1, le=2_000)
+    private_beta_live_processing_interval_seconds: int = Field(default=15, ge=5, le=60)
+    private_beta_live_min_new_segments: int = Field(default=2, ge=1, le=10)
+    private_beta_live_min_new_characters: int = Field(default=160, ge=40, le=2_000)
+    private_beta_live_window_segments: int = Field(default=12, ge=4, le=30)
+    private_beta_live_window_characters: int = Field(default=8_000, ge=1_000, le=20_000)
+    private_beta_live_window_overlap_segments: int = Field(default=2, ge=0, le=5)
+    private_beta_max_live_requests_per_minute: int = Field(default=4, ge=1, le=12)
+    private_beta_max_live_requests_per_interaction: int = Field(default=120, ge=1, le=500)
+    private_beta_max_live_characters_per_interaction: int = Field(default=200_000, ge=1_000, le=1_000_000)
+    private_beta_max_concurrent_live_interactions: int = Field(default=3, ge=1, le=20)
+    private_beta_max_live_provider_calls_per_day: int = Field(default=200, ge=1, le=5_000)
+    private_beta_live_retention_days: int = Field(default=30, ge=1, le=90)
     private_beta_document_processing_retries: int = Field(default=3, ge=1, le=5)
     private_beta_email_processing_retries: int = Field(default=3, ge=1, le=5)
     private_beta_recording_session_expiry_hours: int = Field(default=24, ge=1, le=168)
@@ -115,6 +127,8 @@ class Settings(BaseSettings):
     feature_online_meeting_auto_ingest_enabled: bool = False
     feature_document_evidence_enabled: bool = True
     feature_email_evidence_enabled: bool = True
+    feature_live_interaction_intelligence_enabled: bool = False
+    feature_live_interaction_external_ai_enabled: bool = False
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -310,6 +324,12 @@ class Settings(BaseSettings):
             and not self.feature_online_meeting_native_integration_enabled
         ):
             raise ValueError("Online-meeting auto-ingest requires a native integration to be enabled.")
+        if self.private_beta_live_window_overlap_segments >= self.private_beta_live_window_segments:
+            raise ValueError("Live transcript overlap must be smaller than the processing window.")
+        if self.feature_live_interaction_external_ai_enabled and not (
+            self.feature_live_interaction_intelligence_enabled and self.feature_openai_provider_enabled
+        ):
+            raise ValueError("External live intelligence requires both live intelligence and OpenAI feature flags.")
         return self
 
     @property
@@ -365,6 +385,8 @@ class Settings(BaseSettings):
             "onlineMeetingAutoIngest": self.feature_online_meeting_auto_ingest_enabled,
             "documentEvidence": self.feature_document_evidence_enabled,
             "emailEvidence": self.feature_email_evidence_enabled,
+            "liveInteractionIntelligence": self.feature_live_interaction_intelligence_enabled,
+            "liveInteractionExternalAi": self.feature_live_interaction_external_ai_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

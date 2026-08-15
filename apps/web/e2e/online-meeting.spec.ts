@@ -93,6 +93,7 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
             onlineMeetingImport: true,
             onlineMeetingNativeIntegration: false,
             onlineMeetingAutoIngest: false,
+            liveInteractionIntelligence: true,
             dataExport: true,
             organisationDeletion: false,
           },
@@ -109,6 +110,10 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
       const path = new URL(request.url()).pathname;
       if (path.endsWith("/companion/brief")) {
         await route.fulfill({ json: completedBrief() });
+        return;
+      }
+      if (path.endsWith("/companion/markers")) {
+        await route.fulfill({ json: [] });
         return;
       }
       if (path.endsWith("/visual-evidence") && request.method() === "GET") {
@@ -145,6 +150,26 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
             nativeConnectionState: "not_configured",
             safeMessage:
               "Authorised recording and transcript imports are available. No meeting-platform connection is configured.",
+          },
+        });
+        return;
+      }
+      if (path.endsWith("/live-intelligence")) {
+        await route.fulfill({
+          json: {
+            availability: "unavailable",
+            state: "unavailable",
+            safeMessage:
+              "No authorised progressive transcript source is available. Use the post-interaction Debrief instead.",
+            sourceKind: null,
+            sessionId: null,
+            signals: [],
+            objectives: [],
+            openQuestions: [],
+            reconciliation: null,
+            generatedAt: null,
+            updatedAt: null,
+            nextPollSeconds: 15,
           },
         });
         return;
@@ -193,6 +218,8 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
       .getByRole("region", { name: "Use your meeting platform" })
       .getByText(/remains passive while the meeting runs/i),
   ).toBeVisible();
+  await page.getByRole("link", { name: "Open mobile Companion" }).click();
+  await expect(page.getByText("Live Intelligence unavailable")).toBeVisible();
   await expect(
     page.getByRole("button", { name: /capture meeting audio/i }),
   ).toHaveCount(0);

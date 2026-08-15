@@ -38,6 +38,9 @@ from revenueos.models import (
     Interaction,
     InteractionIntelligenceSnapshot,
     InteractionMarker,
+    LiveBriefProgress,
+    LiveInteractionSession,
+    LiveProcessingWindow,
     Meeting,
     MeetingParticipant,
     OnlineMeetingMetadata,
@@ -46,12 +49,14 @@ from revenueos.models import (
     OpportunityAuditEvent,
     OrganisationMembership,
     PreInteractionBrief,
+    ProvisionalSignal,
     RecordingConsent,
     RecordingSession,
     RevenueBrainInteractionSnapshot,
     RevenueBrainSourceSnapshot,
     SourceCandidateEvidence,
     Transcript,
+    TranscriptSegment,
     TranscriptVersion,
     VisualAsset,
     VisualCandidateEvidence,
@@ -651,6 +656,29 @@ def demo_marker_ids(organisation_id: UUID) -> tuple[UUID, UUID]:
     )
 
 
+def demo_live_ids(organisation_id: UUID) -> dict[str, UUID]:
+    prefix = str(organisation_id)
+    labels = (
+        "interaction",
+        "meeting",
+        "transcript",
+        "transcript-version",
+        "segment-seller",
+        "segment-customer-buying",
+        "segment-customer-risk",
+        "brief",
+        "session",
+        "window",
+        "buying-signal",
+        "risk-signal",
+        "brief-progress",
+        "final-capture",
+        "final-intelligence",
+        "brain-snapshot",
+    )
+    return {label: uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:live-intelligence-{label}") for label in labels}
+
+
 def _demo_brief_content(interaction_id: UUID, interaction_type: BriefInteractionType) -> dict[str, object]:
     variants = {
         "face_to_face_meeting": {
@@ -1230,6 +1258,271 @@ async def seed_demo_data(
                         created_by_user_id=user_id,
                     )
                 )
+        await session.flush()
+
+        live_ids = demo_live_ids(organisation_id)
+        live_completed_at = seeded_at - timedelta(hours=4)
+        if await session.get(Interaction, live_ids["interaction"]) is None:
+            session.add_all(
+                (
+                    Interaction(
+                        id=live_ids["interaction"],
+                        organisation_id=organisation_id,
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        interaction_type="face_to_face_meeting",
+                        lifecycle_status="completed",
+                        title="[DEMO] Recorded face-to-face live review",
+                        actual_start_at=live_completed_at - timedelta(minutes=35),
+                        actual_end_at=live_completed_at,
+                        timezone="Australia/Sydney",
+                        creation_origin="manual",
+                        created_by_user_id=user_id,
+                    ),
+                    Meeting(
+                        id=live_ids["meeting"],
+                        organisation_id=organisation_id,
+                        interaction_id=live_ids["interaction"],
+                        title="[DEMO] Recorded face-to-face live review",
+                        description="Synthetic authorised progressive-source demonstration.",
+                        meeting_date=live_completed_at,
+                        meeting_type="in_person",
+                        status="completed",
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        owner_user_id=user_id,
+                        created_by=user_id,
+                        updated_by=user_id,
+                    ),
+                    Transcript(
+                        id=live_ids["transcript"],
+                        organisation_id=organisation_id,
+                        meeting_id=live_ids["meeting"],
+                        raw_text="SYNTHETIC DEMO FINAL TRANSCRIPT — no real customer data.",
+                        language="en-AU",
+                        version=1,
+                        source="manual",
+                    ),
+                    PreInteractionBrief(
+                        id=live_ids["brief"],
+                        organisation_id=organisation_id,
+                        interaction_id=live_ids["interaction"],
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        source_context_fingerprint=hashlib.sha256(f"demo-live:{organisation_id}".encode()).hexdigest(),
+                        brief_version=1,
+                        schema_version=2,
+                        status="completed",
+                        content_json=_demo_brief_content(
+                            live_ids["interaction"],
+                            "face_to_face_meeting",
+                        ),
+                        source_references_json=[],
+                        created_by_user_id=user_id,
+                    ),
+                )
+            )
+            await session.flush()
+            session.add(
+                TranscriptVersion(
+                    id=live_ids["transcript-version"],
+                    organisation_id=organisation_id,
+                    interaction_id=live_ids["interaction"],
+                    meeting_id=live_ids["meeting"],
+                    transcript_id=live_ids["transcript"],
+                    version=2,
+                    raw_text="Progressive segment envelope; segment rows are the bounded source.",
+                    language="en-AU",
+                    source="progressive",
+                    status="final",
+                )
+            )
+            await session.flush()
+            session.add_all(
+                (
+                    TranscriptSegment(
+                        id=live_ids["segment-seller"],
+                        organisation_id=organisation_id,
+                        transcript_version_id=live_ids["transcript-version"],
+                        sequence_number=0,
+                        start_ms=0,
+                        end_ms=8_000,
+                        speaker_label="Speaker 1",
+                        speaker_role="salesperson",
+                        text="Our platform reduces cost and supports rapid rollout.",
+                    ),
+                    TranscriptSegment(
+                        id=live_ids["segment-customer-buying"],
+                        organisation_id=organisation_id,
+                        transcript_version_id=live_ids["transcript-version"],
+                        sequence_number=1,
+                        start_ms=8_000,
+                        end_ms=16_000,
+                        speaker_label="Speaker 2",
+                        speaker_role="customer",
+                        text="We are ready to move forward and would like an October rollout.",
+                    ),
+                    TranscriptSegment(
+                        id=live_ids["segment-customer-risk"],
+                        organisation_id=organisation_id,
+                        transcript_version_id=live_ids["transcript-version"],
+                        sequence_number=2,
+                        start_ms=16_000,
+                        end_ms=24_000,
+                        speaker_label="Speaker 2",
+                        speaker_role="customer",
+                        text="Security review may take four weeks.",
+                    ),
+                    CaptureSession(
+                        id=live_ids["final-capture"],
+                        organisation_id=organisation_id,
+                        interaction_id=live_ids["interaction"],
+                        capture_type="ai_debrief",
+                        status="completed",
+                        started_by_user_id=user_id,
+                        started_at=live_completed_at,
+                        completed_at=live_completed_at + timedelta(minutes=5),
+                    ),
+                )
+            )
+            await session.flush()
+            final_content = {
+                "schemaVersion": 1,
+                "origin": "salesperson_reported",
+                "items": [
+                    {
+                        "category": "buying_signal",
+                        "statement": "The customer requested an October rollout.",
+                    },
+                    {
+                        "category": "risk",
+                        "statement": "Security review requires approximately four weeks.",
+                    },
+                ],
+            }
+            session.add(
+                InteractionIntelligenceSnapshot(
+                    id=live_ids["final-intelligence"],
+                    organisation_id=organisation_id,
+                    interaction_id=live_ids["interaction"],
+                    opportunity_id=opportunity_id,
+                    session_id=live_ids["final-capture"],
+                    schema_version=1,
+                    version=1,
+                    validation_state="validated",
+                    content_json=final_content,
+                    source_evidence_ids=[],
+                )
+            )
+            await session.flush()
+            session.add(
+                RevenueBrainInteractionSnapshot(
+                    id=live_ids["brain-snapshot"],
+                    organisation_id=organisation_id,
+                    company_id=company_id,
+                    opportunity_id=opportunity_id,
+                    interaction_id=live_ids["interaction"],
+                    interaction_intelligence_id=live_ids["final-intelligence"],
+                    schema_version=1,
+                    version=1,
+                    content_json=final_content,
+                    source_evidence_ids=[],
+                )
+            )
+            session.add(
+                LiveInteractionSession(
+                    id=live_ids["session"],
+                    organisation_id=organisation_id,
+                    interaction_id=live_ids["interaction"],
+                    transcript_version_id=live_ids["transcript-version"],
+                    brief_id=live_ids["brief"],
+                    final_intelligence_id=live_ids["final-intelligence"],
+                    created_by_user_id=user_id,
+                    status="completed",
+                    source_kind="progressive_transcript",
+                    last_processed_sequence=2,
+                    last_processed_at=live_completed_at,
+                    processed_character_count=151,
+                    processing_request_count=1,
+                    started_at=live_completed_at - timedelta(minutes=30),
+                    stopped_at=live_completed_at,
+                    reconciled_at=live_completed_at + timedelta(minutes=5),
+                    retention_expires_at=seeded_at + timedelta(days=30),
+                )
+            )
+            await session.flush()
+            buying_statement = "Customer asked about an October rollout."
+            risk_statement = "Security review may take four weeks."
+            session.add_all(
+                (
+                    LiveProcessingWindow(
+                        id=live_ids["window"],
+                        organisation_id=organisation_id,
+                        live_session_id=live_ids["session"],
+                        trigger_idempotency_key="demo-live-window-1",
+                        window_fingerprint=hashlib.sha256(b"demo-live-window-1").hexdigest(),
+                        first_sequence=0,
+                        last_sequence=2,
+                        segment_count=3,
+                        character_count=151,
+                        status="completed",
+                        signal_count=2,
+                        completed_at=live_completed_at,
+                    ),
+                    ProvisionalSignal(
+                        id=live_ids["buying-signal"],
+                        organisation_id=organisation_id,
+                        interaction_id=live_ids["interaction"],
+                        live_session_id=live_ids["session"],
+                        transcript_version_id=live_ids["transcript-version"],
+                        signal_type="buying_signal",
+                        statement=buying_statement,
+                        lifecycle_status="promoted_candidate",
+                        is_provisional=True,
+                        priority="high",
+                        evidence_strength="customer_attributed",
+                        resolution_status="revised",
+                        signal_fingerprint=hashlib.sha256(buying_statement.lower().encode()).hexdigest(),
+                        subject_fingerprint=hashlib.sha256(b"buying-signal").hexdigest(),
+                        source_sequence_start=1,
+                        source_sequence_end=1,
+                        detected_at=live_completed_at - timedelta(minutes=15),
+                        last_updated_at=live_completed_at + timedelta(minutes=5),
+                    ),
+                    ProvisionalSignal(
+                        id=live_ids["risk-signal"],
+                        organisation_id=organisation_id,
+                        interaction_id=live_ids["interaction"],
+                        live_session_id=live_ids["session"],
+                        transcript_version_id=live_ids["transcript-version"],
+                        signal_type="risk",
+                        statement=risk_statement,
+                        lifecycle_status="promoted_candidate",
+                        is_provisional=True,
+                        priority="high",
+                        evidence_strength="customer_attributed",
+                        resolution_status="revised",
+                        signal_fingerprint=hashlib.sha256(risk_statement.lower().encode()).hexdigest(),
+                        subject_fingerprint=hashlib.sha256(b"security-risk").hexdigest(),
+                        source_sequence_start=2,
+                        source_sequence_end=2,
+                        detected_at=live_completed_at - timedelta(minutes=10),
+                        last_updated_at=live_completed_at + timedelta(minutes=5),
+                    ),
+                    LiveBriefProgress(
+                        id=live_ids["brief-progress"],
+                        organisation_id=organisation_id,
+                        live_session_id=live_ids["session"],
+                        item_type="objective",
+                        item_index=0,
+                        item_fingerprint=hashlib.sha256(
+                            b"Confirm the most valuable outcome for the in-person discussion."
+                        ).hexdigest(),
+                        progress_status="possibly_addressed",
+                        source_sequence_end=1,
+                    ),
+                )
+            )
         debrief_interaction_ids = debrief_ids[:5]
         debrief_variants = (
             ("phone_call", "[DEMO] Completed pricing follow-up call"),
@@ -1694,11 +1987,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 10},
+                    metadata_json={"dataset_version": 11},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 10}
+            event.metadata_json = {"dataset_version": 11}
     return {
         "status": "ready",
         "company_id": company_id,
@@ -1717,6 +2010,7 @@ async def seed_demo_data(
         "visual_ids": visual_ids,
         "source_evidence_ids": source_evidence_ids,
         "marker_ids": marker_ids,
+        "live_interaction_id": live_ids["interaction"],
         "provider_calls": 0,
     }
 
@@ -1730,6 +2024,7 @@ async def reset_demo_data(
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
     phone_contact_id = demo_phone_contact_id(organisation_id)
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
+    live_ids = demo_live_ids(organisation_id)
     google_meeting_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-google-meeting")
     debrief_interaction_ids = list(demo_debrief_ids(organisation_id)[:5])
     source_ids = demo_source_evidence_ids(organisation_id)
@@ -1750,7 +2045,7 @@ async def reset_demo_data(
         await _delete_meeting_batch(
             session,
             organisation_id,
-            [*meeting_ids, *companion_meeting_ids, google_meeting_id],
+            [*meeting_ids, *companion_meeting_ids, google_meeting_id, live_ids["meeting"]],
         )
         await _delete_visual_objects(session, active_settings, organisation_id, debrief_interaction_ids)
         await _delete_interaction_batch(session, organisation_id, debrief_interaction_ids)

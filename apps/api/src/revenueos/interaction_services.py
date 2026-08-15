@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +29,7 @@ from revenueos.models import (
     Contact,
     Interaction,
     InteractionAuditEvent,
+    LiveInteractionSession,
     Meeting,
     MeetingAuditEvent,
     OnlineMeetingMetadata,
@@ -353,6 +355,19 @@ class InteractionService:
                 )
             interaction.call_outcome = request.call_outcome.value
         interaction.updated_at = datetime.now(UTC)
+        live_session = await self.session.scalar(
+            select(LiveInteractionSession)
+            .where(
+                LiveInteractionSession.organisation_id == self.tenant.organisation_id,
+                LiveInteractionSession.interaction_id == interaction.id,
+                LiveInteractionSession.status.in_(("active", "processing")),
+            )
+            .with_for_update()
+        )
+        if live_session is not None:
+            live_session.status = "stopped"
+            live_session.stopped_at = interaction.updated_at
+            live_session.failure_code = None
         if record.meeting_id is not None:
             meeting = await self.repository.get_meeting_for_update(self.tenant.organisation_id, record.meeting_id)
             if meeting is None:

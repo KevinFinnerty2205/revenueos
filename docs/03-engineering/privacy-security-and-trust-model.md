@@ -68,17 +68,17 @@ RevenueOS must be able to demonstrate that:
 
 The exact permission matrix requires a dedicated implementation decision. The beta baseline is:
 
-| Capability | Member / sales representative | Manager | Organisation administrator |
-| --- | --- | --- | --- |
-| View assigned/authorised relationship context | Yes | Yes, plus policy-defined team context | Only where administration requires content; no blanket default |
-| Ingest and review own/authorised meeting | Yes | Yes | Policy-controlled |
-| Approve own follow-up/eligible CRM proposal | Yes, if connected policy allows | Yes for own work; escalation only if configured | Configure policy, not routine content approval |
-| Manage team review exceptions | No | Yes within team scope | Configure scope |
-| Connect personal provider | If permitted | If permitted | Enable/disable capability |
-| Connect shared CRM / configure mappings | No | No by default | Yes |
-| Invite/remove users and assign roles | No | No by default | Yes |
-| Configure retention/export/deletion policy | No | No | Yes |
-| View security/audit metadata | Own relevant history | Team workflow metadata where needed | Organisation-wide metadata |
+| Capability                                    | Member / sales representative   | Manager                                         | Organisation administrator                                     |
+| --------------------------------------------- | ------------------------------- | ----------------------------------------------- | -------------------------------------------------------------- |
+| View assigned/authorised relationship context | Yes                             | Yes, plus policy-defined team context           | Only where administration requires content; no blanket default |
+| Ingest and review own/authorised meeting      | Yes                             | Yes                                             | Policy-controlled                                              |
+| Approve own follow-up/eligible CRM proposal   | Yes, if connected policy allows | Yes for own work; escalation only if configured | Configure policy, not routine content approval                 |
+| Manage team review exceptions                 | No                              | Yes within team scope                           | Configure scope                                                |
+| Connect personal provider                     | If permitted                    | If permitted                                    | Enable/disable capability                                      |
+| Connect shared CRM / configure mappings       | No                              | No by default                                   | Yes                                                            |
+| Invite/remove users and assign roles          | No                              | No by default                                   | Yes                                                            |
+| Configure retention/export/deletion policy    | No                              | No                                              | Yes                                                            |
+| View security/audit metadata                  | Own relevant history            | Team workflow metadata where needed             | Organisation-wide metadata                                     |
 
 Current Sprint 2 members have equal CRUD rights for core entities. Finer permissions above are target beta work and must not be claimed as implemented.
 
@@ -237,6 +237,19 @@ Accepted evidence preserves customer/seller/import origin. Seller documents and
 outbound/internal email remain context. Object-first deletion, authorised export
 v10 and retention handle both raw source and derived lineage. Upstream deletion is
 not applicable because no upstream connector exists.
+
+## WO-020 Live Intelligence controls
+
+The live path is explicit, separately flagged and valid only over an already
+authorised progressive transcript. Its deterministic provider makes no external
+request. Customer-intent categories require customer attribution; unknown speakers
+are conservative and visible. Server cursor/idempotency controls prevent browser
+tampering and repeated windows, while completion freezes processing.
+
+Provisional state is tenant-owned under forced RLS, expires after 30 days by default
+and is included in export/deletion without raw transcript or hidden provider data.
+It cannot update final Opportunity Workspace intelligence, Revenue Brain or an
+external action. See the [security review](live-intelligence-security-review.md).
 
 ## Current high-priority gaps
 

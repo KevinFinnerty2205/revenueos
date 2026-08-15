@@ -18,6 +18,8 @@ from sqlalchemy.sql import Select
 
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
+from revenueos.live_intelligence_maintenance import delete_live_intelligence
+from revenueos.live_intelligence_services import expire_live_intelligence
 from revenueos.models import (
     AIArtifact,
     AIJob,
@@ -41,6 +43,9 @@ from revenueos.models import (
     InteractionAuditEvent,
     InteractionIntelligenceSnapshot,
     InteractionMarker,
+    LiveBriefProgress,
+    LiveInteractionSession,
+    LiveProcessingWindow,
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
@@ -53,6 +58,7 @@ from revenueos.models import (
     OrganisationBetaSettings,
     OrganisationMembership,
     PreInteractionBrief,
+    ProvisionalSignal,
     RecordingChunk,
     RecordingConsent,
     RecordingSession,
@@ -77,7 +83,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 10
+EXPORT_VERSION = 11
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -216,7 +222,24 @@ async def run_retention(
             counts,
             {"document_sources": len(document_ids), "email_sources": len(email_ids)},
         )
-        if dry_run or (not meeting_ids and not interaction_ids and not document_ids and not email_ids):
+        expired_live_count = int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(LiveInteractionSession)
+                    .where(
+                        LiveInteractionSession.organisation_id == organisation_id,
+                        LiveInteractionSession.retention_expires_at <= datetime.now(UTC),
+                        LiveInteractionSession.status != "expired",
+                    )
+                )
+            )
+            or 0
+        )
+        counts["expired_live_sessions"] = expired_live_count
+        if dry_run or (
+            not meeting_ids and not interaction_ids and not document_ids and not email_ids and not expired_live_count
+        ):
             return RetentionResult(
                 organisation_id,
                 dry_run,
@@ -224,6 +247,13 @@ async def run_retention(
                 len(meeting_ids),
                 len(interaction_ids),
                 counts,
+            )
+        if expired_live_count:
+            await expire_live_intelligence(
+                session,
+                organisation_id,
+                now=datetime.now(UTC),
+                limit=bounded_batch_size,
             )
         meeting_interaction_ids = list(
             (
@@ -529,6 +559,11 @@ async def _delete_organisation_records(
         export_root = Path(settings.private_beta_export_directory).resolve()
         for export_record in export_records:
             _validated_export_path(export_root, export_record).unlink(missing_ok=True)
+        await delete_live_intelligence(
+            session,
+            organisation_id,
+            interaction_ids=interaction_ids,
+        )
         await session.execute(delete(RevenueBrainInsight).where(RevenueBrainInsight.organisation_id == organisation_id))
         await session.execute(
             delete(RevenueBrainInteractionSnapshot).where(
@@ -1326,6 +1361,68 @@ async def _interaction_deletion_counts_from_select(
             )
             or 0
         ),
+        "live_interaction_sessions": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(LiveInteractionSession)
+                    .where(
+                        LiveInteractionSession.organisation_id == organisation_id,
+                        LiveInteractionSession.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "live_processing_windows": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(LiveProcessingWindow)
+                    .where(
+                        LiveProcessingWindow.organisation_id == organisation_id,
+                        LiveProcessingWindow.live_session_id.in_(
+                            select(LiveInteractionSession.id).where(
+                                LiveInteractionSession.organisation_id == organisation_id,
+                                LiveInteractionSession.interaction_id.in_(interaction_ids),
+                            )
+                        ),
+                    )
+                )
+            )
+            or 0
+        ),
+        "provisional_signals": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProvisionalSignal)
+                    .where(
+                        ProvisionalSignal.organisation_id == organisation_id,
+                        ProvisionalSignal.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "live_brief_progress": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(LiveBriefProgress)
+                    .where(
+                        LiveBriefProgress.organisation_id == organisation_id,
+                        LiveBriefProgress.live_session_id.in_(
+                            select(LiveInteractionSession.id).where(
+                                LiveInteractionSession.organisation_id == organisation_id,
+                                LiveInteractionSession.interaction_id.in_(interaction_ids),
+                            )
+                        ),
+                    )
+                )
+            )
+            or 0
+        ),
     }
 
 
@@ -1337,6 +1434,11 @@ async def _delete_interaction_batch(
     if not interaction_ids:
         return {}
     counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
+    await delete_live_intelligence(
+        session,
+        organisation_id,
+        interaction_ids=interaction_ids,
+    )
     await _delete_recording_database_rows(session, organisation_id, interaction_ids)
     await session.execute(
         delete(RevenueBrainInteractionSnapshot).where(
@@ -1449,6 +1551,11 @@ async def _delete_recording_database_rows(
     version_ids = select(TranscriptVersion.id).where(
         TranscriptVersion.organisation_id == organisation_id,
         TranscriptVersion.interaction_id.in_(interaction_ids),
+    )
+    await delete_live_intelligence(
+        session,
+        organisation_id,
+        interaction_ids=interaction_ids,
     )
     await session.execute(
         update(RecordingSession)
@@ -1617,6 +1724,21 @@ async def _export_payload(
         select(PreInteractionBrief)
         .where(PreInteractionBrief.organisation_id == organisation_id)
         .order_by(PreInteractionBrief.interaction_id, PreInteractionBrief.brief_version)
+    )
+    live_sessions = await rows(
+        select(LiveInteractionSession)
+        .where(LiveInteractionSession.organisation_id == organisation_id)
+        .order_by(LiveInteractionSession.interaction_id, LiveInteractionSession.created_at)
+    )
+    provisional_signals = await rows(
+        select(ProvisionalSignal)
+        .where(ProvisionalSignal.organisation_id == organisation_id)
+        .order_by(ProvisionalSignal.interaction_id, ProvisionalSignal.detected_at, ProvisionalSignal.id)
+    )
+    live_brief_progress = await rows(
+        select(LiveBriefProgress)
+        .where(LiveBriefProgress.organisation_id == organisation_id)
+        .order_by(LiveBriefProgress.live_session_id, LiveBriefProgress.item_type, LiveBriefProgress.item_index)
     )
     participants = await rows(
         select(MeetingParticipant)
@@ -2223,6 +2345,74 @@ async def _export_payload(
                 ),
             )
             for item in briefs
+        ],
+        "liveInteractionSessions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "transcript_version_id",
+                    "brief_id",
+                    "final_intelligence_id",
+                    "created_by_user_id",
+                    "status",
+                    "source_kind",
+                    "last_processed_sequence",
+                    "last_processed_at",
+                    "processed_character_count",
+                    "processing_request_count",
+                    "started_at",
+                    "stopped_at",
+                    "reconciled_at",
+                    "retention_expires_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in live_sessions
+        ],
+        "provisionalSignals": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "interaction_id",
+                    "live_session_id",
+                    "transcript_version_id",
+                    "superseded_by_id",
+                    "signal_type",
+                    "statement",
+                    "lifecycle_status",
+                    "is_provisional",
+                    "priority",
+                    "evidence_strength",
+                    "resolution_status",
+                    "source_sequence_start",
+                    "source_sequence_end",
+                    "detected_at",
+                    "last_updated_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in provisional_signals
+        ],
+        "liveBriefProgress": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "live_session_id",
+                    "item_type",
+                    "item_index",
+                    "progress_status",
+                    "source_sequence_end",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in live_brief_progress
         ],
         "interactionIntelligenceSnapshots": [
             _columns(

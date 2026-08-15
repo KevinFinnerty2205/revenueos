@@ -18,6 +18,7 @@ from revenueos.audio_validation import UnsafeAudioError, validate_audio_header
 from revenueos.beta_services import BetaService
 from revenueos.config import Settings
 from revenueos.errors import PublicAPIError
+from revenueos.live_intelligence_maintenance import delete_live_intelligence
 from revenueos.models import (
     BetaSystemEvent,
     CaptureSession,
@@ -754,6 +755,11 @@ class RecordingService:
         now = datetime.now(UTC)
         version = await self.repository.get_recording_transcript_version(self.tenant.organisation_id, recording_id)
         if version is not None:
+            await delete_live_intelligence(
+                self.session,
+                self.tenant.organisation_id,
+                transcript_version_ids=(version.id,),
+            )
             version.status = "deleted"
             version.deleted_at = now
             for segment in await self.repository.list_transcript_segments(self.tenant.organisation_id, version.id):

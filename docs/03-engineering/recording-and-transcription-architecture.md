@@ -290,16 +290,24 @@ mismatch, transcript-only sources, missing speaker identity and provider deletio
 
 ## Live Interaction Intelligence
 
-Live signals consume incomplete evidence and are labelled provisional with source
-time and coverage. They cannot update Revenue Brain, trigger external action or be
+WO-020 implements the live intelligence aggregate over a deliberately supplied
+`progressive`/`provisional` transcript version. It does not make the WO-015 batch
+provider stream, does not pretend WO-018 imports are live and stores no duplicate
+transcript window. Segment `speaker_role` is controlled and optional; a label remains
+different from identity.
+
+Live signals consume incomplete evidence and are labelled provisional with exact
+segment ranges. They cannot update Revenue Brain, trigger external action or be
 presented as validated post-interaction intelligence. After final transcript and
-all sources arrive, the normal source-aware capability reruns/reconciles. The final
-result may remove or contradict a live signal.
+all sources arrive, the normal source-aware capability runs and the live aggregate
+reconciles separately. The final result may remove or contradict a live signal.
 
 Real-time transport becomes justified only when tests show that a specific
 in-session decision benefits from low latency and the benefit outweighs attention,
 privacy, cost and reliability risks. WebSockets/streaming are not architecture goals
-by themselves.
+by themselves; the current path uses bounded HTTP polling. Production progressive
+transcription remains disabled until a provider and its consent/privacy/operational
+controls are separately approved.
 
 ## Observability and failure UX
 

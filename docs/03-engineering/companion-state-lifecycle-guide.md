@@ -50,3 +50,15 @@ review-required and completed states.
 No phase transition automatically generates evidence or intelligence. Existing
 recording transcription, Visual Evidence review and AI Debrief review rules
 remain authoritative.
+
+## Live Intelligence substate
+
+The optional live aggregate has its own server lifecycle:
+`active → processing → active → stopped → completed`, plus safe `failed`/`expired`
+states. It is not a second Interaction phase. Polling never supplies the cursor and
+cannot advance it without contiguous segments. Interaction completion locks and
+freezes active processing state. Final reconciliation is available only after normal
+final Interaction Intelligence exists (or reports unresolved when it does not).
+
+See [incremental processing](live-intelligence-incremental-processing.md) and
+[reconciliation](live-intelligence-reconciliation.md).

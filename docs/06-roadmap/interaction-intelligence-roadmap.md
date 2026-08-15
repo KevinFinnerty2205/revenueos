@@ -1,13 +1,13 @@
 # Interaction Intelligence roadmap
 
-The current baseline now includes WO-019 deliberate document and email evidence.
+The current baseline now includes WO-020 bounded Live Interaction Intelligence.
 WO-018 already provides recording/transcript import and Debrief fallback for
 online meetings. Any native mailbox, drive or meeting adapter remains a separately
 approved, design-partner-driven increment.
 
 - **Status:** Recommended sequence; each stage requires a separate approved work
   order before implementation
-- **Current baseline:** Work through WO-019 Documents and Email Evidence is complete;
+- **Current baseline:** Work through WO-020 Live Interaction Intelligence is complete;
   WO-010 remains the approved blueprint
 - **Primary optimisation:** Earliest trustworthy use for real face-to-face sales
   interactions without requiring recording or transcript upload
@@ -281,16 +281,16 @@ during, and immediate evidence-gap capture after the interaction.
 
 ### Impacts and dependencies
 
-| Area         | Scope                                                                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| Dependencies | WO-012/013/014/015 brief, debrief, visual-evidence and recording foundations                                                     |
-| Data model   | Tenant-isolated metadata-only quick markers with type, creator, interaction time and optional recording offset                 |
-| Backend      | Idempotent Interaction start, marker CRUD, recording concurrency protection and capture-status projection                      |
-| Frontend     | Responsive `/interactions/{id}/companion` with BEFORE, DURING and AFTER phases; no dense live transcript or coaching           |
+| Area         | Scope                                                                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependencies | WO-012/013/014/015 brief, debrief, visual-evidence and recording foundations                                                          |
+| Data model   | Tenant-isolated metadata-only quick markers with type, creator, interaction time and optional recording offset                        |
+| Backend      | Idempotent Interaction start, marker CRUD, recording concurrency protection and capture-status projection                             |
+| Frontend     | Responsive `/interactions/{id}/companion` with BEFORE, DURING and AFTER phases; no dense live transcript or coaching                  |
 | Mobile       | Foreground browser recording only; bounded retry and recovery, screen wake lock where available, honest screen-lock/background limits |
-| AI           | Reuses existing deterministic brief and reviewed debrief; gap prompts suppress targets already covered by direct evidence     |
-| Privacy      | Explicit recording/passive choice, consent gate, content-free markers, truthful phone/online limitations and no implicit listening |
-| Operations   | Browser support matrix, safe logs, quota/retention controls, interrupted-session recovery and synthetic end-to-end coverage    |
+| AI           | Reuses existing deterministic brief and reviewed debrief; gap prompts suppress targets already covered by direct evidence             |
+| Privacy      | Explicit recording/passive choice, consent gate, content-free markers, truthful phone/online limitations and no implicit listening    |
+| Operations   | Browser support matrix, safe logs, quota/retention controls, interrupted-session recovery and synthetic end-to-end coverage           |
 
 ### Acceptance criteria
 
@@ -341,16 +341,16 @@ online meetings, with AI Debrief/Voice Journal fallback.
 
 ### Impacts and dependencies
 
-| Area         | Scope                                                                                                                      |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Dependencies | WO-012 through WO-017; no connector credential required                                                                  |
-| Data model   | Tenant-owned normalised meeting metadata and transcript-import provenance                                                |
-| Backend      | Safe references, capabilities, idempotent TXT/VTT/SRT import, WO-015 recording reuse and deterministic adapter fake         |
-| Frontend     | Safe open, passive meeting state, capability-driven import and Debrief/Voice Journal fallback                           |
-| Mobile       | None required; existing Companion surfaces consume results                                                                 |
-| AI           | Reuse transcription only when source lacks an approved transcript; no new live capability                                  |
-| Privacy      | Authority notice, URL/token minimisation, tenant/RLS isolation and local/upstream deletion boundary                      |
-| Operations   | Existing recording/transcription quotas, metadata-only state and import retry/deduplication                              |
+| Area         | Scope                                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Dependencies | WO-012 through WO-017; no connector credential required                                                             |
+| Data model   | Tenant-owned normalised meeting metadata and transcript-import provenance                                           |
+| Backend      | Safe references, capabilities, idempotent TXT/VTT/SRT import, WO-015 recording reuse and deterministic adapter fake |
+| Frontend     | Safe open, passive meeting state, capability-driven import and Debrief/Voice Journal fallback                       |
+| Mobile       | None required; existing Companion surfaces consume results                                                          |
+| AI           | Reuse transcription only when source lacks an approved transcript; no new live capability                           |
+| Privacy      | Authority notice, URL/token minimisation, tenant/RLS isolation and local/upstream deletion boundary                 |
+| Operations   | Existing recording/transcription quotas, metadata-only state and import retry/deduplication                         |
 
 ### Acceptance criteria
 
@@ -408,6 +408,11 @@ selected source path and multi-source reconciliation.
 
 ## WO-020 — Live Interaction Intelligence
 
+**Delivery status:** Implemented by WO-020 as an optional deterministic/no-network
+provisional path over an authorised progressive transcript. See the
+[sprint record](../07-sprints/wo-020-live-interaction-intelligence.md) and
+[product guide](../01-product/live-interaction-intelligence.md).
+
 ### Objective and user value
 
 Evaluate and deliver a narrowly scoped, opt-in live capability that identifies
@@ -416,16 +421,16 @@ so materially improves the interaction or post-interaction review.
 
 ### Impacts and dependencies
 
-| Area         | Scope                                                                                                                    |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| Dependencies | WO-015/016 and validated recording adoption, final-intelligence evaluation, explicit product need and privacy approval   |
-| Data model   | Provisional transcript/claim versions, coverage/gap and final-reconciliation relation                                    |
-| Backend      | Streaming/near-real-time transport only for selected use case, bounded buffers, provisional state and final reprocessing |
-| Frontend     | Suppressible, non-intrusive provisional UI; final review clearly separate                                                |
-| Mobile       | Supported native capture path only; battery/network behaviour tested                                                     |
-| AI           | Evaluated live extraction for a small allowed taxonomy; strict provisional output                                        |
-| Privacy      | Explicit mode/indicator, no covert coaching, consent and provider streaming path                                         |
-| Operations   | Stream health, latency, cost, backpressure, partial/final disagreement and feature kill switch                           |
+| Area         | Scope                                                                                                                  |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| Dependencies | WO-015/016 and validated recording adoption, final-intelligence evaluation, explicit product need and privacy approval |
+| Data model   | Provisional transcript/claim versions, coverage/gap and final-reconciliation relation                                  |
+| Backend      | Server-authoritative cursor, bounded polled windows, separate provisional state and final reconciliation               |
+| Frontend     | Suppressible, non-intrusive provisional UI; final review clearly separate                                              |
+| Mobile       | Responsive foreground browser only; no native client or background guarantee                                           |
+| AI           | Deterministic no-network extraction for a small allowed taxonomy; external live AI remains off                         |
+| Privacy      | Explicit mode/indicator, no covert coaching, consent and provider streaming path                                       |
+| Operations   | Stream health, latency, cost, backpressure, partial/final disagreement and feature kill switch                         |
 
 ### Acceptance criteria
 
@@ -441,8 +446,8 @@ so materially improves the interaction or post-interaction review.
 ### Out of scope and testing availability
 
 No broad live coach, emotion analysis, autonomous action, universal platform or
-guaranteed real-time result. Only explicit pilot users test the selected provisional
-use case.
+guaranteed real-time result. Only explicitly enabled private-beta workspaces test the
+selected provisional use case; production progressive transcription remains unavailable.
 
 ## WO-021 — Interaction Platform Beta
 

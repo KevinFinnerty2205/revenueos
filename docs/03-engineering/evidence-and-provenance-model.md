@@ -313,6 +313,7 @@ customer-direct evidence. See [Phone-call provenance](phone-call-provenance.md).
 - [Recording and transcription architecture](recording-and-transcription-architecture.md)
 - [Interaction security, privacy and consent](interaction-security-privacy-and-consent.md)
 - [AI system blueprint](../04-ai/ai-system-blueprint.md)
+
 ## WO-019 document and email evidence
 
 WO-019 extends the envelope with `document` and `email` evidence and a `context`
@@ -327,3 +328,17 @@ verified inbound customer email can be direct, but extraction remains
 seller-prepared or salesperson-reported context even after acceptance. Edited,
 rejected, conflicting and superseding states remain traceable; no accepted row is
 silently overwritten. See [document and email provenance](document-email-provenance.md).
+
+## WO-020 progressive and provisional evidence
+
+A progressive Transcript Version is incomplete source evidence, not final
+intelligence. Ordered segments may carry a controlled `customer`, `salesperson` or
+`unknown` role; the role is not biometric identity. Live statements reference exact
+segment sequence ranges and retain `customer_attributed`, `speaker_uncertain` or
+`context_only` strength.
+
+The separate live aggregate never changes source origin or final validation. Seller
+speech cannot establish customer intent and unknown speakers are restricted to
+conservative operational categories. Final evidence processing and reconciliation
+can confirm, revise, reject or leave the live interpretation unresolved. See
+[speaker and provenance safety](live-intelligence-speaker-provenance-safety.md).

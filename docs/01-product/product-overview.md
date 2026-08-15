@@ -6,6 +6,12 @@ navigation, passive Companion timing and deliberate recording/transcript import 
 AI Debrief/Voice Journal fallback. It does not add a native connector, meeting bot
 or system-audio capture.
 
+WO-020 adds optional Live Interaction Intelligence when a supported in-progress
+Interaction already has an authorised progressive transcript source. It persists
+possible signals and brief progress separately, then reconciles them with final
+Interaction Intelligence. It does not add production live transcription or allow
+provisional state to update final Opportunity Workspace intelligence or Revenue Brain.
+
 ## Product definition
 
 RevenueOS AI is a multi-tenant relationship-intelligence platform. Sales Brain will help relationship-driven revenue professionals prepare for conversations, capture useful context, reduce administration and follow through thoughtfully.
@@ -42,7 +48,8 @@ WO-016 adds the current mobile-first browser Companion. It derives phase from
 the Interaction lifecycle, presents the concise brief, requires a deliberate
 recording/passive choice, supports authorised photos and metadata-only markers,
 and directs AFTER into the existing reviewed debrief. It remains a foreground
-browser workflow rather than a native or live-intelligence product.
+browser workflow rather than a native product; WO-020 adds a bounded optional live
+panel inside that existing route.
 
 WO-017 adds the current browser-first phone-call workflow. A user can link a
 same-tenant Contact/company/opportunity, scan a compact brief, manually start/end an
@@ -95,7 +102,10 @@ The current implementation provides:
   recording import and source-aware downstream updates; and
 - a deliberate PDF/TXT document and plain-text email path with exact source
   ownership/direction, mandatory review and accepted-evidence Opportunity/Revenue
-  Brain timelines.
+  Brain timelines; and
+- optional provisional Live Intelligence over an authorised progressive transcript,
+  with a server cursor, bounded overlap, objective/question progress, possible
+  signals, dismissal and final reconciliation. Both live flags default off.
 
 The current product accepts only deliberately supplied or explicitly armed inputs:
 record metadata, pasted transcripts, reviewed visual/document/email evidence,
@@ -124,6 +134,20 @@ Production customer data remains prohibited unless separately approved. See the
 [private beta readiness guide](../03-engineering/private-beta-readiness.md).
 
 ## Product principles
+
+### WO-020 provisional live boundary
+
+The current Live Companion is quiet, collapsible and explicitly enabled per
+Interaction. It shows “Possible …” items and uncertain speaker attribution without a
+confidence score. It can be disabled or individual results dismissed. Interaction
+completion freezes the live aggregate; the normal final evidence/intelligence path
+remains authoritative and only final validated outputs can reach Opportunity
+Workspace final intelligence or Revenue Brain.
+
+The deterministic private-beta detector makes no network request. Production live
+transcription, external live AI, ordinary cellular interception, biometric speaker
+identification, autonomous coaching and native capture remain unavailable. See the
+[Live Interaction Intelligence guide](live-interaction-intelligence.md).
 
 ### WO-019 document and email evidence
 

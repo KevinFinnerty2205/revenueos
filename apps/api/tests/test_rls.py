@@ -114,6 +114,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "recording_chunks",
         "transcript_versions",
         "transcript_segments",
+        "live_interaction_sessions",
+        "live_processing_windows",
+        "provisional_signals",
+        "live_brief_progress",
         "debrief_sessions",
         "debrief_turns",
         "evidence_fragments",
@@ -186,6 +190,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "email_source_id": uuid.uuid4(),
         "source_candidate_id": uuid.uuid4(),
         "source_snapshot_id": uuid.uuid4(),
+        "live_session_id": uuid.uuid4(),
+        "live_window_id": uuid.uuid4(),
+        "provisional_signal_id": uuid.uuid4(),
+        "live_brief_progress_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -236,6 +244,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "email_source_id": uuid.uuid4(),
         "source_candidate_id": uuid.uuid4(),
         "source_snapshot_id": uuid.uuid4(),
+        "live_session_id": uuid.uuid4(),
+        "live_window_id": uuid.uuid4(),
+        "provisional_signal_id": uuid.uuid4(),
+        "live_brief_progress_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -927,16 +939,108 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                             INSERT INTO transcript_segments
                                 (id, organisation_id, transcript_version_id,
-                                 sequence_number, start_ms, end_ms, text)
+                                 sequence_number, start_ms, end_ms, speaker_role, text)
                             VALUES
                                 (:recording_segment_id, :organisation_id,
-                                 :recording_transcript_version_id, 0, 0, 60000,
+                                 :recording_transcript_version_id, 0, 0, 60000, 'customer',
                                  :segment_text)
                             """
                         ),
                         {
                             **identity_parameters,
                             "segment_text": f"RLS recorded transcript {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO live_interaction_sessions
+                                (id, organisation_id, interaction_id,
+                                 transcript_version_id, brief_id,
+                                 created_by_user_id, status, source_kind,
+                                 last_processed_sequence,
+                                 processed_character_count,
+                                 processing_request_count, started_at,
+                                 stopped_at, retention_expires_at)
+                            VALUES
+                                (:live_session_id, :organisation_id,
+                                 :interaction_id, :recording_transcript_version_id,
+                                 :brief_id, :user_id, 'completed',
+                                 'progressive_transcript', 0, 25, 1,
+                                 now(), now(), now() + interval '30 days')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO live_processing_windows
+                                (id, organisation_id, live_session_id,
+                                 trigger_idempotency_key, window_fingerprint,
+                                 first_sequence, last_sequence, segment_count,
+                                 character_count, status, signal_count,
+                                 completed_at)
+                            VALUES
+                                (:live_window_id, :organisation_id,
+                                 :live_session_id, :live_window_key,
+                                 :live_window_fingerprint, 0, 0, 1, 25,
+                                 'completed', 1, now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "live_window_key": f"rls-live-window-{suffix.lower()}",
+                            "live_window_fingerprint": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO provisional_signals
+                                (id, organisation_id, interaction_id,
+                                 live_session_id, transcript_version_id,
+                                 signal_type, statement, lifecycle_status,
+                                 is_provisional, priority, evidence_strength,
+                                 resolution_status, signal_fingerprint,
+                                 subject_fingerprint, source_sequence_start,
+                                 source_sequence_end, detected_at,
+                                 last_updated_at)
+                            VALUES
+                                (:provisional_signal_id, :organisation_id,
+                                 :interaction_id, :live_session_id,
+                                 :recording_transcript_version_id,
+                                 'buying_signal', :live_signal_statement,
+                                 'promoted_candidate', true, 'high',
+                                 'customer_attributed', 'confirmed',
+                                 :live_signal_fingerprint,
+                                 :live_subject_fingerprint, 0, 0, now(), now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "live_signal_statement": f"RLS provisional signal {suffix}.",
+                            "live_signal_fingerprint": suffix.upper() * 64,
+                            "live_subject_fingerprint": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO live_brief_progress
+                                (id, organisation_id, live_session_id,
+                                 item_type, item_index, item_fingerprint,
+                                 progress_status, source_sequence_end)
+                            VALUES
+                                (:live_brief_progress_id, :organisation_id,
+                                 :live_session_id, 'objective', 0,
+                                 :live_progress_fingerprint,
+                                 'possibly_addressed', 0)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "live_progress_fingerprint": suffix.lower() * 64,
                         },
                     )
                     await connection.execute(
@@ -1288,6 +1392,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'recording_chunks',
                                     'transcript_versions',
                                     'transcript_segments',
+                                    'live_interaction_sessions',
+                                    'live_processing_windows',
+                                    'provisional_signals',
+                                    'live_brief_progress',
                                     'debrief_sessions',
                                     'debrief_turns',
                                     'evidence_fragments',
@@ -1605,6 +1713,25 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     ),
                     (
                         """
+                        INSERT INTO live_interaction_sessions
+                            (id, organisation_id, interaction_id,
+                             transcript_version_id, created_by_user_id,
+                             status, source_kind, retention_expires_at)
+                        VALUES
+                            (:id, :organisation_id, :interaction_id,
+                             :transcript_version_id, :user_id, 'active',
+                             'progressive_transcript', now() + interval '30 days')
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_a["organisation_id"],
+                            "interaction_id": tenant_b["interaction_id"],
+                            "transcript_version_id": tenant_b["recording_transcript_version_id"],
+                            "user_id": tenant_a["user_id"],
+                        },
+                    ),
+                    (
+                        """
                         INSERT INTO organisation_beta_settings
                             (organisation_id, retention_days)
                         VALUES (:organisation_id, 30)
@@ -1668,6 +1795,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "data_notice_acknowledgements",
                     "organisation_beta_settings",
                     "revenue_brain_insights",
+                    "live_brief_progress",
+                    "provisional_signals",
+                    "live_processing_windows",
+                    "live_interaction_sessions",
                     "revenue_brain_interaction_snapshots",
                     "interaction_intelligence_snapshots",
                     "revenue_brain_snapshots",

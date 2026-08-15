@@ -21,6 +21,7 @@ This is the canonical product and engineering documentation index. Documents dis
 15. [Phone Call Intelligence guide](02-design/phone-call-intelligence-guide.md) — current WO-017 normal-phone workflow
 16. [Online Meeting Capture guide](02-design/online-meeting-capture-guide.md) — current WO-018 browser-first workflow
 17. [Document Evidence guide](03-engineering/document-evidence-guide.md) and [Email Evidence guide](03-engineering/email-evidence-guide.md) — current WO-019 source workflow
+18. [Live Interaction Intelligence product guide](01-product/live-interaction-intelligence.md) — current WO-020 provisional workflow
 
 ## 00 — Company
 
@@ -35,6 +36,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Interaction Intelligence vision](01-product/interaction-intelligence-vision.md)
 - [Interaction Intelligence product blueprint](01-product/interaction-intelligence-product-blueprint.md)
 - [AI Companion preparation](01-product/ai-companion-preparation.md)
+- [Live Interaction Intelligence product guide](01-product/live-interaction-intelligence.md)
 
 ## 02 — Design
 
@@ -136,6 +138,12 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Online Meeting transcript import](03-engineering/online-meeting-transcript-import.md)
 - [Online Meeting URL security](03-engineering/online-meeting-url-security.md)
 - [Online Meeting security and privacy review](03-engineering/online-meeting-security-privacy-review.md)
+- [Live provisional-versus-final architecture](03-engineering/live-intelligence-provisional-final-architecture.md)
+- [Live incremental processing guide](03-engineering/live-intelligence-incremental-processing.md)
+- [Live signal schema guide](03-engineering/live-intelligence-signal-schema.md)
+- [Live-to-final reconciliation guide](03-engineering/live-intelligence-reconciliation.md)
+- [Live speaker and provenance safety](03-engineering/live-intelligence-speaker-provenance-safety.md)
+- [Live Intelligence security review](03-engineering/live-intelligence-security-review.md)
 
 ### Target through beta
 
@@ -213,6 +221,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-017: Phone Call Intelligence](07-sprints/wo-017-phone-call-intelligence.md)
 - [WO-018: Online Meeting Capture](07-sprints/wo-018-online-meeting-capture.md)
 - [WO-019: Documents and Email Evidence](07-sprints/wo-019-document-email-evidence.md)
+- [WO-020: Live Interaction Intelligence](07-sprints/wo-020-live-interaction-intelligence.md)
 
 ## 08 — Decision records
 
@@ -247,10 +256,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0029: private visual evidence storage and mandatory review](08-decisions/0029-private-visual-evidence-storage-and-review.md)
 - [ADR 0030: foreground browser Companion orchestration](08-decisions/0030-browser-companion-foreground-capture.md)
 - [ADR 0031: provider-neutral online-meeting ingestion](08-decisions/0031-provider-neutral-online-meeting-ingestion.md)
+- [ADR 0032: separate polled Live Intelligence aggregate](08-decisions/0032-separate-polled-live-intelligence-aggregate.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -285,15 +295,16 @@ WO-012 adds preparation-only AI Companion briefs for every initial Interaction
 type. The bounded deterministic composer uses linked metadata and validated
 current-version intelligence, never transcript text, and never calls OpenAI.
 Briefs are immutable, source-aware, versioned, reviewable and covered by beta
-quota, retention, export, deletion and synthetic demo operations. WO-016 now
-orchestrates them in the browser Companion without adding live intelligence.
+quota, retention, export, deletion and synthetic demo operations. WO-016
+orchestrates them in the browser Companion; WO-020 later adds the separate optional
+live aggregate described below.
 
 WO-013 adds post-interaction AI Debrief and foreground-only Voice Journal with
 typed fallback, short-segment transcription, strict structured question/extraction,
 complete candidate review and source-aware Opportunity Workspace/Revenue Brain
 updates. The WO-013 path never persists raw audio. Customer/meeting recording, background
-capture, call interception, live intelligence and general media storage were
-outside the WO-013 boundary; WO-015 later adds only the consent-gated browser
+capture, call interception and general media storage were outside the WO-013
+boundary; WO-015 later adds only the consent-gated browser
 recording and batch-transcription slice described below.
 
 WO-014 adds deliberately supplied JPEG/PNG visual evidence with private object
@@ -316,7 +327,8 @@ lifecycle. Users deliberately choose recording or passive capture, can add
 authorised photos and metadata-only quick markers, and then enter a gap-fill
 debrief. Phone calls and online meetings remain passive; screen wake and local
 retry are best effort and foreground-only. Native/background capture, call or
-system-audio interception and automatic live intelligence remain unimplemented.
+system-audio interception and automatically enabled live intelligence remain
+unimplemented.
 
 WO-017 makes phone calls first-class without changing that boundary. It adds a
 Contact-scoped compact brief, controlled direction/outcome, manual start/end,
@@ -336,6 +348,14 @@ gate. Accepted findings augment Opportunity Workspace and the Revenue Brain sour
 timeline. Seller-created or outbound material remains contextual. There is no
 DOCX/OCR/attachment support, mailbox or drive sync, legal interpretation, silent
 Contact creation or automatic opportunity-field write.
+
+WO-020 adds opt-in provisional Live Intelligence only when an authorised progressive
+transcript already exists. PostgreSQL owns the cursor, bounded overlapping windows,
+dedupe, provisional signals and brief progress. The quiet Companion can be collapsed,
+disabled or have one signal dismissed. Final reconciliation remains separate; no
+live result writes Opportunity Workspace final intelligence or Revenue Brain. The
+current detector and tests are deterministic/no-network, and production progressive
+transcription/external live AI remain disabled.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

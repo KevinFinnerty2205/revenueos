@@ -323,6 +323,56 @@ class TranscriptSource(StrEnum):
     USER_UPLOADED = "user_uploaded"
     EXTERNALLY_GENERATED = "externally_generated"
     MANUALLY_PASTED = "manually_pasted"
+    PROGRESSIVE = "progressive"
+
+
+class TranscriptSpeakerRole(StrEnum):
+    CUSTOMER = "customer"
+    SALESPERSON = "salesperson"
+    UNKNOWN = "unknown"
+
+
+class LiveInteractionStatus(StrEnum):
+    ACTIVE = "active"
+    PROCESSING = "processing"
+    STOPPED = "stopped"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    EXPIRED = "expired"
+
+
+class LiveSignalType(StrEnum):
+    BUYING_SIGNAL = "buying_signal"
+    OBJECTION = "objection"
+    STAKEHOLDER = "stakeholder"
+    DECISION = "decision"
+    ACTION_ITEM = "action_item"
+    RISK = "risk"
+    TIMELINE = "timeline"
+    PROCUREMENT = "procurement"
+    SECURITY_LEGAL = "security_legal"
+    CUSTOMER_REQUEST = "customer_request"
+    COMMERCIAL_INTENT = "commercial_intent"
+    OBJECTIVE_PROGRESS = "objective_progress"
+    OPEN_QUESTION_PROGRESS = "open_question_progress"
+    OTHER = "other"
+
+
+class ProvisionalSignalLifecycle(StrEnum):
+    DETECTED = "detected"
+    UPDATED = "updated"
+    SUPERSEDED = "superseded"
+    DISMISSED = "dismissed"
+    PROMOTED_CANDIDATE = "promoted_candidate"
+    EXPIRED = "expired"
+
+
+class LiveSignalResolution(StrEnum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    REVISED = "revised"
+    UNSUPPORTED = "unsupported"
+    UNRESOLVED = "unresolved"
 
 
 class MeetingAuditAction(StrEnum):

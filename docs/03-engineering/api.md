@@ -65,13 +65,13 @@ List parameters: `search`, `status`, `industry`, `sortBy` (`name`, `created_at`,
 
 ## Revenue Brain
 
-| Method | Path                                                 | Purpose                                                          |
-| ------ | ---------------------------------------------------- | ---------------------------------------------------------------- |
-| `GET`  | `/api/v1/accounts/{accountId}/brain`                 | List the account's immutable Revenue Brain snapshot compositions |
-| `GET`  | `/api/v1/accounts/{accountId}/brain/reported-interactions` | List reviewed salesperson-reported Interaction snapshots |
-| `GET`  | `/api/v1/accounts/{accountId}/brain/visual-evidence` | List current reviewed visual Interaction snapshots               |
-| `POST` | `/api/v1/accounts/{accountId}/brain/reasoning`       | Create or reuse deterministic account comparisons                |
-| `GET`  | `/api/v1/accounts/{accountId}/brain/reasoning`       | Read the latest account comparison and bounded history           |
+| Method | Path                                                       | Purpose                                                          |
+| ------ | ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| `GET`  | `/api/v1/accounts/{accountId}/brain`                       | List the account's immutable Revenue Brain snapshot compositions |
+| `GET`  | `/api/v1/accounts/{accountId}/brain/reported-interactions` | List reviewed salesperson-reported Interaction snapshots         |
+| `GET`  | `/api/v1/accounts/{accountId}/brain/visual-evidence`       | List current reviewed visual Interaction snapshots               |
+| `POST` | `/api/v1/accounts/{accountId}/brain/reasoning`             | Create or reuse deterministic account comparisons                |
+| `GET`  | `/api/v1/accounts/{accountId}/brain/reasoning`             | Read the latest account comparison and bounded history           |
 
 The response is a JSON array ordered by meeting date descending, then snapshot
 creation and ID descending. Each item contains the snapshot ownership/trace,
@@ -545,33 +545,48 @@ prompt, schema-registry, provider or worker metadata. See the
 All routes require the trusted active organisation; callers never supply an
 organisation ID.
 
-| Method | Route | Behaviour |
-| --- | --- | --- |
-| GET | `/api/v1/evidence/capabilities` | Flags, supported media and honest connector availability |
-| POST | `/api/v1/evidence/documents` | Deliberate PDF/TXT upload with checksum and authority acknowledgements |
-| GET | `/api/v1/evidence/documents/{id}` | Metadata, processing state and candidates; no content |
-| GET | `/api/v1/evidence/documents/{id}/content` | Authenticated short-lived private download |
-| POST | `/api/v1/evidence/documents/{id}/process` | Bounded parse/extract transition |
-| POST | `/api/v1/evidence/documents/{id}/review` | Complete accept/edit/reject review |
-| DELETE | `/api/v1/evidence/documents/{id}` | Object-first deletion and lineage removal |
-| POST | `/api/v1/evidence/emails` | Deliberate plain-text paste with source/direction |
-| GET | `/api/v1/evidence/emails/{id}` | Metadata and candidates; no body |
-| POST | `/api/v1/evidence/emails/{id}/process` | Normalised strict extraction |
-| POST | `/api/v1/evidence/emails/{id}/review` | Complete accept/edit/reject review |
-| DELETE | `/api/v1/evidence/emails/{id}` | Body clearing and lineage removal |
-| GET | `/api/v1/evidence/opportunities/{id}` | Reviewed accepted source evidence |
-| GET | `/api/v1/evidence/accounts/{id}/brain` | Immutable reviewed source snapshots |
+| Method | Route                                     | Behaviour                                                              |
+| ------ | ----------------------------------------- | ---------------------------------------------------------------------- |
+| GET    | `/api/v1/evidence/capabilities`           | Flags, supported media and honest connector availability               |
+| POST   | `/api/v1/evidence/documents`              | Deliberate PDF/TXT upload with checksum and authority acknowledgements |
+| GET    | `/api/v1/evidence/documents/{id}`         | Metadata, processing state and candidates; no content                  |
+| GET    | `/api/v1/evidence/documents/{id}/content` | Authenticated short-lived private download                             |
+| POST   | `/api/v1/evidence/documents/{id}/process` | Bounded parse/extract transition                                       |
+| POST   | `/api/v1/evidence/documents/{id}/review`  | Complete accept/edit/reject review                                     |
+| DELETE | `/api/v1/evidence/documents/{id}`         | Object-first deletion and lineage removal                              |
+| POST   | `/api/v1/evidence/emails`                 | Deliberate plain-text paste with source/direction                      |
+| GET    | `/api/v1/evidence/emails/{id}`            | Metadata and candidates; no body                                       |
+| POST   | `/api/v1/evidence/emails/{id}/process`    | Normalised strict extraction                                           |
+| POST   | `/api/v1/evidence/emails/{id}/review`     | Complete accept/edit/reject review                                     |
+| DELETE | `/api/v1/evidence/emails/{id}`            | Body clearing and lineage removal                                      |
+| GET    | `/api/v1/evidence/opportunities/{id}`     | Reviewed accepted source evidence                                      |
+| GET    | `/api/v1/evidence/accounts/{id}/brain`    | Immutable reviewed source snapshots                                    |
 
 Create requests require an idempotency key, source time, at least one association,
 `authorityConfirmed=true` and `externalProcessingAcknowledged=true`. Review must
 decide every pending candidate, including an explicit empty decision list for a
 zero-finding source. Safe errors contain a code, message and request ID.
 
+## Live Interaction Intelligence
+
+| Method | Route                                                            | Behaviour                                               |
+| ------ | ---------------------------------------------------------------- | ------------------------------------------------------- |
+| GET    | `/api/v1/interactions/{id}/live-intelligence`                    | Availability/current provisional state                  |
+| POST   | `/api/v1/interactions/{id}/live-intelligence/start`              | Explicit start against an authorised progressive source |
+| POST   | `/api/v1/interactions/{id}/live-intelligence/process`            | Idempotent bounded incremental update                   |
+| POST   | `/api/v1/interactions/{id}/live-intelligence/stop`               | User-controlled stop/freeze                             |
+| POST   | `/api/v1/interactions/{id}/live-intelligence/{signalId}/dismiss` | Dismiss one tenant-owned provisional signal             |
+| POST   | `/api/v1/interactions/{id}/live-intelligence/reconcile`          | Persist final comparison outcomes                       |
+
+All routes derive tenant context from verified authentication. Process accepts only a
+bounded idempotency key; transcript version, cursor and windows are server-owned.
+Public responses contain no raw transcript, internal fingerprints or provider data.
+The feature flag defaults off and unavailable sources return a Debrief fallback.
+
 ## Scope boundary
 
 There are no generic AI job/artefact, provider configuration/model listing,
-cancellation, recording, media upload/storage, transcription, later
-intelligence, question-answering, email sending, calendar, CRM, billing,
+cancellation, external live-provider, question-answering, email sending, calendar, CRM, billing,
 worker-control or automation
 endpoints. Mock/OpenAI selection and beta flags are server-side configuration
 and do not create generic provider control endpoints. Clerk tokens are verified
