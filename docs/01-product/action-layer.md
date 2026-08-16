@@ -55,3 +55,12 @@ history are separate from the Action's review status.
 
 The Action Layer remains the review/intent source. WO-022's separate execution
 engine performs simulations only.
+
+## WO-023 future Sales OS use
+
+Engage outreach, Create delivery, CRM updates and closed-won handover must reuse the
+Action Layer for reviewable consequential intent. Research, methodology, forecast or
+manager recommendations cannot approve themselves. Live providers, policy-based
+batches and any lower-risk automation require separately authorised work and must
+preserve exact-input versioning, revocation and user-visible state. See the
+[End-to-End Sales Platform roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md).

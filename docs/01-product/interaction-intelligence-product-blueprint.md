@@ -311,3 +311,11 @@ criteria.
 - [Evidence and provenance model](../03-engineering/evidence-and-provenance-model.md)
 - [Meeting migration strategy](../03-engineering/interaction-intelligence-migration-strategy.md)
 - [Interaction Intelligence roadmap](../06-roadmap/interaction-intelligence-roadmap.md)
+
+## WO-023 relationship
+
+WO-023 places this lifecycle inside RevenueOS Core. Future Prospect, Engage, Create,
+CRM, Daily, methodology and forecasting capabilities must reuse authorised Evidence,
+Revenue Brain and human-review boundaries; they do not replace them or broaden
+capture authority implicitly. See the
+[End-to-End Sales Platform roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md).

@@ -39,14 +39,14 @@ settings table.
 WO-011 implements the first four metadata boundaries below. The remaining rows are
 future concepts:
 
-| Entity                         | Purpose and key relationships                                                                                        | Tenant and source of truth                                                   | Lifecycle and retention                                                            | Expected work order                       |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------- |
-| Interaction                    | Source-neutral customer event; logical parent of Meeting and owner of shared type/time/account/opportunity context   | Tenant-owned; manual or Meeting-compatible creation in WO-011                | Planned → in progress → completed/cancelled; soft-deleted with linked Meeting      | **Current — WO-011 foundation**           |
-| Meeting compatibility relation | One-to-one same-tenant link preserving existing Meeting ID/API/artefacts                                             | RevenueOS additive migration/backfill                                        | Required, deterministic and removed only through approved rollback/deletion        | **Current — WO-011**                      |
-| CaptureSession                 | Metadata-only supporting activity below an Interaction; no execution/content in WO-011                              | Tenant-owned; same-tenant starter and Interaction                            | Created/capturing/completed/abandoned/failed; execution remains future             | **Current metadata foundation — WO-011**  |
-| Evidence                       | Source-neutral metadata envelope; no body/storage/version chain in WO-011                                            | Tenant-owned; origin never changes through verification                      | Received/available/excluded/superseded/deleted                                     | **Current metadata foundation — WO-011**  |
-| EvidenceFragment               | Citeable time/text/image/page/response/field region of one evidence version                                          | Tenant-owned and bound to its evidence source                                | Immutable locator version; invalidated with source/version                         | **Target — WO-011 and source work order** |
-| InteractionIntelligence        | Source-aware versioned capability artefacts/claims for an Interaction and evidence-set fingerprint                   | RevenueOS derived; strict schema/provenance and review determine eligibility | Provisional/review-required/validated/disputed/superseded/deleted                  | **Target — WO-013 onward**                |
+| Entity                         | Purpose and key relationships                                                                                      | Tenant and source of truth                                                   | Lifecycle and retention                                                       | Expected work order                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------- |
+| Interaction                    | Source-neutral customer event; logical parent of Meeting and owner of shared type/time/account/opportunity context | Tenant-owned; manual or Meeting-compatible creation in WO-011                | Planned → in progress → completed/cancelled; soft-deleted with linked Meeting | **Current — WO-011 foundation**           |
+| Meeting compatibility relation | One-to-one same-tenant link preserving existing Meeting ID/API/artefacts                                           | RevenueOS additive migration/backfill                                        | Required, deterministic and removed only through approved rollback/deletion   | **Current — WO-011**                      |
+| CaptureSession                 | Metadata-only supporting activity below an Interaction; no execution/content in WO-011                             | Tenant-owned; same-tenant starter and Interaction                            | Created/capturing/completed/abandoned/failed; execution remains future        | **Current metadata foundation — WO-011**  |
+| Evidence                       | Source-neutral metadata envelope; no body/storage/version chain in WO-011                                          | Tenant-owned; origin never changes through verification                      | Received/available/excluded/superseded/deleted                                | **Current metadata foundation — WO-011**  |
+| EvidenceFragment               | Citeable time/text/image/page/response/field region of one evidence version                                        | Tenant-owned and bound to its evidence source                                | Immutable locator version; invalidated with source/version                    | **Target — WO-011 and source work order** |
+| InteractionIntelligence        | Source-aware versioned capability artefacts/claims for an Interaction and evidence-set fingerprint                 | RevenueOS derived; strict schema/provenance and review determine eligibility | Provisional/review-required/validated/disputed/superseded/deleted             | **Target — WO-013 onward**                |
 
 Recording, Transcript, Visual Evidence, Document Evidence and User Observation are
 controlled Evidence types rather than nullable fields on Interaction. WO-011 stores
@@ -171,6 +171,21 @@ Conflicts are represented, not overwritten. Field-level source ownership must be
 - Transcript correction granularity and storage cost envelope.
 - Role/permission matrix and source-level transcript visibility.
 
+## WO-023 future Sales OS extensions
+
+The end-to-end blueprint introduces planning concepts for methodology definitions
+and projections, research subjects/findings, ICP/territory, Leads, campaigns and
+sequences, template/content/ROI assets, stage history, typed custom fields, metrics,
+targets, forecasts and entitlements. These are not implemented entities and do not
+authorise schema changes.
+
+Future work must reuse the canonical Organisation, User/membership, Company, Contact,
+Opportunity, Interaction, Evidence, Revenue Brain, Action and Workspace identities.
+A Prospect is staged research; a Lead is pursuit state; a Contact and Company remain
+the accepted canonical person and account. Detailed boundaries are in
+[ADR 0035](../08-decisions/0035-end-to-end-sales-os-architecture.md) and the
+[WO-023 architecture set](../07-sprints/wo-023-end-to-end-sales-platform-blueprint.md).
+
 ## Related documents
 
 - [Current application architecture](architecture.md)
@@ -178,3 +193,4 @@ Conflicts are represented, not overwritten. Field-level source ownership must be
 - [AI system blueprint](../04-ai/ai-system-blueprint.md)
 - [Privacy, security and trust model](privacy-security-and-trust-model.md)
 - [Product roadmap to beta](../06-roadmap/product-roadmap-to-beta.md)
+- [End-to-End Sales Platform roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md)

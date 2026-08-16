@@ -234,6 +234,20 @@ Targets are hypotheses until real workload tests establish provider and file-siz
 - Which data may be retained for evaluation and under what explicit customer agreement.
 - Model/provider regional availability for the first launch geography.
 
+## WO-023 future Sales OS consumers
+
+The proposed Methodology Engine, Daily, Prospect, Engage, Create, forecasting,
+Manager Intelligence and closed-won handover remain bounded consumers of the same
+authorised Evidence → Revenue Brain → review/Action architecture. They do not create
+independent agent authority or a second memory store. Research inferences stay
+labelled and sourced; methodology and forecast outputs are versioned projections;
+generated commercial content distinguishes Evidence, approved content, user input
+and suggestion; external outreach still requires policy and exact human approval.
+
+The detailed contracts are indexed by the
+[WO-023 sprint record](../07-sprints/wo-023-end-to-end-sales-platform-blueprint.md).
+No prompt, model, agent, retrieval system or provider is implemented by WO-023.
+
 ## Related documents
 
 - [Interaction Intelligence product blueprint](../01-product/interaction-intelligence-product-blueprint.md)
@@ -244,3 +258,4 @@ Targets are hypotheses until real workload tests establish provider and file-siz
 - [Privacy, security and trust model](../03-engineering/privacy-security-and-trust-model.md)
 - [Integration strategy](../05-integrations/integration-strategy.md)
 - [Product roadmap to beta](../06-roadmap/product-roadmap-to-beta.md)
+- [End-to-End Sales Platform roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md)

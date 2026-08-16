@@ -150,3 +150,10 @@ WO-010.
 - [Face-to-face interaction experience](../02-design/face-to-face-interaction-experience.md)
 - [Interaction domain architecture](../03-engineering/interaction-domain-architecture.md)
 - [Evidence and provenance model](../03-engineering/evidence-and-provenance-model.md)
+
+## WO-023 relationship
+
+The [End-to-End Sales Platform vision](end-to-end-sales-platform-vision.md) keeps
+Interaction Intelligence as the Core capture-and-understanding engine. Future
+modules reuse its consent, Evidence, provenance and review boundaries; WO-023 does
+not broaden capture authority or change current behaviour.

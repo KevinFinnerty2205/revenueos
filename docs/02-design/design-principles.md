@@ -24,3 +24,8 @@ RevenueOS should feel calm, capable and trustworthy.
 - Animation is unnecessary unless it communicates loading; respect reduced-motion preferences.
 
 The target screen hierarchy and workflow states are defined in [Information architecture](information-architecture.md) and [Core workflows](core-workflows.md). Those documents clearly label current, pilot, beta and later scope.
+
+Every future Sales OS work order also applies the mandatory
+[simplicity and discoverability gate](simplicity-and-discoverability-principles.md),
+including the 30-second first-use test, one-question-per-page rule and three-level
+progressive disclosure.

@@ -274,8 +274,9 @@ and SDK retries are disabled so the durable worker remains the retry authority.
 Existing AI job fields persist prompt/schema/provider/model/request trace,
 available token usage, integer cost and `AUD`; artefacts copy exact labels.
 OpenAI estimated cost remains zero/not calculated because no approved pricing
-source exists. Migration `0026_face_to_face_companion` is the head migration.
-It adds forced-RLS, tenant-isolated, metadata-only Interaction markers and their
+source exists. Migration `0032_integration_execution` is the current head migration.
+Migration `0026_face_to_face_companion` added forced-RLS, tenant-isolated,
+metadata-only Interaction markers and their
 append-only/soft-delete guard. Migration `0025_recording_transcription` added
 forced-RLS recording/consent/chunk/usage and immutable transcript version/segment
 tables, after `0024_visual_evidence` added forced-RLS visual asset/candidate
@@ -439,3 +440,14 @@ The server registry and strict `ActionExecutor` implementations keep capabilitie
 risk classes and result semantics provider-neutral. See
 [connector architecture](connector-architecture.md) and
 [simulation mode](simulation-mode.md).
+
+## WO-023 end-to-end Sales OS direction
+
+WO-023 changes no runtime architecture. It proposes additional modules inside the
+same web/API/PostgreSQL modular monolith, centred on canonical Evidence, Revenue
+Brain, review-first Actions and provider adapters. The future methodology, analytics,
+research, outreach, Create, CRM and entitlement boundaries are indexed from the
+[WO-023 sprint record](../07-sprints/wo-023-end-to-end-sales-platform-blueprint.md).
+[ADR 0035](../08-decisions/0035-end-to-end-sales-os-architecture.md) governs Core/
+add-on and information-architecture boundaries. No schema, endpoint, worker,
+provider or navigation described there exists until a separate work order implements it.

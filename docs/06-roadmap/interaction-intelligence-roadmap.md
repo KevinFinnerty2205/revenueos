@@ -538,3 +538,9 @@ and brief feedback. WO-022 adds a separate simulation-only connector and executi
 foundation with explicit confirmation and no real external action. Production
 connectors and autonomous workflows remain future work and require separate
 approved work orders.
+
+WO-023 preserves these Interaction milestones as the Sales Brain foundation and
+places later cross-module work in the conditional
+[End-to-End Sales Platform roadmap](end-to-end-sales-platform-roadmap.md). The newer
+roadmap does not authorise implementation or weaken this roadmap's evidence,
+consent, reliability and stop criteria.

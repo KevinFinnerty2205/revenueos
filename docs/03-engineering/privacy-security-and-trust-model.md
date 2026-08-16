@@ -296,3 +296,14 @@ literal confirmation. Connection/capability state is organisation-owned and
 server-authoritative. Execution export v13 is metadata-only; opaque credential
 references and internal replay/worker fields are excluded. Unknown outcomes stop
 without blind retry. See [integration security review](integration-security-review.md).
+
+## WO-023 extension
+
+The [End-to-End Sales Platform security and privacy review](end-to-end-sales-platform-security-privacy.md)
+extends this model to prospect research, contact verification, outreach/events,
+templates and generated assets, native/integrated CRM, analytics/targets/forecast,
+manager coaching, entitlements and closed-won handover. It preserves purpose
+limitation, provenance, correction, deletion, human control and content-minimised
+audit as non-negotiable requirements. The accompanying
+[risk register](end-to-end-sales-platform-risk-register.md) is reviewed at each
+future roadmap checkpoint.

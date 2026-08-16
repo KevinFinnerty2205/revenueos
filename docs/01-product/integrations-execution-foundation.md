@@ -25,12 +25,12 @@ previews and cancels queued or retryable simulations immediately.
 
 ## Supported simulation capabilities
 
-| Connector | Capability | Risk class | Simulated result |
-| --- | --- | --- | --- |
-| Mock Email | Send email | External customer-facing | Deterministic mock email ID |
-| Mock Calendar | Create event | External customer-facing | Deterministic mock event ID |
-| Mock CRM | Update one Opportunity or Contact field | Data mutation | Tenant-scoped mock external value |
-| Mock Tasks | Create task | Internal low-risk | Deterministic mock task ID |
+| Connector     | Capability                              | Risk class               | Simulated result                  |
+| ------------- | --------------------------------------- | ------------------------ | --------------------------------- |
+| Mock Email    | Send email                              | External customer-facing | Deterministic mock email ID       |
+| Mock Calendar | Create event                            | External customer-facing | Deterministic mock event ID       |
+| Mock CRM      | Update one Opportunity or Contact field | Data mutation            | Tenant-scoped mock external value |
+| Mock Tasks    | Create task                             | Internal low-risk        | Deterministic mock task ID        |
 
 ## Known limitations
 
@@ -43,3 +43,12 @@ provider/privacy review and production release gate.
 See the [preview and confirmation guide](../03-engineering/execution-preview-confirmation.md),
 [simulation mode](../03-engineering/simulation-mode.md) and
 [Action execution boundary](../05-integrations/action-execution-boundary.md).
+
+## WO-023 future integration order
+
+The end-to-end roadmap recommends discovering Microsoft 365 and Google Workspace
+needs early, implementing only the first ecosystem justified by design-partner use,
+and selecting a first CRM/research provider by customer stack, API quality, scopes,
+privacy, cost and operational burden. No provider is selected or implemented by
+WO-023. Engage and CRM must extend this simulation-first boundary rather than create
+a shortcut around preview, confirmation, idempotency and reconciliation.

@@ -210,7 +210,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  Alembic head `0030_live_interaction_intel`, identity configuration, selected
+  Alembic head `0032_integration_execution`, identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.

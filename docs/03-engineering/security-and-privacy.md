@@ -344,3 +344,12 @@ Technical production identity verification and beta consent/retention/export/
 deletion controls are implemented. Provider/privacy approval, target-environment
 operational evidence and production audit/legal policy are not complete. See
 [the WO-009 security review](private-beta-security-review.md).
+
+## WO-023 future Sales OS threat boundary
+
+The proposed research, outreach, event, Create, CRM, forecast, manager, entitlement,
+file and handover capabilities add material risks but change no current control. Their
+minimum gates and explicit prohibitions are defined in the
+[End-to-End Sales Platform security and privacy review](end-to-end-sales-platform-security-privacy.md)
+and [risk register](end-to-end-sales-platform-risk-register.md). Each future work
+order must re-assess those risks; WO-023 authorises no provider or production data use.
