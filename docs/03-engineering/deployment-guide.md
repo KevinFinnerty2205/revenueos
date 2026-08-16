@@ -124,7 +124,19 @@ and a single head. `API_FEATURE_ONLINE_MEETING_NATIVE_INTEGRATION_ENABLED` and
 credential is required; deliberate import reuses existing transcript/recording
 storage, consent, quota, export and deletion gates.
 
+WO-022 requires current head `0032_integration_execution`. Deploy API, worker and
+web together; verify the six new tables, forced RLS, immutable triggers, worker
+discovery function, downgrade/re-upgrade and single head. Keep Integrations, Action
+Execution and Mock Connectors disabled in production. No provider credential is
+required or accepted for these mock adapters. In a non-production environment,
+enable the complete flag set and run one synthetic email simulation before rollout.
+
 ## Rollback
+
+Disable Action Execution and Integrations before rolling back WO-022. Prefer an
+application rollback with the forward schema. Downgrading `0032` permanently
+removes connection metadata, previews, execution/attempt/audit history and mock
+state; it has no provider-side action to undo because WO-022 is simulation-only.
 
 Prefer application rollback while retaining `0025`. Disable recording,
 transcription and automatic intelligence first. Downgrading `0025` permanently

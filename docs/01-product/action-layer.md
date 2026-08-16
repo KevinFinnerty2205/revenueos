@@ -29,19 +29,29 @@ audience, risk class, typed payload and source references.
 The Opportunity Workspace shows pending, approved and rejected views. Customer-facing
 proposals are visibly higher risk. Users can inspect why an Action was recommended,
 edit safe fields, approve without execution, reject with a controlled reason, and
-manually complete an approved internal Action. Approved customer-facing Actions remain
-labelled **Approved — not yet executed**.
+manually complete an approved internal Action. Approved Actions are labelled
+**Approved — execution requires confirmation**; the separate execution endpoints
+still fail closed unless the complete WO-022 simulation flag set is enabled.
+Users must review an exact server preview and make a separate final confirmation.
 
 Current reviewed Actions can contribute to future Pre-Interaction Brief commitments.
 Rejected, superseded and completed Actions do not.
 
+## WO-022 simulation boundary
+
+WO-022 adds deterministic mock email, calendar, CRM and task execution after
+approval. It does not change the review lifecycle: approval never queues work and
+the execute request cannot replace approved content. The simulation lifecycle and
+history are separate from the Action's review status.
+
 ## Explicit limitations
 
-- no email sending, mailbox connection or recipient delivery confirmation;
-- no CRM, calendar, task-system or collaboration-tool connector;
-- no autonomous agent loop, background executor, retries or execution queue;
+- no real email sending, mailbox connection or recipient delivery confirmation;
+- no real CRM, calendar, task-system or collaboration-tool connector;
+- no autonomous agent loop or live external execution;
 - no automatic Opportunity, Contact, Stakeholder or Task mutation;
 - no use of provisional Live Intelligence;
 - no predictive scoring or guarantee that a recommendation is correct.
 
-The Action Layer is a review and intent-capture surface, not an execution engine.
+The Action Layer remains the review/intent source. WO-022's separate execution
+engine performs simulations only.

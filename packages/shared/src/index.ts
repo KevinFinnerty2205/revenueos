@@ -2071,3 +2071,173 @@ export interface ActionGenerationResponse {
   providerCompositionUsed: false;
   externalActionsExecuted: false;
 }
+
+export type ConnectorKey =
+  "mock_email" | "mock_calendar" | "mock_crm" | "mock_task";
+export type ConnectorCapability =
+  | "send_email"
+  | "create_calendar_event"
+  | "update_opportunity"
+  | "update_contact"
+  | "create_task"
+  | "post_internal_message"
+  | "upload_or_share_document";
+export type ConnectionStatus = "active" | "revoked";
+export type ExecutionStatus =
+  | "queued"
+  | "executing"
+  | "simulated_success"
+  | "failed_retryable"
+  | "failed_permanent"
+  | "cancelled"
+  | "unknown_external_state";
+
+export interface ConnectorDefinition {
+  connectorKey: ConnectorKey;
+  displayName: string;
+  providerFamily: "mock";
+  supportedCapabilities: ConnectorCapability[];
+  authenticationType: "mock_local";
+  executionRiskClasses: ActionRiskClass[];
+  configurationSchemaVersion: number;
+  executionMode: "simulation";
+  available: boolean;
+  simulationOnly: true;
+}
+
+export interface IntegrationCatalogResponse {
+  connectors: ConnectorDefinition[];
+  executionMode: "simulation";
+  externalActionsEnabled: false;
+}
+
+export interface OrganisationConnection {
+  id: string;
+  connectorKey: ConnectorKey;
+  displayName: string;
+  connectionStatus: ConnectionStatus;
+  supportedCapabilities: ConnectorCapability[];
+  capabilityState: ConnectorCapability[];
+  createdByUserId: string;
+  connectedAt: string;
+  lastVerifiedAt: string | null;
+  revokedAt: string | null;
+  metadataVersion: number;
+  executionMode: "simulation";
+  simulationOnly: true;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConnectionListResponse {
+  items: OrganisationConnection[];
+  total: number;
+}
+
+export interface ActionExecutionOption {
+  connectionId: string;
+  connectorKey: ConnectorKey;
+  connectorDisplayName: string;
+  capability: ConnectorCapability;
+  riskClass: ActionRiskClass;
+  executionMode: "simulation";
+  simulationOnly: true;
+}
+
+export interface ActionExecutionOptionListResponse {
+  items: ActionExecutionOption[];
+  total: number;
+}
+
+export type ExecutionPreviewContent =
+  | {
+      kind: "email";
+      recipient: string;
+      subject: string;
+      body: string;
+      action: "send_email";
+    }
+  | {
+      kind: "calendar";
+      event: string;
+      participantContactIds: string[];
+      participants: {
+        contactId: string;
+        displayName: string;
+        email: string;
+      }[];
+      scheduledAt: string;
+      timezone: string;
+      purpose: string;
+      action: "create_calendar_event";
+    }
+  | {
+      kind: "crm";
+      targetType: "opportunity" | "contact";
+      targetId: string;
+      field: string;
+      currentExternalValue: string | number | null;
+      expectedExternalValue: string | number | null;
+      newValue: string | number | null;
+      action: "update_opportunity" | "update_contact";
+    }
+  | {
+      kind: "task";
+      title: string;
+      ownerUserId: string | null;
+      dueAt: string | null;
+      opportunityId: string;
+      context: string;
+      action: "create_task";
+    };
+
+export interface ExecutionPreview {
+  id: string;
+  actionProposalId: string;
+  actionVersion: number;
+  connectionId: string;
+  connectorKey: ConnectorKey;
+  connectorDisplayName: string;
+  capability: ConnectorCapability;
+  riskClass: ActionRiskClass;
+  executionMode: "simulation";
+  simulationOnly: true;
+  readiness: "ready";
+  summary: string;
+  confirmationLabel: string;
+  previewFingerprint: string;
+  content: ExecutionPreviewContent;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface ActionExecution {
+  id: string;
+  actionProposalId: string;
+  actionVersion: number;
+  connectionId: string;
+  connectorKey: ConnectorKey;
+  connectorDisplayName: string;
+  capability: ConnectorCapability;
+  riskClass: ActionRiskClass;
+  executionStatus: ExecutionStatus;
+  executionMode: "simulation";
+  simulationOnly: true;
+  confirmedByUserId: string;
+  confirmedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  failedAt: string | null;
+  safeFailureCode: string | null;
+  externalResultId: string | null;
+  attemptCount: number;
+  retryable: boolean;
+  safeMessage: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActionExecutionListResponse {
+  items: ActionExecution[];
+  total: number;
+}

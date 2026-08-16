@@ -260,7 +260,7 @@ external action. See the [security review](live-intelligence-security-review.md)
   deployed least-privilege runtime role, backup and restore evidence still need
   environment-specific validation.
 - Private browser-supplied visual storage and review are implemented by WO-014;
-  recording/general media ingestion, connectors, action approval workflows and
+  recording/general media ingestion, live connectors and production action execution
   complete product audit coverage are not. Beta deletion/export and retention
   controls are not regulated-industry certification.
 - The existing server-side OpenAI adapter is explicitly flag- and usage-gated;
@@ -287,3 +287,12 @@ they remain tenant-confidential content. Forced RLS, composite tenant keys, boun
 strict payloads, immutable revisions, source revalidation and metadata-only audits
 apply. Approval is human intent, not external execution. Action data is included in
 export v12 and participates in retention and organisation deletion.
+
+## Current simulation execution trust boundary
+
+WO-022 adds no live connector. Exact approved content is reconstructed server-side,
+bound to a short-lived preview fingerprint and accepted only through a separate
+literal confirmation. Connection/capability state is organisation-owned and
+server-authoritative. Execution export v13 is metadata-only; opaque credential
+references and internal replay/worker fields are excluded. Unknown outcomes stop
+without blind retry. See [integration security review](integration-security-review.md).

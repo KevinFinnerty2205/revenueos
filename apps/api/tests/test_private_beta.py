@@ -60,6 +60,8 @@ from revenueos.models import (
     DocumentSource,
     EmailSource,
     Evidence,
+    IntegrationAuditEvent,
+    IntegrationConnection,
     Interaction,
     InteractionIntelligenceSnapshot,
     InteractionMarker,
@@ -204,7 +206,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0029_doc_email_evidence"
+    assert EXPECTED_MIGRATION_HEAD == "0032_integration_execution"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -888,6 +890,8 @@ def test_retention_dry_run_and_execution_are_bounded_and_idempotent() -> None:
 def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user(tmp_path: Path) -> None:
     target_organisation_id = uuid.uuid4()
     target_company_id = uuid.uuid4()
+    target_connection_id = uuid.uuid4()
+    target_integration_audit_id = uuid.uuid4()
     request_id = uuid.uuid4()
     export_request_id = uuid.uuid4()
     export_path = tmp_path / f"revenueos-export-{export_request_id}.json"
@@ -923,6 +927,31 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
                     owner_user_id=PRIMARY_USER_ID,
                 )
             )
+            now = datetime.now(UTC)
+            session.add(
+                IntegrationConnection(
+                    id=target_connection_id,
+                    organisation_id=target_organisation_id,
+                    connector_key="mock_email",
+                    connection_status="active",
+                    created_by_user_id=PRIMARY_USER_ID,
+                    connected_at=now,
+                    last_verified_at=now,
+                    capability_state_json=["send_email"],
+                )
+            )
+            session.add(
+                IntegrationAuditEvent(
+                    id=target_integration_audit_id,
+                    organisation_id=target_organisation_id,
+                    actor_user_id=PRIMARY_USER_ID,
+                    event_type="connection_created",
+                    subject_type="connection",
+                    subject_id=target_connection_id,
+                    connector_key="mock_email",
+                    created_at=now,
+                )
+            )
             session.add(
                 BetaDataRequest(
                     id=request_id,
@@ -955,6 +984,8 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
         async with factory() as session:
             assert await session.get(Organisation, target_organisation_id) is None
             assert await session.get(Company, target_company_id) is None
+            assert await session.get(IntegrationConnection, target_connection_id) is None
+            assert await session.get(IntegrationAuditEvent, target_integration_audit_id) is None
             assert await session.get(User, PRIMARY_USER_ID) is not None
             assert await session.get(Organisation, PRIMARY_ORGANISATION_ID) is not None
             assert await session.get(Organisation, SECONDARY_ORGANISATION_ID) is not None
@@ -1192,7 +1223,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 12
+        assert payload["exportVersion"] == 13
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1207,6 +1238,10 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert payload["actionProposals"] == []
         assert payload["actionProposalVersions"] == []
         assert payload["actionAuditEvents"] == []
+        assert payload["integrationConnections"] == []
+        assert payload["actionExecutions"] == []
+        assert payload["actionExecutionAttempts"] == []
+        assert payload["integrationAuditEvents"] == []
         assert payload["debriefSessions"] == []
         assert payload["debriefTurns"] == []
         assert payload["evidenceFragments"] == []
@@ -1245,7 +1280,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 12
+        assert download.json()["exportVersion"] == 13
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

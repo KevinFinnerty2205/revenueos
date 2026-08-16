@@ -25,3 +25,20 @@ to `superseded` rather than accepting it.
 Audit rows contain event type, actor, proposal version, timestamps and safe bounded
 metadata only. Titles, descriptions, drafts, evidence statements and source content
 stay out of audit/log payloads.
+
+## Separate execution lifecycle
+
+WO-022 does not add execution states to the Action review state machine. A current
+`approved` Action may have zero or one idempotent execution for a given approved
+version, connection and capability. Its separate lifecycle is:
+
+```text
+queued ──claim──> executing ──> simulated_success
+  │                   ├───────> failed_retryable ──bounded retry──> executing
+  │                   ├───────> failed_permanent
+  │                   └───────> unknown_external_state
+  └──connection revoke────────> cancelled
+```
+
+Unknown state is terminal until a future reconciliation workflow exists. Action
+approval remains intact even when its simulation fails or is cancelled.

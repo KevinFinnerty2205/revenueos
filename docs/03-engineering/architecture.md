@@ -24,6 +24,14 @@ responsive Companion route, adds metadata-only Interaction markers and projects 
 latest capture state into Opportunity Workspace. It adds no service, broker,
 datastore, native/PWA client or new AI provider path.
 
+WO-021 adds review-only Action proposals. WO-022 adds organisation connections,
+server-authoritative connector capabilities, fingerprinted execution previews and
+immutable confirmed execution intent. The existing worker also claims these rows
+and invokes deterministic mock `ActionExecutor` adapters. No service, broker,
+production connector, OAuth exchange or live external request was added. See
+[connector architecture](connector-architecture.md) and
+[ADR 0034](../08-decisions/0034-simulation-first-execution-boundary.md).
+
 WO-006A/WO-006B/WO-006C/WO-006D/WO-007/WO-008A/WO-008B keep the Sprint 3 modular monolith and
 WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6 and WO-005 baseline. The durable worker runs
 its infrastructure test plus current-transcript Executive Summary, Decisions,
@@ -68,6 +76,9 @@ Browser
         FastAPI application
         auth · tenant context · domain services
               │
+              ├── Action execution service
+              │     approved version · preview · explicit confirmation
+              │
               ├── Interaction/debrief domain services
               │     bounded foreground prompt/schema/provider requests
               │     narrow ephemeral voice transcription
@@ -83,6 +94,9 @@ Browser
       typed provider contract/registry
       mock (default) or server-side OpenAI
               │
+      ActionExecutor registry
+      deterministic mock email/calendar/CRM/task only
+              │
               ▼
        PostgreSQL / Supabase later
        identity · business records · interactions · meetings
@@ -94,7 +108,7 @@ Browser
 
 - `apps/web` owns web presentation, navigation and server-side access checks.
 - `apps/api` owns authentication dependencies, tenant context, application policy, Pydantic contracts and persistence.
-- `apps/api/src/revenueos/worker.py` is a separately deployable worker entry point; it shares domain/persistence modules but never runs inside FastAPI.
+- `apps/api/src/revenueos/worker.py` is a separately deployable worker entry point; it shares domain/persistence modules, processes both AI jobs and confirmed simulations, and never runs inside FastAPI.
 - `packages/shared` contains the deliberately small TypeScript view of stable API responses.
 - `packages/ui` is reserved for primitives with a real second consumer.
 - Alembic is the sole application-schema migration owner.
@@ -415,3 +429,13 @@ service and repositories over `action_proposals`, immutable
 reads final validated sources only. It does not call a provider or external
 system. See [Action proposal architecture](action-proposal-architecture.md) and
 [ADR 0033](../08-decisions/0033-versioned-review-only-action-layer.md).
+
+## WO-022 simulation execution
+
+Six tenant tables store connections, previews, execution intent, immutable attempts,
+metadata-only audit and mock external state. The API creates previews and confirmed
+queued rows; the existing worker claims only after setting trusted tenant context.
+The server registry and strict `ActionExecutor` implementations keep capabilities,
+risk classes and result semantics provider-neutral. See
+[connector architecture](connector-architecture.md) and
+[simulation mode](simulation-mode.md).

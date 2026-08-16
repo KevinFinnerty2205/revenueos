@@ -307,6 +307,21 @@ completed/cancelled Interactions in an approved tenant context. Admin export and
 organisation deletion workflows exist, but backups and Clerk lifecycle require
 documented operator action and legal hold is not implemented.
 
+## Integration and execution metadata
+
+WO-022 stores tenant-scoped connection metadata, short-lived preview fingerprints,
+immutable confirmed execution intent, append-only attempts/audits and mock external
+state. Forced RLS and explicit organisation predicates cover every table. API,
+frontend and export contracts omit opaque credential references, idempotency keys,
+preview fingerprints, worker leases and mock-object state. Logs exclude approved
+Action content, recipients, provider payloads and credentials.
+
+Export version 13 includes safe connection and execution history. Organisation
+deletion cascades all WO-022 rows; a future credential must be revoked through the
+credential store before local removal. Connection revocation already clears its
+reference, invalidates previews and cancels queued work. No credential or real
+external data exists in the mock implementation.
+
 ## Open risks before production use
 
 - The production non-bypass database role and grants are not provisioned by this repository; CI tests the required RLS behaviour with a temporary restricted role.
@@ -320,6 +335,8 @@ documented operator action and legal hold is not implemented.
 - Hosting, secret management, central monitoring and backup providers are not
   selected; deployment/runbook requirements are documented for operators.
 - Recording wording, residency and deletion commitments require product/legal approval before conversation features.
+- Live connector OAuth, scopes, provider retention/deletion, reconciliation,
+  webhook authentication and incident evidence remain production blockers.
 
 Do not use this system with production customer data. Enabling OpenAI changes
 the data-flow boundary and externally transmits selected transcript content.

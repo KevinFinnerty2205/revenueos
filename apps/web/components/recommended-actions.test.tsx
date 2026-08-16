@@ -111,7 +111,9 @@ describe("RecommendedActions", () => {
     ).toBeVisible();
 
     fireEvent.click(screen.getByRole("tab", { name: "Approved (1)" }));
-    expect(screen.getByText("Approved — not yet executed")).toBeVisible();
+    expect(
+      screen.getByText("Approved — execution requires confirmation"),
+    ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Mark complete manually" }),
     ).toBeNull();
@@ -164,5 +166,133 @@ describe("RecommendedActions", () => {
     expect(
       await screen.findByText("A new Action revision was saved for review."),
     ).toBeVisible();
+  });
+
+  it("uses a read-only server preview and a separate explicit simulation confirmation", async () => {
+    const approved = action({
+      status: "approved",
+      approvedVersion: 1,
+      approvedAt: "2026-08-15T03:00:00Z",
+      proposedPayload: {
+        kind: "follow_up_email",
+        draftArtifactId: "artifact-1",
+        recipientContactId: "contact-1",
+        recipientEmail: "jordan@example.com",
+        recipientConfirmed: true,
+        subject: "Security review next steps",
+        body: "Hello Jordan,\n\nThank you for the discussion.",
+      },
+    });
+    const queued = {
+      id: "execution-1",
+      actionProposalId: approved.id,
+      actionVersion: 1,
+      connectionId: "connection-1",
+      connectorKey: "mock_email",
+      connectorDisplayName: "Mock Email",
+      capability: "send_email",
+      riskClass: "external_customer_facing",
+      executionStatus: "queued",
+      executionMode: "simulation",
+      simulationOnly: true,
+      confirmedByUserId: "user-1",
+      confirmedAt: "2026-08-15T04:00:00Z",
+      startedAt: null,
+      completedAt: null,
+      failedAt: null,
+      safeFailureCode: null,
+      externalResultId: null,
+      attemptCount: 0,
+      retryable: false,
+      safeMessage: "Simulation queued. No external action has occurred.",
+      createdAt: "2026-08-15T04:00:00Z",
+      updatedAt: "2026-08-15T04:00:00Z",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          items: [
+            {
+              connectionId: "connection-1",
+              connectorKey: "mock_email",
+              connectorDisplayName: "Mock Email",
+              capability: "send_email",
+              riskClass: "external_customer_facing",
+              executionMode: "simulation",
+              simulationOnly: true,
+            },
+          ],
+          total: 1,
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          id: "preview-1",
+          actionProposalId: approved.id,
+          actionVersion: 1,
+          connectionId: "connection-1",
+          connectorKey: "mock_email",
+          connectorDisplayName: "Mock Email",
+          capability: "send_email",
+          riskClass: "external_customer_facing",
+          executionMode: "simulation",
+          simulationOnly: true,
+          readiness: "ready",
+          summary: "Simulate sending this approved email.",
+          confirmationLabel: "Send email",
+          previewFingerprint: "f".repeat(64),
+          content: {
+            kind: "email",
+            recipient: "jordan@example.com",
+            subject: "Security review next steps",
+            body: "Hello Jordan,\n\nThank you for the discussion.",
+            action: "send_email",
+          },
+          expiresAt: "2026-08-15T04:10:00Z",
+          createdAt: "2026-08-15T04:00:00Z",
+        }),
+      )
+      .mockResolvedValueOnce(response({ items: [], total: 0 }))
+      .mockResolvedValueOnce(response(queued))
+      .mockResolvedValueOnce(
+        response({
+          ...queued,
+          executionStatus: "simulated_success",
+          externalResultId: "mock_email_result_1",
+          attemptCount: 1,
+          safeMessage: "Simulation completed. No external action occurred.",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <RecommendedActions
+        opportunityId="opportunity-1"
+        initialActions={[approved]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Approved (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review execution" }));
+    expect(
+      await screen.findByText("Simulation — no external action will occur"),
+    ).toBeVisible();
+    expect(screen.getByText("jordan@example.com")).toBeVisible();
+    expect(screen.queryByRole("textbox")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send email" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toEqual({
+      previewId: "preview-1",
+      connectionId: "connection-1",
+      confirmed: true,
+    });
+    expect(await screen.findByText("Queued")).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh simulation status" }),
+    );
+    expect(await screen.findByText("Simulated Success")).toBeVisible();
+    expect(screen.getByText(/mock_email_result_1/)).toBeVisible();
   });
 });

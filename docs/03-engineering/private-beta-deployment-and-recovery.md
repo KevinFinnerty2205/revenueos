@@ -175,3 +175,9 @@ If a forward migration partially fails, keep API/worker stopped, preserve the
 database, inspect the exact Alembic state with the migration role and follow the
 migration-failure runbook. Never edit the version table manually to make
 readiness green.
+
+Migration `0032_integration_execution` adds six forced-RLS simulation tables,
+immutable execution/audit guards and worker discovery. Roll back the application
+with the three WO-022 flags disabled where possible. Its downgrade permanently
+deletes connection/execution/mock metadata; no provider-side rollback exists or is
+needed because the work order performs no external action.

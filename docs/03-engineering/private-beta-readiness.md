@@ -406,4 +406,19 @@ WO-021 baseline. `API_FEATURE_ACTION_MANUAL_COMPLETION_ENABLED` separately gates
 internal manual completion. `API_PRIVATE_BETA_MAX_ACTION_GENERATIONS_PER_DAY`
 defaults to 100 per organisation; each request is capped at eight new proposals and
 each opportunity at 50 active proposals. Export schema v12 contains proposals,
-versions and safe audit metadata. No connector credential or execution flag exists.
+versions and safe audit metadata.
+
+## WO-022 integration and execution controls
+
+`API_FEATURE_INTEGRATIONS_ENABLED`, `API_FEATURE_ACTION_EXECUTION_ENABLED` and
+`API_FEATURE_MOCK_CONNECTORS_ENABLED` are separate server-authoritative switches.
+All must be on with the Action Layer outside production; safe defaults are off and
+production rejects Mock Connectors. Capability limits default to 50 email, 25
+calendar, 100 CRM and 100 task simulations per organisation/day, with five active
+executions per organisation and a ten-minute preview TTL.
+
+Export schema v13 includes connection, execution, attempt and integration-audit
+metadata but omits credential references, idempotency keys, preview fingerprints,
+leases and mock external objects. Retention of an Action or organisation cascades
+its execution metadata. Revocation invalidates open previews and cancels queued
+work. There is no live credential or external provider deletion in WO-022.

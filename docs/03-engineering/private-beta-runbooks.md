@@ -260,3 +260,20 @@ owner.
 6. Disable `API_FEATURE_DOCUMENT_EVIDENCE_ENABLED` or
    `API_FEATURE_EMAIL_EVIDENCE_ENABLED` to stop new intake while preserving existing
    data for recovery/export.
+
+## 17. Simulation connection or execution failure
+
+1. Confirm the environment and four required flags. Never enable Mock Connectors in
+   production and do not describe a mock result as provider delivery.
+2. Disable Action Execution to stop new previews/confirmations while preserving
+   history. Revoke an affected connection to invalidate previews and cancel queued
+   or retryable work.
+3. Inspect only organisation/execution IDs, lifecycle, attempt count, safe failure
+   code and duration. Do not copy Action content, recipient, credential reference or
+   mock/provider payload into logs or tickets.
+4. Retry only `failed_retryable` rows through the bounded worker policy. Never
+   replay `unknown_external_state`; investigate/reconcile first.
+5. For `stale_external_state`, create a new review/preview after resolving the
+   expected value. Do not bypass the comparison or mutate RevenueOS merely to pass.
+6. Validate tenant isolation, one deterministic mock result, export v13 omissions
+   and no external network request before re-enabling.

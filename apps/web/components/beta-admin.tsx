@@ -1,6 +1,7 @@
 "use client";
 
 import { apiRequest } from "@/lib/api";
+import { IntegrationSettings } from "@/components/integration-settings";
 import { useEffect, useState } from "react";
 
 interface AdminOverview {
@@ -53,6 +54,9 @@ const featureFlagLabels: Record<string, string> = {
   openaiProvider: "External OpenAI processing",
   revenueBrain: "Revenue Brain",
   opportunityWorkspace: "Opportunity Workspace",
+  integrations: "Integrations foundation",
+  actionExecution: "Explicit Action simulation",
+  mockConnectors: "Mock simulation connectors",
   dataExport: "Organisation data export",
   organisationDeletion: "Organisation deletion",
 };
@@ -350,6 +354,8 @@ export function BetaAdmin() {
           ))}
         </ul>
       </section>
+
+      {overview.featureFlags.integrations ? <IntegrationSettings /> : null}
 
       {overview.featureFlags.organisationDeletion ? (
         <section

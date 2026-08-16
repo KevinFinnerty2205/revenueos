@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     )
     private_beta_max_email_analyses_per_day: int = Field(default=50, ge=1, le=2_000)
     private_beta_max_action_generations_per_day: int = Field(default=100, ge=1, le=5_000)
+    private_beta_max_email_executions_per_day: int = Field(default=50, ge=1, le=5_000)
+    private_beta_max_calendar_executions_per_day: int = Field(default=25, ge=1, le=2_000)
+    private_beta_max_crm_executions_per_day: int = Field(default=100, ge=1, le=10_000)
+    private_beta_max_task_executions_per_day: int = Field(default=100, ge=1, le=10_000)
+    private_beta_max_concurrent_executions: int = Field(default=5, ge=1, le=100)
+    execution_preview_ttl_seconds: int = Field(default=600, ge=60, le=3_600)
     private_beta_live_processing_interval_seconds: int = Field(default=15, ge=5, le=60)
     private_beta_live_min_new_segments: int = Field(default=2, ge=1, le=10)
     private_beta_live_min_new_characters: int = Field(default=160, ge=40, le=2_000)
@@ -132,6 +138,9 @@ class Settings(BaseSettings):
     feature_live_interaction_external_ai_enabled: bool = False
     feature_action_layer_enabled: bool = True
     feature_action_manual_completion_enabled: bool = True
+    feature_integrations_enabled: bool = False
+    feature_action_execution_enabled: bool = False
+    feature_mock_connectors_enabled: bool = False
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -266,6 +275,8 @@ class Settings(BaseSettings):
                 raise ValueError("Production CORS origins must be explicit.")
             if self.database_url is None or not self.database_url.startswith(("postgresql", "postgres")):
                 raise ValueError("Production requires PostgreSQL persistence.")
+            if self.feature_mock_connectors_enabled:
+                raise ValueError("Mock connectors are prohibited in production.")
         if self.worker_heartbeat_interval_seconds >= self.worker_lease_duration_seconds:
             raise ValueError("Worker heartbeat interval must be shorter than the lease duration.")
         if self.worker_base_retry_delay_seconds > self.worker_max_retry_delay_seconds:
@@ -333,6 +344,12 @@ class Settings(BaseSettings):
             self.feature_live_interaction_intelligence_enabled and self.feature_openai_provider_enabled
         ):
             raise ValueError("External live intelligence requires both live intelligence and OpenAI feature flags.")
+        if self.feature_action_execution_enabled and not (
+            self.feature_integrations_enabled and self.feature_action_layer_enabled
+        ):
+            raise ValueError("Action execution requires the Integrations and Action Layer feature flags.")
+        if self.feature_mock_connectors_enabled and not self.feature_integrations_enabled:
+            raise ValueError("Mock connectors require the Integrations feature flag.")
         return self
 
     @property
@@ -392,6 +409,9 @@ class Settings(BaseSettings):
             "liveInteractionExternalAi": self.feature_live_interaction_external_ai_enabled,
             "actionLayer": self.feature_action_layer_enabled,
             "actionManualCompletion": self.feature_action_manual_completion_enabled,
+            "integrations": self.feature_integrations_enabled,
+            "actionExecution": self.feature_action_execution_enabled,
+            "mockConnectors": self.feature_mock_connectors_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

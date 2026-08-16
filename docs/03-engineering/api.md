@@ -586,8 +586,8 @@ The feature flag defaults off and unavailable sources return a Debrief fallback.
 ## Scope boundary
 
 There are no generic AI job/artefact, provider configuration/model listing,
-cancellation, external live-provider, question-answering, email sending, calendar, CRM, billing,
-worker-control or automation
+cancellation, external live-provider, question-answering, real email sending,
+calendar/CRM mutation, billing, worker-control or automation
 endpoints. Mock/OpenAI selection and beta flags are server-side configuration
 and do not create generic provider control endpoints. Clerk tokens are verified
 by the API; production fails closed without complete configuration.
@@ -604,3 +604,24 @@ by the API; production fails closed without complete configuration.
 Payloads are strict discriminated unions. Review mutations require
 `expectedVersion`. Approval reports `not_executed`; no route dispatches an external
 action. Generation/listing derive the organisation from verified auth context.
+
+## Simulation integration and execution routes
+
+| Method | Route | Behaviour |
+| --- | --- | --- |
+| `GET` | `/api/v1/integrations` | Server-owned mock connector catalog |
+| `GET` | `/api/v1/integrations/connections` | Tenant connection metadata |
+| `POST` | `/api/v1/integrations/connections` | Administrator enables one mock connector |
+| `GET` | `/api/v1/integrations/connections/{id}` | Read tenant connection |
+| `POST` | `/api/v1/integrations/connections/{id}/test` | Administrator runs no-network readiness test |
+| `DELETE` | `/api/v1/integrations/connections/{id}` | Administrator revokes and invalidates pending work |
+| `GET` | `/api/v1/actions/{id}/execution-options` | Server-derived active connection and capability options for the approved Action |
+| `POST` | `/api/v1/actions/{id}/execution-preview` | Reconstruct exact approved content and fingerprint preview |
+| `POST` | `/api/v1/actions/{id}/execute` | Confirm only preview, connection and literal true |
+| `GET` | `/api/v1/actions/{id}/executions` | Read tenant-scoped simulation history |
+| `GET` | `/api/v1/executions/{id}` | Read status and immutable attempts |
+
+Connection management is administrator-only; active members may use an active
+connection. Responses expose simulation labels and safe metadata only. No route
+accepts credentials, provider tokens, Action content at confirmation, a live-mode
+switch or arbitrary connector capabilities.

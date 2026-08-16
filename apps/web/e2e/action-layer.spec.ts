@@ -23,9 +23,9 @@ function proposal(status: "proposed" | "approved" = "proposed") {
     proposedPayload: {
       kind: "follow_up_email",
       draftArtifactId: "artifact-1",
-      recipientContactId: null,
-      recipientEmail: null,
-      recipientConfirmed: false,
+      recipientContactId: "contact-1",
+      recipientEmail: "jordan@example.com",
+      recipientConfirmed: true,
       subject: "Security review next steps",
       body: "Hello Jordan,\n\nThank you for the discussion.",
     },
@@ -55,11 +55,21 @@ function proposal(status: "proposed" | "approved" = "proposed") {
   };
 }
 
-test("reviews a customer-facing Action without exposing external execution", async ({
+test("reviews, confirms and persists a customer-facing Action simulation", async ({
   page,
 }) => {
   let status: "proposed" | "approved" = "proposed";
   let approvalPayload: Record<string, unknown> | null = null;
+  let executionPayload: Record<string, unknown> | null = null;
+  let executionCompleted = false;
+  let connectionCreated = false;
+  const externalRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (!["localhost", "127.0.0.1"].includes(url.hostname)) {
+      externalRequests.push(request.url());
+    }
+  });
 
   await page.route(
     "http://localhost:8000/api/v1/beta/capabilities",
@@ -70,9 +80,103 @@ test("reviews a customer-facing Action without exposing external execution", asy
             opportunityWorkspace: true,
             actionLayer: true,
             actionManualCompletion: true,
+            integrations: true,
+            actionExecution: true,
+            mockConnectors: true,
           },
           noticeVersion: 1,
           maxTranscriptCharacters: 200000,
+        },
+      });
+    },
+  );
+  await page.route("http://localhost:8000/api/v1/beta/admin", async (route) => {
+    await route.fulfill({
+      json: {
+        organisation: {
+          id: "organisation-1",
+          name: "Acme Revenue Team",
+          slug: "acme-revenue-team",
+        },
+        members: [],
+        retention: { policy: "days_90", defaultApplied: true },
+        noticeVersion: 1,
+        acknowledgementCount: 1,
+        activeMemberCount: 1,
+        featureFlags: {
+          integrations: true,
+          actionExecution: true,
+          mockConnectors: true,
+          dataExport: false,
+          organisationDeletion: false,
+        },
+        usage: {
+          date: "2026-08-15",
+          generations: 0,
+          generationLimit: 100,
+          providerRequests: 0,
+          providerRequestLimit: 200,
+          estimatedCostAvailable: false,
+        },
+        recentEvents: [],
+        dataRequests: [],
+      },
+    });
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/integrations",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          connectors: [
+            {
+              connectorKey: "mock_email",
+              displayName: "Mock Email",
+              providerFamily: "mock",
+              supportedCapabilities: ["send_email"],
+              authenticationType: "mock_local",
+              executionRiskClasses: ["external_customer_facing"],
+              configurationSchemaVersion: 1,
+              executionMode: "simulation",
+              available: true,
+              simulationOnly: true,
+            },
+          ],
+          executionMode: "simulation",
+          externalActionsEnabled: false,
+        },
+      });
+    },
+  );
+  const connection = {
+    id: "connection-1",
+    connectorKey: "mock_email",
+    displayName: "Mock Email",
+    connectionStatus: "active",
+    supportedCapabilities: ["send_email"],
+    capabilityState: ["send_email"],
+    createdByUserId: "user-1",
+    connectedAt: "2026-08-15T03:00:00Z",
+    lastVerifiedAt: "2026-08-15T03:00:00Z",
+    revokedAt: null,
+    metadataVersion: 1,
+    executionMode: "simulation",
+    simulationOnly: true,
+    createdAt: "2026-08-15T03:00:00Z",
+    updatedAt: "2026-08-15T03:00:00Z",
+  };
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/connections",
+    async (route) => {
+      if (route.request().method() === "POST") {
+        connectionCreated = true;
+        await route.fulfill({ status: 201, json: connection });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          items: connectionCreated ? [connection] : [],
+          total: connectionCreated ? 1 : 0,
         },
       });
     },
@@ -140,6 +244,127 @@ test("reviews a customer-facing Action without exposing external execution", asy
     },
   );
   await page.route(
+    "http://localhost:8000/api/v1/actions/action-1/execution-options",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              connectionId: "connection-1",
+              connectorKey: "mock_email",
+              connectorDisplayName: "Mock Email",
+              capability: "send_email",
+              riskClass: "external_customer_facing",
+              executionMode: "simulation",
+              simulationOnly: true,
+            },
+          ],
+          total: 1,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/actions/action-1/execution-preview",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          id: "preview-1",
+          actionProposalId: "action-1",
+          actionVersion: 1,
+          connectionId: "connection-1",
+          connectorKey: "mock_email",
+          connectorDisplayName: "Mock Email",
+          capability: "send_email",
+          riskClass: "external_customer_facing",
+          executionMode: "simulation",
+          simulationOnly: true,
+          readiness: "ready",
+          summary: "Simulate sending this approved email.",
+          confirmationLabel: "Send email",
+          previewFingerprint: "a".repeat(64),
+          content: {
+            kind: "email",
+            recipient: "jordan@example.com",
+            subject: "Security review next steps",
+            body: "Hello Jordan,\n\nThank you for the discussion.",
+            action: "send_email",
+          },
+          expiresAt: "2026-08-15T03:10:00Z",
+          createdAt: "2026-08-15T03:00:00Z",
+        },
+      });
+    },
+  );
+  const execution = () => ({
+    id: "execution-1",
+    actionProposalId: "action-1",
+    actionVersion: 1,
+    connectionId: "connection-1",
+    connectorKey: "mock_email",
+    connectorDisplayName: "Mock Email",
+    capability: "send_email",
+    riskClass: "external_customer_facing",
+    executionStatus: executionCompleted ? "simulated_success" : "queued",
+    executionMode: "simulation",
+    simulationOnly: true,
+    confirmedByUserId: "user-1",
+    confirmedAt: "2026-08-15T03:01:00Z",
+    startedAt: executionCompleted ? "2026-08-15T03:01:01Z" : null,
+    completedAt: executionCompleted ? "2026-08-15T03:01:02Z" : null,
+    failedAt: null,
+    safeFailureCode: null,
+    externalResultId: executionCompleted ? "mock_email_result_1" : null,
+    attemptCount: executionCompleted ? 1 : 0,
+    retryable: false,
+    safeMessage: executionCompleted
+      ? "Simulation completed. No external action occurred."
+      : "Simulation queued. No external action has occurred.",
+    createdAt: "2026-08-15T03:01:00Z",
+    updatedAt: "2026-08-15T03:01:02Z",
+    attempts: executionCompleted
+      ? [
+          {
+            attemptNumber: 1,
+            status: "simulated_success",
+            safeFailureCode: null,
+            externalResultId: "mock_email_result_1",
+            startedAt: "2026-08-15T03:01:01Z",
+            completedAt: "2026-08-15T03:01:02Z",
+            durationMs: 1000,
+          },
+        ]
+      : [],
+  });
+  await page.route(
+    "http://localhost:8000/api/v1/actions/action-1/executions",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: executionCompleted ? [execution()] : [],
+          total: executionCompleted ? 1 : 0,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/actions/action-1/execute",
+    async (route) => {
+      executionPayload = route.request().postDataJSON() as Record<
+        string,
+        unknown
+      >;
+      await route.fulfill({ status: 202, json: execution() });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/executions/execution-1",
+    async (route) => {
+      executionCompleted = true;
+      await route.fulfill({ json: execution() });
+    },
+  );
+  await page.route(
     `http://localhost:8000/api/v1/evidence/opportunities/${opportunityId}`,
     async (route) => route.fulfill({ json: [] }),
   );
@@ -158,6 +383,15 @@ test("reviews a customer-facing Action without exposing external execution", asy
       });
     },
   );
+
+  await page.goto("/settings");
+  const integrations = page.getByRole("region", { name: "Integrations" });
+  await expect(integrations.getByText("Mock Email")).toBeVisible();
+  await integrations
+    .getByRole("button", { name: "Connect simulation" })
+    .click();
+  await expect(integrations.getByText("Connected")).toBeVisible();
+  expect(connectionCreated).toBe(true);
 
   await page.goto(`/opportunities/${opportunityId}`);
   const actions = page.getByRole("region", { name: "Recommended Actions" });
@@ -186,8 +420,47 @@ test("reviews a customer-facing Action without exposing external execution", asy
   ).toBeVisible();
   expect(approvalPayload).toEqual({ expectedVersion: 1 });
   await actions.getByRole("tab", { name: "Approved (1)" }).click();
-  await expect(actions.getByText("Approved — not yet executed")).toBeVisible();
   await expect(
-    actions.getByRole("button", { name: /^send|sync|schedule$/i }),
-  ).toHaveCount(0);
+    actions.getByText("Approved — execution requires confirmation"),
+  ).toBeVisible();
+  await actions.getByRole("button", { name: "Review execution" }).click();
+  await expect(
+    actions.getByText("Simulation — no external action will occur"),
+  ).toBeVisible();
+  await expect(actions.getByText("jordan@example.com")).toBeVisible();
+  await expect(
+    actions
+      .getByRole("definition")
+      .filter({ hasText: "Hello Jordan,\n\nThank you for the discussion." }),
+  ).toBeVisible();
+  await expect(actions.getByRole("textbox")).toHaveCount(0);
+  await actions.getByRole("button", { name: "Send email" }).click();
+  expect(executionPayload).toEqual({
+    previewId: "preview-1",
+    connectionId: "connection-1",
+    confirmed: true,
+  });
+  await expect(
+    actions.getByText("Queued", { exact: true }).first(),
+  ).toBeVisible();
+  await actions
+    .getByRole("button", { name: "Refresh simulation status" })
+    .click();
+  await expect(
+    actions.getByText("Simulated Success", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(actions.getByText(/mock_email_result_1/)).toBeVisible();
+
+  await page.reload();
+  const refreshedActions = page.getByRole("region", {
+    name: "Recommended Actions",
+  });
+  await refreshedActions.getByRole("tab", { name: "Approved (1)" }).click();
+  await refreshedActions
+    .getByRole("button", { name: "Review execution" })
+    .click();
+  await expect(
+    refreshedActions.getByText("Execution history (1)"),
+  ).toBeVisible();
+  await expect(externalRequests).toEqual([]);
 });

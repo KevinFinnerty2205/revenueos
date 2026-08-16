@@ -13,7 +13,8 @@ Domain Foundation, WO-012 AI Companion preparation, WO-013 AI Debrief/Voice
 Journal, WO-014 Visual Evidence/Presentation Mode, WO-015 Recording &
 Transcription Foundation, WO-016 Browser Face-to-Face Companion, WO-017 Phone
 Call Intelligence, WO-018 Online Meeting Capture, WO-019 Documents & Email
-Evidence, WO-020 Live Interaction Intelligence and WO-021 Action Layer. Interactions, Meetings,
+Evidence, WO-020 Live Interaction Intelligence, WO-021 Action Layer and WO-022
+Integrations & Execution Foundation. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -76,14 +77,19 @@ final Opportunity Workspace intelligence or Revenue Brain.
 WO-021 adds tenant-scoped, typed and versioned Action proposals derived only from
 final validated intelligence. The Opportunity Workspace supports source review,
 safe revision, approval, controlled rejection and internal manual completion.
-Approval is always `not_executed`: no email, CRM, calendar or task connector and no
-autonomous execution loop is implemented.
+Approval itself remains `not_executed`.
+WO-022 adds organisation-scoped deterministic mock email, calendar, CRM and task
+connections plus a provider-neutral execution boundary. An approved Action can
+produce a read-only server preview and, only after a separate final confirmation,
+queue a durable simulation with idempotency, bounded retry and safe unknown-state
+handling. These are visibly labelled simulations: no real provider, OAuth flow or
+external action is implemented.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
 scoring, forecasting, privileged browser database access, background recording
 guarantees, general media ingestion beyond the reviewed visual/audio paths,
-sending/integration or billing is implemented.
+live sending/integration or billing is implemented.
 
 ## Product blueprint
 
@@ -105,15 +111,16 @@ WO-017 implements the browser-first phone-call path and compliant recording impo
 WO-018 implements the provider-neutral online-meeting import path, WO-019
 implements first-party document/email evidence without an external connector, and
 WO-020 implements bounded provisional processing over an authorised progressive
-source. Production progressive transcription, external live AI, native/background
-capture, mobile client, meeting bot, telephony provider and production connectors
-remain unimplemented.
+source, WO-021 implements reviewed Actions and WO-022 implements simulation-only
+connector/execution foundations. Production progressive transcription, external
+live AI, native/background capture, mobile client, meeting bot, telephony provider
+and production connectors remain unimplemented.
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019, WO-020 and WO-021.
+WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019, WO-020, WO-021 and WO-022.
 WO-010 remains the blueprint; later roadmap work remains unauthorised.
 
 ## Prerequisites
@@ -256,6 +263,9 @@ API routes:
   `/api/v1/opportunities/{opportunityId}/actions`
 - read/revise/approve/reject/manual-complete review-only proposals under
   `/api/v1/actions/{actionId}`; every approval remains not executed
+- manage simulation connections under `/api/v1/integrations`, create an exact
+  preview/confirmation under `/api/v1/actions/{actionId}`, and read simulation
+  history under `/api/v1/executions/{executionId}`
 - `PATCH /api/v1/meetings/{meetingId}/opportunity` — stale-write-safe association or disassociation
 - CRUD under `/api/v1/tasks`
 - CRUD under `/api/v1/meetings`
@@ -377,8 +387,12 @@ and [`apps/api/.env.example`](apps/api/.env.example).
 Action generation is deterministic and makes no provider call. The Action Layer
 and internal manual completion have separate feature flags, with daily and
 per-opportunity caps documented in the
-[Action Layer guide](docs/01-product/action-layer.md). No external execution
-configuration exists.
+[Action Layer guide](docs/01-product/action-layer.md). WO-022 simulation additionally
+requires the Integrations, Action Execution and Mock Connectors flags. Email,
+calendar, CRM and task simulations have separate organisation/day limits, share an
+organisation concurrency cap and use short-lived previews. See
+[simulation mode](docs/03-engineering/simulation-mode.md). No live external
+execution configuration exists.
 
 ## Private beta operations
 
@@ -415,6 +429,9 @@ The web output is started with `pnpm --filter @revenueos/web start`. The API pac
 - **API rejects mock auth:** `API_ENVIRONMENT=production` cannot use the mock. Use development locally.
 - **Port already in use:** stop the existing process or change the local web/API command and update the corresponding URL/CORS variables.
 - **OpenAPI or TypeScript contract changed:** update the small `packages/shared` surface in the same pull request. Pydantic/OpenAPI remains canonical.
+- **Simulation connector unavailable:** confirm the Action Layer, Integrations,
+  Action Execution and Mock Connectors flags are enabled together outside
+  production. Mock connectors are intentionally rejected in production.
 
 See the [documentation index](docs/README.md),
 [development guide](docs/03-engineering/development-guide.md),
@@ -432,6 +449,9 @@ See the [documentation index](docs/README.md),
 [Revenue Brain foundation](docs/03-engineering/revenue-brain-foundation.md),
 [Revenue Brain longitudinal reasoning](docs/03-engineering/revenue-brain-reasoning.md),
 [Opportunity Workspace](docs/03-engineering/opportunity-workspace.md),
+[Integrations and execution foundation](docs/01-product/integrations-execution-foundation.md),
+[Connector architecture](docs/03-engineering/connector-architecture.md),
+[Execution preview and confirmation](docs/03-engineering/execution-preview-confirmation.md),
 [Follow-up Email Composer](docs/03-engineering/follow-up-email-composer.md),
 [Unified Meeting Intelligence workspace](docs/03-engineering/unified-meeting-intelligence.md),
 [OpenAI provider guide](docs/03-engineering/openai-provider-integration.md),

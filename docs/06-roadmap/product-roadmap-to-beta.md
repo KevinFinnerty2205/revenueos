@@ -364,6 +364,12 @@ still required.
 
 ## Narrow pilot integrations
 
+WO-022 now supplies the simulation-only execution foundation used to validate
+connection governance, exact approved-content binding, idempotency, revocation,
+retry and unknown-state UX. It does not complete any pilot integration below;
+OAuth, live adapters, provider receipts, webhooks and provider deletion remain
+part of their future gates.
+
 ### Sprint 11 — Pilot Calendar Connection
 
 - **Objective:** Connect one productivity ecosystem selected from the first five partners and associate eligible calendar events with meetings.

@@ -12,6 +12,12 @@ possible signals and brief progress separately, then reconciles them with final
 Interaction Intelligence. It does not add production live transcription or allow
 provisional state to update final Opportunity Workspace intelligence or Revenue Brain.
 
+WO-021 adds reviewed Action proposals. WO-022 lets an administrator enable
+deterministic mock connections and lets an active member take an approved Action
+through a separate read-only preview and explicit final confirmation. Email,
+calendar, CRM and task outcomes are simulations only; no external system is
+contacted or changed.
+
 ## Product definition
 
 RevenueOS AI is a multi-tenant relationship-intelligence platform. Sales Brain will help relationship-driven revenue professionals prepare for conversations, capture useful context, reduce administration and follow through thoughtfully.
@@ -106,6 +112,9 @@ The current implementation provides:
 - optional provisional Live Intelligence over an authorised progressive transcript,
   with a server cursor, bounded overlap, objective/question progress, possible
   signals, dismissal and final reconciliation. Both live flags default off.
+- tenant-scoped reviewed Actions plus simulation-only mock connector settings,
+  server-generated execution preview, separate confirmation, durable history and
+  deterministic mock result IDs. Approval never executes by itself.
 
 The current product accepts only deliberately supplied or explicitly armed inputs:
 record metadata, pasted transcripts, reviewed visual/document/email evidence,
@@ -125,7 +134,7 @@ qualitative supported changes, never probability, forecast or deal health. The
 Pre-Interaction Brief is likewise provider-free and reads only validated
 structured intelligence plus linked record metadata; it never reads transcript
 text. Source completeness is not a success forecast. The
-application does not answer or assign customer questions, connect external systems
+application does not answer or assign customer questions, connect live external systems
 or process payments. It can record an explicitly armed supported-browser
 Interaction and privately retain bounded audio for batch transcription; it never
 records implicitly and does not guarantee background/screen-lock capture. It also
