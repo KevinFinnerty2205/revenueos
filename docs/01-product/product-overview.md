@@ -18,6 +18,13 @@ through a separate read-only preview and explicit final confirmation. Email,
 calendar, CRM and task outcomes are simulations only; no external system is
 contacted or changed.
 
+WO-023 adds documentation—not product behaviour—for the proposed end-to-end Sales
+OS. [RevenueOS Core](revenueos-core-product.md) remains independently valuable;
+[Prospect](revenueos-prospect.md), [Engage](revenueos-engage.md),
+[Create](revenueos-create.md) and [CRM](revenueos-crm.md) are future optional modules.
+See the [platform vision](end-to-end-sales-platform-vision.md) and
+[information architecture](../02-design/revenueos-information-architecture.md).
+
 ## Product definition
 
 RevenueOS AI is a multi-tenant relationship-intelligence platform. Sales Brain will help relationship-driven revenue professionals prepare for conversations, capture useful context, reduce administration and follow through thoughtfully.
@@ -35,7 +42,9 @@ These are target product goals, not current capabilities. The complete direction
 in the [master product blueprint](master-product-blueprint.md),
 [Interaction Intelligence vision](interaction-intelligence-vision.md),
 [Interaction Intelligence product blueprint](interaction-intelligence-product-blueprint.md)
-and [roadmap](../06-roadmap/interaction-intelligence-roadmap.md).
+and [Interaction roadmap](../06-roadmap/interaction-intelligence-roadmap.md). The
+broader future Sales OS sequence is separately defined in the
+[End-to-End Sales Platform roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md).
 
 ## Interaction Intelligence direction
 
@@ -70,7 +79,8 @@ The current implementation provides:
 - an honest public landing page;
 - sign-in, sign-up and sign-out paths prepared for Clerk;
 - a protected application shell and fixed development organisation;
-- Dashboard, Companies, Contacts, Opportunities, Meetings, Tasks, Assistant and Settings navigation;
+- Dashboard, Getting started, Companies, Contacts, Opportunities, Interactions,
+  Meetings, Tasks, Assistant, Feedback and Settings navigation;
 - a dashboard with polished empty sections;
 - tenant-isolated list/create/edit/delete workflows for companies, contacts, opportunities and tasks;
 - tenant-isolated meeting, participant and deliberately supplied plain-text transcript workflows with local audit history;

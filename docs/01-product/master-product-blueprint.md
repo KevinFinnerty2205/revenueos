@@ -143,6 +143,14 @@ consequential actions.
 
 The later products are not beta requirements and must not distort Sales Brain workflows prematurely.
 
+WO-023 defines the future end-to-end Sales OS direction within Sales Brain. It keeps
+Sales Brain, Methodology, Intelligence, Workspace and Daily in Core; adds Prospect,
+Engage, Create and CRM as optional modules; and organises the experience around Home,
+Find, Sell, Pipeline, Create and Insights. The authoritative expansion contract is the
+[End-to-End Sales Platform vision](end-to-end-sales-platform-vision.md), with the
+[conditional roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md). It does not
+change the implemented WO-022 baseline or authorise a later work order.
+
 ## Product boundaries
 
 RevenueOS owns:

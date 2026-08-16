@@ -84,6 +84,9 @@ produce a read-only server preview and, only after a separate final confirmation
 queue a durable simulation with idempotency, bounded retry and safe unknown-state
 handling. These are visibly labelled simulations: no real provider, OAuth flow or
 external action is implemented.
+WO-023 documents the proposed end-to-end Sales OS, Core/add-on boundaries,
+simplicity-first information architecture and conditional WO-024–045 roadmap. It
+changes no production behaviour, schema, dependency or navigation.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
@@ -94,6 +97,13 @@ live sending/integration or billing is implemented.
 ## Product blueprint
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
+
+The proposed direction beyond the current WO-022 baseline is defined by the
+[End-to-End Sales Platform vision](docs/01-product/end-to-end-sales-platform-vision.md),
+[commercial packaging](docs/01-product/revenueos-commercial-packaging.md),
+[simplicity-first information architecture](docs/02-design/revenueos-information-architecture.md)
+and [conditional WO-024–045 roadmap](docs/06-roadmap/end-to-end-sales-platform-roadmap.md).
+These WO-023 documents do not authorise implementation.
 
 WO-010 defines the approved direction in the
 [Interaction Intelligence vision](docs/01-product/interaction-intelligence-vision.md),
@@ -121,7 +131,8 @@ not authorise another sprint. The current implementation boundary is Sprints 1�
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
 WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019, WO-020, WO-021 and WO-022.
-WO-010 remains the blueprint; later roadmap work remains unauthorised.
+WO-010 remains the Interaction Intelligence blueprint. WO-023 adds the broader
+end-to-end Sales OS blueprint; all later roadmap work remains unauthorised.
 
 ## Prerequisites
 

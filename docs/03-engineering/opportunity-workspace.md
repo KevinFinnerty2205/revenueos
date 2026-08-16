@@ -348,3 +348,14 @@ selects an active server-authorised mock connection, renders an exact read-only
 preview, requires a consequentially labelled final confirmation, and shows queued,
 failure, unknown or simulated-success history. The panel never changes the
 Opportunity's canonical fields and never contacts an external provider.
+
+## WO-023 future Opportunity and Account Workspace
+
+WO-023 keeps Opportunity as the central deal working area and adds Account as the
+relationship context inside Sell. The proposed Opportunity sections are Overview,
+People, Activity, Deal, Actions, Files and Insights, using progressive disclosure
+rather than separate entity navigation. CRM may enrich Deal/Pipeline; it does not
+replace this Core workspace. See the
+[future UX contract](../02-design/opportunity-and-account-workspace-ux.md) and
+[ADR 0035](../08-decisions/0035-end-to-end-sales-os-architecture.md). No described
+section or navigation change is implemented by WO-023.

@@ -244,3 +244,12 @@ On small screens, use a compact menu and preserve direct access to Dashboard, Me
 - [Core workflows](core-workflows.md)
 - [User journeys](../01-product/user-journeys.md)
 - [Privacy, security and trust model](../03-engineering/privacy-security-and-trust-model.md)
+
+## WO-023 future navigation
+
+This document remains the detailed current-through-beta screen inventory. WO-023
+proposes the longer-lived goal-based shell—Home, Find, Sell, Pipeline, Create and
+Insights, with Search and Settings as utilities—in
+[RevenueOS information architecture](revenueos-information-architecture.md). The
+future design nests entity routes under user goals and preserves deep links; no
+navigation change is implemented by WO-023.

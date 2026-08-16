@@ -276,3 +276,13 @@ change is reconstructed from transcript text and no new reasoning is triggered b
 opening or generating a brief. The insight ID, scope and validation state remain
 in internal source references. See
 [Pre-Interaction source grounding](pre-interaction-source-grounding.md).
+
+## WO-023 future consumers
+
+Revenue Brain remains the evidence-centred memory/reasoning layer for the proposed
+Sales OS. Methodology, Daily, forecast, manager coaching, Create and closed-won
+handover consume versioned authorised Brain projections and cited Evidence; Prospect
+findings remain staged until reviewed promotion. None may mutate historical snapshots,
+infer resolution from silence or turn AI output into source Evidence. See the
+[End-to-End Sales Platform vision](../01-product/end-to-end-sales-platform-vision.md).
+WO-023 changes no version-1 reasoning behaviour.

@@ -552,11 +552,11 @@ part of their future gates.
 
 ## Integration coverage at launch stages
 
-| Stage                 | Calendar/mail                      | CRM                                        | Meeting source                                                 |
-| --------------------- | ---------------------------------- | ------------------------------------------ | -------------------------------------------------------------- |
-| Design-partner pilot  | One selected ecosystem             | One selected CRM                           | Manual upload/paste; connected source only if safely available |
-| Private beta entry    | Google and Microsoft calendar/mail | Salesforce and HubSpot read/approved write | Manual fallback plus one priority provider import              |
-| Later beta increments | Provider-specific improvements     | Additional objects/fields by evidence      | Remaining Zoom/Teams/Meet imports in focused sprints           |
+| Stage                 | Calendar/mail                                       | CRM                                           | Meeting source                                                 |
+| --------------------- | --------------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------- |
+| Design-partner pilot  | Discover both; implement one selected ecosystem     | Discover providers; one only if essential     | Manual upload/paste; connected source only if safely available |
+| Private beta entry    | First live-ready ecosystem; second only by evidence | First live-ready read/reviewed-write boundary | Manual fallback plus one priority provider import              |
+| Later beta increments | Provider-specific improvements and second ecosystem | Additional providers/objects only by evidence | Remaining Zoom/Teams/Meet imports in focused sprints           |
 
 Not every listed integration is a prerequisite for the first pilot or private beta entry. Availability must be labelled by provider, edition, capability and region.
 
@@ -571,7 +571,8 @@ Not every listed integration is a prerequisite for the first pilot or private be
 
 ## Next sequencing decision
 
-WO-020 Live Interaction Intelligence is the current implemented baseline. WO-009 supplies the smallest verified
+WO-022 Integrations and Execution Foundation is the current implemented baseline.
+WO-009 supplies the smallest verified
 identity, organisation-administration and operational controls needed for a
 controlled beta, so the older Sprint 4 description below is retained as target
 roadmap history rather than an instruction to rebuild that surface. Production
@@ -584,9 +585,11 @@ non-recording AI Debrief/Voice Journal and WO-014 browser-first visual evidence 
 Presentation Mode, WO-015 optional browser recording and batch transcription,
 WO-016 foreground browser Companion orchestration, WO-017 browser-first phone
 calls, WO-018 provider-neutral online-meeting capture, WO-019 document/email
-evidence and WO-020 bounded provisional live processing are complete. Any
-recommended next work must be separately
-authorised from the Interaction Intelligence roadmap.
+evidence, WO-020 bounded provisional live processing, WO-021 reviewed Actions and
+WO-022 simulation-only execution are complete. Any recommended next work must be
+separately authorised. WO-023 now defines the broader future sequence in the
+[End-to-End Sales Platform roadmap](end-to-end-sales-platform-roadmap.md), with
+explicit checkpoints rather than an unconditional build queue.
 The older Sprint 4–26 entries remain useful integration/release-gate context but must
 be reconciled into the Interaction work orders rather than implemented in parallel
 as a contradictory plan.
@@ -599,3 +602,4 @@ as a contradictory plan.
 - [Target domain model](../03-engineering/target-domain-model.md)
 - [Integration strategy](../05-integrations/integration-strategy.md)
 - [ADR 0003](../08-decisions/0003-product-blueprint-and-beta-sequencing.md)
+- [End-to-End Sales Platform roadmap](end-to-end-sales-platform-roadmap.md)
