@@ -134,6 +134,7 @@ class Settings(BaseSettings):
     feature_online_meeting_auto_ingest_enabled: bool = False
     feature_document_evidence_enabled: bool = True
     feature_email_evidence_enabled: bool = True
+    feature_sales_methodology_enabled: bool = True
     feature_live_interaction_intelligence_enabled: bool = False
     feature_live_interaction_external_ai_enabled: bool = False
     feature_action_layer_enabled: bool = True
@@ -405,6 +406,7 @@ class Settings(BaseSettings):
             "onlineMeetingAutoIngest": self.feature_online_meeting_auto_ingest_enabled,
             "documentEvidence": self.feature_document_evidence_enabled,
             "emailEvidence": self.feature_email_evidence_enabled,
+            "salesMethodology": self.feature_sales_methodology_enabled,
             "liveInteractionIntelligence": self.feature_live_interaction_intelligence_enabled,
             "liveInteractionExternalAi": self.feature_live_interaction_external_ai_enabled,
             "actionLayer": self.feature_action_layer_enabled,

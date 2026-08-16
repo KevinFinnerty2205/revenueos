@@ -13,8 +13,8 @@ Domain Foundation, WO-012 AI Companion preparation, WO-013 AI Debrief/Voice
 Journal, WO-014 Visual Evidence/Presentation Mode, WO-015 Recording &
 Transcription Foundation, WO-016 Browser Face-to-Face Companion, WO-017 Phone
 Call Intelligence, WO-018 Online Meeting Capture, WO-019 Documents & Email
-Evidence, WO-020 Live Interaction Intelligence, WO-021 Action Layer and WO-022
-Integrations & Execution Foundation. Interactions, Meetings,
+Evidence, WO-020 Live Interaction Intelligence, WO-021 Action Layer, WO-022
+Integrations & Execution Foundation and WO-024 Sales Methodology Engine. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -87,6 +87,11 @@ external action is implemented.
 WO-023 documents the proposed end-to-end Sales OS, Core/add-on boundaries,
 simplicity-first information architecture and conditional WO-024–045 roadmap. It
 changes no production behaviour, schema, dependency or navigation.
+WO-024 implements RevenueOS Core methodology projections for MEDDIC, MEDDPICC,
+BANT and SPICED plus bounded versioned custom definitions. The deterministic engine
+maps current validated Evidence into categorical, source-linked field states and adds
+Opportunity Deal and Settings experiences. It adds no qualification score, stage
+blocking, rep ranking, new top-level navigation item or external provider call.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
@@ -98,12 +103,13 @@ live sending/integration or billing is implemented.
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-The proposed direction beyond the current WO-022 baseline is defined by the
+The proposed direction beyond the current WO-024 baseline is defined by the
 [End-to-End Sales Platform vision](docs/01-product/end-to-end-sales-platform-vision.md),
 [commercial packaging](docs/01-product/revenueos-commercial-packaging.md),
 [simplicity-first information architecture](docs/02-design/revenueos-information-architecture.md)
 and [conditional WO-024–045 roadmap](docs/06-roadmap/end-to-end-sales-platform-roadmap.md).
-These WO-023 documents do not authorise implementation.
+WO-024 implements only the Sales Methodology slice; later roadmap items remain
+unauthorised.
 
 WO-010 defines the approved direction in the
 [Interaction Intelligence vision](docs/01-product/interaction-intelligence-vision.md),
@@ -121,8 +127,9 @@ WO-017 implements the browser-first phone-call path and compliant recording impo
 WO-018 implements the provider-neutral online-meeting import path, WO-019
 implements first-party document/email evidence without an external connector, and
 WO-020 implements bounded provisional processing over an authorised progressive
-source, WO-021 implements reviewed Actions and WO-022 implements simulation-only
-connector/execution foundations. Production progressive transcription, external
+source, WO-021 implements reviewed Actions, WO-022 implements simulation-only
+connector/execution foundations and WO-024 implements evidence-backed Sales
+Methodology. Production progressive transcription, external
 live AI, native/background capture, mobile client, meeting bot, telephony provider
 and production connectors remain unimplemented.
 
@@ -130,9 +137,9 @@ Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019, WO-020, WO-021 and WO-022.
+WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019, WO-020, WO-021, WO-022 and WO-024.
 WO-010 remains the Interaction Intelligence blueprint. WO-023 adds the broader
-end-to-end Sales OS blueprint; all later roadmap work remains unauthorised.
+end-to-end Sales OS blueprint; all post-WO-024 roadmap work remains unauthorised.
 
 ## Prerequisites
 

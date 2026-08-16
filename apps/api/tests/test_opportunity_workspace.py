@@ -382,10 +382,10 @@ def test_workspace_query_count_is_bounded_as_recent_meetings_grow(
 
     assert response.status_code == 200, response.text
     assert len(response.json()["recentMeetings"]) == 6
-    # Longitudinal reasoning and reviewed visual provenance add only bounded
-    # snapshot/artefact/evidence reads; query count remains constant as the
-    # number of recent meetings grows.
-    assert select_count <= 11
+    # Longitudinal reasoning, reviewed visual provenance and the current
+    # methodology projection add only bounded reads; query count remains
+    # constant as the number of recent meetings grows.
+    assert select_count <= 13
 
 
 def test_latest_meeting_navigation_telemetry_is_tenant_validated_and_metadata_only(

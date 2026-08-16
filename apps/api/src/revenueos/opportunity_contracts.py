@@ -14,6 +14,7 @@ from revenueos.domain import (
     OpportunityStatus,
 )
 from revenueos.intelligence_contracts import MeetingIntelligenceResponse
+from revenueos.methodology_contracts import OpportunityMethodologyResponse
 from revenueos.revenue_brain_reasoning_contracts import RevenueBrainReasoningResponse
 
 IntelligenceReadiness = Literal["unavailable", "not_generated", "partial", "ready"]
@@ -152,6 +153,7 @@ class OpportunityWorkspaceResponse(APIModel):
     reported_intelligence: ReportedInteractionIntelligenceResponse | None = None
     visual_intelligence: VisualInteractionIntelligenceResponse | None = None
     latest_interaction_capture: OpportunityInteractionCaptureStatusResponse | None = None
+    methodology: OpportunityMethodologyResponse
     intelligence_sections_available: int
     partial_data: bool
     generated_at: datetime

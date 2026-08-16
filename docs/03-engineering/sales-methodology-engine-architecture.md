@@ -1,16 +1,17 @@
 # Sales Methodology Engine architecture
 
-- **Status:** Proposed Core architecture; not implemented
-- **Decision owner:** WO-023
+- **Status:** Implemented Core architecture by WO-024
+- **Decision owner:** WO-023 architecture, realised by WO-024
 - **Depends on:** Evidence, Revenue Brain, Opportunity Workspace and organisation administration
 
 ## Purpose
 
-RevenueOS should support multiple qualification and discovery methodologies without
+RevenueOS supports multiple qualification and discovery methodologies without
 creating a separate intelligence system for each one. Canonical, tenant-owned
 Evidence remains the truth. A versioned Methodology Projection Engine interprets
-that Evidence for MEDDIC, MEDDPICC, BANT, SPICED, SPIN, Challenger, Sandler, GAP
-Selling, Solution Selling or a safe organisation-defined methodology.
+that Evidence for MEDDIC, MEDDPICC, BANT, SPICED or a safe organisation-defined
+methodology. Other named methodologies remain possible configuration work, not
+implemented projections.
 
 ```mermaid
 flowchart LR
@@ -42,9 +43,11 @@ historical Evidence.
 | `MethodologyItem`            | State, concise belief, support/conflict references and last-supported time      |
 | `ProjectionReview`           | Human confirmation, correction or rejection with actor, reason and version      |
 
-These names are planning vocabulary, not authorised tables or endpoints. All
-tenant-owned identifiers, uniqueness constraints and reads must be explicitly
-organisation-scoped. Definitions use stable keys so labels can change safely.
+WO-024 implements the smallest coherent form as code-deployed standard definitions,
+tenant-owned custom definition/version rows, an organisation setting, immutable
+projection JSON and immutable review rows. All tenant-owned identifiers, uniqueness
+constraints and reads are explicitly organisation-scoped. Definitions use stable
+keys so historical projections remain explainable.
 
 ## Evidence-aware states
 
@@ -64,9 +67,9 @@ forecast.
 
 1. Load the authorised Opportunity Evidence snapshot and effective definition.
 2. Apply deterministic admissibility, recency and contradiction policies.
-3. Ask bounded AI extraction/reasoning only where an approved schema requires it.
+3. Apply the deterministic canonical-fact and support policy; v1 makes no provider call.
 4. Validate every proposed belief against cited Evidence IDs.
-5. Store the definition, policy, prompt/model and Evidence-set versions needed to
+5. Store the definition, policy/engine and Evidence-set versions needed to
    reproduce the result.
 6. Present changed items for review; consequential changes remain provisional until
    the applicable policy is met.
@@ -81,14 +84,14 @@ Evidence lifecycle—not the methodology screen—decides whether it becomes tru
 ## Custom methodology builder
 
 An organisation administrator may define a field key, display name, explanation,
-required/optional flag, stage expectation, acceptable Evidence classes, suggested
-discovery questions, dependencies and ordering. The builder must provide preview,
-draft, validation, publish and replacement-version flows.
+required/optional flag, stage expectation, allowlisted Evidence/fact mappings,
+suggested discovery questions, freshness and ordering. The guided builder validates
+and creates immutable replacement versions.
 
 It must not permit executable code, arbitrary database expressions, hidden model
 prompts, cross-tenant sources, unbounded field counts or a general workflow language.
-Dependencies are limited to validated references between fields and approved stages.
-Published versions are immutable; corrections create a replacement version.
+Published versions are immutable; corrections create a replacement version. Field
+dependencies and general expressions are not supported in v1.
 
 ## Service boundaries and contracts
 
@@ -100,8 +103,8 @@ Published versions are immutable; corrections create a replacement version.
 - Brief, Action, forecast and coaching consumers receive typed projection outputs;
   they do not reinterpret raw methodology fields independently.
 
-Future API resources should support definition lifecycle, assignment, projection
-read/recompute and review. The server derives organisation and effective permission
+The API supports definition lifecycle, organisation selection, projection
+read/recompute/history and review. The server derives organisation and effective permission
 from verified auth context. Writes require optimistic concurrency or equivalent
 version checks; audit content stores metadata, not customer Evidence text.
 
@@ -127,6 +130,6 @@ desktop-first.
 
 ## Explicitly out of scope
 
-WO-023 does not implement schemas, endpoints, prompts or UI. The future engine is not
-a generic rules platform, an opaque qualification score, a guaranteed sales process
-or a substitute for human judgement.
+WO-024 does not implement a generic rules platform, an opaque qualification score,
+a guaranteed sales process, stage blocking, employee surveillance, Daily, manager
+analytics or a substitute for human judgement.

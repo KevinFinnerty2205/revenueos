@@ -57,6 +57,10 @@ from revenueos.models import (
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
+    MethodologyDefinition,
+    MethodologyDefinitionVersion,
+    MethodologyProjection,
+    MethodologyReview,
     MockConnectorObject,
     OnboardingProgress,
     OnlineMeetingMetadata,
@@ -66,6 +70,7 @@ from revenueos.models import (
     Organisation,
     OrganisationBetaSettings,
     OrganisationMembership,
+    OrganisationMethodologySetting,
     PreInteractionBrief,
     ProvisionalSignal,
     RecordingChunk,
@@ -92,7 +97,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 13
+EXPORT_VERSION = 14
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -224,12 +229,39 @@ async def run_retention(
                 )
             ).all()
         )
+        methodology_projection_ids = list(
+            (
+                await session.scalars(
+                    select(MethodologyProjection.id)
+                    .where(
+                        MethodologyProjection.organisation_id == organisation_id,
+                        MethodologyProjection.generated_at < cutoff,
+                    )
+                    .order_by(MethodologyProjection.generated_at, MethodologyProjection.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
         counts = await _meeting_deletion_counts(session, organisation_id, meeting_ids)
         interaction_counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
         counts = _merge_counts(counts, interaction_counts)
         counts = _merge_counts(
             counts,
             {"document_sources": len(document_ids), "email_sources": len(email_ids)},
+        )
+        counts["methodology_projections"] = len(methodology_projection_ids)
+        counts["methodology_reviews"] = int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(MethodologyReview)
+                    .where(
+                        MethodologyReview.organisation_id == organisation_id,
+                        MethodologyReview.projection_id.in_(methodology_projection_ids),
+                    )
+                )
+            )
+            or 0
         )
         expired_live_count = int(
             (
@@ -247,7 +279,12 @@ async def run_retention(
         )
         counts["expired_live_sessions"] = expired_live_count
         if dry_run or (
-            not meeting_ids and not interaction_ids and not document_ids and not email_ids and not expired_live_count
+            not meeting_ids
+            and not interaction_ids
+            and not document_ids
+            and not email_ids
+            and not methodology_projection_ids
+            and not expired_live_count
         ):
             return RetentionResult(
                 organisation_id,
@@ -296,7 +333,12 @@ async def run_retention(
         await _delete_document_objects(session, settings, organisation_id, all_document_ids)
         await _enable_approved_deletion(session)
         await _delete_source_database_rows(session, organisation_id, all_document_ids, all_email_ids)
-        removed = await _delete_meeting_batch(session, organisation_id, meeting_ids)
+        removed = await _delete_methodology_projection_batch(
+            session,
+            organisation_id,
+            methodology_projection_ids,
+        )
+        removed = _merge_counts(removed, await _delete_meeting_batch(session, organisation_id, meeting_ids))
         removed = _merge_counts(
             removed,
             await _delete_interaction_batch(session, organisation_id, interaction_ids),
@@ -637,6 +679,38 @@ async def _delete_organisation_records(
         await session.execute(
             delete(RecordingUsageCounter).where(RecordingUsageCounter.organisation_id == organisation_id)
         )
+        clarification_evidence_ids = list(
+            (
+                await session.scalars(
+                    select(MethodologyReview.clarification_evidence_id).where(
+                        MethodologyReview.organisation_id == organisation_id,
+                        MethodologyReview.clarification_evidence_id.is_not(None),
+                    )
+                )
+            ).all()
+        )
+        await session.execute(delete(MethodologyReview).where(MethodologyReview.organisation_id == organisation_id))
+        await session.execute(
+            delete(MethodologyProjection).where(MethodologyProjection.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(OrganisationMethodologySetting).where(
+                OrganisationMethodologySetting.organisation_id == organisation_id
+            )
+        )
+        await session.execute(
+            delete(MethodologyDefinitionVersion).where(MethodologyDefinitionVersion.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(MethodologyDefinition).where(MethodologyDefinition.organisation_id == organisation_id)
+        )
+        if clarification_evidence_ids:
+            await session.execute(
+                delete(Evidence).where(
+                    Evidence.organisation_id == organisation_id,
+                    Evidence.id.in_(clarification_evidence_ids),
+                )
+            )
         await session.execute(delete(Evidence).where(Evidence.organisation_id == organisation_id))
         await session.execute(delete(CaptureSession).where(CaptureSession.organisation_id == organisation_id))
         await session.execute(delete(PreInteractionBrief).where(PreInteractionBrief.organisation_id == organisation_id))
@@ -1634,6 +1708,52 @@ async def _delete_interaction_batch(
     return counts
 
 
+async def _delete_methodology_projection_batch(
+    session: AsyncSession,
+    organisation_id: UUID,
+    projection_ids: list[UUID],
+) -> dict[str, int]:
+    if not projection_ids:
+        return {}
+    reviews = list(
+        (
+            await session.scalars(
+                select(MethodologyReview).where(
+                    MethodologyReview.organisation_id == organisation_id,
+                    MethodologyReview.projection_id.in_(projection_ids),
+                )
+            )
+        ).all()
+    )
+    clarification_ids = [
+        item.clarification_evidence_id for item in reviews if item.clarification_evidence_id is not None
+    ]
+    await session.execute(
+        delete(MethodologyReview).where(
+            MethodologyReview.organisation_id == organisation_id,
+            MethodologyReview.projection_id.in_(projection_ids),
+        )
+    )
+    await session.execute(
+        delete(MethodologyProjection).where(
+            MethodologyProjection.organisation_id == organisation_id,
+            MethodologyProjection.id.in_(projection_ids),
+        )
+    )
+    if clarification_ids:
+        await session.execute(
+            delete(Evidence).where(
+                Evidence.organisation_id == organisation_id,
+                Evidence.id.in_(clarification_ids),
+            )
+        )
+    return {
+        "methodology_reviews": len(reviews),
+        "methodology_projections": len(projection_ids),
+        "methodology_clarification_evidence": len(clarification_ids),
+    }
+
+
 async def _delete_recording_database_rows(
     session: AsyncSession,
     organisation_id: UUID,
@@ -1733,6 +1853,35 @@ async def _export_payload(
     contacts = await rows(select(Contact).where(Contact.organisation_id == organisation_id).order_by(Contact.id))
     opportunities = await rows(
         select(Opportunity).where(Opportunity.organisation_id == organisation_id).order_by(Opportunity.id)
+    )
+    methodology_definitions = await rows(
+        select(MethodologyDefinition)
+        .where(MethodologyDefinition.organisation_id == organisation_id)
+        .order_by(MethodologyDefinition.id)
+    )
+    methodology_definition_versions = await rows(
+        select(MethodologyDefinitionVersion)
+        .where(MethodologyDefinitionVersion.organisation_id == organisation_id)
+        .order_by(
+            MethodologyDefinitionVersion.definition_id,
+            MethodologyDefinitionVersion.version,
+        )
+    )
+    methodology_settings = await rows(
+        select(OrganisationMethodologySetting).where(OrganisationMethodologySetting.organisation_id == organisation_id)
+    )
+    methodology_projections = await rows(
+        select(MethodologyProjection)
+        .where(MethodologyProjection.organisation_id == organisation_id)
+        .order_by(
+            MethodologyProjection.opportunity_id,
+            MethodologyProjection.projection_version,
+        )
+    )
+    methodology_reviews = await rows(
+        select(MethodologyReview)
+        .where(MethodologyReview.organisation_id == organisation_id)
+        .order_by(MethodologyReview.opportunity_id, MethodologyReview.created_at)
     )
     action_proposals = await rows(
         select(ActionProposal)
@@ -2100,6 +2249,87 @@ async def _export_payload(
                 ),
             )
             for item in opportunities
+        ],
+        "methodologyDefinitions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "status",
+                    "current_version",
+                    "created_by_user_id",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in methodology_definitions
+        ],
+        "methodologyDefinitionVersions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "definition_id",
+                    "version",
+                    "schema_version",
+                    "content_json",
+                    "content_fingerprint",
+                    "created_by_user_id",
+                    "created_at",
+                ),
+            )
+            for item in methodology_definition_versions
+        ],
+        "organisationMethodologySettings": [
+            _columns(
+                item,
+                (
+                    "selection",
+                    "custom_definition_id",
+                    "updated_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in methodology_settings
+        ],
+        "methodologyProjections": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "opportunity_id",
+                    "methodology_kind",
+                    "definition_key",
+                    "definition_id",
+                    "definition_version",
+                    "projection_version",
+                    "engine_version",
+                    "schema_version",
+                    "content_json",
+                    "generated_by_user_id",
+                    "generated_at",
+                ),
+            )
+            for item in methodology_projections
+        ],
+        "methodologyReviews": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "projection_id",
+                    "opportunity_id",
+                    "field_key",
+                    "action",
+                    "clarification_text",
+                    "clarification_evidence_id",
+                    "reviewed_by_user_id",
+                    "created_at",
+                ),
+            )
+            for item in methodology_reviews
         ],
         "actionProposals": [
             _columns(

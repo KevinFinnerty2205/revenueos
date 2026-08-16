@@ -47,6 +47,7 @@ class ActionSourceReference(StrictActionModel):
         "accepted_evidence",
         "interaction_intelligence",
         "revenue_brain_insight",
+        "methodology_projection",
     ]
     source_id: UUID
     item_key: Annotated[
@@ -59,6 +60,7 @@ class ActionSourceReference(StrictActionModel):
         "salesperson_reported",
         "validated_intelligence",
         "revenue_brain",
+        "methodology",
     ]
 
 

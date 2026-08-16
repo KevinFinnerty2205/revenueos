@@ -131,3 +131,8 @@ generic BI, autonomous external action and unrestricted custom workflow code.
 See [Sales Methodology architecture](../03-engineering/sales-methodology-engine-architecture.md),
 [Intelligence architecture](../03-engineering/sales-analytics-targets-forecast-architecture.md)
 and [Daily experience](../02-design/revenueos-daily-experience.md).
+
+WO-024 now implements the methodology slice of Core: one organisation default or
+none, four immutable standards, bounded custom definitions, explainable Opportunity
+views and preparation/action context. It does not implement Daily, analytics,
+forecasting, manager dashboards or methodology-based rep measurement.

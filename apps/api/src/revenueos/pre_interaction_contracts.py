@@ -57,6 +57,7 @@ BriefSourceCapability = Literal[
     "next_best_action",
     "revenue_brain",
     "action_layer",
+    "sales_methodology",
 ]
 BriefSourceScope = Literal["interaction", "meeting", "opportunity", "account"]
 BriefSourceClassification = Literal[
@@ -66,6 +67,7 @@ BriefSourceClassification = Literal[
     "inferred_from_prior_intelligence",
     "revenue_brain_change",
     "recommendation",
+    "methodology_gap",
 ]
 
 Headline = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]

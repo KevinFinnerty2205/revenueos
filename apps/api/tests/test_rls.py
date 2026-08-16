@@ -149,6 +149,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "beta_feedback",
         "beta_data_requests",
         "beta_system_events",
+        "methodology_definitions",
+        "methodology_definition_versions",
+        "organisation_methodology_settings",
+        "methodology_projections",
+        "methodology_reviews",
     )
     tenant_a = {
         "suffix": "A",
@@ -206,6 +211,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "live_window_id": uuid.uuid4(),
         "provisional_signal_id": uuid.uuid4(),
         "live_brief_progress_id": uuid.uuid4(),
+        "methodology_definition_id": uuid.uuid4(),
+        "methodology_definition_version_id": uuid.uuid4(),
+        "methodology_projection_id": uuid.uuid4(),
+        "methodology_review_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -263,6 +272,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "live_window_id": uuid.uuid4(),
         "provisional_signal_id": uuid.uuid4(),
         "live_brief_progress_id": uuid.uuid4(),
+        "methodology_definition_id": uuid.uuid4(),
+        "methodology_definition_version_id": uuid.uuid4(),
+        "methodology_projection_id": uuid.uuid4(),
+        "methodology_review_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -380,6 +393,95 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO methodology_definitions
+                                (id, organisation_id, status, current_version,
+                                 created_by_user_id)
+                            VALUES
+                                (:methodology_definition_id, :organisation_id,
+                                 'active', 1, :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO methodology_definition_versions
+                                (id, organisation_id, definition_id, version,
+                                 schema_version, content_json,
+                                 content_fingerprint, created_by_user_id)
+                            VALUES
+                                (:methodology_definition_version_id,
+                                 :organisation_id, :methodology_definition_id,
+                                 1, 1, CAST(:methodology_content AS json),
+                                 :methodology_fingerprint, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "methodology_content": (
+                                '{"key":"rls_methodology","name":"RLS Methodology",'
+                                '"description":"RLS custom definition",'
+                                '"version":1,"standard":false,"fields":[]}'
+                            ),
+                            "methodology_fingerprint": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO organisation_methodology_settings
+                                (organisation_id, selection,
+                                 updated_by_user_id)
+                            VALUES (:organisation_id, 'bant', :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO methodology_projections
+                                (id, organisation_id, opportunity_id,
+                                 methodology_kind, definition_key,
+                                 definition_version, projection_version,
+                                 engine_version, schema_version,
+                                 source_fingerprint, content_json,
+                                 generated_by_user_id)
+                            VALUES
+                                (:methodology_projection_id, :organisation_id,
+                                 :opportunity_id, 'standard', 'bant', 1, 1,
+                                 1, 1, :methodology_fingerprint,
+                                 '{}'::json, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "methodology_fingerprint": suffix.upper() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO methodology_reviews
+                                (id, organisation_id, projection_id,
+                                 opportunity_id, field_key, action,
+                                 reviewed_by_user_id, idempotency_key)
+                            VALUES
+                                (:methodology_review_id, :organisation_id,
+                                 :methodology_projection_id, :opportunity_id,
+                                 'budget', 'confirm_interpretation', :user_id,
+                                 :methodology_review_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "methodology_review_key": f"rls-methodology-review-{suffix.lower()}",
+                        },
                     )
                     await connection.execute(
                         text(
@@ -1499,7 +1601,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'ai_usage_counters',
                                     'beta_feedback',
                                     'beta_data_requests',
-                                    'beta_system_events'
+                                    'beta_system_events',
+                                    'methodology_definitions',
+                                    'methodology_definition_versions',
+                                    'organisation_methodology_settings',
+                                    'methodology_projections',
+                                    'methodology_reviews'
                                 )
                                 """
                             )
@@ -1536,6 +1643,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["company_id"]},
                 )
                 assert company_update.rowcount == 0
+                methodology_definition_update = await connection.execute(
+                    text("UPDATE methodology_definitions SET status = 'archived' WHERE id = :id"),
+                    {"id": tenant_b["methodology_definition_id"]},
+                )
+                assert methodology_definition_update.rowcount == 0
                 job_update = await connection.execute(
                     text("UPDATE ai_jobs SET status = 'cancelled' WHERE id = :id"),
                     {"id": tenant_b["ai_job_id"]},
@@ -1881,6 +1993,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "beta_system_events",
                     "beta_data_requests",
                     "beta_feedback",
+                    "methodology_reviews",
+                    "methodology_projections",
+                    "organisation_methodology_settings",
+                    "methodology_definition_versions",
+                    "methodology_definitions",
                     "ai_usage_counters",
                     "onboarding_progress",
                     "data_notice_acknowledgements",

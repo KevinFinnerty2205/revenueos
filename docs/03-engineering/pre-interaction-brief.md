@@ -78,3 +78,12 @@ brief source fingerprint and open commitments. Each reference is labelled
 `action_layer`; approved Actions use completed validation status and pending Actions
 remain recommendations. Rejected, superseded and manually completed Actions are
 excluded. Brief generation still performs no provider call and no execution.
+
+## Sales Methodology gaps
+
+WO-024 adds current final methodology gaps to the deterministic source fingerprint.
+The composer selects at most three natural questions and at most one for a phone
+call, while preserving the global question cap. Executive meetings prioritise
+commercial authority/impact; workshops prioritise process/technical gaps. Confirmed
+fields are not mechanically asked. AI Debrief inherits these brief questions within
+its existing cap.

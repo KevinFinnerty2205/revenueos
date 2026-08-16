@@ -353,3 +353,8 @@ minimum gates and explicit prohibitions are defined in the
 [End-to-End Sales Platform security and privacy review](end-to-end-sales-platform-security-privacy.md)
 and [risk register](end-to-end-sales-platform-risk-register.md). Each future work
 order must re-assess those risks; WO-023 authorises no provider or production data use.
+
+WO-024 implements only the methodology boundary. Its strict bounded custom
+configuration, forced RLS, review provenance, source invalidation, metadata-only
+telemetry and lifecycle controls are reviewed in
+[Sales Methodology security and privacy](sales-methodology-security-privacy-review.md).

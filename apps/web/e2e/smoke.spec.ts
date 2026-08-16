@@ -3795,6 +3795,14 @@ function opportunityWorkspace(
     reasoning: hasMeeting
       ? opportunityReasoning(reasoningGenerated ? "completed" : "not_generated")
       : opportunityReasoning("insufficient_history"),
+    methodology: {
+      state: "not_configured",
+      definition: null,
+      projectionId: null,
+      projection: null,
+      generationAvailable: false,
+      safeMessage: "Your organisation has not selected a sales methodology.",
+    },
     partialData: false,
     generatedAt: "2026-07-24T00:00:08Z",
   };

@@ -28,6 +28,7 @@ This is the canonical product and engineering documentation index. Documents dis
 22. [RevenueOS information architecture](02-design/revenueos-information-architecture.md) — six-area future navigation
 23. [End-to-End Sales Platform roadmap](06-roadmap/end-to-end-sales-platform-roadmap.md) — conditional WO-024–045 sequence
 24. [ADR 0035: End-to-End Sales OS architecture](08-decisions/0035-end-to-end-sales-os-architecture.md)
+25. [Sales Methodology Engine implementation](03-engineering/sales-methodology-engine-implementation.md) — current WO-024 Core boundary
 
 ## 00 — Company
 
@@ -52,6 +53,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [RevenueOS Engage](01-product/revenueos-engage.md)
 - [RevenueOS Create](01-product/revenueos-create.md)
 - [RevenueOS CRM](01-product/revenueos-crm.md)
+- [Standard sales methodologies](01-product/standard-sales-methodologies.md)
 
 ## 02 — Design
 
@@ -82,6 +84,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Manager Intelligence experience](02-design/manager-intelligence-experience.md)
 - [Mobile Sales OS experience](02-design/mobile-sales-os-experience.md)
 - [Simplicity and discoverability principles](02-design/simplicity-and-discoverability-principles.md)
+- [Sales Methodology UX](02-design/sales-methodology-ux.md)
 
 ## 03 — Engineering
 
@@ -181,6 +184,12 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Execution idempotency and reconciliation](03-engineering/execution-idempotency-reconciliation.md)
 - [External-state safety](03-engineering/external-state-safety.md)
 - [WO-022 integration security review](03-engineering/integration-security-review.md)
+- [Sales Methodology Engine implementation](03-engineering/sales-methodology-engine-implementation.md)
+- [Sales Methodology Engine architecture](03-engineering/sales-methodology-engine-architecture.md)
+- [Custom sales methodology guide](03-engineering/custom-sales-methodology-guide.md)
+- [Methodology Evidence and field states](03-engineering/methodology-evidence-and-field-state.md)
+- [Methodology freshness and conflict resolution](03-engineering/methodology-freshness-and-conflict.md)
+- [Sales Methodology security and privacy review](03-engineering/sales-methodology-security-privacy-review.md)
 
 ### Target through beta
 
@@ -196,7 +205,6 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Document parsing and security](03-engineering/document-parsing-security-guide.md)
 - [Email sanitisation and security](03-engineering/email-sanitisation-security-guide.md)
 - [Document and email provenance](03-engineering/document-email-provenance.md)
-- [Sales Methodology Engine architecture](03-engineering/sales-methodology-engine-architecture.md)
 - [Sales analytics, targets and forecast architecture](03-engineering/sales-analytics-targets-forecast-architecture.md)
 - [Prospect research and Evidence architecture](03-engineering/prospect-research-evidence-architecture.md)
 - [Outreach, campaign and event architecture](03-engineering/outreach-campaign-architecture.md)
@@ -275,6 +283,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-021: Action Layer](07-sprints/wo-021-action-layer.md)
 - [WO-022: Integrations and Execution Foundation](07-sprints/wo-022-integrations-execution-foundation.md)
 - [WO-023: End-to-End Sales Platform Blueprint](07-sprints/wo-023-end-to-end-sales-platform-blueprint.md)
+- [WO-024: Sales Methodology Engine](07-sprints/wo-024-sales-methodology-engine.md)
 
 ## 08 — Decision records
 
@@ -316,9 +325,10 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 is simulation-only and does not make a mock connector a production integration.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 is simulation-only and does not make a mock connector a production integration.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
-OS; it does not implement or authorise WO-024–045.
+OS. WO-024 implements only its Sales Methodology Engine slice; WO-025–045 remain
+unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

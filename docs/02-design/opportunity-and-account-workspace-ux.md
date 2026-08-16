@@ -110,3 +110,12 @@ Every AI-supported item offers **Why?** and, where appropriate, **Correct**. A
 correction creates a versioned review event, preserves evidence origin and
 invalidates dependent briefs, Actions or forecasts as required. Editing an external
 CRM field follows its source-of-truth and approval rules.
+
+## Current Sales Methodology area
+
+WO-024 places a compact Methodology card directly under the Opportunity Deal header.
+It leads with categorical counts and the three highest-priority gaps, then reveals
+all fields, Evidence/provenance, review controls and history on demand. On mobile it
+remains a single-column summary rather than a matrix. Methodology is absent from
+top-level navigation and RevenueOS remains fully usable when the organisation selects
+none. See [Sales Methodology UX](sales-methodology-ux.md).

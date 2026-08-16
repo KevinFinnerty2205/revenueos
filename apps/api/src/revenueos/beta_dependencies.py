@@ -50,6 +50,13 @@ async def require_action_layer_feature(
         raise PublicAPIError("feature_unavailable", "This feature is not enabled for the private beta.", 404)
 
 
+async def require_sales_methodology_feature(
+    settings: Settings = Depends(get_settings),
+) -> None:
+    if not settings.feature_sales_methodology_enabled:
+        raise PublicAPIError("feature_unavailable", "This feature is not enabled for the private beta.", 404)
+
+
 async def require_action_manual_completion_feature(
     settings: Settings = Depends(get_settings),
 ) -> None:

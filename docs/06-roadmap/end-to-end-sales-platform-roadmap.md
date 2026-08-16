@@ -18,7 +18,7 @@ selection, legal review, user evidence and operational readiness can change sequ
 
 ```mermaid
 flowchart LR
-    B["Implemented baseline WO-001–022"] --> A["Stage A: Core habit\nWO-024–025"]
+    B["Implemented baseline through WO-024"] --> A["Stage A: Core habit\nWO-025"]
     A --> C1{"Checkpoint 1\nCore validation"}
     C1 --> T["Stage B: Top of funnel\nWO-026–031"]
     T --> C2{"Checkpoint 2\nProspect and Engage validation"}
@@ -50,6 +50,8 @@ Every work order must:
 ## Stage A — Strengthen Core
 
 ### WO-024 — Sales Methodology Engine
+
+**Implementation status:** Complete in WO-024; validation/review gate applies.
 
 - **Objective/value/package:** Project canonical Evidence into explainable MEDDIC,
   MEDDPICC, BANT, SPICED and a bounded custom methodology so sellers see gaps without
@@ -673,3 +675,10 @@ risks, package impact and next smallest experiment. A work order is complete onl
 code, contracts, schema, UI states, documentation, security behaviour, observability
 and validation agree. This roadmap should be updated when evidence changes; preserving
 the numbering is less important than preserving trust and simplicity.
+
+## Implementation checkpoint — WO-024
+
+The Sales Methodology Engine is implemented as the first Core work order after the
+WO-023 blueprint. MEDDIC, MEDDPICC, BANT, SPICED, bounded custom definitions,
+evidence-linked projections and review are current. WO-025 RevenueOS Daily and every
+later roadmap item remain conditional and unauthorised by WO-024.

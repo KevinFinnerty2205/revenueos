@@ -153,3 +153,10 @@ WO-021 may translate a current completed Next Best Action recommendation into a
 typed proposal with source references. The original intelligence remains unchanged.
 The Action proposal has its own review/version lifecycle and cannot execute the
 recommendation. Stale Next Best Action sources invalidate approval.
+
+## Methodology context boundary
+
+WO-024 exposes a typed, bounded final-evidence-only methodology gap context for the
+existing recommendation architecture. It does not create a second Next Best Action
+engine or regenerate existing NBA artefacts. A future NBA revision may combine this
+context with other sources; methodology must never be its only implicit truth.

@@ -451,3 +451,9 @@ research, outreach, Create, CRM and entitlement boundaries are indexed from the
 [ADR 0035](../08-decisions/0035-end-to-end-sales-os-architecture.md) governs Core/
 add-on and information-architecture boundaries. No schema, endpoint, worker,
 provider or navigation described there exists until a separate work order implements it.
+
+WO-024 is now the first realised post-blueprint module. It remains inside the same
+web/API/PostgreSQL modular monolith: standard definition registry, tenant custom
+definition repository, deterministic projection service and Opportunity/Settings UI.
+Migration `0033_sales_methodology` is the current Alembic head. No service, queue,
+provider, datastore or top-level navigation area was added.
