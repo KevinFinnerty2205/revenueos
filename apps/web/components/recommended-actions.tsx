@@ -10,6 +10,7 @@ import type {
 } from "@revenueos/shared";
 import { FormEvent, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { ActionExecutionPanel } from "@/components/action-execution-panel";
 import { humanise } from "@/lib/business-entities";
 
 type ActionTab = "pending" | "approved" | "rejected";
@@ -158,8 +159,9 @@ export function RecommendedActions({
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Grounded proposals from final validated intelligence. Approval
-            records your decision only; RevenueOS does not send emails, create
-            tasks, update records or schedule meetings.
+            records your decision only. A separate review and explicit
+            confirmation can run a clearly labelled simulation; WO-022 never
+            contacts an external system.
           </p>
         </div>
         <button
@@ -311,7 +313,7 @@ function ActionCard({
         </div>
         <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
           {action.status === "approved"
-            ? "Approved — not yet executed"
+            ? "Approved — execution requires confirmation"
             : humanise(action.status)}
         </p>
       </div>
@@ -485,6 +487,9 @@ function ActionCard({
         >
           Mark complete manually
         </button>
+      ) : null}
+      {action.status === "approved" ? (
+        <ActionExecutionPanel action={action} />
       ) : null}
     </article>
   );

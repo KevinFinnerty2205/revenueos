@@ -3,8 +3,10 @@
 ## Boundary
 
 The Action Layer remains inside the FastAPI modular monolith. Routes delegate to
-`ActionService`; tenant-scoped repositories own persistence. There is no new worker,
-provider call, message broker or external connector.
+`ActionService`; tenant-scoped repositories own persistence. WO-021 generation and
+review make no provider call. WO-022 adds a separate execution service and reuses
+the existing worker for deterministic connector simulations; there is still no
+message broker or live external connector.
 
 `action_proposals` owns identity and lifecycle. `action_proposal_versions` stores
 immutable typed content revisions. `action_audit_events` stores metadata-only review
@@ -29,9 +31,11 @@ AI provider.
 FastAPI/Pydantic remains canonical. The discriminated `proposedPayload.kind` union
 rejects unknown fields and constrains values, text length, identifiers and recipient
 pairs. Routes cover opportunity generation/listing plus Action read, edit, approve,
-reject and manual completion. Every response reports `executionState: not_executed`
-and `sendReady: false`.
+reject and manual completion. Every proposal response reports
+`executionState: not_executed` and `sendReady: false`; execution history is an
+independent WO-022 contract.
 
-Migration `0031_action_layer` is reversible. Downgrade permanently deletes Action
-proposals, versions and audit events but cannot undo an external action because no
-executor exists.
+Migration `0031_action_layer` is reversible. WO-022 migration
+`0032_integration_execution` references exact Action versions and is also
+reversible. Its downgrade deletes simulation metadata but cannot undo an external
+action because no live executor exists.

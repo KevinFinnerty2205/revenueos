@@ -22,6 +22,8 @@ from revenueos.live_intelligence_maintenance import delete_live_intelligence
 from revenueos.live_intelligence_services import expire_live_intelligence
 from revenueos.models import (
     ActionAuditEvent,
+    ActionExecution,
+    ActionExecutionAttempt,
     ActionProposal,
     ActionProposalVersion,
     AIArtifact,
@@ -42,6 +44,9 @@ from revenueos.models import (
     EmailSource,
     Evidence,
     EvidenceFragment,
+    ExecutionPreview,
+    IntegrationAuditEvent,
+    IntegrationConnection,
     Interaction,
     InteractionAuditEvent,
     InteractionIntelligenceSnapshot,
@@ -52,6 +57,7 @@ from revenueos.models import (
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
+    MockConnectorObject,
     OnboardingProgress,
     OnlineMeetingMetadata,
     OnlineMeetingTranscriptImport,
@@ -86,7 +92,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 12
+EXPORT_VERSION = 13
 EXPORT_EXPIRY_HOURS = 24
 
 
@@ -583,6 +589,18 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(AIArtifact).where(AIArtifact.organisation_id == organisation_id))
         await session.execute(delete(AIJob).where(AIJob.organisation_id == organisation_id))
+        await session.execute(delete(MockConnectorObject).where(MockConnectorObject.organisation_id == organisation_id))
+        await session.execute(
+            delete(IntegrationAuditEvent).where(IntegrationAuditEvent.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ActionExecutionAttempt).where(ActionExecutionAttempt.organisation_id == organisation_id)
+        )
+        await session.execute(delete(ActionExecution).where(ActionExecution.organisation_id == organisation_id))
+        await session.execute(delete(ExecutionPreview).where(ExecutionPreview.organisation_id == organisation_id))
+        await session.execute(
+            delete(IntegrationConnection).where(IntegrationConnection.organisation_id == organisation_id)
+        )
         await session.execute(delete(ActionAuditEvent).where(ActionAuditEvent.organisation_id == organisation_id))
         await session.execute(
             delete(ActionProposalVersion).where(ActionProposalVersion.organisation_id == organisation_id)
@@ -1734,6 +1752,29 @@ async def _export_payload(
         .where(ActionAuditEvent.organisation_id == organisation_id)
         .order_by(ActionAuditEvent.action_id, ActionAuditEvent.created_at, ActionAuditEvent.id)
     )
+    integration_connections = await rows(
+        select(IntegrationConnection)
+        .where(IntegrationConnection.organisation_id == organisation_id)
+        .order_by(IntegrationConnection.connector_key, IntegrationConnection.id)
+    )
+    action_executions = await rows(
+        select(ActionExecution)
+        .where(ActionExecution.organisation_id == organisation_id)
+        .order_by(ActionExecution.action_id, ActionExecution.confirmed_at, ActionExecution.id)
+    )
+    action_execution_attempts = await rows(
+        select(ActionExecutionAttempt)
+        .where(ActionExecutionAttempt.organisation_id == organisation_id)
+        .order_by(
+            ActionExecutionAttempt.execution_id,
+            ActionExecutionAttempt.attempt_number,
+        )
+    )
+    integration_audits = await rows(
+        select(IntegrationAuditEvent)
+        .where(IntegrationAuditEvent.organisation_id == organisation_id)
+        .order_by(IntegrationAuditEvent.created_at, IntegrationAuditEvent.id)
+    )
     tasks = await rows(select(Task).where(Task.organisation_id == organisation_id).order_by(Task.id))
     meetings = await rows(select(Meeting).where(Meeting.organisation_id == organisation_id).order_by(Meeting.id))
     interactions = await rows(
@@ -2124,6 +2165,91 @@ async def _export_payload(
                 ),
             )
             for item in action_audits
+        ],
+        "integrationConnections": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connector_key",
+                    "connection_status",
+                    "created_by_user_id",
+                    "connected_at",
+                    "last_verified_at",
+                    "revoked_at",
+                    "capability_state_json",
+                    "metadata_version",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in integration_connections
+        ],
+        "actionExecutions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "action_id",
+                    "action_version",
+                    "connection_id",
+                    "connector_key",
+                    "capability",
+                    "risk_class",
+                    "execution_status",
+                    "execution_mode",
+                    "confirmed_by_user_id",
+                    "confirmed_at",
+                    "started_at",
+                    "completed_at",
+                    "failed_at",
+                    "safe_failure_code",
+                    "external_result_id",
+                    "attempt_count",
+                    "max_attempts",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in action_executions
+        ],
+        "actionExecutionAttempts": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "execution_id",
+                    "attempt_number",
+                    "status",
+                    "safe_failure_code",
+                    "external_result_id",
+                    "started_at",
+                    "completed_at",
+                    "duration_ms",
+                ),
+            )
+            for item in action_execution_attempts
+        ],
+        "integrationAuditEvents": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "actor_user_id",
+                    "event_type",
+                    "subject_type",
+                    "subject_id",
+                    "connector_key",
+                    "capability",
+                    "risk_class",
+                    "attempt_count",
+                    "safe_failure_code",
+                    "external_result_id",
+                    "duration_ms",
+                    "created_at",
+                ),
+            )
+            for item in integration_audits
         ],
         "tasks": [
             _columns(

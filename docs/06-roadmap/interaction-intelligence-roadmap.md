@@ -534,5 +534,7 @@ review—before broadening architecture.
 
 WO-021 implements the review-only Action Layer: typed proposals, immutable revisions,
 human approval/rejection, internal manual completion, Opportunity Workspace review
-and brief feedback. External execution, connectors and autonomous workflows remain
-future work and require a separate approved work order.
+and brief feedback. WO-022 adds a separate simulation-only connector and execution
+foundation with explicit confirmation and no real external action. Production
+connectors and autonomous workflows remain future work and require separate
+approved work orders.

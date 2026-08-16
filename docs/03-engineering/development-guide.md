@@ -113,8 +113,8 @@ brief persistence and no worker/provider
 configuration. See [Pre-Interaction Brief engineering](pre-interaction-brief.md).
 
 WO-014 migration `0024_visual_evidence` is followed by WO-015 migration
-`0025_recording_transcription` and the current head
-`0026_face_to_face_companion`. WO-015 adds forced-RLS Recording Session,
+`0025_recording_transcription`; later work orders culminate in current head
+`0032_integration_execution`. WO-015 adds forced-RLS Recording Session,
 Consent, Chunk, usage and immutable Transcript Version/Segment tables. `0026`
 adds tenant-isolated metadata-only Interaction markers with forced RLS. `0024`
 adds forced-RLS visual asset and candidate tables, composite tenant relationships, review
@@ -124,6 +124,11 @@ must be completed before an explicitly approved downgrade.
 
 Local recording tests use private filesystem object storage and the deterministic
 mock transcription provider; neither needs a cloud account or makes a network call.
+
+Local WO-022 settings enable deterministic mock connectors. They require no account
+or credential and make no external request. Keep the Action Layer, Integrations,
+Action Execution and Mock Connectors flags aligned. Production configuration rejects
+Mock Connectors.
 
 ## Database workflow
 

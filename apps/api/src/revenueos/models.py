@@ -37,12 +37,15 @@ from revenueos.domain import (
     CaptureSessionStatus,
     CaptureSessionType,
     CompanyStatus,
+    ConnectionStatus,
+    ConnectorKey,
     EvidenceLifecycleStatus,
     EvidenceOriginClass,
     EvidenceRetentionClass,
     EvidenceSupportClass,
     EvidenceType,
     EvidenceValidationState,
+    ExecutionStatus,
     InteractionCreationOrigin,
     InteractionLifecycleStatus,
     InteractionType,
@@ -792,6 +795,357 @@ class ActionAuditEvent(Base):
         JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class IntegrationConnection(TimestampMixin, Base):
+    __tablename__ = "integration_connections"
+    __table_args__ = (
+        CheckConstraint(
+            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task')",
+            name="ck_integration_connections_key",
+        ),
+        CheckConstraint(
+            "connection_status IN ('active', 'revoked')",
+            name="ck_integration_connections_status",
+        ),
+        CheckConstraint("metadata_version > 0", name="ck_integration_connections_version"),
+        CheckConstraint(
+            "(connection_status = 'active' AND revoked_at IS NULL) OR "
+            "(connection_status = 'revoked' AND revoked_at IS NOT NULL)",
+            name="ck_integration_connections_revoked",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_integration_connections_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_integration_connections_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "connector_key",
+            name="uq_integration_connections_org_key",
+        ),
+        Index(
+            "ix_integration_connections_org_status",
+            "organisation_id",
+            "connection_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    connector_key: Mapped[str] = mapped_column(String(40), nullable=False, default=ConnectorKey.MOCK_EMAIL.value)
+    connection_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ConnectionStatus.ACTIVE.value, server_default="active"
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    credential_reference: Mapped[str | None] = mapped_column(String(255))
+    capability_state_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    metadata_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class ExecutionPreview(Base):
+    __tablename__ = "execution_previews"
+    __table_args__ = (
+        CheckConstraint(
+            "capability IN ('send_email', 'create_calendar_event', 'update_opportunity', "
+            "'update_contact', 'create_task')",
+            name="ck_execution_previews_capability",
+        ),
+        CheckConstraint(
+            "risk_class IN ('internal_low_risk', 'external_customer_facing', 'data_mutation')",
+            name="ck_execution_previews_risk",
+        ),
+        CheckConstraint("length(preview_fingerprint) = 64", name="ck_execution_previews_fingerprint"),
+        ForeignKeyConstraint(
+            ["organisation_id", "action_id", "action_version"],
+            [
+                "action_proposal_versions.organisation_id",
+                "action_proposal_versions.action_id",
+                "action_proposal_versions.version",
+            ],
+            name="fk_execution_previews_action_version",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_execution_previews_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "confirmed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_execution_previews_confirmer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_execution_previews_org_id"),
+        Index("ix_execution_previews_org_action", "organisation_id", "action_id", "created_at"),
+        Index("ix_execution_previews_org_connection", "organisation_id", "connection_id"),
+        Index("ix_execution_previews_org_expiry", "organisation_id", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    action_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    capability: Mapped[str] = mapped_column(String(40), nullable=False)
+    risk_class: Mapped[str] = mapped_column(String(32), nullable=False)
+    preview_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ActionExecution(TimestampMixin, Base):
+    __tablename__ = "action_executions"
+    __table_args__ = (
+        CheckConstraint(
+            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task')",
+            name="ck_action_executions_connector",
+        ),
+        CheckConstraint(
+            "capability IN ('send_email', 'create_calendar_event', 'update_opportunity', "
+            "'update_contact', 'create_task')",
+            name="ck_action_executions_capability",
+        ),
+        CheckConstraint(
+            "risk_class IN ('internal_low_risk', 'external_customer_facing', 'data_mutation')",
+            name="ck_action_executions_risk",
+        ),
+        CheckConstraint(
+            "execution_status IN ('queued', 'executing', 'simulated_success', "
+            "'failed_retryable', 'failed_permanent', 'cancelled', 'unknown_external_state')",
+            name="ck_action_executions_status",
+        ),
+        CheckConstraint("execution_mode = 'simulation'", name="ck_action_executions_mode"),
+        CheckConstraint("length(idempotency_key) = 64", name="ck_action_executions_idempotency"),
+        CheckConstraint("length(preview_fingerprint) = 64", name="ck_action_executions_preview"),
+        CheckConstraint("attempt_count >= 0", name="ck_action_executions_attempts"),
+        CheckConstraint("max_attempts BETWEEN 1 AND 20", name="ck_action_executions_max_attempts"),
+        ForeignKeyConstraint(
+            ["organisation_id", "action_id", "action_version"],
+            [
+                "action_proposal_versions.organisation_id",
+                "action_proposal_versions.action_id",
+                "action_proposal_versions.version",
+            ],
+            name="fk_action_executions_action_version",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_action_executions_connection",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "preview_id"],
+            ["execution_previews.organisation_id", "execution_previews.id"],
+            name="fk_action_executions_preview",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "confirmed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_action_executions_confirmer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_action_executions_org_id"),
+        UniqueConstraint("organisation_id", "preview_id", name="uq_action_executions_preview"),
+        UniqueConstraint("organisation_id", "idempotency_key", name="uq_action_executions_idempotency"),
+        UniqueConstraint(
+            "organisation_id",
+            "action_id",
+            "action_version",
+            "connection_id",
+            "capability",
+            name="uq_action_executions_action_connection",
+        ),
+        Index(
+            "ix_action_executions_org_status_next",
+            "organisation_id",
+            "execution_status",
+            "next_attempt_at",
+        ),
+        Index(
+            "ix_action_executions_org_connection_status",
+            "organisation_id",
+            "connection_id",
+            "execution_status",
+        ),
+        Index("ix_action_executions_org_action", "organisation_id", "action_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    action_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    preview_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    connector_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    capability: Mapped[str] = mapped_column(String(40), nullable=False)
+    risk_class: Mapped[str] = mapped_column(String(32), nullable=False)
+    execution_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ExecutionStatus.QUEUED.value, server_default="queued"
+    )
+    execution_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="simulation", server_default="simulation"
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    preview_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirmed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    confirmed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    safe_failure_code: Mapped[str | None] = mapped_column(String(80))
+    external_result_id: Mapped[str | None] = mapped_column(String(255))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ActionExecutionAttempt(Base):
+    __tablename__ = "action_execution_attempts"
+    __table_args__ = (
+        CheckConstraint("attempt_number > 0", name="ck_action_execution_attempts_number"),
+        CheckConstraint("duration_ms IS NULL OR duration_ms >= 0", name="ck_action_execution_attempts_duration"),
+        ForeignKeyConstraint(
+            ["organisation_id", "execution_id"],
+            ["action_executions.organisation_id", "action_executions.id"],
+            name="fk_action_execution_attempts_execution",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_action_execution_attempts_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "execution_id",
+            "attempt_number",
+            name="uq_action_execution_attempts_number",
+        ),
+        Index(
+            "ix_action_execution_attempts_org_execution",
+            "organisation_id",
+            "execution_id",
+            "attempt_number",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    execution_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    safe_failure_code: Mapped[str | None] = mapped_column(String(80))
+    external_result_id: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+
+
+class IntegrationAuditEvent(Base):
+    __tablename__ = "integration_audit_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('connection_created', 'connection_tested', 'connection_revoked', "
+            "'execution_preview_created', 'execution_confirmed', 'execution_started', "
+            "'execution_succeeded', 'execution_failed', 'execution_unknown_state')",
+            name="ck_integration_audit_events_type",
+        ),
+        CheckConstraint("duration_ms IS NULL OR duration_ms >= 0", name="ck_integration_audit_events_duration"),
+        ForeignKeyConstraint(
+            ["organisation_id", "actor_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_integration_audit_events_actor",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_integration_audit_events_org_id"),
+        Index(
+            "ix_integration_audit_events_org_subject",
+            "organisation_id",
+            "subject_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    subject_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    subject_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    connector_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    capability: Mapped[str | None] = mapped_column(String(40))
+    risk_class: Mapped[str | None] = mapped_column(String(32))
+    attempt_count: Mapped[int | None] = mapped_column(Integer)
+    safe_failure_code: Mapped[str | None] = mapped_column(String(80))
+    external_result_id: Mapped[str | None] = mapped_column(String(255))
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class MockConnectorObject(TimestampMixin, Base):
+    __tablename__ = "mock_connector_objects"
+    __table_args__ = (
+        CheckConstraint(
+            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task')",
+            name="ck_mock_connector_objects_key",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_mock_connector_objects_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "last_execution_id"],
+            ["action_executions.organisation_id", "action_executions.id"],
+            name="fk_mock_connector_objects_execution",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_mock_connector_objects_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "connection_id",
+            "object_key",
+            name="uq_mock_connector_objects_key",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    last_execution_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    connector_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    object_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    object_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    external_result_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    state_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=dict)
 
 
 class Task(TimestampMixin, Base):

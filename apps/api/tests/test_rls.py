@@ -96,6 +96,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "action_proposals",
         "action_proposal_versions",
         "action_audit_events",
+        "integration_connections",
+        "execution_previews",
+        "action_executions",
+        "action_execution_attempts",
+        "integration_audit_events",
+        "mock_connector_objects",
         "tasks",
         "interactions",
         "online_meeting_metadata",
@@ -1441,6 +1447,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'action_proposals',
                                     'action_proposal_versions',
                                     'action_audit_events',
+                                    'integration_connections',
+                                    'execution_previews',
+                                    'action_executions',
+                                    'action_execution_attempts',
+                                    'integration_audit_events',
+                                    'mock_connector_objects',
                                     'tasks',
                                     'interactions',
                                     'online_meeting_metadata',
@@ -1506,8 +1518,17 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 tenant_a_counts = {
                     table: await connection.scalar(text(f"SELECT count(*) FROM {table}")) for table in tenant_tables
                 }
+                empty_wo022_tables = {
+                    "integration_connections",
+                    "execution_previews",
+                    "action_executions",
+                    "action_execution_attempts",
+                    "integration_audit_events",
+                    "mock_connector_objects",
+                }
                 expected_tenant_a_counts = {
-                    table: 2 if table == "revenue_brain_snapshots" else 1 for table in tenant_tables
+                    table: (0 if table in empty_wo022_tables else 2 if table == "revenue_brain_snapshots" else 1)
+                    for table in tenant_tables
                 }
                 assert tenant_a_counts == expected_tenant_a_counts
                 company_update = await connection.execute(

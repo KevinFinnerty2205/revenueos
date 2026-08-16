@@ -23,6 +23,7 @@ This is the canonical product and engineering documentation index. Documents dis
 17. [Document Evidence guide](03-engineering/document-evidence-guide.md) and [Email Evidence guide](03-engineering/email-evidence-guide.md) — current WO-019 source workflow
 18. [Live Interaction Intelligence product guide](01-product/live-interaction-intelligence.md) — current WO-020 provisional workflow
 19. [Action Layer product guide](01-product/action-layer.md) — current WO-021 review-only workflow
+20. [Integrations and execution foundation](01-product/integrations-execution-foundation.md) — current WO-022 simulation boundary
 
 ## 00 — Company
 
@@ -39,6 +40,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [AI Companion preparation](01-product/ai-companion-preparation.md)
 - [Live Interaction Intelligence product guide](01-product/live-interaction-intelligence.md)
 - [Action Layer product guide](01-product/action-layer.md)
+- [Integrations and execution foundation](01-product/integrations-execution-foundation.md)
 
 ## 02 — Design
 
@@ -151,6 +153,14 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Action review and approval](03-engineering/action-review-approval.md)
 - [Customer-facing Action safety](03-engineering/customer-facing-action-safety.md)
 - [Action Layer security review](03-engineering/action-layer-security-review.md)
+- [Connector architecture](03-engineering/connector-architecture.md)
+- [ActionExecutor contract](03-engineering/action-executor-contract.md)
+- [Execution preview and confirmation](03-engineering/execution-preview-confirmation.md)
+- [Simulation mode](03-engineering/simulation-mode.md)
+- [Credential and OAuth security design](03-engineering/credential-oauth-security-design.md)
+- [Execution idempotency and reconciliation](03-engineering/execution-idempotency-reconciliation.md)
+- [External-state safety](03-engineering/external-state-safety.md)
+- [WO-022 integration security review](03-engineering/integration-security-review.md)
 
 ### Target through beta
 
@@ -186,6 +196,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Document and email provider boundary](05-integrations/document-email-provider-boundary.md)
 - [Action execution boundary](05-integrations/action-execution-boundary.md)
 - [CRM-ready Action payloads](05-integrations/crm-ready-action-payloads.md)
+- [Future webhook boundary](05-integrations/future-webhook-boundary.md)
 
 ## 06 — Roadmap
 
@@ -232,6 +243,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-019: Documents and Email Evidence](07-sprints/wo-019-document-email-evidence.md)
 - [WO-020: Live Interaction Intelligence](07-sprints/wo-020-live-interaction-intelligence.md)
 - [WO-021: Action Layer](07-sprints/wo-021-action-layer.md)
+- [WO-022: Integrations and Execution Foundation](07-sprints/wo-022-integrations-execution-foundation.md)
 
 ## 08 — Decision records
 
@@ -268,10 +280,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0031: provider-neutral online-meeting ingestion](08-decisions/0031-provider-neutral-online-meeting-ingestion.md)
 - [ADR 0032: separate polled Live Intelligence aggregate](08-decisions/0032-separate-polled-live-intelligence-aggregate.md)
 - [ADR 0033: versioned review-only Action Layer](08-decisions/0033-versioned-review-only-action-layer.md)
+- [ADR 0034: simulation-first Action execution boundary](08-decisions/0034-simulation-first-execution-boundary.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 is simulation-only and does not make a mock connector a production integration.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

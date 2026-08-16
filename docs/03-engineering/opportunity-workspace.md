@@ -342,4 +342,9 @@ It loads tenant-scoped proposal records separately from the existing intelligenc
 read model. Cards show type, priority, customer-facing risk, due date, explanation
 and source labels. Users can save a new revision, approve without execution, reject
 with a controlled reason, or manually complete an approved internal Action. There
-are no send, sync, record-update or schedule controls.
+WO-021 originally shipped no send, sync, record-update or schedule controls.
+WO-022 now adds a separate simulation panel for supported approved Actions. It
+selects an active server-authorised mock connection, renders an exact read-only
+preview, requires a consequentially labelled final confirmation, and shows queued,
+failure, unknown or simulated-success history. The panel never changes the
+Opportunity's canonical fields and never contacts an external provider.
