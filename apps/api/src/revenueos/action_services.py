@@ -63,6 +63,8 @@ from revenueos.domain import (
     ActionType,
 )
 from revenueos.errors import PublicAPIError
+from revenueos.methodology_contracts import MethodologyGapContext
+from revenueos.methodology_services import SalesMethodologyProjectionService
 from revenueos.models import (
     ActionAuditEvent,
     ActionProposal,
@@ -139,6 +141,7 @@ class ActionService:
         self.repository = ActionRepository(session)
         self.workspace_repository = OpportunityWorkspaceRepository(session)
         self.source_repository = SourceEvidenceRepository(session)
+        self.methodology = SalesMethodologyProjectionService(session, tenant, settings)
 
     async def generate(self, opportunity_id: UUID) -> ActionGenerationResponse:
         opportunity = await self.repository.opportunity_for_update(
@@ -537,7 +540,80 @@ class ActionService:
             limit=20,
         )
         candidates.extend(self._source_snapshot_candidates(opportunity, snapshots))
+        if self.settings.feature_sales_methodology_enabled:
+            candidates.extend(
+                self._methodology_candidates(
+                    opportunity,
+                    await self.methodology.gap_context(opportunity.id, limit=2),
+                )
+            )
         return self._deduplicate_candidates(candidates)
+
+    @staticmethod
+    def _methodology_candidates(
+        opportunity: Opportunity,
+        gaps: tuple[MethodologyGapContext, ...],
+    ) -> list[ActionCandidate]:
+        values: list[ActionCandidate] = []
+        for gap in gaps:
+            source = ActionSourceReference(
+                source_type="methodology_projection",
+                source_id=gap.projection_id,
+                item_key=f"field:{gap.field_key}",
+                label=f"Current {gap.methodology_key.upper()} view: {gap.display_name}",
+                origin="methodology",
+            )
+            if gap.state == "conflicting":
+                source_labels = tuple(item.label for item in gap.sources[:5])
+                claims = (
+                    source_labels
+                    if len(source_labels) >= 2
+                    else (
+                        "One current source supports this field.",
+                        "Another current source disagrees with it.",
+                    )
+                )
+                payload: BaseModel = ReviewConflictPayload(
+                    kind="review_conflict",
+                    subject=gap.display_name,
+                    conflicting_claims=claims,
+                )
+                action_type = ActionType.REVIEW_CONFLICT
+                title = f"Review conflicting {gap.display_name.lower()} evidence"
+                description = "Resolve the conflicting evidence before relying on this deal view."
+                priority = ActionPriority.HIGH
+            else:
+                payload = PrepareNextInteractionPayload(
+                    kind="prepare_next_interaction",
+                    objective=gap.suggested_question,
+                    preparation_notes=(
+                        f"The current methodology field is {gap.state.replace('_', ' ')}.",
+                        "Use this as guidance; it is not a stage gate.",
+                    ),
+                )
+                action_type = ActionType.PREPARE_NEXT_INTERACTION
+                title = f"Clarify {gap.display_name.lower()}"
+                description = "Prepare to close an evidence gap in the current methodology view."
+                priority = ActionPriority.NORMAL if gap.state == "partially_supported" else ActionPriority.HIGH
+            values.append(
+                ActionCandidate(
+                    logical_key=f"methodology:{gap.projection_id}:{gap.field_key}",
+                    interaction_id=None,
+                    action_type=action_type,
+                    priority=priority,
+                    title=title,
+                    description=description,
+                    proposed_due_at=None,
+                    target_entity_type="opportunity",
+                    target_entity_id=opportunity.id,
+                    payload=payload,
+                    source_refs=(source,),
+                    provenance_summary=(
+                        f"Suggested from the current evidence-backed methodology gap for {gap.display_name}."
+                    ),
+                )
+            )
+        return values
 
     def _artifact_candidates(
         self,
@@ -1211,11 +1287,16 @@ class ActionService:
     async def _require_current_sources(self, record: ActionRecord) -> None:
         references = self._source_refs(record.version.source_refs_json)
         for reference in references:
-            if await self.repository.source_is_current(
-                self.tenant.organisation_id,
-                record.proposal.opportunity_id,
-                reference,
-            ):
+            if reference.source_type == "methodology_projection":
+                methodology = await self.methodology.read(record.proposal.opportunity_id)
+                is_current = methodology.state == "current" and methodology.projection_id == reference.source_id
+            else:
+                is_current = await self.repository.source_is_current(
+                    self.tenant.organisation_id,
+                    record.proposal.opportunity_id,
+                    reference,
+                )
+            if is_current:
                 continue
             now = datetime.now(UTC)
             record.proposal.status = ActionStatus.SUPERSEDED.value

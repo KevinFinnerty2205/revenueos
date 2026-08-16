@@ -64,3 +64,11 @@ manager recommendations cannot approve themselves. Live providers, policy-based
 batches and any lower-risk automation require separately authorised work and must
 preserve exact-input versioning, revocation and user-visible state. See the
 [End-to-End Sales Platform roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md).
+
+## WO-024 methodology source
+
+Current final methodology gaps can produce review-only Prepare Next Interaction or
+Review Conflict candidates through the existing Action generation service. Proposals
+cite the immutable methodology projection. Approval rechecks that the projection is
+still current. Provisional Live Intelligence and unsupported methodology conclusions
+cannot create or execute Actions.

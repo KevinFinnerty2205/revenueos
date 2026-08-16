@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +22,16 @@ from revenueos.business_contracts import (
 from revenueos.business_repositories import BusinessRepository, PageResult
 from revenueos.domain import OpportunityAuditAction
 from revenueos.errors import PublicAPIError
-from revenueos.models import Company, Contact, Opportunity, OpportunityAuditEvent, Task
+from revenueos.models import (
+    Company,
+    Contact,
+    Evidence,
+    MethodologyProjection,
+    MethodologyReview,
+    Opportunity,
+    OpportunityAuditEvent,
+    Task,
+)
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.opportunities")
@@ -293,6 +303,36 @@ class BusinessService:
 
     async def delete_opportunity(self, opportunity_id: UUID) -> None:
         opportunity = await self._get_opportunity_for_update(opportunity_id)
+        clarification_evidence_ids = list(
+            (
+                await self.repository.session.scalars(
+                    select(MethodologyReview.clarification_evidence_id).where(
+                        MethodologyReview.organisation_id == self.tenant.organisation_id,
+                        MethodologyReview.opportunity_id == opportunity_id,
+                        MethodologyReview.clarification_evidence_id.is_not(None),
+                    )
+                )
+            ).all()
+        )
+        await self.repository.session.execute(
+            delete(MethodologyReview).where(
+                MethodologyReview.organisation_id == self.tenant.organisation_id,
+                MethodologyReview.opportunity_id == opportunity_id,
+            )
+        )
+        await self.repository.session.execute(
+            delete(MethodologyProjection).where(
+                MethodologyProjection.organisation_id == self.tenant.organisation_id,
+                MethodologyProjection.opportunity_id == opportunity_id,
+            )
+        )
+        if clarification_evidence_ids:
+            await self.repository.session.execute(
+                delete(Evidence).where(
+                    Evidence.organisation_id == self.tenant.organisation_id,
+                    Evidence.id.in_(clarification_evidence_ids),
+                )
+            )
         self.repository.add(
             self._opportunity_audit(
                 opportunity.id,

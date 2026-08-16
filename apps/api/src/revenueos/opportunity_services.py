@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.ai_contracts import BuyingSignalsArtifactContent, NextBestActionArtifactContent
 from revenueos.business_repositories import PageResult
+from revenueos.config import Settings
 from revenueos.domain import (
     InteractionAuditAction,
     InteractionLifecycleStatus,
@@ -25,6 +26,7 @@ from revenueos.domain import (
 from revenueos.errors import PublicAPIError
 from revenueos.intelligence_workspace import CAPABILITIES, MeetingIntelligenceService
 from revenueos.meeting_contracts import MeetingOpportunityUpdate
+from revenueos.methodology_services import SalesMethodologyProjectionService
 from revenueos.models import AIArtifact, InteractionAuditEvent, Meeting, MeetingAuditEvent, OpportunityAuditEvent
 from revenueos.opportunity_contracts import (
     IntelligenceReadiness,
@@ -55,12 +57,13 @@ logger = logging.getLogger("revenueos.opportunity_workspace")
 class OpportunityWorkspaceService:
     """Tenant-scoped opportunity read model over stored meeting intelligence."""
 
-    def __init__(self, session: AsyncSession, tenant: TenantContext) -> None:
+    def __init__(self, session: AsyncSession, tenant: TenantContext, settings: Settings) -> None:
         self.session = session
         self.tenant = tenant
         self.repository = OpportunityWorkspaceRepository(session)
         self.intelligence = MeetingIntelligenceService(session, tenant)
         self.reasoning = RevenueBrainReasoningService(session, tenant)
+        self.methodology = SalesMethodologyProjectionService(session, tenant, settings)
 
     async def list_opportunities(
         self,
@@ -268,6 +271,7 @@ class OpportunityWorkspaceService:
             reported_intelligence=reported_intelligence,
             visual_intelligence=visual_intelligence,
             latest_interaction_capture=self._interaction_capture_status(latest_capture_record),
+            methodology=await self.methodology.read(opportunity_id),
             intelligence_sections_available=available_count,
             partial_data=(latest is not None and available_count < len(CAPABILITIES)),
             generated_at=datetime.now(UTC),

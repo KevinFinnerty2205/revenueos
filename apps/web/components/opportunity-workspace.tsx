@@ -30,6 +30,7 @@ import { formatMeetingDate } from "@/lib/meetings";
 import { RevenueBrainInsightPanel } from "@/components/revenue-brain-insight";
 import { CustomerEvidencePanel } from "@/components/customer-evidence-panel";
 import { RecommendedActions } from "@/components/recommended-actions";
+import { OpportunityMethodology } from "@/components/opportunity-methodology";
 
 export function OpportunityWorkspace({
   opportunityId,
@@ -308,6 +309,12 @@ export function OpportunityWorkspace({
           </p>
         ) : null}
       </header>
+
+      <OpportunityMethodology
+        key={`${opportunity.id}-${workspace.methodology.projectionId ?? workspace.methodology.state}`}
+        opportunityId={opportunity.id}
+        initialMethodology={workspace.methodology}
+      />
 
       {workspace.latestInteractionCapture ? (
         <section

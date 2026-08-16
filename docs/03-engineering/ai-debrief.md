@@ -91,3 +91,11 @@ may route the user into this flow after optional foreground recording or visual
 capture, but accepted debrief content remains separately labelled
 salesperson-reported evidence. Production data remains subject to private-beta
 gates.
+
+## Methodology-aware follow-up
+
+The debrief may ask a bounded question already selected by the latest
+Pre-Interaction Brief when an important methodology gap could have been resolved.
+It does not run a checklist, exceed the existing question cap or persist methodology
+state. Reviewed debrief Evidence must complete its normal provenance lifecycle before
+a later methodology refresh can use it.

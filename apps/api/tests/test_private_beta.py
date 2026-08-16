@@ -68,6 +68,7 @@ from revenueos.models import (
     LiveBriefProgress,
     LiveInteractionSession,
     Meeting,
+    MethodologyProjection,
     OnlineMeetingMetadata,
     OnlineMeetingTranscriptImport,
     Organisation,
@@ -546,6 +547,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         second = await seed_demo_data(factory, PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, settings)
         assert first == second
         assert first["provider_calls"] == 0
+        assert first["methodology_projection_versions"] == (1, 2)
         online_interaction_ids = first["online_meeting_interaction_ids"]
         assert isinstance(online_interaction_ids, tuple)
         _, _, meeting_ids, _ = demo_ids(PRIMARY_ORGANISATION_ID)
@@ -558,6 +560,25 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         debrief_interaction_ids = debrief_ids[:5]
         companion_interaction_ids, companion_meeting_ids, _, brief_ids = demo_companion_ids(PRIMARY_ORGANISATION_ID)
         async with factory() as session:
+            methodology_projections = list(
+                (
+                    await session.scalars(
+                        select(MethodologyProjection)
+                        .where(
+                            MethodologyProjection.organisation_id == PRIMARY_ORGANISATION_ID,
+                            MethodologyProjection.opportunity_id == first["opportunity_id"],
+                        )
+                        .order_by(MethodologyProjection.projection_version)
+                    )
+                ).all()
+            )
+            assert [item.definition_key for item in methodology_projections] == ["bant", "meddpicc"]
+            meddpicc_items = {item["field_key"]: item for item in methodology_projections[-1].content_json["items"]}
+            assert meddpicc_items["champion"]["state"] == "confirmed"
+            assert meddpicc_items["economic_buyer"]["state"] == "unknown"
+            assert meddpicc_items["paper_process"]["state"] == "partially_supported"
+            assert meddpicc_items["competition"]["state"] == "confirmed"
+            assert meddpicc_items["decision_process"]["state"] == "conflicting"
             assert all([await session.get(Meeting, meeting_id) is not None for meeting_id in meeting_ids])
             assert all(
                 [
@@ -711,6 +732,16 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
         reset = await reset_demo_data(factory, PRIMARY_ORGANISATION_ID, settings)
         assert reset["provider_calls"] == 0
         async with factory() as session:
+            assert not list(
+                (
+                    await session.scalars(
+                        select(MethodologyProjection).where(
+                            MethodologyProjection.organisation_id == PRIMARY_ORGANISATION_ID,
+                            MethodologyProjection.opportunity_id == first["opportunity_id"],
+                        )
+                    )
+                ).all()
+            )
             assert all([await session.get(Meeting, meeting_id) is None for meeting_id in meeting_ids])
             assert all([await session.get(Interaction, interaction_id) is None for interaction_id in interaction_ids])
             assert all(
@@ -1080,6 +1111,33 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             json={"name": "Export Test Company", "status": "prospect"},
         )
         assert company.status_code == 201
+        opportunity = client.post(
+            "/api/v1/opportunities",
+            json={
+                "companyId": company.json()["id"],
+                "name": "Export methodology opportunity",
+                "stage": "evaluation",
+                "status": "open",
+            },
+        )
+        assert opportunity.status_code == 201, opportunity.text
+        selected_methodology = client.patch(
+            "/api/v1/methodologies/current",
+            json={"selection": "bant", "customDefinitionId": None},
+        )
+        assert selected_methodology.status_code == 200, selected_methodology.text
+        methodology = client.post(f"/api/v1/opportunities/{opportunity.json()['id']}/methodology/generate")
+        assert methodology.status_code == 200, methodology.text
+        methodology_review = client.post(
+            f"/api/v1/opportunities/{opportunity.json()['id']}/methodology/budget/review",
+            json={
+                "expectedProjectionId": methodology.json()["projectionId"],
+                "action": "clarify",
+                "clarification": "The seller reports that a provisional budget exists.",
+                "idempotencyKey": "export-methodology-review",
+            },
+        )
+        assert methodology_review.status_code == 200, methodology_review.text
         interaction = client.post(
             "/api/v1/interactions",
             json={
@@ -1223,7 +1281,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 13
+        assert payload["exportVersion"] == 14
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1235,6 +1293,11 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert exported_evidence["origin_class"] == "salesperson_reported"
         assert payload["preInteractionBriefs"][0]["interaction_id"] == interaction.json()["id"]
         assert payload["preInteractionBriefs"][0]["source_references_json"]
+        assert payload["organisationMethodologySettings"][0]["selection"] == "bant"
+        assert payload["methodologyProjections"][0]["opportunity_id"] == opportunity.json()["id"]
+        assert "source_fingerprint" not in payload["methodologyProjections"][0]
+        assert payload["methodologyReviews"][0]["action"] == "clarify"
+        assert "idempotency_key" not in payload["methodologyReviews"][0]
         assert payload["actionProposals"] == []
         assert payload["actionProposalVersions"] == []
         assert payload["actionAuditEvents"] == []
@@ -1280,7 +1343,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 13
+        assert download.json()["exportVersion"] == 14
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

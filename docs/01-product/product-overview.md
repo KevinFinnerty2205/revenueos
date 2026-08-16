@@ -208,3 +208,10 @@ RevenueOS can turn final validated intelligence into reviewable opportunity Acti
 Users can revise, approve or reject proposals with clear sources and risk labels.
 Approval never sends, syncs, schedules or changes a business record. This provides
 durable human intent while keeping future execution integrations out of current scope.
+
+## Sales Methodology now implemented
+
+WO-024 adds MEDDIC, MEDDPICC, BANT, SPICED and bounded custom organisation
+methodologies to RevenueOS Core. They organise current validated Evidence into
+reviewable categorical field states under Opportunity → Deal. There is no percentage,
+qualification score, close probability, stage gate or new top-level navigation item.

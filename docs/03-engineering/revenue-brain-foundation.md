@@ -179,3 +179,10 @@ Completed Revenue Brain insights can ground bounded Action proposals when their
 source snapshots remain current. The Action Layer stores only references and a
 bounded provenance summary; it does not modify Revenue Brain snapshots or insights.
 Approval is refused if the referenced insight is no longer current.
+
+## Sales Methodology consumer
+
+WO-024 reads bounded final Revenue Brain artefacts/snapshots and their validated
+references as projection input. The methodology service does not create another
+brain, edit snapshots or treat its own projection as new customer Evidence. Definition,
+source or review changes produce a new immutable projection fingerprint/version.

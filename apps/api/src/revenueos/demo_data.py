@@ -21,6 +21,8 @@ from revenueos.beta_maintenance import (
 )
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
+from revenueos.methodology_contracts import MethodologySelectionUpdate
+from revenueos.methodology_services import SalesMethodologyProjectionService
 from revenueos.models import (
     BetaFeedback,
     BetaSystemEvent,
@@ -43,11 +45,14 @@ from revenueos.models import (
     LiveProcessingWindow,
     Meeting,
     MeetingParticipant,
+    MethodologyProjection,
+    MethodologyReview,
     OnlineMeetingMetadata,
     OnlineMeetingTranscriptImport,
     Opportunity,
     OpportunityAuditEvent,
     OrganisationMembership,
+    OrganisationMethodologySetting,
     PreInteractionBrief,
     ProvisionalSignal,
     RecordingConsent,
@@ -70,6 +75,7 @@ from revenueos.pre_interaction_contracts import (
     PreInteractionBriefContent,
     PreInteractionSourceReference,
 )
+from revenueos.tenant import TenantContext
 from revenueos.visual_storage import create_visual_storage
 
 DEMO_NAMESPACE = UUID("d7838892-ce0b-434a-a8e9-445767115063")
@@ -1973,6 +1979,106 @@ async def seed_demo_data(
             phone_contact_id,
             seeded_at,
         )
+        methodology_intelligence_id = uuid.uuid5(
+            DEMO_NAMESPACE,
+            f"{organisation_id}:methodology-final-intelligence",
+        )
+        methodology_brain_id = uuid.uuid5(
+            DEMO_NAMESPACE,
+            f"{organisation_id}:methodology-brain-snapshot",
+        )
+        methodology_evidence_id = uuid.uuid5(
+            DEMO_NAMESPACE,
+            f"{organisation_id}:methodology-final-evidence",
+        )
+        methodology_content = {
+            "schemaVersion": 2,
+            "origin": "validated_intelligence",
+            "sourceLabel": "Final synthetic pilot review",
+            "items": [
+                {
+                    "category": "stakeholder",
+                    "statement": "The operations lead remains the internal champion.",
+                    "sourceOwnership": "customer_created",
+                    "supportClassification": "direct",
+                    "sourceLabel": "Final synthetic pilot review",
+                    "conflictState": "not_assessed",
+                },
+                {
+                    "category": "competitor",
+                    "statement": "The customer is comparing another vendor and the status quo.",
+                    "sourceOwnership": "customer_created",
+                    "supportClassification": "direct",
+                    "sourceLabel": "Final synthetic pilot review",
+                    "conflictState": "not_assessed",
+                },
+                {
+                    "category": "procurement",
+                    "statement": "Procurement is involved, but the final contracting path is unclear.",
+                    "sourceOwnership": "imported_external",
+                    "supportClassification": "context",
+                    "sourceLabel": "Final synthetic pilot review",
+                    "conflictState": "not_assessed",
+                },
+                {
+                    "category": "decision",
+                    "statement": "The approval process date conflicts with the previously supplied decision date.",
+                    "sourceOwnership": "customer_created",
+                    "supportClassification": "direct",
+                    "sourceLabel": "Final synthetic pilot review",
+                    "conflictState": "conflicting",
+                },
+            ],
+        }
+        if await session.get(Evidence, methodology_evidence_id) is None:
+            session.add(
+                Evidence(
+                    id=methodology_evidence_id,
+                    organisation_id=organisation_id,
+                    interaction_id=linked_interaction_ids[1],
+                    capture_session_id=recording_capture_id,
+                    evidence_type="transcript",
+                    origin_class="customer_direct",
+                    support_class="direct",
+                    validation_state="verified",
+                    captured_by_user_id=user_id,
+                    captured_at=seeded_at - timedelta(days=7),
+                    lifecycle_status="available",
+                    retention_class="inherited",
+                )
+            )
+            await session.flush()
+        if await session.get(InteractionIntelligenceSnapshot, methodology_intelligence_id) is None:
+            session.add(
+                InteractionIntelligenceSnapshot(
+                    id=methodology_intelligence_id,
+                    organisation_id=organisation_id,
+                    interaction_id=linked_interaction_ids[1],
+                    opportunity_id=opportunity_id,
+                    session_id=recording_capture_id,
+                    schema_version=2,
+                    version=1,
+                    validation_state="validated",
+                    content_json=methodology_content,
+                    source_evidence_ids=[str(methodology_evidence_id)],
+                )
+            )
+            await session.flush()
+        if await session.get(RevenueBrainInteractionSnapshot, methodology_brain_id) is None:
+            session.add(
+                RevenueBrainInteractionSnapshot(
+                    id=methodology_brain_id,
+                    organisation_id=organisation_id,
+                    company_id=company_id,
+                    opportunity_id=opportunity_id,
+                    interaction_id=linked_interaction_ids[1],
+                    interaction_intelligence_id=methodology_intelligence_id,
+                    schema_version=2,
+                    version=3,
+                    content_json=methodology_content,
+                    source_evidence_ids=[str(methodology_evidence_id)],
+                )
+            )
         event = await session.scalar(
             select(BetaSystemEvent).where(
                 BetaSystemEvent.organisation_id == organisation_id,
@@ -1987,11 +2093,18 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 11},
+                    metadata_json={"dataset_version": 12},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 11}
+            event.metadata_json = {"dataset_version": 12}
+    methodology_versions = await _seed_methodology_views(
+        session_factory,
+        organisation_id,
+        user_id,
+        active_settings,
+        opportunity_id,
+    )
     return {
         "status": "ready",
         "company_id": company_id,
@@ -2011,8 +2124,63 @@ async def seed_demo_data(
         "source_evidence_ids": source_evidence_ids,
         "marker_ids": marker_ids,
         "live_interaction_id": live_ids["interaction"],
+        "methodology_projection_versions": methodology_versions,
         "provider_calls": 0,
     }
+
+
+async def _seed_methodology_views(
+    session_factory: async_sessionmaker[AsyncSession],
+    organisation_id: UUID,
+    user_id: UUID,
+    settings: Settings,
+    opportunity_id: UUID,
+) -> tuple[int, ...]:
+    """Seed a BANT-to-MEDDPICC switch using only deterministic final evidence."""
+
+    tenant = TenantContext(organisation_id=organisation_id, user_id=user_id, role="admin")
+    async with session_factory() as session:
+        await set_tenant_database_context(session, organisation_id)
+        existing_keys = set(
+            await session.scalars(
+                select(MethodologyProjection.definition_key).where(
+                    MethodologyProjection.organisation_id == organisation_id,
+                    MethodologyProjection.opportunity_id == opportunity_id,
+                )
+            )
+        )
+        service = SalesMethodologyProjectionService(session, tenant, settings)
+        if "bant" not in existing_keys:
+            await service.select_methodology(MethodologySelectionUpdate(selection="bant"))
+            await service.generate(opportunity_id)
+        if "meddpicc" not in existing_keys:
+            await service.select_methodology(MethodologySelectionUpdate(selection="meddpicc"))
+            await service.generate(opportunity_id)
+        else:
+            setting = await session.get(OrganisationMethodologySetting, organisation_id)
+            if setting is None:
+                session.add(
+                    OrganisationMethodologySetting(
+                        organisation_id=organisation_id,
+                        selection="meddpicc",
+                        updated_by_user_id=user_id,
+                    )
+                )
+            elif setting.selection != "meddpicc" or setting.custom_definition_id is not None:
+                setting.selection = "meddpicc"
+                setting.custom_definition_id = None
+                setting.updated_by_user_id = user_id
+                setting.updated_at = datetime.now(UTC)
+            await session.commit()
+        versions = await session.scalars(
+            select(MethodologyProjection.projection_version)
+            .where(
+                MethodologyProjection.organisation_id == organisation_id,
+                MethodologyProjection.opportunity_id == opportunity_id,
+            )
+            .order_by(MethodologyProjection.projection_version)
+        )
+        return tuple(versions)
 
 
 async def reset_demo_data(
@@ -2055,6 +2223,23 @@ async def reset_demo_data(
             delete(OpportunityAuditEvent).where(
                 OpportunityAuditEvent.organisation_id == organisation_id,
                 OpportunityAuditEvent.opportunity_id == opportunity_id,
+            )
+        )
+        await session.execute(
+            delete(MethodologyReview).where(
+                MethodologyReview.organisation_id == organisation_id,
+                MethodologyReview.opportunity_id == opportunity_id,
+            )
+        )
+        await session.execute(
+            delete(MethodologyProjection).where(
+                MethodologyProjection.organisation_id == organisation_id,
+                MethodologyProjection.opportunity_id == opportunity_id,
+            )
+        )
+        await session.execute(
+            delete(OrganisationMethodologySetting).where(
+                OrganisationMethodologySetting.organisation_id == organisation_id,
             )
         )
         await session.execute(

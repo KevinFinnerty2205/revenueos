@@ -20,6 +20,7 @@ from revenueos.models import (
     Interaction,
     InteractionIntelligenceSnapshot,
     Meeting,
+    MethodologyProjection,
     Opportunity,
     RevenueBrainInsight,
     Transcript,
@@ -319,6 +320,17 @@ class ActionRepository:
                     RevenueBrainInsight.id == reference.source_id,
                     RevenueBrainInsight.opportunity_id == opportunity_id,
                     RevenueBrainInsight.status == "completed",
+                )
+            )
+            return int(count or 0) == 1
+        if reference.source_type == "methodology_projection":
+            count = await self.session.scalar(
+                select(func.count())
+                .select_from(MethodologyProjection)
+                .where(
+                    MethodologyProjection.organisation_id == organisation_id,
+                    MethodologyProjection.opportunity_id == opportunity_id,
+                    MethodologyProjection.id == reference.source_id,
                 )
             )
             return int(count or 0) == 1

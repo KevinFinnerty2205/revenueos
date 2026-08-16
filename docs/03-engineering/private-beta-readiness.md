@@ -422,3 +422,10 @@ metadata but omits credential references, idempotency keys, preview fingerprints
 leases and mock external objects. Retention of an Action or organisation cascades
 its execution metadata. Revocation invalidates open previews and cancels queued
 work. There is no live credential or external provider deletion in WO-022.
+
+WO-024 advances export schema to v14 with methodology definitions/versions,
+selection, projections and reviews. Retention and deletion cover those rows plus
+linked salesperson-reported clarification Evidence. Synthetic demo data now includes
+historical BANT and current MEDDPICC projections from final synthetic sources; it
+makes zero provider calls. The Core methodology flag uses the existing feature-flag
+endpoint and can fail closed without disabling other RevenueOS workflows.

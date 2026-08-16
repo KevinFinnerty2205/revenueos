@@ -625,3 +625,22 @@ Connection management is administrator-only; active members may use an active
 connection. Responses expose simulation labels and safe metadata only. No route
 accepts credentials, provider tokens, Action content at confirmation, a live-mode
 switch or arbitrary connector capabilities.
+
+## Sales Methodology routes
+
+| Method | Route | Behaviour |
+| --- | --- | --- |
+| `GET` | `/api/v1/methodologies` | Standards, tenant custom definitions, current default and safe limits |
+| `GET` | `/api/v1/methodologies/current` | Effective organisation selection |
+| `PATCH` | `/api/v1/methodologies/current` | Administrator selects standard, custom or none |
+| `POST` | `/api/v1/methodologies/custom` | Administrator creates immutable custom v1 |
+| `PATCH` | `/api/v1/methodologies/custom/{id}` | Administrator creates the next version |
+| `DELETE` | `/api/v1/methodologies/custom/{id}` | Administrator archives; history remains |
+| `POST` | `/api/v1/opportunities/{id}/methodology/generate` | Idempotently project current validated sources |
+| `GET` | `/api/v1/opportunities/{id}/methodology` | Current view or safe refresh/empty state |
+| `GET` | `/api/v1/opportunities/{id}/methodology/history` | Bounded immutable summaries |
+| `POST` | `/api/v1/opportunities/{id}/methodology/{fieldKey}/review` | Immutable interpretation review/clarification |
+
+All payloads are strict and product-safe. The API never accepts organisation IDs,
+arbitrary rules/prompts, source conclusions, provider choices or scores. Current
+reads hide a stale projection's conclusions when the source fingerprint changes.

@@ -1893,6 +1893,155 @@ export interface OnlineMeetingTranscriptImport {
   safeMessage: string;
 }
 
+export type MethodologyKey = "meddic" | "meddpicc" | "bant" | "spiced";
+export type MethodologySelection = "none" | MethodologyKey | "custom";
+export type MethodologyState =
+  "confirmed" | "partially_supported" | "unknown" | "conflicting" | "stale";
+
+export interface MethodologyFieldDefinition {
+  key: string;
+  displayName: string;
+  explanation: string;
+  order: number;
+  required: boolean;
+  evidenceExpectations: string[];
+  canonicalFacts: string[];
+  evidenceCategories: string[];
+  freshnessDays: number | null;
+  suggestedQuestions: string[];
+  stageExpectation: OpportunityStage | null;
+}
+
+export interface MethodologyDefinitionSummary {
+  id: string | null;
+  key: string;
+  name: string;
+  description: string;
+  version: number;
+  standard: boolean;
+  status: "active" | "archived";
+  fieldCount: number;
+  fields: MethodologyFieldDefinition[];
+  createdAt: string | null;
+}
+
+export interface MethodologySelectionResponse {
+  selection: MethodologySelection;
+  customDefinitionId: string | null;
+  effectiveDefinition: MethodologyDefinitionSummary | null;
+  updatedAt: string | null;
+}
+
+export interface MethodologyCatalogueResponse {
+  standards: MethodologyDefinitionSummary[];
+  custom: MethodologyDefinitionSummary[];
+  current: MethodologySelectionResponse;
+  customMethodologyLimit: number;
+  fieldLimit: number;
+  executableRulesSupported: false;
+}
+
+export interface MethodologySourceReference {
+  sourceType:
+    | "ai_artifact"
+    | "accepted_evidence"
+    | "interaction_intelligence"
+    | "opportunity_state"
+    | "methodology_review";
+  sourceId: string;
+  itemKey: string;
+  label: string;
+  origin:
+    | "customer_direct"
+    | "salesperson_reported"
+    | "system_metadata"
+    | "imported_external"
+    | "seller_prepared"
+    | "validated_intelligence";
+  supportedAt: string;
+  sourceClassification: string;
+}
+
+export interface MethodologyProjectionItem {
+  fieldKey: string;
+  displayName: string;
+  explanation: string;
+  required: boolean;
+  state: MethodologyState;
+  conclusion: string | null;
+  sources: MethodologySourceReference[];
+  conflicts: MethodologySourceReference[];
+  lastSupportedAt: string | null;
+  freshness: "current" | "stale" | "not_applicable";
+  suggestedQuestion: string | null;
+  stageExpectation: OpportunityStage | null;
+  reviews: Array<{
+    action:
+      | "confirm_interpretation"
+      | "clarify"
+      | "mark_not_known"
+      | "mark_incorrect";
+    reviewedAt: string;
+    reviewedByUserId: string;
+    clarificationEvidenceId: string | null;
+  }>;
+}
+
+export interface MethodologyStateCounts {
+  confirmed: number;
+  partiallySupported: number;
+  unknown: number;
+  conflicting: number;
+  stale: number;
+}
+
+export interface MethodologyProjectionContent {
+  opportunityId: string;
+  methodologyKey: string;
+  methodologyName: string;
+  definitionVersion: number;
+  projectionVersion: number;
+  engineVersion: number;
+  stateCounts: MethodologyStateCounts;
+  items: MethodologyProjectionItem[];
+  generatedAt: string;
+}
+
+export interface OpportunityMethodologyResponse {
+  state:
+    | "disabled"
+    | "not_configured"
+    | "not_generated"
+    | "current"
+    | "needs_refresh";
+  generationAvailable: boolean;
+  needsRefresh: boolean;
+  safeMessage: string;
+  definition: MethodologyDefinitionSummary | null;
+  projectionId: string | null;
+  projection: MethodologyProjectionContent | null;
+  generatedAt: string | null;
+}
+
+export interface MethodologyGenerationResponse extends OpportunityMethodologyResponse {
+  created: boolean;
+  reused: boolean;
+}
+
+export interface MethodologyHistoryResponse {
+  currentProjectionId: string | null;
+  items: Array<{
+    id: string;
+    methodologyKey: string;
+    methodologyName: string;
+    definitionVersion: number;
+    projectionVersion: number;
+    stateCounts: MethodologyStateCounts;
+    generatedAt: string;
+    projection: MethodologyProjectionContent;
+  }>;
+}
+
 export interface OpportunityWorkspaceResponse {
   opportunity: OpportunityWorkspaceOpportunity;
   reasoning: RevenueBrainReasoningResponse;
@@ -1902,6 +2051,7 @@ export interface OpportunityWorkspaceResponse {
   reportedIntelligence: ReportedInteractionIntelligence | null;
   visualIntelligence: VisualInteractionIntelligence | null;
   latestInteractionCapture: OpportunityInteractionCaptureStatus | null;
+  methodology: OpportunityMethodologyResponse;
   intelligenceSectionsAvailable: number;
   partialData: boolean;
   generatedAt: string;
@@ -2011,7 +2161,8 @@ export interface ActionSourceReference {
     | "ai_artifact"
     | "accepted_evidence"
     | "interaction_intelligence"
-    | "revenue_brain_insight";
+    | "revenue_brain_insight"
+    | "methodology_projection";
   sourceId: string;
   itemKey: string;
   label: string;
@@ -2019,7 +2170,8 @@ export interface ActionSourceReference {
     | "customer_direct"
     | "salesperson_reported"
     | "validated_intelligence"
-    | "revenue_brain";
+    | "revenue_brain"
+    | "methodology";
 }
 
 export interface ActionProposal {

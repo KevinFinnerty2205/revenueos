@@ -527,6 +527,259 @@ class OpportunityAuditEvent(Base):
     )
 
 
+class MethodologyDefinition(TimestampMixin, Base):
+    __tablename__ = "methodology_definitions"
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'archived')", name="ck_methodology_definitions_status"),
+        CheckConstraint("current_version > 0", name="ck_methodology_definitions_version"),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_methodology_definitions_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_methodology_definitions_org_id"),
+        Index("ix_methodology_definitions_org_status", "organisation_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", server_default="active")
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MethodologyDefinitionVersion(Base):
+    __tablename__ = "methodology_definition_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_methodology_versions_version"),
+        CheckConstraint("schema_version = 1", name="ck_methodology_versions_schema"),
+        CheckConstraint("length(content_fingerprint) = 64", name="ck_methodology_versions_fingerprint"),
+        ForeignKeyConstraint(
+            ["organisation_id", "definition_id"],
+            ["methodology_definitions.organisation_id", "methodology_definitions.id"],
+            name="fk_methodology_versions_definition",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_methodology_versions_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_methodology_versions_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "definition_id",
+            "version",
+            name="uq_methodology_versions_definition_version",
+        ),
+        Index(
+            "ix_methodology_versions_org_definition",
+            "organisation_id",
+            "definition_id",
+            "version",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    definition_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    content_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class OrganisationMethodologySetting(TimestampMixin, Base):
+    __tablename__ = "organisation_methodology_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "selection IN ('none', 'meddic', 'meddpicc', 'bant', 'spiced', 'custom')",
+            name="ck_methodology_settings_selection",
+        ),
+        CheckConstraint(
+            "(selection = 'custom' AND custom_definition_id IS NOT NULL) OR "
+            "(selection <> 'custom' AND custom_definition_id IS NULL)",
+            name="ck_methodology_settings_custom",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "custom_definition_id"],
+            ["methodology_definitions.organisation_id", "methodology_definitions.id"],
+            name="fk_methodology_settings_custom",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "updated_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_methodology_settings_updater",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), primary_key=True
+    )
+    selection: Mapped[str] = mapped_column(String(16), nullable=False, default="none", server_default="none")
+    custom_definition_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class MethodologyProjection(Base):
+    __tablename__ = "methodology_projections"
+    __table_args__ = (
+        CheckConstraint("methodology_kind IN ('standard', 'custom')", name="ck_methodology_projections_kind"),
+        CheckConstraint("definition_version > 0", name="ck_methodology_projections_definition_version"),
+        CheckConstraint("projection_version > 0", name="ck_methodology_projections_version"),
+        CheckConstraint("engine_version = 1", name="ck_methodology_projections_engine"),
+        CheckConstraint("schema_version = 1", name="ck_methodology_projections_schema"),
+        CheckConstraint("length(source_fingerprint) = 64", name="ck_methodology_projections_fingerprint"),
+        CheckConstraint(
+            "(methodology_kind = 'custom' AND definition_id IS NOT NULL) OR "
+            "(methodology_kind = 'standard' AND definition_id IS NULL)",
+            name="ck_methodology_projections_definition",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_methodology_projections_opportunity",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "definition_id"],
+            ["methodology_definitions.organisation_id", "methodology_definitions.id"],
+            name="fk_methodology_projections_definition",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "generated_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_methodology_projections_generator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_methodology_projections_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "opportunity_id",
+            "definition_key",
+            "definition_version",
+            "source_fingerprint",
+            name="uq_methodology_projections_idempotency",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "opportunity_id",
+            "projection_version",
+            name="uq_methodology_projections_logical_version",
+        ),
+        Index(
+            "ix_methodology_projections_org_opportunity_generated",
+            "organisation_id",
+            "opportunity_id",
+            "generated_at",
+        ),
+        Index(
+            "ix_methodology_projections_org_definition",
+            "organisation_id",
+            "definition_key",
+            "definition_version",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    methodology_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    definition_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    definition_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    definition_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    projection_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    engine_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    generated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class MethodologyReview(Base):
+    __tablename__ = "methodology_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('confirm_interpretation', 'clarify', 'mark_not_known', 'mark_incorrect')",
+            name="ck_methodology_reviews_action",
+        ),
+        CheckConstraint("length(trim(field_key)) BETWEEN 1 AND 64", name="ck_methodology_reviews_field"),
+        CheckConstraint("length(trim(idempotency_key)) BETWEEN 1 AND 200", name="ck_methodology_reviews_key"),
+        CheckConstraint(
+            "(action = 'clarify' AND clarification_text IS NOT NULL AND clarification_evidence_id IS NOT NULL) OR "
+            "(action <> 'clarify' AND clarification_text IS NULL AND clarification_evidence_id IS NULL)",
+            name="ck_methodology_reviews_clarification",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "projection_id"],
+            ["methodology_projections.organisation_id", "methodology_projections.id"],
+            name="fk_methodology_reviews_projection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_methodology_reviews_opportunity",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "reviewed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_methodology_reviews_reviewer",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "clarification_evidence_id"],
+            ["evidence.organisation_id", "evidence.id"],
+            name="fk_methodology_reviews_evidence",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_methodology_reviews_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "reviewed_by_user_id",
+            "idempotency_key",
+            name="uq_methodology_reviews_idempotency",
+        ),
+        Index(
+            "ix_methodology_reviews_org_opportunity_field",
+            "organisation_id",
+            "opportunity_id",
+            "field_key",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    projection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    field_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    clarification_text: Mapped[str | None] = mapped_column(String(1000))
+    clarification_evidence_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class ActionProposal(Base):
     __tablename__ = "action_proposals"
     __table_args__ = (

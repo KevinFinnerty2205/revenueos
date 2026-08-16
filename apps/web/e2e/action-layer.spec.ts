@@ -208,6 +208,15 @@ test("reviews, confirms and persists a customer-facing Action simulation", async
             latest: null,
             history: [],
           },
+          methodology: {
+            state: "not_configured",
+            definition: null,
+            projectionId: null,
+            projection: null,
+            generationAvailable: false,
+            safeMessage:
+              "Your organisation has not selected a sales methodology.",
+          },
           latestMeeting: null,
           recentMeetings: [],
           intelligence: null,

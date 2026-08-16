@@ -27,6 +27,8 @@ from revenueos.beta_services import BetaService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.methodology_contracts import MethodologyGapContext
+from revenueos.methodology_services import SalesMethodologyProjectionService
 from revenueos.models import AIArtifact, PreInteractionBrief
 from revenueos.pre_interaction_contracts import (
     BriefCommitment,
@@ -55,7 +57,7 @@ from revenueos.revenue_brain_reasoning_contracts import RevenueBrainInsightConte
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.pre_interaction_briefs")
-PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 2
+PRE_INTERACTION_BRIEF_SCHEMA_VERSION = 3
 PRE_INTERACTION_BRIEF_HISTORY_LIMIT = 6
 ValidatedModel = TypeVar("ValidatedModel", bound=BaseModel)
 
@@ -73,6 +75,7 @@ class ValidatedBriefContext:
     open_questions: OpenQuestionsArtifactContent | None
     next_best_action: NextBestActionArtifactContent | None
     revenue_brain: RevenueBrainInsightContent | None
+    methodology_gaps: tuple[MethodologyGapContext, ...]
     source_references: tuple[PreInteractionSourceReference, ...]
     fingerprint: str
 
@@ -91,6 +94,7 @@ class PreInteractionBriefService:
         self.settings = settings
         self.repository = PreInteractionBriefRepository(session)
         self.beta = BetaService(session, tenant, settings)
+        self.methodology = SalesMethodologyProjectionService(session, tenant, settings)
 
     async def get_brief(self, interaction_id: UUID) -> PreInteractionBriefResponse:
         self.beta.require_feature("aiCompanion")
@@ -161,7 +165,7 @@ class PreInteractionBriefService:
                 **self._empty_response(records).model_dump(),
                 created=False,
             )
-        context = self._build_context(records)
+        context = await self._build_context(records)
         existing = await self.repository.get_equivalent_brief(
             self.tenant.organisation_id,
             interaction_id,
@@ -345,7 +349,7 @@ class PreInteractionBriefService:
             raise PublicAPIError("interaction_not_found", "The requested interaction was not found.", 404)
         return records
 
-    def _build_context(self, records: PreInteractionSourceRecords) -> ValidatedBriefContext:
+    async def _build_context(self, records: PreInteractionSourceRecords) -> ValidatedBriefContext:
         artifacts = records.artifacts
         executive_summary = self._validated_artifact(
             artifacts.get("executive_summary"), ExecutiveSummaryArtifactContent
@@ -396,7 +400,21 @@ class PreInteractionBriefService:
             for capability, value in validated_values.items()
             if value is not None and capability in artifacts
         }
+        methodology_gaps: tuple[MethodologyGapContext, ...] = ()
+        if self.settings.feature_sales_methodology_enabled and records.opportunity is not None:
+            methodology_gaps = await self.methodology.gap_context(records.opportunity.id, limit=8)
         references = self._source_references(records, validated_artifacts, revenue_brain is not None)
+        references += tuple(
+            PreInteractionSourceReference(
+                section="questions_to_ask",
+                capability="sales_methodology",
+                source_id=gap.projection_id,
+                scope="opportunity",
+                source_classification="methodology_gap",
+                validation_status="completed",
+            )
+            for gap in methodology_gaps
+        )
         canonical = {
             "schema_version": PRE_INTERACTION_BRIEF_SCHEMA_VERSION,
             "interaction": {
@@ -459,6 +477,15 @@ class PreInteractionBriefService:
                 "next_best_action": self._json(next_best_action),
             },
             "revenue_brain": self._json(revenue_brain),
+            "methodology_gaps": [
+                {
+                    "projection_id": str(gap.projection_id),
+                    "field_key": gap.field_key,
+                    "state": gap.state,
+                    "suggested_question": gap.suggested_question,
+                }
+                for gap in methodology_gaps
+            ],
             "source_trace": {
                 capability: {
                     "id": str(artifact.id),
@@ -509,6 +536,7 @@ class PreInteractionBriefService:
             open_questions=open_questions,
             next_best_action=next_best_action,
             revenue_brain=revenue_brain,
+            methodology_gaps=methodology_gaps,
             source_references=references,
             fingerprint=fingerprint,
         )
@@ -684,6 +712,20 @@ class PreInteractionBriefService:
 
     def _questions(self, context: ValidatedBriefContext) -> tuple[BriefQuestion, ...]:
         values: list[BriefQuestion] = []
+        methodology_limit = 1 if context.records.interaction.interaction_type == "phone_call" else 3
+        for gap in self._ordered_methodology_gaps(context)[:methodology_limit]:
+            self._append_unique_question(
+                values,
+                BriefQuestion(
+                    question=gap.suggested_question,
+                    purpose=(
+                        f"Resolve conflicting evidence about {gap.display_name.lower()}."
+                        if gap.state == "conflicting"
+                        else f"Clarify the current evidence gap for {gap.display_name.lower()}."
+                    ),
+                    priority=("high" if gap.state in {"conflicting", "stale", "unknown"} else "medium"),
+                ),
+            )
         if context.open_questions is not None:
             for open_question in context.open_questions.open_questions:
                 self._append_unique_question(
@@ -795,6 +837,42 @@ class PreInteractionBriefService:
             )
         maximum = 5 if context.records.interaction.interaction_type == "phone_call" else 8
         return tuple(values[:maximum])
+
+    @staticmethod
+    def _ordered_methodology_gaps(
+        context: ValidatedBriefContext,
+    ) -> tuple[MethodologyGapContext, ...]:
+        interaction_type = context.records.interaction.interaction_type
+        preferred: tuple[str, ...]
+        if interaction_type == "executive_lunch":
+            preferred = (
+                "economic_buyer",
+                "metrics",
+                "impact",
+                "business_pain",
+                "decision",
+            )
+        elif interaction_type in {"workshop", "presentation"}:
+            preferred = (
+                "decision_criteria",
+                "decision_process",
+                "paper_process",
+                "critical_event",
+            )
+        else:
+            preferred = ()
+        preference = {field_key: index for index, field_key in enumerate(preferred)}
+        existing_order = {gap.field_key: index for index, gap in enumerate(context.methodology_gaps)}
+        return tuple(
+            sorted(
+                context.methodology_gaps,
+                key=lambda gap: (
+                    preference.get(gap.field_key, len(preference)),
+                    {"conflicting": 0, "stale": 1, "unknown": 2, "partially_supported": 3}[gap.state],
+                    existing_order[gap.field_key],
+                ),
+            )
+        )
 
     @staticmethod
     def _stakeholders(context: ValidatedBriefContext) -> tuple[BriefStakeholder, ...]:
