@@ -377,6 +377,170 @@ export interface Task extends TenantEntity {
   createdByUserId: string;
 }
 
+export type DailyPriorityKind =
+  "interaction" | "action" | "deal" | "recommendation";
+export type DailyInteractionState =
+  "prepared" | "not_prepared" | "active" | "capture_needed" | "complete";
+export type DailyActionTiming =
+  "overdue" | "due_today" | "upcoming" | "no_due_date";
+export type DailyDealReasonCode =
+  | "overdue_action"
+  | "unresolved_risk"
+  | "methodology_gap"
+  | "conflicting_evidence"
+  | "upcoming_close_with_blocker"
+  | "interaction_stale"
+  | "next_action_pending";
+
+export interface DailyPriority {
+  kind: DailyPriorityKind;
+  reasonCode:
+    | "active_interaction"
+    | "interaction_needs_preparation"
+    | "overdue_high_priority_action"
+    | "interaction_needs_capture"
+    | "time_sensitive_deal_blocker"
+    | "high_priority_action"
+    | "next_best_action"
+    | "next_upcoming_interaction";
+  title: string;
+  context: string;
+  reason: string;
+  ctaLabel: string;
+  href: string;
+  sourceId: string;
+  startsAt: string | null;
+  dueAt: string | null;
+}
+
+export interface DailyInteraction {
+  id: string;
+  title: string;
+  companyId: string | null;
+  companyName: string | null;
+  opportunityId: string | null;
+  opportunityName: string | null;
+  interactionType: string;
+  lifecycleStatus: string;
+  startsAt: string;
+  preparationState: DailyInteractionState;
+  context: string;
+  ctaLabel: string;
+  href: string;
+}
+
+export interface DailyAction {
+  id: string;
+  title: string;
+  opportunityId: string;
+  opportunityName: string;
+  companyName: string | null;
+  priority: "high" | "normal" | "low";
+  reviewStatus: "proposed" | "edited" | "approved";
+  timing: DailyActionTiming;
+  dueAt: string | null;
+  state:
+    | "needs_review"
+    | "approved_not_complete"
+    | "simulation_in_progress"
+    | "simulation_completed_action_open"
+    | "simulation_needs_review";
+  stateLabel: string;
+  ctaLabel: string;
+  href: string;
+}
+
+export interface DailyActionSection {
+  attentionCount: number;
+  overdueCount: number;
+  dueTodayCount: number;
+  pendingReviewCount: number;
+  approvedOpenCount: number;
+  items: DailyAction[];
+  truncated: boolean;
+}
+
+export interface DailyDealReason {
+  code: DailyDealReasonCode;
+  text: string;
+}
+
+export interface DailyDealAttention {
+  opportunityId: string;
+  opportunityName: string;
+  companyName: string | null;
+  estimatedValue: string | null;
+  currency: string | null;
+  expectedCloseDate: string | null;
+  priority: "urgent" | "needs_attention" | "watch";
+  reasons: DailyDealReason[];
+  href: string;
+}
+
+export interface DailyDealSection {
+  attentionCount: number;
+  items: DailyDealAttention[];
+  truncated: boolean;
+}
+
+export interface DailyPipelineCurrency {
+  currency: string;
+  openValue: string;
+  closingThisMonthValue: string;
+  openOpportunityCount: number;
+  closingThisMonthCount: number;
+}
+
+export interface DailyPipelineSummary {
+  state: "empty" | "single_currency" | "multiple_currencies";
+  openOpportunityCount: number;
+  unvaluedOpportunityCount: number;
+  currencyCount: number;
+  currencies: DailyPipelineCurrency[];
+  safeMessage: string;
+}
+
+export interface DailyRecommendation {
+  sourceId: string;
+  opportunityId: string;
+  opportunityName: string;
+  recommendation: string;
+  priority: "high" | "medium" | "low";
+  reason: string;
+  ctaLabel: "Review";
+  href: string;
+}
+
+export interface DailyAvailability {
+  interactions: boolean;
+  actions: boolean;
+  dealAttention: boolean;
+  pipeline: boolean;
+  recommendations: boolean;
+  methodology: boolean;
+  revenueBrain: boolean;
+  targets: false;
+  forecast: false;
+}
+
+export interface DailyResponse {
+  generatedAt: string;
+  localDate: string;
+  timezone: string;
+  userDisplayName: string;
+  topPriority: DailyPriority | null;
+  nextInteraction: DailyInteraction | null;
+  todayInteractions: DailyInteraction[];
+  totalTodayInteractions: number;
+  actions: DailyActionSection;
+  dealAttention: DailyDealSection;
+  pipeline: DailyPipelineSummary;
+  recommendations: DailyRecommendation[];
+  availability: DailyAvailability;
+  hasOpportunities: boolean;
+  caughtUp: boolean;
+}
+
 export interface Meeting extends TenantEntity {
   interactionId: string;
   title: string;

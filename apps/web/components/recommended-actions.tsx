@@ -148,7 +148,11 @@ export function RecommendedActions({
   const visible = actions.filter((action) => actionTab(action.status) === tab);
 
   return (
-    <section aria-labelledby="recommended-actions-title" className="form-card">
+    <section
+      id="recommended-actions"
+      aria-labelledby="recommended-actions-title"
+      className="form-card"
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">

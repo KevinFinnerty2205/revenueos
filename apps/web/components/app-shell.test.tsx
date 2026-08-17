@@ -21,7 +21,7 @@ describe("application shell", () => {
       name: "Main navigation",
     });
     for (const label of [
-      "Dashboard",
+      "Home",
       "Getting started",
       "Companies",
       "Contacts",

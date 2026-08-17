@@ -56,6 +56,12 @@ history are separate from the Action's review status.
 The Action Layer remains the review/intent source. WO-022's separate execution
 engine performs simulations only.
 
+WO-025 RevenueOS Daily reads only current proposed, edited and approved Actions for
+the user's owned Opportunities. It caps the section at five, keeps **Approved — not
+complete** explicit, maps simulation state to safe salesperson language and links
+back to the existing review/confirmation boundary. Rejected, superseded, completed
+and historical Actions are not Daily work.
+
 ## WO-023 future Sales OS use
 
 Engage outreach, Create delivery, CRM updates and closed-won handover must reuse the

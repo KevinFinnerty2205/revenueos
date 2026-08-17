@@ -245,6 +245,12 @@ the default retention policy does not immediately expire the walkthrough. Its
 IDs and content are deterministic, it is tenant-scoped and idempotent, and it
 makes zero external provider calls:
 
+Dataset version 13 schedules the first two companion Interactions near the seed time,
+values the open Opportunity at AUD 420,000 and adds two current internal Actions:
+one overdue high-priority review item and one approved-but-not-complete item due
+today. This gives RevenueOS Daily useful current Interactions, Actions, methodology
+attention and pipeline without adding a forecast, target or provider request.
+
 ```text
 uv --directory apps/api run revenueos-demo-data seed --organisation-id <UUID> --user-id <UUID>
 ```
@@ -429,3 +435,7 @@ linked salesperson-reported clarification Evidence. Synthetic demo data now incl
 historical BANT and current MEDDPICC projections from final synthetic sources; it
 makes zero provider calls. The Core methodology flag uses the existing feature-flag
 endpoint and can fail closed without disabling other RevenueOS workflows.
+
+WO-025 adds no export or retention schema because Daily is computed and unpersisted.
+The v13 demo additions are existing Opportunity, Interaction and Action rows and
+therefore use their established reset, retention and export behaviour.

@@ -51,6 +51,7 @@ from revenueos.demo_data import (
 from revenueos.errors import PublicAPIError
 from revenueos.main import create_app
 from revenueos.models import (
+    ActionProposal,
     AIUsageCounter,
     BetaDataRequest,
     CaptureSession,
@@ -71,6 +72,7 @@ from revenueos.models import (
     MethodologyProjection,
     OnlineMeetingMetadata,
     OnlineMeetingTranscriptImport,
+    Opportunity,
     Organisation,
     OrganisationMembership,
     PreInteractionBrief,
@@ -573,6 +575,21 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
                 ).all()
             )
             assert [item.definition_key for item in methodology_projections] == ["bant", "meddpicc"]
+            demo_opportunity = await session.get(Opportunity, first["opportunity_id"])
+            assert demo_opportunity is not None
+            assert str(demo_opportunity.estimated_value) == "420000.00"
+            assert demo_opportunity.currency == "AUD"
+            demo_actions = list(
+                (
+                    await session.scalars(
+                        select(ActionProposal).where(
+                            ActionProposal.organisation_id == PRIMARY_ORGANISATION_ID,
+                            ActionProposal.opportunity_id == first["opportunity_id"],
+                        )
+                    )
+                ).all()
+            )
+            assert {item.status for item in demo_actions} == {"proposed", "approved"}
             meddpicc_items = {item["field_key"]: item for item in methodology_projections[-1].content_json["items"]}
             assert meddpicc_items["champion"]["state"] == "confirmed"
             assert meddpicc_items["economic_buyer"]["state"] == "unknown"

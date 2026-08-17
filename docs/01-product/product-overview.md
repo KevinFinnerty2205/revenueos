@@ -79,9 +79,11 @@ The current implementation provides:
 - an honest public landing page;
 - sign-in, sign-up and sign-out paths prepared for Clerk;
 - a protected application shell and fixed development organisation;
-- Dashboard, Getting started, Companies, Contacts, Opportunities, Interactions,
+- Home (RevenueOS Daily), Getting started, Companies, Contacts, Opportunities, Interactions,
   Meetings, Tasks, Assistant, Feedback and Settings navigation;
-- a dashboard with polished empty sections;
+- a bounded personal RevenueOS Daily Home with one deterministic priority, local-day
+  Interactions, current Actions, explainable deal attention, currency-safe pipeline
+  and existing Next Best Action focus;
 - tenant-isolated list/create/edit/delete workflows for companies, contacts, opportunities and tasks;
 - tenant-isolated meeting, participant and deliberately supplied plain-text transcript workflows with local audit history;
 - a unified Meeting Detail Intelligence workspace that derives safe overall state and progress while independently persisting a transcript-grounded Executive Summary, Buying Signals & Deal Momentum, Objections & Competitive Signals, cautious Stakeholder Intelligence, strict Key Decisions, concrete Action Items, structured Risks & Blockers, genuinely unresolved Open Questions and an artefact-only Follow-up Email;

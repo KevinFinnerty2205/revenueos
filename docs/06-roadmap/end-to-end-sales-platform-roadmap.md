@@ -78,6 +78,10 @@ Every work order must:
 
 ### WO-025 — RevenueOS Daily
 
+**Implementation status:** Complete. Home at `/dashboard` now provides the bounded
+personal Daily composition. Targets, forecasting, manager/team Daily and add-on
+discovery remain with their later owning work orders.
+
 - **Objective/value/package:** Make “What matters today?” the useful signed-in habit,
   combining Interactions, Actions, deal attention and concise target/forecast state.
   **Core**.

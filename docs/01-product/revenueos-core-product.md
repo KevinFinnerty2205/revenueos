@@ -89,10 +89,12 @@ management is outside Core.
 
 ## RevenueOS Daily
 
-Daily is the default habit surface and answers **What matters today?** It combines
-upcoming interactions, actions, commitments, deal attention, deadlines, target
-progress, forecast and pipeline gap into a bounded priority view. It is not an
-analytics dashboard or notification dump.
+Daily is the implemented default habit surface and answers **What matters today?**
+It combines local-day Interactions, current Actions/commitments, explainable deal
+attention, descriptive currency-safe pipeline and existing Next Best Action into a
+bounded personal priority view. Targets and forecasting are not implemented because
+their canonical engines remain WO-037/WO-038. Daily is not an analytics dashboard or
+notification dump.
 
 ## Core maturity definition
 

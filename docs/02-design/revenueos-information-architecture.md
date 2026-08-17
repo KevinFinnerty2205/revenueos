@@ -1,13 +1,14 @@
 # RevenueOS information architecture
 
-- **Status:** WO-023 future direction; current navigation remains unchanged
+- **Status:** WO-023 direction; Home = RevenueOS Daily is implemented in WO-025 while
+  the broader six-area navigation migration remains future
 - **Design rule:** Organise around seller goals, not entities or implementation boundaries
 
 ## Permanent desktop navigation
 
 | Area     | User question                                | Primary contents                                                            | Entitlement behaviour                        |
 | -------- | -------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------- |
-| Home     | What should I do today?                      | RevenueOS Daily, priorities, interactions, actions, deal attention, targets | Core                                         |
+| Home     | What should I do today?                      | RevenueOS Daily, priorities, interactions, actions, deal attention, pipeline | Core                                         |
 | Find     | Who should I target?                         | Account/person search, research, ICP, territory, outreach entry             | Prospect/Engage with calm unavailable states |
 | Sell     | What am I actively working on?               | Accounts, opportunities, people, interactions and actions                   | Core; CRM adds native administration         |
 | Pipeline | Where are my deals and what needs attention? | List/board, stage movement, methodology, forecast drill-down                | Core; CRM adds record-management depth       |
@@ -118,7 +119,7 @@ It uses the same routes and permissions as visible UI. Beginners never need it.
 
 ## Role adaptation
 
-- **Salesperson:** Home opens personal Daily; Pipeline and Insights default to owned
+- **Salesperson:** Home opens the implemented personal Daily; Pipeline and Insights default to owned
   work.
 - **Manager:** Home adds team priorities; Pipeline/Insights default to authorised
   team scope and coaching exceptions.
@@ -136,12 +137,13 @@ to one relevant inline suggestion.
 
 ## Migration from the current navigation
 
-The current Dashboard, Getting started, Companies, Contacts, Opportunities,
-Interactions, Meetings, Tasks, Assistant, Feedback and Settings navigation is the
-truthful implementation surface. A future implementation should migrate route by
-route with redirects and preserved deep links:
+The `/dashboard` compatibility route now renders Home / RevenueOS Daily and the shell
+label is **Home**. Getting started, Companies, Contacts, Opportunities, Interactions,
+Meetings, Tasks, Assistant, Feedback and Settings remain the truthful implementation
+surface. Later areas should migrate route by route with redirects and preserved deep
+links:
 
-- Dashboard → Home;
+- Dashboard → Home (implemented without changing the compatible route);
 - Companies/Contacts/Opportunities/Interactions/Meetings/Tasks → Sell children;
 - Assistant → Search or ask RevenueOS;
 - Getting started and Feedback → contextual/help/settings destinations.

@@ -7,6 +7,7 @@ import hashlib
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import delete, select, text, update
@@ -24,6 +25,9 @@ from revenueos.database import create_engine, create_session_factory, set_tenant
 from revenueos.methodology_contracts import MethodologySelectionUpdate
 from revenueos.methodology_services import SalesMethodologyProjectionService
 from revenueos.models import (
+    ActionAuditEvent,
+    ActionProposal,
+    ActionProposalVersion,
     BetaFeedback,
     BetaSystemEvent,
     CandidateEvidence,
@@ -843,10 +847,19 @@ async def seed_demo_data(
                     name="[DEMO] Revenue workflow pilot",
                     stage="evaluation",
                     status="open",
+                    estimated_value=Decimal("420000.00"),
+                    currency="AUD",
+                    expected_close_date=(seeded_at + timedelta(days=14)).date(),
                     owner_user_id=user_id,
                     description="Synthetic private-beta opportunity. No real customer or personal data.",
                 )
             )
+        else:
+            # Advance older synthetic datasets to the current Daily fixture without
+            # touching any non-demo opportunity.
+            opportunity.estimated_value = Decimal("420000.00")
+            opportunity.currency = "AUD"
+            opportunity.expected_close_date = (seeded_at + timedelta(days=14)).date()
         await session.flush()
         if await session.get(Contact, phone_contact_id) is None:
             session.add(
@@ -1183,16 +1196,18 @@ async def seed_demo_data(
                     completed_at=seeded_at - timedelta(days=2),
                 )
             )
-        companion_variants: tuple[tuple[BriefInteractionType, str, str, int], ...] = (
-            ("face_to_face_meeting", "in_person", "[DEMO] On-site pilot planning", 1),
-            ("phone_call", "phone", "[DEMO] Pilot next-step call", 2),
-            ("presentation", "other", "[DEMO] Pilot presentation", 3),
+        companion_variants: tuple[tuple[BriefInteractionType, str, str, timedelta], ...] = (
+            ("face_to_face_meeting", "in_person", "[DEMO] On-site pilot planning", timedelta(hours=2)),
+            ("phone_call", "phone", "[DEMO] Pilot next-step call", timedelta(hours=5)),
+            ("presentation", "other", "[DEMO] Pilot presentation", timedelta(days=1, hours=2)),
         )
-        for index, (interaction_type, meeting_type, title, days_ahead) in enumerate(companion_variants):
+        for index, (interaction_type, meeting_type, title, starts_after) in enumerate(companion_variants):
             interaction_id = companion_interaction_ids[index]
             meeting_id = companion_meeting_ids[index]
             participant_id = participant_ids[index]
-            if await session.get(Interaction, interaction_id) is None:
+            scheduled_at = seeded_at + starts_after
+            companion_interaction = await session.get(Interaction, interaction_id)
+            if companion_interaction is None:
                 session.add(
                     Interaction(
                         id=interaction_id,
@@ -1204,13 +1219,17 @@ async def seed_demo_data(
                         call_direction="outbound" if interaction_type == "phone_call" else None,
                         lifecycle_status="planned",
                         title=title,
-                        scheduled_start_at=seeded_at + timedelta(days=days_ahead),
+                        scheduled_start_at=scheduled_at,
                         timezone="Australia/Sydney",
                         creation_origin="manual",
                         created_by_user_id=user_id,
                     )
                 )
-            if await session.get(Meeting, meeting_id) is None:
+            elif companion_interaction.lifecycle_status == "planned":
+                companion_interaction.scheduled_start_at = scheduled_at
+                companion_interaction.timezone = "Australia/Sydney"
+            companion_meeting = await session.get(Meeting, meeting_id)
+            if companion_meeting is None:
                 session.add(
                     Meeting(
                         id=meeting_id,
@@ -1218,7 +1237,7 @@ async def seed_demo_data(
                         interaction_id=interaction_id,
                         title=title,
                         description="Synthetic upcoming interaction for AI Companion preparation.",
-                        meeting_date=seeded_at + timedelta(days=days_ahead),
+                        meeting_date=scheduled_at,
                         meeting_type=meeting_type,
                         status="scheduled",
                         company_id=company_id,
@@ -1228,6 +1247,8 @@ async def seed_demo_data(
                         updated_by=user_id,
                     )
                 )
+            elif companion_meeting.status == "scheduled":
+                companion_meeting.meeting_date = scheduled_at
             if await session.get(MeetingParticipant, participant_id) is None:
                 session.add(
                     MeetingParticipant(
@@ -1265,6 +1286,79 @@ async def seed_demo_data(
                     )
                 )
         await session.flush()
+
+        daily_actions = (
+            (
+                "send-security-summary",
+                "Send the security summary",
+                "Review the requested security summary before sharing it.",
+                "proposed",
+                "high",
+                seeded_at - timedelta(hours=2),
+            ),
+            (
+                "confirm-pilot-scope",
+                "Confirm the pilot scope",
+                "Record the approved internal pilot scope as complete when finished.",
+                "approved",
+                "normal",
+                seeded_at + timedelta(hours=4),
+            ),
+        )
+        for label, title, description, status, priority, due_at in daily_actions:
+            action_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:daily-action:{label}")
+            if await session.get(ActionProposal, action_id) is not None:
+                continue
+            source_fingerprint = hashlib.sha256(f"demo-daily-source:{organisation_id}:{label}".encode()).hexdigest()
+            semantic_key = hashlib.sha256(f"demo-daily-semantic:{organisation_id}:{label}".encode()).hexdigest()
+            content_fingerprint = hashlib.sha256(f"demo-daily-content:{organisation_id}:{label}".encode()).hexdigest()
+            is_approved = status == "approved"
+            session.add_all(
+                (
+                    ActionProposal(
+                        id=action_id,
+                        organisation_id=organisation_id,
+                        opportunity_id=opportunity_id,
+                        action_type="create_task",
+                        status=status,
+                        priority=priority,
+                        audience="internal",
+                        risk_class="internal_low_risk",
+                        current_version=1,
+                        approved_version=1 if is_approved else None,
+                        source_fingerprint=source_fingerprint,
+                        semantic_key=semantic_key,
+                        created_by_user_id=user_id,
+                        generated_at=seeded_at - timedelta(days=1),
+                        reviewed_by_user_id=user_id if is_approved else None,
+                        reviewed_at=seeded_at - timedelta(hours=1) if is_approved else None,
+                        approved_at=seeded_at - timedelta(hours=1) if is_approved else None,
+                    ),
+                    ActionProposalVersion(
+                        organisation_id=organisation_id,
+                        action_id=action_id,
+                        version=1,
+                        title=title,
+                        description=description,
+                        proposed_due_at=due_at,
+                        target_entity_type="opportunity",
+                        target_entity_id=opportunity_id,
+                        payload_json={"kind": "create_task", "title": title},
+                        source_refs_json=[],
+                        provenance_summary="Synthetic final validated demonstration evidence.",
+                        content_fingerprint=content_fingerprint,
+                        created_by_user_id=user_id,
+                    ),
+                    ActionAuditEvent(
+                        organisation_id=organisation_id,
+                        action_id=action_id,
+                        actor_user_id=user_id,
+                        event_type="approved" if is_approved else "proposed",
+                        proposal_version=1,
+                        metadata_json={"synthetic_demo": True},
+                    ),
+                )
+            )
 
         live_ids = demo_live_ids(organisation_id)
         live_completed_at = seeded_at - timedelta(hours=4)
@@ -2093,11 +2187,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 12},
+                    metadata_json={"dataset_version": 13},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 12}
+            event.metadata_json = {"dataset_version": 13}
     methodology_versions = await _seed_methodology_views(
         session_factory,
         organisation_id,

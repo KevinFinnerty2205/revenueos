@@ -125,6 +125,11 @@ verifies the RS256 JWT issuer, audience, lifetime and organisation claim, then
 deterministically projects active users, organisations and admin/member
 memberships. Client-supplied organisation IDs never establish tenant context.
 
+WO-025 adds a thin Home client over one FastAPI Daily aggregate. Application policy
+combines bounded set-based repository reads; optional sources degrade independently
+through savepoints. The aggregate performs no AI/provider work, raw Evidence load,
+new persistence or cache. Browser focus and local-midnight refresh replace polling.
+
 WO-009 keeps beta controls inside the modular monolith. Seven focused
 tenant-owned tables store retention, notice acknowledgement, onboarding, UTC
 usage counters, feedback, data requests and safe events. Explicit predicates,
@@ -172,6 +177,7 @@ FastAPI exposes:
 - `GET /health` for process health;
 - `GET /ready` for honest configured-dependency readiness;
 - `GET /api/v1/me` for the authenticated identity and active organisation context;
+- `GET /api/v1/daily` for the bounded tenant/user-scoped RevenueOS Daily Home projection;
 - CRUD collections and resources under `/api/v1/companies`, `/api/v1/contacts`, `/api/v1/opportunities` and `/api/v1/tasks`;
 - an enriched opportunity list, aggregate read at `/api/v1/opportunities/{opportunityId}/workspace` and stale-write-safe meeting association at `/api/v1/meetings/{meetingId}/opportunity`;
 - meeting, nested participant, singular transcript and audit-history resources under `/api/v1/meetings`;

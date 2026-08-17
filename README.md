@@ -14,7 +14,8 @@ Journal, WO-014 Visual Evidence/Presentation Mode, WO-015 Recording &
 Transcription Foundation, WO-016 Browser Face-to-Face Companion, WO-017 Phone
 Call Intelligence, WO-018 Online Meeting Capture, WO-019 Documents & Email
 Evidence, WO-020 Live Interaction Intelligence, WO-021 Action Layer, WO-022
-Integrations & Execution Foundation and WO-024 Sales Methodology Engine. Interactions, Meetings,
+Integrations & Execution Foundation, WO-024 Sales Methodology Engine and WO-025
+RevenueOS Daily. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -92,6 +93,10 @@ BANT and SPICED plus bounded versioned custom definitions. The deterministic eng
 maps current validated Evidence into categorical, source-linked field states and adds
 Opportunity Deal and Settings experiences. It adds no qualification score, stage
 blocking, rep ranking, new top-level navigation item or external provider call.
+WO-025 makes the compatible `/dashboard` route Home / RevenueOS Daily. One bounded
+personal read model composes local-day Interactions, current Actions, explainable deal
+attention, currency-safe descriptive pipeline and existing Next Best Action. It adds
+no migration, target/forecast engine, deal score, new AI/provider or Daily nav item.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
@@ -99,17 +104,22 @@ scoring, forecasting, privileged browser database access, background recording
 guarantees, general media ingestion beyond the reviewed visual/audio paths,
 live sending/integration or billing is implemented.
 
+Synthetic demo dataset v13 makes Home useful without provider calls: it includes
+near-term prepared Interactions, two current Action Layer items (one overdue), an
+important methodology gap and an AUD 420,000 open Opportunity. Demo content remains
+explicitly synthetic; Daily still presents no forecast or invented target.
+
 ## Product blueprint
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-The proposed direction beyond the current WO-024 baseline is defined by the
+The proposed direction beyond the current WO-025 baseline is defined by the
 [End-to-End Sales Platform vision](docs/01-product/end-to-end-sales-platform-vision.md),
 [commercial packaging](docs/01-product/revenueos-commercial-packaging.md),
 [simplicity-first information architecture](docs/02-design/revenueos-information-architecture.md)
 and [conditional WO-024–045 roadmap](docs/06-roadmap/end-to-end-sales-platform-roadmap.md).
-WO-024 implements only the Sales Methodology slice; later roadmap items remain
-unauthorised.
+WO-024 implements Sales Methodology and WO-025 implements RevenueOS Daily; later
+roadmap items remain unauthorised.
 
 WO-010 defines the approved direction in the
 [Interaction Intelligence vision](docs/01-product/interaction-intelligence-vision.md),
@@ -212,7 +222,7 @@ Public web routes:
 
 Protected routes:
 
-- `/dashboard`
+- `/dashboard` — Home / RevenueOS Daily
 - `/onboarding`
 - `/select-organisation`
 - `/companies`
@@ -271,6 +281,7 @@ API routes:
 - `GET /ready` — configured dependency readiness
 - `GET /health/ready` — canonical configured dependency readiness
 - `GET /api/v1/me` — trusted authenticated user and organisation context
+- `GET /api/v1/daily?timezone=Australia%2FSydney` — bounded personal RevenueOS Daily read model
 - beta notice, onboarding, feedback and tenant-admin operations under
   `/api/v1/beta`
 - CRUD under `/api/v1/companies`
