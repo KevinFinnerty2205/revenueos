@@ -25,6 +25,14 @@ OS. [RevenueOS Core](revenueos-core-product.md) remains independently valuable;
 See the [platform vision](end-to-end-sales-platform-vision.md) and
 [information architecture](../02-design/revenueos-information-architecture.md).
 
+WO-024 now implements the Sales Methodology Engine and WO-025 implements RevenueOS
+Daily as the protected Home experience. Checkpoint 1 concludes that the Core
+foundation is differentiated but should not proceed to Prospect until target-
+environment design-partner readiness, simpler Core navigation/onboarding,
+evidence-backed Ask RevenueOS and one selected production CRM path are validated.
+See the
+[Core readiness decision](../06-roadmap/checkpoint-1-core-competitive-readiness.md).
+
 ## Product definition
 
 RevenueOS AI is a multi-tenant relationship-intelligence platform. Sales Brain will help relationship-driven revenue professionals prepare for conversations, capture useful context, reduce administration and follow through thoughtfully.
@@ -217,3 +225,22 @@ WO-024 adds MEDDIC, MEDDPICC, BANT, SPICED and bounded custom organisation
 methodologies to RevenueOS Core. They organise current validated Evidence into
 reviewable categorical field states under Opportunity → Deal. There is no percentage,
 qualification score, close probability, stage gate or new top-level navigation item.
+
+## RevenueOS Daily now implemented
+
+WO-025 makes Home a bounded personal day plan with one deterministic top priority,
+local-day Interactions, current Actions, explainable deal attention, descriptive
+currency-safe pipeline and existing Next Best Action focus. It does not add targets,
+forecast, team/manager aggregation, a new AI engine or a new navigation destination.
+
+## Checkpoint 1 readiness boundary
+
+RevenueOS cannot currently promise that it handles sales administration after a
+meeting. It can prepare source-aware intelligence, follow-up and CRM-ready Action
+proposals, but every email/calendar/CRM/task execution is a labelled simulation and
+the Assistant is a placeholder. Production customer-data use also remains prohibited
+until the target-environment gates are approved.
+
+The recommended next sequence is documentation-only: WO-025A Core Experience &
+Design-Partner Readiness, WO-025B Ask RevenueOS and WO-025C one selected Core CRM
+Sync path, followed by observed Checkpoint 1B before WO-026 Prospect.

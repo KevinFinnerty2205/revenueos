@@ -94,6 +94,19 @@ The roadmap is intentionally conditional. Checkpoints after Core, top-of-funnel 
 product/platform stages decide keep, modify, defer or remove using customer behaviour,
 trust, safety, operability and commercial evidence.
 
+## Checkpoint 1 outcome
+
+Checkpoint 1 was completed after WO-024 and WO-025. It preserved the WO-023 product,
+package, truth and architecture boundaries, but revised sequencing to insert WO-025A
+Core Experience & Design-Partner Readiness, WO-025B Ask RevenueOS and WO-025C one
+selected production Core CRM path before WO-026. It also places Core Win/Loss
+Intelligence after WO-036 and revises WO-042 to expand a proven first CRM connector.
+
+See the
+[Checkpoint 1 record](checkpoint-1-core-competitive-readiness.md) and
+[roadmap decision](../06-roadmap/checkpoint-1-core-competitive-readiness.md). This
+cross-reference does not rewrite or expand WO-023's historical implementation scope.
+
 ## Validation boundary
 
 This work order validates Markdown structure/formatting, local links and anchors,
