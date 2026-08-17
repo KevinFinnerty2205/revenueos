@@ -1,7 +1,12 @@
 # RevenueOS Core product
 
-- **Status:** Future product definition; current capability is explicitly identified below
+- **Status:** Core definition through Checkpoint 1; implemented and future capability
+  is explicitly identified below
 - **Purpose:** Make Sales Brain indispensable without requiring another module
+
+Checkpoint 1 confirms the five-part Core boundary and adds a pre-Prospect readiness
+sequence. See the [Core capability floor](core-competitive-capability-floor.md) and
+[Checkpoint 1 decision](../06-roadmap/checkpoint-1-core-competitive-readiness.md).
 
 ## Core promise
 
@@ -50,9 +55,10 @@ and forecasts while preserving source and historical interpretation.
 
 ## Sales Methodology
 
-Methodology is included in Core. Evidence remains canonical; MEDDIC, MEDDPICC,
-BANT, SPICED, SPIN, Challenger, Sandler, GAP Selling, Solution Selling and a safe
-custom definition are projections over the same evidence.
+Methodology is included in Core. Evidence remains canonical. WO-024 implements
+MEDDIC, MEDDPICC, BANT, SPICED and safe bounded custom definitions as projections over
+the same Evidence. SPIN, Challenger, Sandler, GAP Selling and Solution Selling remain
+possible future configuration, not implemented standards.
 
 Each item is `confirmed`, `partially_supported`, `unknown`, `conflicting` or `stale`.
 The user sees what RevenueOS believes, why, the evidence, last support date,
@@ -71,6 +77,11 @@ Core eventually includes:
 - an explainable evidence-based forecast with ranges and calibration;
 - manager deal-attention views; and
 - coaching grounded in actual evidence and historical outcomes.
+
+Checkpoint 1 also confirms evidence-backed universal Search/**Ask RevenueOS** and
+responsible **Win/Loss Intelligence** as Core. Enough production CRM integration to
+read/match context and execute an approved Core update is Core-enabling
+infrastructure; the optional native CRM product remains an add-on.
 
 The default is a short narrative and action list. Charts and tables are drill-down.
 Forecasting in Core avoids forcing customers to buy an add-on to understand the
@@ -106,7 +117,10 @@ Core is mature when a seller can:
 4. see methodology gaps without maintaining dozens of fields;
 5. use an Account or Opportunity as the relationship workspace;
 6. understand target, forecast and risk explanations; and
-7. correct or delete AI-supported information and see that change propagate.
+7. ask account, Opportunity and portfolio questions and inspect the supporting
+   sources;
+8. prepare and apply an approved change to the selected system of record; and
+9. correct or delete AI-supported information and see that change propagate.
 
 ## Simplicity test
 
@@ -134,7 +148,10 @@ See [Sales Methodology architecture](../03-engineering/sales-methodology-engine-
 [Intelligence architecture](../03-engineering/sales-analytics-targets-forecast-architecture.md)
 and [Daily experience](../02-design/revenueos-daily-experience.md).
 
-WO-024 now implements the methodology slice of Core: one organisation default or
-none, four immutable standards, bounded custom definitions, explainable Opportunity
-views and preparation/action context. It does not implement Daily, analytics,
-forecasting, manager dashboards or methodology-based rep measurement.
+WO-024 implements the methodology slice of Core: one organisation default or none,
+four immutable standards, bounded custom definitions, explainable Opportunity views
+and preparation/action context. WO-025 implements the personal RevenueOS Daily Home.
+Analytics, Win/Loss, targets, forecasting, coaching, manager views, Ask RevenueOS and
+production external execution remain future work. Checkpoint 1 recommends WO-025A
+Core readiness, WO-025B Ask RevenueOS and WO-025C one selected CRM path before
+WO-026 Prospect; the recommendation does not authorise implementation.

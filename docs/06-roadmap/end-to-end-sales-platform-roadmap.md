@@ -1,8 +1,13 @@
 # End-to-end Sales Platform roadmap
 
-- **Status:** Proposed sequence after WO-023; no listed work order is authorised by this document
-- **Baseline:** Through WO-022 is implemented; WO-023 is documentation only
+- **Status:** Revised by Checkpoint 1; no proposed work order is authorised by this document
+- **Baseline:** WO-024 Sales Methodology and WO-025 RevenueOS Daily are implemented
 - **Decision rule:** Validate each loop before funding the next layer
+
+Checkpoint 1 selected **Option 2**: Core design-partner readiness, Ask RevenueOS and
+one selected production CRM path must precede WO-026. See the
+[checkpoint decision](checkpoint-1-core-competitive-readiness.md) and
+[roadmap adjustments](core-roadmap-adjustments-after-checkpoint-1.md).
 
 ## Outcome and sequencing principles
 
@@ -16,17 +21,10 @@ The numbered work orders describe traceable planning units, not an unconditional
 build queue. A checkpoint can keep, modify, defer or remove any later item. Provider
 selection, legal review, user evidence and operational readiness can change sequence.
 
-```mermaid
-flowchart LR
-    B["Implemented baseline through WO-024"] --> A["Stage A: Core habit\nWO-025"]
-    A --> C1{"Checkpoint 1\nCore validation"}
-    C1 --> T["Stage B: Top of funnel\nWO-026–031"]
-    T --> C2{"Checkpoint 2\nProspect and Engage validation"}
-    C2 --> P["Stage C: Convert and manage\nWO-032–039"]
-    P --> C3{"Checkpoint 3\nProduct/platform validation"}
-    C3 --> X["Stage D: Ecosystem and handover\nWO-040–044"]
-    X --> Z["WO-045 End-to-End Sales OS Beta"]
-```
+The conditional sequence is Stage A2 (WO-025A–025C) → observed Checkpoint 1B →
+Stage B (WO-026–031) → Checkpoint 2 → Stage C (WO-032–039, including WO-036B) →
+Checkpoint 3 → Stage D (WO-040–044) → WO-045. A failed or inconclusive checkpoint
+changes the next smallest experiment rather than automatically advancing.
 
 Microsoft 365 and Google Workspace discovery starts before Engage, but implementation
 is pulled forward only for the ecosystem most used by design partners. Do not build
@@ -108,11 +106,74 @@ discovery remain with their later owning work orders.
 
 ## Checkpoint 1 — Core product user validation
 
-Decide **keep, modify, defer or remove** for each proposed Stage B item. Proceed only
-if users can navigate unaided, trust Evidence/methodology explanations, use Daily to
-start meaningful work and still value Core without an add-on. Revisit navigation,
-ranking, methodology burden, missing-data handling and willingness to adopt—not just
-stated interest.
+The 17 August 2026 review selected **Option 2 — insert Core work before WO-026**.
+Repository inspection and current official category evidence found a differentiated
+foundation but four material readiness gaps: target-environment design-partner use,
+Core navigation/onboarding simplicity, evidence-backed universal Search/Ask and one
+real approved CRM update path.
+
+### WO-025A — Core Experience & Design-Partner Readiness
+
+- **Objective/value/package:** Make the implemented Core loop safe, understandable
+  and supportable for the first real design-partner cohort. **Core**.
+- **Dependencies/checkpoint:** WO-024–025, private-beta controls and target-environment
+  security/privacy/operations evidence.
+- **Experience:** Outcome-led first-interaction onboarding; Core-only task navigation;
+  mobile Today/Interactions/Actions/Search; Opportunity summary → why → Evidence.
+- **Technical scope:** Productise one existing capture-to-review path plus its
+  no-recording fallback; preserve compatible routes and current domain boundaries.
+- **Acceptance:** Permitted real customer use, unaided journey completion, supported
+  capture/review/recovery and declared time-to-value; no unresolved high release risk
+  without owner/rollback.
+- **Out of scope:** New intelligence extractor, meeting-provider matrix, Ask, live
+  connector, Prospect, forecast or manager surface.
+- **Validate:** Observe first-interaction completion, correction/trust, navigation,
+  mobile use and support burden with the offered cohort.
+
+### WO-025B — Ask RevenueOS
+
+- **Objective/value/package:** Provide permission-scoped universal Search and cited
+  Q&A over authorised Core knowledge. **Core**.
+- **Dependencies/checkpoint:** WO-025A experience/launch boundary; current Evidence,
+  Revenue Brain, Methodology, Action and Workspace projections.
+- **Experience:** Search utility from Home/context; normal search, structured filters
+  and evidence-backed answers with deep links, unknown/conflicting/stale states.
+- **Technical scope:** Application-owned typed query plans; bounded final-source
+  retrieval; strict citation validation; optional provider synthesis with no tools.
+- **Acceptance:** Representative account/deal/portfolio questions answer or refuse
+  correctly; every material claim has an authorised citation; cross-role/tenant,
+  injection, deletion and bounded-result tests pass.
+- **Out of scope:** Generic chat, web/Prospect research, arbitrary SQL, transcript dump,
+  self-approved Action or persistent general conversation product.
+- **Validate:** Usefulness, citation/support rate, refusal correctness, latency and
+  repeated use.
+
+### WO-025C — Core CRM Sync
+
+- **Objective/value/package:** Complete one real CRM read/match and approved-write
+  loop while the customer's CRM remains authoritative. **Core integration foundation**.
+- **Dependencies/checkpoint:** Action/Execution Foundation, WO-025A release gate and
+  design-partner choice of Salesforce or HubSpot.
+- **Experience:** Admin connection/health and mapping; explicit record match/authority;
+  exact preview, confirmation, receipt, conflict and recovery inside current work.
+- **Technical scope:** One provider adapter, tenant-scoped binding/mapping, minimum
+  current-value reads, allow-listed field/activity/task updates, idempotency and
+  reconciliation.
+- **Acceptance:** Live sandbox/pilot connect/revoke/match/execute/reconcile succeeds;
+  retry cannot duplicate; human/provider conflicts do not silently overwrite; outage
+  leaves Core readable.
+- **Out of scope:** Both CRMs, connector matrix, arbitrary object ETL, autonomous bulk
+  updates, mail/calendar delivery and native CRM.
+- **Validate:** Setup time, match precision, proposal acceptance/edit, admin reduction,
+  conflicts, reliability and support cost.
+
+### Checkpoint 1B — observed Core validation
+
+Proceed to WO-026 only if real users can navigate unaided, trust and correct
+Evidence/methodology explanations, receive useful reviewed intelligence from a
+supported first Interaction, use Ask with valid citations, complete one approved CRM
+update and still value Core without an add-on. Decide **keep, modify, defer or remove**
+for every Stage B item from observed behaviour—not stated interest.
 
 ## Stage B — Create qualified pipeline safely
 
@@ -120,8 +181,8 @@ stated interest.
 
 - **Objective/value/package:** Source attributable business account/person candidates
   and promote accepted records without polluting the canonical domain. **Prospect**.
-- **Dependencies/checkpoint:** Checkpoint 1, provider/legal/source discovery, Evidence
-  model, Company/Contact CRUD and entitlement projection.
+- **Dependencies/checkpoint:** Checkpoint 1B pass, provider/legal/source discovery,
+  Evidence model, Company/Contact CRUD and entitlement projection.
 - **Experience:** Find search/discovery, result reasons/sources, detail, duplicate review
   and Save to Sell; clear prospect/lead/contact/account language.
 - **Domain/data:** Research subject/source/finding/run, contact observation, promotion
@@ -385,6 +446,32 @@ Create or CRM dependent on purchasing Prospect/Engage.
 - **Validate:** Confirm users can answer why pipeline changed and act without analyst
   training before adding targets.
 
+### WO-036B — Win/Loss Intelligence
+
+- **Objective/value/package:** Explain why an Opportunity was won or lost and identify
+  responsible themes across sufficiently defined cohorts. **Core**.
+- **Dependencies/checkpoint:** WO-035–036, explicit outcome lifecycle/review, stable
+  metric/cohort definitions and enough representative closed Opportunities.
+- **Experience:** Opportunity outcome explanation with citations/correction; Insights
+  aggregate themes with cohort, sample, freshness and source drill-down.
+- **Domain/data:** Immutable versioned deal outcome explanation, reviewed reason,
+  contributing factors and bounded aggregate observation; source Evidence remains
+  canonical.
+- **Backend/frontend/AI:** Deterministic source selection and cohort calculation;
+  bounded cited synthesis where useful; accessible narrative/table before charts.
+- **Integrations:** Internal canonical history first; external CRM outcomes only after
+  mapped authority and reconciliation are proven.
+- **Security/privacy/operations:** Outcome/team permission, no rep ranking, no raw
+  customer-content telemetry, source deletion/correction propagation and minimum-
+  sample policy.
+- **Acceptance:** Every deal-level material statement is cited or explicitly
+  user-supplied; aggregate themes reconcile to eligible outcomes; association is not
+  presented as causation; sparse cohorts are unavailable.
+- **Out of scope:** Automated causal claims, employee performance scoring, sentiment
+  verdicts, generic market research and fabricated close reasons.
+- **Validate:** Seller/manager correction and usefulness, cohort stability and whether
+  themes change enablement/deal decisions before forecasting consumes outcomes.
+
 ### WO-037 — Targets & KPI Engine
 
 - **Objective/value/package:** Compare supported individual/team outcomes with clear
@@ -410,8 +497,8 @@ Create or CRM dependent on purchasing Prospect/Engage.
 
 - **Objective/value/package:** Produce an evidence-based estimate and range with clear
   drivers, missing data and calibration. **Core**.
-- **Dependencies/checkpoint:** WO-024, WO-035–037, sufficient clean historical outcomes
-  and agreed deterministic/statistical MVP policy.
+- **Dependencies/checkpoint:** WO-024, WO-035–037 including WO-036B, sufficient clean
+  historical outcomes and agreed deterministic/statistical MVP policy.
 - **Experience:** Daily headline, Pipeline deal factors and Insights scenario drill-down;
   distinguish model, seller and manager views and show changes over time.
 - **Domain/data:** Versioned forecast run/snapshot, scenario/range, assumptions,
@@ -520,19 +607,20 @@ incremental reach justifies duplicate provider/security/operations work.
 
 ### WO-042 — CRM Connectors
 
-- **Objective/value/package:** Let customers retain an external CRM while RevenueOS
-  supplies interaction intelligence, Brain context and reviewed updates. **Core read
-  foundation with provider/update availability commercially determined later**.
-- **Dependencies/checkpoint:** Native CRM source-authority model, Action/Execution
-  Foundation, selected CRM demand and provider/security review.
+- **Objective/value/package:** Expand the validated WO-025C external-CRM foundation to
+  a second provider or broader bidirectional mappings only where customer evidence
+  justifies the cost. **Core integration expansion**.
+- **Dependencies/checkpoint:** Proven WO-025C connector, Native CRM source-authority
+  model where relevant, selected incremental demand and provider/security review.
 - **Experience:** Settings mapping/health/conflicts; source authority visible inside
   Sell/Pipeline; exact reviewed outbound updates and actionable sync errors.
 - **Domain/data:** Provider-neutral SyncBinding, field mapping/authority, cursor,
   tombstone, conflict and reconciliation state linked to canonical entities.
-- **Backend/frontend/AI:** One connector first, incremental idempotent sync and mapping;
-  conflict UI; AI never bypasses the reviewed Action boundary.
-- **Integrations:** Select by design-partner stack, API quality, scopes, sandbox and cost;
-  do not promise a connector matrix in advance.
+- **Backend/frontend/AI:** Reuse the first provider-neutral binding/sync contract for a
+  second connector, wider field families or bounded backfill; AI never bypasses the
+  reviewed Action boundary.
+- **Integrations:** Add only the next validated CRM/provider scope; do not promise a
+  connector matrix in advance.
 - **Security/privacy/operations:** Secret/scopes, webhook signatures, field allow-lists,
   deletion policy, replay/backfill limits, provider outage/runbooks and safe telemetry.
 - **Acceptance:** Authority conflicts cannot silently overwrite; retries are idempotent;
@@ -620,15 +708,15 @@ incremental reach justifies duplicate provider/security/operations work.
 
 ## Release definitions
 
-| Release                     | Minimum credible boundary                                                                                                                                                                                        |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Sales Brain Beta**        | Deliberate Interaction input/capture path, reviewable debrief and Evidence, longitudinal Revenue Brain/Opportunity Workspace, safe Action proposals and production-ready identity/privacy for the offered cohort |
-| **End-to-End Core Beta**    | Sales Brain Beta plus methodology, Daily, Workspace, actionable Intelligence/analytics/targets and an honest evidence-based forecast or explicit unavailable state                                               |
-| **Prospect Beta**           | Approved sourced research, trust/contact states, ICP/territory and safe promotion into Sell, with provider/privacy operations                                                                                    |
-| **Engage Beta**             | Person-specific reviewed outreach and only the validated campaign/event subset, with suppression, provider execution and incident controls                                                                       |
-| **Create Beta**             | Secure template/content ingestion, evidence-grounded presentation/proposal generation and deterministic ROI where offered                                                                                        |
-| **CRM Beta**                | Minimum lovable native mode inside Sell/Pipeline, safe import and clear authority; connectors only if separately live-ready                                                                                      |
-| **RevenueOS Complete Beta** | End-to-End Core plus only module betas that independently meet their gates; one coherent entitlement/navigation/support experience                                                                               |
+| Release                     | Minimum credible boundary                                                                                                                                                                                                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sales Brain Beta**        | Deliberate Interaction input/capture path, reviewable debrief and Evidence, longitudinal Revenue Brain/Opportunity Workspace, safe Action proposals and production-ready identity/privacy for the offered cohort                 |
+| **End-to-End Core Beta**    | Sales Brain Beta plus methodology, Daily, Workspace, evidence-backed Ask, one production-approved CRM update path, actionable Intelligence/analytics/targets and an honest evidence-based forecast or explicit unavailable state |
+| **Prospect Beta**           | Approved sourced research, trust/contact states, ICP/territory and safe promotion into Sell, with provider/privacy operations                                                                                                    |
+| **Engage Beta**             | Person-specific reviewed outreach and only the validated campaign/event subset, with suppression, provider execution and incident controls                                                                                       |
+| **Create Beta**             | Secure template/content ingestion, evidence-grounded presentation/proposal generation and deterministic ROI where offered                                                                                                        |
+| **CRM Beta**                | Minimum lovable native mode inside Sell/Pipeline, safe import and clear authority; connectors only if separately live-ready                                                                                                      |
+| **RevenueOS Complete Beta** | End-to-End Core plus only module betas that independently meet their gates; one coherent entitlement/navigation/support experience                                                                                               |
 
 Sales Brain Beta can be the first commercial product. No release requires every future
 module, both productivity ecosystems or every connector.
@@ -684,5 +772,6 @@ the numbering is less important than preserving trust and simplicity.
 
 The Sales Methodology Engine is implemented as the first Core work order after the
 WO-023 blueprint. MEDDIC, MEDDPICC, BANT, SPICED, bounded custom definitions,
-evidence-linked projections and review are current. WO-025 RevenueOS Daily and every
-later roadmap item remain conditional and unauthorised by WO-024.
+evidence-linked projections and review are current. WO-025 RevenueOS Daily is also
+implemented. Checkpoint 1 now recommends WO-025A–025C and Checkpoint 1B before WO-026;
+every proposed later item remains conditional and unauthorised by this roadmap.

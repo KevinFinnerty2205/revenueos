@@ -30,6 +30,7 @@ This is the canonical product and engineering documentation index. Documents dis
 24. [ADR 0035: End-to-End Sales OS architecture](08-decisions/0035-end-to-end-sales-os-architecture.md)
 25. [Sales Methodology Engine implementation](03-engineering/sales-methodology-engine-implementation.md) — current WO-024 Core boundary
 26. [RevenueOS Daily implementation](03-engineering/revenueos-daily-implementation.md) — current WO-025 Home boundary
+27. [Checkpoint 1 Core competitive readiness](06-roadmap/checkpoint-1-core-competitive-readiness.md) — Option 2 pre-Prospect decision
 
 ## 00 — Company
 
@@ -50,6 +51,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [End-to-End Sales Platform vision](01-product/end-to-end-sales-platform-vision.md)
 - [RevenueOS commercial packaging](01-product/revenueos-commercial-packaging.md)
 - [RevenueOS Core](01-product/revenueos-core-product.md)
+- [Core competitive capability floor](01-product/core-competitive-capability-floor.md)
+- [RevenueOS versus the revenue-intelligence category](01-product/revenueos-vs-revenue-intelligence-category.md)
 - [RevenueOS Prospect](01-product/revenueos-prospect.md)
 - [RevenueOS Engage](01-product/revenueos-engage.md)
 - [RevenueOS Create](01-product/revenueos-create.md)
@@ -87,6 +90,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Mobile Sales OS experience](02-design/mobile-sales-os-experience.md)
 - [Simplicity and discoverability principles](02-design/simplicity-and-discoverability-principles.md)
 - [Sales Methodology UX](02-design/sales-methodology-ux.md)
+- [Core simplicity readiness review](02-design/core-simplicity-readiness-review.md)
 
 ## 03 — Engineering
 
@@ -219,6 +223,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Sales OS module entitlement architecture](03-engineering/sales-os-module-entitlement-architecture.md)
 - [End-to-End Sales Platform security and privacy](03-engineering/end-to-end-sales-platform-security-privacy.md)
 - [End-to-End Sales Platform risk register](03-engineering/end-to-end-sales-platform-risk-register.md)
+- [Core capability gap analysis](03-engineering/core-capability-gap-analysis.md)
 
 ## 04 — AI
 
@@ -248,6 +253,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Long-range product roadmap](06-roadmap/product-roadmap.md)
 - [Interaction Intelligence roadmap](06-roadmap/interaction-intelligence-roadmap.md)
 - [End-to-End Sales Platform roadmap](06-roadmap/end-to-end-sales-platform-roadmap.md)
+- [Checkpoint 1 Core competitive readiness](06-roadmap/checkpoint-1-core-competitive-readiness.md)
+- [Core roadmap adjustments after Checkpoint 1](06-roadmap/core-roadmap-adjustments-after-checkpoint-1.md)
 
 ## 07 — Sprint records
 
@@ -291,6 +298,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-023: End-to-End Sales Platform Blueprint](07-sprints/wo-023-end-to-end-sales-platform-blueprint.md)
 - [WO-024: Sales Methodology Engine](07-sprints/wo-024-sales-methodology-engine.md)
 - [WO-025: RevenueOS Daily](07-sprints/wo-025-revenueos-daily.md)
+- [Checkpoint 1: Core competitive and product readiness](07-sprints/checkpoint-1-core-competitive-readiness.md)
 
 ## 08 — Decision records
 
