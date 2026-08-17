@@ -8,6 +8,11 @@ document.
 
 The roadmap preserves one demonstrable outcome per sprint where practical. It takes the current Sprint 1–3 baseline to a narrow design-partner loop before broadening integrations. Sprint numbers express sequence, not committed dates; estimates require team capacity, provider access and design-partner availability.
 
+The implemented post-blueprint Core baseline now also includes WO-025 RevenueOS
+Daily: the compatible `/dashboard` Home route uses one bounded personal read model
+for Interactions, Actions, deal attention, descriptive pipeline and existing Next
+Best Action. It does not bring later target, forecast or manager capabilities forward.
+
 ## Sequencing principles
 
 - Build the meeting domain before ingestion and AI.

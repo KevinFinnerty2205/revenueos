@@ -13,6 +13,14 @@ one deterministic example membership.
 
 Every request derives its user and organisation from the auth adapter. Client-supplied organisation identifiers do not select a tenant and are forbidden from create/update contracts. Tenant dependencies recheck that the trusted user has an active local membership before setting the database tenant context. Private-beta roles are limited to `admin` and `member`; administration and destructive-request routes enforce `admin` server-side, while active members retain the existing product access.
 
+WO-025 Daily reuses that boundary and then narrows the projection to the current
+user's created Interactions, created Actions attached to owned Opportunities and
+owned open Opportunities/pipeline. Admin does not imply team visibility. Daily never
+selects transcript/document/email bodies, raw Evidence values, prompts or provider
+payloads and persists no snapshot. Its logs contain only IDs, local date/timezone,
+controlled priority type, counts, source availability and a partial flag. See the
+[Daily security review](revenueos-daily-security-privacy-review.md).
+
 ## Tenant isolation
 
 - Organisation-owned queries include explicit organisation predicates.

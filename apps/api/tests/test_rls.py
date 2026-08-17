@@ -17,6 +17,7 @@ from revenueos.ai_worker_repositories import AIWorkerRepository
 from revenueos.auth import VerifiedIdentity, _resolve_identity
 from revenueos.beta_services import BetaService
 from revenueos.config import Settings
+from revenueos.daily_repositories import DailyRepository
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import AIJobStatus
 from revenueos.errors import PublicAPIError
@@ -1685,6 +1686,19 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 ) as session:
                     repository = AIJobRepository(session)
                     worker_repository = AIWorkerRepository(session)
+                    daily_repository = DailyRepository(session)
+                    own_daily_opportunities = await daily_repository.opportunities(
+                        tenant_a["organisation_id"],
+                        tenant_a["user_id"],
+                    )
+                    assert {item.opportunity.id for item in own_daily_opportunities} == {tenant_a["opportunity_id"]}
+                    assert (
+                        await daily_repository.opportunities(
+                            tenant_b["organisation_id"],
+                            tenant_b["user_id"],
+                        )
+                        == []
+                    )
                     assert (
                         await worker_repository.claim_next(
                             tenant_b["organisation_id"],

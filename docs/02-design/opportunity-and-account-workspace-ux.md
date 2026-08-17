@@ -119,3 +119,8 @@ all fields, Evidence/provenance, review controls and history on demand. On mobil
 remains a single-column summary rather than a matrix. Methodology is absent from
 top-level navigation and RevenueOS remains fully usable when the organisation selects
 none. See [Sales Methodology UX](sales-methodology-ux.md).
+
+WO-025 adds only source links into this existing workspace: Daily Action and deal
+cards open the Opportunity, methodology gaps remain controlled summaries, and an
+existing Next Best Action deep link opens its current workspace section. Daily does
+not duplicate Evidence, Methodology, Action review or Revenue Brain history.

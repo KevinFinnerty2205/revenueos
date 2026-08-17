@@ -1,122 +1,102 @@
 # RevenueOS Daily experience
 
-- **Status:** Future Core experience; not implemented
+- **Status:** Implemented in WO-025
 - **Question:** What matters today?
 
-## Experience contract
+Daily is the default signed-in Home at `/dashboard`. It turns authorised, current
+persisted state into a short action-oriented plan. It is not a generic analytics
+dashboard, notification inbox or second copy of the source workflows.
 
-Daily is the default signed-in destination. It turns authorised current state into a
-short, action-oriented day plan. It is not a dashboard of every available metric.
-
-Priority order is deterministic and explainable: time-critical Interaction,
-customer/commitment deadline, approved/action-required work, materially at-risk deal,
-then target/pipeline focus. Users can snooze or dismiss a recommendation with a
-reason; that choice is not silently promoted to customer fact.
-
-## Desktop concept
+## Desktop hierarchy
 
 ```text
-Good morning Kevin                         Search or ask RevenueOS
+Home · RevenueOS Daily                         Search
 
-FOCUS NOW
-Prepare for Qantas security workshop                      Prepare →
-Starts 10:30 · Security decision criteria still unknown   Why this?
+Good morning, Kevin
+Monday, 17 August · What matters today
 
-TODAY                        ACTIONS
-3 customer interactions      5 need attention
-Next: Qantas, 10:30           2 customer-facing · 3 internal
+TOP PRIORITY
+Prepare for Qantas technical review
+10:00 · Economic Buyer is still unknown.       Prepare →
+
+TODAY'S INTERACTIONS              DAILY CONTEXT
+chronological, maximum five       Open pipeline
+
+ACTIONS                           Recommended focus
+current, maximum five
 
 DEALS NEEDING ATTENTION
-Qantas — procurement owner unknown                         Open deal →
-Acme — close date conflicts with legal timeline            Review conflict →
-
-TARGET          FORECAST        PIPELINE
-$158K / $200K   $175K–$195K     3.4× qualified coverage
-You may need approximately $110K additional qualified pipeline.
-Find opportunities →
-
-LATER TODAY
-Four bounded upcoming or due items                         View day →
+explainable, maximum three
 ```
 
-The first card has one primary action. Summary tiles are textual and secondary.
-Charts appear only after opening Insights.
+The dark priority card is the single visual focal point. Source sections remain
+bounded, textual and actionable. Pipeline/Recommended focus use a narrower secondary
+column. No chart competes with the next action.
 
-## Mobile concept
+## Mobile hierarchy
 
 ```text
-Today
+Home · RevenueOS Daily              Search
 
-[ Focus now ]
-Prepare for Qantas
-10:30 · 8 min
-[Prepare]
+Good morning, Kevin
 
-2 actions need attention
-[Review]
+NEXT
+Qantas · 10:00
+Economic Buyer is still unknown.
+[ Prepare ]
 
-1 deal needs help
-[Open Qantas]
-
-Target $158K / $200K
-Forecast $175K–$195K
-
-Today   Interactions   Actions   Search
+Actions
+Deals needing attention
+Later today
+Open pipeline
+Recommended focus
 ```
 
-Mobile shows one focus item and collapsed counts. A contextual card takes priority:
-**Meeting in 10 minutes → Prepare** or **Meeting finished → Debrief**. No horizontal
-pipeline or full manager table is shown.
+The next Interaction replaces a duplicate large priority card when they refer to the
+same item. Today's remaining Interactions are reduced to two simple links. Multi-
+currency detail is hidden on mobile, while counts and links remain available.
 
-## Sections
+## Section contracts
 
-- **Focus now:** one recommendation, time/reason and primary action.
-- **Today's Interactions:** chronological, with phase-specific Prepare/Start/Debrief.
-- **Actions:** overdue, approval required, failed execution or due soon.
-- **Deals needing attention:** at most three material, evidence-backed exceptions.
-- **Target/forecast/pipeline:** compact headline, range and one explanation.
-- **Suggested focus:** bounded prospecting, coaching or content action after higher
-  priority work.
+- **Top priority:** exactly zero or one deterministic focus with reason and CTA.
+- **Today's Interactions:** current user's non-cancelled local-day Interactions in
+  effective-time order; CTA is Prepare, Prepare for meeting, Open Companion, Capture
+  what happened or Open interaction.
+- **Actions:** proposed, edited and approved-but-open work only; current timing/state
+  and source Opportunity remain visible.
+- **Deals needing attention:** at most three owned open Opportunities; each shows why
+  through at most two controlled current reasons. There is no deal-health score.
+- **Open pipeline:** descriptive owned open value, separately by currency, plus
+  closing-this-month value. It is explicitly not forecast.
+- **Recommended focus:** up to three existing current Next Best Actions. Daily does
+  not create another recommendation.
 
 ## First-time, empty and failure states
 
-- First-time: explain Sales Brain in one sentence and offer **Add your next
-  interaction**. Do not show a grid of empty charts.
-- No work today: confirm there is no urgent work, then offer recent Accounts or one
-  useful pipeline-building action.
-- Partial source failure: retain available sections, timestamp last-known data and
-  disable only unsafe actions.
-- No target/forecast: show **Set a target** or explain that an administrator owns it;
-  do not invent progress.
-- No add-on: retain the pipeline-gap explanation and replace the Prospect action with
-  a calm learn-more link.
+- No Opportunities: one welcome card explains the prepare/capture loop and offers
+  **Add an opportunity**. Empty analytics are removed.
+- Opportunities but no Interactions: show **No customer interactions scheduled
+  today**, then useful Actions/deals/pipeline/recommendations.
+- Nothing urgent: calmly show **You're caught up** and keep the useful context.
+- Partial source failure: retain available sections and show only
+  **Actions temporarily unavailable** (or the relevant source).
+- Total failure: **RevenueOS couldn't load your day**, Retry and direct links to
+  Interactions and Opportunities.
+
+Loading uses a restrained skeleton. “Updated just now” is subtle, and browser focus
+or the next local midnight triggers one refresh without polling.
 
 ## Explainability and control
 
-**Why this?** opens Level 2 with the rule, evidence, dates and conflicts. **Show
-evidence** opens Level 3. The user can correct associations, snooze, dismiss or open
-the source. Daily never hides the underlying due date, risk or forecast assumption.
+Each card links to its existing source workflow for evidence, history and correction.
+Daily exposes the deterministic product-safe reason but not raw Evidence or Brain
+history. It contains no mutation, approval, execution or send control itself.
+Dismiss/snooze is deferred until an approved preference and outcome contract exists.
 
-## Data flow
+Targets remain WO-037, forecasting remains WO-038 and team/manager Daily remains
+WO-039. Without canonical target/forecast inputs Daily omits them instead of showing
+placeholders that look authoritative.
 
-```mermaid
-flowchart LR
-    I["Interactions and calendar"] --> P["Priority policy"]
-    A["Actions and commitments"] --> P
-    B["Revenue Brain and methodology gaps"] --> P
-    T["Targets, forecast and pipeline"] --> P
-    E["Entitlements and permissions"] --> P
-    P --> D["Bounded Daily projection"]
-    D --> X["Explanation and source links"]
-    D --> U["User action, snooze or correction"]
-    U -. "outcome metadata" .-> P
-```
-
-Application policy owns ranking and caps. AI may phrase a supported explanation but
-does not choose hidden priorities, expand permissions or create facts.
-
-## Success measures
-
-Measure priority opened/resolved, preparation/debrief completion, commitment
-follow-through, time to first useful action and dismiss/correction reasons. Do not
-measure keystrokes, screen time or constant presence.
+See [prioritisation](../03-engineering/revenueos-daily-prioritisation.md),
+[simplicity review](revenueos-daily-simplicity-review.md) and
+[security review](../03-engineering/revenueos-daily-security-privacy-review.md).

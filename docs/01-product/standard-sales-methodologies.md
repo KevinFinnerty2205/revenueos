@@ -1,5 +1,10 @@
 # Standard sales methodologies
 
+WO-025 RevenueOS Daily reuses the organisation's current WO-024 projection and may
+surface at most one important non-confirmed field per owned open Opportunity. It does
+not show the full framework, calculate completion, block stage movement or invent a
+qualification/deal score; the Opportunity remains the explanation and review surface.
+
 **Status:** Current RevenueOS Core behaviour from WO-024.
 
 RevenueOS supplies concise, original v1 definitions for four commonly named sales

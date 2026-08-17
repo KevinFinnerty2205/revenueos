@@ -1,5 +1,14 @@
 # API reference
 
+## RevenueOS Daily
+
+`GET /api/v1/daily?timezone=<IANA>` returns one strict, bounded personal Home read
+model. It composes local-day Interactions, current Actions, controlled deal-attention
+reasons, pipeline groups by currency and existing Next Best Actions. Optional source
+failures use availability flags; authentication/membership failures remain terminal.
+It returns no raw evidence/customer-source content or provider metadata. See the
+[Daily API guide](revenueos-daily-api.md).
+
 WO-018 adds `meetingPlatform`, normalised `meetingUrl`, `externalMeetingId`,
 `captureSource` and `ingestionState` to online Interaction contracts. It adds:
 

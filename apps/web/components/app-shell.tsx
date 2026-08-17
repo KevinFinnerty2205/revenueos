@@ -4,7 +4,7 @@ import { DevAuthBanner } from "@/components/dev-auth-banner";
 import { type AuthState, getAuthState } from "@/lib/auth";
 
 const navigation = [
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/dashboard", label: "Home" },
   { href: "/onboarding", label: "Getting started" },
   { href: "/companies", label: "Companies" },
   { href: "/contacts", label: "Contacts" },

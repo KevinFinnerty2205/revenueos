@@ -154,6 +154,7 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/api/v1/companies/{company_id}",
         "/api/v1/contacts",
         "/api/v1/contacts/{contact_id}",
+        "/api/v1/daily",
         "/api/v1/opportunities",
         "/api/v1/opportunities/{opportunity_id}",
         "/api/v1/opportunities/{opportunity_id}/brain/reasoning",

@@ -87,3 +87,8 @@ call, while preserving the global question cap. Executive meetings prioritise
 commercial authority/impact; workshops prioritise process/technical gaps. Confirmed
 fields are not mechanically asked. AI Debrief inherits these brief questions within
 its existing cap.
+
+WO-025 uses completed brief existence only to label a Daily Interaction prepared and
+link to `#preparation`; it does not hydrate brief content into Home. An unprepared
+Interaction within four hours may become the top priority. This read path creates no
+brief or provider call.

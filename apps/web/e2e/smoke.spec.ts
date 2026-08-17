@@ -49,10 +49,57 @@ test("landing page explains the current product honestly", async ({ page }) => {
 test("development user can open the protected dashboard shell", async ({
   page,
 }) => {
+  await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
+    await route.fulfill({
+      json: {
+        generatedAt: "2026-08-17T00:00:00Z",
+        localDate: "2026-08-17",
+        timezone: "Australia/Sydney",
+        userDisplayName: "Alex Morgan",
+        topPriority: null,
+        nextInteraction: null,
+        todayInteractions: [],
+        totalTodayInteractions: 0,
+        actions: {
+          attentionCount: 0,
+          overdueCount: 0,
+          dueTodayCount: 0,
+          pendingReviewCount: 0,
+          approvedOpenCount: 0,
+          items: [],
+          truncated: false,
+        },
+        dealAttention: { attentionCount: 0, items: [], truncated: false },
+        pipeline: {
+          state: "empty",
+          openOpportunityCount: 0,
+          unvaluedOpportunityCount: 0,
+          currencyCount: 0,
+          currencies: [],
+          safeMessage:
+            "Open pipeline will appear here when you add an opportunity.",
+        },
+        recommendations: [],
+        availability: {
+          interactions: true,
+          actions: true,
+          dealAttention: true,
+          pipeline: true,
+          recommendations: true,
+          methodology: true,
+          revenueBrain: true,
+          targets: false,
+          forecast: false,
+        },
+        hasOpportunities: false,
+        caughtUp: true,
+      },
+    });
+  });
   await page.goto("/dashboard");
   await expect(page.getByText(/mock authentication is active/i)).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Today’s Priorities" }),
+    page.getByRole("heading", { name: /Good .*Alex/i }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
 });
