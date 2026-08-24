@@ -2557,3 +2557,99 @@ export interface ActionExecutionListResponse {
   items: ActionExecution[];
   total: number;
 }
+
+export type AskScopeType = "opportunity" | "account" | "workspace";
+export type AskQuestionClass =
+  | "deal_summary"
+  | "blocker_risk"
+  | "stakeholder"
+  | "methodology"
+  | "timeline"
+  | "commitment"
+  | "action"
+  | "buying_signal"
+  | "objection"
+  | "competitor"
+  | "decision"
+  | "customer_request"
+  | "security_legal"
+  | "procurement"
+  | "pricing_commercial"
+  | "recent_change"
+  | "evidence_lookup"
+  | "opportunity_filter"
+  | "daily_focus"
+  | "unsupported_public_web"
+  | "general_sales_question";
+export type AskAnswerStatus =
+  | "supported"
+  | "partially_supported"
+  | "conflicting"
+  | "unknown";
+
+export interface AskScope {
+  type: AskScopeType;
+  id: string | null;
+  label: string;
+}
+
+export interface AskSource {
+  id: string;
+  sourceType:
+    | "interaction"
+    | "accepted_evidence"
+    | "methodology"
+    | "revenue_brain"
+    | "action"
+    | "daily"
+    | "opportunity";
+  label: string;
+  occurredAt: string | null;
+  excerpt: string | null;
+  provenance:
+    | "customer_direct"
+    | "salesperson_reported"
+    | "seller_prepared"
+    | "imported_external"
+    | "validated_intelligence"
+    | "system_metadata";
+  href: string;
+}
+
+export interface AskSummaryPoint {
+  text: string;
+  sourceIds: string[];
+}
+
+export interface AskSuggestedAction {
+  label: string;
+  href: string;
+  sourceId: string | null;
+}
+
+export interface AskAnswer {
+  schemaVersion: 1;
+  askRequestId: string;
+  answer: string;
+  answerStatus: AskAnswerStatus;
+  questionClass: AskQuestionClass;
+  summaryPoints: AskSummaryPoint[];
+  sources: AskSource[];
+  uncertainties: string[];
+  suggestedAction: AskSuggestedAction | null;
+  followUpQuestions: string[];
+  scope: AskScope;
+  generatedAt: string;
+}
+
+export interface AskCapabilities {
+  enabled: boolean;
+  scope: AskScope;
+  supportedScopes: AskScopeType[];
+  retainedHistory: false;
+  publicWebResearch: false;
+  actionExecution: false;
+  maxQuestionCharacters: number;
+  maxSources: number;
+  safeMessage: string;
+}

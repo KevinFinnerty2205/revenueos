@@ -153,6 +153,12 @@ describe("RevenueBrainTimeline", () => {
     expect(
       screen.getAllByRole("link", { name: "Open meeting" })[0],
     ).toHaveAttribute("href", "/meetings/meeting-new");
+    expect(
+      screen.getByRole("link", { name: "Ask about this account" }),
+    ).toHaveAttribute(
+      "href",
+      "/assistant?mode=ask&scope=account&scopeId=company-1",
+    );
   });
 
   it("shows an empty state when the account has no snapshots", async () => {

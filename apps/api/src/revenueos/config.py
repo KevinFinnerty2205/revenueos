@@ -90,6 +90,11 @@ class Settings(BaseSettings):
         le=20_000_000_000,
     )
     private_beta_max_email_analyses_per_day: int = Field(default=50, ge=1, le=2_000)
+    private_beta_max_ask_questions_per_user_per_day: int = Field(default=75, ge=1, le=1_000)
+    private_beta_max_ask_questions_per_organisation_per_day: int = Field(default=500, ge=1, le=10_000)
+    private_beta_ask_max_sources: int = Field(default=12, ge=1, le=20)
+    private_beta_ask_max_context_characters: int = Field(default=16_000, ge=1_000, le=50_000)
+    private_beta_ask_max_portfolio_results: int = Field(default=10, ge=1, le=20)
     private_beta_max_action_generations_per_day: int = Field(default=100, ge=1, le=5_000)
     private_beta_max_email_executions_per_day: int = Field(default=50, ge=1, le=5_000)
     private_beta_max_calendar_executions_per_day: int = Field(default=25, ge=1, le=2_000)
@@ -135,6 +140,7 @@ class Settings(BaseSettings):
     feature_document_evidence_enabled: bool = True
     feature_email_evidence_enabled: bool = True
     feature_sales_methodology_enabled: bool = True
+    feature_ask_revenueos_enabled: bool = True
     feature_live_interaction_intelligence_enabled: bool = False
     feature_live_interaction_external_ai_enabled: bool = False
     feature_action_layer_enabled: bool = True
@@ -407,6 +413,7 @@ class Settings(BaseSettings):
             "documentEvidence": self.feature_document_evidence_enabled,
             "emailEvidence": self.feature_email_evidence_enabled,
             "salesMethodology": self.feature_sales_methodology_enabled,
+            "askRevenueOS": self.feature_ask_revenueos_enabled,
             "liveInteractionIntelligence": self.feature_live_interaction_intelligence_enabled,
             "liveInteractionExternalAi": self.feature_live_interaction_external_ai_enabled,
             "actionLayer": self.feature_action_layer_enabled,

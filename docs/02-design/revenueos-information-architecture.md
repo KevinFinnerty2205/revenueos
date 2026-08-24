@@ -153,3 +153,11 @@ links:
 - Getting started and Feedback → contextual/help/settings destinations.
 
 Do not rename routes or remove current deep links in WO-023.
+
+## Current WO-025B Ask placement
+
+`/assistant` now defaults to deterministic Search and exposes **Ask RevenueOS** as a
+second mode. Opportunity and Account workspaces deep-link to that same utility with an
+explicit scope. Desktop/mobile top-level navigation remains unchanged. The scope label
+persists through each independent question, while source details and follow-ups use
+progressive disclosure. Ask is a Core utility, not Prospect or a new product area.

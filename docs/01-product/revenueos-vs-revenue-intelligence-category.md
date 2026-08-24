@@ -62,7 +62,7 @@ marketed to mid-market revenue teams.
 | CRM administration removed            | Automatic mapped field/activity/task updates     | Strong proposal/approval/simulation boundary, no real connector                         | Move one CRM path before Prospect; keep review-by-default                     |
 | Methodology tracking                  | Framework extraction, often presented as a score | Explainable categorical states with sources, freshness and conflicts                    | Keep the trust advantage; counts may scan, never replace state                |
 | Deal risk and next steps              | Portfolio risk warnings and recommended actions  | Strong source-level risks, gaps and personal Daily; fragmented portfolio view           | Complete source-neutral deal/pipeline projection in WO-035                    |
-| Natural-language answers              | Ask across calls/deals/accounts                  | Placeholder only                                                                        | Make Ask RevenueOS Core and pre-Prospect                                      |
+| Natural-language answers              | Ask across calls/deals/accounts                  | Bounded cited Opportunity, Account and user-owned workspace Ask                         | Validate trust/usefulness; do not widen into generic research                 |
 | Forecast                              | Continuously updated deal/team forecast          | Explicitly not implemented                                                              | Keep WO-038 until enough lifecycle/history evidence exists                    |
 | Coaching                              | Scorecards, call examples and automated feedback | Opportunity guidance but no coaching product                                            | Build evidence/outcome-linked coaching in WO-039; reject rep-score theatre    |
 | Manager visibility                    | Team deal risk, forecast, reports and coaching   | Personal Daily only                                                                     | Keep WO-039 after reliable team metrics/forecast                              |
@@ -115,8 +115,9 @@ more notifications.
 
 1. **The external loop is not real.** There is no production CRM, mail, calendar or
    meeting-platform connector, and customer data remains prohibited.
-2. **Accumulated knowledge is hard to retrieve.** The Assistant/Search destination is
-   a placeholder even though retrieval is a central category expectation.
+2. **Accumulated knowledge retrieval is newly bounded.** WO-025B adds cited Ask over
+   authorised RevenueOS data, but no public research, broad manager scope or persisted
+   conversations; real cohort usefulness remains to be observed.
 3. **Pipeline intelligence is incomplete.** Forecasting, analytics, Win/Loss,
    targets, team visibility and coaching are documented but absent.
 4. **The experience exposes architecture.** Eleven top-level links, a long stacked

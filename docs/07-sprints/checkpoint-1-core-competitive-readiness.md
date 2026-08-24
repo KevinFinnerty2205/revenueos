@@ -71,3 +71,8 @@ Core. Prospect, Engage, Create and optional native CRM remain add-ons.
 
 No historical work order was rewritten. Current documents were only clarified where
 WO-025 or this checkpoint changed the present-tense roadmap/product statement.
+
+WO-025A and WO-025B subsequently delivered the recommended Core experience and
+evidence-backed Ask slices. Ask is Core, not Prospect: it reads authorised RevenueOS
+data only and cannot research or execute. WO-025C and observed Checkpoint 1B remain
+pending/unauthorised until separately approved.

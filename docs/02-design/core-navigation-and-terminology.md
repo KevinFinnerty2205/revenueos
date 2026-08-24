@@ -31,3 +31,10 @@ Insights are not advertised before their owning capability exists.
 Technical terms remain in engineering documentation and operator diagnostics where
 they are necessary. They do not form the primary label or prerequisite for an
 ordinary seller workflow.
+
+WO-025B retains the navigation table unchanged. The Search destination contains
+**Search** and **Ask RevenueOS** modes; normal Search remains selected by default.
+Opportunity and Account headers use **Ask about this deal/account** as secondary links.
+Answer labels are **Supported by current evidence**, **Partially supported**,
+**Conflicting evidence** and **Not enough reliable evidence**. Provider, RAG, vector,
+prompt and retrieval terminology is absent from the seller interface.

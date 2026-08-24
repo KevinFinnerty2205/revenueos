@@ -359,3 +359,10 @@ replace this Core workspace. See the
 [future UX contract](../02-design/opportunity-and-account-workspace-ux.md) and
 [ADR 0035](../08-decisions/0035-end-to-end-sales-os-architecture.md). No described
 section or navigation change is implemented by WO-023.
+
+WO-025B adds one secondary **Ask about this deal** link to the current Opportunity
+header. It opens `/assistant` in explicit Opportunity scope and does not alter the
+workspace read model. Source links return to existing meeting, customer Evidence,
+Methodology, Revenue Brain and recommended-Action sections so the seller can inspect
+or correct the underlying work. Account Revenue Brain adds the equivalent
+**Ask about this account** link.

@@ -653,3 +653,19 @@ switch or arbitrary connector capabilities.
 All payloads are strict and product-safe. The API never accepts organisation IDs,
 arbitrary rules/prompts, source conclusions, provider choices or scores. Current
 reads hide a stale projection's conclusions when the source fingerprint changes.
+
+## Ask RevenueOS API
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| `GET` | `/api/v1/ask/capabilities?scopeType=&scopeId=` | Resolve flag, membership and explicit scope; report non-retention/public-web/action boundaries |
+| `POST` | `/api/v1/ask` | Classify, retrieve and compose one bounded cited answer; reserve quota and metadata audit |
+| `POST` | `/api/v1/ask/telemetry` | Record source-open/follow-up metadata for a request owned by the active organisation/user |
+
+The strict request accepts `question`, `scopeType`, conditional `scopeId` and optional
+timezone only. The response contains opaque request ID, answer, status, question class,
+cited summary points, validated sources, uncertainties, optional existing-work link,
+bounded follow-ups, scope and generation time. It cannot accept organisation IDs,
+SQL, retrieval plans, provider/tool choices or Action payloads. See the
+[retrieval architecture](ask-retrieval-architecture.md) and
+[citation contract](ask-source-citation-model.md).

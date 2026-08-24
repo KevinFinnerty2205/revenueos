@@ -186,3 +186,12 @@ WO-024 reads bounded final Revenue Brain artefacts/snapshots and their validated
 references as projection input. The methodology service does not create another
 brain, edit snapshots or treat its own projection as new customer Evidence. Definition,
 source or review changes produce a new immutable projection fingerprint/version.
+
+## Ask RevenueOS consumer
+
+WO-025B reads only the latest complete Revenue Brain snapshot bundle and current
+longitudinal insight for the already-authorised scope. It validates referenced final,
+non-superseded artefacts in one bounded set and links conclusions back to their meeting
+or Opportunity. Ask does not edit Brain snapshots, reread raw transcript text, invoke
+the Brain provider or create replacement recommendations. “What changed recently?”
+uses the existing insight; “what should I do next?” reuses existing Next Best Action.

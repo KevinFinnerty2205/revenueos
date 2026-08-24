@@ -132,6 +132,9 @@ real approved CRM update path.
 
 ### WO-025B — Ask RevenueOS
 
+**Current status:** implemented on 24 August 2026 as an ephemeral deterministic Core
+Q&A slice. It uses no provider, public-web research, text-to-SQL or Action execution.
+
 - **Objective/value/package:** Provide permission-scoped universal Search and cited
   Q&A over authorised Core knowledge. **Core**.
 - **Dependencies/checkpoint:** WO-025A experience/launch boundary; current Evidence,

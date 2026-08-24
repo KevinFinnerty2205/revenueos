@@ -259,3 +259,12 @@ No prompt, model, agent, retrieval system or provider is implemented by WO-023.
 - [Integration strategy](../05-integrations/integration-strategy.md)
 - [Product roadmap to beta](../06-roadmap/product-roadmap-to-beta.md)
 - [End-to-End Sales Platform roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md)
+
+## Current Ask RevenueOS boundary
+
+WO-025B adds no new provider, prompt or model path. Its deterministic classifier maps
+question text to a fixed sales taxonomy; bounded repositories retrieve current
+authorised structured sources; a deterministic composer emits a strict answer whose
+citations are validated against that retrieved set. Provider calls per Ask answer are
+zero. Future provider-backed composition remains gated by ADR 0036 and must preserve
+the same scope, provenance, conflict, unknown, source and citation invariants.

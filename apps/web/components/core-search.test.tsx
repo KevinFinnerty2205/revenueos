@@ -82,4 +82,86 @@ describe("CoreSearch", () => {
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("keeps deterministic Search separate while opening Ask in explicit scope", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          enabled: true,
+          scope: { type: "account", id: "company-1", label: "Acme" },
+          supportedScopes: ["opportunity", "account", "workspace"],
+          retainedHistory: false,
+          publicWebResearch: false,
+          actionExecution: false,
+          maxQuestionCharacters: 1000,
+          maxSources: 12,
+          safeMessage: "Authorised RevenueOS evidence only.",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <CoreSearch
+        initialMode="ask"
+        scopeType="account"
+        scopeId="company-1"
+        initialQuestion="What changed recently?"
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Ask RevenueOS" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(await screen.findByText("About: Acme")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Ask RevenueOS" })).toHaveValue(
+      "What changed recently?",
+    );
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "scopeType=account&scopeId=company-1",
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Search" }));
+    expect(
+      screen.getByRole("searchbox", { name: "Search your workspace" }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports arrow-key navigation between Search and Ask tabs", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            enabled: true,
+            scope: {
+              type: "workspace",
+              id: null,
+              label: "Your accessible sales work",
+            },
+            supportedScopes: ["opportunity", "account", "workspace"],
+            retainedHistory: false,
+            publicWebResearch: false,
+            actionExecution: false,
+            maxQuestionCharacters: 1000,
+            maxSources: 12,
+            safeMessage: "Authorised RevenueOS evidence only.",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    render(<CoreSearch />);
+    const searchTab = screen.getByRole("tab", { name: "Search" });
+    searchTab.focus();
+    fireEvent.keyDown(searchTab, { key: "ArrowRight" });
+    const askTab = screen.getByRole("tab", { name: "Ask RevenueOS" });
+    await waitFor(() => expect(askTab).toHaveFocus());
+    expect(askTab).toHaveAttribute("aria-selected", "true");
+    expect(
+      await screen.findByText("About: Your accessible sales work"),
+    ).toBeVisible();
+  });
 });

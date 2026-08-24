@@ -61,7 +61,8 @@ environment-specific launch review.
 
 ## Known limitations
 
-- Ask RevenueOS and cited answers remain WO-025B.
+- Ask RevenueOS is now implemented by WO-025B as a second Search mode and contextual
+  Opportunity/Account utility; normal Search remains deterministic.
 - Production CRM matching and approved writes remain WO-025C.
 - Forecasting, Manager Intelligence and Prospect remain later work.
 - There is no native mobile app or background recording promise.

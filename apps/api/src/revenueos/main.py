@@ -24,6 +24,7 @@ from revenueos.observability import configure_logging
 from revenueos.routes import (
     accounts,
     actions,
+    ask,
     beta,
     companies,
     contacts,
@@ -143,6 +144,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(methodologies.router)
     app.include_router(accounts.router)
     app.include_router(actions.router)
+    app.include_router(ask.router)
     app.include_router(integrations.router)
     return app
 

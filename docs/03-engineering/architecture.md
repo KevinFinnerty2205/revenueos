@@ -463,3 +463,10 @@ web/API/PostgreSQL modular monolith: standard definition registry, tenant custom
 definition repository, deterministic projection service and Opportunity/Settings UI.
 Migration `0033_sales_methodology` is the current Alembic head. No service, queue,
 provider, datastore or top-level navigation area was added.
+
+WO-025B adds strict Ask contracts, a tenant-scoped repository and a deterministic
+service/router inside that same API. It composes current Methodology, Revenue Brain,
+accepted Evidence, Daily and Action records without adding a service, queue,
+datastore, vector index, provider call or schema migration. The web exposes it through
+the existing Search route and contextual workspace links. See
+[ADR 0036](../08-decisions/0036-ephemeral-deterministic-ask-revenueos.md).
