@@ -35,6 +35,7 @@ This is the canonical product and engineering documentation index. Documents dis
 29. [ADR 0036: Ephemeral deterministic Ask RevenueOS v1](08-decisions/0036-ephemeral-deterministic-ask-revenueos.md)
 30. [Focused CRM Sync implementation](03-engineering/focused-crm-sync.md) — current WO-025C HubSpot boundary
 31. [ADR 0037: HubSpot-first Focused CRM Sync](08-decisions/0037-hubspot-first-focused-crm-sync.md)
+32. [Checkpoint 1B Core readiness](06-roadmap/checkpoint-1b-core-readiness.md) — GO decision for WO-026
 
 ## 00 — Company
 
@@ -63,6 +64,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [RevenueOS CRM](01-product/revenueos-crm.md)
 - [Standard sales methodologies](01-product/standard-sales-methodologies.md)
 - [Ask RevenueOS](01-product/ask-revenueos.md)
+- [Core go-to-Prospect readiness](01-product/core-go-to-prospect-readiness.md)
 
 ## 02 — Design
 
@@ -87,6 +89,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [RevenueOS information architecture](02-design/revenueos-information-architecture.md)
 - [RevenueOS Daily experience](02-design/revenueos-daily-experience.md)
 - [RevenueOS Daily simplicity review](02-design/revenueos-daily-simplicity-review.md)
+- [Core post-WO-025C simplicity review](02-design/core-post-025c-simplicity-review.md)
 - [Opportunity and Account Workspace UX](02-design/opportunity-and-account-workspace-ux.md)
 - [Find and Prospect experience](02-design/find-and-prospect-experience.md)
 - [Engage, campaign and event experience](02-design/engage-campaign-event-experience.md)
@@ -248,6 +251,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [End-to-End Sales Platform security and privacy](03-engineering/end-to-end-sales-platform-security-privacy.md)
 - [End-to-End Sales Platform risk register](03-engineering/end-to-end-sales-platform-risk-register.md)
 - [Core capability gap analysis](03-engineering/core-capability-gap-analysis.md)
+- [Prospect foundation readiness](03-engineering/prospect-foundation-readiness.md)
 
 ## 04 — AI
 
@@ -282,6 +286,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [End-to-End Sales Platform roadmap](06-roadmap/end-to-end-sales-platform-roadmap.md)
 - [Checkpoint 1 Core competitive readiness](06-roadmap/checkpoint-1-core-competitive-readiness.md)
 - [Core roadmap adjustments after Checkpoint 1](06-roadmap/core-roadmap-adjustments-after-checkpoint-1.md)
+- [Checkpoint 1B Core readiness](06-roadmap/checkpoint-1b-core-readiness.md)
 
 ## 07 — Sprint records
 
@@ -329,6 +334,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-025A: Core Experience & Design-Partner Readiness](07-sprints/wo-025a-core-experience-readiness.md)
 - [WO-025B: Ask RevenueOS](07-sprints/wo-025b-ask-revenueos.md)
 - [WO-025C: Focused CRM Sync](07-sprints/wo-025c-focused-crm-sync.md)
+- [Checkpoint 1B: Core readiness before Prospect](07-sprints/checkpoint-1b-core-readiness.md)
 
 ## 08 — Decision records
 
@@ -375,8 +381,8 @@ This is the canonical product and engineering documentation index. Documents dis
 Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
-implements one HubSpot CRM path; WO-026–045
-remain unauthorised.
+implements one HubSpot CRM path. Checkpoint 1B recommends WO-026 as the next work
+order; WO-026 still needs separate authorisation and WO-027–045 remain unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

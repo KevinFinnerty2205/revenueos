@@ -1,13 +1,16 @@
 # End-to-end Sales Platform roadmap
 
-- **Status:** Revised by Checkpoint 1; no proposed work order is authorised by this document
-- **Baseline:** WO-024 Sales Methodology and WO-025 RevenueOS Daily are implemented
+- **Status:** Revised by Checkpoint 1B; WO-026 is the recommended next work order but
+  still requires separate authorisation
+- **Baseline:** WO-024–025C and the Checkpoint 1B Core readiness review are complete
 - **Decision rule:** Validate each loop before funding the next layer
 
 Checkpoint 1 selected **Option 2**: Core design-partner readiness, Ask RevenueOS and
 one selected production CRM path must precede WO-026. See the
 [checkpoint decision](checkpoint-1-core-competitive-readiness.md) and
-[roadmap adjustments](core-roadmap-adjustments-after-checkpoint-1.md).
+[roadmap adjustments](core-roadmap-adjustments-after-checkpoint-1.md). Checkpoint 1B
+subsequently recorded a [GO decision for WO-026](checkpoint-1b-core-readiness.md),
+subject to a separate work-order approval and target-environment launch gates.
 
 ## Outcome and sequencing principles
 
@@ -21,7 +24,7 @@ The numbered work orders describe traceable planning units, not an unconditional
 build queue. A checkpoint can keep, modify, defer or remove any later item. Provider
 selection, legal review, user evidence and operational readiness can change sequence.
 
-The conditional sequence is Stage A2 (WO-025A–025C) → observed Checkpoint 1B →
+The conditional sequence is completed Stage A2 (WO-025A–025C) and Checkpoint 1B →
 Stage B (WO-026–031) → Checkpoint 2 → Stage C (WO-032–039, including WO-036B) →
 Checkpoint 3 → Stage D (WO-040–044) → WO-045. A failed or inconclusive checkpoint
 changes the next smallest experiment rather than automatically advancing.
@@ -176,11 +179,21 @@ separate gate. Salesforce, bulk import and bidirectional sync remain future.
 
 ### Checkpoint 1B — observed Core validation
 
-Proceed to WO-026 only if real users can navigate unaided, trust and correct
-Evidence/methodology explanations, receive useful reviewed intelligence from a
-supported first Interaction, use Ask with valid citations, complete one approved CRM
-update and still value Core without an add-on. Decide **keep, modify, defer or remove**
-for every Stage B item from observed behaviour—not stated interest.
+**Decision recorded 24 August 2026:** **GO** to begin WO-026. Core is coherent enough
+to support Prospect without another foundational Core work order. See the full
+[Checkpoint 1B decision](checkpoint-1b-core-readiness.md).
+
+Core design-partner readiness is **ready with restrictions**. A supervised cohort may
+see synthetic/approved non-customer data now; real customer data remains prohibited
+until the target-environment identity, RLS, privacy, provider, retention,
+export/deletion, backup/restore and operational checklist is approved. Run that
+evidence in parallel with WO-026 and keep launch approval separate from architecture
+readiness.
+
+Stage B remains conditional. WO-026 must preserve sourced research observations and
+reviewed promotion outside canonical truth. Before WO-029 can send outreach, select
+and approve one mail ecosystem and implement its smallest reviewed delivery slice;
+otherwise keep WO-029 draft-only. Stop at Checkpoint 2 before Stage C.
 
 ## Stage B — Create qualified pipeline safely
 
@@ -775,10 +788,10 @@ code, contracts, schema, UI states, documentation, security behaviour, observabi
 and validation agree. This roadmap should be updated when evidence changes; preserving
 the numbering is less important than preserving trust and simplicity.
 
-## Implementation checkpoint — WO-024
+## Implementation checkpoint — Checkpoint 1B
 
-The Sales Methodology Engine is implemented as the first Core work order after the
-WO-023 blueprint. MEDDIC, MEDDPICC, BANT, SPICED, bounded custom definitions,
-evidence-linked projections and review are current. WO-025 RevenueOS Daily is also
-implemented. Checkpoint 1 now recommends WO-025A–025C and Checkpoint 1B before WO-026;
-every proposed later item remains conditional and unauthorised by this roadmap.
+The Sales Methodology Engine, RevenueOS Daily, Core experience readiness, Ask
+RevenueOS and HubSpot-first Focused CRM Sync are implemented. Checkpoint 1B records a
+GO recommendation for WO-026 with no further Core work order inserted. WO-026 still
+requires its own approval; WO-027–045, production customer-data use and design-partner
+launch remain unauthorised by this roadmap.
