@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -786,7 +787,7 @@ class ActionProposal(Base):
         CheckConstraint(
             "action_type IN ('follow_up_email', 'send_requested_material', 'create_task', "
             "'follow_up_stakeholder', 'schedule_interaction', 'update_opportunity', "
-            "'update_contact', 'update_stakeholder', 'add_decision', 'add_commitment', "
+            "'update_contact', 'log_interaction', 'update_stakeholder', 'add_decision', 'add_commitment', "
             "'add_risk', 'update_timeline', 'update_procurement', 'update_security_legal', "
             "'create_reminder', 'notify_internal', 'prepare_next_interaction', "
             "'resolve_open_question', 'review_conflict', 'other')",
@@ -1054,16 +1055,16 @@ class IntegrationConnection(TimestampMixin, Base):
     __tablename__ = "integration_connections"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task')",
+            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot')",
             name="ck_integration_connections_key",
         ),
         CheckConstraint(
-            "connection_status IN ('active', 'revoked')",
+            "connection_status IN ('active', 'reauthorisation_required', 'revoked')",
             name="ck_integration_connections_status",
         ),
         CheckConstraint("metadata_version > 0", name="ck_integration_connections_version"),
         CheckConstraint(
-            "(connection_status = 'active' AND revoked_at IS NULL) OR "
+            "(connection_status IN ('active', 'reauthorisation_required') AND revoked_at IS NULL) OR "
             "(connection_status = 'revoked' AND revoked_at IS NOT NULL)",
             name="ck_integration_connections_revoked",
         ),
@@ -1102,7 +1103,218 @@ class IntegrationConnection(TimestampMixin, Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     credential_reference: Mapped[str | None] = mapped_column(String(255))
     capability_state_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    external_account_id: Mapped[str | None] = mapped_column(String(128))
+    external_account_name: Mapped[str | None] = mapped_column(String(200))
+    granted_scopes_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
     metadata_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class OAuthConnectionState(Base):
+    __tablename__ = "oauth_connection_states"
+    __table_args__ = (
+        CheckConstraint("connector_key = 'hubspot'", name="ck_oauth_connection_states_connector"),
+        CheckConstraint("length(state_hash) = 64", name="ck_oauth_connection_states_hash"),
+        CheckConstraint("length(trim(redirect_uri)) > 0", name="ck_oauth_connection_states_redirect"),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_oauth_connection_states_membership",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_oauth_connection_states_org_id"),
+        UniqueConstraint("state_hash", name="uq_oauth_connection_states_hash"),
+        Index("ix_oauth_connection_states_org_expiry", "organisation_id", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    connector_key: Mapped[str] = mapped_column(String(40), nullable=False, default="hubspot")
+    state_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    redirect_uri: Mapped[str] = mapped_column(String(2048), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class EncryptedConnectorCredential(TimestampMixin, Base):
+    __tablename__ = "encrypted_connector_credentials"
+    __table_args__ = (
+        CheckConstraint("connector_key = 'hubspot'", name="ck_encrypted_connector_credentials_connector"),
+        CheckConstraint("length(nonce) = 12", name="ck_encrypted_connector_credentials_nonce"),
+        CheckConstraint("key_version > 0", name="ck_encrypted_connector_credentials_key_version"),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_encrypted_connector_credentials_connection",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_encrypted_connector_credentials_org_id"),
+        UniqueConstraint("organisation_id", "connection_id", name="uq_encrypted_connector_credentials_connection"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    connector_key: Mapped[str] = mapped_column(String(40), nullable=False, default="hubspot")
+    encrypted_payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary(12), nullable=False)
+    key_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class CRMEntityMapping(TimestampMixin, Base):
+    __tablename__ = "crm_entity_mappings"
+    __table_args__ = (
+        CheckConstraint(
+            "revenueos_entity_type IN ('company', 'contact', 'opportunity')",
+            name="ck_crm_entity_mappings_entity_type",
+        ),
+        CheckConstraint(
+            "external_object_type IN ('company', 'contact', 'deal')",
+            name="ck_crm_entity_mappings_object_type",
+        ),
+        CheckConstraint("sync_state IN ('active', 'external_missing')", name="ck_crm_entity_mappings_state"),
+        CheckConstraint(
+            "length(trim(external_object_id)) BETWEEN 1 AND 128", name="ck_crm_entity_mappings_external_id"
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_entity_mappings_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_entity_mappings_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_entity_mappings_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "connection_id",
+            "revenueos_entity_type",
+            "revenueos_entity_id",
+            name="uq_crm_entity_mappings_revenueos_entity",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "connection_id",
+            "external_object_type",
+            "external_object_id",
+            name="uq_crm_entity_mappings_external_object",
+        ),
+        Index("ix_crm_entity_mappings_org_entity", "organisation_id", "revenueos_entity_type", "revenueos_entity_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revenueos_entity_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    revenueos_entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    external_object_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    external_object_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sync_state: Mapped[str] = mapped_column(String(24), nullable=False, default="active", server_default="active")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class CRMFieldMapping(TimestampMixin, Base):
+    __tablename__ = "crm_field_mappings"
+    __table_args__ = (
+        CheckConstraint("entity_type IN ('opportunity', 'contact')", name="ck_crm_field_mappings_entity_type"),
+        CheckConstraint(
+            "external_property_type IN ('string', 'number', 'date', 'datetime', 'enumeration')",
+            name="ck_crm_field_mappings_property_type",
+        ),
+        CheckConstraint(
+            "authority IN ('crm_authoritative', 'revenueos_authoritative', 'review_before_sync')",
+            name="ck_crm_field_mappings_authority",
+        ),
+        CheckConstraint("length(trim(revenueos_field)) BETWEEN 1 AND 64", name="ck_crm_field_mappings_field"),
+        CheckConstraint(
+            "length(trim(external_property_name)) BETWEEN 1 AND 128", name="ck_crm_field_mappings_property"
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_field_mappings_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "configured_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_field_mappings_configurer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_field_mappings_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "connection_id",
+            "entity_type",
+            "revenueos_field",
+            name="uq_crm_field_mappings_field",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    revenueos_field: Mapped[str] = mapped_column(String(64), nullable=False)
+    external_property_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_property_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    authority: Mapped[str] = mapped_column(String(32), nullable=False, default="review_before_sync")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class CRMStageMapping(TimestampMixin, Base):
+    __tablename__ = "crm_stage_mappings"
+    __table_args__ = (
+        CheckConstraint(
+            "revenueos_stage IN ('qualification', 'discovery', 'evaluation', 'proposal', 'negotiation', "
+            "'procurement', 'closed_won', 'closed_lost', 'other')",
+            name="ck_crm_stage_mappings_stage",
+        ),
+        CheckConstraint("length(trim(external_pipeline_id)) BETWEEN 1 AND 128", name="ck_crm_stage_mappings_pipeline"),
+        CheckConstraint(
+            "length(trim(external_stage_id)) BETWEEN 1 AND 128", name="ck_crm_stage_mappings_external_stage"
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_stage_mappings_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "configured_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_stage_mappings_configurer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_stage_mappings_org_id"),
+        UniqueConstraint("organisation_id", "connection_id", "revenueos_stage", name="uq_crm_stage_mappings_stage"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revenueos_stage: Mapped[str] = mapped_column(String(30), nullable=False)
+    external_pipeline_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_stage_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
 
 
 class ExecutionPreview(Base):
@@ -1110,7 +1322,7 @@ class ExecutionPreview(Base):
     __table_args__ = (
         CheckConstraint(
             "capability IN ('send_email', 'create_calendar_event', 'update_opportunity', "
-            "'update_contact', 'create_task')",
+            "'update_contact', 'create_activity', 'create_task')",
             name="ck_execution_previews_capability",
         ),
         CheckConstraint(
@@ -1167,12 +1379,12 @@ class ActionExecution(TimestampMixin, Base):
     __tablename__ = "action_executions"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task')",
+            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot')",
             name="ck_action_executions_connector",
         ),
         CheckConstraint(
             "capability IN ('send_email', 'create_calendar_event', 'update_opportunity', "
-            "'update_contact', 'create_task')",
+            "'update_contact', 'create_activity', 'create_task')",
             name="ck_action_executions_capability",
         ),
         CheckConstraint(
@@ -1180,11 +1392,11 @@ class ActionExecution(TimestampMixin, Base):
             name="ck_action_executions_risk",
         ),
         CheckConstraint(
-            "execution_status IN ('queued', 'executing', 'simulated_success', "
+            "execution_status IN ('queued', 'executing', 'simulated_success', 'succeeded', "
             "'failed_retryable', 'failed_permanent', 'cancelled', 'unknown_external_state')",
             name="ck_action_executions_status",
         ),
-        CheckConstraint("execution_mode = 'simulation'", name="ck_action_executions_mode"),
+        CheckConstraint("execution_mode IN ('simulation', 'live')", name="ck_action_executions_mode"),
         CheckConstraint("length(idempotency_key) = 64", name="ck_action_executions_idempotency"),
         CheckConstraint("length(preview_fingerprint) = 64", name="ck_action_executions_preview"),
         CheckConstraint("attempt_count >= 0", name="ck_action_executions_attempts"),
@@ -1321,8 +1533,10 @@ class IntegrationAuditEvent(Base):
     __table_args__ = (
         CheckConstraint(
             "event_type IN ('connection_created', 'connection_tested', 'connection_revoked', "
+            "'connection_reauthorisation_required', 'mapping_created', 'mapping_changed', 'mapping_removed', "
+            "'field_mapping_changed', 'stage_mapping_changed', "
             "'execution_preview_created', 'execution_confirmed', 'execution_started', "
-            "'execution_succeeded', 'execution_failed', 'execution_unknown_state')",
+            "'execution_succeeded', 'execution_failed', 'execution_unknown_state', 'execution_reconciled')",
             name="ck_integration_audit_events_type",
         ),
         CheckConstraint("duration_ms IS NULL OR duration_ms >= 0", name="ck_integration_audit_events_duration"),

@@ -31,6 +31,7 @@ import { RevenueBrainInsightPanel } from "@/components/revenue-brain-insight";
 import { CustomerEvidencePanel } from "@/components/customer-evidence-panel";
 import { RecommendedActions } from "@/components/recommended-actions";
 import { OpportunityMethodology } from "@/components/opportunity-methodology";
+import { CRMRecordLink } from "@/components/crm-record-link";
 
 export function OpportunityWorkspace({
   opportunityId,
@@ -338,6 +339,8 @@ export function OpportunityWorkspace({
           </p>
         ) : null}
       </header>
+
+      <CRMRecordLink opportunityId={opportunity.id} />
 
       <section
         aria-labelledby="deal-focus-title"

@@ -1,12 +1,17 @@
 # Integrations and execution foundation
 
-**Status:** Implemented by WO-022 for development and private-beta simulation only.
+**Status:** WO-022 simulation foundation plus WO-025C feature-gated HubSpot live CRM.
 
 WO-022 lets an organisation administrator enable deterministic mock email,
 calendar, CRM and task connections. An active organisation member may then take
 an already approved Action through a separate server-generated preview and final
 confirmation. The result is an auditable simulation; RevenueOS does not contact
 or mutate an external provider.
+
+WO-025C extends the same boundary with HubSpot as the sole production CRM adapter.
+It supports reviewed Opportunity/Contact field updates and interaction activities,
+not autonomous sync. HubSpot is off until OAuth and encrypted credential settings
+are complete; simulation connectors remain prohibited in production.
 
 ## User promise
 
@@ -32,13 +37,20 @@ previews and cancels queued or retryable simulations immediately.
 | Mock CRM      | Update one Opportunity or Contact field | Data mutation            | Tenant-scoped mock external value |
 | Mock Tasks    | Create task                             | Internal low-risk        | Deterministic mock task ID        |
 
+## Live HubSpot capabilities
+
+An admin connects, tests, maps and disconnects HubSpot in Settings. A seller
+explicitly links an Opportunity/Contact record, approves an Action, reviews current
+and proposed CRM values, then confirms the exact write. Typed authority, stage and
+currency rules plus execute-time external reads prevent unsafe overwrite. See
+[provider selection](../05-integrations/crm-provider-selection.md).
+
 ## Known limitations
 
 There are no real Gmail, Outlook, Microsoft 365, Google Workspace, Salesforce,
-HubSpot, Dynamics, calendar, Slack, Teams or task-system connections. There is no
-real OAuth exchange, webhook ingestion, browser automation, autonomous execution
-or direct tool use by AI. A future live adapter requires a separate work order,
-provider/privacy review and production release gate.
+Dynamics, calendar, Slack, Teams or task-system connections. There is no broad
+webhook/inbound sync, browser automation, autonomous execution or direct tool use
+by AI. HubSpot is the only live provider and still requires a target-environment gate.
 
 See the [preview and confirmation guide](../03-engineering/execution-preview-confirmation.md),
 [simulation mode](../03-engineering/simulation-mode.md) and

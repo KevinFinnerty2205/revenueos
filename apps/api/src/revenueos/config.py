@@ -148,6 +148,7 @@ class Settings(BaseSettings):
     feature_integrations_enabled: bool = False
     feature_action_execution_enabled: bool = False
     feature_mock_connectors_enabled: bool = False
+    feature_hubspot_crm_enabled: bool = False
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
@@ -156,6 +157,16 @@ class Settings(BaseSettings):
     worker_base_retry_delay_seconds: int = Field(default=5, ge=1, le=3600)
     worker_max_retry_delay_seconds: int = Field(default=300, ge=1, le=86400)
     worker_default_max_attempts: int = Field(default=3, ge=1, le=20)
+    hubspot_client_id: str | None = Field(default=None, min_length=8, max_length=255)
+    hubspot_client_secret: SecretStr | None = None
+    hubspot_oauth_redirect_uri: str | None = Field(default=None, max_length=2048)
+    hubspot_authorisation_base_url: str = "https://app.hubspot.com/oauth/authorize"
+    hubspot_api_base_url: str = "https://api.hubapi.com"
+    hubspot_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    hubspot_read_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    hubspot_write_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
+    hubspot_oauth_state_ttl_seconds: int = Field(default=600, ge=120, le=1800)
+    connector_credential_master_key: SecretStr | None = None
     ai_provider_name: AIProviderName = Field(
         default="mock",
         validation_alias=AliasChoices("AI_PROVIDER", "API_AI_PROVIDER_NAME"),
@@ -357,6 +368,31 @@ class Settings(BaseSettings):
             raise ValueError("Action execution requires the Integrations and Action Layer feature flags.")
         if self.feature_mock_connectors_enabled and not self.feature_integrations_enabled:
             raise ValueError("Mock connectors require the Integrations feature flag.")
+        if self.feature_hubspot_crm_enabled:
+            if not (self.feature_integrations_enabled and self.feature_action_execution_enabled):
+                raise ValueError("HubSpot CRM requires Integrations and Action Execution feature flags.")
+            if not all(
+                (
+                    self.hubspot_client_id,
+                    self.hubspot_client_secret,
+                    self.hubspot_oauth_redirect_uri,
+                    self.connector_credential_master_key,
+                )
+            ):
+                raise ValueError(
+                    "HubSpot CRM requires client credentials, an exact redirect URI and an encryption master key."
+                )
+            assert self.hubspot_oauth_redirect_uri is not None
+            if self.environment == "production" and not self.hubspot_oauth_redirect_uri.startswith("https://"):
+                raise ValueError("Production HubSpot OAuth requires an HTTPS redirect URI.")
+            if self.hubspot_api_base_url != "https://api.hubapi.com":
+                raise ValueError("HubSpot API host must use the official HTTPS endpoint.")
+            if self.hubspot_authorisation_base_url != "https://app.hubspot.com/oauth/authorize":
+                raise ValueError("HubSpot authorisation must use the official HTTPS endpoint.")
+            assert self.connector_credential_master_key is not None
+            from revenueos.credential_store import EncryptedDatabaseCredentialStore
+
+            EncryptedDatabaseCredentialStore.decode_master_key(self.connector_credential_master_key.get_secret_value())
         return self
 
     @property
@@ -421,6 +457,7 @@ class Settings(BaseSettings):
             "integrations": self.feature_integrations_enabled,
             "actionExecution": self.feature_action_execution_enabled,
             "mockConnectors": self.feature_mock_connectors_enabled,
+            "hubspotCrm": self.feature_hubspot_crm_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
         }

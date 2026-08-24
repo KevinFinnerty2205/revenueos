@@ -454,7 +454,7 @@ test("reviews, confirms and persists a customer-facing Action simulation", async
       fullPage: true,
     });
   }
-  await actions.getByRole("button", { name: "Preview simulation" }).click();
+  await actions.getByRole("button", { name: "Review execution" }).click();
   await expect(
     actions.getByText("Simulation — no external action will occur"),
   ).toBeVisible();
@@ -475,7 +475,7 @@ test("reviews, confirms and persists a customer-facing Action simulation", async
     actions.getByText("Simulation in progress", { exact: true }).first(),
   ).toBeVisible();
   await actions
-    .getByRole("button", { name: "Refresh simulation status" })
+    .getByRole("button", { name: "Refresh execution status" })
     .click();
   await expect(
     actions.getByText("Simulation complete", { exact: true }).first(),
@@ -488,10 +488,10 @@ test("reviews, confirms and persists a customer-facing Action simulation", async
   });
   await refreshedActions.getByRole("tab", { name: "Approved (1)" }).click();
   await refreshedActions
-    .getByRole("button", { name: "Preview simulation" })
+    .getByRole("button", { name: "Review execution" })
     .click();
   await expect(
-    refreshedActions.getByText("Simulation history (1)"),
+    refreshedActions.getByText("Execution history (1)"),
   ).toBeVisible();
   await expect(externalRequests).toEqual([]);
 });

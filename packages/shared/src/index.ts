@@ -2255,6 +2255,7 @@ export type ActionType =
   | "schedule_interaction"
   | "update_opportunity"
   | "update_contact"
+  | "log_interaction"
   | "update_stakeholder"
   | "add_decision"
   | "add_commitment"
@@ -2313,11 +2314,25 @@ export interface CreateTaskActionPayload extends ActionPayloadBase {
   linkedInteractionId: string | null;
 }
 
+export interface LogInteractionActionPayload extends ActionPayloadBase {
+  kind: "log_interaction";
+  interactionId: string;
+  occurredAt: string;
+  interactionType: InteractionType;
+  title: string;
+  summary: string;
+  agreedNextSteps: string[];
+}
+
 export type ActionPayload =
   | FollowUpEmailActionPayload
   | CreateTaskActionPayload
+  | LogInteractionActionPayload
   | ({
-      kind: Exclude<ActionType, "follow_up_email" | "create_task">;
+      kind: Exclude<
+        ActionType,
+        "follow_up_email" | "create_task" | "log_interaction"
+      >;
     } & Record<string, unknown>);
 
 export interface ActionSourceReference {
@@ -2389,20 +2404,23 @@ export interface ActionGenerationResponse {
 }
 
 export type ConnectorKey =
-  "mock_email" | "mock_calendar" | "mock_crm" | "mock_task";
+  "mock_email" | "mock_calendar" | "mock_crm" | "mock_task" | "hubspot";
 export type ConnectorCapability =
   | "send_email"
   | "create_calendar_event"
   | "update_opportunity"
   | "update_contact"
+  | "create_activity"
   | "create_task"
   | "post_internal_message"
   | "upload_or_share_document";
-export type ConnectionStatus = "active" | "revoked";
+export type ConnectionStatus =
+  "active" | "reauthorisation_required" | "revoked";
 export type ExecutionStatus =
   | "queued"
   | "executing"
   | "simulated_success"
+  | "succeeded"
   | "failed_retryable"
   | "failed_permanent"
   | "cancelled"
@@ -2411,20 +2429,20 @@ export type ExecutionStatus =
 export interface ConnectorDefinition {
   connectorKey: ConnectorKey;
   displayName: string;
-  providerFamily: "mock";
+  providerFamily: "mock" | "crm";
   supportedCapabilities: ConnectorCapability[];
-  authenticationType: "mock_local";
+  authenticationType: "mock_local" | "oauth2_authorisation_code";
   executionRiskClasses: ActionRiskClass[];
   configurationSchemaVersion: number;
-  executionMode: "simulation";
+  executionMode: "simulation" | "live";
   available: boolean;
-  simulationOnly: true;
+  simulationOnly: boolean;
 }
 
 export interface IntegrationCatalogResponse {
   connectors: ConnectorDefinition[];
-  executionMode: "simulation";
-  externalActionsEnabled: false;
+  executionMode: "simulation" | "mixed";
+  externalActionsEnabled: boolean;
 }
 
 export interface OrganisationConnection {
@@ -2438,9 +2456,12 @@ export interface OrganisationConnection {
   connectedAt: string;
   lastVerifiedAt: string | null;
   revokedAt: string | null;
+  externalAccountId: string | null;
+  externalAccountName: string | null;
+  grantedScopes: string[];
   metadataVersion: number;
-  executionMode: "simulation";
-  simulationOnly: true;
+  executionMode: "simulation" | "live";
+  simulationOnly: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -2456,8 +2477,8 @@ export interface ActionExecutionOption {
   connectorDisplayName: string;
   capability: ConnectorCapability;
   riskClass: ActionRiskClass;
-  executionMode: "simulation";
-  simulationOnly: true;
+  executionMode: "simulation" | "live";
+  simulationOnly: boolean;
 }
 
 export interface ActionExecutionOptionListResponse {
@@ -2495,7 +2516,23 @@ export type ExecutionPreviewContent =
       currentExternalValue: string | number | null;
       expectedExternalValue: string | number | null;
       newValue: string | number | null;
+      fieldAuthority:
+        | "crm_authoritative"
+        | "revenueos_authoritative"
+        | "review_before_sync"
+        | null;
+      externalUpdatedAt: string | null;
       action: "update_opportunity" | "update_contact";
+    }
+  | {
+      kind: "crm_activity";
+      interactionId: string;
+      occurredAt: string;
+      title: string;
+      summary: string;
+      agreedNextSteps: string[];
+      rawTranscriptIncluded: false;
+      action: "create_activity";
     }
   | {
       kind: "task";
@@ -2516,8 +2553,8 @@ export interface ExecutionPreview {
   connectorDisplayName: string;
   capability: ConnectorCapability;
   riskClass: ActionRiskClass;
-  executionMode: "simulation";
-  simulationOnly: true;
+  executionMode: "simulation" | "live";
+  simulationOnly: boolean;
   readiness: "ready";
   summary: string;
   confirmationLabel: string;
@@ -2537,8 +2574,8 @@ export interface ActionExecution {
   capability: ConnectorCapability;
   riskClass: ActionRiskClass;
   executionStatus: ExecutionStatus;
-  executionMode: "simulation";
-  simulationOnly: true;
+  executionMode: "simulation" | "live";
+  simulationOnly: boolean;
   confirmedByUserId: string;
   confirmedAt: string;
   startedAt: string | null;
@@ -2556,6 +2593,86 @@ export interface ActionExecution {
 export interface ActionExecutionListResponse {
   items: ActionExecution[];
   total: number;
+}
+
+export interface OAuthStartResponse {
+  authorisationUrl: string;
+  expiresAt: string;
+}
+
+export type CRMObjectType = "company" | "contact" | "deal";
+
+export interface CRMSearchResult {
+  externalObjectType: CRMObjectType;
+  externalObjectId: string;
+  displayName: string;
+  secondaryLabel: string | null;
+  updatedAt: string | null;
+}
+
+export interface CRMSearchResponse {
+  items: CRMSearchResult[];
+  total: number;
+}
+
+export interface CRMEntityMapping {
+  id: string;
+  connectionId: string;
+  connectorKey: "hubspot";
+  revenueosEntityType: "company" | "contact" | "opportunity";
+  revenueosEntityId: string;
+  externalObjectType: CRMObjectType;
+  externalObjectId: string;
+  externalUpdatedAt: string | null;
+  lastSyncedAt: string | null;
+  syncState: "active" | "external_missing";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CRMPropertyDefinition {
+  entityType: "opportunity" | "contact";
+  externalPropertyName: string;
+  label: string;
+  propertyType: "string" | "number" | "date" | "datetime" | "enumeration";
+  options: { label: string; value: string }[];
+  readOnly: boolean;
+}
+
+export interface CRMFieldMapping {
+  id: string;
+  connectionId: string;
+  entityType: "opportunity" | "contact";
+  revenueosField: string;
+  externalPropertyName: string;
+  externalPropertyType:
+    "string" | "number" | "date" | "datetime" | "enumeration";
+  authority:
+    "crm_authoritative" | "revenueos_authoritative" | "review_before_sync";
+  enabled: boolean;
+}
+
+export interface CRMFieldConfiguration {
+  properties: CRMPropertyDefinition[];
+  mappings: CRMFieldMapping[];
+}
+
+export interface CRMStageDefinition {
+  pipelineId: string;
+  pipelineLabel: string;
+  stageId: string;
+  stageLabel: string;
+}
+
+export interface CRMStageMapping {
+  revenueosStage: string;
+  externalPipelineId: string;
+  externalStageId: string;
+}
+
+export interface CRMStageConfiguration {
+  availableStages: CRMStageDefinition[];
+  mappings: CRMStageMapping[];
 }
 
 export type AskScopeType = "opportunity" | "account" | "workspace";
@@ -2582,10 +2699,7 @@ export type AskQuestionClass =
   | "unsupported_public_web"
   | "general_sales_question";
 export type AskAnswerStatus =
-  | "supported"
-  | "partially_supported"
-  | "conflicting"
-  | "unknown";
+  "supported" | "partially_supported" | "conflicting" | "unknown";
 
 export interface AskScope {
   type: AskScopeType;

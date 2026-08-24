@@ -153,10 +153,14 @@ Q&A slice. It uses no provider, public-web research, text-to-SQL or Action execu
 
 ### WO-025C — Core CRM Sync
 
+**Current status:** implemented on 24 August 2026 for HubSpot only. The connector is
+off by default and observed target-environment/Checkpoint 1B evidence remains a
+separate gate. Salesforce, bulk import and bidirectional sync remain future.
+
 - **Objective/value/package:** Complete one real CRM read/match and approved-write
   loop while the customer's CRM remains authoritative. **Core integration foundation**.
 - **Dependencies/checkpoint:** Action/Execution Foundation, WO-025A release gate and
-  design-partner choice of Salesforce or HubSpot.
+  documented HubSpot-first provider decision.
 - **Experience:** Admin connection/health and mapping; explicit record match/authority;
   exact preview, confirmation, receipt, conflict and recovery inside current work.
 - **Technical scope:** One provider adapter, tenant-scoped binding/mapping, minimum

@@ -343,8 +343,10 @@ external data exists in the mock implementation.
 - Hosting, secret management, central monitoring and backup providers are not
   selected; deployment/runbook requirements are documented for operators.
 - Recording wording, residency and deletion commitments require product/legal approval before conversation features.
-- Live connector OAuth, scopes, provider retention/deletion, reconciliation,
-  webhook authentication and incident evidence remain production blockers.
+- Additional live connector OAuth/webhook architecture remains future. WO-025C
+  HubSpot OAuth, encrypted credentials, scoped outbound execution and reconciliation
+  are implemented behind a target-environment release gate; incident/operational
+  evidence remains required before production customer use.
 
 Do not use this system with production customer data. Enabling OpenAI changes
 the data-flow boundary and externally transmits selected transcript content.
@@ -374,3 +376,11 @@ conversation persistence. It makes no external provider call and exposes no Acti
 connector tool. Question, answer and source content are excluded from logs/events.
 See [Ask scope and permissions](ask-scope-permissions.md), [prompt-injection security](ask-prompt-injection-security.md)
 and [retention/export/deletion](ask-retention-export-deletion.md).
+
+WO-025C adds an account-scoped HubSpot data flow for exact mapped fields and bounded
+reviewed interaction summaries. Tokens, contact email, customer names, CRM values,
+notes and provider payloads remain outside logs/audits. Export version 15 includes
+connection/mapping/policy/execution metadata without credentials. Disconnect and
+organisation deletion attempt token revocation then remove local credentials and
+mappings; they never delete or undo HubSpot records. See the
+[CRM sync security review](crm-sync-security-review.md).

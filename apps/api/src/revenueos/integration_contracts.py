@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import ConfigDict, Field, StringConstraints
+from pydantic import ConfigDict, Field, StringConstraints, model_validator
 
 from revenueos.contracts import APIModel, to_camel
 from revenueos.domain import (
@@ -31,20 +31,20 @@ class StrictIntegrationModel(APIModel):
 class ConnectorDefinitionResponse(APIModel):
     connector_key: ConnectorKey
     display_name: str
-    provider_family: Literal["mock"]
+    provider_family: Literal["mock", "crm"]
     supported_capabilities: list[ConnectorCapability]
-    authentication_type: Literal["mock_local"]
+    authentication_type: Literal["mock_local", "oauth2_authorisation_code"]
     execution_risk_classes: list[ActionRiskClass]
     configuration_schema_version: int
-    execution_mode: Literal["simulation"] = "simulation"
+    execution_mode: Literal["simulation", "live"] = "simulation"
     available: bool
-    simulation_only: Literal[True] = True
+    simulation_only: bool = True
 
 
 class IntegrationCatalogResponse(APIModel):
     connectors: list[ConnectorDefinitionResponse]
-    execution_mode: Literal["simulation"] = "simulation"
-    external_actions_enabled: Literal[False] = False
+    execution_mode: Literal["simulation", "mixed"]
+    external_actions_enabled: bool
 
 
 class ConnectionCreateRequest(StrictIntegrationModel):
@@ -62,9 +62,12 @@ class OrganisationConnectionResponse(APIModel):
     connected_at: datetime
     last_verified_at: datetime | None
     revoked_at: datetime | None
+    external_account_id: str | None
+    external_account_name: str | None
+    granted_scopes: list[str]
     metadata_version: int
-    execution_mode: Literal["simulation"] = "simulation"
-    simulation_only: Literal[True] = True
+    execution_mode: Literal["simulation", "live"] = "simulation"
+    simulation_only: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -80,8 +83,8 @@ class ActionExecutionOptionResponse(APIModel):
     connector_display_name: str
     capability: ConnectorCapability
     risk_class: ActionRiskClass
-    execution_mode: Literal["simulation"] = "simulation"
-    simulation_only: Literal[True] = True
+    execution_mode: Literal["simulation", "live"] = "simulation"
+    simulation_only: bool = True
 
 
 class ActionExecutionOptionListResponse(APIModel):
@@ -129,7 +132,20 @@ class CRMExecutionPreview(StrictIntegrationModel):
     current_external_value: str | Decimal | None
     expected_external_value: str | Decimal | None
     new_value: str | Decimal | None
+    field_authority: Literal["crm_authoritative", "revenueos_authoritative", "review_before_sync"] | None = None
+    external_updated_at: datetime | None = None
     action: Literal["update_opportunity", "update_contact"]
+
+
+class CRMActivityExecutionPreview(StrictIntegrationModel):
+    kind: Literal["crm_activity"]
+    interaction_id: UUID
+    occurred_at: datetime
+    title: str
+    summary: str
+    agreed_next_steps: tuple[str, ...]
+    raw_transcript_included: Literal[False] = False
+    action: Literal["create_activity"] = "create_activity"
 
 
 class TaskExecutionPreview(StrictIntegrationModel):
@@ -143,7 +159,11 @@ class TaskExecutionPreview(StrictIntegrationModel):
 
 
 ExecutionPreviewContent = Annotated[
-    EmailExecutionPreview | CalendarExecutionPreview | CRMExecutionPreview | TaskExecutionPreview,
+    EmailExecutionPreview
+    | CalendarExecutionPreview
+    | CRMExecutionPreview
+    | CRMActivityExecutionPreview
+    | TaskExecutionPreview,
     Field(discriminator="kind"),
 ]
 
@@ -157,8 +177,8 @@ class ExecutionPreviewResponse(APIModel):
     connector_display_name: str
     capability: ConnectorCapability
     risk_class: ActionRiskClass
-    execution_mode: Literal["simulation"] = "simulation"
-    simulation_only: Literal[True] = True
+    execution_mode: Literal["simulation", "live"] = "simulation"
+    simulation_only: bool = True
     readiness: Literal["ready"] = "ready"
     summary: str
     confirmation_label: str
@@ -198,8 +218,8 @@ class ActionExecutionResponse(APIModel):
     capability: ConnectorCapability
     risk_class: ActionRiskClass
     execution_status: ExecutionStatus
-    execution_mode: Literal["simulation"] = "simulation"
-    simulation_only: Literal[True] = True
+    execution_mode: Literal["simulation", "live"] = "simulation"
+    simulation_only: bool = True
     confirmed_by_user_id: UUID
     confirmed_at: datetime
     started_at: datetime | None
@@ -221,3 +241,133 @@ class ActionExecutionListResponse(APIModel):
 
 class ActionExecutionDetailResponse(ActionExecutionResponse):
     attempts: list[ExecutionAttemptResponse]
+
+
+class OAuthStartResponse(APIModel):
+    authorisation_url: str
+    expires_at: datetime
+
+
+class OAuthCallbackRequest(StrictIntegrationModel):
+    state: Annotated[str, StringConstraints(min_length=32, max_length=512)]
+    code: Annotated[str, StringConstraints(min_length=1, max_length=2048)] | None = None
+    provider_error: Annotated[str, StringConstraints(min_length=1, max_length=120)] | None = None
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> OAuthCallbackRequest:
+        if (self.code is None) == (self.provider_error is None):
+            raise ValueError("Supply exactly one OAuth callback outcome.")
+        return self
+
+
+CRMObjectType = Literal["company", "contact", "deal"]
+
+
+class CRMSearchResult(APIModel):
+    external_object_type: CRMObjectType
+    external_object_id: str
+    display_name: str
+    secondary_label: str | None
+    updated_at: datetime | None
+
+
+class CRMSearchResponse(APIModel):
+    items: list[CRMSearchResult]
+    total: int
+
+
+class CRMEntityLinkRequest(StrictIntegrationModel):
+    connection_id: UUID
+    external_object_type: CRMObjectType
+    external_object_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+
+
+class CRMEntityMappingResponse(APIModel):
+    id: UUID
+    connection_id: UUID
+    connector_key: ConnectorKey
+    revenueos_entity_type: Literal["company", "contact", "opportunity"]
+    revenueos_entity_id: UUID
+    external_object_type: CRMObjectType
+    external_object_id: str
+    external_updated_at: datetime | None
+    last_synced_at: datetime | None
+    sync_state: Literal["active", "external_missing"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class CRMPropertyDefinition(APIModel):
+    entity_type: Literal["opportunity", "contact"]
+    external_property_name: str
+    label: str
+    property_type: Literal["string", "number", "date", "datetime", "enumeration"]
+    options: list[dict[str, str]]
+    read_only: bool
+
+
+class CRMFieldMappingRequest(StrictIntegrationModel):
+    entity_type: Literal["opportunity", "contact"]
+    revenueos_field: Literal[
+        "stage",
+        "expected_close_date",
+        "estimated_value",
+        "next_step",
+        "description",
+        "first_name",
+        "last_name",
+        "email",
+        "job_title",
+    ]
+    external_property_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    authority: Literal["review_before_sync", "crm_authoritative"] = "review_before_sync"
+
+
+class CRMFieldMappingResponse(APIModel):
+    id: UUID
+    connection_id: UUID
+    entity_type: Literal["opportunity", "contact"]
+    revenueos_field: str
+    external_property_name: str
+    external_property_type: Literal["string", "number", "date", "datetime", "enumeration"]
+    authority: Literal["crm_authoritative", "revenueos_authoritative", "review_before_sync"]
+    enabled: bool
+
+
+class CRMFieldConfigurationResponse(APIModel):
+    properties: list[CRMPropertyDefinition]
+    mappings: list[CRMFieldMappingResponse]
+
+
+class CRMStageMappingRequest(StrictIntegrationModel):
+    revenueos_stage: Literal[
+        "qualification",
+        "discovery",
+        "evaluation",
+        "proposal",
+        "negotiation",
+        "procurement",
+        "closed_won",
+        "closed_lost",
+        "other",
+    ]
+    external_pipeline_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    external_stage_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+
+
+class CRMStageDefinition(APIModel):
+    pipeline_id: str
+    pipeline_label: str
+    stage_id: str
+    stage_label: str
+
+
+class CRMStageMappingResponse(APIModel):
+    revenueos_stage: str
+    external_pipeline_id: str
+    external_stage_id: str
+
+
+class CRMStageConfigurationResponse(APIModel):
+    available_stages: list[CRMStageDefinition]
+    mappings: list[CRMStageMappingResponse]

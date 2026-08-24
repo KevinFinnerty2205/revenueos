@@ -136,6 +136,7 @@ class OpportunityUpdatePayload(StrictActionModel):
         "description",
         "estimated_value",
         "currency",
+        "next_step",
     ]
     current_value: str | Decimal | None
     proposed_value: str | Decimal | None
@@ -151,6 +152,27 @@ class ContactUpdatePayload(StrictActionModel):
     email: EmailText | None
     job_title: ShortText | None
     current_values: dict[str, str | None]
+
+
+class LogInteractionPayload(StrictActionModel):
+    kind: Literal["log_interaction"]
+    interaction_id: UUID
+    occurred_at: datetime
+    interaction_type: Literal[
+        "online_meeting",
+        "face_to_face_meeting",
+        "presentation",
+        "workshop",
+        "site_visit",
+        "executive_lunch",
+        "phone_call",
+        "conference_interaction",
+        "trade_show_interaction",
+        "manual_interaction",
+    ]
+    title: ShortText
+    summary: DescriptionText
+    agreed_next_steps: tuple[LabelText, ...] = Field(max_length=8)
 
 
 class StakeholderUpdatePayload(StrictActionModel):
@@ -258,6 +280,7 @@ ActionPayload = Annotated[
     | ScheduleInteractionPayload
     | OpportunityUpdatePayload
     | ContactUpdatePayload
+    | LogInteractionPayload
     | StakeholderUpdatePayload
     | RecordDecisionPayload
     | RecordCommitmentPayload

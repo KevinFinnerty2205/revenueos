@@ -1,10 +1,9 @@
 # Checkpoint 1 — Core competitive and product readiness
 
-> **WO-025A update (24 August 2026):** Core navigation, first-time guidance,
-> Opportunity/Interaction hierarchy, bounded entity Search and Action terminology are
-> implemented. Ask, production CRM sync and observed Checkpoint 1B validation remain
-> WO-025B, WO-025C and Checkpoint 1B respectively. Target-environment launch approval
-> is not inferred from local product hardening.
+> **WO-025A/B/C update (24 August 2026):** Core navigation and first-time guidance,
+> bounded Search/Ask, and one production-capable reviewed HubSpot CRM path are
+> implemented. Target-environment launch approval and observed Checkpoint 1B
+> validation remain separate and are not inferred from local product hardening.
 
 - **Decision date:** 17 August 2026
 - **Baseline reviewed:** WO-011 through WO-025, ending at RevenueOS Daily
@@ -81,7 +80,7 @@ autonomy, scoring or surveillance posture.
 | Capture           | Automatic online call capture is a normal expectation                   | Deliberate browser face-to-face capture; online/phone import; no native online bot or call capture                | Best authorised source with equally valid no-recording path                                         | B         | Keep selected online/productivity capture in WO-040/041 unless WO-025A cohort evidence pulls one path forward |
 | Transcription     | Fast automatic transcription after captured calls                       | Versioned segments and optional OpenAI batch adapter exist; normal flags are off and customer use is not approved | Supported production batch path with explicit partial/failure states                                | A         | Operationalise one existing path in WO-025A                                                                   |
 | Notes/summaries   | Structured summaries, next steps and call records                       | Strong typed Meeting/Interaction artefacts; generation is not a zero-touch production loop                        | Source-aware, timely and reviewable after each supported Interaction                                | C         | Validate quality and latency in WO-025A                                                                       |
-| CRM auto-fill     | Field-level Salesforce/HubSpot write-back is central to the proposition | CRM-ready Action payloads and safe simulation only                                                                | One real, mapped, conflict-aware connector; review by default                                       | A         | WO-025C; retain broader connector breadth in WO-042                                                           |
+| CRM auto-fill     | Field-level Salesforce/HubSpot write-back is central to the proposition | One mapped, conflict-aware, review-by-default HubSpot path                                                        | Validate the path in the target environment                                                         | C         | Retain broader connector breadth in WO-042                                                                    |
 | Methodology       | MEDDIC/BANT/SPICED extraction and scores                                | MEDDIC, MEDDPICC, BANT, SPICED and bounded custom projections with five evidence states                           | Evidence-backed gaps that improve preparation, actions and later forecast                           | D         | Keep categorical trust states; do not add a primary percentage                                                |
 | Deal intelligence | Deal summaries, plans, health and warnings                              | Rich latest-meeting intelligence, Revenue Brain changes, methodology, risks and next action                       | Concise current deal narrative across all final sources                                             | B         | Improve Workspace projection in WO-025A/WO-035; avoid a rival deal score                                      |
 | Risk              | Continuous risk warnings with recommended actions                       | Supported risks, blockers, conflicts, stale gaps and deterministic Daily attention                                | Portfolio and manager exceptions with citations                                                     | C         | Personal view covered; team roll-up in WO-039                                                                 |
@@ -571,11 +570,13 @@ Do not start WO-026 until all are evidenced:
 Checkpoint 1B may modify or stop the sequence. This review does not authorise any
 listed work order.
 
-## WO-025B completion note
+## WO-025B/C completion note
 
 Ask RevenueOS is now implemented as the checkpoint's smallest trustworthy Core Q&A
 slice: contextual Opportunity/Account and user-owned workspace scope, bounded current
 RevenueOS sources, explicit citations/statuses, no public research, no arbitrary SQL,
-no Action execution and no retained chat. This closes the Ask access gap without
-authorising Prospect or WO-025C. Checkpoint 1B and the selected CRM decision remain
+no Action execution and no retained chat. WO-025C separately selects HubSpot and
+implements one explicit link → preview → confirm → verify/reconcile path with no
+autonomous write. These close the technical Ask and first-CRM gaps without
+authorising Prospect. Target-environment approval and observed Checkpoint 1B remain
 separate gates.

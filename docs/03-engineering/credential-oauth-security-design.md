@@ -1,7 +1,7 @@
 # Credential and OAuth security design
 
-WO-022 defines a credential-store abstraction but implements no OAuth provider,
-token exchange or production secret storage. Mock connections use no credential.
+WO-022 defined the abstraction. WO-025C implements it for HubSpot with server-side
+OAuth and AES-256-GCM database envelopes. Mock connections still use no credential.
 
 ## Boundary
 
@@ -13,7 +13,16 @@ manager reference; token material must never be stored in the application table.
 API responses, shared browser contracts, exports, audits and logs omit the field.
 Revocation clears the reference after asking the credential store to revoke it.
 
-## Requirements for a future live connector
+## Live HubSpot implementation
+
+High-entropy state is stored hashed and bound to tenant, admin user, exact redirect,
+expiry and one-time consumption. Short-lived access and refresh tokens are available
+only inside the adapter. A 32-byte environment master key is required; associated
+data binds every ciphertext to tenant, connection and credential ID. Refresh rotates
+the envelope and disconnect attempts provider revocation before local deletion.
+See [HubSpot OAuth security](crm-oauth-credential-security.md).
+
+## Requirements for any additional live connector
 
 - Administrator-only, deliberate connection and reauthorisation.
 - PKCE and state/nonce validation where applicable.

@@ -31,7 +31,7 @@ proposals are visibly higher risk. Users can inspect why an Action was recommend
 edit safe fields, approve without execution, reject with a controlled reason, and
 manually complete an approved internal Action. Approved Actions are labelled
 **Approved — execution requires confirmation**; the separate execution endpoints
-still fail closed unless the complete WO-022 simulation flag set is enabled.
+fail closed unless an eligible simulation or WO-025C HubSpot connection is enabled.
 Users must review an exact server preview and make a separate final confirmation.
 
 Current reviewed Actions can contribute to future Pre-Interaction Brief commitments.
@@ -44,17 +44,26 @@ approval. It does not change the review lifecycle: approval never queues work an
 the execute request cannot replace approved content. The simulation lifecycle and
 history are separate from the Action's review status.
 
+## WO-025C reviewed CRM execution
+
+WO-025C adds one live path for approved Opportunity/Contact field updates and
+bounded interaction activity logging through HubSpot. Final Executive Summary and
+Next Best Action may prepare CRM Actions, but neither intelligence nor approval
+can call HubSpot. A live current-value preview and a separate **Update CRM** or
+**Log interaction in CRM** confirmation remain mandatory. See the
+[Focused CRM Sync guide](../03-engineering/focused-crm-sync.md).
+
 ## Explicit limitations
 
 - no real email sending, mailbox connection or recipient delivery confirmation;
-- no real CRM, calendar, task-system or collaboration-tool connector;
-- no autonomous agent loop or live external execution;
+- no second CRM, real calendar, task-system or collaboration-tool connector;
+- no autonomous agent loop or autonomous external execution;
 - no automatic Opportunity, Contact, Stakeholder or Task mutation;
 - no use of provisional Live Intelligence;
 - no predictive scoring or guarantee that a recommendation is correct.
 
-The Action Layer remains the review/intent source. WO-022's separate execution
-engine performs simulations only.
+The Action Layer remains the review/intent source. WO-022 mock adapters still
+simulate; WO-025C HubSpot is the only live adapter and always requires confirmation.
 
 WO-025 RevenueOS Daily reads only current proposed, edited and approved Actions for
 the user's owned Opportunities. It caps the section at five, keeps **Approved — not

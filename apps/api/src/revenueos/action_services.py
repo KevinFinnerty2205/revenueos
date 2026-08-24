@@ -27,6 +27,7 @@ from revenueos.action_contracts import (
     ContactUpdatePayload,
     CreateTaskPayload,
     FollowUpEmailPayload,
+    LogInteractionPayload,
     OpportunityUpdatePayload,
     OtherActionPayload,
     PrepareNextInteractionPayload,
@@ -46,6 +47,7 @@ from revenueos.action_repositories import ActionRecord, ActionRepository
 from revenueos.ai_contracts import (
     ActionItemsArtifactContent,
     DecisionsArtifactContent,
+    ExecutiveSummaryArtifactContent,
     FollowUpEmailArtifactContent,
     NextBestActionArtifactContent,
     OpenQuestionsArtifactContent,
@@ -101,6 +103,7 @@ _DATA_MUTATION_TYPES = {
     ActionType.UPDATE_OPPORTUNITY,
     ActionType.UPDATE_CONTACT,
     ActionType.UPDATE_STAKEHOLDER,
+    ActionType.LOG_INTERACTION,
 }
 _CUSTOMER_FACING_TYPES = {
     ActionType.FOLLOW_UP_EMAIL,
@@ -512,6 +515,7 @@ class ActionService:
                 self.tenant.organisation_id,
                 recent,
                 artifact_types={
+                    "executive_summary",
                     "action_items",
                     "decisions",
                     "risks_blockers",
@@ -523,7 +527,16 @@ class ActionService:
             )
             selected = self._validated_artifacts(artifacts)
             meeting = recent[0].meeting
-            candidates.extend(self._artifact_candidates(opportunity, meeting.interaction_id, selected))
+            candidates.extend(
+                self._artifact_candidates(
+                    opportunity,
+                    meeting.interaction_id,
+                    meeting.meeting_date,
+                    meeting.title,
+                    recent[0].interaction_type,
+                    selected,
+                )
+            )
 
         display = await self.workspace_repository.get_opportunity(
             self.tenant.organisation_id,
@@ -619,9 +632,71 @@ class ActionService:
         self,
         opportunity: Opportunity,
         interaction_id: UUID,
+        occurred_at: datetime,
+        interaction_title: str,
+        interaction_type: str,
         artifacts: dict[str, tuple[AIArtifact, BaseModel]],
     ) -> list[ActionCandidate]:
         values: list[ActionCandidate] = []
+        summary_entry = artifacts.get("executive_summary")
+        if summary_entry is not None:
+            artifact, parsed = summary_entry
+            summary = cast(ExecutiveSummaryArtifactContent, parsed)
+            action_items_entry = artifacts.get("action_items")
+            agreed_next_steps: tuple[str, ...] = ()
+            source_refs = [self._artifact_ref(artifact, "executive_summary:0", "Final Executive Summary")]
+            if action_items_entry is not None:
+                action_items = cast(ActionItemsArtifactContent, action_items_entry[1])
+                agreed_next_steps = tuple(item.task for item in action_items.action_items[:8])
+                source_refs.extend(
+                    self._artifact_ref(
+                        action_items_entry[0],
+                        f"action_item:{index}",
+                        "Final Action Item",
+                    )
+                    for index, _item in enumerate(action_items.action_items[:8])
+                )
+            values.append(
+                ActionCandidate(
+                    logical_key="crm_activity:executive_summary",
+                    interaction_id=interaction_id,
+                    action_type=ActionType.LOG_INTERACTION,
+                    priority=ActionPriority.NORMAL,
+                    title="Log this interaction in CRM",
+                    description=(
+                        "Review the bounded final summary before creating a CRM activity. "
+                        "Raw transcript and private Evidence are excluded."
+                    ),
+                    proposed_due_at=None,
+                    target_entity_type="opportunity",
+                    target_entity_id=opportunity.id,
+                    payload=LogInteractionPayload(
+                        kind="log_interaction",
+                        interaction_id=interaction_id,
+                        occurred_at=occurred_at,
+                        interaction_type=cast(
+                            Literal[
+                                "online_meeting",
+                                "face_to_face_meeting",
+                                "presentation",
+                                "workshop",
+                                "site_visit",
+                                "executive_lunch",
+                                "phone_call",
+                                "conference_interaction",
+                                "trade_show_interaction",
+                                "manual_interaction",
+                            ],
+                            interaction_type,
+                        ),
+                        title=interaction_title,
+                        summary=summary.executive_summary,
+                        agreed_next_steps=agreed_next_steps,
+                    ),
+                    source_refs=tuple(source_refs),
+                    provenance_summary="Prepared from the current final Executive Summary; no transcript is included.",
+                )
+            )
         action_items_entry = artifacts.get("action_items")
         if action_items_entry is not None:
             artifact, parsed = action_items_entry
@@ -697,6 +772,20 @@ class ActionService:
         if nba_entry is not None:
             artifact, parsed = nba_entry
             nba_content = cast(NextBestActionArtifactContent, parsed)
+            primary = nba_content.recommended_actions[0]
+            values.append(
+                self._opportunity_update(
+                    opportunity,
+                    interaction_id,
+                    "crm_next_step:next_best_action",
+                    "next_step",
+                    None,
+                    primary.action,
+                    primary.reason,
+                    self._artifact_ref(artifact, "recommended_action:0", "Next Best Action"),
+                    "Prepared from the current final Next Best Action for explicit CRM review.",
+                )
+            )
             for index, recommendation in enumerate(nba_content.recommended_actions[:2]):
                 source = self._artifact_ref(artifact, f"recommended_action:{index}", "Next Best Action")
                 lowered = recommendation.action.casefold()
@@ -1222,7 +1311,15 @@ class ActionService:
         opportunity: Opportunity,
         interaction_id: UUID | None,
         logical_key: str,
-        field: Literal["stage", "status", "expected_close_date", "description", "estimated_value", "currency"],
+        field: Literal[
+            "stage",
+            "status",
+            "expected_close_date",
+            "description",
+            "estimated_value",
+            "currency",
+            "next_step",
+        ],
         current_value: str | Decimal | None,
         proposed_value: str | Decimal | None,
         statement: str,
@@ -1253,6 +1350,7 @@ class ActionService:
     @staticmethod
     def _validated_artifacts(artifacts: list[AIArtifact]) -> dict[str, tuple[AIArtifact, BaseModel]]:
         validators: dict[str, type[BaseModel]] = {
+            "executive_summary": ExecutiveSummaryArtifactContent,
             "action_items": ActionItemsArtifactContent,
             "decisions": DecisionsArtifactContent,
             "risks_blockers": RisksBlockersArtifactContent,

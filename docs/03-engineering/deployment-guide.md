@@ -131,6 +131,21 @@ Execution and Mock Connectors disabled in production. No provider credential is
 required or accepted for these mock adapters. In a non-production environment,
 enable the complete flag set and run one synthetic email simulation before rollout.
 
+WO-025C advances the single head to `0034_crm_sync`. Deploy API, worker and web
+together; verify the five new forced-RLS tables, updated connector/capability/status
+checks, downgrade/re-upgrade and Alembic drift. HubSpot remains off unless all core
+execution flags plus `API_FEATURE_HUBSPOT_CRM_ENABLED` are true and client ID, secret,
+exact HTTPS callback and a base64url 32-byte credential master key validate. Register
+only the documented scopes. Complete a separately gated developer-test-account
+connect, test, deal link, preview, write, reconciliation and disconnect proof before
+customer rollout. No real provider smoke test belongs in standard CI.
+
+Rollback first disables HubSpot and Action Execution. Existing external updates
+cannot be undone by RevenueOS. Disconnect/revoke tenant connections before retiring
+the app/client secret or downgrading. Prefer application rollback with the forward
+schema; downgrading `0034` permanently removes OAuth state, encrypted credentials
+and CRM mapping configuration and restores the WO-022 simulation-only checks.
+
 ## Rollback
 
 Disable Action Execution and Integrations before rolling back WO-022. Prefer an

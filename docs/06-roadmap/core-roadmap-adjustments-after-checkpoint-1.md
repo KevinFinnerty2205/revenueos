@@ -1,7 +1,7 @@
 # Core roadmap adjustments after Checkpoint 1
 
-- **Status:** Approved sequence; WO-025A experience hardening and WO-025B Ask RevenueOS
-  implemented on 24 August 2026, while WO-025C and Checkpoint 1B remain future
+- **Status:** Approved sequence; WO-025A/B/C implemented on 24 August 2026, while
+  target-environment validation and observed Checkpoint 1B remain future
 - **Source decision:** [Checkpoint 1 — Core competitive and product readiness](checkpoint-1-core-competitive-readiness.md)
 - **Rule:** Prove the Core loop before adding a new data-acquisition module
 
@@ -71,10 +71,17 @@ provider composer remains a separately gated future change.
 
 ## WO-025C — Core CRM Sync
 
+**Implementation note (24 August 2026):** HubSpot was selected after a documented
+Salesforce/HubSpot comparison. The implemented boundary is confidential OAuth,
+explicit record linking, typed field/stage authority, current-value preview,
+explicit confirmation, verified write/activity execution, stale-state protection
+and read-only uncertainty reconciliation. It remains off by default and does not
+constitute target-environment or customer launch approval.
+
 - **Objective/value/package:** Close one real approved Opportunity/Contact update loop
   while the customer's CRM remains authoritative. **Core integration foundation**.
-- **Provider decision:** Choose **Salesforce or HubSpot**, not both, from the first
-  cohort's stack, API/scopes, sandbox, support and commercial evidence.
+- **Provider decision:** **HubSpot selected; Salesforce deferred.** Only HubSpot has a
+  production adapter in WO-025C.
 - **Experience:** Admin connection and health; explicit record match/mapping; source
   authority visible in Opportunity/Action review; exact preview, confirmation and
   receipt; useful unavailable/conflict/recovery states.

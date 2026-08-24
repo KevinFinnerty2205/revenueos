@@ -29,3 +29,11 @@ intentional blockers, not deferred details of a working connector.
 
 No real external network action, production connector, browser automation,
 autonomous agent or AI tool invocation was introduced by WO-022.
+
+## WO-025C superseding live review
+
+This document remains the WO-022 simulation review. WO-025C closes the listed OAuth,
+credential, live stale-state and reconciliation gaps for HubSpot only; it does not
+change the mock-connector verdict or approve a target environment. See the dedicated
+[CRM sync security review](crm-sync-security-review.md) and
+[OAuth/credential guide](crm-oauth-credential-security.md).

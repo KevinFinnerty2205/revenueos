@@ -16,7 +16,10 @@ approved subject/body. Task creation fixes the approved linked Opportunity,
 nullable owner, due date and context. Execute requests cannot provide arbitrary
 replacement payloads.
 
-For a future live connector, expected-version or ETag support is preferred.
-Otherwise the adapter must read immediately before mutation, compare a normalised
-allowlisted state, and stop on uncertainty. Conflict resolution belongs in a new
-review cycle, not in an automatic retry.
+WO-025C applies that rule to HubSpot, whose object APIs do not provide the required
+conditional update primitive for this path. Preview fetches the mapped allowlisted
+field and provider update timestamp. The worker fetches it again, reconstructs the
+preview fingerprint and stops with `stale_external_state` if it changed. Amounts use
+exact decimal normalisation and require matching currency context; no conversion is
+performed. Conflict resolution belongs in a fresh preview/review cycle, not an
+automatic retry.

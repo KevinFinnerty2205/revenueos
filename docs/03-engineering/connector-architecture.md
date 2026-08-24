@@ -30,7 +30,8 @@ before any tenant read or write.
 
 ## Registry rules
 
-The initial keys are `mock_email`, `mock_calendar`, `mock_crm` and `mock_task`.
+The keys are `mock_email`, `mock_calendar`, `mock_crm`, `mock_task` and the sole
+live key `hubspot`.
 Only the server registry maps these to `send_email`, `create_calendar_event`,
 `update_opportunity`, `update_contact` and `create_task`. Database constraints
 close the same sets. Unknown keys, capability drift and risk mismatches fail
@@ -43,3 +44,9 @@ validator rejects mock connectors in production.
 See [ActionExecutor contract](action-executor-contract.md),
 [credential/OAuth design](credential-oauth-security-design.md) and
 [ADR 0034](../08-decisions/0034-simulation-first-execution-boundary.md).
+
+WO-025C supplies `HubSpotCRMExecutor` through the same registry. Provider HTTP and
+token types remain inside the adapter. Tenant mappings bind approved Actions to
+exact external objects/properties, and the existing worker owns retry, lease,
+idempotency and result audit. No new queue/service was added. See
+[ADR 0037](../08-decisions/0037-hubspot-first-focused-crm-sync.md).

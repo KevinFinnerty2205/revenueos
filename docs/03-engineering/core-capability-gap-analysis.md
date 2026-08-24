@@ -143,15 +143,18 @@ The first connector needs a bounded tenant-owned binding/mapping surface:
 - conflict, tombstone/disconnect and last reconciled state; and
 - immutable external execution receipt reference without customer payload in logs.
 
-The exact schema belongs to the future work order. Checkpoint 1 does not authorise a
-migration.
+WO-025C now implements this minimum schema in migration `0034_crm_sync`: one-time
+OAuth state, encrypted credential envelopes, tenant-owned entity/field/stage
+mappings and connection/execution metadata. It deliberately omits cursors, webhook
+receipts and a parallel CRM domain because there is no inbound or bulk sync.
 
 ### Read/match before write
 
 A safe write requires the product to know which external organisation, object and
 field it is changing. The MVP must therefore read the minimum identifiers and current
 values needed for explicit matching and conflict detection. It is not a general CRM
-replica. Initial provider backfill must be bounded, resumable and reviewable.
+replica. WO-025C performs no provider backfill. Search is bounded and user-triggered;
+a user must select one exact external record before a mapping is stored.
 
 ### Authority and execution
 
@@ -167,10 +170,11 @@ state what canonical data/receipts remain under policy.
 
 ### Provider selection
 
-Choose Salesforce or HubSpot only after checking the design-partner majority,
-sandbox/test support, granular OAuth scopes, object/field APIs, webhook/revision
-semantics, rate limits, data residency/deletion, app-review requirements, pricing and
-support burden. Do not select both for roadmap symmetry.
+WO-025C evaluated Salesforce and HubSpot against target-market, OAuth, sandbox,
+scope, object/activity, custom-field, rate-limit, reconciliation and administration
+criteria and selected HubSpot. Salesforce is deferred to a separate work order; no
+Salesforce runtime, credential or UI code was added. See the
+[provider decision](../05-integrations/crm-provider-selection.md).
 
 ## Later dependency chain
 

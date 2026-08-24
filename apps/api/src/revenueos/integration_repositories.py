@@ -15,10 +15,14 @@ from revenueos.models import (
     ActionExecutionAttempt,
     ActionProposal,
     ActionProposalVersion,
+    CRMEntityMapping,
+    CRMFieldMapping,
+    CRMStageMapping,
     ExecutionPreview,
     IntegrationAuditEvent,
     IntegrationConnection,
     MockConnectorObject,
+    OAuthConnectionState,
 )
 
 
@@ -270,6 +274,112 @@ class IntegrationRepository:
             statement = statement.with_for_update()
         return cast(MockConnectorObject | None, await self.session.scalar(statement))
 
+    async def oauth_state_by_hash(
+        self,
+        organisation_id: UUID,
+        state_hash: str,
+        *,
+        for_update: bool = False,
+    ) -> OAuthConnectionState | None:
+        statement = select(OAuthConnectionState).where(
+            OAuthConnectionState.organisation_id == organisation_id,
+            OAuthConnectionState.state_hash == state_hash,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return cast(OAuthConnectionState | None, await self.session.scalar(statement))
+
+    async def entity_mapping(
+        self,
+        organisation_id: UUID,
+        connection_id: UUID,
+        entity_type: str,
+        entity_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> CRMEntityMapping | None:
+        statement = select(CRMEntityMapping).where(
+            CRMEntityMapping.organisation_id == organisation_id,
+            CRMEntityMapping.connection_id == connection_id,
+            CRMEntityMapping.revenueos_entity_type == entity_type,
+            CRMEntityMapping.revenueos_entity_id == entity_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return cast(CRMEntityMapping | None, await self.session.scalar(statement))
+
+    async def field_mapping(
+        self,
+        organisation_id: UUID,
+        connection_id: UUID,
+        entity_type: str,
+        revenueos_field: str,
+    ) -> CRMFieldMapping | None:
+        return cast(
+            CRMFieldMapping | None,
+            await self.session.scalar(
+                select(CRMFieldMapping).where(
+                    CRMFieldMapping.organisation_id == organisation_id,
+                    CRMFieldMapping.connection_id == connection_id,
+                    CRMFieldMapping.entity_type == entity_type,
+                    CRMFieldMapping.revenueos_field == revenueos_field,
+                    CRMFieldMapping.enabled.is_(True),
+                )
+            ),
+        )
+
+    async def list_field_mappings(
+        self,
+        organisation_id: UUID,
+        connection_id: UUID,
+        entity_type: str,
+    ) -> list[CRMFieldMapping]:
+        values = await self.session.scalars(
+            select(CRMFieldMapping)
+            .where(
+                CRMFieldMapping.organisation_id == organisation_id,
+                CRMFieldMapping.connection_id == connection_id,
+                CRMFieldMapping.entity_type == entity_type,
+            )
+            .order_by(CRMFieldMapping.revenueos_field)
+        )
+        return list(values.all())
+
+    async def stage_mapping(
+        self,
+        organisation_id: UUID,
+        connection_id: UUID,
+        revenueos_stage: str,
+    ) -> CRMStageMapping | None:
+        return cast(
+            CRMStageMapping | None,
+            await self.session.scalar(
+                select(CRMStageMapping).where(
+                    CRMStageMapping.organisation_id == organisation_id,
+                    CRMStageMapping.connection_id == connection_id,
+                    CRMStageMapping.revenueos_stage == revenueos_stage,
+                )
+            ),
+        )
+
+    async def list_stage_mappings(
+        self,
+        organisation_id: UUID,
+        connection_id: UUID,
+    ) -> list[CRMStageMapping]:
+        values = await self.session.scalars(
+            select(CRMStageMapping)
+            .where(
+                CRMStageMapping.organisation_id == organisation_id,
+                CRMStageMapping.connection_id == connection_id,
+            )
+            .order_by(CRMStageMapping.revenueos_stage)
+        )
+        return list(values.all())
+
+    async def delete_entity_mapping(self, mapping: CRMEntityMapping) -> None:
+        await self.session.delete(mapping)
+
     async def invalidate_connection_previews(
         self,
         organisation_id: UUID,
@@ -319,7 +429,11 @@ class IntegrationRepository:
         | ActionExecution
         | ActionExecutionAttempt
         | IntegrationAuditEvent
-        | MockConnectorObject,
+        | MockConnectorObject
+        | OAuthConnectionState
+        | CRMEntityMapping
+        | CRMFieldMapping
+        | CRMStageMapping,
     ) -> None:
         self.session.add(record)
 
