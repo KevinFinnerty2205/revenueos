@@ -22,7 +22,9 @@ describe("BetaFeatureGate", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Feature unavailable" }),
+      await screen.findByRole("heading", {
+        name: "This section is not enabled",
+      }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Sensitive workspace content")).toBeNull();
   });

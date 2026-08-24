@@ -218,7 +218,7 @@ test("online meeting uses a safe passive lifecycle and persists transcript impor
       .getByRole("region", { name: "Use your meeting platform" })
       .getByText(/remains passive while the meeting runs/i),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Open mobile Companion" }).click();
+  await page.getByRole("link", { name: "Continue in Companion" }).click();
   await expect(page.getByText("Live Intelligence unavailable")).toBeVisible();
   await expect(
     page.getByRole("button", { name: /capture meeting audio/i }),

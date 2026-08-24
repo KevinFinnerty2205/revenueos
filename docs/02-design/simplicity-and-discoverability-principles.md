@@ -3,6 +3,10 @@
 - **Status:** Mandatory design gate for future work orders
 - **Goal:** RevenueOS absorbs complexity so the salesperson does not have to
 
+WO-025A applies this gate to the existing Core: one next-action focus on Opportunity,
+lifecycle-led Interaction controls, progressive meeting/administration disclosure,
+bounded Search and a four-task mobile shell.
+
 ## Product rules
 
 - One page primarily answers one user question.

@@ -185,8 +185,8 @@ export function OnlineMeetingCapture({
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
           {capabilities.safeMessage} RevenueOS never joins this meeting or
-          captures browser system audio. Choose an authorised artefact below, or
-          use AI Debrief or Voice Journal while the context is fresh.
+          captures browser system audio. Choose an authorised source below, or
+          report what happened while the context is fresh.
         </p>
         <ul className="mt-5 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <li className="rounded-xl bg-slate-50 p-4">
@@ -328,8 +328,8 @@ export function OnlineMeetingCapture({
                 />
                 <span>
                   I understand approved processing may send transcript content
-                  to the configured AI provider; transcript content is not
-                  written to application logs.
+                  to the configured external AI service; transcript content is
+                  not written to application logs.
                 </span>
               </label>
               {error ? (

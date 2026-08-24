@@ -109,9 +109,14 @@ export function InteractionDetail({
     );
   }
 
-  const canComplete =
-    interaction.lifecycleStatus === "planned" ||
-    interaction.lifecycleStatus === "in_progress";
+  const isActive = interaction.lifecycleStatus === "in_progress";
+  const isCompleted = interaction.lifecycleStatus === "completed";
+  const companionLabel =
+    interaction.lifecycleStatus === "planned"
+      ? "Prepare and start"
+      : isActive
+        ? "Continue in Companion"
+        : "Review capture in Companion";
   return (
     <section aria-labelledby="interaction-detail-title">
       <Link
@@ -215,18 +220,25 @@ export function InteractionDetail({
             {error}
           </p>
         ) : null}
+        <p className="mt-7 border-t border-slate-100 pt-5 text-sm font-semibold text-slate-500">
+          Prepare <span aria-hidden="true">→</span> Capture{" "}
+          <span aria-hidden="true">→</span> Review{" "}
+          <span aria-hidden="true">→</span> Follow through
+        </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
-            className="primary-button"
+            className={
+              isActive || isCompleted ? "secondary-button" : "primary-button"
+            }
             href={`/interactions/${interaction.id}/companion`}
           >
-            Open mobile Companion
+            {companionLabel}
           </Link>
           {interaction.interactionType === "phone_call" &&
           interaction.lifecycleStatus === "planned" ? (
             <button
               type="button"
-              className="primary-button"
+              className="secondary-button"
               disabled={starting || completing}
               onClick={() => void start()}
             >
@@ -237,31 +249,48 @@ export function InteractionDetail({
           interaction.lifecycleStatus === "planned" ? (
             <button
               type="button"
-              className="primary-button"
+              className="secondary-button"
               disabled={starting || completing}
               onClick={() => void start()}
             >
               {starting ? "Starting…" : "Start meeting"}
             </button>
           ) : null}
-          {canComplete &&
+          {interaction.lifecycleStatus === "planned" &&
           interaction.interactionType !== "phone_call" &&
-          (interaction.interactionType !== "online_meeting" ||
-            interaction.lifecycleStatus === "in_progress") ? (
+          interaction.interactionType !== "online_meeting" ? (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={starting || completing}
+              onClick={() => void start()}
+            >
+              {starting ? "Starting…" : "Start interaction"}
+            </button>
+          ) : null}
+          {isActive &&
+          interaction.interactionType !== "phone_call" &&
+          interaction.interactionType !== "online_meeting" ? (
             <button
               type="button"
               className="primary-button"
               disabled={completing}
               onClick={() => void complete()}
             >
-              {completing
-                ? "Completing…"
-                : interaction.interactionType === "online_meeting"
-                  ? "End meeting"
-                  : "Complete interaction"}
+              {completing ? "Completing…" : "Finish interaction"}
             </button>
           ) : null}
-          {canComplete && interaction.interactionType === "phone_call" ? (
+          {isActive && interaction.interactionType === "online_meeting" ? (
+            <button
+              type="button"
+              className="primary-button"
+              disabled={completing}
+              onClick={() => void complete()}
+            >
+              {completing ? "Ending…" : "End meeting"}
+            </button>
+          ) : null}
+          {isActive && interaction.interactionType === "phone_call" ? (
             <>
               {interaction.lifecycleStatus === "in_progress" ? (
                 <button
@@ -301,10 +330,10 @@ export function InteractionDetail({
           ) : null}
           {interaction.meetingId ? (
             <Link
-              className="secondary-button"
+              className={isCompleted ? "primary-button" : "secondary-button"}
               href={`/meetings/${interaction.meetingId}`}
             >
-              Open Meeting Intelligence
+              Review meeting intelligence
             </Link>
           ) : null}
           {interaction.interactionType === "online_meeting" &&
@@ -320,14 +349,16 @@ export function InteractionDetail({
           ) : null}
         </div>
       </div>
-      <div className="mt-6" id="preparation">
-        <BetaFeatureGate feature="aiCompanion">
-          <PreInteractionBrief
-            interactionId={interaction.id}
-            interactionType={interaction.interactionType}
-          />
-        </BetaFeatureGate>
-      </div>
+      {!isCompleted ? (
+        <div className="mt-6" id="preparation">
+          <BetaFeatureGate feature="aiCompanion">
+            <PreInteractionBrief
+              interactionId={interaction.id}
+              interactionType={interaction.interactionType}
+            />
+          </BetaFeatureGate>
+        </div>
+      ) : null}
       {interaction.lifecycleStatus === "completed" ? (
         <div className="mt-6" id="debrief">
           <BetaFeatureGate feature="aiDebrief">
@@ -338,11 +369,9 @@ export function InteractionDetail({
           </BetaFeatureGate>
         </div>
       ) : null}
-      <div className="mt-6" id="recording">
-        {interaction.interactionType === "online_meeting" ? (
-          interaction.lifecycleStatus === "completed" ? (
-            <OnlineMeetingCapture interaction={interaction} />
-          ) : (
+      {!isCompleted ? (
+        <div className="mt-6">
+          {interaction.interactionType === "online_meeting" ? (
             <section
               className="form-card"
               aria-labelledby="online-capture-boundary"
@@ -353,17 +382,11 @@ export function InteractionDetail({
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 RevenueOS remains passive while the meeting runs. It does not
                 join, record system audio, monitor the browser or run a meeting
-                bot. End the meeting here, then choose an authorised recording,
-                transcript, AI Debrief or Voice Journal capture path.
+                bot. End the meeting here, then add an authorised recording or
+                transcript, or report what happened while it is fresh.
               </p>
             </section>
-          )
-        ) : interaction.interactionType === "phone_call" ? (
-          interaction.lifecycleStatus === "completed" ? (
-            <BetaFeatureGate feature="recordingCapture">
-              <ImportedCallRecording interactionId={interaction.id} />
-            </BetaFeatureGate>
-          ) : (
+          ) : interaction.interactionType === "phone_call" ? (
             <section
               className="form-card"
               aria-labelledby="phone-capture-boundary"
@@ -378,27 +401,59 @@ export function InteractionDetail({
                 the outcome while it is fresh.
               </p>
             </section>
-          )
-        ) : (
-          <BetaFeatureGate feature="recordingCapture">
-            <RecordingFoundation
-              interactionId={interaction.id}
-              interactionType={interaction.interactionType}
-              lifecycleStatus={interaction.lifecycleStatus}
-            />
-          </BetaFeatureGate>
-        )}
-      </div>
-      {interaction.interactionType !== "phone_call" ? (
-        <div className="mt-6" id="visual-evidence">
-          <BetaFeatureGate feature="visualEvidence">
-            <VisualEvidenceCapture
-              interactionId={interaction.id}
-              interactionType={interaction.interactionType}
-              lifecycleStatus={interaction.lifecycleStatus}
-            />
-          </BetaFeatureGate>
+          ) : (
+            <section
+              className="form-card"
+              aria-labelledby="companion-capture-boundary"
+            >
+              <h2 id="companion-capture-boundary" className="form-legend">
+                Capture when the interaction starts
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Companion keeps recording choices, notes and visual evidence in
+                the active interaction flow. Nothing starts in the background.
+              </p>
+            </section>
+          )}
         </div>
+      ) : null}
+      {isCompleted ? (
+        <details className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
+          <summary className="cursor-pointer text-base font-bold text-slate-900">
+            More capture options
+          </summary>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Add only authorised source material that helps complete the review.
+          </p>
+          <div className="mt-5" id="recording">
+            {interaction.interactionType === "online_meeting" ? (
+              <OnlineMeetingCapture interaction={interaction} />
+            ) : interaction.interactionType === "phone_call" ? (
+              <BetaFeatureGate feature="recordingCapture">
+                <ImportedCallRecording interactionId={interaction.id} />
+              </BetaFeatureGate>
+            ) : (
+              <BetaFeatureGate feature="recordingCapture">
+                <RecordingFoundation
+                  interactionId={interaction.id}
+                  interactionType={interaction.interactionType}
+                  lifecycleStatus={interaction.lifecycleStatus}
+                />
+              </BetaFeatureGate>
+            )}
+          </div>
+          {interaction.interactionType !== "phone_call" ? (
+            <div className="mt-6" id="visual-evidence">
+              <BetaFeatureGate feature="visualEvidence">
+                <VisualEvidenceCapture
+                  interactionId={interaction.id}
+                  interactionType={interaction.interactionType}
+                  lifecycleStatus={interaction.lifecycleStatus}
+                />
+              </BetaFeatureGate>
+            </div>
+          ) : null}
+        </details>
       ) : null}
     </section>
   );

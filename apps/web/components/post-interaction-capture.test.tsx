@@ -45,7 +45,7 @@ describe("PostInteractionCapture", () => {
     window.localStorage.clear();
   });
 
-  it("shows the immediate phone-call capture choices without a call-recording claim", async () => {
+  it("shows one immediate phone-call capture path and discloses alternatives on request", async () => {
     render(
       <PostInteractionCapture
         interactionId="interaction-1"
@@ -59,13 +59,16 @@ describe("PostInteractionCapture", () => {
       }),
     ).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Start AI Debrief" }),
-    ).toBeVisible();
+      screen.getByRole("button", { name: "Capture what happened" }),
+    ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Start AI Debrief" }),
-    ).toBeDisabled();
+    ).not.toBeVisible();
+    fireEvent.click(await screen.findByText("Other debrief options"));
+    expect(
+      screen.getByRole("heading", { name: "Start AI Debrief" }),
+    ).toBeVisible();
     expect(screen.getByText("Add Voice Journal")).toBeVisible();
-    expect(screen.getByText("Type Notes")).toBeVisible();
     expect(screen.getByRole("link", { name: "Add Recording" })).toHaveAttribute(
       "href",
       "#recording",
@@ -98,6 +101,7 @@ describe("PostInteractionCapture", () => {
       />,
     );
 
+    fireEvent.click(await screen.findByText("Other debrief options"));
     expect(await screen.findByText("Add Voice Journal")).toBeVisible();
     expect(screen.getByText(/browser cannot record audio/i)).toBeVisible();
     const typeJournal = screen.getByRole("button", {
@@ -220,14 +224,14 @@ describe("PostInteractionCapture", () => {
         interactionType="presentation"
       />,
     );
-    await screen.findByText("Type Debrief");
+    await screen.findByRole("button", { name: "Capture what happened" });
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /safely stopped/i,
       }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Start typed debrief" }),
+      screen.getByRole("button", { name: "Capture what happened" }),
     );
     await screen.findByText("How did it go?");
     fireEvent.change(screen.getByLabelText("Your answer"), {

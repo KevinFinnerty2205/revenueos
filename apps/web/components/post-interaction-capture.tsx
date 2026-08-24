@@ -468,9 +468,9 @@ export function PostInteractionCapture({
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             {interactionType === "phone_call"
-              ? "Use AI Debrief, Voice Journal, typed notes or an authorised recording import. RevenueOS did not record or monitor the call."
+              ? "Type a short account below, or choose another authorised capture option when needed. RevenueOS did not record or monitor the call."
               : interactionType === "online_meeting"
-                ? "Use AI Debrief, Voice Journal or typed notes when no authorised recording or transcript is available. RevenueOS did not join, record or monitor the meeting."
+                ? "Type a short account below when no authorised recording or transcript is available. RevenueOS did not join, record or monitor the meeting."
                 : `A short debrief for this ${humanise(interactionType).toLowerCase()} turns your own report into reviewable evidence. It does not record the customer interaction.`}
           </p>
         </div>
@@ -697,70 +697,89 @@ function StartCapture({
           </span>
         </label>
       </div>
-      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 text-sm leading-6 text-slate-700">
-        <input
-          type="checkbox"
-          className="mt-1 h-5 w-5 rounded border-slate-400 text-teal-700 focus:ring-teal-600"
-          checked={voiceAcknowledged}
-          onChange={(event) =>
-            onVoiceAcknowledgementChange(event.target.checked)
-          }
-        />
-        <span>
-          I understand Voice Journal records only my post-interaction report and
-          sends each bounded segment for transcription. RevenueOS does not
-          retain the audio after transcription.
-        </span>
-      </label>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <StartOption
-          title="Start AI Debrief"
-          description="A short, guided conversation that asks only the most useful follow-up questions."
-          action="Start AI Debrief"
-          disabled={working || !safetyConfirmed}
-          onClick={() => onStart("ai_debrief", "guided")}
-        />
-        <StartOption
-          title="Add Voice Journal"
-          description={
-            microphoneAvailable
-              ? "Speak a short reflection, pause when needed, then review the transcript."
-              : "This browser cannot record audio. You can still type a short journal."
-          }
-          action={
-            microphoneAvailable ? "Start Voice Journal" : "Type a journal"
-          }
-          disabled={
-            working ||
-            !safetyConfirmed ||
-            (microphoneAvailable && !voiceAcknowledged)
-          }
-          onClick={() =>
-            onStart("voice_journal", microphoneAvailable ? "voice" : "typed")
-          }
-        />
-        <StartOption
-          title={phoneCall ? "Type Notes" : "Type Debrief"}
-          description="Use the same bounded evidence workflow without enabling the microphone."
-          action={phoneCall ? "Type notes" : "Start typed debrief"}
-          disabled={working || !safetyConfirmed}
-          onClick={() => onStart("ai_debrief", "typed")}
-        />
-      </div>
-      {phoneCall ? (
-        <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-5">
-          <a className="secondary-button" href="#recording">
-            Add Recording
-          </a>
+      <div className="rounded-2xl border border-slate-200 p-4 text-sm leading-6 text-slate-700">
+        <div>
+          <p className="font-semibold text-slate-950">Capture what happened</p>
+          <p className="mt-1">
+            Type a short account of what changed, what was agreed and what needs
+            follow-up. You will review it before intelligence is updated.
+          </p>
           <button
             type="button"
-            className="secondary-button"
-            onClick={onFinishForNow}
+            className="primary-button mt-4"
+            disabled={working || !safetyConfirmed}
+            onClick={() => onStart("ai_debrief", "typed")}
           >
-            Finish for now
+            Capture what happened
           </button>
         </div>
-      ) : null}
+      </div>
+      <details className="rounded-2xl border border-slate-200 p-4">
+        <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          Other debrief options
+        </summary>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Use a guided debrief or Voice Journal when that better fits the way
+          you want to report the interaction.
+        </p>
+        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 text-sm leading-6 text-slate-700">
+          <input
+            type="checkbox"
+            className="mt-1 h-5 w-5 rounded border-slate-400 text-teal-700 focus:ring-teal-600"
+            checked={voiceAcknowledged}
+            onChange={(event) =>
+              onVoiceAcknowledgementChange(event.target.checked)
+            }
+          />
+          <span>
+            I understand Voice Journal records only my post-interaction report
+            and sends each bounded segment for transcription. RevenueOS does not
+            retain the audio after transcription.
+          </span>
+        </label>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <StartOption
+            title="Start AI Debrief"
+            description="A short, guided conversation that asks only the most useful follow-up questions."
+            action="Start AI Debrief"
+            disabled={working || !safetyConfirmed}
+            onClick={() => onStart("ai_debrief", "guided")}
+          />
+          <StartOption
+            title="Add Voice Journal"
+            description={
+              microphoneAvailable
+                ? "Speak a short reflection, pause when needed, then review the transcript."
+                : "This browser cannot record audio. You can still type a short journal."
+            }
+            action={
+              microphoneAvailable ? "Start Voice Journal" : "Type a journal"
+            }
+            disabled={
+              working ||
+              !safetyConfirmed ||
+              (microphoneAvailable && !voiceAcknowledged)
+            }
+            onClick={() =>
+              onStart("voice_journal", microphoneAvailable ? "voice" : "typed")
+            }
+          />
+        </div>
+        {phoneCall ? (
+          <div className="mt-5 flex flex-wrap gap-3 border-t border-slate-200 pt-5">
+            <a className="secondary-button" href="#recording">
+              Add Recording
+            </a>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onFinishForNow}
+            >
+              Finish for now
+            </button>
+          </div>
+        ) : null}
+      </details>
     </div>
   );
 }

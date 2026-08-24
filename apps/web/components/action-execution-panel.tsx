@@ -48,7 +48,7 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "Execution preview could not be prepared.",
+          : "The simulation preview could not be prepared.",
       );
     } finally {
       setBusy(false);
@@ -120,10 +120,10 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
           disabled={busy}
           onClick={() => void reviewExecution()}
         >
-          {busy ? "Preparing preview…" : "Review execution"}
+          {busy ? "Preparing preview…" : "Preview simulation"}
         </button>
         <p className="mt-2 text-xs font-bold text-amber-800">
-          Simulation only — approval has not executed this Action.
+          Optional simulation only — approval has not sent or updated anything.
         </p>
         {error ? (
           <p role="alert" className="mt-3 text-sm text-rose-800">
@@ -167,7 +167,7 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
         ) : (
           <div className="mt-4 rounded-xl bg-white p-3" aria-live="polite">
             <p className="font-bold text-slate-900">
-              {humanise(execution.executionStatus)}
+              {simulationStatus(execution.executionStatus)}
             </p>
             <p className="mt-1 text-sm text-slate-600">
               {execution.safeMessage}
@@ -195,12 +195,13 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
       {history.length ? (
         <details className="mt-3">
           <summary className="cursor-pointer text-sm font-bold text-slate-700">
-            Execution history ({history.length})
+            Simulation history ({history.length})
           </summary>
           <ul className="mt-2 space-y-2 text-sm text-slate-600">
             {history.map((item) => (
               <li key={item.id}>
-                {humanise(item.executionStatus)} · {item.connectorDisplayName} ·{" "}
+                {simulationStatus(item.executionStatus)} ·{" "}
+                {item.connectorDisplayName} ·{" "}
                 {new Date(item.confirmedAt).toLocaleString("en-AU")}
               </li>
             ))}
@@ -214,6 +215,19 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
       ) : null}
     </div>
   );
+}
+
+function simulationStatus(status: ActionExecution["executionStatus"]) {
+  if (status === "simulated_success") return "Simulation complete";
+  if (
+    status === "failed_retryable" ||
+    status === "failed_permanent" ||
+    status === "unknown_external_state"
+  ) {
+    return "Simulation needs attention";
+  }
+  if (status === "cancelled") return "Simulation cancelled";
+  return "Simulation in progress";
 }
 
 function PreviewContent({ content }: { content: ExecutionPreviewContent }) {

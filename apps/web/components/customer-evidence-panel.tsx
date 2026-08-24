@@ -466,8 +466,8 @@ function DocumentForm({
             I confirm I am authorised to use this document.
           </ConsentCheckbox>
           <ConsentCheckbox checked={processing} onChange={setProcessing}>
-            I understand the text may be sent to the configured AI provider for
-            extraction.
+            I understand the text may be sent to the configured external AI
+            service for extraction.
           </ConsentCheckbox>
         </div>
         <FormActions
@@ -632,8 +632,8 @@ function EmailForm({
             I confirm I am authorised to use this email.
           </ConsentCheckbox>
           <ConsentCheckbox checked={processing} onChange={setProcessing}>
-            I understand the email text may be sent to the configured AI
-            provider for extraction.
+            I understand the email text may be sent to the configured external
+            AI service for extraction.
           </ConsentCheckbox>
         </div>
         <FormActions

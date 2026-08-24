@@ -62,7 +62,7 @@ describe("InteractionDetail", () => {
       screen.getByRole("status", { name: "Interaction lifecycle status" }),
     ).toHaveTextContent("Planned");
     expect(
-      screen.getByRole("link", { name: "Open Meeting Intelligence" }),
+      screen.getByRole("link", { name: "Review meeting intelligence" }),
     ).toHaveAttribute("href", "/meetings/meeting-1");
     fireEvent.click(screen.getByRole("button", { name: "Start meeting" }));
     expect(

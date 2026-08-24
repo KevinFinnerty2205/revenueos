@@ -96,9 +96,7 @@ describe("RecommendedActions", () => {
       screen.queryByRole("button", { name: /^send|sync|schedule$/i }),
     ).toBeNull();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Approve — do not execute" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Approve action" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "/actions/action-1/approve",
@@ -107,13 +105,11 @@ describe("RecommendedActions", () => {
       expectedVersion: 1,
     });
     expect(
-      await screen.findByText(/Nothing was sent, synced or executed/i),
+      await screen.findByText(/Nothing was sent or updated/i),
     ).toBeVisible();
 
     fireEvent.click(screen.getByRole("tab", { name: "Approved (1)" }));
-    expect(
-      screen.getByText("Approved — execution requires confirmation"),
-    ).toBeVisible();
+    expect(screen.getByText("Approved — not sent or updated")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Mark complete manually" }),
     ).toBeNull();
@@ -137,7 +133,7 @@ describe("RecommendedActions", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit proposal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit suggestion" }));
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Review the updated follow-up" },
     });
@@ -164,7 +160,7 @@ describe("RecommendedActions", () => {
       recipientConfirmed: false,
     });
     expect(
-      await screen.findByText("A new Action revision was saved for review."),
+      await screen.findByText("Your changes were saved for review."),
     ).toBeVisible();
   });
 
@@ -273,7 +269,7 @@ describe("RecommendedActions", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "Approved (1)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review execution" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview simulation" }));
     expect(
       await screen.findByText("Simulation — no external action will occur"),
     ).toBeVisible();
@@ -287,12 +283,12 @@ describe("RecommendedActions", () => {
       connectionId: "connection-1",
       confirmed: true,
     });
-    expect(await screen.findByText("Queued")).toBeVisible();
+    expect(await screen.findByText("Simulation in progress")).toBeVisible();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Refresh simulation status" }),
     );
-    expect(await screen.findByText("Simulated Success")).toBeVisible();
+    expect(await screen.findByText("Simulation complete")).toBeVisible();
     expect(screen.getByText(/mock_email_result_1/)).toBeVisible();
   });
 });

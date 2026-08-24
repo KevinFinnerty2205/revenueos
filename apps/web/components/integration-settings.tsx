@@ -137,7 +137,7 @@ export function IntegrationSettings() {
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
         These deterministic mock connectors exercise review, confirmation and
         audit controls only. They never contact an email, calendar, CRM or task
-        provider.
+        service.
       </p>
 
       {catalog.length ? (

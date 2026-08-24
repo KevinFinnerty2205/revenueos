@@ -344,6 +344,10 @@ async function routeCommon(page: import("@playwright/test").Page) {
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === "/api/v1/me") {
+      await route.fulfill({ json: adminIdentity() });
+      return;
+    }
     if (path === `/api/v1/opportunities/${opportunityId}/workspace`) {
       await route.fulfill({ json: workspace() });
       return;
@@ -414,6 +418,12 @@ test("shows an explainable MEDDPICC deal view on desktop and mobile", async ({
       .getByText("Unknown", { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Champion" })).toBeHidden();
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-opportunity-desktop.png",
+      fullPage: true,
+    });
+  }
   await page.getByRole("button", { name: "View all 5 fields" }).click();
   await expect(page.getByRole("heading", { name: "Champion" })).toBeVisible();
   await page
@@ -423,6 +433,12 @@ test("shows an explainable MEDDPICC deal view on desktop and mobile", async ({
   await expect(
     page.getByText("Final synthetic pilot review").last(),
   ).toBeVisible();
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-methodology-desktop.png",
+      fullPage: true,
+    });
+  }
 
   if (process.env.CAPTURE_WO_024_SCREENSHOT === "1") {
     await page.screenshot({
@@ -440,6 +456,12 @@ test("shows an explainable MEDDPICC deal view on desktop and mobile", async ({
     page.getByRole("button", { name: "View all 5 fields" }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Methodology" })).toHaveCount(0);
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-opportunity-mobile.png",
+      fullPage: true,
+    });
+  }
   if (process.env.CAPTURE_WO_024_SCREENSHOT === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-024-methodology-mobile.png",
@@ -459,6 +481,10 @@ test("carries an economic-buyer gap through brief, debrief, review and refresh",
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === "/api/v1/me") {
+      await route.fulfill({ json: adminIdentity() });
+      return;
+    }
 
     if (path === `/api/v1/opportunities/${opportunityId}/workspace`) {
       const currentMethodology = projectionGenerated
@@ -674,7 +700,7 @@ test("carries an economic-buyer gap through brief, debrief, review and refresh",
   await page.getByRole("button", { name: "Start call" }).click();
   await page.getByRole("button", { name: "End connected call" }).click();
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Type notes" }).click();
+  await page.getByRole("button", { name: "Capture what happened" }).click();
   await expect(
     page.getByText("Did you establish who owns final commercial approval?"),
   ).toBeVisible();
@@ -729,6 +755,10 @@ test("admin creates and selects bounded custom methodology without JSON or rules
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === "/api/v1/me") {
+      await route.fulfill({ json: adminIdentity() });
+      return;
+    }
     if (path === "/api/v1/methodologies" && request.method() === "GET") {
       const custom = customCreated
         ? [
@@ -892,7 +922,7 @@ test("admin creates and selects bounded custom methodology without JSON or rules
   await page.getByRole("button", { name: "Create methodology" }).click();
   await expect(page.getByText(/Created Mutual plan/i)).toBeVisible();
   await expect(
-    page.getByText(/Guided fields only. Executable rules/i),
+    page.getByText(/Guided fields only. This builder captures descriptive/i),
   ).toBeVisible();
   await expect(page.getByText("Mutual plan · v1")).toBeVisible();
   await page
@@ -901,7 +931,7 @@ test("admin creates and selects bounded custom methodology without JSON or rules
     .getByRole("button", { name: "Select" })
     .click();
   await expect(
-    page.getByText(/Existing evidence and projection history are preserved/i),
+    page.getByText(/Existing evidence and review history are preserved/i),
   ).toBeVisible();
 
   await page.goto(`/opportunities/${opportunityId}`);
@@ -918,6 +948,10 @@ test("switching BANT to MEDDPICC keeps the historical evidence-backed view", asy
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === "/api/v1/me") {
+      await route.fulfill({ json: adminIdentity() });
+      return;
+    }
     if (path === "/api/v1/methodologies" && request.method() === "GET") {
       await route.fulfill({
         json: {
@@ -1046,7 +1080,7 @@ test("switching BANT to MEDDPICC keeps the historical evidence-backed view", asy
     .filter({ hasText: "MEDDPICC" });
   await meddpiccCard.getByRole("button", { name: "Select" }).click();
   await expect(
-    page.getByText(/Existing evidence and projection history are preserved/i),
+    page.getByText(/Existing evidence and review history are preserved/i),
   ).toBeVisible();
 
   await page.goto(`/opportunities/${opportunityId}`);
@@ -1055,3 +1089,22 @@ test("switching BANT to MEDDPICC keeps the historical evidence-backed view", asy
   await expect(page.getByText(/MEDDPICC · view v2/i)).toBeVisible();
   await expect(page.getByText(/BANT · view v1/i)).toBeVisible();
 });
+
+function adminIdentity() {
+  return {
+    user: {
+      id: "user-1",
+      externalAuthId: "user_dev_001",
+      displayName: "Alex Morgan",
+      email: "alex@example.test",
+    },
+    organisation: {
+      id: "organisation-1",
+      name: "Example Revenue Team",
+      slug: "example-revenue-team",
+    },
+    role: "admin",
+    authMode: "mock",
+    requestId: "request-methodology-e2e",
+  };
+}

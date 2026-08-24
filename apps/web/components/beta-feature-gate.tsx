@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useId, useState } from "react";
 import { apiRequest } from "@/lib/api";
 
 type BetaFeature =
@@ -29,6 +30,7 @@ export function BetaFeatureGate({
 }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState(false);
+  const titleId = useId();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -46,17 +48,23 @@ export function BetaFeatureGate({
 
   if (error || enabled === false) {
     return (
-      <section
-        className="form-card"
-        aria-labelledby="feature-unavailable-title"
-      >
-        <h1 id="feature-unavailable-title" className="text-2xl font-semibold">
-          Feature unavailable
-        </h1>
-        <p role="status" className="mt-3 text-sm leading-6 text-slate-600">
-          This workspace is not enabled for the private beta. Return to the
-          dashboard or contact your organisation administrator.
+      <section className="form-card" aria-labelledby={titleId}>
+        <h2 id={titleId} className="text-xl font-semibold">
+          {error
+            ? "This section could not be checked"
+            : "This section is not enabled"}
+        </h2>
+        <p
+          role={error ? "alert" : "status"}
+          className="mt-3 text-sm leading-6 text-slate-600"
+        >
+          {error
+            ? "Try loading the page again. Your other workspace information is still available."
+            : "Ask your organisation administrator if this private-beta capability should be available."}
         </p>
+        <Link href="/dashboard" className="secondary-button mt-4">
+          Return Home
+        </Link>
       </section>
     );
   }

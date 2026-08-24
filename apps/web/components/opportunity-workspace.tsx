@@ -240,13 +240,33 @@ export function OpportunityWorkspace({
 
   const opportunity = workspace.opportunity;
   const intelligence = workspace.intelligence;
-  const selectedMeeting = meetings.find(
-    (meeting) => meeting.id === selectedMeetingId,
+  const pendingAction = actions.find(
+    (action) => action.status === "proposed" || action.status === "edited",
   );
+  const methodologyGaps = workspace.methodology.projection
+    ? workspace.methodology.projection.stateCounts.unknown +
+      workspace.methodology.projection.stateCounts.conflicting +
+      workspace.methodology.projection.stateCounts.stale
+    : 0;
+  const nextBestAction =
+    intelligence?.nextBestAction.content?.overallRecommendation ?? null;
 
   return (
     <section aria-labelledby="opportunity-title" className="space-y-6">
       <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <nav
+          aria-label="Breadcrumb"
+          className="mb-5 text-sm font-semibold text-slate-500"
+        >
+          <Link
+            href="/opportunities"
+            className="hover:text-teal-800 hover:underline"
+          >
+            Pipeline
+          </Link>{" "}
+          <span aria-hidden="true">/</span>{" "}
+          <span aria-current="page">{opportunity.name}</span>
+        </nav>
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap gap-2">
@@ -268,6 +288,15 @@ export function OpportunityWorkspace({
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link href="#recommended-actions" className="primary-button">
+              Review next actions
+            </Link>
+            <Link
+              href={`/opportunities/${opportunity.id}/edit`}
+              className="secondary-button"
+            >
+              Edit details
+            </Link>
             <button
               type="button"
               className="secondary-button"
@@ -276,14 +305,8 @@ export function OpportunityWorkspace({
                 setRefreshKey((value) => value + 1);
               }}
             >
-              Refresh workspace
+              Refresh
             </button>
-            <Link
-              href={`/opportunities/${opportunity.id}/edit`}
-              className="primary-button"
-            >
-              Edit opportunity
-            </Link>
           </div>
         </div>
         <dl className="mt-7 grid gap-5 border-t border-slate-100 pt-6 sm:grid-cols-2 lg:grid-cols-5">
@@ -310,11 +333,42 @@ export function OpportunityWorkspace({
         ) : null}
       </header>
 
-      <OpportunityMethodology
-        key={`${opportunity.id}-${workspace.methodology.projectionId ?? workspace.methodology.state}`}
-        opportunityId={opportunity.id}
-        initialMethodology={workspace.methodology}
-      />
+      <section
+        aria-labelledby="deal-focus-title"
+        className="rounded-3xl border border-teal-200 bg-teal-950 p-6 text-white shadow-sm sm:p-8"
+      >
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">
+          How to move this deal forward
+        </p>
+        <h2 id="deal-focus-title" className="mt-3 text-2xl font-semibold">
+          {pendingAction?.title ??
+            nextBestAction ??
+            (methodologyGaps > 0
+              ? `Close ${methodologyGaps} methodology ${methodologyGaps === 1 ? "gap" : "gaps"}`
+              : "Review the next customer step")}
+        </h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-teal-50">
+          {pendingAction
+            ? "RevenueOS has prepared this suggestion from reviewed evidence. Confirm or edit it before treating it as agreed work."
+            : methodologyGaps > 0
+              ? "Use the deal methodology below to see what is known, what is missing and why it matters."
+              : "Use the latest reviewed evidence below to keep ownership and timing clear."}
+        </p>
+        <Link
+          href={pendingAction ? "#recommended-actions" : "#deal-methodology"}
+          className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-white px-4 text-sm font-bold text-teal-950 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-teal-950"
+        >
+          {pendingAction ? "Review suggestion" : "Review deal evidence"}
+        </Link>
+      </section>
+
+      <div id="deal-methodology" className="scroll-mt-6">
+        <OpportunityMethodology
+          key={`${opportunity.id}-${workspace.methodology.projectionId ?? workspace.methodology.state}`}
+          opportunityId={opportunity.id}
+          initialMethodology={workspace.methodology}
+        />
+      </div>
 
       {workspace.latestInteractionCapture ? (
         <section
@@ -364,15 +418,22 @@ export function OpportunityWorkspace({
         </section>
       ) : null}
 
-      <AssociationPanel
-        meetings={availableMeetings}
-        selectedMeetingId={selectedMeetingId}
-        saving={savingMeetingId !== null}
-        error={associationError}
-        message={associationMessage}
-        onSelect={setSelectedMeetingId}
-        onAssociate={() => void associateSelected()}
-      />
+      <details className="rounded-2xl border border-slate-200 bg-white p-5">
+        <summary className="cursor-pointer text-sm font-bold text-slate-700">
+          Meeting and record administration
+        </summary>
+        <div className="mt-5">
+          <AssociationPanel
+            meetings={availableMeetings}
+            selectedMeetingId={selectedMeetingId}
+            saving={savingMeetingId !== null}
+            error={associationError}
+            message={associationMessage}
+            onSelect={setSelectedMeetingId}
+            onAssociate={() => void associateSelected()}
+          />
+        </div>
+      </details>
 
       <CustomerEvidencePanel
         opportunityId={opportunity.id}
@@ -386,14 +447,21 @@ export function OpportunityWorkspace({
         initialError={actionLoadError}
       />
 
-      <RevenueBrainInsightPanel
-        reasoning={workspace.reasoning}
-        requesting={reasoningRequesting}
-        requestError={reasoningError}
-        onRequest={
-          opportunity.companyId ? () => void requestReasoning() : undefined
-        }
-      />
+      <details className="rounded-2xl border border-slate-200 bg-white p-5">
+        <summary className="cursor-pointer text-sm font-bold text-slate-700">
+          Account history and change over time
+        </summary>
+        <div className="mt-5">
+          <RevenueBrainInsightPanel
+            reasoning={workspace.reasoning}
+            requesting={reasoningRequesting}
+            requestError={reasoningError}
+            onRequest={
+              opportunity.companyId ? () => void requestReasoning() : undefined
+            }
+          />
+        </div>
+      </details>
 
       {workspace.reportedIntelligence ? (
         <section
@@ -493,156 +561,176 @@ export function OpportunityWorkspace({
         </section>
       ) : null}
 
-      {!workspace.latestMeeting || !intelligence ? (
-        <NoMeetingState />
-      ) : (
-        <>
-          <section
-            aria-labelledby="latest-next-best-action"
-            className="overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-sm"
-          >
-            <div className="bg-slate-950 p-6 text-white sm:p-8">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
-                Latest associated meeting
-              </p>
-              <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h2
-                    id="latest-next-best-action"
-                    className="text-2xl font-semibold tracking-tight"
-                  >
-                    Latest Next Best Action
-                  </h2>
-                  <p className="mt-2 text-sm text-slate-300">
-                    Based only on validated evidence from{" "}
-                    {workspace.latestMeeting.title}.
-                  </p>
-                </div>
-                <Link
-                  href={`/meetings/${workspace.latestMeeting.id}`}
-                  onClick={() => {
-                    void apiRequest<void>(
-                      `/api/v1/opportunities/${opportunity.id}/workspace/latest-meeting-navigation`,
-                      { method: "POST", keepalive: true },
-                    ).catch(() => undefined);
-                  }}
-                  className="inline-flex min-h-11 items-center rounded-xl border border-white/30 px-4 text-sm font-bold text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white"
-                >
-                  Open latest meeting intelligence
-                </Link>
-              </div>
-            </div>
-            <div className="p-6 sm:p-8">
-              <CapabilityContent
-                capability={intelligence.nextBestAction}
-                unavailable="No Next Best Action has been generated for the latest associated meeting."
+      <details className="rounded-2xl border border-slate-200 bg-white p-5">
+        <summary className="cursor-pointer text-sm font-bold text-slate-700">
+          Latest meeting intelligence
+        </summary>
+        <div className="mt-5 space-y-6">
+          {!workspace.latestMeeting || !intelligence ? (
+            <NoMeetingState />
+          ) : (
+            <>
+              <section
+                aria-labelledby="latest-next-best-action"
+                className="overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-sm"
               >
-                <NextBestActionView
-                  content={intelligence.nextBestAction.content}
+                <div className="bg-slate-950 p-6 text-white sm:p-8">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+                    Latest associated meeting
+                  </p>
+                  <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h2
+                        id="latest-next-best-action"
+                        className="text-2xl font-semibold tracking-tight"
+                      >
+                        Latest Next Best Action
+                      </h2>
+                      <p className="mt-2 text-sm text-slate-300">
+                        Based only on validated evidence from{" "}
+                        {workspace.latestMeeting.title}.
+                      </p>
+                    </div>
+                    <Link
+                      href={`/meetings/${workspace.latestMeeting.id}`}
+                      onClick={() => {
+                        void apiRequest<void>(
+                          `/api/v1/opportunities/${opportunity.id}/workspace/latest-meeting-navigation`,
+                          { method: "POST", keepalive: true },
+                        ).catch(() => undefined);
+                      }}
+                      className="inline-flex min-h-11 items-center rounded-xl border border-white/30 px-4 text-sm font-bold text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white"
+                    >
+                      Open latest meeting intelligence
+                    </Link>
+                  </div>
+                </div>
+                <div className="p-6 sm:p-8">
+                  <CapabilityContent
+                    capability={intelligence.nextBestAction}
+                    unavailable="No Next Best Action has been generated for the latest associated meeting."
+                  >
+                    <NextBestActionView
+                      content={intelligence.nextBestAction.content}
+                    />
+                  </CapabilityContent>
+                </div>
+              </section>
+
+              {workspace.partialData ? (
+                <p
+                  role="status"
+                  className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"
+                >
+                  Some latest-meeting intelligence is not available. Completed,
+                  current information remains visible below.
+                </p>
+              ) : null}
+
+              <WorkspaceSection
+                id="latest-meeting-momentum"
+                title="Latest Meeting Momentum & Buying Signals"
+                capability={intelligence.buyingSignals}
+              >
+                <BuyingSignalsView
+                  content={intelligence.buyingSignals.content}
                 />
-              </CapabilityContent>
-            </div>
-          </section>
+              </WorkspaceSection>
+              <WorkspaceSection
+                id="objections"
+                title="Objections & Competitive Signals"
+                capability={intelligence.objectionsCompetitiveSignals}
+              >
+                <ObjectionsCompetitiveSignalsView
+                  content={intelligence.objectionsCompetitiveSignals.content}
+                />
+              </WorkspaceSection>
+              <WorkspaceSection
+                id="stakeholders"
+                title="Latest Meeting Stakeholders"
+                capability={intelligence.stakeholderIntelligence}
+              >
+                <StakeholderIntelligenceView
+                  content={intelligence.stakeholderIntelligence.content}
+                />
+              </WorkspaceSection>
 
-          {workspace.partialData ? (
-            <p
-              role="status"
-              className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"
-            >
-              Some latest-meeting intelligence is not available. Completed,
-              current information remains visible below.
-            </p>
-          ) : null}
+              <div className="grid items-start gap-6 lg:grid-cols-2">
+                <WorkspaceSection
+                  id="risks"
+                  title="Latest Meeting Risks & Blockers"
+                  capability={intelligence.risksBlockers}
+                >
+                  <RisksBlockersView
+                    content={intelligence.risksBlockers.content}
+                  />
+                </WorkspaceSection>
+                <WorkspaceSection
+                  id="questions"
+                  title="Open Questions"
+                  capability={intelligence.openQuestions}
+                >
+                  <OpenQuestionsView
+                    content={intelligence.openQuestions.content}
+                  />
+                </WorkspaceSection>
+                <WorkspaceSection
+                  id="actions"
+                  title="Action Items"
+                  capability={intelligence.actionItems}
+                >
+                  <ActionItemsView content={intelligence.actionItems.content} />
+                </WorkspaceSection>
+                <WorkspaceSection
+                  id="decisions"
+                  title="Key Decisions"
+                  capability={intelligence.decisions}
+                >
+                  <DecisionsView content={intelligence.decisions.content} />
+                </WorkspaceSection>
+              </div>
 
-          <WorkspaceSection
-            id="latest-meeting-momentum"
-            title="Latest Meeting Momentum & Buying Signals"
-            capability={intelligence.buyingSignals}
-          >
-            <BuyingSignalsView content={intelligence.buyingSignals.content} />
-          </WorkspaceSection>
-          <WorkspaceSection
-            id="objections"
-            title="Objections & Competitive Signals"
-            capability={intelligence.objectionsCompetitiveSignals}
-          >
-            <ObjectionsCompetitiveSignalsView
-              content={intelligence.objectionsCompetitiveSignals.content}
-            />
-          </WorkspaceSection>
-          <WorkspaceSection
-            id="stakeholders"
-            title="Latest Meeting Stakeholders"
-            capability={intelligence.stakeholderIntelligence}
-          >
-            <StakeholderIntelligenceView
-              content={intelligence.stakeholderIntelligence.content}
-            />
-          </WorkspaceSection>
+              <WorkspaceSection
+                id="summary"
+                title="Latest Executive Summary"
+                capability={intelligence.executiveSummary}
+              >
+                <ExecutiveSummaryView
+                  content={intelligence.executiveSummary.content}
+                />
+              </WorkspaceSection>
 
-          <div className="grid items-start gap-6 lg:grid-cols-2">
-            <WorkspaceSection
-              id="risks"
-              title="Latest Meeting Risks & Blockers"
-              capability={intelligence.risksBlockers}
-            >
-              <RisksBlockersView content={intelligence.risksBlockers.content} />
-            </WorkspaceSection>
-            <WorkspaceSection
-              id="questions"
-              title="Open Questions"
-              capability={intelligence.openQuestions}
-            >
-              <OpenQuestionsView content={intelligence.openQuestions.content} />
-            </WorkspaceSection>
-            <WorkspaceSection
-              id="actions"
-              title="Action Items"
-              capability={intelligence.actionItems}
-            >
-              <ActionItemsView content={intelligence.actionItems.content} />
-            </WorkspaceSection>
-            <WorkspaceSection
-              id="decisions"
-              title="Key Decisions"
-              capability={intelligence.decisions}
-            >
-              <DecisionsView content={intelligence.decisions.content} />
-            </WorkspaceSection>
-          </div>
+              <WorkspaceSection
+                id="follow-up-email"
+                title="Latest Follow-up Email"
+                capability={intelligence.followUpEmail}
+              >
+                <FollowUpEmailReadOnly
+                  content={intelligence.followUpEmail.content}
+                  copyStatus={copyStatus}
+                  onCopy={copyEmail}
+                />
+              </WorkspaceSection>
+            </>
+          )}
+        </div>
+      </details>
 
-          <WorkspaceSection
-            id="summary"
-            title="Latest Executive Summary"
-            capability={intelligence.executiveSummary}
-          >
-            <ExecutiveSummaryView
-              content={intelligence.executiveSummary.content}
-            />
-          </WorkspaceSection>
-
-          <WorkspaceSection
-            id="follow-up-email"
-            title="Latest Follow-up Email"
-            capability={intelligence.followUpEmail}
-          >
-            <FollowUpEmailReadOnly
-              content={intelligence.followUpEmail.content}
-              copyStatus={copyStatus}
-              onCopy={copyEmail}
-            />
-          </WorkspaceSection>
-        </>
-      )}
-
-      <RecentMeetings
-        meetings={workspace.recentMeetings}
-        savingMeetingId={savingMeetingId}
-        onDisassociate={(meeting) => {
-          const source = meetings.find((item) => item.id === meeting.id);
-          if (source) void updateAssociation(source, null);
-        }}
-      />
+      <details className="rounded-2xl border border-slate-200 bg-white p-5">
+        <summary className="cursor-pointer text-sm font-bold text-slate-700">
+          Meeting history ({workspace.recentMeetings.length})
+        </summary>
+        <div className="mt-5">
+          <RecentMeetings
+            meetings={workspace.recentMeetings}
+            savingMeetingId={savingMeetingId}
+            onDisassociate={(meeting) => {
+              const source = meetings.find((item) => item.id === meeting.id);
+              if (source) void updateAssociation(source, null);
+            }}
+          />
+        </div>
+      </details>
     </section>
   );
 }

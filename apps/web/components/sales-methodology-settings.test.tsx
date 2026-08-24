@@ -100,7 +100,7 @@ describe("SalesMethodologySettings", () => {
     });
     expect(
       await screen.findByText(
-        /Existing evidence and projection history are preserved/i,
+        /Existing evidence and review history are preserved/i,
       ),
     ).toBeVisible();
   });

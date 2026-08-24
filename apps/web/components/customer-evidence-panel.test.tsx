@@ -208,7 +208,7 @@ describe("CustomerEvidencePanel", () => {
       screen.getByLabelText("I confirm I am authorised to use this email."),
     );
     fireEvent.click(
-      screen.getByLabelText(/configured AI provider for extraction/),
+      screen.getByLabelText(/configured external AI service for extraction/),
     );
     fireEvent.click(screen.getByRole("button", { name: "Analyse and review" }));
 

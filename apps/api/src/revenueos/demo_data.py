@@ -1343,20 +1343,36 @@ async def seed_demo_data(
                         proposed_due_at=due_at,
                         target_entity_type="opportunity",
                         target_entity_id=opportunity_id,
-                        payload_json={"kind": "create_task", "title": title},
+                        payload_json={
+                            "kind": "create_task",
+                            "title": title,
+                            "ownerName": "Alex Morgan",
+                            "ownerUserId": str(user_id),
+                            "dueAt": due_at.isoformat(),
+                            "context": description,
+                            "linkedOpportunityId": str(opportunity_id),
+                            "linkedInteractionId": None,
+                        },
                         source_refs_json=[],
                         provenance_summary="Synthetic final validated demonstration evidence.",
                         content_fingerprint=content_fingerprint,
                         created_by_user_id=user_id,
                     ),
-                    ActionAuditEvent(
-                        organisation_id=organisation_id,
-                        action_id=action_id,
-                        actor_user_id=user_id,
-                        event_type="approved" if is_approved else "proposed",
-                        proposal_version=1,
-                        metadata_json={"synthetic_demo": True},
-                    ),
+                )
+            )
+            # These models intentionally have no ORM relationships. Flush the
+            # proposal and immutable version before adding the foreign-keyed
+            # audit event so a fresh SQLite demo database cannot choose the
+            # audit insert first.
+            await session.flush()
+            session.add(
+                ActionAuditEvent(
+                    organisation_id=organisation_id,
+                    action_id=action_id,
+                    actor_user_id=user_id,
+                    event_type="approved" if is_approved else "proposed",
+                    proposal_version=1,
+                    metadata_json={"synthetic_demo": True},
                 )
             )
 

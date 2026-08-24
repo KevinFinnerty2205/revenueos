@@ -601,7 +601,7 @@ export function VisualEvidenceCapture({
                 className="mt-1 h-5 w-5 rounded border-slate-400 text-teal-700 focus:ring-teal-600"
               />
               I am authorised to upload this image and understand that it may be
-              sent to the configured visual-analysis provider.
+              sent to the configured external visual-analysis service.
             </label>
             <button
               type="button"

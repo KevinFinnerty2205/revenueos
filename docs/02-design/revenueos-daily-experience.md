@@ -3,6 +3,10 @@
 - **Status:** Implemented in WO-025
 - **Question:** What matters today?
 
+WO-025A preserves Daily's hierarchy and adds the four-task mobile shell plus a direct
+Actions anchor. Search now finds bounded Core records instead of opening an inactive
+Assistant placeholder.
+
 Daily is the default signed-in Home at `/dashboard`. It turns authorised, current
 persisted state into a short action-oriented plan. It is not a generic analytics
 dashboard, notification inbox or second copy of the source workflows.

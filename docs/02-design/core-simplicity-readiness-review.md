@@ -4,8 +4,16 @@
 - **Surfaces inspected:** current app shell, onboarding, Daily desktop/mobile,
   Opportunity/Methodology desktop/mobile, Interaction, Meeting, Actions, Settings and
   Assistant placeholder
-- **Outcome:** Daily passes; the complete Core experience does not yet pass the
-  pre-Prospect simplicity gate
+- **Outcome:** the implemented Core passes the local screenshot-led simplicity gate
+  after WO-025A; observed design-partner readiness remains Checkpoint 1B evidence
+
+## WO-025A implementation update
+
+The 24 August 2026 hardening pass closes the identified shell, onboarding, Search
+dead-end, Opportunity hierarchy, Interaction lifecycle and Action-language defects.
+Actual desktop/mobile screenshots and the complete gate determine the implementation
+result; target-environment and observed design-partner readiness remain separate
+evidence. Bounded entity search is available now, while cited Ask remains WO-025B.
 
 ## Five-second findings
 

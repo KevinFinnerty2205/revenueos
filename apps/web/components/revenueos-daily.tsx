@@ -422,68 +422,70 @@ function ActionsSection({
   timezone: string;
 }) {
   return (
-    <SectionCard
-      eyebrow="What needs my attention?"
-      title="Actions"
-      count={count}
-    >
-      {!available ? (
-        <Unavailable label="Actions" />
-      ) : actions.length === 0 ? (
-        <EmptyLine>No current Actions need your attention.</EmptyLine>
-      ) : (
-        <>
-          {overdueCount > 0 ? (
-            <p className="mb-4 text-sm font-semibold text-rose-800">
-              {overdueCount} overdue
-            </p>
-          ) : null}
-          <ul className="grid gap-3">
-            {actions.map((action) => (
-              <li
-                key={action.id}
-                className="rounded-2xl border border-slate-200 p-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                      {action.timing === "overdue"
-                        ? "Overdue"
-                        : action.timing === "due_today"
-                          ? "Due today"
-                          : action.dueAt
-                            ? `Due ${formatShortDate(action.dueAt, timezone)}`
-                            : action.stateLabel}
-                    </p>
-                    <h3 className="mt-1 font-semibold text-slate-950">
-                      {action.title}
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {action.opportunityName} · {action.stateLabel}
-                    </p>
+    <div id="daily-actions" className="scroll-mt-6">
+      <SectionCard
+        eyebrow="What needs my attention?"
+        title="Actions"
+        count={count}
+      >
+        {!available ? (
+          <Unavailable label="Actions" />
+        ) : actions.length === 0 ? (
+          <EmptyLine>No current Actions need your attention.</EmptyLine>
+        ) : (
+          <>
+            {overdueCount > 0 ? (
+              <p className="mb-4 text-sm font-semibold text-rose-800">
+                {overdueCount} overdue
+              </p>
+            ) : null}
+            <ul className="grid gap-3">
+              {actions.map((action) => (
+                <li
+                  key={action.id}
+                  className="rounded-2xl border border-slate-200 p-4"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                        {action.timing === "overdue"
+                          ? "Overdue"
+                          : action.timing === "due_today"
+                            ? "Due today"
+                            : action.dueAt
+                              ? `Due ${formatShortDate(action.dueAt, timezone)}`
+                              : action.stateLabel}
+                      </p>
+                      <h3 className="mt-1 font-semibold text-slate-950">
+                        {action.title}
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {action.opportunityName} · {action.stateLabel}
+                      </p>
+                    </div>
+                    <Link
+                      className="secondary-button shrink-0"
+                      href={action.href}
+                    >
+                      {action.ctaLabel}
+                    </Link>
                   </div>
-                  <Link
-                    className="secondary-button shrink-0"
-                    href={action.href}
-                  >
-                    {action.ctaLabel}
-                  </Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Link
-            className="mt-4 inline-flex min-h-11 items-center text-sm font-bold text-teal-800"
-            href="/opportunities"
-          >
-            View all opportunity Actions{" "}
-            <span aria-hidden="true" className="ml-1">
-              →
-            </span>
-          </Link>
-        </>
-      )}
-    </SectionCard>
+                </li>
+              ))}
+            </ul>
+            <Link
+              className="mt-4 inline-flex min-h-11 items-center text-sm font-bold text-teal-800"
+              href="/opportunities"
+            >
+              View all opportunity Actions{" "}
+              <span aria-hidden="true" className="ml-1">
+                →
+              </span>
+            </Link>
+          </>
+        )}
+      </SectionCard>
+    </div>
   );
 }
 

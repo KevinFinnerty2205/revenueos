@@ -370,8 +370,8 @@ export function BetaAdmin() {
           </h2>
           <p className="mt-3 text-sm leading-6 text-slate-600">
             This queues a reviewed maintenance operation. Type{" "}
-            <strong>{deletionPhrase}</strong> exactly. Identity-provider
-            deletion remains a separate operator step.
+            <strong>{deletionPhrase}</strong> exactly. Deletion from the
+            identity service remains a separate operator step.
           </p>
           <label
             htmlFor="deletion-confirmation"

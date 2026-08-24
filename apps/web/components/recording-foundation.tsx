@@ -821,7 +821,7 @@ export function RecordingFoundation({
                 I confirm participants have received any required notice and I
                 have authority to record. Audio may capture customer
                 participants and may be processed by the configured external
-                transcription provider. Consent rules vary by jurisdiction.
+                transcription service. Consent rules vary by jurisdiction.
               </span>
             </label>
           ) : null}

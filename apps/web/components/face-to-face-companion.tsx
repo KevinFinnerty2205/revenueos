@@ -910,55 +910,56 @@ function AfterPhase({
       </dl>
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         {debriefEnabled ? (
-          <>
-            <a
-              className="primary-button min-h-14 text-center text-base"
-              href="#companion-debrief"
-            >
-              Start AI Debrief
-            </a>
-            <a
-              className="secondary-button min-h-14 text-center text-base"
-              href="#companion-debrief"
-            >
-              Add Voice Journal
-            </a>
-          </>
-        ) : null}
-        {visualEnabled ? (
-          <button
-            type="button"
-            className="secondary-button min-h-14 text-base"
-            onClick={onToggleVisuals}
+          <a
+            className="primary-button min-h-14 text-center text-base"
+            href="#companion-debrief"
           >
-            {showVisuals ? "Hide photo capture" : "Add visual evidence"}
-          </button>
-        ) : null}
-        {interaction.opportunityId ? (
-          <Link
-            className="secondary-button min-h-14 text-center text-base"
-            href={`/opportunities/${interaction.opportunityId}`}
-          >
-            Open opportunity workspace
-          </Link>
+            Capture what happened
+          </a>
         ) : null}
         <Link
           className="secondary-button min-h-14 text-center text-base"
-          href={
-            interaction.companyId
-              ? `/companies/${interaction.companyId}`
-              : "/companies"
-          }
-        >
-          Open Revenue Brain
-        </Link>
-        <Link
-          className="primary-button min-h-14 text-center text-base"
           href={`/interactions/${interaction.id}`}
         >
           Finish
         </Link>
       </div>
+      {visualEnabled || interaction.opportunityId || interaction.companyId ? (
+        <details className="mt-4 rounded-2xl border border-slate-200 p-4">
+          <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600">
+            More options
+          </summary>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {visualEnabled ? (
+              <button
+                type="button"
+                className="secondary-button min-h-14 text-base"
+                onClick={onToggleVisuals}
+              >
+                {showVisuals ? "Hide photo capture" : "Add visual evidence"}
+              </button>
+            ) : null}
+            {interaction.opportunityId ? (
+              <Link
+                className="secondary-button min-h-14 text-center text-base"
+                href={`/opportunities/${interaction.opportunityId}`}
+              >
+                Open opportunity workspace
+              </Link>
+            ) : null}
+            <Link
+              className="secondary-button min-h-14 text-center text-base"
+              href={
+                interaction.companyId
+                  ? `/companies/${interaction.companyId}`
+                  : "/companies"
+              }
+            >
+              Open Revenue Brain
+            </Link>
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }

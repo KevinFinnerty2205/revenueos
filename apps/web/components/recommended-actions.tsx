@@ -61,15 +61,12 @@ export function RecommendedActions({
       setTab("pending");
       setMessage(
         result.createdCount > 0
-          ? `${result.createdCount} recommended ${result.createdCount === 1 ? "Action" : "Actions"} prepared for review.`
-          : "The current validated evidence produced no new Actions.",
+          ? `${result.createdCount} next ${result.createdCount === 1 ? "action is" : "actions are"} prepared for review.`
+          : "The current reviewed evidence produced no new actions.",
       );
     } catch (requestError: unknown) {
       setError(
-        actionError(
-          requestError,
-          "Recommended Actions could not be generated.",
-        ),
+        actionError(requestError, "Next actions could not be prepared."),
       );
     } finally {
       setGenerating(false);
@@ -98,14 +95,14 @@ export function RecommendedActions({
       await refresh();
       setMessage(
         operation === "approve"
-          ? "Action approved. Nothing was sent, synced or executed."
+          ? "Action approved. Nothing was sent or updated."
           : operation === "reject"
             ? "Action rejected."
-            : "Internal Action marked complete from your confirmation.",
+            : "Action marked complete from your confirmation.",
       );
     } catch (requestError: unknown) {
       setError(
-        actionError(requestError, "The Action review could not be saved."),
+        actionError(requestError, "The action review could not be saved."),
       );
     } finally {
       setBusyId(null);
@@ -134,11 +131,9 @@ export function RecommendedActions({
         }),
       });
       await refresh();
-      setMessage("A new Action revision was saved for review.");
+      setMessage("Your changes were saved for review.");
     } catch (requestError: unknown) {
-      setError(
-        actionError(requestError, "The Action revision could not be saved."),
-      );
+      setError(actionError(requestError, "Your changes could not be saved."));
       throw requestError;
     } finally {
       setBusyId(null);
@@ -156,16 +151,15 @@ export function RecommendedActions({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
-            Review-only Action Layer
+            RevenueOS suggestion
           </p>
           <h2 id="recommended-actions-title" className="form-legend mt-2">
-            Recommended Actions
+            Next actions
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Grounded proposals from final validated intelligence. Approval
-            records your decision only. A separate review and explicit
-            confirmation can run a clearly labelled simulation; WO-022 never
-            contacts an external system.
+            Prepared from reviewed customer evidence. You can edit, approve or
+            reject each suggestion. Approval records your decision only—it does
+            not send a message or update another system.
           </p>
         </div>
         <button
@@ -174,7 +168,7 @@ export function RecommendedActions({
           disabled={generating}
           onClick={() => void generate()}
         >
-          {generating ? "Preparing…" : "Generate recommended Actions"}
+          {generating ? "Preparing…" : "Prepare next actions"}
         </button>
       </div>
 
@@ -235,8 +229,8 @@ export function RecommendedActions({
       ) : (
         <p className="mt-5 rounded-2xl border border-dashed border-slate-300 p-5 text-sm text-slate-600">
           {tab === "pending"
-            ? "No Actions are waiting for review. Generate proposals when final validated intelligence is available."
-            : `No ${tab} Actions.`}
+            ? "No actions are waiting for review. Prepare suggestions when reviewed evidence is available."
+            : `No ${tab} actions.`}
         </p>
       )}
     </section>
@@ -317,8 +311,10 @@ function ActionCard({
         </div>
         <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
           {action.status === "approved"
-            ? "Approved — execution requires confirmation"
-            : humanise(action.status)}
+            ? "Approved — not sent or updated"
+            : action.status === "completed_manually"
+              ? "Completed manually"
+              : humanise(action.status)}
         </p>
       </div>
 
@@ -445,7 +441,7 @@ function ActionCard({
             disabled={busy}
             onClick={() => setEditing(true)}
           >
-            Edit proposal
+            Edit suggestion
           </button>
           <button
             type="button"
@@ -453,7 +449,7 @@ function ActionCard({
             disabled={busy}
             onClick={() => void onApprove(action)}
           >
-            Approve — do not execute
+            Approve action
           </button>
           <label className="text-sm font-bold text-slate-700">
             Rejection reason

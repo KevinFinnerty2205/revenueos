@@ -1,6 +1,7 @@
 # Core roadmap adjustments after Checkpoint 1
 
-- **Status:** Approved sequencing recommendation; no implementation is authorised
+- **Status:** Approved sequence; WO-025A experience hardening implemented on 24 August
+  2026, while WO-025B/C and Checkpoint 1B remain future
 - **Source decision:** [Checkpoint 1 — Core competitive and product readiness](checkpoint-1-core-competitive-readiness.md)
 - **Rule:** Prove the Core loop before adding a new data-acquisition module
 
