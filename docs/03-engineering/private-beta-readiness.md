@@ -439,3 +439,18 @@ endpoint and can fail closed without disabling other RevenueOS workflows.
 WO-025 adds no export or retention schema because Daily is computed and unpersisted.
 The v13 demo additions are existing Opportunity, Interaction and Action rows and
 therefore use their established reset, retention and export behaviour.
+
+## WO-025B Ask controls
+
+`FEATURE_ASK_REVENUEOS_ENABLED` fails closed independently. Daily limits default to 75
+answers per user and 500 per organisation and are reserved under an organisation-row
+lock using existing `BetaSystemEvent` metadata. Retrieval defaults to 12 sources,
+16,000 context characters and 10 workspace results. Environment variables can lower
+these bounds without widening authorisation.
+
+Ask content is ephemeral. Events record question class, scope, answer status, source
+count, retrieval/composer identifiers and context size—not the question, answer or
+source excerpt. The deterministic demo's existing synthetic Qantas-style Opportunity,
+customer/seller Evidence, security request, timeline, commitment, competitor,
+Methodology gap, change and Next Best Action provide the flagship Ask scenario with
+zero provider requests.

@@ -663,6 +663,10 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             seller_document = await session.get(DocumentSource, source_evidence_ids["seller-proposal:source"])
             inbound_email = await session.get(EmailSource, source_evidence_ids["customer-inbound:source"])
             outbound_email = await session.get(EmailSource, source_evidence_ids["seller-outbound:source"])
+            timeline_email = await session.get(
+                EmailSource,
+                source_evidence_ids["customer-timeline-update:source"],
+            )
             assert customer_document is not None
             assert customer_document.source_ownership == "customer_provided"
             assert seller_document is not None
@@ -671,6 +675,8 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             assert inbound_email.origin_class == "customer_direct"
             assert outbound_email is not None
             assert outbound_email.origin_class == "salesperson_reported"
+            assert timeline_email is not None
+            assert timeline_email.origin_class == "customer_direct"
             source_candidates = [
                 await session.get(
                     SourceCandidateEvidence,
@@ -681,9 +687,12 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
                     "seller-proposal",
                     "customer-inbound",
                     "seller-outbound",
+                    "customer-timeline-update",
                 )
             ]
             assert all(candidate is not None for candidate in source_candidates)
+            assert source_candidates[-1] is not None
+            assert source_candidates[-1].conflict_state == "conflicting"
             for candidate in source_candidates:
                 assert candidate is not None
                 SourceCandidateLocation.model_validate(candidate.source_location_json)
@@ -699,6 +708,7 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
                         "seller-proposal",
                         "customer-inbound",
                         "seller-outbound",
+                        "customer-timeline-update",
                     )
                 ]
             )
@@ -790,7 +800,11 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             assert all(
                 [
                     await session.get(EmailSource, source_evidence_ids[f"{label}:source"]) is None
-                    for label in ("customer-inbound", "seller-outbound")
+                    for label in (
+                        "customer-inbound",
+                        "seller-outbound",
+                        "customer-timeline-update",
+                    )
                 ]
             )
             assert all([await session.get(InteractionMarker, marker_id) is None for marker_id in marker_ids])

@@ -92,8 +92,8 @@ The current implementation provides:
 - an honest public landing page;
 - sign-in, sign-up and sign-out paths prepared for Clerk;
 - a protected application shell and fixed development organisation;
-- Home (RevenueOS Daily), Getting started, Companies, Contacts, Opportunities, Interactions,
-  Meetings, Tasks, Assistant, Feedback and Settings navigation;
+- Home (RevenueOS Daily), Sell, Pipeline, Search and Settings desktop navigation plus
+  Today, Interactions, Actions and Search mobile navigation;
 - a bounded personal RevenueOS Daily Home with one deterministic priority, local-day
   Interactions, current Actions, explainable deal attention, currency-safe pipeline
   and existing Next Best Action focus;
@@ -109,7 +109,8 @@ The current implementation provides:
 - a controlled private-beta foundation with Clerk organisation sign-in,
   versioned transcript/data notice, onboarding, retention, export/deletion
   requests, usage limits, feedback and an admin-only organisation view; and
-- an Assistant placeholder that states its capability is not implemented;
+- deterministic Search plus evidence-backed Ask RevenueOS for explicit Opportunity,
+  Account and user-owned workspace questions;
 - a tenant-isolated Interaction list/create/detail path with controlled types and
   lifecycle, plus stable bidirectional links to existing Meetings; and
 - preparation-only AI Companion briefs for all ten Interaction types, with
@@ -242,10 +243,12 @@ forecast, team/manager aggregation, a new AI engine or a new navigation destinat
 
 RevenueOS cannot currently promise that it handles sales administration after a
 meeting. It can prepare source-aware intelligence, follow-up and CRM-ready Action
-proposals, but every email/calendar/CRM/task execution is a labelled simulation and
-the Assistant is a placeholder. Production customer-data use also remains prohibited
+proposals, but every email/calendar/CRM/task execution is a labelled simulation.
+WO-025A replaces the Assistant placeholder with deterministic Search; WO-025B adds
+Ask RevenueOS as an ephemeral evidence-backed mode and contextual deal/account utility.
+Ask cannot research the web or execute an Action. Production customer-data use also remains prohibited
 until the target-environment gates are approved.
 
-The recommended next sequence is documentation-only: WO-025A Core Experience &
-Design-Partner Readiness, WO-025B Ask RevenueOS and WO-025C one selected Core CRM
-Sync path, followed by observed Checkpoint 1B before WO-026 Prospect.
+WO-025A and WO-025B are now implemented. The recommended next sequence is WO-025C one
+selected Core CRM Sync path, followed by observed Checkpoint 1B before WO-026 Prospect;
+the recommendation does not itself authorise that work.

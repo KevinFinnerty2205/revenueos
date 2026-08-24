@@ -570,3 +570,12 @@ Do not start WO-026 until all are evidenced:
 
 Checkpoint 1B may modify or stop the sequence. This review does not authorise any
 listed work order.
+
+## WO-025B completion note
+
+Ask RevenueOS is now implemented as the checkpoint's smallest trustworthy Core Q&A
+slice: contextual Opportunity/Account and user-owned workspace scope, bounded current
+RevenueOS sources, explicit citations/statuses, no public research, no arbitrary SQL,
+no Action execution and no retained chat. This closes the Ask access gap without
+authorising Prospect or WO-025C. Checkpoint 1B and the selected CRM decision remain
+separate gates.

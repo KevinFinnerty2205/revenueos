@@ -144,6 +144,17 @@ DEMO_EMAILS = {
         "context",
         "Outbound salesperson email",
     ),
+    "customer-timeline-update": (
+        "customer_sent",
+        "inbound",
+        "[DEMO] Updated pilot timeline",
+        "SYNTHETIC DEMO EMAIL — no real customer data. The pilot now needs to begin in December, not October, because security review is still open.",
+        "timeline",
+        "The customer moved the target pilot start from October to December while security review remains open.",
+        "customer_direct",
+        "direct",
+        "Verified inbound customer timeline update",
+    ),
 }
 
 
@@ -154,6 +165,7 @@ def demo_source_evidence_ids(organisation_id: UUID) -> dict[str, UUID]:
         "seller-proposal",
         "customer-inbound",
         "seller-outbound",
+        "customer-timeline-update",
     )
     ids: dict[str, UUID] = {}
     for label in labels:
@@ -492,6 +504,7 @@ async def _seed_document_email_evidence(
             "section": None,
             "paragraphIndex": 0,
         }
+        conflict_state = "conflicting" if label == "customer-timeline-update" else "not_assessed"
         session.add(
             SourceCandidateEvidence(
                 id=candidate_id,
@@ -512,7 +525,7 @@ async def _seed_document_email_evidence(
                 source_location_json=location,
                 validation_state="verified",
                 review_state="accepted",
-                conflict_state="not_assessed",
+                conflict_state=conflict_state,
                 reviewed_by_user_id=user_id,
                 reviewed_at=occurred_at + timedelta(minutes=1),
             )
@@ -552,7 +565,7 @@ async def _seed_document_email_evidence(
                             "sourceOrigin": source_type,
                             "originClass": origin_class,
                             "supportClass": support_class,
-                            "conflictState": "not_assessed",
+                            "conflictState": conflict_state,
                             "location": location,
                         }
                     ],

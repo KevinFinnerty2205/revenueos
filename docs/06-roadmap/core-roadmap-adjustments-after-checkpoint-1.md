@@ -1,7 +1,7 @@
 # Core roadmap adjustments after Checkpoint 1
 
-- **Status:** Approved sequence; WO-025A experience hardening implemented on 24 August
-  2026, while WO-025B/C and Checkpoint 1B remain future
+- **Status:** Approved sequence; WO-025A experience hardening and WO-025B Ask RevenueOS
+  implemented on 24 August 2026, while WO-025C and Checkpoint 1B remain future
 - **Source decision:** [Checkpoint 1 — Core competitive and product readiness](checkpoint-1-core-competitive-readiness.md)
 - **Rule:** Prove the Core loop before adding a new data-acquisition module
 
@@ -62,6 +62,12 @@ bounded provider precursor rather than expanding this work order silently.
   actions, cross-tenant retrieval, arbitrary SQL and a conversation-history product.
 - **Validate:** Answer usefulness, citation validity, unsupported-claim rate, refusal
   quality, retrieval latency and repeat use.
+
+**Implementation note (24 August 2026):** WO-025B chose deterministic classification,
+bounded structured retrieval and deterministic composition with zero provider calls.
+Opportunity, Account and user-owned workspace scopes, four answer states, strict
+citations, quotas, metadata-only telemetry and ephemeral questions are current. A
+provider composer remains a separately gated future change.
 
 ## WO-025C — Core CRM Sync
 

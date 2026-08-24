@@ -369,6 +369,12 @@ describe("OpportunityWorkspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Platform expansion" }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Ask about this deal" }),
+    ).toHaveAttribute(
+      "href",
+      "/assistant?mode=ask&scope=opportunity&scopeId=opportunity-1",
+    );
     fireEvent.click(screen.getByText("Account history and change over time"));
     fireEvent.click(screen.getByText("Latest meeting intelligence"));
     fireEvent.click(screen.getByText("Meeting history (1)"));

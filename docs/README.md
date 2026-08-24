@@ -31,6 +31,8 @@ This is the canonical product and engineering documentation index. Documents dis
 25. [Sales Methodology Engine implementation](03-engineering/sales-methodology-engine-implementation.md) — current WO-024 Core boundary
 26. [RevenueOS Daily implementation](03-engineering/revenueos-daily-implementation.md) — current WO-025 Home boundary
 27. [Checkpoint 1 Core competitive readiness](06-roadmap/checkpoint-1-core-competitive-readiness.md) — Option 2 pre-Prospect decision
+28. [Ask RevenueOS](01-product/ask-revenueos.md) — current WO-025B evidence-backed Q&A boundary
+29. [ADR 0036: Ephemeral deterministic Ask RevenueOS v1](08-decisions/0036-ephemeral-deterministic-ask-revenueos.md)
 
 ## 00 — Company
 
@@ -58,6 +60,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [RevenueOS Create](01-product/revenueos-create.md)
 - [RevenueOS CRM](01-product/revenueos-crm.md)
 - [Standard sales methodologies](01-product/standard-sales-methodologies.md)
+- [Ask RevenueOS](01-product/ask-revenueos.md)
 
 ## 02 — Design
 
@@ -96,6 +99,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Core empty, loading and error states](02-design/core-ui-state-guide.md)
 - [Core mobile usability review](02-design/core-mobile-usability-review.md)
 - [Core accessibility review](02-design/core-accessibility-review.md)
+- [Ask RevenueOS simplicity review](02-design/ask-revenueos-simplicity-review.md)
 
 ## 03 — Engineering
 
@@ -206,6 +210,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [RevenueOS Daily prioritisation](03-engineering/revenueos-daily-prioritisation.md)
 - [RevenueOS Daily API](03-engineering/revenueos-daily-api.md)
 - [RevenueOS Daily security and privacy review](03-engineering/revenueos-daily-security-privacy-review.md)
+- [Ask RevenueOS retrieval architecture](03-engineering/ask-retrieval-architecture.md)
+- [Ask RevenueOS source and citation model](03-engineering/ask-source-citation-model.md)
+- [Ask RevenueOS scope and permissions](03-engineering/ask-scope-permissions.md)
+- [Ask RevenueOS prompt-injection security](03-engineering/ask-prompt-injection-security.md)
+- [Ask RevenueOS retention, export and deletion](03-engineering/ask-retention-export-deletion.md)
 
 ### Target through beta
 
@@ -306,6 +315,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-025: RevenueOS Daily](07-sprints/wo-025-revenueos-daily.md)
 - [Checkpoint 1: Core competitive and product readiness](07-sprints/checkpoint-1-core-competitive-readiness.md)
 - [WO-025A: Core Experience & Design-Partner Readiness](07-sprints/wo-025a-core-experience-readiness.md)
+- [WO-025B: Ask RevenueOS](07-sprints/wo-025b-ask-revenueos.md)
 
 ## 08 — Decision records
 
@@ -344,10 +354,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0033: versioned review-only Action Layer](08-decisions/0033-versioned-review-only-action-layer.md)
 - [ADR 0034: simulation-first Action execution boundary](08-decisions/0034-simulation-first-execution-boundary.md)
 - [ADR 0035: Evidence-centred end-to-end Sales OS architecture](08-decisions/0035-end-to-end-sales-os-architecture.md)
+- [ADR 0036: Ephemeral deterministic Ask RevenueOS v1](08-decisions/0036-ephemeral-deterministic-ask-revenueos.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 is simulation-only and does not make a mock connector a production integration.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 is simulation-only and does not make a mock connector a production integration.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology and WO-025 implements Daily; WO-026–045
 remain unauthorised.
@@ -379,7 +390,11 @@ safe beta administration. Completed account-linked meetings can now append one
 reference-only Revenue Brain snapshot per validated transcript revision. The
 account timeline and Opportunity Workspace now show explainable supported
 changes with meeting links and qualitative labels; no deal score, probability
-or forecast exists. Assistant remains a placeholder.
+or forecast exists. WO-025A replaces the former Assistant placeholder with
+deterministic Search. WO-025B adds Ask RevenueOS as an evidence-backed Search mode
+and contextual Opportunity/Account utility. Ask uses bounded authorised structured
+reads and a deterministic composer, makes no provider call, retains no conversation
+content and cannot research the public web, generate SQL or execute Actions.
 
 WO-012 adds preparation-only AI Companion briefs for every initial Interaction
 type. The bounded deterministic composer uses linked metadata and validated

@@ -366,3 +366,11 @@ WO-024 implements only the methodology boundary. Its strict bounded custom
 configuration, forced RLS, review provenance, source invalidation, metadata-only
 telemetry and lifecycle controls are reviewed in
 [Sales Methodology security and privacy](sales-methodology-security-privacy-review.md).
+
+WO-025B adds a read-only evidence composition with explicit tenant/user scope,
+active-membership checks, bounded set-based retrieval, strict citation validation,
+instruction-like/public-web safe failure, metadata-only audit/telemetry and no
+conversation persistence. It makes no external provider call and exposes no Action or
+connector tool. Question, answer and source content are excluded from logs/events.
+See [Ask scope and permissions](ask-scope-permissions.md), [prompt-injection security](ask-prompt-injection-security.md)
+and [retention/export/deletion](ask-retention-export-deletion.md).

@@ -54,3 +54,12 @@ approved hard-deletion maintenance cascades/removes metadata in deterministic or
 Future work that adds a body or storage object requires its own approved schema,
 consent, encryption, access, retention, deletion, malware/content handling and
 provenance review. It must not overload these metadata columns.
+
+## Ask RevenueOS consumer
+
+Ask v1 reads only accepted document/email Revenue Brain source snapshots whose source
+and every referenced accepted Evidence row are verified, available and not deleted.
+It preserves `customer_direct`, `salesperson_reported`, `seller_prepared` and
+`imported_external` provenance. A customer-speech question filters out seller-side
+context. Deleted, rejected, unverified or provisional candidate content cannot become
+an Ask citation. Ask adds no Evidence mutation or new content storage.

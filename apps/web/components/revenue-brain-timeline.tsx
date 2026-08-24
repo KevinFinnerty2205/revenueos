@@ -192,12 +192,20 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
         <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
           {company.name}
         </h1>
-        <Link
-          href={`/companies/${company.id}/edit`}
-          className="mt-4 inline-flex text-sm font-bold text-teal-700 hover:text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
-        >
-          Edit account
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link
+            href={`/assistant?mode=ask&scope=account&scopeId=${company.id}`}
+            className="primary-button"
+          >
+            Ask about this account
+          </Link>
+          <Link
+            href={`/companies/${company.id}/edit`}
+            className="secondary-button"
+          >
+            Edit account
+          </Link>
+        </div>
       </header>
 
       <RevenueBrainInsightPanel

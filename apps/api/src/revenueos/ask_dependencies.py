@@ -1,0 +1,18 @@
+from collections.abc import AsyncIterator
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from revenueos.ask_services import AskRevenueOSService
+from revenueos.config import Settings, get_settings
+from revenueos.database import get_db, set_tenant_database_context
+from revenueos.tenant import TenantContext, get_tenant_context
+
+
+async def get_ask_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[AskRevenueOSService]:
+    await set_tenant_database_context(session, tenant.organisation_id)
+    yield AskRevenueOSService(session, tenant, settings)

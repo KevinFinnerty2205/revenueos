@@ -292,6 +292,12 @@ export function OpportunityWorkspace({
               Review next actions
             </Link>
             <Link
+              href={`/assistant?mode=ask&scope=opportunity&scopeId=${opportunity.id}`}
+              className="secondary-button"
+            >
+              Ask about this deal
+            </Link>
+            <Link
               href={`/opportunities/${opportunity.id}/edit`}
               className="secondary-button"
             >
