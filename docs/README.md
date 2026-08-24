@@ -33,6 +33,8 @@ This is the canonical product and engineering documentation index. Documents dis
 27. [Checkpoint 1 Core competitive readiness](06-roadmap/checkpoint-1-core-competitive-readiness.md) — Option 2 pre-Prospect decision
 28. [Ask RevenueOS](01-product/ask-revenueos.md) — current WO-025B evidence-backed Q&A boundary
 29. [ADR 0036: Ephemeral deterministic Ask RevenueOS v1](08-decisions/0036-ephemeral-deterministic-ask-revenueos.md)
+30. [Focused CRM Sync implementation](03-engineering/focused-crm-sync.md) — current WO-025C HubSpot boundary
+31. [ADR 0037: HubSpot-first Focused CRM Sync](08-decisions/0037-hubspot-first-focused-crm-sync.md)
 
 ## 00 — Company
 
@@ -215,6 +217,13 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Ask RevenueOS scope and permissions](03-engineering/ask-scope-permissions.md)
 - [Ask RevenueOS prompt-injection security](03-engineering/ask-prompt-injection-security.md)
 - [Ask RevenueOS retention, export and deletion](03-engineering/ask-retention-export-deletion.md)
+- [Focused CRM Sync implementation](03-engineering/focused-crm-sync.md)
+- [CRM field authority](03-engineering/crm-field-authority.md)
+- [CRM object mapping](03-engineering/crm-object-mapping.md)
+- [CRM field mapping](03-engineering/crm-field-mapping.md)
+- [CRM execution and reconciliation](03-engineering/crm-execution-reconciliation.md)
+- [CRM OAuth and credential security](03-engineering/crm-oauth-credential-security.md)
+- [CRM sync security review](03-engineering/crm-sync-security-review.md)
 
 ### Target through beta
 
@@ -260,6 +269,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Action execution boundary](05-integrations/action-execution-boundary.md)
 - [CRM-ready Action payloads](05-integrations/crm-ready-action-payloads.md)
 - [Future webhook boundary](05-integrations/future-webhook-boundary.md)
+- [CRM provider selection](05-integrations/crm-provider-selection.md)
+- [HubSpot connection and operations](05-integrations/hubspot-connection-guide.md)
+- [CRM administrator setup](05-integrations/crm-admin-setup.md)
 
 ## 06 — Roadmap
 
@@ -316,6 +328,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Checkpoint 1: Core competitive and product readiness](07-sprints/checkpoint-1-core-competitive-readiness.md)
 - [WO-025A: Core Experience & Design-Partner Readiness](07-sprints/wo-025a-core-experience-readiness.md)
 - [WO-025B: Ask RevenueOS](07-sprints/wo-025b-ask-revenueos.md)
+- [WO-025C: Focused CRM Sync](07-sprints/wo-025c-focused-crm-sync.md)
 
 ## 08 — Decision records
 
@@ -355,12 +368,14 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0034: simulation-first Action execution boundary](08-decisions/0034-simulation-first-execution-boundary.md)
 - [ADR 0035: Evidence-centred end-to-end Sales OS architecture](08-decisions/0035-end-to-end-sales-os-architecture.md)
 - [ADR 0036: Ephemeral deterministic Ask RevenueOS v1](08-decisions/0036-ephemeral-deterministic-ask-revenueos.md)
+- [ADR 0037: HubSpot-first Focused CRM Sync](08-decisions/0037-hubspot-first-focused-crm-sync.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 is simulation-only and does not make a mock connector a production integration.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
-OS. WO-024 implements Sales Methodology and WO-025 implements Daily; WO-026–045
+OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
+implements one HubSpot CRM path; WO-026–045
 remain unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
@@ -379,9 +394,10 @@ text. WO-007 adds a tenant-safe Opportunity Workspace over the latest
 associated meeting's existing current-version artefacts. WO-008B adds
 deterministic, on-demand account and opportunity comparisons over immutable
 snapshots and their referenced artefacts. It performs no transcript read,
-extraction, provider call, prediction or forecast. There is no send,
-external-action approval, general question answering, provider configuration UI,
-external integration, billing or mobile application. The later WO-014/WO-015
+extraction, provider call, prediction or forecast. There is no email/calendar send,
+autonomous external action, billing or mobile application. Ask RevenueOS and bounded
+HubSpot connection/mapping/review UI now exist, but no second CRM or general
+integration marketplace exists. The later WO-014/WO-015
 binary-evidence paths are deliberately bounded to private visual assets and
 consent-gated audio; they are not general media storage. WO-009
 adds verified Clerk organisation sessions, versioned acknowledgement,
@@ -466,6 +482,16 @@ WO-021 adds deterministic, typed Action proposals over final validated intellige
 Users can inspect sources, revise, approve, reject and manually complete safe internal
 Actions. Approval is intent only: there is no email, CRM, calendar or task-system
 execution, and provisional Live Intelligence cannot generate an Action.
+
+WO-025C selects HubSpot and adds production-capable OAuth, explicit Opportunity and
+Contact linking, bounded typed field/stage mapping, exact live preview, explicit
+confirmation, worker-time stale-state protection, verified updates, bounded activity
+logging and read-only unknown-outcome reconciliation. Tokens use AES-256-GCM
+envelope encryption and never enter browser contracts, logs or exports. Each write
+still requires an approved immutable Action and a second explicit confirmation;
+RevenueOS does not perform autonomous CRM writes or write raw transcripts. The
+connector is off by default and target-environment/customer launch approval remains
+separate. Salesforce, bulk import, full bidirectional sync and Prospect remain future.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

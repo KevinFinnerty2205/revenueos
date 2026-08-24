@@ -343,11 +343,15 @@ read model. Cards show type, priority, customer-facing risk, due date, explanati
 and source labels. Users can save a new revision, approve without execution, reject
 with a controlled reason, or manually complete an approved internal Action. There
 WO-021 originally shipped no send, sync, record-update or schedule controls.
-WO-022 now adds a separate simulation panel for supported approved Actions. It
+WO-022 adds a separate simulation panel for supported approved Actions. It
 selects an active server-authorised mock connection, renders an exact read-only
 preview, requires a consequentially labelled final confirmation, and shows queued,
 failure, unknown or simulated-success history. The panel never changes the
-Opportunity's canonical fields and never contacts an external provider.
+Opportunity's canonical fields. WO-025C additionally adds a lazy contextual
+**Connect to CRM record** control and live HubSpot exact-value preview. Ordinary
+Opportunity render makes no provider request; the seller explicitly searches and
+selects a deal. A live result is shown in the Action execution history and does not
+silently mutate the canonical RevenueOS Opportunity.
 
 ## WO-023 future Opportunity and Account Workspace
 

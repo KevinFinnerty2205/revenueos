@@ -34,7 +34,7 @@ The loop, not any individual screen or model, is the competitive floor.
 | Remember the relationship | Immutable longitudinal account/Opportunity context                                                    | Implemented deterministic foundation                         | Extend across final source-neutral Evidence and explicit outcomes              |
 | Qualify the deal          | MEDDIC, MEDDPICC, BANT, SPICED and bounded custom method                                              | Implemented                                                  | Prefer categorical evidence states and questions over percentage theatre       |
 | Progress the deal         | Risks, gaps, Next Best Action and reviewable Actions                                                  | Implemented in RevenueOS                                     | Complete a production approved-action loop in the selected system of record    |
-| Reduce sales admin        | Prepare notes, follow-up and CRM-ready changes                                                        | Partly implemented; execution is simulated                   | One real CRM path before Prospect; selected mail path later                    |
+| Reduce sales admin        | Prepare notes, follow-up and CRM-ready changes                                                        | One reviewed HubSpot field/activity path implemented         | Validate in the target environment; selected mail path later                   |
 | Retrieve knowledge        | Search and evidence-backed questions                                                                  | Implemented in bounded WO-025A/B form                        | Validate usefulness/citation trust before Prospect                             |
 | Understand pipeline       | Reproducible pipeline, conversion and movement                                                        | Descriptive personal pipeline only                           | WO-035/036                                                                     |
 | Learn from outcomes       | Reviewed deal and aggregate win/loss explanation                                                      | Missing                                                      | WO-036B                                                                        |
@@ -109,7 +109,7 @@ control.
 - Capture useful context with or without recording.
 - Review the Evidence behind deal and methodology gaps.
 
-### Credible only after WO-025A/B/C evidence
+### Implemented technically; credible externally only after target-environment evidence
 
 - Ask RevenueOS what happened, what changed and what is missing—with sources.
 - Finish the meeting; RevenueOS prepares the follow-through and applies the CRM
@@ -146,4 +146,5 @@ inside Home, Opportunity or Search before it earns another surface.
 Core is ready for adjacent add-on investment only when users can complete and trust
 the Core loop without the add-on. At Checkpoint 1 that means the target environment,
 one production-supported capture path, simple navigation/onboarding, Ask RevenueOS
-and one approved CRM update path must be validated before WO-026.
+and one approved CRM update path must be validated before WO-026. WO-025C supplies
+the HubSpot technical path; observed Checkpoint 1B evidence is still required.

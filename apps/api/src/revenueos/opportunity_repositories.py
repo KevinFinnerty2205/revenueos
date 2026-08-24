@@ -41,6 +41,7 @@ class OpportunityDisplayRecord:
 @dataclass(frozen=True)
 class MeetingSummaryRecord:
     meeting: Meeting
+    interaction_type: str
     company_name: str | None
     participant_count: int
     transcript_id: UUID | None
@@ -353,12 +354,20 @@ class OpportunityWorkspaceRepository:
             await self.session.execute(
                 select(
                     Meeting,
+                    Interaction.interaction_type,
                     Company.name,
                     participant_count,
                     Transcript.id,
                     Transcript.version,
                 )
                 .join(ranked, and_(ranked.c.meeting_id == Meeting.id, ranked.c.meeting_rank == 1))
+                .join(
+                    Interaction,
+                    and_(
+                        Interaction.organisation_id == Meeting.organisation_id,
+                        Interaction.id == Meeting.interaction_id,
+                    ),
+                )
                 .outerjoin(
                     Company,
                     and_(
@@ -379,10 +388,11 @@ class OpportunityWorkspaceRepository:
         return {
             row[0].opportunity_id: MeetingSummaryRecord(
                 meeting=row[0],
-                company_name=row[1],
-                participant_count=int(row[2] or 0),
-                transcript_id=row[3],
-                transcript_version=row[4],
+                interaction_type=row[1],
+                company_name=row[2],
+                participant_count=int(row[3] or 0),
+                transcript_id=row[4],
+                transcript_version=row[5],
             )
             for row in rows
             if row[0].opportunity_id is not None
@@ -409,10 +419,18 @@ class OpportunityWorkspaceRepository:
             await self.session.execute(
                 select(
                     Meeting,
+                    Interaction.interaction_type,
                     Company.name,
                     participant_count,
                     Transcript.id,
                     Transcript.version,
+                )
+                .join(
+                    Interaction,
+                    and_(
+                        Interaction.organisation_id == Meeting.organisation_id,
+                        Interaction.id == Meeting.interaction_id,
+                    ),
                 )
                 .outerjoin(
                     Company,
@@ -442,10 +460,11 @@ class OpportunityWorkspaceRepository:
         return [
             MeetingSummaryRecord(
                 meeting=row[0],
-                company_name=row[1],
-                participant_count=int(row[2] or 0),
-                transcript_id=row[3],
-                transcript_version=row[4],
+                interaction_type=row[1],
+                company_name=row[2],
+                participant_count=int(row[3] or 0),
+                transcript_id=row[4],
+                transcript_version=row[5],
             )
             for row in rows
         ]

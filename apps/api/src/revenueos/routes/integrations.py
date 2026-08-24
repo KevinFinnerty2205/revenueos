@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from revenueos.integration_contracts import (
     ActionExecutionDetailResponse,
@@ -11,10 +11,21 @@ from revenueos.integration_contracts import (
     ConnectionCreateRequest,
     ConnectionHealthResponse,
     ConnectionListResponse,
+    CRMEntityLinkRequest,
+    CRMEntityMappingResponse,
+    CRMFieldConfigurationResponse,
+    CRMFieldMappingRequest,
+    CRMFieldMappingResponse,
+    CRMSearchResponse,
+    CRMStageConfigurationResponse,
+    CRMStageMappingRequest,
+    CRMStageMappingResponse,
     ExecutionConfirmRequest,
     ExecutionPreviewRequest,
     ExecutionPreviewResponse,
     IntegrationCatalogResponse,
+    OAuthCallbackRequest,
+    OAuthStartResponse,
     OrganisationConnectionResponse,
 )
 from revenueos.integration_dependencies import (
@@ -85,6 +96,119 @@ async def revoke_connection(
     return await service.revoke_connection(connection_id)
 
 
+@router.post("/integrations/hubspot/oauth/start", response_model=OAuthStartResponse)
+async def start_hubspot_oauth(service: Integrations) -> OAuthStartResponse:
+    return await service.start_hubspot_oauth()
+
+
+@router.post(
+    "/integrations/hubspot/oauth/callback",
+    response_model=OrganisationConnectionResponse,
+)
+async def complete_hubspot_oauth(
+    request: OAuthCallbackRequest,
+    service: Integrations,
+) -> OrganisationConnectionResponse:
+    return await service.complete_hubspot_oauth(request)
+
+
+@router.get("/integrations/connections/{connection_id}/crm/search", response_model=CRMSearchResponse)
+async def search_crm_records(
+    connection_id: UUID,
+    service: Integrations,
+    entity_type: str = Query(alias="entityType"),
+    query: str = Query(min_length=2, max_length=120),
+) -> CRMSearchResponse:
+    return await service.search_crm_records(connection_id, entity_type, query)
+
+
+@router.get(
+    "/integrations/connections/{connection_id}/crm/entities/{entity_type}/{entity_id}",
+    response_model=CRMEntityMappingResponse | None,
+)
+async def get_crm_entity_mapping(
+    connection_id: UUID,
+    entity_type: str,
+    entity_id: UUID,
+    service: Integrations,
+) -> CRMEntityMappingResponse | None:
+    return await service.get_entity_mapping(connection_id, entity_type, entity_id)
+
+
+@router.put(
+    "/integrations/crm/entities/{entity_type}/{entity_id}",
+    response_model=CRMEntityMappingResponse,
+)
+async def link_crm_entity(
+    entity_type: str,
+    entity_id: UUID,
+    request: CRMEntityLinkRequest,
+    service: Integrations,
+) -> CRMEntityMappingResponse:
+    return await service.link_entity(entity_type, entity_id, request)
+
+
+@router.delete(
+    "/integrations/connections/{connection_id}/crm/entities/{entity_type}/{entity_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def unlink_crm_entity(
+    connection_id: UUID,
+    entity_type: str,
+    entity_id: UUID,
+    service: Integrations,
+) -> Response:
+    await service.unlink_entity(connection_id, entity_type, entity_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/integrations/connections/{connection_id}/crm/fields/{entity_type}",
+    response_model=CRMFieldConfigurationResponse,
+)
+async def crm_field_configuration(
+    connection_id: UUID,
+    entity_type: str,
+    service: Integrations,
+) -> CRMFieldConfigurationResponse:
+    return await service.field_configuration(connection_id, entity_type)
+
+
+@router.put(
+    "/integrations/connections/{connection_id}/crm/fields",
+    response_model=CRMFieldMappingResponse,
+)
+async def set_crm_field_mapping(
+    connection_id: UUID,
+    request: CRMFieldMappingRequest,
+    service: Integrations,
+) -> CRMFieldMappingResponse:
+    return await service.set_field_mapping(connection_id, request)
+
+
+@router.get(
+    "/integrations/connections/{connection_id}/crm/stages",
+    response_model=CRMStageConfigurationResponse,
+)
+async def crm_stage_configuration(
+    connection_id: UUID,
+    service: Integrations,
+) -> CRMStageConfigurationResponse:
+    return await service.stage_configuration(connection_id)
+
+
+@router.put(
+    "/integrations/connections/{connection_id}/crm/stages",
+    response_model=CRMStageMappingResponse,
+)
+async def set_crm_stage_mapping(
+    connection_id: UUID,
+    request: CRMStageMappingRequest,
+    service: Integrations,
+) -> CRMStageMappingResponse:
+    return await service.set_stage_mapping(connection_id, request)
+
+
 @router.post(
     "/actions/{action_id}/execution-preview",
     response_model=ExecutionPreviewResponse,
@@ -138,3 +262,11 @@ async def get_execution(
     service: Executions,
 ) -> ActionExecutionDetailResponse:
     return await service.get_execution(execution_id)
+
+
+@router.post("/executions/{execution_id}/reconcile", response_model=ActionExecutionResponse)
+async def reconcile_execution(
+    execution_id: UUID,
+    service: Executions,
+) -> ActionExecutionResponse:
+    return await service.reconcile_execution(execution_id)

@@ -103,6 +103,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "action_execution_attempts",
         "integration_audit_events",
         "mock_connector_objects",
+        "oauth_connection_states",
+        "encrypted_connector_credentials",
+        "crm_entity_mappings",
+        "crm_field_mappings",
+        "crm_stage_mappings",
         "tasks",
         "interactions",
         "online_meeting_metadata",
@@ -216,6 +221,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "methodology_definition_version_id": uuid.uuid4(),
         "methodology_projection_id": uuid.uuid4(),
         "methodology_review_id": uuid.uuid4(),
+        "connection_id": uuid.uuid4(),
+        "oauth_state_id": uuid.uuid4(),
+        "credential_id": uuid.uuid4(),
+        "crm_entity_mapping_id": uuid.uuid4(),
+        "crm_field_mapping_id": uuid.uuid4(),
+        "crm_stage_mapping_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -277,6 +288,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "methodology_definition_version_id": uuid.uuid4(),
         "methodology_projection_id": uuid.uuid4(),
         "methodology_review_id": uuid.uuid4(),
+        "connection_id": uuid.uuid4(),
+        "oauth_state_id": uuid.uuid4(),
+        "credential_id": uuid.uuid4(),
+        "crm_entity_mapping_id": uuid.uuid4(),
+        "crm_field_mapping_id": uuid.uuid4(),
+        "crm_stage_mapping_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -394,6 +411,111 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO integration_connections
+                                (id, organisation_id, connector_key,
+                                 connection_status, created_by_user_id,
+                                 credential_reference, capability_state_json,
+                                 external_account_id, external_account_name,
+                                 granted_scopes_json)
+                            VALUES
+                                (:connection_id, :organisation_id, 'hubspot',
+                                 'active', :user_id, :credential_reference,
+                                 '["update_opportunity"]'::json,
+                                 :external_account_id, :external_account_name,
+                                 '["oauth","crm.objects.deals.read",'
+                                 '"crm.objects.deals.write"]'::json)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "credential_reference": str(tenant["credential_id"]),
+                            "external_account_id": f"hubspot-{suffix.lower()}",
+                            "external_account_name": f"RLS HubSpot {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO oauth_connection_states
+                                (id, organisation_id, user_id, connector_key,
+                                 state_hash, redirect_uri, expires_at)
+                            VALUES
+                                (:oauth_state_id, :organisation_id, :user_id,
+                                 'hubspot', :state_hash,
+                                 'https://app.example.test/settings/integrations/hubspot/callback',
+                                 now() + interval '10 minutes')
+                            """
+                        ),
+                        {**identity_parameters, "state_hash": suffix.lower() * 64},
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO encrypted_connector_credentials
+                                (id, organisation_id, connection_id, connector_key,
+                                 encrypted_payload, nonce, key_version)
+                            VALUES
+                                (:credential_id, :organisation_id, :connection_id,
+                                 'hubspot', :encrypted_payload, :nonce, 1)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "encrypted_payload": b"synthetic-ciphertext",
+                            "nonce": bytes([1 if suffix == "A" else 2]) * 12,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_entity_mappings
+                                (id, organisation_id, connection_id,
+                                 revenueos_entity_type, revenueos_entity_id,
+                                 external_object_type, external_object_id,
+                                 created_by_user_id)
+                            VALUES
+                                (:crm_entity_mapping_id, :organisation_id,
+                                 :connection_id, 'opportunity', :opportunity_id,
+                                 'deal', :external_object_id, :user_id)
+                            """
+                        ),
+                        {**identity_parameters, "external_object_id": f"deal-{suffix.lower()}"},
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_field_mappings
+                                (id, organisation_id, connection_id, entity_type,
+                                 revenueos_field, external_property_name,
+                                 external_property_type, authority,
+                                 configured_by_user_id)
+                            VALUES
+                                (:crm_field_mapping_id, :organisation_id,
+                                 :connection_id, 'opportunity', 'amount',
+                                 'amount', 'number', 'review_before_sync',
+                                 :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_stage_mappings
+                                (id, organisation_id, connection_id,
+                                 revenueos_stage, external_pipeline_id,
+                                 external_stage_id, configured_by_user_id)
+                            VALUES
+                                (:crm_stage_mapping_id, :organisation_id,
+                                 :connection_id, 'discovery', 'default',
+                                 :external_stage_id, :user_id)
+                            """
+                        ),
+                        {**identity_parameters, "external_stage_id": f"stage-{suffix.lower()}"},
                     )
                     await connection.execute(
                         text(
@@ -1556,6 +1678,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'action_execution_attempts',
                                     'integration_audit_events',
                                     'mock_connector_objects',
+                                    'oauth_connection_states',
+                                    'encrypted_connector_credentials',
+                                    'crm_entity_mappings',
+                                    'crm_field_mappings',
+                                    'crm_stage_mappings',
                                     'tasks',
                                     'interactions',
                                     'online_meeting_metadata',
@@ -1627,7 +1754,6 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     table: await connection.scalar(text(f"SELECT count(*) FROM {table}")) for table in tenant_tables
                 }
                 empty_wo022_tables = {
-                    "integration_connections",
                     "execution_previews",
                     "action_executions",
                     "action_execution_attempts",
@@ -1644,6 +1770,17 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["company_id"]},
                 )
                 assert company_update.rowcount == 0
+                crm_mapping_update = await connection.execute(
+                    text(
+                        """
+                        UPDATE crm_entity_mappings
+                        SET external_object_id = 'blocked-cross-tenant-write'
+                        WHERE id = :id
+                        """
+                    ),
+                    {"id": tenant_b["crm_entity_mapping_id"]},
+                )
+                assert crm_mapping_update.rowcount == 0
                 methodology_definition_update = await connection.execute(
                     text("UPDATE methodology_definitions SET status = 'archived' WHERE id = :id"),
                     {"id": tenant_b["methodology_definition_id"]},
@@ -2004,6 +2141,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "crm_stage_mappings",
+                    "crm_field_mappings",
+                    "crm_entity_mappings",
+                    "encrypted_connector_credentials",
+                    "oauth_connection_states",
+                    "integration_connections",
                     "beta_system_events",
                     "beta_data_requests",
                     "beta_feedback",

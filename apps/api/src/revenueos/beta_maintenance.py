@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import base64
 import json
+import logging
 import os
 import tempfile
 from dataclasses import dataclass
@@ -36,6 +37,9 @@ from revenueos.models import (
     CaptureSession,
     Company,
     Contact,
+    CRMEntityMapping,
+    CRMFieldMapping,
+    CRMStageMapping,
     DataNoticeAcknowledgement,
     DebriefSession,
     DebriefTurn,
@@ -97,8 +101,9 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 14
+EXPORT_VERSION = 15
 EXPORT_EXPIRY_HOURS = 24
+logger = logging.getLogger("revenueos.beta_maintenance")
 
 
 @dataclass(frozen=True)
@@ -632,6 +637,7 @@ async def _delete_organisation_records(
         await session.execute(delete(AIArtifact).where(AIArtifact.organisation_id == organisation_id))
         await session.execute(delete(AIJob).where(AIJob.organisation_id == organisation_id))
         await session.execute(delete(MockConnectorObject).where(MockConnectorObject.organisation_id == organisation_id))
+        await _attempt_hubspot_revocation(session, settings, organisation_id)
         await session.execute(
             delete(IntegrationAuditEvent).where(IntegrationAuditEvent.organisation_id == organisation_id)
         )
@@ -640,6 +646,9 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(ActionExecution).where(ActionExecution.organisation_id == organisation_id))
         await session.execute(delete(ExecutionPreview).where(ExecutionPreview.organisation_id == organisation_id))
+        await session.execute(delete(CRMStageMapping).where(CRMStageMapping.organisation_id == organisation_id))
+        await session.execute(delete(CRMFieldMapping).where(CRMFieldMapping.organisation_id == organisation_id))
+        await session.execute(delete(CRMEntityMapping).where(CRMEntityMapping.organisation_id == organisation_id))
         await session.execute(
             delete(IntegrationConnection).where(IntegrationConnection.organisation_id == organisation_id)
         )
@@ -750,6 +759,65 @@ async def _delete_organisation_records(
             )
             if not remaining:
                 await session.execute(delete(User).where(User.id == user_id))
+
+
+async def _attempt_hubspot_revocation(
+    session: AsyncSession,
+    settings: Settings,
+    organisation_id: UUID,
+) -> None:
+    """Attempt provider cleanup before local cascade without exposing credentials."""
+    connections = list(
+        (
+            await session.scalars(
+                select(IntegrationConnection).where(
+                    IntegrationConnection.organisation_id == organisation_id,
+                    IntegrationConnection.connector_key == "hubspot",
+                    IntegrationConnection.credential_reference.is_not(None),
+                )
+            )
+        ).all()
+    )
+    if not connections:
+        return
+    if not all(
+        (
+            settings.hubspot_client_id,
+            settings.hubspot_client_secret,
+            settings.connector_credential_master_key,
+        )
+    ):
+        logger.warning(
+            "organisation_deletion_hubspot_revocation_unavailable",
+            extra={"organisation_id": str(organisation_id), "connection_count": len(connections)},
+        )
+        return
+    from revenueos.credential_store import EncryptedDatabaseCredentialStore
+    from revenueos.hubspot_connector import HubSpotAPIError, HubSpotClient
+
+    assert settings.connector_credential_master_key is not None
+    store = EncryptedDatabaseCredentialStore(
+        session,
+        settings.connector_credential_master_key.get_secret_value(),
+    )
+    client = HubSpotClient(settings, store)
+    for connection in connections:
+        assert connection.credential_reference is not None
+        try:
+            credential = await store.get(
+                organisation_id,
+                connection.id,
+                connection.credential_reference,
+            )
+            await client.revoke(credential)
+        except (HubSpotAPIError, ValueError):
+            logger.warning(
+                "organisation_deletion_hubspot_revocation_failed",
+                extra={
+                    "organisation_id": str(organisation_id),
+                    "connection_id": str(connection.id),
+                },
+            )
 
 
 def _validated_export_path(root: Path, record: BetaDataRequest) -> Path:
@@ -1906,6 +1974,21 @@ async def _export_payload(
         .where(IntegrationConnection.organisation_id == organisation_id)
         .order_by(IntegrationConnection.connector_key, IntegrationConnection.id)
     )
+    crm_entity_mappings = await rows(
+        select(CRMEntityMapping)
+        .where(CRMEntityMapping.organisation_id == organisation_id)
+        .order_by(CRMEntityMapping.connection_id, CRMEntityMapping.revenueos_entity_type, CRMEntityMapping.id)
+    )
+    crm_field_mappings = await rows(
+        select(CRMFieldMapping)
+        .where(CRMFieldMapping.organisation_id == organisation_id)
+        .order_by(CRMFieldMapping.connection_id, CRMFieldMapping.entity_type, CRMFieldMapping.revenueos_field)
+    )
+    crm_stage_mappings = await rows(
+        select(CRMStageMapping)
+        .where(CRMStageMapping.organisation_id == organisation_id)
+        .order_by(CRMStageMapping.connection_id, CRMStageMapping.revenueos_stage)
+    )
     action_executions = await rows(
         select(ActionExecution)
         .where(ActionExecution.organisation_id == organisation_id)
@@ -2408,12 +2491,70 @@ async def _export_payload(
                     "last_verified_at",
                     "revoked_at",
                     "capability_state_json",
+                    "external_account_id",
+                    "external_account_name",
+                    "granted_scopes_json",
                     "metadata_version",
                     "created_at",
                     "updated_at",
                 ),
             )
             for item in integration_connections
+        ],
+        "crmEntityMappings": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "revenueos_entity_type",
+                    "revenueos_entity_id",
+                    "external_object_type",
+                    "external_object_id",
+                    "external_updated_at",
+                    "last_synced_at",
+                    "sync_state",
+                    "created_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_entity_mappings
+        ],
+        "crmFieldMappings": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "entity_type",
+                    "revenueos_field",
+                    "external_property_name",
+                    "external_property_type",
+                    "authority",
+                    "enabled",
+                    "configured_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_field_mappings
+        ],
+        "crmStageMappings": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "revenueos_stage",
+                    "external_pipeline_id",
+                    "external_stage_id",
+                    "configured_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_stage_mappings
         ],
         "actionExecutions": [
             _columns(

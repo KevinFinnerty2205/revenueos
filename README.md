@@ -14,8 +14,9 @@ Journal, WO-014 Visual Evidence/Presentation Mode, WO-015 Recording &
 Transcription Foundation, WO-016 Browser Face-to-Face Companion, WO-017 Phone
 Call Intelligence, WO-018 Online Meeting Capture, WO-019 Documents & Email
 Evidence, WO-020 Live Interaction Intelligence, WO-021 Action Layer, WO-022
-Integrations & Execution Foundation, WO-024 Sales Methodology Engine and WO-025
-RevenueOS Daily. Interactions, Meetings,
+Integrations & Execution Foundation, WO-024 Sales Methodology Engine, WO-025
+RevenueOS Daily, WO-025A Core Experience readiness, WO-025B Ask RevenueOS and
+WO-025C Focused CRM Sync. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
 a tenant-isolated opportunity list and latest-meeting view over stored,
@@ -97,12 +98,21 @@ WO-025 makes the compatible `/dashboard` route Home / RevenueOS Daily. One bound
 personal read model composes local-day Interactions, current Actions, explainable deal
 attention, currency-safe descriptive pipeline and existing Next Best Action. It adds
 no migration, target/forecast engine, deal score, new AI/provider or Daily nav item.
+WO-025A tightens the Core experience for design partners without expanding product
+scope. WO-025B adds evidence-backed Ask RevenueOS over authorised Core records and
+validated intelligence, with citations and explicit unknown/conflict states.
+WO-025C selects HubSpot as the single production CRM connector. Organisation admins
+can complete server-side OAuth, configure bounded object/field/stage mappings and
+revoke or test the connection. A reviewed Action still requires a fresh exact preview
+and a separate final **Update CRM** confirmation; stale or uncertain external state
+fails closed. There is no bulk import, bidirectional sync, autonomous write, raw
+transcript export, second CRM connector or new top-level CRM navigation item.
 WO-009 adds production Clerk verification, versioned consent, beta retention,
 export/deletion requests, usage guardrails, feature flags, onboarding,
 synthetic demo data, feedback and safe administration/operations. No predictive
 scoring, forecasting, privileged browser database access, background recording
 guarantees, general media ingestion beyond the reviewed visual/audio paths,
-live sending/integration or billing is implemented.
+general live sending, billing or integration marketplace is implemented.
 
 Synthetic demo dataset v13 makes Home useful without provider calls: it includes
 near-term prepared Interactions, two current Action Layer items (one overdue), an
@@ -113,13 +123,14 @@ explicitly synthetic; Daily still presents no forecast or invented target.
 
 The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
-The proposed direction beyond the current WO-025 baseline is defined by the
+The proposed direction beyond the current WO-025C baseline is defined by the
 [End-to-End Sales Platform vision](docs/01-product/end-to-end-sales-platform-vision.md),
 [commercial packaging](docs/01-product/revenueos-commercial-packaging.md),
 [simplicity-first information architecture](docs/02-design/revenueos-information-architecture.md)
 and [conditional WO-024–045 roadmap](docs/06-roadmap/end-to-end-sales-platform-roadmap.md).
-WO-024 implements Sales Methodology and WO-025 implements RevenueOS Daily; later
-roadmap items remain unauthorised.
+WO-024 implements Sales Methodology, WO-025 implements RevenueOS Daily, WO-025B
+implements bounded Ask RevenueOS and WO-025C implements the first reviewed HubSpot
+CRM path; later roadmap items remain unauthorised.
 
 WO-010 defines the approved direction in the
 [Interaction Intelligence vision](docs/01-product/interaction-intelligence-vision.md),
@@ -137,19 +148,22 @@ WO-017 implements the browser-first phone-call path and compliant recording impo
 WO-018 implements the provider-neutral online-meeting import path, WO-019
 implements first-party document/email evidence without an external connector, and
 WO-020 implements bounded provisional processing over an authorised progressive
-source, WO-021 implements reviewed Actions, WO-022 implements simulation-only
-connector/execution foundations and WO-024 implements evidence-backed Sales
-Methodology. Production progressive transcription, external
-live AI, native/background capture, mobile client, meeting bot, telephony provider
-and production connectors remain unimplemented.
+source, WO-021 implements reviewed Actions, WO-022 implements simulation-first
+connector/execution foundations, WO-024 implements evidence-backed Sales
+Methodology, WO-025B implements bounded evidence-backed Ask and WO-025C implements
+one production-capable HubSpot CRM connector. Production progressive transcription,
+external live AI, native/background capture, mobile client, meeting bot, telephony
+provider, second CRM connector and autonomous CRM writes remain unimplemented.
 
 Target documents distinguish future direction from shipped functionality and do
 not authorise another sprint. The current implementation boundary is Sprints 1–3
 plus WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6, WO-005, WO-006A,
 WO-006B, WO-006C, WO-006D, WO-007, WO-008A, WO-008B, WO-009, WO-011, WO-012,
-WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019, WO-020, WO-021, WO-022 and WO-024.
+WO-013, WO-014, WO-015, WO-016, WO-017, WO-018, WO-019, WO-020, WO-021, WO-022,
+WO-024, WO-025, WO-025A, WO-025B and WO-025C.
 WO-010 remains the Interaction Intelligence blueprint. WO-023 adds the broader
-end-to-end Sales OS blueprint; all post-WO-024 roadmap work remains unauthorised.
+end-to-end Sales OS blueprint; all work beyond the implemented WO-025C boundary
+remains unauthorised.
 
 ## Prerequisites
 

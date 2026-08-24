@@ -34,6 +34,10 @@ class ConnectorDefinition:
     display_name: str
     capabilities: tuple[ConnectorCapability, ...]
     risk_classes: tuple[ActionRiskClass, ...]
+    provider_family: Literal["mock", "crm"] = "mock"
+    authentication_type: Literal["mock_local", "oauth2_authorisation_code"] = "mock_local"
+    execution_mode: Literal["simulation", "live"] = "simulation"
+    simulation_only: bool = True
 
 
 CONNECTOR_DEFINITIONS: dict[ConnectorKey, ConnectorDefinition] = {
@@ -61,6 +65,20 @@ CONNECTOR_DEFINITIONS: dict[ConnectorKey, ConnectorDefinition] = {
         capabilities=(ConnectorCapability.CREATE_TASK,),
         risk_classes=(ActionRiskClass.INTERNAL_LOW_RISK,),
     ),
+    ConnectorKey.HUBSPOT: ConnectorDefinition(
+        connector_key=ConnectorKey.HUBSPOT,
+        display_name="HubSpot",
+        capabilities=(
+            ConnectorCapability.UPDATE_OPPORTUNITY,
+            ConnectorCapability.UPDATE_CONTACT,
+            ConnectorCapability.CREATE_ACTIVITY,
+        ),
+        risk_classes=(ActionRiskClass.DATA_MUTATION,),
+        provider_family="crm",
+        authentication_type="oauth2_authorisation_code",
+        execution_mode="live",
+        simulation_only=False,
+    ),
 }
 
 
@@ -69,6 +87,25 @@ class ApprovedContactRecipient:
     contact_id: UUID
     display_name: str
     email: str
+
+
+@dataclass(frozen=True)
+class ApprovedExternalTarget:
+    mapping_id: UUID
+    external_object_type: str
+    external_object_id: str
+    external_property_name: str | None = None
+    external_property_type: str | None = None
+    field_authority: str | None = None
+    proposed_external_value: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecutorConnectionContext:
+    organisation_id: UUID
+    connection_id: UUID
+    credential_reference: str | None
+    execution_mode: Literal["simulation", "live"]
 
 
 @dataclass(frozen=True)
@@ -84,6 +121,8 @@ class ApprovedActionInput:
     target_entity_id: UUID | None
     payload: ActionPayload
     participant_contacts: tuple[ApprovedContactRecipient, ...] = ()
+    revenueos_currency: str | None = None
+    external_target: ApprovedExternalTarget | None = None
 
 
 @dataclass(frozen=True)
@@ -103,7 +142,15 @@ class ExecutionFailure(Exception):
 
 
 class RetryableExecutionFailure(ExecutionFailure):
-    pass
+    def __init__(
+        self,
+        code: str,
+        safe_message: str,
+        *,
+        retry_after_seconds: int | None = None,
+    ) -> None:
+        super().__init__(code, safe_message)
+        self.retry_after_seconds = retry_after_seconds
 
 
 class PermanentExecutionFailure(ExecutionFailure):
@@ -115,16 +162,24 @@ class UnknownExternalStateFailure(ExecutionFailure):
 
 
 class ActionExecutor(ABC):
-    """Provider-neutral execution port. WO-022 implementations are simulation-only."""
+    """Provider-neutral execution port for simulation and reviewed live adapters."""
 
     definition: ConnectorDefinition
 
     @abstractmethod
-    async def validate_connection(self) -> None:
+    async def validate_connection(self, context: ExecutorConnectionContext | None = None) -> None:
         raise NotImplementedError
 
     def get_capabilities(self) -> tuple[ConnectorCapability, ...]:
         return self.definition.capabilities
+
+    async def current_external_state(
+        self,
+        action: ApprovedActionInput,
+        context: ExecutorConnectionContext,
+    ) -> object | None:
+        del action, context
+        return None
 
     @abstractmethod
     def validate_action(self, action: ApprovedActionInput) -> None:
@@ -145,6 +200,7 @@ class ActionExecutor(ABC):
         *,
         idempotency_key: str,
         current_external_state: object | None,
+        context: ExecutorConnectionContext | None = None,
     ) -> ExecutorResult:
         raise NotImplementedError
 
@@ -162,7 +218,8 @@ class ActionExecutor(ABC):
 
 
 class _MockExecutor(ActionExecutor):
-    async def validate_connection(self) -> None:
+    async def validate_connection(self, context: ExecutorConnectionContext | None = None) -> None:
+        del context
         return None
 
     @staticmethod
@@ -212,8 +269,9 @@ class MockEmailExecutor(_MockExecutor):
         *,
         idempotency_key: str,
         current_external_state: object | None,
+        context: ExecutorConnectionContext | None = None,
     ) -> ExecutorResult:
-        del current_external_state
+        del current_external_state, context
         self.validate_action(action)
         return ExecutorResult(
             external_result_id=self._external_id("mock_email", idempotency_key),
@@ -299,8 +357,9 @@ class MockCalendarExecutor(_MockExecutor):
         *,
         idempotency_key: str,
         current_external_state: object | None,
+        context: ExecutorConnectionContext | None = None,
     ) -> ExecutorResult:
-        del current_external_state
+        del current_external_state, context
         self.validate_action(action)
         return ExecutorResult(
             external_result_id=self._external_id("mock_event", idempotency_key),
@@ -377,7 +436,9 @@ class MockCRMExecutor(_MockExecutor):
         *,
         idempotency_key: str,
         current_external_state: object | None,
+        context: ExecutorConnectionContext | None = None,
     ) -> ExecutorResult:
+        del context
         self.validate_action(action)
         field, expected, new_value = self._change(action)
         current = expected if current_external_state is None else current_external_state
@@ -433,8 +494,9 @@ class MockTaskExecutor(_MockExecutor):
         *,
         idempotency_key: str,
         current_external_state: object | None,
+        context: ExecutorConnectionContext | None = None,
     ) -> ExecutorResult:
-        del current_external_state
+        del current_external_state, context
         self.validate_action(action)
         return ExecutorResult(
             external_result_id=self._external_id("mock_task", idempotency_key),
@@ -450,13 +512,20 @@ class MockTaskExecutor(_MockExecutor):
 
 
 class ActionExecutorRegistry:
-    def __init__(self, executors: tuple[ActionExecutor, ...] | None = None) -> None:
+    def __init__(
+        self,
+        executors: tuple[ActionExecutor, ...] | None = None,
+        *,
+        live_executor: ActionExecutor | None = None,
+    ) -> None:
         selected = executors or (
             MockEmailExecutor(),
             MockCalendarExecutor(),
             MockCRMExecutor(),
             MockTaskExecutor(),
         )
+        if live_executor is not None:
+            selected = (*selected, live_executor)
         self._executors = {item.definition.connector_key: item for item in selected}
 
     def get(self, connector_key: ConnectorKey) -> ActionExecutor:
@@ -476,10 +545,11 @@ def capability_for_action(action_type: str) -> ConnectorCapability:
             "schedule_interaction": ConnectorCapability.CREATE_CALENDAR_EVENT,
             "update_opportunity": ConnectorCapability.UPDATE_OPPORTUNITY,
             "update_contact": ConnectorCapability.UPDATE_CONTACT,
+            "log_interaction": ConnectorCapability.CREATE_ACTIVITY,
             "create_task": ConnectorCapability.CREATE_TASK,
         }[action_type]
     except KeyError as exc:
         raise PermanentExecutionFailure(
             "action_not_executable",
-            "This approved Action type does not have a WO-022 simulation capability.",
+            "This approved Action type does not have an enabled execution capability.",
         ) from exc

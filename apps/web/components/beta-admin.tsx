@@ -55,8 +55,9 @@ const featureFlagLabels: Record<string, string> = {
   revenueBrain: "Revenue Brain",
   opportunityWorkspace: "Opportunity Workspace",
   integrations: "Integrations foundation",
-  actionExecution: "Explicit Action simulation",
+  actionExecution: "Explicit Action execution",
   mockConnectors: "Mock simulation connectors",
+  hubspotCrm: "HubSpot CRM sync",
   dataExport: "Organisation data export",
   organisationDeletion: "Organisation deletion",
 };

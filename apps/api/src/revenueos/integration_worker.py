@@ -5,7 +5,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID
 
 from sqlalchemy import or_, select, text
@@ -17,6 +17,7 @@ from revenueos.domain import ConnectorCapability, ExecutionStatus
 from revenueos.errors import PublicAPIError
 from revenueos.integration_executors import (
     ActionExecutorRegistry,
+    ExecutorConnectionContext,
     PermanentExecutionFailure,
     RetryableExecutionFailure,
     UnknownExternalStateFailure,
@@ -26,11 +27,13 @@ from revenueos.integration_services import ActionExecutionService
 from revenueos.models import (
     ActionExecution,
     ActionExecutionAttempt,
+    CRMEntityMapping,
     IntegrationAuditEvent,
     IntegrationConnection,
     MockConnectorObject,
     Organisation,
     OrganisationMembership,
+    User,
 )
 from revenueos.tenant import TenantContext
 
@@ -46,7 +49,7 @@ class ClaimedExecution:
 
 
 class ActionExecutionWorkerService:
-    """Durable simulation queue using the existing RevenueOS worker process."""
+    """Durable reviewed execution queue using the existing RevenueOS worker."""
 
     def __init__(
         self,
@@ -57,7 +60,7 @@ class ActionExecutionWorkerService:
     ) -> None:
         self._session_factory = session_factory
         self._settings = settings
-        self._executors = executors or ActionExecutorRegistry()
+        self._executors = executors
 
     async def run_once(self, worker_id: str) -> bool:
         if not self._features_enabled():
@@ -204,13 +207,14 @@ class ActionExecutionWorkerService:
                 OrganisationMembership,
                 (organisation_id, execution.confirmed_by_user_id),
             )
+            user = await session.get(User, execution.confirmed_by_user_id)
             if connection is None or connection.connection_status != "active":
                 execution.execution_status = ExecutionStatus.CANCELLED.value
                 execution.failed_at = now
                 execution.safe_failure_code = "connection_revoked"
                 execution.next_attempt_at = None
                 return None
-            if membership is None or membership.status != "active":
+            if membership is None or membership.status != "active" or user is None or user.status != "active":
                 execution.execution_status = ExecutionStatus.FAILED_PERMANENT.value
                 execution.failed_at = now
                 execution.safe_failure_code = "confirming_user_disabled"
@@ -261,7 +265,8 @@ class ActionExecutionWorkerService:
                 OrganisationMembership,
                 (claim.organisation_id, execution.confirmed_by_user_id),
             )
-            if membership is None or membership.status != "active":
+            user = await session.get(User, execution.confirmed_by_user_id)
+            if membership is None or membership.status != "active" or user is None or user.status != "active":
                 self._finish_failure(
                     session,
                     execution,
@@ -294,32 +299,63 @@ class ActionExecutionWorkerService:
                         "The approved Action version changed.",
                     )
                 action = await action_service._action_input(action_record)
+                action = await action_service._bind_external_target(action, record.connection)
                 capability = ConnectorCapability(execution.capability)
                 executor = action_service._executor(record.connection, capability, action.risk_class)
                 object_key = executor.object_key(action, execution.idempotency_key)
-                mock_object = await repository.mock_object(
-                    claim.organisation_id,
-                    execution.connection_id,
-                    object_key,
-                    for_update=True,
+                context = ExecutorConnectionContext(
+                    organisation_id=claim.organisation_id,
+                    connection_id=execution.connection_id,
+                    credential_reference=record.connection.credential_reference,
+                    execution_mode=cast(Literal["simulation", "live"], execution.execution_mode),
                 )
-                if mock_object is not None and mock_object.last_idempotency_key == execution.idempotency_key:
-                    self._finish_success(
-                        session,
-                        execution,
-                        mock_object.external_result_id,
-                        started_clock,
+                mock_object: MockConnectorObject | None = None
+                if execution.execution_mode == "simulation":
+                    mock_object = await repository.mock_object(
+                        claim.organisation_id,
+                        execution.connection_id,
+                        object_key,
+                        for_update=True,
                     )
-                    return
-                current_external_state = (
-                    mock_object.state_json.get("current_value") if mock_object is not None else None
-                )
-                result = await executor.execute(
-                    action,
-                    idempotency_key=execution.idempotency_key,
-                    current_external_state=current_external_state,
-                )
-                if mock_object is None:
+                    if mock_object is not None and mock_object.last_idempotency_key == execution.idempotency_key:
+                        self._finish_success(
+                            session,
+                            execution,
+                            mock_object.external_result_id,
+                            started_clock,
+                        )
+                        return
+                    current_external_state = (
+                        mock_object.state_json.get("current_value") if mock_object is not None else None
+                    )
+                else:
+                    current_external_state = await executor.current_external_state(action, context)
+                    content = executor.preview_execution(action, current_external_state)
+                    current_fingerprint = action_service._preview_fingerprint(
+                        action_record,
+                        record.connection,
+                        capability,
+                        content.model_dump(mode="json", by_alias=True),
+                    )
+                    if current_fingerprint != execution.preview_fingerprint:
+                        raise PermanentExecutionFailure(
+                            "stale_external_state",
+                            "HubSpot changed since this preview. Review the latest values before updating CRM.",
+                        )
+                if execution.execution_mode == "live":
+                    result = await executor.execute(
+                        action,
+                        idempotency_key=execution.idempotency_key,
+                        current_external_state=current_external_state,
+                        context=context,
+                    )
+                else:
+                    result = await executor.execute(
+                        action,
+                        idempotency_key=execution.idempotency_key,
+                        current_external_state=current_external_state,
+                    )
+                if execution.execution_mode == "simulation" and mock_object is None:
                     mock_object = MockConnectorObject(
                         id=uuid.uuid4(),
                         organisation_id=claim.organisation_id,
@@ -335,13 +371,28 @@ class ActionExecutionWorkerService:
                         updated_at=datetime.now(UTC),
                     )
                     session.add(mock_object)
-                else:
+                elif execution.execution_mode == "simulation":
+                    assert mock_object is not None
                     mock_object.last_execution_id = execution.id
                     mock_object.last_idempotency_key = execution.idempotency_key
                     mock_object.external_result_id = result.external_result_id
                     mock_object.state_json = result.state
+                if execution.execution_mode == "live" and action.external_target is not None:
+                    mapping = await session.scalar(
+                        select(CRMEntityMapping).where(
+                            CRMEntityMapping.organisation_id == claim.organisation_id,
+                            CRMEntityMapping.connection_id == execution.connection_id,
+                            CRMEntityMapping.id == action.external_target.mapping_id,
+                        )
+                    )
+                    if mapping is not None:
+                        mapping.last_synced_at = datetime.now(UTC)
+                        mapping.sync_state = "active"
                 self._finish_success(session, execution, result.external_result_id, started_clock)
             except (RetryableExecutionFailure, PermanentExecutionFailure, UnknownExternalStateFailure) as exc:
+                if exc.code == "connection_reauthorisation_required":
+                    record.connection.connection_status = "reauthorisation_required"
+                    record.connection.metadata_version += 1
                 self._finish_failure(session, execution, exc, started_clock)
             except PublicAPIError as exc:
                 self._finish_failure(
@@ -351,13 +402,13 @@ class ActionExecutionWorkerService:
                     started_clock,
                 )
             except Exception:
-                logger.exception("simulation_executor_failed", extra=self._log_context(execution))
+                logger.exception("connector_executor_failed", extra=self._log_context(execution))
                 self._finish_failure(
                     session,
                     execution,
                     RetryableExecutionFailure(
-                        "simulation_executor_unavailable",
-                        "The simulation executor was temporarily unavailable.",
+                        "connector_executor_unavailable",
+                        "The connector executor was temporarily unavailable.",
                     ),
                     started_clock,
                 )
@@ -371,7 +422,10 @@ class ActionExecutionWorkerService:
     ) -> None:
         now = datetime.now(UTC)
         duration_ms = max(0, round((time.perf_counter() - started_clock) * 1000))
-        execution.execution_status = ExecutionStatus.SIMULATED_SUCCESS.value
+        success_status = (
+            ExecutionStatus.SUCCEEDED if execution.execution_mode == "live" else ExecutionStatus.SIMULATED_SUCCESS
+        )
+        execution.execution_status = success_status.value
         execution.completed_at = now
         execution.failed_at = None
         execution.safe_failure_code = None
@@ -382,7 +436,7 @@ class ActionExecutionWorkerService:
         self._add_attempt(
             session,
             execution,
-            status=ExecutionStatus.SIMULATED_SUCCESS.value,
+            status=success_status.value,
             completed_at=now,
             duration_ms=duration_ms,
             external_result_id=external_result_id,
@@ -413,7 +467,13 @@ class ActionExecutionWorkerService:
         elif isinstance(failure, RetryableExecutionFailure) and execution.attempt_count < execution.max_attempts:
             status = ExecutionStatus.FAILED_RETRYABLE
             event_type = "execution_failed"
-            next_attempt_at = now + timedelta(seconds=self._retry_delay(execution.attempt_count))
+            retry_delay = self._retry_delay(execution.attempt_count)
+            if failure.retry_after_seconds is not None:
+                retry_delay = min(
+                    max(retry_delay, failure.retry_after_seconds),
+                    self._settings.worker_max_retry_delay_seconds,
+                )
+            next_attempt_at = now + timedelta(seconds=retry_delay)
         else:
             status = ExecutionStatus.FAILED_PERMANENT
             event_type = "execution_failed"
@@ -507,11 +567,13 @@ class ActionExecutionWorkerService:
 
     def _features_enabled(self) -> bool:
         return (
-            self._settings.environment != "production"
-            and self._settings.feature_integrations_enabled
+            self._settings.feature_integrations_enabled
             and self._settings.feature_action_execution_enabled
-            and self._settings.feature_mock_connectors_enabled
             and self._settings.feature_action_layer_enabled
+            and (
+                self._settings.feature_hubspot_crm_enabled
+                or (self._settings.environment != "production" and self._settings.feature_mock_connectors_enabled)
+            )
         )
 
     @staticmethod
@@ -531,5 +593,5 @@ class ActionExecutionWorkerService:
             "attempt_count": execution.attempt_count,
             "execution_status": execution.execution_status,
             "safe_failure_code": execution.safe_failure_code,
-            "execution_mode": "simulation",
+            "execution_mode": execution.execution_mode,
         }

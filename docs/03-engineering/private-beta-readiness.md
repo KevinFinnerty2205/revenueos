@@ -440,6 +440,13 @@ WO-025 adds no export or retention schema because Daily is computed and unpersis
 The v13 demo additions are existing Opportunity, Interaction and Action rows and
 therefore use their established reset, retention and export behaviour.
 
+WO-025C advances export schema to v15 with safe HubSpot connection metadata and
+tenant-scoped entity, field and stage mappings. It deliberately excludes encrypted
+credentials, credential references, OAuth state, access and refresh tokens,
+idempotency markers and execution-preview fingerprints. Organisation deletion
+attempts provider revocation before deleting the encrypted local credential and
+all CRM mappings; a provider failure cannot retain tenant data locally.
+
 ## WO-025B Ask controls
 
 `FEATURE_ASK_REVENUEOS_ENABLED` fails closed independently. Daily limits default to 75
@@ -454,3 +461,28 @@ source excerpt. The deterministic demo's existing synthetic Qantas-style Opportu
 customer/seller Evidence, security request, timeline, commitment, competitor,
 Methodology gap, change and Next Best Action provide the flagship Ask scenario with
 zero provider requests.
+
+## WO-025C HubSpot CRM controls
+
+`API_FEATURE_HUBSPOT_CRM_ENABLED` is a server-authoritative provider switch and
+defaults off. Live use also requires the existing Integrations, Action Layer and
+Action Execution switches plus valid HubSpot client configuration and an exact OAuth
+redirect. Production configuration fails closed if the redirect is not HTTPS, the
+official HubSpot hosts are replaced or the 32-byte deployment credential master key
+is missing/invalid. Mock connectors remain prohibited in production.
+
+Focused CRM Sync reuses the existing CRM execution limit of 100 per organisation/day,
+five active executions per organisation and the ten-minute preview TTL. It adds no
+poller or unbounded read quota: provider reads occur only during admin setup/testing,
+explicit record search/link, preview, worker execution and explicit reconciliation.
+429 responses honour numeric `Retry-After` within the existing bounded worker delay.
+
+Export schema v15 adds safe HubSpot connection/account capability metadata, entity
+mappings, typed field/stage mappings, authority policies and live execution results.
+It excludes OAuth state secrets, credential IDs, ciphertext, tokens, nonces, AAD,
+preview fingerprints, idempotency keys and provider payloads. Disconnect attempts
+provider revocation, immediately disables local execution and invalidates previews;
+it never deletes a HubSpot record. Organisation deletion attempts revocation before
+removing local credential/mapping/execution rows. External updates already applied
+are not undone. Ordinary Action/Interaction retention continues to own reviewed
+content; CRM audit/log records remain metadata-only.

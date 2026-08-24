@@ -42,6 +42,7 @@ class ActionType(StrEnum):
     SCHEDULE_INTERACTION = "schedule_interaction"
     UPDATE_OPPORTUNITY = "update_opportunity"
     UPDATE_CONTACT = "update_contact"
+    LOG_INTERACTION = "log_interaction"
     UPDATE_STAKEHOLDER = "update_stakeholder"
     ADD_DECISION = "add_decision"
     ADD_COMMITMENT = "add_commitment"
@@ -98,6 +99,7 @@ class ConnectorKey(StrEnum):
     MOCK_CALENDAR = "mock_calendar"
     MOCK_CRM = "mock_crm"
     MOCK_TASK = "mock_task"
+    HUBSPOT = "hubspot"
 
 
 class ConnectorCapability(StrEnum):
@@ -106,12 +108,14 @@ class ConnectorCapability(StrEnum):
     UPDATE_OPPORTUNITY = "update_opportunity"
     UPDATE_CONTACT = "update_contact"
     CREATE_TASK = "create_task"
+    CREATE_ACTIVITY = "create_activity"
     POST_INTERNAL_MESSAGE = "post_internal_message"
     UPLOAD_OR_SHARE_DOCUMENT = "upload_or_share_document"
 
 
 class ConnectionStatus(StrEnum):
     ACTIVE = "active"
+    REAUTHORISATION_REQUIRED = "reauthorisation_required"
     REVOKED = "revoked"
 
 
@@ -119,10 +123,29 @@ class ExecutionStatus(StrEnum):
     QUEUED = "queued"
     EXECUTING = "executing"
     SIMULATED_SUCCESS = "simulated_success"
+    SUCCEEDED = "succeeded"
     FAILED_RETRYABLE = "failed_retryable"
     FAILED_PERMANENT = "failed_permanent"
     CANCELLED = "cancelled"
     UNKNOWN_EXTERNAL_STATE = "unknown_external_state"
+
+
+class CRMFieldAuthority(StrEnum):
+    CRM_AUTHORITATIVE = "crm_authoritative"
+    REVENUEOS_AUTHORITATIVE = "revenueos_authoritative"
+    REVIEW_BEFORE_SYNC = "review_before_sync"
+
+
+class CRMEntityType(StrEnum):
+    COMPANY = "company"
+    CONTACT = "contact"
+    OPPORTUNITY = "opportunity"
+
+
+class CRMExternalObjectType(StrEnum):
+    COMPANY = "company"
+    CONTACT = "contact"
+    DEAL = "deal"
 
 
 class TaskStatus(StrEnum):

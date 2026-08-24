@@ -669,3 +669,17 @@ bounded follow-ups, scope and generation time. It cannot accept organisation IDs
 SQL, retrieval plans, provider/tool choices or Action payloads. See the
 [retrieval architecture](ask-retrieval-architecture.md) and
 [citation contract](ask-source-citation-model.md).
+
+## Focused CRM Sync API
+
+WO-025C keeps connection and Action execution in the existing route family. Admins
+use HubSpot OAuth start/callback, connection test/delete and typed field/stage
+configuration. Active members may use bounded CRM search and exact entity link/
+unlink routes. No route accepts an organisation ID, OAuth token, provider property
+at execute time, arbitrary payload or live/simulation switch.
+
+Action execution continues through `execution-options`, `execution-preview`,
+`execute` and history/detail. Live previews add exact current/new CRM values,
+authority and provider update time. `POST /api/v1/executions/{id}/reconcile` is
+available only for live `unknown_external_state` and performs no write. See the
+[Focused CRM Sync guide](focused-crm-sync.md) for the complete route list.

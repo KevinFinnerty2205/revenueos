@@ -6,7 +6,9 @@
 
 WO-025A consolidates the current Core shell and first-time journey. Search finds
 Accounts, Opportunities and Interactions; WO-025B adds evidence-cited Ask in the same
-utility and contextual workspaces. Production CRM completion remains WO-025C.
+utility and contextual workspaces. WO-025C now adds a production-capable, explicitly
+confirmed HubSpot update path; target-environment/customer launch approval remains
+separate.
 
 Checkpoint 1 confirms the five-part Core boundary and adds a pre-Prospect readiness
 sequence. See the [Core capability floor](core-competitive-capability-floor.md) and
@@ -159,6 +161,8 @@ WO-025A completes the Core experience-readiness pass and WO-025B implements Ask
 RevenueOS as bounded evidence-backed Opportunity, Account and user-owned workspace
 Q&A. Ask reuses existing intelligence, preserves provenance/conflict and returns
 unknown rather than widening to public research. Analytics, Win/Loss, targets,
-forecasting, coaching, manager views and production external execution remain future
-work. WO-025C one selected CRM path remains recommended before WO-026 Prospect; that
-recommendation does not authorise implementation.
+forecasting, coaching, manager views, broader provider execution and observed
+Checkpoint 1B remain future work. WO-025C implements the selected HubSpot path only:
+explicit object linking, typed field/stage authority, exact preview, confirmation,
+verified execution and reconciliation. It does not authorise Prospect, Salesforce,
+bulk import, bidirectional sync or autonomous writes.

@@ -1,7 +1,7 @@
 # Execution idempotency and reconciliation
 
 Confirmation computes a SHA-256 idempotency key from organisation, Action ID,
-approved version, connection, capability and simulation mode. Unique constraints
+approved version, connection, capability and execution mode. Unique constraints
 cover preview confirmation, idempotency key and the Action/version/connection/
 capability tuple. Concurrent confirmations therefore converge on one execution.
 
@@ -17,10 +17,17 @@ do not retry. A lease that expires while an execution was in progress becomes
 `unknown_external_state`, because blindly invoking an external provider again
 could duplicate a consequential action.
 
-## Future live reconciliation
+## HubSpot live reconciliation
 
-A live connector must provide a provider idempotency mechanism or durable
-request/result mapping, and implement status lookup. Unknown outcomes require
-operator-visible reconciliation evidence before retry or resolution. Webhook
-delivery alone is not sufficient because it can be delayed, duplicated or absent.
-No manual force-retry endpoint exists in WO-022.
+WO-025C uses the same durable execution identity for HubSpot. Field writes first
+read/compare current state, then verify the desired value after mutation. Activity
+creation uses a hashed execution marker in internal notes and searches before create
+and after any uncertain result. A response timeout or provider 5xx after a mutation
+is never blindly retried.
+
+An `unknown_external_state` execution exposes one explicit read-only reconciliation
+operation. Desired state resolves to success; unchanged original state permits a
+bounded safe retry; a third value becomes permanent attention. Reconciliation never
+writes. HubSpot does not provide a general idempotency header for these single-record
+operations, so these comparison and durable-marker rules are the connector's
+documented mechanism. See [CRM execution and reconciliation](crm-execution-reconciliation.md).

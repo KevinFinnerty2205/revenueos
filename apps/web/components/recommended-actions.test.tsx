@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActionProposal } from "@revenueos/shared";
+import { ActionExecutionPanel } from "@/components/action-execution-panel";
 import { RecommendedActions } from "@/components/recommended-actions";
 
 function response(body: object) {
@@ -164,7 +165,7 @@ describe("RecommendedActions", () => {
     ).toBeVisible();
   });
 
-  it("uses a read-only server preview and a separate explicit simulation confirmation", async () => {
+  it("uses a read-only server preview and a separate explicit execution confirmation", async () => {
     const approved = action({
       status: "approved",
       approvedVersion: 1,
@@ -269,7 +270,7 @@ describe("RecommendedActions", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "Approved (1)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Preview simulation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review execution" }));
     expect(
       await screen.findByText("Simulation — no external action will occur"),
     ).toBeVisible();
@@ -286,9 +287,143 @@ describe("RecommendedActions", () => {
     expect(await screen.findByText("Simulation in progress")).toBeVisible();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Refresh simulation status" }),
+      screen.getByRole("button", { name: "Refresh execution status" }),
     );
     expect(await screen.findByText("Simulation complete")).toBeVisible();
     expect(screen.getByText(/mock_email_result_1/)).toBeVisible();
+  });
+
+  it("shows an exact live CRM diff and reconciles an unknown result read-only", async () => {
+    const approved = action({
+      actionType: "update_opportunity",
+      status: "approved",
+      approvedVersion: 1,
+      approvedAt: "2026-08-24T01:00:00Z",
+      riskClass: "data_mutation",
+      audience: "internal",
+      title: "Review opportunity amount update",
+      proposedPayload: {
+        kind: "update_opportunity",
+        field: "estimated_value",
+        currentValue: "125000.50",
+        proposedValue: "140000.00",
+        reason: "The reviewed scope changed.",
+      },
+    });
+    const unknown = {
+      id: "execution-live-1",
+      actionProposalId: approved.id,
+      actionVersion: 1,
+      connectionId: "hubspot-connection-1",
+      connectorKey: "hubspot",
+      connectorDisplayName: "HubSpot",
+      capability: "update_opportunity",
+      riskClass: "data_mutation",
+      executionStatus: "unknown_external_state",
+      executionMode: "live",
+      simulationOnly: false,
+      confirmedByUserId: "user-1",
+      confirmedAt: "2026-08-24T01:02:00Z",
+      startedAt: "2026-08-24T01:02:01Z",
+      completedAt: null,
+      failedAt: "2026-08-24T01:02:06Z",
+      safeFailureCode: "unknown_external_state",
+      externalResultId: null,
+      attemptCount: 1,
+      retryable: false,
+      safeMessage:
+        "The HubSpot outcome is unknown. RevenueOS will not retry until it is reconciled.",
+      createdAt: "2026-08-24T01:02:00Z",
+      updatedAt: "2026-08-24T01:02:06Z",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          items: [
+            {
+              connectionId: "hubspot-connection-1",
+              connectorKey: "hubspot",
+              connectorDisplayName: "HubSpot",
+              capability: "update_opportunity",
+              riskClass: "data_mutation",
+              executionMode: "live",
+              simulationOnly: false,
+            },
+          ],
+          total: 1,
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          id: "preview-live-1",
+          actionProposalId: approved.id,
+          actionVersion: 1,
+          connectionId: "hubspot-connection-1",
+          connectorKey: "hubspot",
+          connectorDisplayName: "HubSpot",
+          capability: "update_opportunity",
+          riskClass: "data_mutation",
+          executionMode: "live",
+          simulationOnly: false,
+          readiness: "ready",
+          summary:
+            "Apply this reviewed field update to the linked HubSpot deal.",
+          confirmationLabel: "Update CRM",
+          previewFingerprint: "f".repeat(64),
+          content: {
+            kind: "crm",
+            targetType: "opportunity",
+            targetId: "opportunity-1",
+            field: "estimated_value",
+            currentExternalValue: "125000.50",
+            expectedExternalValue: "125000.50",
+            newValue: "140000.00",
+            fieldAuthority: "review_before_sync",
+            externalUpdatedAt: "2026-08-24T01:01:00Z",
+            action: "update_opportunity",
+          },
+          expiresAt: "2026-08-24T01:12:00Z",
+          createdAt: "2026-08-24T01:02:00Z",
+        }),
+      )
+      .mockResolvedValueOnce(response({ items: [], total: 0 }))
+      .mockResolvedValueOnce(response(unknown))
+      .mockResolvedValueOnce(
+        response({
+          ...unknown,
+          executionStatus: "succeeded",
+          completedAt: "2026-08-24T01:03:00Z",
+          failedAt: null,
+          safeFailureCode: null,
+          externalResultId: "deal-1",
+          safeMessage:
+            "HubSpot contains the approved value. The result was reconciled.",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ActionExecutionPanel action={approved} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Review execution" }));
+    expect(
+      await screen.findByText(
+        "Live HubSpot action — review exact values before confirming",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText("125000.50")).toBeVisible();
+    expect(screen.getByText("140000.00")).toBeVisible();
+    expect(screen.getByText("Review Before Sync")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Update CRM" }));
+    expect(
+      await screen.findByText("HubSpot action needs attention"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Reconcile HubSpot outcome" }),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reconcile HubSpot outcome" }),
+    );
+    expect(await screen.findByText("HubSpot update complete")).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 });

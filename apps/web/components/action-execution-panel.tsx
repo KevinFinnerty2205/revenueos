@@ -29,7 +29,7 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
       const option = options.items[0];
       if (!option) {
         throw new Error(
-          "Ask an administrator to enable an authorised simulation connector for this Action.",
+          "Ask an administrator to enable an authorised connector for this Action.",
         );
       }
       const result = await apiRequest<ExecutionPreview>(
@@ -48,7 +48,7 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The simulation preview could not be prepared.",
+          : "The execution preview could not be prepared.",
       );
     } finally {
       setBusy(false);
@@ -80,7 +80,7 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The simulation could not be confirmed.",
+          : "The reviewed action could not be confirmed.",
       );
     } finally {
       setBusy(false);
@@ -104,7 +104,32 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "Simulation status could not be refreshed.",
+          : "Execution status could not be refreshed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reconcileExecution() {
+    if (!execution) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await apiRequest<ActionExecution>(
+        `/api/v1/executions/${execution.id}/reconcile`,
+        { method: "POST" },
+      );
+      setExecution(result);
+      setHistory((items) => [
+        result,
+        ...items.filter((item) => item.id !== result.id),
+      ]);
+    } catch (reason: unknown) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The HubSpot outcome could not be reconciled.",
       );
     } finally {
       setBusy(false);
@@ -120,10 +145,11 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
           disabled={busy}
           onClick={() => void reviewExecution()}
         >
-          {busy ? "Preparing preview…" : "Preview simulation"}
+          {busy ? "Preparing preview…" : "Review execution"}
         </button>
         <p className="mt-2 text-xs font-bold text-amber-800">
-          Optional simulation only — approval has not sent or updated anything.
+          Approval alone has not sent or updated anything. A separate preview
+          and confirmation are required.
         </p>
         {error ? (
           <p role="alert" className="mt-3 text-sm text-rose-800">
@@ -136,9 +162,15 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
 
   return (
     <div className="mt-5 border-t border-slate-100 pt-4">
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-900">
-          Simulation — no external action will occur
+      <div
+        className={`rounded-2xl border p-4 ${preview.simulationOnly ? "border-amber-200 bg-amber-50" : "border-teal-200 bg-teal-50"}`}
+      >
+        <p
+          className={`text-xs font-bold uppercase tracking-[0.14em] ${preview.simulationOnly ? "text-amber-900" : "text-teal-900"}`}
+        >
+          {preview.simulationOnly
+            ? "Simulation — no external action will occur"
+            : "Live HubSpot action — review exact values before confirming"}
         </p>
         <h4 className="mt-2 font-bold text-slate-950">
           {preview.connectorDisplayName}
@@ -167,14 +199,15 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
         ) : (
           <div className="mt-4 rounded-xl bg-white p-3" aria-live="polite">
             <p className="font-bold text-slate-900">
-              {simulationStatus(execution.executionStatus)}
+              {executionStatus(execution)}
             </p>
             <p className="mt-1 text-sm text-slate-600">
               {execution.safeMessage}
             </p>
             {execution.externalResultId ? (
               <p className="mt-2 break-all text-xs text-slate-500">
-                Mock result ID: {execution.externalResultId}
+                {execution.simulationOnly ? "Mock" : "HubSpot"} result ID:{" "}
+                {execution.externalResultId}
               </p>
             ) : null}
             {execution.executionStatus === "queued" ||
@@ -186,7 +219,18 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
                 disabled={busy}
                 onClick={() => void refreshExecution()}
               >
-                Refresh simulation status
+                Refresh execution status
+              </button>
+            ) : null}
+            {execution.executionStatus === "unknown_external_state" &&
+            !execution.simulationOnly ? (
+              <button
+                type="button"
+                className="secondary-button mt-3"
+                disabled={busy}
+                onClick={() => void reconcileExecution()}
+              >
+                Reconcile HubSpot outcome
               </button>
             ) : null}
           </div>
@@ -195,13 +239,12 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
       {history.length ? (
         <details className="mt-3">
           <summary className="cursor-pointer text-sm font-bold text-slate-700">
-            Simulation history ({history.length})
+            Execution history ({history.length})
           </summary>
           <ul className="mt-2 space-y-2 text-sm text-slate-600">
             {history.map((item) => (
               <li key={item.id}>
-                {simulationStatus(item.executionStatus)} ·{" "}
-                {item.connectorDisplayName} ·{" "}
+                {executionStatus(item)} · {item.connectorDisplayName} ·{" "}
                 {new Date(item.confirmedAt).toLocaleString("en-AU")}
               </li>
             ))}
@@ -217,17 +260,26 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
   );
 }
 
-function simulationStatus(status: ActionExecution["executionStatus"]) {
+function executionStatus(execution: ActionExecution) {
+  const status = execution.executionStatus;
+  if (status === "succeeded") return "HubSpot update complete";
   if (status === "simulated_success") return "Simulation complete";
   if (
     status === "failed_retryable" ||
     status === "failed_permanent" ||
     status === "unknown_external_state"
   ) {
-    return "Simulation needs attention";
+    return execution.simulationOnly
+      ? "Simulation needs attention"
+      : "HubSpot action needs attention";
   }
-  if (status === "cancelled") return "Simulation cancelled";
-  return "Simulation in progress";
+  if (status === "cancelled")
+    return execution.simulationOnly
+      ? "Simulation cancelled"
+      : "HubSpot action cancelled";
+  return execution.simulationOnly
+    ? "Simulation in progress"
+    : "HubSpot action in progress";
 }
 
 function PreviewContent({ content }: { content: ExecutionPreviewContent }) {
@@ -271,6 +323,38 @@ function PreviewContent({ content }: { content: ExecutionPreviewContent }) {
           value={displayValue(content.currentExternalValue)}
         />
         <PreviewRow label="New" value={displayValue(content.newValue)} />
+        {content.fieldAuthority ? (
+          <PreviewRow
+            label="Field authority"
+            value={humanise(content.fieldAuthority)}
+          />
+        ) : null}
+      </dl>
+    );
+  }
+  if (content.kind === "crm_activity") {
+    return (
+      <dl className="mt-4 grid gap-2 text-sm">
+        <PreviewRow label="Interaction" value={content.title} />
+        <PreviewRow
+          label="Occurred"
+          value={new Date(content.occurredAt).toLocaleString("en-AU")}
+        />
+        <PreviewRow
+          label="Summary"
+          value={content.summary}
+          preserveWhitespace
+        />
+        <PreviewRow
+          label="Agreed next steps"
+          value={
+            content.agreedNextSteps.length
+              ? content.agreedNextSteps.join("\n")
+              : "None included"
+          }
+          preserveWhitespace
+        />
+        <PreviewRow label="Raw transcript" value="Not included" />
       </dl>
     );
   }
