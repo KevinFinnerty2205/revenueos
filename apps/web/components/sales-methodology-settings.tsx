@@ -167,8 +167,8 @@ export function SalesMethodologySettings() {
       );
       setMessage(
         selection === "none"
-          ? "Sales Methodology is now optional and unselected. Existing projection history is preserved."
-          : "Organisation methodology updated. Existing evidence and projection history are preserved.",
+          ? "Sales Methodology is now optional and unselected. Existing review history is preserved."
+          : "Organisation methodology updated. Existing evidence and review history are preserved.",
       );
       await load();
     } catch (requestError: unknown) {
@@ -226,7 +226,7 @@ export function SalesMethodologySettings() {
         method: "DELETE",
       });
       setMessage(
-        `${definition.name} was archived. Historical projections remain available.`,
+        `${definition.name} was archived. Historical methodology views remain available.`,
       );
       if (editing?.id === definition.id) resetBuilder();
       await load();
@@ -350,8 +350,8 @@ export function SalesMethodologySettings() {
               Custom methodology builder
             </h3>
             <p className="mt-2 text-sm text-slate-600">
-              Guided fields only. Executable rules, prompt instructions and
-              custom code are not supported.
+              Guided fields only. This builder captures descriptive fields and
+              discovery questions; it does not automate deal rules.
             </p>
           </div>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
@@ -648,7 +648,7 @@ function FieldEditor({
         />
       </label>
       <label className="text-sm font-bold text-slate-800">
-        Canonical fact
+        Customer fact
         <select
           className="form-control mt-2"
           value={field.canonicalFact}

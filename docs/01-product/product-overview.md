@@ -1,5 +1,10 @@
 # Product overview
 
+WO-025A presents the implemented Core as one outcome-led experience: Home, Sell,
+Pipeline and bounded Search on desktop; Today, Interactions, Actions and Search on
+mobile; deal-first Opportunity hierarchy; and lifecycle-led Interaction capture.
+It adds no AI, connector or product module and does not relax private-beta limits.
+
 WO-018 makes Microsoft Teams, Zoom, Google Meet and other online meetings a
 current browser-first Interaction workflow: existing preparation, safe meeting
 navigation, passive Companion timing and deliberate recording/transcript import or

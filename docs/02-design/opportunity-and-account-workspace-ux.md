@@ -1,6 +1,7 @@
 # Opportunity and Account Workspace UX
 
-- **Status:** Target evolution; the current Opportunity Workspace remains implemented reality
+- **Status:** WO-025A implements the Opportunity summary → why → evidence hierarchy;
+  the broader Account target remains future
 - **Principle:** Keep the relationship and deal in one coherent working area
 
 ## Account Workspace

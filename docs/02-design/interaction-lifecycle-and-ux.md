@@ -3,6 +3,10 @@
 WO-018 applies this lifecycle to online meetings with safe Open Meeting navigation,
 a passive During state and capability-driven post-meeting import/debrief choices.
 
+WO-025A makes the shared customer sequence explicit as Prepare → Capture → Review →
+Follow through. Planned face-to-face capture stays in Companion; additional completed
+source options use progressive disclosure.
+
 - **Status:** WO-016 implements the responsive browser Companion across the
   persisted planned, in-progress and completed Interaction lifecycle. The richer
   product-state diagram below remains a target model, not a database enum. WO-017
@@ -64,7 +68,7 @@ never required to complete a preparation checklist before meeting the customer.
 | Site visit             | safety constraints, authorised photo zones, technical questions and offline expectation              |
 | Executive lunch        | relationship context and a discreet non-recording default                                            |
 | Conference interaction | rapid account matching, badge/business-card permission and very short objectives                     |
-| Phone call             | Contact/role, purpose, commitment, objection/timeline, recent change and desired next step            |
+| Phone call             | Contact/role, purpose, commitment, objection/timeline, recent change and desired next step           |
 
 ## During the interaction
 

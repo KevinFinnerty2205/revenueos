@@ -115,7 +115,7 @@ test("core entity pages remain usable at a mobile viewport", async ({
     page.getByRole("link", { name: "Create company" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("navigation", { name: "Main navigation" }),
+    page.getByRole("navigation", { name: "Mobile navigation" }),
   ).toBeVisible();
 });
 
@@ -126,6 +126,27 @@ test("private beta onboarding, consent, feedback and admin controls stay product
   let acknowledged = false;
   let adminAllowed = true;
   let feedbackPayload: Record<string, unknown> | null = null;
+
+  await page.route("http://localhost:8000/api/v1/me", async (route) => {
+    await route.fulfill({
+      json: {
+        user: {
+          id: "user-1",
+          externalAuthId: "user_dev_001",
+          displayName: "Alex Morgan",
+          email: "alex@example.test",
+        },
+        organisation: {
+          id: "organisation-1",
+          name: "Example Revenue Team",
+          slug: "example-revenue-team",
+        },
+        role: "admin",
+        authMode: "mock",
+        requestId: "request-private-beta-e2e",
+      },
+    });
+  });
 
   await page.route("http://localhost:8000/api/v1/beta/**", async (route) => {
     const request = route.request();
@@ -207,9 +228,11 @@ test("private beta onboarding, consent, feedback and admin controls stay product
 
   await page.goto("/onboarding");
   await expect(
-    page.getByRole("heading", { name: "Set up your safe first journey" }),
+    page.getByRole("heading", {
+      name: "Move your first customer conversation forward",
+    }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Start safely" }).click();
+  await page.getByRole("button", { name: "Show me how" }).click();
   await expect(
     page.getByRole("heading", { name: /Private beta data notice/ }),
   ).toBeVisible();
@@ -221,7 +244,7 @@ test("private beta onboarding, consent, feedback and admin controls stay product
     page.getByRole("heading", { name: "Your workspace is ready" }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Feedback" }).click();
+  await page.goto("/feedback");
   await page.getByLabel("Category").selectOption("confusing");
   await page.getByLabel("Rating").selectOption("4");
   await page
@@ -236,9 +259,9 @@ test("private beta onboarding, consent, feedback and admin controls stay product
     currentRoute: "/feedback",
   });
 
-  await page.getByRole("link", { name: "Settings" }).click();
+  await page.goto("/settings");
   await expect(
-    page.getByRole("heading", { name: "Organisation controls" }),
+    page.getByRole("heading", { name: "Synthetic Beta Organisation" }),
   ).toBeVisible();
   await expect(page.getByLabel(/retention policy/i)).toHaveValue("days_90");
   await expect(page.getByText("0 / 100")).toBeVisible();
@@ -376,6 +399,20 @@ test("interaction timeline supports deliberate creation and completion without i
       const path = new URL(request.url()).pathname;
       if (path.endsWith("/companion/brief")) {
         await route.fulfill({ json: emptyBriefResponse() });
+        return;
+      }
+      if (path.endsWith("/companion/markers")) {
+        await route.fulfill({ json: [] });
+        return;
+      }
+      if (request.method() === "POST" && path.endsWith("/start")) {
+        await route.fulfill({
+          json: {
+            ...createdInteraction,
+            lifecycleStatus: "in_progress",
+            actualStartAt: "2026-08-04T01:00:00Z",
+          },
+        });
         return;
       }
       if (request.method() === "POST" && path.endsWith("/complete")) {
@@ -519,7 +556,8 @@ test("interaction timeline supports deliberate creation and completion without i
     companyId: "company-1",
     opportunityId: "opportunity-1",
   });
-  await page.getByRole("button", { name: "Complete interaction" }).click();
+  await page.getByRole("button", { name: "Start interaction" }).click();
+  await page.getByRole("button", { name: "Finish interaction" }).click();
   await expect(
     page.getByRole("status", { name: "Interaction lifecycle status" }),
   ).toHaveText("Completed");
@@ -738,11 +776,24 @@ test("a presentation supports browser image upload, explicit review and intellig
         await route.fulfill({ json: brief });
         return;
       }
+      if (path.endsWith("/companion/markers")) {
+        await route.fulfill({ json: [] });
+        return;
+      }
       if (path === "/api/v1/interactions/interaction-visual/complete") {
         interaction = {
           ...interaction,
           lifecycleStatus: "completed",
           actualEndAt: "2026-08-14T02:00:00Z",
+        };
+        await route.fulfill({ json: interaction });
+        return;
+      }
+      if (path === "/api/v1/interactions/interaction-visual/start") {
+        interaction = {
+          ...interaction,
+          lifecycleStatus: "in_progress",
+          actualStartAt: "2026-08-14T01:00:00Z",
         };
         await route.fulfill({ json: interaction });
         return;
@@ -1050,16 +1101,59 @@ test("a presentation supports browser image upload, explicit review and intellig
     .click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await page.goto("/interactions/interaction-visual");
+  await expect(
+    page.getByRole("heading", { name: "Customer solution presentation" }),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-interaction-before-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+  }
   await page.getByRole("button", { name: "Prepare brief" }).click();
   await expect(
     page.getByRole("heading", { name: "Presentation guidance" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await expect(page.getByRole("button", { name: "Reviewed" })).toBeDisabled();
-  await page.getByRole("button", { name: "Complete interaction" }).click();
+  await page.getByRole("link", { name: "Prepare and start" }).click();
+  await expect(page).toHaveURL(
+    /\/interactions\/interaction-visual\/companion$/,
+  );
+  await page.getByRole("button", { name: "Start interaction" }).click();
+  await page
+    .getByRole("button", { name: "Continue without recording" })
+    .click();
   await expect(
-    page.getByRole("status", { name: "Interaction lifecycle status" }),
-  ).toHaveText("Completed");
+    page.getByRole("heading", { name: "No recording or listening" }),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-companion-mobile.png",
+      fullPage: true,
+    });
+  }
+  await page.getByRole("button", { name: "End interaction" }).click();
+  await expect(page.getByText("AFTER", { exact: true })).toBeVisible();
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.getByRole("link", { name: "Back", exact: true }).click();
+    await expect(
+      page.getByRole("status", { name: "Interaction lifecycle status" }),
+    ).toHaveText("Completed");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-interaction-after-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page
+      .getByRole("link", { name: "Review capture in Companion" })
+      .click();
+  }
+  await page.getByText("More options").click();
+  await page.getByRole("button", { name: "Add visual evidence" }).click();
   await expect(
     page.getByRole("heading", { name: "Visual evidence" }),
   ).toBeVisible();
@@ -1132,7 +1226,7 @@ test("a presentation supports browser image upload, explicit review and intellig
   ).toBeVisible();
 
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Start typed debrief" }).click();
+  await page.getByRole("button", { name: "Capture what happened" }).click();
   await page
     .getByLabel("Your answer")
     .fill(
@@ -1145,11 +1239,19 @@ test("a presentation supports browser image upload, explicit review and intellig
     .getByRole("button", { name: "Finish review and update intelligence" })
     .click();
   await expect(page.getByText("Debrief complete")).toBeVisible();
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-post-capture-mobile.png",
+      fullPage: true,
+    });
+  }
   expect(debriefReviewPayload).toMatchObject({
     decisions: [{ decision: "accept" }],
   });
 
   await page.reload();
+  await page.getByText("More options").click();
+  await page.getByRole("button", { name: "Add visual evidence" }).click();
   await expect(
     page.getByText("Accepted · AI-interpreted, user-reviewed"),
   ).toBeVisible();
@@ -1180,7 +1282,7 @@ test("a presentation supports browser image upload, explicit review and intellig
     page.getByText("Customer requested a reviewed security workshop."),
   ).toBeVisible();
   await expect(page.getByText("Reported by you")).toBeVisible();
-  await page.getByRole("button", { name: "Refresh workspace" }).click();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(
     page.getByText("Customer requested a reviewed security workshop."),
   ).toBeVisible();
@@ -1488,10 +1590,13 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
     }),
   ).toBeVisible();
   await expect(
+    page.getByRole("button", { name: "Capture what happened" }),
+  ).toBeVisible();
+  await page.getByText("Other debrief options").click();
+  await expect(
     page.getByRole("heading", { name: "Start AI Debrief" }),
   ).toBeVisible();
   await expect(page.getByText("Add Voice Journal")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Type Notes" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Add Recording" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Finish for now" }),
@@ -1509,7 +1614,7 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
     });
   }
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Type notes" }).click();
+  await page.getByRole("button", { name: "Capture what happened" }).click();
   await page
     .getByLabel("Your answer")
     .fill("Jordan confirmed the budget and I will send the proposal.");
@@ -1531,7 +1636,7 @@ test("an unrecorded phone call flows from compact brief to Workspace and Revenue
   await expect(
     page.getByText("Jordan confirmed the budget owner."),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Refresh workspace" }).click();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
   expect(workspaceReads).toBeGreaterThanOrEqual(2);
 
   await page.goto("/companies/company-1");
@@ -1878,6 +1983,7 @@ test("an authorised imported call recording uses the existing transcription and 
   );
 
   await page.goto("/interactions/interaction-imported-call");
+  await page.getByText("More capture options").click();
   await expect(
     page.getByRole("heading", { name: "Add Recording" }),
   ).toBeVisible();
@@ -1905,6 +2011,7 @@ test("an authorised imported call recording uses the existing transcription and 
   ).toBeVisible();
 
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
+  await page.getByText("Other debrief options").click();
   await page.getByRole("button", { name: "Start AI Debrief" }).click();
   await expect(
     page.getByText("What important outcome might the recording have missed?"),
@@ -2562,7 +2669,7 @@ test("mobile Companion recording path persists a consented transcript into exist
     }),
   ).toBeVisible();
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Start typed debrief" }).click();
+  await page.getByRole("button", { name: "Capture what happened" }).click();
   await expect(
     page.getByText("What important outcome might the recording have missed?"),
   ).toBeVisible();
@@ -2835,7 +2942,7 @@ test("mobile Companion passive path captures a marker and photo before a reviewe
     });
   }
   await page.getByRole("checkbox", { name: /safely stopped/i }).check();
-  await page.getByRole("button", { name: "Start typed debrief" }).click();
+  await page.getByRole("button", { name: "Capture what happened" }).click();
   await expect(page.getByText("How did it go?")).toBeVisible();
   await page
     .getByLabel("Your answer")
@@ -3194,6 +3301,8 @@ test("opportunity workspace persists an associated meeting and composes stored i
   await expect(
     page.getByRole("heading", { name: "Platform expansion" }),
   ).toBeVisible();
+  await page.getByText("Meeting and record administration").click();
+  await page.getByText("Latest meeting intelligence").click();
   await expect(
     page.getByRole("heading", { name: "No meetings associated" }),
   ).toBeVisible();
@@ -3206,8 +3315,9 @@ test("opportunity workspace persists an associated meeting and composes stored i
     page.getByText("Identify the economic buyer.", { exact: true }).first(),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Expansion review" }),
+    page.getByRole("link", { name: "Open latest meeting intelligence" }),
   ).toHaveAttribute("href", "/meetings/meeting-1");
+  await page.getByText("Account history and change over time").click();
   await expect(
     page.getByRole("heading", { name: "Longitudinal Changes" }),
   ).toBeVisible();
@@ -3225,7 +3335,7 @@ test("opportunity workspace persists an associated meeting and composes stored i
     });
   }
 
-  await page.getByRole("button", { name: "Refresh workspace" }).click();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Latest Next Best Action" }),
   ).toBeVisible();
@@ -3664,7 +3774,7 @@ test("document and email evidence require explicit review before appearing in th
   });
   await page.getByLabel(/authorised to use this document/i).check();
   await page
-    .getByLabel(/text may be sent to the configured AI provider/i)
+    .getByLabel(/text may be sent to the configured external AI service/i)
     .check();
   await page.getByRole("button", { name: "Upload and review" }).click();
   await expect(
@@ -3695,7 +3805,7 @@ test("document and email evidence require explicit review before appearing in th
     );
   await page.getByLabel(/authorised to use this email/i).check();
   await page
-    .getByLabel(/email text may be sent to the configured AI provider/i)
+    .getByLabel(/email text may be sent to the configured external AI service/i)
     .check();
   await page.getByRole("button", { name: "Analyse and review" }).click();
   await page.getByRole("button", { name: "Accept all" }).click();
@@ -3719,7 +3829,7 @@ test("document and email evidence require explicit review before appearing in th
     .selectOption("salesperson_provided");
   await page.getByLabel(/authorised to use this document/i).check();
   await page
-    .getByLabel(/text may be sent to the configured AI provider/i)
+    .getByLabel(/text may be sent to the configured external AI service/i)
     .check();
   await page.getByRole("button", { name: "Upload and review" }).click();
   await expect(page.getByText(/pricing requirement/i)).toBeVisible();
@@ -3732,7 +3842,7 @@ test("document and email evidence require explicit review before appearing in th
   ).toBeVisible();
   await expect(page.getByText(/Proposal · Context/).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Refresh workspace" }).click();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(
     page.getByText("The platform must support SSO integration."),
   ).toBeVisible();

@@ -123,6 +123,26 @@ test("reviews, confirms and persists a customer-facing Action simulation", async
       },
     });
   });
+  await page.route("http://localhost:8000/api/v1/me", async (route) => {
+    await route.fulfill({
+      json: {
+        user: {
+          id: "user-1",
+          externalAuthId: "user_dev_001",
+          displayName: "Alex Morgan",
+          email: "alex@example.test",
+        },
+        organisation: {
+          id: "organisation-1",
+          name: "Acme Revenue Team",
+          slug: "acme-revenue-team",
+        },
+        role: "admin",
+        authMode: "mock",
+        requestId: "request-action-e2e",
+      },
+    });
+  });
   await page.route(
     "http://localhost:8000/api/v1/integrations",
     async (route) => {
@@ -403,7 +423,7 @@ test("reviews, confirms and persists a customer-facing Action simulation", async
   expect(connectionCreated).toBe(true);
 
   await page.goto(`/opportunities/${opportunityId}`);
-  const actions = page.getByRole("region", { name: "Recommended Actions" });
+  const actions = page.getByRole("region", { name: "Next actions" });
   await expect(
     actions.getByText("Customer-facing — review carefully"),
   ).toBeVisible();
@@ -421,18 +441,20 @@ test("reviews, confirms and persists a customer-facing Action simulation", async
     });
   }
 
-  await actions
-    .getByRole("button", { name: "Approve — do not execute" })
-    .click();
-  await expect(
-    actions.getByText(/Nothing was sent, synced or executed/i),
-  ).toBeVisible();
+  await actions.getByRole("button", { name: "Approve action" }).click();
+  await expect(actions.getByText(/Nothing was sent or updated/i)).toBeVisible();
   expect(approvalPayload).toEqual({ expectedVersion: 1 });
   await actions.getByRole("tab", { name: "Approved (1)" }).click();
   await expect(
-    actions.getByText("Approved — execution requires confirmation"),
+    actions.getByText("Approved — not sent or updated"),
   ).toBeVisible();
-  await actions.getByRole("button", { name: "Review execution" }).click();
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-actions-desktop.png",
+      fullPage: true,
+    });
+  }
+  await actions.getByRole("button", { name: "Preview simulation" }).click();
   await expect(
     actions.getByText("Simulation — no external action will occur"),
   ).toBeVisible();
@@ -450,26 +472,26 @@ test("reviews, confirms and persists a customer-facing Action simulation", async
     confirmed: true,
   });
   await expect(
-    actions.getByText("Queued", { exact: true }).first(),
+    actions.getByText("Simulation in progress", { exact: true }).first(),
   ).toBeVisible();
   await actions
     .getByRole("button", { name: "Refresh simulation status" })
     .click();
   await expect(
-    actions.getByText("Simulated Success", { exact: true }).first(),
+    actions.getByText("Simulation complete", { exact: true }).first(),
   ).toBeVisible();
   await expect(actions.getByText(/mock_email_result_1/)).toBeVisible();
 
   await page.reload();
   const refreshedActions = page.getByRole("region", {
-    name: "Recommended Actions",
+    name: "Next actions",
   });
   await refreshedActions.getByRole("tab", { name: "Approved (1)" }).click();
   await refreshedActions
-    .getByRole("button", { name: "Review execution" })
+    .getByRole("button", { name: "Preview simulation" })
     .click();
   await expect(
-    refreshedActions.getByText("Execution history (1)"),
+    refreshedActions.getByText("Simulation history (1)"),
   ).toBeVisible();
   await expect(externalRequests).toEqual([]);
 });

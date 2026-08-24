@@ -91,12 +91,18 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Simplicity and discoverability principles](02-design/simplicity-and-discoverability-principles.md)
 - [Sales Methodology UX](02-design/sales-methodology-ux.md)
 - [Core simplicity readiness review](02-design/core-simplicity-readiness-review.md)
+- [Core navigation and terminology](02-design/core-navigation-and-terminology.md)
+- [Core first-time-user journey](02-design/core-first-time-user-journey.md)
+- [Core empty, loading and error states](02-design/core-ui-state-guide.md)
+- [Core mobile usability review](02-design/core-mobile-usability-review.md)
+- [Core accessibility review](02-design/core-accessibility-review.md)
 
 ## 03 — Engineering
 
 ### Current implementation
 
 - [Application architecture](03-engineering/architecture.md)
+- [Core experience readiness implementation](03-engineering/core-experience-readiness-implementation.md)
 - [AI database foundation](03-engineering/ai-database-foundation.md)
 - [AI domain services](03-engineering/ai-domain-services.md)
 - [AI worker and durable job queue](03-engineering/ai-worker-queue.md)
@@ -299,6 +305,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-024: Sales Methodology Engine](07-sprints/wo-024-sales-methodology-engine.md)
 - [WO-025: RevenueOS Daily](07-sprints/wo-025-revenueos-daily.md)
 - [Checkpoint 1: Core competitive and product readiness](07-sprints/checkpoint-1-core-competitive-readiness.md)
+- [WO-025A: Core Experience & Design-Partner Readiness](07-sprints/wo-025a-core-experience-readiness.md)
 
 ## 08 — Decision records
 

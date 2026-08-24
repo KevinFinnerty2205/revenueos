@@ -14,58 +14,34 @@ interface OnboardingState {
 
 const steps = [
   {
-    title: "Welcome to Sales Brain",
-    body: "Use RevenueOS to turn deliberately supplied meeting text into reviewable sales intelligence.",
+    title: "Move your first customer conversation forward",
+    body: "RevenueOS helps you prepare, capture what happened, review the evidence and keep the next step clear.",
     href: null,
-    action: "Start safely",
+    action: "Show me how",
   },
   {
-    title: "Review the data notice",
-    body: "Acknowledge the notice below before adding a transcript or requesting intelligence.",
+    title: "Use authorised information",
+    body: "Review this private-beta notice before you add customer information. You stay in control of what enters the workspace.",
     href: null,
-    action: "Notice acknowledged",
+    action: "Notice reviewed",
   },
   {
-    title: "Add a company",
-    body: "Create the organisation you are selling to, or ask your operator to seed the synthetic demo dataset.",
-    href: "/companies/new",
-    action: "Continue",
-  },
-  {
-    title: "Create an opportunity",
-    body: "Connect the commercial context to the company.",
+    title: "Start with a deal",
+    body: "Create your first opportunity, or open the seeded example if your beta operator has prepared one. Add only the context needed to make the next conversation useful.",
     href: "/opportunities/new",
-    action: "Continue",
+    action: "I have a deal to work on",
   },
   {
-    title: "Add a meeting",
-    body: "Create a meeting and associate it with the opportunity.",
-    href: "/meetings/new",
-    action: "Continue",
+    title: "Plan the next interaction",
+    body: "Add the next meeting, call or in-person interaction from the deal. RevenueOS will keep preparation and capture in the same customer journey.",
+    href: "/interactions/new",
+    action: "I know the next interaction",
   },
   {
-    title: "Add safe transcript text",
-    body: "Paste only content you are authorised to process. Synthetic demo text is safest for the beta.",
-    href: "/meetings",
-    action: "Continue",
-  },
-  {
-    title: "Generate Meeting Intelligence",
-    body: "Use the synthetic demo path for a deterministic demonstration that stays inside RevenueOS.",
-    href: "/meetings",
-    action: "Continue",
-  },
-  {
-    title: "Open Opportunity Workspace",
-    body: "Review the linked meetings, evidence and next action in one place.",
-    href: "/opportunities",
-    action: "Continue",
-  },
-  {
-    title: "Review Revenue Brain",
-    body: "After two complete demo meetings, inspect the explainable change timeline.",
-    href: "/companies",
-    action: "Finish onboarding",
+    title: "Use one simple loop",
+    body: "Prepare before the interaction, use Companion when it starts, capture the outcome afterwards, then review the next action on the deal. Home brings the work that needs attention back to you.",
+    href: "/dashboard",
+    action: "Go to Home",
   },
 ] as const;
 
@@ -134,11 +110,11 @@ export function BetaOnboarding() {
           Your workspace is ready
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          You can revisit this guide at any time. Generated intelligence still
-          needs human review.
+          You can revisit this guide from its direct link at any time. RevenueOS
+          suggestions still need your review before anything changes.
         </p>
         <Link className="primary-button mt-6" href="/dashboard">
-          Open dashboard
+          Go to Home
         </Link>
       </section>
     );
@@ -167,7 +143,11 @@ export function BetaOnboarding() {
         <p className="mt-3 text-sm leading-7 text-slate-600">{step.body}</p>
         {step.href ? (
           <Link className="secondary-button mt-5" href={step.href}>
-            Open this step
+            {index === 2
+              ? "Add an opportunity"
+              : index === 3
+                ? "Add an interaction"
+                : "Open Home"}
           </Link>
         ) : null}
       </section>

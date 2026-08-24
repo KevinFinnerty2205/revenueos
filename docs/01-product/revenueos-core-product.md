@@ -4,6 +4,10 @@
   is explicitly identified below
 - **Purpose:** Make Sales Brain indispensable without requiring another module
 
+WO-025A consolidates the current Core shell and first-time journey. Search currently
+finds Accounts, Opportunities and Interactions only; evidence-cited Ask remains
+WO-025B and production CRM completion remains WO-025C.
+
 Checkpoint 1 confirms the five-part Core boundary and adds a pre-Prospect readiness
 sequence. See the [Core capability floor](core-competitive-capability-floor.md) and
 [Checkpoint 1 decision](../06-roadmap/checkpoint-1-core-competitive-readiness.md).

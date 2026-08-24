@@ -227,6 +227,13 @@ test("RevenueOS Daily keeps the complete review journey one click away", async (
   await expect(page.getByText(/synthetic demo transcript/i)).toHaveCount(0);
   expect(requestCount()).toBe(1);
 
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-home-desktop.png",
+      fullPage: true,
+    });
+  }
+
   await page.getByRole("link", { name: "Prepare for meeting" }).last().click();
   await expect(page).toHaveURL(new RegExp(`/interactions/${interactionId}`));
   await page.goto("/dashboard");
@@ -323,6 +330,29 @@ test("RevenueOS Daily puts the next interaction first on mobile", async ({
     .boundingBox();
   expect(prepareBox?.height ?? 0).toBeGreaterThanOrEqual(44);
   await expect(page.getByText("2 currencies", { exact: true })).toHaveCount(0);
+  const mobileNavigation = page.getByRole("navigation", {
+    name: "Mobile navigation",
+  });
+  await expect(mobileNavigation.getByRole("link")).toHaveCount(4);
+  for (const label of ["Today", "Interactions", "Actions", "Search"]) {
+    await expect(
+      mobileNavigation.getByRole("link", { name: label, exact: true }),
+    ).toBeVisible();
+  }
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
+    ),
+  ).toBe(false);
+
+  if (process.env.CAPTURE_WO_025A_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-025a-home-mobile.png",
+      fullPage: true,
+    });
+  }
 
   if (process.env.CAPTURE_WO_025_SCREENSHOT === "1") {
     await page.screenshot({
@@ -330,4 +360,57 @@ test("RevenueOS Daily puts the next interaction first on mobile", async ({
       fullPage: true,
     });
   }
+});
+
+test("mobile Search finds bounded Core records without an AI answer", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await routeDaily(page);
+  for (const entity of ["companies", "opportunities", "interactions"]) {
+    await page.route(
+      `http://localhost:8000/api/v1/${entity}**`,
+      async (route) => {
+        const item =
+          entity === "companies"
+            ? { id: "company-search", name: "Qantas", industry: "Aviation" }
+            : entity === "opportunities"
+              ? {
+                  id: "opportunity-search",
+                  name: "Network modernisation",
+                  companyName: "Qantas",
+                  stage: "proposal",
+                }
+              : {
+                  id: "interaction-search",
+                  title: "Qantas technical review",
+                  interactionType: "workshop",
+                  lifecycleStatus: "planned",
+                };
+        await route.fulfill({
+          json: {
+            items: [item],
+            page: 1,
+            pageSize: 6,
+            total: 1,
+            pages: 1,
+          },
+        });
+      },
+    );
+  }
+
+  await page.goto("/dashboard");
+  await page
+    .getByRole("navigation", { name: "Mobile navigation" })
+    .getByRole("link", { name: "Search" })
+    .click();
+  await page
+    .getByRole("searchbox", { name: "Search your workspace" })
+    .fill("Qantas");
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(
+    page.getByRole("link", { name: /Network modernisation/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/does not generate an AI answer/i)).toBeVisible();
 });

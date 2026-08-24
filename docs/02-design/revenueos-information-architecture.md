@@ -1,19 +1,23 @@
 # RevenueOS information architecture
 
-- **Status:** WO-023 direction; Home = RevenueOS Daily is implemented in WO-025 while
-  the broader six-area navigation migration remains future
+- **Status:** WO-025A implements the Core-only pre-Prospect shell; later entitled
+  areas remain future
 - **Design rule:** Organise around seller goals, not entities or implementation boundaries
 
 ## Permanent desktop navigation
 
-| Area     | User question                                | Primary contents                                                            | Entitlement behaviour                        |
-| -------- | -------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------- |
+Before Prospect, the implemented shell is Home; Sell with Accounts, People and
+Interactions; Pipeline; Search; and Settings. Mobile is exactly Today, Interactions,
+Actions and Search. The six-area table below remains the entitlement-aware target.
+
+| Area     | User question                                | Primary contents                                                             | Entitlement behaviour                        |
+| -------- | -------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------- |
 | Home     | What should I do today?                      | RevenueOS Daily, priorities, interactions, actions, deal attention, pipeline | Core                                         |
-| Find     | Who should I target?                         | Account/person search, research, ICP, territory, outreach entry             | Prospect/Engage with calm unavailable states |
-| Sell     | What am I actively working on?               | Accounts, opportunities, people, interactions and actions                   | Core; CRM adds native administration         |
-| Pipeline | Where are my deals and what needs attention? | List/board, stage movement, methodology, forecast drill-down                | Core; CRM adds record-management depth       |
-| Create   | What should RevenueOS create for me?         | Presentation, proposal, business case and ROI guided flows                  | Create add-on                                |
-| Insights | How am I performing and why?                 | Targets, funnel, forecast, manager and coaching views                       | Core                                         |
+| Find     | Who should I target?                         | Account/person search, research, ICP, territory, outreach entry              | Prospect/Engage with calm unavailable states |
+| Sell     | What am I actively working on?               | Accounts, opportunities, people, interactions and actions                    | Core; CRM adds native administration         |
+| Pipeline | Where are my deals and what needs attention? | List/board, stage movement, methodology, forecast drill-down                 | Core; CRM adds record-management depth       |
+| Create   | What should RevenueOS create for me?         | Presentation, proposal, business case and ROI guided flows                   | Create add-on                                |
+| Insights | How am I performing and why?                 | Targets, funnel, forecast, manager and coaching views                        | Core                                         |
 
 Global **Search or ask RevenueOS** and **Settings** are utilities, not primary areas.
 This produces six primary areas rather than a growing list of Leads, Contacts,

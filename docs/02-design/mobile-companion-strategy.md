@@ -7,6 +7,10 @@
   consider PWA convenience or native capture only when observed demand and a
   separate platform spike justify their privacy, reliability and operating cost.
 
+WO-025A adds a fixed Today/Interactions/Actions/Search mobile shell and keeps planned
+capture choices inside Companion. It does not add background recording or a native
+application promise.
+
 ## Capability comparison
 
 | Client                      | Strengths                                                                           | Critical limits                                                                          | Recommended role                                                                    |

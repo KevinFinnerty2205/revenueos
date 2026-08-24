@@ -1,5 +1,11 @@
 # Checkpoint 1 — Core competitive and product readiness
 
+> **WO-025A update (24 August 2026):** Core navigation, first-time guidance,
+> Opportunity/Interaction hierarchy, bounded entity Search and Action terminology are
+> implemented. Ask, production CRM sync and observed Checkpoint 1B validation remain
+> WO-025B, WO-025C and Checkpoint 1B respectively. Target-environment launch approval
+> is not inferred from local product hardening.
+
 - **Decision date:** 17 August 2026
 - **Baseline reviewed:** WO-011 through WO-025, ending at RevenueOS Daily
 - **Decision:** **Option 2 — insert Core work before WO-026 Prospect**

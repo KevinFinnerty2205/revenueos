@@ -15,11 +15,12 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.requests import Request
 
+from revenueos.action_contracts import ActionPayload
 from revenueos.auth import (
     AuthenticatedUser,
     AuthenticationError,
@@ -52,6 +53,7 @@ from revenueos.errors import PublicAPIError
 from revenueos.main import create_app
 from revenueos.models import (
     ActionProposal,
+    ActionProposalVersion,
     AIUsageCounter,
     BetaDataRequest,
     CaptureSession,
@@ -590,6 +592,19 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
                 ).all()
             )
             assert {item.status for item in demo_actions} == {"proposed", "approved"}
+            payload_adapter: TypeAdapter[ActionPayload] = TypeAdapter(ActionPayload)
+            for demo_action in demo_actions:
+                demo_version = await session.scalar(
+                    select(ActionProposalVersion).where(
+                        ActionProposalVersion.organisation_id == PRIMARY_ORGANISATION_ID,
+                        ActionProposalVersion.action_id == demo_action.id,
+                        ActionProposalVersion.version == demo_action.current_version,
+                    )
+                )
+                assert demo_version is not None
+                payload = payload_adapter.validate_python(demo_version.payload_json)
+                assert payload.kind == "create_task"
+                assert payload.linked_opportunity_id == first["opportunity_id"]
             meddpicc_items = {item["field_key"]: item for item in methodology_projections[-1].content_json["items"]}
             assert meddpicc_items["champion"]["state"] == "confirmed"
             assert meddpicc_items["economic_buyer"]["state"] == "unknown"

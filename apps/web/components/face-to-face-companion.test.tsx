@@ -204,6 +204,10 @@ describe("FaceToFaceCompanion", () => {
       screen.getByText(/Use the debrief to capture the outcome/i),
     ).toBeVisible();
     expect(
+      screen.getByRole("link", { name: "Capture what happened" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByText("More options"));
+    expect(
       screen.getByRole("link", { name: "Open Revenue Brain" }),
     ).toHaveAttribute("href", "/companies/company-1");
     expect(screen.getByText("1", { selector: "dd" })).toBeVisible();

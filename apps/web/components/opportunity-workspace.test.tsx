@@ -369,6 +369,9 @@ describe("OpportunityWorkspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Platform expansion" }),
     ).toBeVisible();
+    fireEvent.click(screen.getByText("Account history and change over time"));
+    fireEvent.click(screen.getByText("Latest meeting intelligence"));
+    fireEvent.click(screen.getByText("Meeting history (1)"));
     expect(
       screen.getByRole("heading", { name: "Latest Next Best Action" }),
     ).toBeVisible();
@@ -382,10 +385,10 @@ describe("OpportunityWorkspace", () => {
     );
     expect(screen.queryByText(/snapshot-1|stakeholders-2/i)).toBeNull();
     expect(
-      screen.getByText("Confirm the economic buyer and procurement owner."),
-    ).toBeVisible();
+      screen.getAllByText("Confirm the economic buyer and procurement owner."),
+    ).toHaveLength(2);
     expect(
-      screen.getByRole("heading", { level: 2, name: "Recommended Actions" }),
+      screen.getByRole("heading", { level: 2, name: "Next actions" }),
     ).toBeVisible();
     for (const heading of [
       "Latest Meeting Momentum & Buying Signals",
@@ -444,6 +447,7 @@ describe("OpportunityWorkspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Platform expansion" }),
     ).toBeVisible();
+    fireEvent.click(screen.getByText("Latest meeting intelligence"));
     expect(
       screen.getByRole("heading", { name: "No meetings associated" }),
     ).toBeVisible();
@@ -623,6 +627,9 @@ describe("OpportunityWorkspace", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
+    fireEvent.click(
+      await screen.findByText("Meeting and record administration"),
+    );
     fireEvent.change(await screen.findByLabelText("Meeting"), {
       target: { value: "meeting-1" },
     });
@@ -670,6 +677,7 @@ describe("OpportunityWorkspace", () => {
     );
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
+    fireEvent.click(await screen.findByText("Latest meeting intelligence"));
     expect(
       await screen.findByText("The customer confirmed the commercial path."),
     ).toBeVisible();
@@ -716,6 +724,9 @@ describe("OpportunityWorkspace", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
+    fireEvent.click(
+      await screen.findByText("Account history and change over time"),
+    );
     fireEvent.click(
       await screen.findByRole("button", { name: "Generate changes" }),
     );

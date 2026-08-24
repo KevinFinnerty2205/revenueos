@@ -1,13 +1,15 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { CoreSearch } from "@/components/core-search";
+import { PageHeader } from "@/components/page-header";
 
 export default function AssistantPage() {
   return (
-    <PlaceholderPage
-      eyebrow="Sales Brain"
-      title="Assistant"
-      description="The future assistant will answer from authorised evidence and be explicit when information is unavailable."
-      emptyTitle="No AI provider is connected"
-      emptyDescription="This build makes no OpenAI calls, generates no answers and grants no model access to tools or customer data."
-    />
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow="Workspace"
+        title="Search"
+        description="Go straight to the account, opportunity or interaction you need."
+      />
+      <CoreSearch />
+    </div>
   );
 }
