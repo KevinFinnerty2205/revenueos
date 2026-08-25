@@ -1,8 +1,8 @@
 # Prospect quotas and anti-abuse
 
 WO-027 is sales research, not a data-harvesting API. Discovery requires one existing
-researched company and returns at most 15 people. Defaults are 20 discovery requests
-per user/day and 100 per organisation/day. Person research shares the existing
+researched company and returns at most 15 people. Defaults are 10 discovery requests
+per user/day and 50 per organisation/day. Person research shares the existing
 Prospect research-run limits (20 per user/day, 100 per organisation/day) and the
 organisation concurrent-run cap.
 
