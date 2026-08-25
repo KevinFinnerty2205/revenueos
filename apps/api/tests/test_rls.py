@@ -2319,6 +2319,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "prospect_research_observation_sources",
+                    "prospect_research_observations",
+                    "prospect_research_sources",
+                    "prospect_research_runs",
+                    "prospect_research_targets",
+                    "prospect_usage_counters",
+                    "organisation_module_entitlements",
                     "crm_stage_mappings",
                     "crm_field_mappings",
                     "crm_entity_mappings",
