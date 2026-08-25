@@ -116,7 +116,7 @@ class ContactResponse(APIModel):
     company_id: UUID
     first_name: str
     last_name: str
-    email: str
+    email: str | None
     phone: str | None
     job_title: str | None
     linkedin_url: str | None

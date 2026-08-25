@@ -1,5 +1,12 @@
 # Ask RevenueOS
 
+## Prospect Person boundary
+
+WO-027 does not broaden Ask retrieval. Public professional research, buying-role
+hypotheses and contact points are not Ask sources, even after Contact promotion. A
+future consumer would require an explicit separately labelled public-research source
+contract and prompt-injection review.
+
 **Status:** current WO-025B Core capability
 
 Ask RevenueOS is an evidence-backed question-and-answer surface for the sales work a

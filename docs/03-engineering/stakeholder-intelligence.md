@@ -1,5 +1,13 @@
 # Stakeholder Intelligence
 
+## Prospect Person boundary
+
+WO-027 buying-role hypotheses are public research projections, not Stakeholder
+Intelligence. Marking one relevant or promoting its person to Contact never creates a
+stakeholder, confirms influence/stance/engagement or changes meeting intelligence.
+Stakeholder truth continues to require the existing interaction/customer Evidence
+path.
+
 ## Product behaviour
 
 WO-006C adds an independent, transcript-grounded Sales Intelligence capability

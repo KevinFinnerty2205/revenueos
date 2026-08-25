@@ -1,5 +1,13 @@
 # Sales Methodology Engine architecture
 
+## Prospect Person boundary
+
+WO-027 buying-role hypotheses and public statements are excluded from Methodology
+projection inputs and review evidence. Marking a Prospect role relevant or promoting
+a Contact never confirms budget, authority, need, timing or any custom methodology
+field. Such confirmation continues to require the existing eligible customer/seller
+Evidence path.
+
 - **Status:** Implemented Core architecture by WO-024
 - **Decision owner:** WO-023 architecture, realised by WO-024
 - **Depends on:** Evidence, Revenue Brain, Opportunity Workspace and organisation administration

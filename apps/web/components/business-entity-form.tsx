@@ -324,7 +324,11 @@ export function BusinessEntityForm({
     setSubmitError(null);
     setSubmitting(true);
     try {
-      const payload = payloadFor(formFields, values);
+      const payload = payloadFor(
+        formFields,
+        values,
+        isEditing && entity === "contacts" ? new Set(["email"]) : undefined,
+      );
       if (entity === "opportunities" && entityId && expectedUpdatedAt) {
         payload.expectedUpdatedAt = expectedUpdatedAt;
       }
@@ -416,6 +420,14 @@ export function BusinessEntityForm({
               <FormField
                 key={field.name}
                 field={field}
+                required={
+                  field.required &&
+                  !(
+                    isEditing &&
+                    entity === "contacts" &&
+                    field.name === "email"
+                  )
+                }
                 value={values[field.name] ?? ""}
                 options={
                   field.reference
@@ -459,16 +471,19 @@ export function BusinessEntityForm({
 
 function FormField({
   field,
+  required,
   value,
   options,
   onChange,
 }: {
   field: FieldConfig;
+  required?: boolean;
   value: string;
   options: EntityOption[];
   onChange: (value: string) => void;
 }) {
   const id = `field-${field.name}`;
+  const isRequired = required ?? field.required;
   const className =
     "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-950 outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-100";
 
@@ -476,14 +491,14 @@ function FormField({
     <div className={field.fullWidth ? "sm:col-span-2" : undefined}>
       <label htmlFor={id} className="text-sm font-bold text-slate-800">
         {field.label}
-        {field.required ? <span aria-hidden="true"> *</span> : null}
+        {isRequired ? <span aria-hidden="true"> *</span> : null}
       </label>
       {field.kind === "textarea" ? (
         <textarea
           id={id}
           name={field.name}
           value={value}
-          required={field.required}
+          required={isRequired}
           onChange={(event) => onChange(event.target.value)}
           rows={5}
           className={`${className} py-3`}
@@ -493,12 +508,12 @@ function FormField({
           id={id}
           name={field.name}
           value={value}
-          required={field.required}
+          required={isRequired}
           onChange={(event) => onChange(event.target.value)}
           className={className}
         >
           <option value="">
-            {field.required ? `Select ${field.label.toLowerCase()}` : "None"}
+            {isRequired ? `Select ${field.label.toLowerCase()}` : "None"}
           </option>
           {(field.kind === "select"
             ? (field.options ?? []).map((option) => ({
@@ -518,7 +533,7 @@ function FormField({
           name={field.name}
           type={field.kind}
           value={value}
-          required={field.required}
+          required={isRequired}
           min={field.min}
           max={field.max}
           step={field.step}
@@ -575,11 +590,12 @@ function valuesForForm(
 function payloadFor(
   formFields: FieldConfig[],
   values: Record<string, string>,
+  optionalFields: ReadonlySet<string> = new Set(),
 ): Record<string, string | number | null> {
   return Object.fromEntries(
     formFields.map((field) => {
       const value = values[field.name]?.trim() ?? "";
-      if (!value && !field.required) {
+      if (!value && (!field.required || optionalFields.has(field.name))) {
         return [field.name, null];
       }
       if (field.kind === "number") {

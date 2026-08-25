@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -37,6 +38,7 @@ from revenueos.models import (
     CaptureSession,
     Company,
     Contact,
+    ContactFieldSource,
     CRMEntityMapping,
     CRMFieldMapping,
     CRMStageMapping,
@@ -77,6 +79,10 @@ from revenueos.models import (
     OrganisationMethodologySetting,
     OrganisationModuleEntitlement,
     PreInteractionBrief,
+    ProspectBuyingRoleHypothesis,
+    ProspectBuyingRoleSource,
+    ProspectContactPoint,
+    ProspectPerson,
     ProspectResearchObservation,
     ProspectResearchObservationSource,
     ProspectResearchRun,
@@ -108,7 +114,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 16
+EXPORT_VERSION = 17
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -157,9 +163,40 @@ async def run_retention(
             .where(OrganisationBetaSettings.organisation_id == organisation_id)
         )
         retention_days = configured_days if setting_exists else settings.private_beta_default_retention_days
+        now = datetime.now(UTC)
+        expired_contact_point_ids = list(
+            (
+                await session.scalars(
+                    select(ProspectContactPoint.id)
+                    .where(
+                        ProspectContactPoint.organisation_id == organisation_id,
+                        ProspectContactPoint.active.is_(True),
+                        ProspectContactPoint.expires_at.is_not(None),
+                        ProspectContactPoint.expires_at <= now,
+                    )
+                    .order_by(ProspectContactPoint.expires_at, ProspectContactPoint.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
         if retention_days is None:
-            return RetentionResult(organisation_id, dry_run, None, 0, 0, {})
-        cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+            counts = {"expired_prospect_contact_points": len(expired_contact_point_ids)}
+            if dry_run or not expired_contact_point_ids:
+                return RetentionResult(organisation_id, dry_run, None, 0, 0, counts)
+            removed = await _expire_prospect_contact_points(session, organisation_id, expired_contact_point_ids)
+            session.add(
+                BetaSystemEvent(
+                    organisation_id=organisation_id,
+                    actor_user_id=None,
+                    event_type="retention_batch_completed",
+                    metadata_json={
+                        "expired_prospect_contact_point_count": len(expired_contact_point_ids),
+                        "retention_days": None,
+                    },
+                )
+            )
+            return RetentionResult(organisation_id, False, None, 0, 0, removed)
+        cutoff = now - timedelta(days=retention_days)
         meeting_ids = list(
             (
                 await session.scalars(
@@ -295,6 +332,7 @@ async def run_retention(
         )
         prospect_counts = await _prospect_deletion_counts(session, organisation_id, prospect_target_ids)
         counts.update(prospect_counts)
+        counts["expired_prospect_contact_points"] = len(expired_contact_point_ids)
         expired_live_count = int(
             (
                 await session.scalar(
@@ -318,6 +356,7 @@ async def run_retention(
             and not methodology_projection_ids
             and not prospect_target_ids
             and not expired_live_count
+            and not expired_contact_point_ids
         ):
             return RetentionResult(
                 organisation_id,
@@ -327,6 +366,7 @@ async def run_retention(
                 len(interaction_ids),
                 counts,
             )
+        removed = await _expire_prospect_contact_points(session, organisation_id, expired_contact_point_ids)
         if expired_live_count:
             await expire_live_intelligence(
                 session,
@@ -366,10 +406,13 @@ async def run_retention(
         await _delete_document_objects(session, settings, organisation_id, all_document_ids)
         await _enable_approved_deletion(session)
         await _delete_source_database_rows(session, organisation_id, all_document_ids, all_email_ids)
-        removed = await _delete_methodology_projection_batch(
-            session,
-            organisation_id,
-            methodology_projection_ids,
+        removed = _merge_counts(
+            removed,
+            await _delete_methodology_projection_batch(
+                session,
+                organisation_id,
+                methodology_projection_ids,
+            ),
         )
         removed = _merge_counts(removed, await _delete_meeting_batch(session, organisation_id, meeting_ids))
         removed = _merge_counts(
@@ -393,6 +436,7 @@ async def run_retention(
                     "interaction_count": len(interaction_ids),
                     "meeting_count": len(meeting_ids),
                     "prospect_target_count": len(prospect_target_ids),
+                    "expired_prospect_contact_point_count": len(expired_contact_point_ids),
                     "retention_days": retention_days,
                 },
             )
@@ -770,9 +814,16 @@ async def _delete_organisation_records(
         await session.execute(
             delete(OpportunityAuditEvent).where(OpportunityAuditEvent.organisation_id == organisation_id)
         )
-        await session.execute(delete(Task).where(Task.organisation_id == organisation_id))
-        await session.execute(delete(Contact).where(Contact.organisation_id == organisation_id))
-        await session.execute(delete(Opportunity).where(Opportunity.organisation_id == organisation_id))
+        await session.execute(delete(ContactFieldSource).where(ContactFieldSource.organisation_id == organisation_id))
+        await session.execute(
+            delete(ProspectBuyingRoleSource).where(ProspectBuyingRoleSource.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProspectContactPoint).where(ProspectContactPoint.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProspectBuyingRoleHypothesis).where(ProspectBuyingRoleHypothesis.organisation_id == organisation_id)
+        )
         await session.execute(
             delete(ProspectResearchObservationSource).where(
                 ProspectResearchObservationSource.organisation_id == organisation_id
@@ -785,12 +836,16 @@ async def _delete_organisation_records(
             delete(ProspectResearchSource).where(ProspectResearchSource.organisation_id == organisation_id)
         )
         await session.execute(delete(ProspectResearchRun).where(ProspectResearchRun.organisation_id == organisation_id))
+        await session.execute(delete(ProspectPerson).where(ProspectPerson.organisation_id == organisation_id))
         await session.execute(
             delete(ProspectResearchTarget).where(ProspectResearchTarget.organisation_id == organisation_id)
         )
         await session.execute(
             delete(ProspectUsageCounter).where(ProspectUsageCounter.organisation_id == organisation_id)
         )
+        await session.execute(delete(Task).where(Task.organisation_id == organisation_id))
+        await session.execute(delete(Contact).where(Contact.organisation_id == organisation_id))
+        await session.execute(delete(Opportunity).where(Opportunity.organisation_id == organisation_id))
         await session.execute(delete(Company).where(Company.organisation_id == organisation_id))
         await session.execute(
             delete(DataNoticeAcknowledgement).where(DataNoticeAcknowledgement.organisation_id == organisation_id)
@@ -1948,6 +2003,95 @@ async def _delete_recording_database_rows(
     )
 
 
+async def _expire_prospect_contact_points(
+    session: AsyncSession,
+    organisation_id: UUID,
+    contact_point_ids: list[UUID],
+) -> dict[str, int]:
+    if not contact_point_ids:
+        return {}
+    points = list(
+        (
+            await session.scalars(
+                select(ProspectContactPoint).where(
+                    ProspectContactPoint.organisation_id == organisation_id,
+                    ProspectContactPoint.id.in_(contact_point_ids),
+                )
+            )
+        ).all()
+    )
+    cleared_contact_fields = 0
+    current_at = datetime.now(UTC)
+    field_by_point_type = {
+        "business_email": "email",
+        "business_phone": "phone",
+        "public_professional_profile": "linkedin_url",
+    }
+    for point in points:
+        field_key = field_by_point_type.get(point.point_type)
+        person = await session.scalar(
+            select(ProspectPerson).where(
+                ProspectPerson.organisation_id == organisation_id,
+                ProspectPerson.id == point.person_id,
+            )
+        )
+        if field_key is None or person is None or person.promoted_contact_id is None:
+            continue
+        contact = await session.scalar(
+            select(Contact).where(
+                Contact.organisation_id == organisation_id,
+                Contact.id == person.promoted_contact_id,
+            )
+        )
+        if contact is None:
+            continue
+        current_value = getattr(contact, field_key)
+        still_supported = await session.scalar(
+            select(ProspectContactPoint.id)
+            .where(
+                ProspectContactPoint.organisation_id == organisation_id,
+                ProspectContactPoint.person_id == point.person_id,
+                ProspectContactPoint.id != point.id,
+                ProspectContactPoint.point_type == point.point_type,
+                ProspectContactPoint.value_fingerprint == point.value_fingerprint,
+                ProspectContactPoint.active.is_(True),
+                or_(
+                    ProspectContactPoint.expires_at.is_(None),
+                    ProspectContactPoint.expires_at > current_at,
+                ),
+            )
+            .limit(1)
+        )
+        if still_supported is not None:
+            continue
+        if (
+            isinstance(current_value, str)
+            and hashlib.sha256(current_value.casefold().encode()).hexdigest() == point.value_fingerprint
+        ):
+            setattr(contact, field_key, None)
+            cleared_contact_fields += 1
+        await session.execute(
+            update(ContactFieldSource)
+            .where(
+                ContactFieldSource.organisation_id == organisation_id,
+                ContactFieldSource.contact_id == contact.id,
+                ContactFieldSource.field_key == field_key,
+                ContactFieldSource.value_fingerprint == point.value_fingerprint,
+            )
+            .values(active=False)
+        )
+    await session.execute(
+        delete(ProspectContactPoint).where(
+            ProspectContactPoint.organisation_id == organisation_id,
+            ProspectContactPoint.id.in_(contact_point_ids),
+        )
+    )
+    return {
+        "expired_prospect_contact_points": len(points),
+        "expired_prospect_contact_fields": cleared_contact_fields,
+    }
+
+
 async def _prospect_deletion_counts(
     session: AsyncSession,
     organisation_id: UUID,
@@ -1958,6 +2102,10 @@ async def _prospect_deletion_counts(
     run_ids = select(ProspectResearchRun.id).where(
         ProspectResearchRun.organisation_id == organisation_id,
         ProspectResearchRun.target_id.in_(target_ids),
+    )
+    person_ids = select(ProspectPerson.id).where(
+        ProspectPerson.organisation_id == organisation_id,
+        ProspectPerson.target_id.in_(target_ids),
     )
 
     return {
@@ -2009,6 +2157,58 @@ async def _prospect_deletion_counts(
                     .where(
                         ProspectResearchObservationSource.organisation_id == organisation_id,
                         ProspectResearchObservationSource.run_id.in_(run_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "prospect_people": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProspectPerson)
+                    .where(
+                        ProspectPerson.organisation_id == organisation_id,
+                        ProspectPerson.target_id.in_(target_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "prospect_buying_role_hypotheses": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProspectBuyingRoleHypothesis)
+                    .where(
+                        ProspectBuyingRoleHypothesis.organisation_id == organisation_id,
+                        ProspectBuyingRoleHypothesis.person_id.in_(person_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "prospect_buying_role_sources": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProspectBuyingRoleSource)
+                    .where(
+                        ProspectBuyingRoleSource.organisation_id == organisation_id,
+                        ProspectBuyingRoleSource.run_id.in_(run_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "prospect_contact_points": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProspectContactPoint)
+                    .where(
+                        ProspectContactPoint.organisation_id == organisation_id,
+                        ProspectContactPoint.person_id.in_(person_ids),
                     )
                 )
             )
@@ -2075,6 +2275,42 @@ async def _export_payload(
             ProspectResearchObservationSource.observation_id,
             ProspectResearchObservationSource.source_id,
         )
+    )
+    prospect_people = await rows(
+        select(ProspectPerson)
+        .where(ProspectPerson.organisation_id == organisation_id)
+        .order_by(ProspectPerson.target_id, ProspectPerson.display_name, ProspectPerson.id)
+    )
+    prospect_buying_roles = await rows(
+        select(ProspectBuyingRoleHypothesis)
+        .where(ProspectBuyingRoleHypothesis.organisation_id == organisation_id)
+        .order_by(
+            ProspectBuyingRoleHypothesis.person_id,
+            ProspectBuyingRoleHypothesis.created_at,
+            ProspectBuyingRoleHypothesis.id,
+        )
+    )
+    prospect_buying_role_sources = await rows(
+        select(ProspectBuyingRoleSource)
+        .where(ProspectBuyingRoleSource.organisation_id == organisation_id)
+        .order_by(
+            ProspectBuyingRoleSource.run_id,
+            ProspectBuyingRoleSource.hypothesis_id,
+            ProspectBuyingRoleSource.source_id,
+        )
+    )
+    prospect_contact_points = await rows(
+        select(ProspectContactPoint)
+        .where(
+            ProspectContactPoint.organisation_id == organisation_id,
+            ProspectContactPoint.export_allowed.is_(True),
+        )
+        .order_by(ProspectContactPoint.person_id, ProspectContactPoint.point_type, ProspectContactPoint.id)
+    )
+    contact_field_sources = await rows(
+        select(ContactFieldSource)
+        .where(ContactFieldSource.organisation_id == organisation_id)
+        .order_by(ContactFieldSource.contact_id, ContactFieldSource.field_key, ContactFieldSource.id)
     )
     contacts = await rows(select(Contact).where(Contact.organisation_id == organisation_id).order_by(Contact.id))
     opportunities = await rows(
@@ -2481,6 +2717,7 @@ async def _export_payload(
                 (
                     "id",
                     "target_id",
+                    "person_id",
                     "requested_by_user_id",
                     "refresh_of_run_id",
                     "status",
@@ -2543,6 +2780,100 @@ async def _export_payload(
         ],
         "prospectObservationSources": [
             _columns(item, ("observation_id", "source_id", "run_id")) for item in prospect_source_links
+        ],
+        "prospectPeople": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "target_id",
+                    "display_name",
+                    "first_name",
+                    "last_name",
+                    "current_role",
+                    "current_company",
+                    "public_professional_location",
+                    "public_profile_url",
+                    "relevant_function",
+                    "why_may_matter",
+                    "discovery_source",
+                    "provider_attribution",
+                    "identity_state",
+                    "employment_state",
+                    "promoted_contact_id",
+                    "promoted_by_user_id",
+                    "promoted_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in prospect_people
+        ],
+        "prospectBuyingRoleHypotheses": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "target_id",
+                    "person_id",
+                    "run_id",
+                    "hypothesized_role",
+                    "rationale",
+                    "trust_state",
+                    "review_state",
+                    "assessment_origin",
+                    "reviewed_by_user_id",
+                    "reviewed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in prospect_buying_roles
+        ],
+        "prospectBuyingRoleSources": [
+            _columns(item, ("hypothesis_id", "source_id", "run_id")) for item in prospect_buying_role_sources
+        ],
+        "prospectContactPoints": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "target_id",
+                    "person_id",
+                    "run_id",
+                    "source_id",
+                    "point_type",
+                    "value",
+                    "value_fingerprint",
+                    "trust_state",
+                    "verification_method",
+                    "observed_at",
+                    "expires_at",
+                    "active",
+                    "created_at",
+                ),
+            )
+            for item in prospect_contact_points
+        ],
+        "contactFieldSources": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "contact_id",
+                    "field_key",
+                    "value_fingerprint",
+                    "source_type",
+                    "source_prospect_person_id",
+                    "provider_key",
+                    "trust_state",
+                    "observed_at",
+                    "verified_at",
+                    "active",
+                    "created_at",
+                ),
+            )
+            for item in contact_field_sources
         ],
         "contacts": [
             _columns(

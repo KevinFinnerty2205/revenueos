@@ -1,5 +1,18 @@
 # Prospect Account Research security and privacy review
 
+## WO-027 extension
+
+Person discovery remains subordinate to one researched company, uses the same
+entitlement and trusted tenant context, and adds atomic people-discovery quotas.
+Every new person/provenance table has forced RLS. Provider candidates, professional
+claims, hypotheses and contact points pass source, trust, URL, freshness and
+sensitive-content validation before persistence.
+
+The live-provider status remains unavailable. No LinkedIn/private-social scraping,
+personal contact harvesting, sensitive/personality inference, photos, bulk export or
+outreach was added. See the
+[Person Intelligence review](prospect-person-security-privacy-review.md).
+
 **Status:** Passed for the implemented WO-026 boundary
 
 ## Threat findings and controls

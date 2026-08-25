@@ -367,7 +367,7 @@ function displayCells(
         label: "Name",
         value: `${contact.firstName} ${contact.lastName}`,
       },
-      { label: "Email", value: contact.email },
+      { label: "Email", value: contact.email ?? "Not established" },
       { label: "Job title", value: contact.jobTitle ?? "—" },
       { label: "Phone", value: contact.phone ?? "—" },
     ];

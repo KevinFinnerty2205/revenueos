@@ -1513,6 +1513,7 @@ class ActionExecutionService:
             if (
                 contact is None
                 or payload.recipient_email is None
+                or contact.email is None
                 or contact.email.casefold() != payload.recipient_email.casefold()
             ):
                 raise PublicAPIError("unsupported_recipient", "The approved Contact recipient is unavailable.", 409)
@@ -1528,13 +1529,15 @@ class ActionExecutionService:
                 ).all()
             )
             contacts_by_id = {contact.id: contact for contact in contacts}
-            if len(contacts_by_id) != len(set(payload.participant_contact_ids)):
+            if len(contacts_by_id) != len(set(payload.participant_contact_ids)) or any(
+                contact.email is None for contact in contacts_by_id.values()
+            ):
                 raise PublicAPIError("calendar_attendees_stale", "A selected calendar participant is unavailable.", 409)
             participant_contacts = tuple(
                 ApprovedContactRecipient(
                     contact_id=contact_id,
                     display_name=f"{contacts_by_id[contact_id].first_name} {contacts_by_id[contact_id].last_name}",
-                    email=contacts_by_id[contact_id].email,
+                    email=cast(str, contacts_by_id[contact_id].email),
                 )
                 for contact_id in payload.participant_contact_ids
             )

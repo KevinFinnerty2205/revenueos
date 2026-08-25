@@ -1427,7 +1427,11 @@ class ActionService:
                 self.tenant.organisation_id,
                 payload.recipient_contact_id,
             )
-            if contact is None or contact.email.casefold() != cast(str, payload.recipient_email).casefold():
+            if (
+                contact is None
+                or contact.email is None
+                or contact.email.casefold() != cast(str, payload.recipient_email).casefold()
+            ):
                 raise PublicAPIError(
                     "unsupported_recipient",
                     "Choose a validated Contact and its stored email address.",

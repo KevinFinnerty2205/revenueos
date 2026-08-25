@@ -1,5 +1,13 @@
 # Evidence and provenance model
 
+## Prospect public-research boundary
+
+WO-027 Prospect Person sources and observations are not customer Evidence. Public
+professional statements remain `verified`, `provider_supplied`, `inferred` or
+`unknown` within Prospect and cannot be reclassified as `customer_direct` by Contact
+promotion or seller hypothesis review. Contact field provenance records where a
+canonical field came from; it does not make the underlying public research Evidence.
+
 WO-018 distinguishes platform/user transcript and recording sources while
 preserving imported provider, declared provenance, timestamp and speaker-label
 availability. Speaker labels are not identities and imported content is not marked

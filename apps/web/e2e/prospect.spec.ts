@@ -281,6 +281,162 @@ function readyBrief(
   };
 }
 
+const prospectPerson = {
+  id: "person-jane",
+  companyTargetId: target.id,
+  displayName: "Jane Smith",
+  currentRole: "Chief Technology Officer",
+  currentCompany: target.name,
+  publicProfessionalLocation: "Sydney, Australia",
+  publicProfileUrl:
+    "https://northstar-facilities.example/leadership/jane-smith",
+  relevantFunction: "technology",
+  whyMayMatter:
+    "Her public remit suggests she may help evaluate operational technology change.",
+  providerAttribution: "RevenueOS deterministic mock provider",
+  identityState: "supported",
+  employmentState: "current",
+  researchStatus: "ready",
+  promotedContactId: null,
+  promotedAt: null,
+  createdAt: "2026-08-25T00:00:00Z",
+  updatedAt: "2026-08-25T00:02:00Z",
+};
+
+const personSource = {
+  id: "person-source",
+  sourceType: "company_leadership",
+  url: "https://northstar-facilities.example/leadership/jane-smith",
+  canonicalUrl: "https://northstar-facilities.example/leadership/jane-smith",
+  domain: "northstar-facilities.example",
+  title: "Jane Smith leadership profile",
+  publisher: "Northstar Facilities Group",
+  publishedAt: null,
+  retrievedAt: "2026-08-25T00:02:00Z",
+  authorityClass: "official_public",
+};
+
+function personResearchBrief() {
+  const personRun = {
+    id: "person-run",
+    status: "completed",
+    refreshOfRunId: null,
+    createdAt: "2026-08-25T00:00:00Z",
+    startedAt: "2026-08-25T00:01:00Z",
+    completedAt: "2026-08-25T00:02:00Z",
+    sourceCount: 1,
+    observationCount: 3,
+    errorCode: null,
+  };
+  return {
+    person: prospectPerson,
+    status: "ready",
+    statusMessage: "Public professional research is ready.",
+    currentRun: personRun,
+    latestRun: personRun,
+    observations: [
+      observation(
+        "person_current_role",
+        "current_role",
+        "Northstar lists Jane Smith as Chief Technology Officer.",
+        "verified",
+        [personSource.id],
+        "2026-08-25T00:00:00Z",
+        "high",
+      ),
+      observation(
+        "person_activity",
+        "professional_activity",
+        "Jane publicly discussed reliable technology across distributed operations.",
+        "verified",
+        [personSource.id],
+        "2026-07-10T00:00:00Z",
+      ),
+      observation(
+        "person_context",
+        "conversation_context",
+        "A useful conversation may explore how distributed operations shape technology evaluation.",
+        "inferred",
+        [personSource.id],
+        null,
+        "high",
+      ),
+    ],
+    sources: [personSource],
+    buyingRoles: [
+      {
+        id: "role-technical-evaluator",
+        role: "technical_evaluator",
+        rationale:
+          "Her public remit suggests possible evaluation involvement; seller validation is required.",
+        trustState: "inferred",
+        reviewState: "needs_validation",
+        assessmentOrigin: "system_hypothesis",
+        sourceIds: [personSource.id],
+        reviewedAt: null,
+      },
+    ],
+    contactPoints: [
+      {
+        id: "contact-point-email",
+        pointType: "business_email",
+        value: "jane.smith@northstar-facilities.example",
+        trustState: "provider_supplied",
+        verificationMethod: "provider_reported",
+        sourceId: personSource.id,
+        observedAt: "2026-08-25T00:00:00Z",
+        expiresAt: "2026-09-25T00:00:00Z",
+        exportAllowed: true,
+        permissionStatus: "not_assessed",
+      },
+    ],
+    changes: [],
+    history: [personRun],
+    existingContactMatches: [
+      {
+        id: "contact-jane",
+        displayName: "Jane Smith",
+        email: "jane.smith@northstar-facilities.example",
+        companyId: "company-northstar",
+        matchStrength: "strong",
+        matchReason: "exact_business_email",
+      },
+    ],
+  };
+}
+
+function peopleDiscovery(withPeople: boolean) {
+  return {
+    companyTargetId: target.id,
+    functions: [
+      {
+        functionKey: "technology",
+        label: "Technology",
+        whyItMayMatter: "May assess technical fit and implementation impact.",
+      },
+      {
+        functionKey: "finance",
+        label: "Finance",
+        whyItMayMatter: "May evaluate investment and commercial impact.",
+      },
+    ],
+    people: withPeople ? [prospectPerson] : [],
+    gaps: withPeople
+      ? [
+          {
+            role: "security",
+            label: "Security",
+            message: "No likely security stakeholder has been identified yet.",
+          },
+        ]
+      : [],
+    resultLimit: 15,
+    message: withPeople
+      ? "RevenueOS found 1 person worth understanding. Buying roles remain hypotheses."
+      : "Find relevant people from this researched company when you are ready.",
+  };
+}
+
 async function routeShell(page: Page, enabled = true) {
   await page.route(
     "http://localhost:8000/api/v1/beta/capabilities",
@@ -303,6 +459,10 @@ async function routeShell(page: Page, enabled = true) {
           : { ...availability, state: "not_in_plan", enabled: false },
       });
     },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/prospect/research/*/people",
+    async (route) => route.fulfill({ json: peopleDiscovery(false) }),
   );
 }
 
@@ -530,6 +690,230 @@ test("flagship account research path is sourced, refreshable and explicitly prom
   await expect(page.getByRole("link", { name: "View research" })).toBeVisible();
   expect(promotionCount).toBe(1);
   expect(unexpectedMutations).toEqual([]);
+});
+
+test("people discovery and person research stay sourced, hypothesis-led and duplicate-safe", async ({
+  page,
+}) => {
+  await routeShell(page);
+  const emptyPeopleRoute =
+    "http://localhost:8000/api/v1/prospect/research/*/people";
+  await page.unroute(emptyPeopleRoute);
+  let peopleFound = false;
+  let roleReviewed = false;
+  let promoted = false;
+  const unexpectedMutations: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() !== "GET" &&
+      /\/api\/v1\/(opportunities|methodologies|interactions|accounts\/.*\/brain)/u.test(
+        request.url(),
+      )
+    )
+      unexpectedMutations.push(request.url());
+  });
+  await page.route(
+    `http://localhost:8000/api/v1/prospect/research/${target.id}`,
+    async (route) => route.fulfill({ json: readyBrief() }),
+  );
+  await page.route(emptyPeopleRoute, async (route) =>
+    route.fulfill({ json: peopleDiscovery(peopleFound) }),
+  );
+  await page.route(
+    `http://localhost:8000/api/v1/prospect/research/${target.id}/people/discover`,
+    async (route) => {
+      peopleFound = true;
+      await route.fulfill({ json: peopleDiscovery(true) });
+    },
+  );
+  await page.route(
+    `http://localhost:8000/api/v1/prospect/people/${prospectPerson.id}**`,
+    async (route) => {
+      const url = new URL(route.request().url());
+      const method = route.request().method();
+      if (url.pathname.endsWith("/promote") && method === "POST") {
+        expect(route.request().postDataJSON()).toEqual({
+          confirmed: true,
+          duplicateAction: "attach_research",
+          existingContactId: "contact-jane",
+        });
+        promoted = true;
+        await route.fulfill({
+          json: {
+            status: "attached",
+            contactId: "contact-jane",
+            companyId: "company-northstar",
+            prospectPersonId: prospectPerson.id,
+            message:
+              "Public professional research was linked to the existing Contact. No canonical fields were overwritten.",
+          },
+        });
+        return;
+      }
+      if (url.pathname.includes("/buying-roles/") && method === "PATCH") {
+        expect(route.request().postDataJSON()).toEqual({
+          role: "technical_evaluator",
+          reviewState: "relevant",
+        });
+        roleReviewed = true;
+        await route.fulfill({
+          json: {
+            ...personResearchBrief().buyingRoles[0],
+            reviewState: "relevant",
+            assessmentOrigin: "seller_assessed",
+            reviewedAt: "2026-08-25T01:00:00Z",
+          },
+        });
+        return;
+      }
+      await route.fulfill({ json: personResearchBrief() });
+    },
+  );
+  await page.route("http://localhost:8000/api/v1/companies**", async (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id: "company-northstar",
+            organisationId: "org-dev",
+            name: "Northstar Facilities Group",
+            website: "https://northstar-facilities.example/",
+            industry: "Facilities services",
+            employeeCount: null,
+            status: "prospect",
+            ownerUserId: "user-dev",
+            createdAt: "2026-08-25T00:00:00Z",
+            updatedAt: "2026-08-25T00:00:00Z",
+          },
+        ],
+        page: 1,
+        pageSize: 100,
+        total: 1,
+        pages: 1,
+      },
+    }),
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/contacts/contact-jane",
+    async (route) =>
+      route.fulfill({
+        json: {
+          id: "contact-jane",
+          organisationId: "org-dev",
+          companyId: "company-northstar",
+          firstName: "Jane",
+          lastName: "Smith",
+          email: "jane.smith@northstar-facilities.example",
+          phone: null,
+          jobTitle: "Existing reviewed title",
+          linkedinUrl: null,
+          ownerUserId: "user-dev",
+          createdAt: "2026-08-25T00:00:00Z",
+          updatedAt: "2026-08-25T00:00:00Z",
+        },
+      }),
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/prospect/contacts/contact-jane/research-link",
+    async (route) =>
+      route.fulfill({
+        json: {
+          contactId: "contact-jane",
+          prospectPersonId: prospectPerson.id,
+          companyTargetId: target.id,
+          updatedAt: "2026-08-25T01:02:00Z",
+          label: "Public professional research",
+        },
+      }),
+  );
+
+  await page.goto(`/find/${target.id}`);
+  await expect(
+    page.getByRole("heading", { name: "People worth understanding" }),
+  ).toBeVisible();
+  await expect(page.getByText(/not Contacts until/i)).toBeVisible();
+  await page.getByRole("button", { name: "Find relevant people" }).click();
+  await expect(page.getByText("Jane Smith")).toBeVisible();
+  await expect(page.getByText(/No likely security stakeholder/i)).toBeVisible();
+  if (process.env.CAPTURE_WO_027_SCREENSHOTS === "1") {
+    await page
+      .getByRole("heading", { name: "People worth understanding" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-027-people-discovery-desktop.png",
+      fullPage: true,
+    });
+  }
+  await page.getByRole("link", { name: "View professional research" }).click();
+  await expect(page).toHaveURL(
+    `/find/${target.id}/people/${prospectPerson.id}`,
+  );
+  await expect(
+    page.getByRole("heading", { name: "Why this person may matter" }),
+  ).toBeVisible();
+  await expect(page.getByText("Hypothesis — Needs validation")).toBeVisible();
+  await expect(
+    page.getByText("Permission not assessed", { exact: false }),
+  ).toBeVisible();
+  await expect(page.locator("img")).toHaveCount(0);
+  if (process.env.CAPTURE_WO_027_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-027-person-research-desktop.png",
+      fullPage: true,
+    });
+  }
+
+  await page.getByRole("button", { name: "Mark relevant" }).click();
+  await expect(page.getByText("Hypothesis — Relevant")).toBeVisible();
+  expect(roleReviewed).toBe(true);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    page.getByRole("navigation", { name: "Mobile navigation" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
+    ),
+  ).toBe(false);
+  if (process.env.CAPTURE_WO_027_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-027-person-research-mobile.png",
+      fullPage: true,
+    });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
+  await page.getByRole("button", { name: "Add to Sales as Contact" }).click();
+  await expect(page.getByText("Possible existing Contact")).toBeVisible();
+  await expect(
+    page.getByText(/will not create an Opportunity, stakeholder role/i),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_027_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-027-contact-promotion-review-desktop.png",
+    });
+  }
+  await page.getByRole("button", { name: "Attach research" }).click();
+  await expect(page.getByRole("link", { name: "Open Contact" })).toBeVisible();
+  expect(promoted).toBe(true);
+  expect(unexpectedMutations).toEqual([]);
+  await page.getByRole("link", { name: "Open Contact" }).click();
+  await expect(page).toHaveURL("/contacts/contact-jane/edit");
+  await expect(
+    page.getByRole("heading", { name: "Public professional research" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/separate from customer evidence/i),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_027_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-027-promoted-contact-desktop.png",
+      fullPage: true,
+    });
+  }
 });
 
 test("exact-domain existing Account is attached without a duplicate", async ({

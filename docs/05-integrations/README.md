@@ -31,3 +31,10 @@ deterministic synthetic adapter only. No real research/search/company-data provi
 page fetcher, OpenAI synthesis, LinkedIn scraper or paid plan is configured. The mock
 makes no network request and fails closed in production; provider selection remains
 a separately approved integration decision.
+
+WO-027 extends that synthetic boundary to company-scoped person discovery,
+professional research and expiring business contact fields. The
+[provider evaluation](person-contact-provider-evaluation.md) and
+[licensing/storage decision](person-provider-licensing-storage-decision.md) document
+why no live provider, trial or paid service was activated. No scraping fallback was
+added and standard tests make no real external provider request.

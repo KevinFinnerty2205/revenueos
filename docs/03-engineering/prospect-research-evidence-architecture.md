@@ -1,6 +1,18 @@
 # Prospect research and evidence architecture
 
-- **Status:** Proposed Prospect architecture; not implemented
+## Current WO-027 person research boundary
+
+Professional role, activity, public statements, conversation context and buying-role
+hypotheses remain Prospect observations/projections. They carry public source links
+and Prospect trust; they are not `Evidence`, `CandidateEvidence` or customer-direct
+statements. Contact promotion copies only canonical identity/contact fields with
+provenance and does not promote research claims.
+
+No WO-027 service calls Evidence, Methodology, Stakeholder Intelligence, Revenue Brain
+or Ask RevenueOS writers. Later use of saved public research must preserve a distinct
+public-research origin and require an explicitly approved consumer contract.
+
+- **Status:** WO-026/027 separation is implemented; broader ICP/territory architecture remains proposed
 - **Purpose:** Find relevant business accounts and people using attributable,
   permitted professional information
 

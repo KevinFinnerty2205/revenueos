@@ -11,6 +11,7 @@ import type {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { ProspectPeopleSection } from "@/components/prospect-people";
 
 const trustLabels: Record<ProspectTrustState, string> = {
   verified: "Verified",
@@ -447,6 +448,8 @@ export function ProspectResearchBriefView({ targetId }: { targetId: string }) {
               </p>
             ) : null}
           </ResearchSection>
+
+          <ProspectPeopleSection targetId={targetId} />
 
           {recent.length > 0 ? (
             <ResearchSection

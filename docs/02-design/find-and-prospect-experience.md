@@ -1,7 +1,23 @@
 # Find and Prospect experience
 
-- **Status:** WO-026 company Find and Account Research implemented; later discovery remains future
+- **Status:** WO-026 company Find/Account Research and WO-027 company-scoped Person Intelligence implemented; ICP/territory remains future
 - **Question:** Who should I target?
+
+## Current WO-027 person path
+
+The researched-company page now contains **People worth understanding**. Discovery
+is an explicit company-scoped action and returns a bounded, unranked set of public
+professional identities with relevant function and cautious rationale. Selecting a
+person opens a separate sourced brief; no photo, personality signal, lead score or
+outreach action appears.
+
+The brief keeps buying roles labelled as hypotheses, presents contact trust per
+field, states that permission is not assessed and handles unknown/partial/departed
+states without guessing. **Add to Sales as Contact** opens explicit duplicate review.
+The canonical Contact links back to separately labelled public research. See
+[Person Research UX](person-research-ux-implementation.md),
+[Buying Committee UX](buying-committee-ux.md) and the
+[mobile simplicity review](prospect-person-mobile-simplicity-review.md).
 
 ## Find landing
 

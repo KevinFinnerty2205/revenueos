@@ -1,5 +1,19 @@
 # Application architecture
 
+## Prospect Person Intelligence (WO-027)
+
+The modular monolith now includes a company-scoped Prospect Person research slice.
+It reuses the FastAPI Prospect module, PostgreSQL-compatible Prospect worker and
+immutable run/source/observation pipeline. Five new tenant tables use composite
+organisation relationships and forced RLS. A provider-neutral typed interface is
+implemented with deterministic mock data only; there is no live provider, scraper,
+new datastore or queue.
+
+Prospect Person remains outside Core Contact until an explicit duplicate-safe
+promotion transaction. That transaction writes only Contact and field provenance.
+Evidence, Methodology, Stakeholder Intelligence, Revenue Brain, Ask RevenueOS and
+outreach do not consume WO-027 research.
+
 ## Current scope
 
 WO-011 adds Interaction as the authoritative source for shared customer-event

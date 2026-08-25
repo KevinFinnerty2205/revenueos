@@ -10,9 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.models import (
     Base,
     Company,
+    Contact,
+    ContactFieldSource,
     Organisation,
     OrganisationMembership,
     OrganisationModuleEntitlement,
+    ProspectBuyingRoleHypothesis,
+    ProspectBuyingRoleSource,
+    ProspectContactPoint,
+    ProspectPerson,
     ProspectResearchObservation,
     ProspectResearchObservationSource,
     ProspectResearchRun,
@@ -154,6 +160,7 @@ class ProspectRepository:
             .where(
                 ProspectResearchRun.organisation_id == organisation_id,
                 ProspectResearchRun.target_id == target_id,
+                ProspectResearchRun.person_id.is_(None),
             )
             .order_by(ProspectResearchRun.created_at.desc(), ProspectResearchRun.id.desc())
         )
@@ -167,6 +174,7 @@ class ProspectRepository:
                 .where(
                     ProspectResearchRun.organisation_id == organisation_id,
                     ProspectResearchRun.target_id == target_id,
+                    ProspectResearchRun.person_id.is_(None),
                     ProspectResearchRun.status.in_(USABLE_RUN_STATUSES),
                 )
                 .order_by(ProspectResearchRun.completed_at.desc(), ProspectResearchRun.created_at.desc())
@@ -182,6 +190,7 @@ class ProspectRepository:
                 .where(
                     ProspectResearchRun.organisation_id == organisation_id,
                     ProspectResearchRun.target_id == target_id,
+                    ProspectResearchRun.person_id.is_(None),
                     ProspectResearchRun.status.in_(ACTIVE_RUN_STATUSES),
                 )
                 .order_by(ProspectResearchRun.created_at.desc())
@@ -203,6 +212,7 @@ class ProspectRepository:
                 .where(
                     ProspectResearchRun.organisation_id == organisation_id,
                     ProspectResearchRun.target_id == target_id,
+                    ProspectResearchRun.person_id.is_(None),
                     ProspectResearchRun.status.in_(USABLE_RUN_STATUSES),
                     ProspectResearchRun.completed_at >= fresh_after,
                 )
@@ -218,6 +228,7 @@ class ProspectRepository:
             .where(
                 ProspectResearchRun.organisation_id == organisation_id,
                 ProspectResearchRun.target_id == target_id,
+                ProspectResearchRun.person_id.is_(None),
             )
         )
         return int(count or 0)
@@ -275,6 +286,244 @@ class ProspectRepository:
             )
         )
         return int(count or 0)
+
+    async def get_person(
+        self,
+        organisation_id: UUID,
+        person_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> ProspectPerson | None:
+        statement = select(ProspectPerson).where(
+            ProspectPerson.organisation_id == organisation_id,
+            ProspectPerson.id == person_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return cast(ProspectPerson | None, await self.session.scalar(statement))
+
+    async def person_by_provider_identity(
+        self,
+        organisation_id: UUID,
+        target_id: UUID,
+        provider_key: str,
+        provider_person_id: str,
+    ) -> ProspectPerson | None:
+        return cast(
+            ProspectPerson | None,
+            await self.session.scalar(
+                select(ProspectPerson).where(
+                    ProspectPerson.organisation_id == organisation_id,
+                    ProspectPerson.target_id == target_id,
+                    ProspectPerson.provider_key == provider_key,
+                    ProspectPerson.provider_person_id == provider_person_id,
+                )
+            ),
+        )
+
+    async def people_for_target(self, organisation_id: UUID, target_id: UUID) -> list[ProspectPerson]:
+        values = await self.session.scalars(
+            select(ProspectPerson)
+            .where(
+                ProspectPerson.organisation_id == organisation_id,
+                ProspectPerson.target_id == target_id,
+            )
+            .order_by(ProspectPerson.display_name, ProspectPerson.id)
+        )
+        return list(values.all())
+
+    async def runs_for_person(self, organisation_id: UUID, person_id: UUID) -> list[ProspectResearchRun]:
+        values = await self.session.scalars(
+            select(ProspectResearchRun)
+            .where(
+                ProspectResearchRun.organisation_id == organisation_id,
+                ProspectResearchRun.person_id == person_id,
+            )
+            .order_by(ProspectResearchRun.created_at.desc(), ProspectResearchRun.id.desc())
+        )
+        return list(values.all())
+
+    async def current_person_run(self, organisation_id: UUID, person_id: UUID) -> ProspectResearchRun | None:
+        return cast(
+            ProspectResearchRun | None,
+            await self.session.scalar(
+                select(ProspectResearchRun)
+                .where(
+                    ProspectResearchRun.organisation_id == organisation_id,
+                    ProspectResearchRun.person_id == person_id,
+                    ProspectResearchRun.status.in_(USABLE_RUN_STATUSES),
+                )
+                .order_by(ProspectResearchRun.completed_at.desc(), ProspectResearchRun.created_at.desc())
+                .limit(1)
+            ),
+        )
+
+    async def active_person_run(self, organisation_id: UUID, person_id: UUID) -> ProspectResearchRun | None:
+        return cast(
+            ProspectResearchRun | None,
+            await self.session.scalar(
+                select(ProspectResearchRun)
+                .where(
+                    ProspectResearchRun.organisation_id == organisation_id,
+                    ProspectResearchRun.person_id == person_id,
+                    ProspectResearchRun.status.in_(ACTIVE_RUN_STATUSES),
+                )
+                .order_by(ProspectResearchRun.created_at.desc())
+                .limit(1)
+            ),
+        )
+
+    async def fresh_person_run(
+        self,
+        organisation_id: UUID,
+        person_id: UUID,
+        *,
+        fresh_after: datetime,
+    ) -> ProspectResearchRun | None:
+        return cast(
+            ProspectResearchRun | None,
+            await self.session.scalar(
+                select(ProspectResearchRun)
+                .where(
+                    ProspectResearchRun.organisation_id == organisation_id,
+                    ProspectResearchRun.person_id == person_id,
+                    ProspectResearchRun.status.in_(USABLE_RUN_STATUSES),
+                    ProspectResearchRun.completed_at >= fresh_after,
+                )
+                .order_by(ProspectResearchRun.completed_at.desc())
+                .limit(1)
+            ),
+        )
+
+    async def hypotheses_for_run(
+        self,
+        organisation_id: UUID,
+        run_id: UUID,
+    ) -> list[ProspectBuyingRoleHypothesis]:
+        values = await self.session.scalars(
+            select(ProspectBuyingRoleHypothesis)
+            .where(
+                ProspectBuyingRoleHypothesis.organisation_id == organisation_id,
+                ProspectBuyingRoleHypothesis.run_id == run_id,
+            )
+            .order_by(ProspectBuyingRoleHypothesis.hypothesized_role, ProspectBuyingRoleHypothesis.id)
+        )
+        return list(values.all())
+
+    async def hypothesis(
+        self,
+        organisation_id: UUID,
+        person_id: UUID,
+        hypothesis_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> ProspectBuyingRoleHypothesis | None:
+        statement = select(ProspectBuyingRoleHypothesis).where(
+            ProspectBuyingRoleHypothesis.organisation_id == organisation_id,
+            ProspectBuyingRoleHypothesis.person_id == person_id,
+            ProspectBuyingRoleHypothesis.id == hypothesis_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return cast(ProspectBuyingRoleHypothesis | None, await self.session.scalar(statement))
+
+    async def buying_role_source_links(
+        self,
+        organisation_id: UUID,
+        run_id: UUID,
+    ) -> list[ProspectBuyingRoleSource]:
+        values = await self.session.scalars(
+            select(ProspectBuyingRoleSource).where(
+                ProspectBuyingRoleSource.organisation_id == organisation_id,
+                ProspectBuyingRoleSource.run_id == run_id,
+            )
+        )
+        return list(values.all())
+
+    async def contact_points_for_run(
+        self,
+        organisation_id: UUID,
+        run_id: UUID,
+        *,
+        current_at: datetime,
+    ) -> list[ProspectContactPoint]:
+        values = await self.session.scalars(
+            select(ProspectContactPoint)
+            .where(
+                ProspectContactPoint.organisation_id == organisation_id,
+                ProspectContactPoint.run_id == run_id,
+                ProspectContactPoint.active.is_(True),
+                or_(ProspectContactPoint.expires_at.is_(None), ProspectContactPoint.expires_at > current_at),
+            )
+            .order_by(ProspectContactPoint.point_type, ProspectContactPoint.id)
+        )
+        return list(values.all())
+
+    async def contact_by_email(self, organisation_id: UUID, email: str) -> Contact | None:
+        return cast(
+            Contact | None,
+            await self.session.scalar(
+                select(Contact)
+                .where(
+                    Contact.organisation_id == organisation_id,
+                    func.lower(Contact.email) == email.casefold(),
+                )
+                .order_by(Contact.created_at, Contact.id)
+                .limit(1)
+            ),
+        )
+
+    async def contacts_by_name_and_company(
+        self,
+        organisation_id: UUID,
+        company_id: UUID,
+        first_name: str,
+        last_name: str,
+    ) -> list[Contact]:
+        values = await self.session.scalars(
+            select(Contact)
+            .where(
+                Contact.organisation_id == organisation_id,
+                Contact.company_id == company_id,
+                func.lower(Contact.first_name) == first_name.casefold(),
+                func.lower(Contact.last_name) == last_name.casefold(),
+            )
+            .order_by(Contact.created_at, Contact.id)
+        )
+        return list(values.all())
+
+    async def get_contact(self, organisation_id: UUID, contact_id: UUID) -> Contact | None:
+        return cast(
+            Contact | None,
+            await self.session.scalar(
+                select(Contact).where(Contact.organisation_id == organisation_id, Contact.id == contact_id)
+            ),
+        )
+
+    async def person_for_contact(self, organisation_id: UUID, contact_id: UUID) -> ProspectPerson | None:
+        return cast(
+            ProspectPerson | None,
+            await self.session.scalar(
+                select(ProspectPerson).where(
+                    ProspectPerson.organisation_id == organisation_id,
+                    ProspectPerson.promoted_contact_id == contact_id,
+                )
+            ),
+        )
+
+    async def field_sources_for_contact(
+        self,
+        organisation_id: UUID,
+        contact_id: UUID,
+    ) -> list[ContactFieldSource]:
+        values = await self.session.scalars(
+            select(ContactFieldSource).where(
+                ContactFieldSource.organisation_id == organisation_id,
+                ContactFieldSource.contact_id == contact_id,
+                ContactFieldSource.active.is_(True),
+            )
+        )
+        return list(values.all())
 
     def add(self, entity: Base) -> None:
         self.session.add(entity)
@@ -411,6 +660,17 @@ class ProspectWorkerRepository:
                 select(ProspectResearchTarget).where(
                     ProspectResearchTarget.organisation_id == organisation_id,
                     ProspectResearchTarget.id == target_id,
+                )
+            ),
+        )
+
+    async def person(self, organisation_id: UUID, person_id: UUID) -> ProspectPerson | None:
+        return cast(
+            ProspectPerson | None,
+            await self.session.scalar(
+                select(ProspectPerson).where(
+                    ProspectPerson.organisation_id == organisation_id,
+                    ProspectPerson.id == person_id,
                 )
             ),
         )
