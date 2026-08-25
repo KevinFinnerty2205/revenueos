@@ -1,9 +1,10 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.database import set_tenant_database_context
-from revenueos.models import Organisation, OrganisationMembership, User
+from revenueos.models import Organisation, OrganisationMembership, OrganisationModuleEntitlement, User
 
 DEVELOPMENT_USER_ID = UUID("00000000-0000-4000-8000-000000000001")
 DEVELOPMENT_ORGANISATION_ID = UUID("00000000-0000-4000-8000-000000000002")
@@ -45,6 +46,22 @@ async def ensure_development_identity(
                     organisation_id=DEVELOPMENT_ORGANISATION_ID,
                     user_id=DEVELOPMENT_USER_ID,
                     role="admin",
+                )
+            )
+        await session.flush()
+        entitlement = await session.get(
+            OrganisationModuleEntitlement,
+            (DEVELOPMENT_ORGANISATION_ID, "prospect"),
+        )
+        if entitlement is None:
+            session.add(
+                OrganisationModuleEntitlement(
+                    organisation_id=DEVELOPMENT_ORGANISATION_ID,
+                    module_key="prospect",
+                    enabled=True,
+                    source="manual_private_beta",
+                    configured_by_user_id=DEVELOPMENT_USER_ID,
+                    enabled_at=datetime.now(UTC),
                 )
             )
         await session.commit()

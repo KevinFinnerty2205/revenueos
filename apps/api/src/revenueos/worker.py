@@ -10,6 +10,7 @@ from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory
 from revenueos.integration_worker import ActionExecutionWorkerService
 from revenueos.observability import configure_logging
+from revenueos.prospect_worker import ProspectWorkerService
 from revenueos.recording_worker import RecordingWorkerService
 
 logger = logging.getLogger("revenueos.ai_worker")
@@ -23,12 +24,14 @@ class AIWorker:
         *,
         recording_service: RecordingWorkerService | None = None,
         execution_service: ActionExecutionWorkerService | None = None,
+        prospect_service: ProspectWorkerService | None = None,
         worker_id: str | None = None,
     ) -> None:
         self._service = service
         self._settings = settings
         self._recording_service = recording_service
         self._execution_service = execution_service
+        self._prospect_service = prospect_service
         resolved_worker_id = (worker_id or f"worker-{uuid.uuid4().hex}").strip()
         if not resolved_worker_id or len(resolved_worker_id) > 200:
             raise ValueError("Worker identity must contain 1 to 200 characters.")
@@ -52,12 +55,15 @@ class AIWorker:
             logger.info("worker_stopped", extra={"worker_id": self.worker_id})
 
     async def run_once(self) -> bool:
+        prospect_processed = (
+            await self._prospect_service.run_once(self.worker_id) if self._prospect_service is not None else False
+        )
         recording_processed = await self._recording_service.run_once() if self._recording_service is not None else False
         execution_processed = (
             await self._execution_service.run_once(self.worker_id) if self._execution_service is not None else False
         )
         organisations = await self._service.discover_eligible_organisations()
-        processed = recording_processed or execution_processed
+        processed = prospect_processed or recording_processed or execution_processed
         for organisation_id in organisations:
             cancelled = await self._service.cancel_pending_jobs(organisation_id)
             recovered = await self._service.recover_abandoned_jobs(organisation_id)
@@ -89,6 +95,7 @@ async def run_worker(settings: Settings | None = None) -> None:
         resolved_settings,
         recording_service=RecordingWorkerService(session_factory, resolved_settings),
         execution_service=ActionExecutionWorkerService(session_factory, resolved_settings),
+        prospect_service=ProspectWorkerService(session_factory, resolved_settings),
     )
     try:
         await worker.run(stop)

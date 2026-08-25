@@ -1,6 +1,6 @@
 # Sales OS module entitlement architecture
 
-- **Status:** Proposed commercial-control architecture; not implemented
+- **Status:** WO-026 implements a bounded Prospect organisation switch; the wider commercial model remains proposed
 - **Principle:** Core remains coherent; module discovery is contextual and restrained
 
 ## Package model
@@ -11,6 +11,12 @@ a feature-dumping ground. Actual prices and billing-provider implementation rema
 future decisions.
 
 ## Effective availability
+
+Current WO-026 availability is intentionally smaller than the target equation below:
+the server combines the global Prospect feature flag, active tenant/membership,
+organisation `prospect` entitlement and production-capable provider configuration.
+Only admins can change the organisation switch. There is no billing, plan catalogue,
+trial or grace-period model yet.
 
 The server produces one product-safe availability projection:
 
@@ -40,7 +46,8 @@ Only authorised billing administrators receive commercial detail.
 | `UsageCounter`                   | Idempotent, period-scoped metered consumption where justified |
 | `AvailabilityProjection`         | Safe response for a user/context with reason and next step    |
 
-These are future concepts, not implemented schema. Plan mappings are versioned and
+Except for the bounded `organisation_module_entitlements` Prospect row and usage
+counters added by WO-026, these are future concepts. Plan mappings are versioned and
 centralised; page code must never contain price or package rules. Tenant-owned state,
 counts and keys include organisation scope.
 
@@ -111,6 +118,6 @@ denials by safe reason, stale state and reconciliation—not user content.
 
 ## Explicitly out of scope
 
-WO-023 adds no billing, plan table, feature flag, metering or UI. Exact prices,
+WO-026 adds no billing or plan table. Exact prices,
 contracts, tax, invoicing, proration, trials and payment flows require later commercial
 and legal decisions.

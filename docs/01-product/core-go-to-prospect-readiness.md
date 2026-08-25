@@ -1,7 +1,7 @@
 # Core go-to-Prospect readiness
 
-- **Status:** Current product boundary after WO-025C
-- **Decision:** Core is ready to support the start of WO-026
+- **Status:** Current Core/Prospect boundary after WO-026
+- **Decision:** Core supported the implemented company Account Research slice
 - **Design-partner status:** Ready with restrictions; real customer data requires a
   separately approved target environment
 - **Decision authority:** [Checkpoint 1B](../06-roadmap/checkpoint-1b-core-readiness.md)
@@ -177,7 +177,9 @@ normal Core maintenance issues, not a new pre-Prospect product layer.
 
 ## Product decision
 
-Start WO-026. Preserve the Core loop as an independently useful product, keep research
-facts outside canonical records until reviewed, and validate controlled partner value
-in parallel. Do not move forecast, coaching, manager, analytics, targets, win/loss or
-a second CRM ahead of the first Prospect learning loop.
+WO-026 preserves the Core loop as an independently useful product. Research Targets
+remain separate until explicit Add to Sales, and their public observations remain
+outside customer Evidence after promotion. Validate controlled partner value and an
+approved real provider before rollout. Do not move forecast, coaching, manager,
+analytics, targets, win/loss or a second CRM ahead of the first Prospect learning
+loop.

@@ -7,6 +7,56 @@ class CompanyStatus(StrEnum):
     INACTIVE = "inactive"
 
 
+class ProductModule(StrEnum):
+    PROSPECT = "prospect"
+
+
+class ProspectResearchRunStatus(StrEnum):
+    PENDING = "pending"
+    FETCHING = "fetching"
+    SYNTHESIZING = "synthesizing"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
+class ProspectTrustState(StrEnum):
+    VERIFIED = "verified"
+    PROVIDER_SUPPLIED = "provider_supplied"
+    INFERRED = "inferred"
+    UNKNOWN = "unknown"
+
+
+class ProspectSourceAuthority(StrEnum):
+    PRIMARY = "primary"
+    OFFICIAL_PUBLIC = "official_public"
+    REGULATORY = "regulatory"
+    REPUTABLE_SECONDARY = "reputable_secondary"
+    STRUCTURED_PROVIDER = "structured_provider"
+    OTHER_PUBLIC = "other_public"
+
+
+class ProspectObservationCategory(StrEnum):
+    COMPANY_PROFILE = "company_profile"
+    INDUSTRY = "industry"
+    LOCATION = "location"
+    SIZE = "size"
+    BUSINESS_MODEL = "business_model"
+    PRODUCT_SERVICE = "product_service"
+    STRATEGIC_INITIATIVE = "strategic_initiative"
+    EXPANSION = "expansion"
+    HIRING = "hiring"
+    LEADERSHIP_CHANGE = "leadership_change"
+    FUNDING_FINANCIAL = "funding_financial"
+    TECHNOLOGY = "technology"
+    REGULATORY = "regulatory"
+    PARTNERSHIP = "partnership"
+    CUSTOMER_MARKET = "customer_market"
+    TRIGGER = "trigger"
+    POTENTIAL_FIT = "potential_fit"
+    OTHER = "other"
+
+
 class OpportunityStage(StrEnum):
     QUALIFICATION = "qualification"
     DISCOVERY = "discovery"

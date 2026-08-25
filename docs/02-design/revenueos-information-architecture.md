@@ -1,14 +1,16 @@
 # RevenueOS information architecture
 
-- **Status:** WO-025A implements the Core-only pre-Prospect shell; later entitled
-  areas remain future
+- **Status:** WO-026 implements the entitlement-aware desktop Prospect/Find slice;
+  later Prospect and other entitled areas remain future
 - **Design rule:** Organise around seller goals, not entities or implementation boundaries
 
 ## Permanent desktop navigation
 
-Before Prospect, the implemented shell is Home; Sell with Accounts, People and
-Interactions; Pipeline; Search; and Settings. Mobile is exactly Today, Interactions,
-Actions and Search. The six-area table below remains the entitlement-aware target.
+The implemented shell is Home; conditional Prospect with Find; Sell with Accounts,
+People and Interactions; Pipeline; Search; and Settings. The Prospect group appears
+only after server-confirmed entitlement. Mobile remains exactly Today, Interactions,
+Actions and Search while the Find route itself is responsive. The remainder of the
+six-area table below is still the entitlement-aware target.
 
 | Area     | User question                                | Primary contents                                                             | Entitlement behaviour                        |
 | -------- | -------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------- |

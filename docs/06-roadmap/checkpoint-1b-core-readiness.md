@@ -306,3 +306,16 @@ downstream destination for Prospect. Begin WO-026. Keep forecasting, coaching,
 manager, analytics, targets and win/loss in their evidence-dependent positions. Keep
 HubSpot first. Treat partner launch approval and mail delivery as explicit gates, not
 as reasons to re-open the Core architecture.
+
+## WO-026 follow-through — 25 August 2026
+
+The authorised company-only slice is now implemented. It reuses the existing Core
+tenant, Company, API and worker foundations while keeping unpromoted Research Targets
+and public observations separate from customer Evidence. Explicit Add to Sales uses
+exact normalised-domain duplicate handling. No Contact or Opportunity is created.
+
+The provider/legal gate remains open for real data: WO-026 selected no paid or live
+provider and added no arbitrary page fetcher. The deterministic mock proves the
+complete product and trust lifecycle, but production mock configuration fails closed.
+WO-027 decision-maker research and WO-028 ICP/territory/bulk discovery remain
+unauthorised until separately approved.

@@ -10,6 +10,7 @@ AIProviderName = Literal["mock", "openai"]
 TranscriptionProviderName = Literal["mock", "openai"]
 VisualProviderName = Literal["mock", "openai"]
 EvidenceExtractionProviderName = Literal["mock", "openai"]
+ProspectResearchProviderName = Literal["mock"]
 VisualStorageBackend = Literal["local", "s3_compatible"]
 
 
@@ -95,6 +96,10 @@ class Settings(BaseSettings):
     private_beta_ask_max_sources: int = Field(default=12, ge=1, le=20)
     private_beta_ask_max_context_characters: int = Field(default=16_000, ge=1_000, le=50_000)
     private_beta_ask_max_portfolio_results: int = Field(default=10, ge=1, le=20)
+    private_beta_max_prospect_research_per_user_per_day: int = Field(default=20, ge=1, le=500)
+    private_beta_max_prospect_research_per_organisation_per_day: int = Field(default=100, ge=1, le=2_000)
+    private_beta_max_concurrent_prospect_research: int = Field(default=5, ge=1, le=50)
+    private_beta_prospect_fresh_days: int = Field(default=7, ge=1, le=90)
     private_beta_max_action_generations_per_day: int = Field(default=100, ge=1, le=5_000)
     private_beta_max_email_executions_per_day: int = Field(default=50, ge=1, le=5_000)
     private_beta_max_calendar_executions_per_day: int = Field(default=25, ge=1, le=2_000)
@@ -151,6 +156,8 @@ class Settings(BaseSettings):
     feature_hubspot_crm_enabled: bool = False
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
+    feature_prospect_enabled: bool = True
+    prospect_research_provider_name: ProspectResearchProviderName = "mock"
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
     worker_lease_duration_seconds: int = Field(default=60, ge=10, le=3600)
     worker_heartbeat_interval_seconds: int = Field(default=20, ge=1, le=1200)
@@ -460,6 +467,7 @@ class Settings(BaseSettings):
             "hubspotCrm": self.feature_hubspot_crm_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
+            "prospect": self.feature_prospect_enabled,
         }
 
 

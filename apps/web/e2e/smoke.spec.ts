@@ -2968,7 +2968,7 @@ test("meeting detail orchestrates and persists the unified Meeting Intelligence 
   context,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-    origin: "http://localhost:3000",
+    origin: `http://localhost:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
   });
   let stage:
     "not_started" | "extractions" | "prerequisites" | "email" | "completed" =

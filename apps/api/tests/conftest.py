@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -72,7 +73,14 @@ from revenueos.models import (
     OrganisationBetaSettings,
     OrganisationMembership,
     OrganisationMethodologySetting,
+    OrganisationModuleEntitlement,
     PreInteractionBrief,
+    ProspectResearchObservation,
+    ProspectResearchObservationSource,
+    ProspectResearchRun,
+    ProspectResearchSource,
+    ProspectResearchTarget,
+    ProspectUsageCounter,
     ProvisionalSignal,
     RecordingChunk,
     RecordingConsent,
@@ -165,6 +173,22 @@ def database() -> Iterator[None]:
             await session.commit()
             session.add_all(
                 [
+                    OrganisationModuleEntitlement(
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        module_key="prospect",
+                        enabled=True,
+                        source="manual_private_beta",
+                        configured_by_user_id=PRIMARY_USER_ID,
+                        enabled_at=datetime.now(UTC),
+                    ),
+                    OrganisationModuleEntitlement(
+                        organisation_id=SECONDARY_ORGANISATION_ID,
+                        module_key="prospect",
+                        enabled=True,
+                        source="manual_private_beta",
+                        configured_by_user_id=SECONDARY_USER_ID,
+                        enabled_at=datetime.now(UTC),
+                    ),
                     DataNoticeAcknowledgement(
                         id=UUID("00000000-0000-4000-8000-000000000003"),
                         organisation_id=PRIMARY_ORGANISATION_ID,
@@ -224,6 +248,12 @@ def clean_business_entities() -> Iterator[None]:
                 MethodologyDefinitionVersion,
                 MethodologyDefinition,
                 AIUsageCounter,
+                ProspectResearchObservationSource,
+                ProspectResearchObservation,
+                ProspectResearchSource,
+                ProspectResearchRun,
+                ProspectResearchTarget,
+                ProspectUsageCounter,
                 OnboardingProgress,
                 OrganisationBetaSettings,
                 RevenueBrainInsight,

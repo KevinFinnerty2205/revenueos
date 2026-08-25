@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const opportunityId = "opportunity-crm-sync";
+const webOrigin = `http://localhost:${process.env.PLAYWRIGHT_PORT ?? "3000"}`;
 
 const hubspotConnection = {
   id: "hubspot-connection-1",
@@ -184,8 +185,7 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
     async (route) => {
       await route.fulfill({
         json: {
-          authorisationUrl:
-            "http://localhost:3000/settings/integrations/hubspot/callback?code=fixture-code&state=fixture-state",
+          authorisationUrl: `${webOrigin}/settings/integrations/hubspot/callback?code=fixture-code&state=fixture-state`,
           expiresAt: "2026-08-24T01:10:00Z",
         },
       });

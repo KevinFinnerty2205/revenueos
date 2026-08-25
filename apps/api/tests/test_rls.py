@@ -160,6 +160,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "organisation_methodology_settings",
         "methodology_projections",
         "methodology_reviews",
+        "organisation_module_entitlements",
+        "prospect_usage_counters",
+        "prospect_research_targets",
+        "prospect_research_runs",
+        "prospect_research_sources",
+        "prospect_research_observations",
+        "prospect_research_observation_sources",
     )
     tenant_a = {
         "suffix": "A",
@@ -227,6 +234,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "crm_entity_mapping_id": uuid.uuid4(),
         "crm_field_mapping_id": uuid.uuid4(),
         "crm_stage_mapping_id": uuid.uuid4(),
+        "prospect_target_id": uuid.uuid4(),
+        "prospect_run_id": uuid.uuid4(),
+        "prospect_source_id": uuid.uuid4(),
+        "prospect_observation_id": uuid.uuid4(),
     }
     tenant_b = {
         "suffix": "B",
@@ -294,6 +305,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "crm_entity_mapping_id": uuid.uuid4(),
         "crm_field_mapping_id": uuid.uuid4(),
         "crm_stage_mapping_id": uuid.uuid4(),
+        "prospect_target_id": uuid.uuid4(),
+        "prospect_run_id": uuid.uuid4(),
+        "prospect_source_id": uuid.uuid4(),
+        "prospect_observation_id": uuid.uuid4(),
     }
 
     async def scenario() -> None:
@@ -365,6 +380,124 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             **identity_parameters,
                             "company_name": f"RLS Company {suffix}",
                         },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO organisation_module_entitlements
+                                (organisation_id, module_key, enabled, source,
+                                 configured_by_user_id, enabled_at)
+                            VALUES
+                                (:organisation_id, 'prospect', true,
+                                 'manual_private_beta', :user_id, now())
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_usage_counters
+                                (organisation_id, usage_date, scope_key, research_run_count)
+                            VALUES (:organisation_id, current_date, 'organisation', 1)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_research_targets
+                                (id, organisation_id, provider_key,
+                                 provider_candidate_id, name, normalized_domain,
+                                 website_url, provider_attribution)
+                            VALUES
+                                (:prospect_target_id, :organisation_id, 'mock',
+                                 :provider_candidate_id, :target_name,
+                                 :target_domain, :target_url, 'Synthetic RLS data')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "provider_candidate_id": f"rls-company-{suffix.lower()}",
+                            "target_name": f"RLS Prospect {suffix}",
+                            "target_domain": f"rls-prospect-{suffix.lower()}.example",
+                            "target_url": f"https://rls-prospect-{suffix.lower()}.example/",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_research_runs
+                                (id, organisation_id, target_id,
+                                 requested_by_user_id, status, provider_key,
+                                 provider_version, request_fingerprint,
+                                 idempotency_key, completed_at)
+                            VALUES
+                                (:prospect_run_id, :organisation_id,
+                                 :prospect_target_id, :user_id, 'completed',
+                                 'mock', 'mock-v1', :request_fingerprint,
+                                 :idempotency_key, now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "request_fingerprint": suffix.lower() * 64,
+                            "idempotency_key": f"rls:{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_research_sources
+                                (id, organisation_id, run_id, target_id,
+                                 source_key, source_type, url, canonical_url,
+                                 domain, title, publisher, retrieved_at,
+                                 authority_class, content_fingerprint)
+                            VALUES
+                                (:prospect_source_id, :organisation_id,
+                                 :prospect_run_id, :prospect_target_id,
+                                 'official', 'official_website', :source_url,
+                                 :source_url, :source_domain, 'Official profile',
+                                 'RLS Prospect', now(), 'official_public',
+                                 :source_fingerprint)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "source_url": f"https://rls-prospect-{suffix.lower()}.example/about",
+                            "source_domain": f"rls-prospect-{suffix.lower()}.example",
+                            "source_fingerprint": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_research_observations
+                                (id, organisation_id, run_id, target_id,
+                                 observation_key, category, statement,
+                                 trust_state, freshness, generated_at)
+                            VALUES
+                                (:prospect_observation_id, :organisation_id,
+                                 :prospect_run_id, :prospect_target_id,
+                                 'company_profile', 'company_profile',
+                                 'A tenant-scoped public company profile.',
+                                 'verified', 'stable', now())
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_research_observation_sources
+                                (organisation_id, observation_id, source_id, run_id)
+                            VALUES
+                                (:organisation_id, :prospect_observation_id,
+                                 :prospect_source_id, :prospect_run_id)
+                            """
+                        ),
+                        identity_parameters,
                     )
                     await connection.execute(
                         text(
@@ -1734,7 +1867,14 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'methodology_definition_versions',
                                     'organisation_methodology_settings',
                                     'methodology_projections',
-                                    'methodology_reviews'
+                                    'methodology_reviews',
+                                    'organisation_module_entitlements',
+                                    'prospect_usage_counters',
+                                    'prospect_research_targets',
+                                    'prospect_research_runs',
+                                    'prospect_research_sources',
+                                    'prospect_research_observations',
+                                    'prospect_research_observation_sources'
                                 )
                                 """
                             )
@@ -1770,6 +1910,44 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["company_id"]},
                 )
                 assert company_update.rowcount == 0
+                prospect_update = await connection.execute(
+                    text(
+                        """
+                        UPDATE prospect_research_observations
+                        SET statement = 'Blocked cross-tenant update.'
+                        WHERE id = :id
+                        """
+                    ),
+                    {"id": tenant_b["prospect_observation_id"]},
+                )
+                assert prospect_update.rowcount == 0
+                prospect_delete = await connection.execute(
+                    text("DELETE FROM prospect_research_sources WHERE id = :id"),
+                    {"id": tenant_b["prospect_source_id"]},
+                )
+                assert prospect_delete.rowcount == 0
+                savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_research_targets
+                                (id, organisation_id, provider_key,
+                                 provider_candidate_id, name, normalized_domain,
+                                 website_url, provider_attribution)
+                            VALUES
+                                (:id, :organisation_id, 'mock',
+                                 'forged-cross-tenant', 'Forged target',
+                                 'forged.example', 'https://forged.example/',
+                                 'Synthetic RLS data')
+                            """
+                        ),
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                        },
+                    )
+                await savepoint.rollback()
                 crm_mapping_update = await connection.execute(
                     text(
                         """

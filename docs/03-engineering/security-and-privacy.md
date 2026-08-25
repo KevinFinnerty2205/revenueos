@@ -384,3 +384,23 @@ connection/mapping/policy/execution metadata without credentials. Disconnect and
 organisation deletion attempt token revocation then remove local credentials and
 mappings; they never delete or undo HubSpot records. See the
 [CRM sync security review](crm-sync-security-review.md).
+
+## WO-026 Prospect research controls
+
+Prospect uses a separate company-focused research domain with forced RLS, composite
+tenant relationships, explicit service predicates, membership checks and a
+server-enforced organisation entitlement. Candidate identity is selected explicitly;
+promotion uses exact normalised-domain matching and cannot create Contacts or
+Opportunities.
+
+There is no runtime public-page fetcher or AI synthesis. All accepted source links
+must be canonical public HTTPS URLs; the reusable policy rejects credential URLs,
+unexpected ports, Unicode/local/IP-literal hosts, non-global DNS results and unsafe
+redirect chains. Citation and trust validation occurs before persistence. Logs are
+metadata-only and exclude searches, company identity, URLs, excerpts and findings.
+
+Export schema v16, organisation/target deletion and retention cover the research
+graph while preserving any separately promoted Company. Production mock configuration
+fails closed. See the dedicated
+[security/privacy review](prospect-security-privacy-review.md) and
+[SSRF/public-content guide](prospect-ssrf-public-content-security.md).

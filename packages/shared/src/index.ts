@@ -2767,3 +2767,136 @@ export interface AskCapabilities {
   maxSources: number;
   safeMessage: string;
 }
+
+export type ProspectAvailabilityState =
+  "available" | "temporarily_unavailable" | "not_in_plan";
+export type ProspectTrustState =
+  "verified" | "provider_supplied" | "inferred" | "unknown";
+export type ProspectResearchStatus =
+  "pending" | "researching" | "ready" | "partial" | "failed";
+export type ProspectRunStatus =
+  "pending" | "fetching" | "synthesizing" | "completed" | "partial" | "failed";
+
+export interface ProspectAvailability {
+  moduleKey: "prospect";
+  state: ProspectAvailabilityState;
+  enabled: boolean;
+  canManage: boolean;
+  message: string;
+}
+
+export interface ProspectCompanyCandidate {
+  candidateId: string;
+  name: string;
+  domain: string;
+  websiteUrl: string;
+  location: string | null;
+  industry: string | null;
+  providerAttribution: string;
+}
+
+export interface ProspectCompanySearch {
+  items: ProspectCompanyCandidate[];
+  query: string;
+  ambiguous: boolean;
+}
+
+export interface ProspectResearchTarget {
+  id: string;
+  name: string;
+  domain: string;
+  websiteUrl: string;
+  location: string | null;
+  industry: string | null;
+  providerAttribution: string;
+  promotedCompanyId: string | null;
+  promotedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProspectResearchRun {
+  id: string;
+  status: ProspectRunStatus;
+  refreshOfRunId: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  sourceCount: number;
+  observationCount: number;
+  errorCode: string | null;
+}
+
+export interface ProspectResearchSource {
+  id: string;
+  sourceType: string;
+  url: string;
+  canonicalUrl: string;
+  domain: string;
+  title: string;
+  publisher: string;
+  publishedAt: string | null;
+  retrievedAt: string;
+  authorityClass: string;
+}
+
+export interface ProspectResearchObservation {
+  id: string;
+  observationKey: string;
+  category: string;
+  statement: string;
+  trustState: ProspectTrustState;
+  relevance: "high" | "normal";
+  observedAt: string | null;
+  freshness: "stable" | "time_sensitive";
+  sourceIds: string[];
+}
+
+export interface ProspectResearchChange {
+  changeType: "new" | "changed" | "no_longer_supported";
+  observationKey: string;
+  statement: string;
+  previousStatement: string | null;
+}
+
+export interface ProspectExistingCompanyMatch {
+  id: string;
+  name: string;
+  domain: string;
+}
+
+export interface ProspectResearchBrief {
+  target: ProspectResearchTarget;
+  status: ProspectResearchStatus;
+  statusMessage: string;
+  currentRun: ProspectResearchRun | null;
+  latestRun: ProspectResearchRun | null;
+  observations: ProspectResearchObservation[];
+  sources: ProspectResearchSource[];
+  changes: ProspectResearchChange[];
+  history: ProspectResearchRun[];
+  existingCompanyMatch: ProspectExistingCompanyMatch | null;
+}
+
+export interface ProspectRecentResearch {
+  items: Array<{
+    target: ProspectResearchTarget;
+    status: ProspectResearchStatus;
+    updatedAt: string;
+  }>;
+}
+
+export interface ProspectPromotion {
+  status: "created" | "attached" | "already_promoted";
+  companyId: string;
+  companyName: string;
+  researchTargetId: string;
+  message: string;
+}
+
+export interface ProspectAccountResearchLink {
+  targetId: string;
+  companyId: string;
+  updatedAt: string;
+  status: "ready" | "partial";
+}

@@ -36,6 +36,9 @@ This is the canonical product and engineering documentation index. Documents dis
 30. [Focused CRM Sync implementation](03-engineering/focused-crm-sync.md) — current WO-025C HubSpot boundary
 31. [ADR 0037: HubSpot-first Focused CRM Sync](08-decisions/0037-hubspot-first-focused-crm-sync.md)
 32. [Checkpoint 1B Core readiness](06-roadmap/checkpoint-1b-core-readiness.md) — GO decision for WO-026
+33. [Prospect Account Research](01-product/prospect-account-research.md) — current WO-026 company research boundary
+34. [Prospect Account Research architecture](03-engineering/prospect-account-research-architecture.md)
+35. [ADR 0038: Separate Prospect research domain](08-decisions/0038-separate-prospect-research-domain.md)
 
 ## 00 — Company
 
@@ -65,6 +68,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Standard sales methodologies](01-product/standard-sales-methodologies.md)
 - [Ask RevenueOS](01-product/ask-revenueos.md)
 - [Core go-to-Prospect readiness](01-product/core-go-to-prospect-readiness.md)
+- [Prospect Account Research implementation](01-product/prospect-account-research.md)
+- [Account Research trust and sources](01-product/account-research-trust-and-sources.md)
+- [Prospect research versus customer Evidence](01-product/prospect-research-vs-customer-evidence.md)
 
 ## 02 — Design
 
@@ -105,6 +111,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Core mobile usability review](02-design/core-mobile-usability-review.md)
 - [Core accessibility review](02-design/core-accessibility-review.md)
 - [Ask RevenueOS simplicity review](02-design/ask-revenueos-simplicity-review.md)
+- [Find and Account Research UX implementation](02-design/find-account-research-implementation.md)
+- [Prospect trust-state UX](02-design/prospect-trust-state-ux.md)
+- [Prospect mobile UX and simplicity review](02-design/prospect-mobile-simplicity-review.md)
 
 ## 03 — Engineering
 
@@ -227,6 +236,12 @@ This is the canonical product and engineering documentation index. Documents dis
 - [CRM execution and reconciliation](03-engineering/crm-execution-reconciliation.md)
 - [CRM OAuth and credential security](03-engineering/crm-oauth-credential-security.md)
 - [CRM sync security review](03-engineering/crm-sync-security-review.md)
+- [Prospect Account Research architecture](03-engineering/prospect-account-research-architecture.md)
+- [Prospect provider and fetch strategy](03-engineering/prospect-provider-fetch-strategy.md)
+- [Prospect source and citation architecture](03-engineering/prospect-source-citation-architecture.md)
+- [Prospect SSRF and public-content security](03-engineering/prospect-ssrf-public-content-security.md)
+- [Prospect retention, export and deletion](03-engineering/prospect-retention-export-deletion.md)
+- [Prospect Account Research security and privacy review](03-engineering/prospect-security-privacy-review.md)
 
 ### Target through beta
 
@@ -276,6 +291,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [CRM provider selection](05-integrations/crm-provider-selection.md)
 - [HubSpot connection and operations](05-integrations/hubspot-connection-guide.md)
 - [CRM administrator setup](05-integrations/crm-admin-setup.md)
+- [Prospect research provider boundary and deferred provider decision](05-integrations/prospect-research-provider-boundary.md)
 
 ## 06 — Roadmap
 
@@ -335,6 +351,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-025B: Ask RevenueOS](07-sprints/wo-025b-ask-revenueos.md)
 - [WO-025C: Focused CRM Sync](07-sprints/wo-025c-focused-crm-sync.md)
 - [Checkpoint 1B: Core readiness before Prospect](07-sprints/checkpoint-1b-core-readiness.md)
+- [WO-026: Account & Lead Research](07-sprints/wo-026-account-lead-research.md)
 
 ## 08 — Decision records
 
@@ -375,14 +392,15 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0035: Evidence-centred end-to-end Sales OS architecture](08-decisions/0035-end-to-end-sales-os-architecture.md)
 - [ADR 0036: Ephemeral deterministic Ask RevenueOS v1](08-decisions/0036-ephemeral-deterministic-ask-revenueos.md)
 - [ADR 0037: HubSpot-first Focused CRM Sync](08-decisions/0037-hubspot-first-focused-crm-sync.md)
+- [ADR 0038: Separate unpromoted Prospect research domain](08-decisions/0038-separate-prospect-research-domain.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
-implements one HubSpot CRM path. Checkpoint 1B recommends WO-026 as the next work
-order; WO-026 still needs separate authorisation and WO-027–045 remain unauthorised.
+implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026 now provides
+mock-backed company Account Research and WO-027–045 remain unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -497,7 +515,16 @@ envelope encryption and never enter browser contracts, logs or exports. Each wri
 still requires an approved immutable Action and a second explicit confirmation;
 RevenueOS does not perform autonomous CRM writes or write raw transcripts. The
 connector is off by default and target-environment/customer launch approval remains
-separate. Salesforce, bulk import, full bidirectional sync and Prospect remain future.
+separate. Salesforce, bulk import and full bidirectional sync remain future.
+
+WO-026 adds the separately entitled Prospect Find path for bounded company
+name/domain resolution, immutable sourced Account Research, controlled refresh and
+explicit duplicate-safe Add to Sales. Public research remains separate from
+customer Evidence and cannot mutate Methodology, Revenue Brain or Ask RevenueOS.
+The deterministic provider uses synthetic data and no network; production mock
+configuration fails closed. No real provider, public-page fetcher, AI synthesis,
+LinkedIn scraping, person profiling, contact enrichment, predictive score, ICP,
+territory, bulk lead list, monitoring or outreach was added.
 
 Do not use production customer data unless separately approved. Target
 environment launch evidence, provider/privacy approval and every unchecked

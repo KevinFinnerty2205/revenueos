@@ -75,7 +75,14 @@ from revenueos.models import (
     OrganisationBetaSettings,
     OrganisationMembership,
     OrganisationMethodologySetting,
+    OrganisationModuleEntitlement,
     PreInteractionBrief,
+    ProspectResearchObservation,
+    ProspectResearchObservationSource,
+    ProspectResearchRun,
+    ProspectResearchSource,
+    ProspectResearchTarget,
+    ProspectUsageCounter,
     ProvisionalSignal,
     RecordingChunk,
     RecordingConsent,
@@ -101,7 +108,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 15
+EXPORT_VERSION = 16
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -247,6 +254,24 @@ async def run_retention(
                 )
             ).all()
         )
+        active_prospect_targets = select(ProspectResearchRun.target_id).where(
+            ProspectResearchRun.organisation_id == organisation_id,
+            ProspectResearchRun.status.in_(("pending", "fetching", "synthesizing")),
+        )
+        prospect_target_ids = list(
+            (
+                await session.scalars(
+                    select(ProspectResearchTarget.id)
+                    .where(
+                        ProspectResearchTarget.organisation_id == organisation_id,
+                        ProspectResearchTarget.updated_at < cutoff,
+                        ProspectResearchTarget.id.not_in(active_prospect_targets),
+                    )
+                    .order_by(ProspectResearchTarget.updated_at, ProspectResearchTarget.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
         counts = await _meeting_deletion_counts(session, organisation_id, meeting_ids)
         interaction_counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
         counts = _merge_counts(counts, interaction_counts)
@@ -268,6 +293,8 @@ async def run_retention(
             )
             or 0
         )
+        prospect_counts = await _prospect_deletion_counts(session, organisation_id, prospect_target_ids)
+        counts.update(prospect_counts)
         expired_live_count = int(
             (
                 await session.scalar(
@@ -289,6 +316,7 @@ async def run_retention(
             and not document_ids
             and not email_ids
             and not methodology_projection_ids
+            and not prospect_target_ids
             and not expired_live_count
         ):
             return RetentionResult(
@@ -348,6 +376,14 @@ async def run_retention(
             removed,
             await _delete_interaction_batch(session, organisation_id, interaction_ids),
         )
+        if prospect_target_ids:
+            await session.execute(
+                delete(ProspectResearchTarget).where(
+                    ProspectResearchTarget.organisation_id == organisation_id,
+                    ProspectResearchTarget.id.in_(prospect_target_ids),
+                )
+            )
+            removed = _merge_counts(removed, prospect_counts)
         session.add(
             BetaSystemEvent(
                 organisation_id=organisation_id,
@@ -356,6 +392,7 @@ async def run_retention(
                 metadata_json={
                     "interaction_count": len(interaction_ids),
                     "meeting_count": len(meeting_ids),
+                    "prospect_target_count": len(prospect_target_ids),
                     "retention_days": retention_days,
                 },
             )
@@ -736,6 +773,24 @@ async def _delete_organisation_records(
         await session.execute(delete(Task).where(Task.organisation_id == organisation_id))
         await session.execute(delete(Contact).where(Contact.organisation_id == organisation_id))
         await session.execute(delete(Opportunity).where(Opportunity.organisation_id == organisation_id))
+        await session.execute(
+            delete(ProspectResearchObservationSource).where(
+                ProspectResearchObservationSource.organisation_id == organisation_id
+            )
+        )
+        await session.execute(
+            delete(ProspectResearchObservation).where(ProspectResearchObservation.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProspectResearchSource).where(ProspectResearchSource.organisation_id == organisation_id)
+        )
+        await session.execute(delete(ProspectResearchRun).where(ProspectResearchRun.organisation_id == organisation_id))
+        await session.execute(
+            delete(ProspectResearchTarget).where(ProspectResearchTarget.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProspectUsageCounter).where(ProspectUsageCounter.organisation_id == organisation_id)
+        )
         await session.execute(delete(Company).where(Company.organisation_id == organisation_id))
         await session.execute(
             delete(DataNoticeAcknowledgement).where(DataNoticeAcknowledgement.organisation_id == organisation_id)
@@ -745,6 +800,11 @@ async def _delete_organisation_records(
         await session.execute(delete(BetaSystemEvent).where(BetaSystemEvent.organisation_id == organisation_id))
         await session.execute(
             delete(OrganisationBetaSettings).where(OrganisationBetaSettings.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(OrganisationModuleEntitlement).where(
+                OrganisationModuleEntitlement.organisation_id == organisation_id
+            )
         )
         await session.execute(delete(BetaDataRequest).where(BetaDataRequest.organisation_id == organisation_id))
         await session.execute(
@@ -1888,6 +1948,75 @@ async def _delete_recording_database_rows(
     )
 
 
+async def _prospect_deletion_counts(
+    session: AsyncSession,
+    organisation_id: UUID,
+    target_ids: list[UUID],
+) -> dict[str, int]:
+    if not target_ids:
+        return {}
+    run_ids = select(ProspectResearchRun.id).where(
+        ProspectResearchRun.organisation_id == organisation_id,
+        ProspectResearchRun.target_id.in_(target_ids),
+    )
+
+    return {
+        "prospect_targets": len(target_ids),
+        "prospect_runs": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProspectResearchRun)
+                    .where(
+                        ProspectResearchRun.organisation_id == organisation_id,
+                        ProspectResearchRun.target_id.in_(target_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "prospect_sources": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProspectResearchSource)
+                    .where(
+                        ProspectResearchSource.organisation_id == organisation_id,
+                        ProspectResearchSource.target_id.in_(target_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "prospect_observations": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProspectResearchObservation)
+                    .where(
+                        ProspectResearchObservation.organisation_id == organisation_id,
+                        ProspectResearchObservation.target_id.in_(target_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+        "prospect_source_links": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProspectResearchObservationSource)
+                    .where(
+                        ProspectResearchObservationSource.organisation_id == organisation_id,
+                        ProspectResearchObservationSource.run_id.in_(run_ids),
+                    )
+                )
+            )
+            or 0
+        ),
+    }
+
+
 def _merge_counts(first: dict[str, int], second: dict[str, int]) -> dict[str, int]:
     return {key: first.get(key, 0) + second.get(key, 0) for key in first.keys() | second.keys()}
 
@@ -1918,6 +2047,35 @@ async def _export_payload(
         return list((await session.scalars(statement)).all())
 
     companies = await rows(select(Company).where(Company.organisation_id == organisation_id).order_by(Company.id))
+    prospect_targets = await rows(
+        select(ProspectResearchTarget)
+        .where(ProspectResearchTarget.organisation_id == organisation_id)
+        .order_by(ProspectResearchTarget.id)
+    )
+    prospect_runs = await rows(
+        select(ProspectResearchRun)
+        .where(ProspectResearchRun.organisation_id == organisation_id)
+        .order_by(ProspectResearchRun.target_id, ProspectResearchRun.created_at, ProspectResearchRun.id)
+    )
+    prospect_sources = await rows(
+        select(ProspectResearchSource)
+        .where(ProspectResearchSource.organisation_id == organisation_id)
+        .order_by(ProspectResearchSource.run_id, ProspectResearchSource.id)
+    )
+    prospect_observations = await rows(
+        select(ProspectResearchObservation)
+        .where(ProspectResearchObservation.organisation_id == organisation_id)
+        .order_by(ProspectResearchObservation.run_id, ProspectResearchObservation.id)
+    )
+    prospect_source_links = await rows(
+        select(ProspectResearchObservationSource)
+        .where(ProspectResearchObservationSource.organisation_id == organisation_id)
+        .order_by(
+            ProspectResearchObservationSource.run_id,
+            ProspectResearchObservationSource.observation_id,
+            ProspectResearchObservationSource.source_id,
+        )
+    )
     contacts = await rows(select(Contact).where(Contact.organisation_id == organisation_id).order_by(Contact.id))
     opportunities = await rows(
         select(Opportunity).where(Opportunity.organisation_id == organisation_id).order_by(Opportunity.id)
@@ -2284,6 +2442,7 @@ async def _export_payload(
                     "id",
                     "name",
                     "website",
+                    "normalized_domain",
                     "industry",
                     "employee_count",
                     "status",
@@ -2293,6 +2452,97 @@ async def _export_payload(
                 ),
             )
             for item in companies
+        ],
+        "prospectTargets": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "provider_key",
+                    "provider_candidate_id",
+                    "name",
+                    "normalized_domain",
+                    "website_url",
+                    "location",
+                    "industry",
+                    "provider_attribution",
+                    "promoted_company_id",
+                    "promoted_by_user_id",
+                    "promoted_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in prospect_targets
+        ],
+        "prospectRuns": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "target_id",
+                    "requested_by_user_id",
+                    "refresh_of_run_id",
+                    "status",
+                    "provider_key",
+                    "provider_version",
+                    "schema_version",
+                    "attempt_count",
+                    "max_attempts",
+                    "started_at",
+                    "completed_at",
+                    "last_error_code",
+                    "source_fingerprint",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in prospect_runs
+        ],
+        "prospectSources": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "run_id",
+                    "target_id",
+                    "source_type",
+                    "url",
+                    "canonical_url",
+                    "domain",
+                    "title",
+                    "publisher",
+                    "published_at",
+                    "retrieved_at",
+                    "authority_class",
+                    "provider_source_id",
+                    "content_fingerprint",
+                ),
+            )
+            for item in prospect_sources
+        ],
+        "prospectObservations": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "run_id",
+                    "target_id",
+                    "observation_key",
+                    "category",
+                    "statement",
+                    "trust_state",
+                    "relevance",
+                    "observed_at",
+                    "freshness",
+                    "status",
+                    "generated_at",
+                ),
+            )
+            for item in prospect_observations
+        ],
+        "prospectObservationSources": [
+            _columns(item, ("observation_id", "source_id", "run_id")) for item in prospect_source_links
         ],
         "contacts": [
             _columns(

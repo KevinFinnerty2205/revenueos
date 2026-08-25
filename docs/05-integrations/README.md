@@ -24,3 +24,10 @@ reviewable intent. WO-022 implements the simulation portion of that boundary plu
 focused outbound path documented in the [provider decision](crm-provider-selection.md),
 [connection guide](hubspot-connection-guide.md) and
 [admin setup](crm-admin-setup.md). It does not add broad inbound sync.
+
+WO-026 adds a strict
+[Prospect research provider boundary](prospect-research-provider-boundary.md) and a
+deterministic synthetic adapter only. No real research/search/company-data provider,
+page fetcher, OpenAI synthesis, LinkedIn scraper or paid plan is configured. The mock
+makes no network request and fails closed in production; provider selection remains
+a separately approved integration decision.

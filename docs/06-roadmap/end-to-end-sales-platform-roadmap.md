@@ -199,14 +199,19 @@ otherwise keep WO-029 draft-only. Stop at Checkpoint 2 before Stage C.
 
 ### WO-026 — Account & Lead Research
 
-- **Objective/value/package:** Source attributable business account/person candidates
+**Current status:** implemented as the company-only Account Research foundation on
+25 August 2026. The real provider remains deferred and production fails closed; this
+does not authorise WO-027 or WO-028.
+
+- **Objective/value/package:** Source attributable business account candidates
   and promote accepted records without polluting the canonical domain. **Prospect**.
 - **Dependencies/checkpoint:** Checkpoint 1B pass, provider/legal/source discovery,
   Evidence model, Company/Contact CRUD and entitlement projection.
 - **Experience:** Find search/discovery, result reasons/sources, detail, duplicate review
   and Save to Sell; clear prospect/lead/contact/account language.
-- **Domain/data:** Research subject/source/finding/run, contact observation, promotion
-  review and minimal Lead concepts with provenance, freshness and trust states.
+- **Domain/data:** Separate Research Target/source/observation/run and explicit
+  promotion link with provenance, freshness and trust states. Person/contact
+  observations remain WO-027.
 - **Backend/frontend/AI:** Provider adapters, policy/normalisation/promotion services;
   source-rich results; AI only for bounded cited extraction/inference.
 - **Integrations:** Select one approved research provider or permitted search path

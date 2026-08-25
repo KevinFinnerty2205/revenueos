@@ -47,6 +47,15 @@ remain consistent across server processes built from the release.
 See [OpenAI provider integration](openai-provider-integration.md) for the exact
 variables, data flow, smoke test and rollback.
 
+WO-026 adds `FEATURE_PROSPECT_ENABLED`, `PROSPECT_RESEARCH_PROVIDER_NAME`,
+`PRIVATE_BETA_MAX_PROSPECT_RESEARCH_PER_USER_PER_DAY`,
+`PRIVATE_BETA_MAX_PROSPECT_RESEARCH_PER_ORGANISATION_PER_DAY`,
+`PRIVATE_BETA_MAX_CONCURRENT_PROSPECT_RESEARCH` and
+`PRIVATE_BETA_PROSPECT_FRESH_DAYS`. The only current provider value is `mock`.
+It is safe for local/CI synthetic data but deliberately unavailable in production;
+no provider credential exists. Keep production Prospect disabled until an approved
+adapter and its terms/security review are implemented.
+
 ## Release order
 
 1. Build and scan one immutable release.
@@ -140,11 +149,23 @@ only the documented scopes. Complete a separately gated developer-test-account
 connect, test, deal link, preview, write, reconciliation and disconnect proof before
 customer rollout. No real provider smoke test belongs in standard CI.
 
+WO-026 advances the single head to `0035_prospect_research`. Deploy API, worker and
+web together; verify Company domain backfill, the six forced-RLS Prospect tables,
+module entitlement/usage tables, worker discovery function, downgrade/re-upgrade and
+drift. Local development seeds the Prospect entitlement for the fixed development
+organisation. Production with the mock provider fails closed and must not be
+described as working public research.
+
 Rollback first disables HubSpot and Action Execution. Existing external updates
 cannot be undone by RevenueOS. Disconnect/revoke tenant connections before retiring
 the app/client secret or downgrading. Prefer application rollback with the forward
 schema; downgrading `0034` permanently removes OAuth state, encrypted credentials
 and CRM mapping configuration and restores the WO-022 simulation-only checks.
+
+Disable Prospect before rolling back `0035`. Prefer application rollback with the
+forward schema. Downgrade permanently removes Research Targets, runs, source
+metadata, observations, citations, Prospect entitlement/usage and Company normalised
+domain; it does not delete canonical Companies.
 
 ## Rollback
 

@@ -1,9 +1,9 @@
 # Prospect foundation readiness
 
-- **Status:** Architecture readiness decision after WO-025C
+- **Status:** Architecture readiness decision fulfilled by WO-026
 - **Verdict:** No foundational rearchitecture is required before WO-026
-- **Scope:** Defines constraints for a future WO-026; it does not implement or
-  authorise routes, schema, providers, workers or UI
+- **Scope:** Historical readiness constraints plus WO-026 follow-through; the work
+  order supplies the separate implementation authority
 - **Decision authority:** [Checkpoint 1B](../06-roadmap/checkpoint-1b-core-readiness.md)
 
 ## Architecture conclusion
@@ -36,9 +36,9 @@ patterns are approved.
 | Action boundary            | Proposal, review, approval, preview, confirmation, idempotency and reconciliation         | Govern any later outreach or external mutation                   | Ready for reuse; no WO-026 send                           |
 | Quotas/operations          | Tenant/user limits, content-free audit patterns, health/readiness and safe errors         | Limit research cost and abuse                                    | Ready for extension                                       |
 | Retention/export/deletion  | Existing private-beta maintenance contracts                                               | Include research data and provider identifiers                   | Pattern ready; WO-026 must add its data                   |
-| Entitlements               | Core/add-on projection described in platform architecture                                 | Keep Core complete when Prospect is disabled                     | Ready as a boundary; exact WO-026 contract remains future |
+| Entitlements               | Server feature, organisation Prospect switch and usage counters                            | Keep Core complete when Prospect is disabled                     | Implemented for the bounded WO-026 slice                  |
 
-The migration chain through `0034_crm_sync` is linear and upgrades cleanly in the
+The migration chain through `0035_prospect_research` is linear and upgrades cleanly in the
 controlled review environment. This is repository evidence only; PostgreSQL/RLS and
 target deployment checks remain mandatory in WO-026 and launch validation.
 
@@ -220,10 +220,15 @@ Live-provider credentials must never be required for the normal suite.
 - Provider-assisted Ask synthesis may be evaluated from observed questions; it is not
   required for research retrieval or promotion.
 
-## Engineering decision
+## Engineering decision and follow-through
 
 Authorise WO-026 planning against the existing modular-monolith architecture. Add the
 smallest tenant-owned research/evidence/promotion model in that work order, reuse the
 existing provider and worker foundations, and preserve reviewed promotion into
 canonical truth. Do not add a microservice, datastore, generic agent runtime, broad
 integration framework or pre-emptive Core migration.
+
+WO-026 followed this decision with a separate Research Target/run/source/observation
+domain, the existing PostgreSQL worker, strict deterministic mock adapter, forced RLS
+and explicit Company promotion. It added no microservice, datastore, generic agent,
+public fetcher or customer-Evidence mutation.
