@@ -227,6 +227,13 @@ does not authorise WO-027 or WO-028.
 
 ### WO-027 — Prospect Intelligence
 
+**Implementation status (2026-08-25): complete in draft review.** WO-027 ships
+company-scoped Prospect Person discovery/research, sourced buying-role hypotheses,
+field-level business-contact trust and explicit duplicate-safe Contact promotion.
+It remains deterministic mock-only and introduces no outreach. WO-028 may consume
+the company/person foundation for ICP/territory only after separate approval; WO-029
+owns future reviewed personalised outreach.
+
 - **Objective/value/package:** Explain relevant people, likely business roles and
   buying-committee hypotheses from sourced professional context. **Prospect**.
 - **Dependencies/checkpoint:** WO-026 research/provenance and accepted Company/Contact

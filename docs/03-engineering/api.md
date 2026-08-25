@@ -123,7 +123,10 @@ contains raw image bytes or signed object URLs.
 
 List parameters: `search` across name/email, `companyId`, `sortBy` (`last_name`, `first_name`, `created_at`, `updated_at`) and `sortOrder`.
 
-A contact requires a company in the same organisation and a syntactically valid email address.
+Manual Contact creation requires a company in the same organisation and a
+syntactically valid email address. A Prospect Person promotion may create a Contact
+with null email when no permitted address is established; the UI shows “Not
+established” rather than guessing.
 
 ## Opportunities
 
@@ -698,6 +701,24 @@ available only for live `unknown_external_state` and performs no write. See the
 | `POST` | `/api/v1/prospect/research/{targetId}/promote` | Confirm exact-domain Company link/create. |
 | `DELETE` | `/api/v1/prospect/research/{targetId}` | Delete research without deleting a promoted Company. |
 | `GET` | `/api/v1/prospect/accounts/{companyId}/research-link` | Read separately labelled public-research link for a Company. |
+
+### Prospect Person Intelligence
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/prospect/research/{targetId}/people` | Read bounded people already discovered for one researched company. |
+| `POST` | `/api/v1/prospect/research/{targetId}/people/discover` | Run backend-controlled company-scoped discovery. |
+| `GET` | `/api/v1/prospect/people/{personId}` | Read current person brief, hypotheses, contact trust, sources and history. |
+| `POST` | `/api/v1/prospect/people/{personId}/research` | Idempotently enqueue initial person research. |
+| `POST` | `/api/v1/prospect/people/{personId}/refresh` | Enqueue a versioned person refresh. |
+| `PATCH` | `/api/v1/prospect/people/{personId}/buying-roles/{hypothesisId}` | Record seller relevance without confirming stakeholder truth. |
+| `POST` | `/api/v1/prospect/people/{personId}/promote` | Explicitly create/link one duplicate-reviewed Contact. |
+| `DELETE` | `/api/v1/prospect/people/{personId}` | Delete Prospect research while preserving any promoted Contact. |
+| `GET` | `/api/v1/prospect/contacts/{contactId}/research-link` | Read the separately labelled professional-research link. |
+
+The client never supplies provider syntax or organisation IDs. Contact points include
+field trust, verification method, observation/expiry and permission-not-assessed
+state. Raw provider payloads and provider person IDs are not API fields.
 
 No route accepts an organisation ID, arbitrary URL, provider name, fetch instruction,
 prompt, trust override, observation payload, Contact/Opportunity creation request or

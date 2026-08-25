@@ -1,6 +1,6 @@
 # Sales OS module entitlement architecture
 
-- **Status:** WO-026 implements a bounded Prospect organisation switch; the wider commercial model remains proposed
+- **Status:** WO-026/027 use one bounded Prospect organisation switch; the wider commercial model remains proposed
 - **Principle:** Core remains coherent; module discovery is contextual and restrained
 
 ## Package model
@@ -116,8 +116,14 @@ Cache keys include organisation, membership/role and entitlement version. Invali
 on plan, policy, permission or capability changes. Metrics cover projection latency,
 denials by safe reason, stale state and reconciliation—not user content.
 
+WO-027 person discovery/research uses the same server-authoritative `prospect`
+entitlement at list, discovery, research, review, promotion, delete and Contact-link
+boundaries. A separate client flag was intentionally not added. Disabling Prospect
+blocks person capability according to the same read/write policy; Core Accounts and
+Contacts remain usable.
+
 ## Explicitly out of scope
 
-WO-026 adds no billing or plan table. Exact prices,
+WO-026/027 add no billing or plan table. Exact prices,
 contracts, tax, invoicing, proration, trials and payment flows require later commercial
 and legal decisions.

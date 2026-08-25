@@ -234,6 +234,7 @@ class ProspectUsageCounter(Base):
             name="ck_prospect_usage_scope",
         ),
         CheckConstraint("research_run_count >= 0", name="ck_prospect_usage_count"),
+        CheckConstraint("people_discovery_count >= 0", name="ck_prospect_people_discovery_count"),
     )
 
     organisation_id: Mapped[uuid.UUID] = mapped_column(
@@ -244,6 +245,7 @@ class ProspectUsageCounter(Base):
     usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
     scope_key: Mapped[str] = mapped_column(String(50), primary_key=True)
     research_run_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    people_discovery_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -478,6 +480,84 @@ class ProspectResearchTarget(TimestampMixin, Base):
     promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ProspectPerson(TimestampMixin, Base):
+    __tablename__ = "prospect_people"
+    __table_args__ = (
+        CheckConstraint("length(trim(display_name)) > 0", name="ck_prospect_people_name"),
+        CheckConstraint("length(trim(first_name)) > 0", name="ck_prospect_people_first_name"),
+        CheckConstraint("length(trim(last_name)) > 0", name="ck_prospect_people_last_name"),
+        CheckConstraint(
+            "identity_state IN ('supported', 'ambiguous')",
+            name="ck_prospect_people_identity_state",
+        ),
+        CheckConstraint(
+            "employment_state IN ('current', 'uncertain', 'no_longer_current')",
+            name="ck_prospect_people_employment_state",
+        ),
+        CheckConstraint(
+            "(promoted_contact_id IS NULL AND promoted_by_user_id IS NULL AND promoted_at IS NULL) OR "
+            "(promoted_contact_id IS NOT NULL AND promoted_by_user_id IS NOT NULL AND promoted_at IS NOT NULL)",
+            name="ck_prospect_people_promotion",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "target_id"],
+            ["prospect_research_targets.organisation_id", "prospect_research_targets.id"],
+            name="fk_prospect_people_target",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "promoted_contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_prospect_people_contact",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "promoted_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_prospect_people_promoter",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_prospect_people_org_id"),
+        UniqueConstraint("organisation_id", "id", "target_id", name="uq_prospect_people_org_id_target"),
+        UniqueConstraint(
+            "organisation_id",
+            "target_id",
+            "provider_key",
+            "provider_person_id",
+            name="uq_prospect_people_provider_identity",
+        ),
+        Index("ix_prospect_people_org_target", "organisation_id", "target_id"),
+        Index("ix_prospect_people_org_contact", "organisation_id", "promoted_contact_id"),
+        Index("ix_prospect_people_org_name", "organisation_id", "display_name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_person_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    current_role: Mapped[str] = mapped_column(String(200), nullable=False)
+    current_company: Mapped[str] = mapped_column(String(200), nullable=False)
+    public_professional_location: Mapped[str | None] = mapped_column(String(200))
+    public_profile_url: Mapped[str | None] = mapped_column(String(2048))
+    relevant_function: Mapped[str] = mapped_column(String(80), nullable=False)
+    why_may_matter: Mapped[str] = mapped_column(String(600), nullable=False)
+    discovery_source: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_attribution: Mapped[str] = mapped_column(String(120), nullable=False)
+    identity_state: Mapped[str] = mapped_column(String(20), nullable=False, default="supported")
+    employment_state: Mapped[str] = mapped_column(String(24), nullable=False, default="current")
+    promoted_contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    promoted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ProspectResearchRun(TimestampMixin, Base):
     __tablename__ = "prospect_research_runs"
     __table_args__ = (
@@ -496,6 +576,12 @@ class ProspectResearchRun(TimestampMixin, Base):
             ["organisation_id", "target_id"],
             ["prospect_research_targets.organisation_id", "prospect_research_targets.id"],
             name="fk_prospect_runs_target",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "person_id", "target_id"],
+            ["prospect_people.organisation_id", "prospect_people.id", "prospect_people.target_id"],
+            name="fk_prospect_runs_person",
             ondelete="CASCADE",
         ),
         ForeignKeyConstraint(
@@ -525,6 +611,7 @@ class ProspectResearchRun(TimestampMixin, Base):
             name="uq_prospect_runs_idempotency",
         ),
         Index("ix_prospect_runs_org_target_created", "organisation_id", "target_id", "created_at"),
+        Index("ix_prospect_runs_org_person_created", "organisation_id", "person_id", "created_at"),
         Index("ix_prospect_runs_org_status", "organisation_id", "status"),
         Index("ix_prospect_runs_status_attempt", "status", "next_attempt_at"),
         Index("ix_prospect_runs_status_lease", "status", "lease_expires_at"),
@@ -537,6 +624,7 @@ class ProspectResearchRun(TimestampMixin, Base):
         nullable=False,
     )
     target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    person_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     refresh_of_run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     status: Mapped[str] = mapped_column(
@@ -567,7 +655,10 @@ class ProspectResearchSource(Base):
     __table_args__ = (
         CheckConstraint(
             "source_type IN ('official_website', 'company_newsroom', 'careers_page', "
-            "'structured_provider', 'public_filing', 'reputable_news', 'other_public')",
+            "'structured_provider', 'public_filing', 'reputable_news', 'other_public', "
+            "'company_leadership', 'professional_profile', 'professional_article', "
+            "'professional_post', 'interview', 'conference', 'association', 'contact_provider', "
+            "'company_contact_page')",
             name="ck_prospect_sources_type",
         ),
         CheckConstraint(
@@ -627,7 +718,10 @@ class ProspectResearchObservation(Base):
             "category IN ('company_profile', 'industry', 'location', 'size', 'business_model', "
             "'product_service', 'strategic_initiative', 'expansion', 'hiring', 'leadership_change', "
             "'funding_financial', 'technology', 'regulatory', 'partnership', 'customer_market', "
-            "'trigger', 'potential_fit', 'other')",
+            "'trigger', 'potential_fit', 'current_role', 'current_company', 'career_history', "
+            "'responsibility', 'expertise', 'professional_interest', 'professional_activity', "
+            "'company_initiative', 'public_statement', 'authored_content', 'conference_activity', "
+            "'why_person_matters', 'conversation_context', 'other_professional', 'other')",
             name="ck_prospect_observations_category",
         ),
         CheckConstraint(
@@ -726,6 +820,235 @@ class ProspectResearchObservationSource(Base):
     run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
 
 
+class ProspectBuyingRoleHypothesis(Base):
+    __tablename__ = "prospect_buying_role_hypotheses"
+    __table_args__ = (
+        CheckConstraint(
+            "hypothesized_role IN ('executive_sponsor', 'economic_buyer_candidate', 'champion_candidate', "
+            "'business_buyer', 'technical_evaluator', 'security', 'procurement', 'legal', 'finance', "
+            "'end_user_influencer', 'other_relevant')",
+            name="ck_prospect_buying_roles_role",
+        ),
+        CheckConstraint(
+            "trust_state IN ('verified', 'provider_supplied', 'inferred', 'unknown')",
+            name="ck_prospect_buying_roles_trust",
+        ),
+        CheckConstraint(
+            "review_state IN ('needs_validation', 'relevant', 'not_relevant')",
+            name="ck_prospect_buying_roles_review",
+        ),
+        CheckConstraint(
+            "assessment_origin IN ('system_hypothesis', 'seller_assessed')",
+            name="ck_prospect_buying_roles_origin",
+        ),
+        CheckConstraint("length(trim(rationale)) BETWEEN 1 AND 600", name="ck_prospect_buying_roles_rationale"),
+        ForeignKeyConstraint(
+            ["organisation_id", "person_id", "target_id"],
+            ["prospect_people.organisation_id", "prospect_people.id", "prospect_people.target_id"],
+            name="fk_prospect_buying_roles_person",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "run_id", "target_id"],
+            [
+                "prospect_research_runs.organisation_id",
+                "prospect_research_runs.id",
+                "prospect_research_runs.target_id",
+            ],
+            name="fk_prospect_buying_roles_run",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "reviewed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_prospect_buying_roles_reviewer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_prospect_buying_roles_org_id"),
+        UniqueConstraint(
+            "organisation_id", "run_id", "person_id", "hypothesized_role", name="uq_prospect_buying_roles_run_role"
+        ),
+        Index("ix_prospect_buying_roles_org_person", "organisation_id", "person_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    person_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    hypothesized_role: Mapped[str] = mapped_column(String(40), nullable=False)
+    rationale: Mapped[str] = mapped_column(String(600), nullable=False)
+    trust_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    review_state: Mapped[str] = mapped_column(String(24), nullable=False, default="needs_validation")
+    assessment_origin: Mapped[str] = mapped_column(String(24), nullable=False, default="system_hypothesis")
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ProspectBuyingRoleSource(Base):
+    __tablename__ = "prospect_buying_role_sources"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organisation_id", "hypothesis_id"],
+            ["prospect_buying_role_hypotheses.organisation_id", "prospect_buying_role_hypotheses.id"],
+            name="fk_prospect_buying_role_sources_hypothesis",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_id", "run_id"],
+            [
+                "prospect_research_sources.organisation_id",
+                "prospect_research_sources.id",
+                "prospect_research_sources.run_id",
+            ],
+            name="fk_prospect_buying_role_sources_source",
+            ondelete="CASCADE",
+        ),
+        Index("ix_prospect_buying_role_sources_org_run", "organisation_id", "run_id"),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), primary_key=True
+    )
+    hypothesis_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    source_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class ProspectContactPoint(Base):
+    __tablename__ = "prospect_contact_points"
+    __table_args__ = (
+        CheckConstraint(
+            "point_type IN ('business_email', 'business_phone', 'company_switchboard', 'public_professional_profile')",
+            name="ck_prospect_contact_points_type",
+        ),
+        CheckConstraint(
+            "trust_state IN ('verified', 'provider_supplied', 'inferred', 'unknown')",
+            name="ck_prospect_contact_points_trust",
+        ),
+        CheckConstraint(
+            "verification_method IN ('authoritative_public', 'provider_reported', 'not_verified')",
+            name="ck_prospect_contact_points_verification",
+        ),
+        CheckConstraint("length(trim(value)) BETWEEN 1 AND 2048", name="ck_prospect_contact_points_value"),
+        ForeignKeyConstraint(
+            ["organisation_id", "person_id", "target_id"],
+            ["prospect_people.organisation_id", "prospect_people.id", "prospect_people.target_id"],
+            name="fk_prospect_contact_points_person",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "run_id", "target_id"],
+            [
+                "prospect_research_runs.organisation_id",
+                "prospect_research_runs.id",
+                "prospect_research_runs.target_id",
+            ],
+            name="fk_prospect_contact_points_run",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_id", "run_id"],
+            [
+                "prospect_research_sources.organisation_id",
+                "prospect_research_sources.id",
+                "prospect_research_sources.run_id",
+            ],
+            name="fk_prospect_contact_points_source",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_prospect_contact_points_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "run_id",
+            "person_id",
+            "point_type",
+            "value_fingerprint",
+            name="uq_prospect_contact_points_run_value",
+        ),
+        Index("ix_prospect_contact_points_org_person", "organisation_id", "person_id"),
+        Index("ix_prospect_contact_points_org_fingerprint", "organisation_id", "point_type", "value_fingerprint"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    person_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    point_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    value: Mapped[str] = mapped_column(String(2048), nullable=False)
+    value_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    trust_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    verification_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    export_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ContactFieldSource(Base):
+    __tablename__ = "contact_field_sources"
+    __table_args__ = (
+        CheckConstraint(
+            "field_key IN ('email', 'phone', 'job_title', 'linkedin_url')",
+            name="ck_contact_field_sources_field",
+        ),
+        CheckConstraint(
+            "trust_state IN ('verified', 'provider_supplied', 'inferred', 'unknown')",
+            name="ck_contact_field_sources_trust",
+        ),
+        CheckConstraint("source_type = 'prospect_person'", name="ck_contact_field_sources_type"),
+        CheckConstraint(
+            "source_organisation_id IS NULL OR source_organisation_id = organisation_id",
+            name="ck_contact_field_sources_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_contact_field_sources_contact",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["source_organisation_id", "source_prospect_person_id"],
+            ["prospect_people.organisation_id", "prospect_people.id"],
+            name="fk_contact_field_sources_person",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_contact_field_sources_org_id"),
+        UniqueConstraint(
+            "organisation_id", "contact_id", "field_key", "value_fingerprint", name="uq_contact_field_sources_value"
+        ),
+        Index("ix_contact_field_sources_org_contact", "organisation_id", "contact_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    contact_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    field_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    value_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False, default="prospect_person")
+    source_organisation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    source_prospect_person_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    trust_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class Contact(TimestampMixin, Base):
     __tablename__ = "contacts"
     __table_args__ = (
@@ -761,7 +1084,7 @@ class Contact(TimestampMixin, Base):
     company_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320))
     phone: Mapped[str | None] = mapped_column(String(50))
     job_title: Mapped[str | None] = mapped_column(String(150))
     linkedin_url: Mapped[str | None] = mapped_column(String(2048))

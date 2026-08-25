@@ -123,4 +123,57 @@ describe("BusinessEntityForm", () => {
     );
     expect(router.push).not.toHaveBeenCalled();
   });
+
+  it("saves an explicitly promoted Contact whose business email is unknown", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/v1/companies?pageSize=100"))
+        return Promise.resolve(
+          jsonResponse({
+            items: [{ id: "company-1", name: "Acme Australia" }],
+            page: 1,
+            pageSize: 100,
+            total: 1,
+            pages: 1,
+          }),
+        );
+      if (init?.method === "PATCH")
+        return Promise.resolve(jsonResponse({ id: "contact-1" }));
+      return Promise.resolve(
+        jsonResponse({
+          id: "contact-1",
+          companyId: "company-1",
+          firstName: "Jordan",
+          lastName: "Lee",
+          email: null,
+          phone: null,
+          jobTitle: "Technology Director",
+          linkedinUrl: null,
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BusinessEntityForm entity="contacts" entityId="contact-1" />);
+    const email = await screen.findByLabelText("Email");
+    expect(email).not.toBeRequired();
+    expect(email).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Job title"), {
+      target: { value: "Chief Technology Officer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.find((call) => call[1]?.method === "PATCH"),
+      ).toBeDefined(),
+    );
+    const patchCall = fetchMock.mock.calls.find(
+      (call) => call[1]?.method === "PATCH",
+    );
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+      email: null,
+      jobTitle: "Chief Technology Officer",
+    });
+  });
 });

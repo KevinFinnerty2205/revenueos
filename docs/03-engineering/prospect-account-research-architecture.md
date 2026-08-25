@@ -1,6 +1,6 @@
 # Prospect Account Research architecture
 
-**Status:** Current WO-026 implementation
+**Status:** Current WO-026 company and WO-027 person implementation
 
 WO-026 stays inside the existing FastAPI/Next.js modular monolith and PostgreSQL
 worker process. It adds no service, datastore, message broker or general web agent.
@@ -67,3 +67,15 @@ longer supported findings without mutating earlier runs.
 
 All routes require authenticated, active tenant membership. OpenAPI/Pydantic remains
 the source of truth and `packages/shared` mirrors only client-facing contracts.
+
+## WO-027 extension
+
+Migration `0036_prospect_people` adds a separate Prospect Person aggregate, optional
+person ownership on existing runs, buying-role hypotheses/source links, expiring
+contact points and Contact field provenance. The same worker, lifecycle, citations,
+tenant context and forced-RLS posture are reused; no queue or service was added.
+
+Company run queries explicitly require `person_id IS NULL`. Person runs require a
+same-tenant, same-target Prospect Person. Person refresh changes only research state;
+Contact promotion is a separate confirmed service transaction. See
+[Prospect Person domain architecture](prospect-person-domain-architecture.md).

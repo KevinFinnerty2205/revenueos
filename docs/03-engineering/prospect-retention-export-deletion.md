@@ -1,5 +1,12 @@
 # Prospect retention, export and deletion
 
+WO-027 extends this lifecycle to Prospect People, person runs, professional
+observations, buying-role hypotheses and contact points. Provider-specific contact
+expiry can be shorter than organisation retention. Export schema 17 excludes provider
+person IDs and non-exportable contact fields. Person/target deletion preserves any
+promoted Company or Contact. See
+[Prospect Person retention, export and deletion](prospect-person-retention-export-deletion.md).
+
 **Status:** Current WO-026 lifecycle
 
 Prospect data follows the organisation’s configured private-beta retention period.

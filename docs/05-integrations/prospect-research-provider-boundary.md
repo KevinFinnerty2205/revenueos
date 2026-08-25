@@ -1,5 +1,17 @@
 # Prospect research provider boundary
 
+## WO-027 person/contact status
+
+The provider protocol now has typed company-scoped people discovery and selected
+person research operations. No production adapter is configured. The deterministic
+mock supplies synthetic professional sources, role hypotheses, optional expiring
+business contact points and an employment-change refresh fixture. Provider syntax and
+raw responses never cross the API boundary.
+
+See the [provider evaluation](person-contact-provider-evaluation.md) and
+[licensing/storage decision](person-provider-licensing-storage-decision.md). Scraping
+is not an allowed fallback.
+
 **Status:** Adapter-ready; real provider deferred
 
 `ProspectResearchProvider` is the only WO-026 research integration boundary. It

@@ -15,11 +15,23 @@ from revenueos.prospect_contracts import (
     ResearchCreateRequest,
     ResearchRefreshRequest,
 )
-from revenueos.prospect_dependencies import get_prospect_service
+from revenueos.prospect_dependencies import get_prospect_people_service, get_prospect_service
+from revenueos.prospect_people_contracts import (
+    BuyingRoleHypothesisResponse,
+    BuyingRoleReviewRequest,
+    ContactProspectResearchLinkResponse,
+    PersonDiscoveryResponse,
+    PersonPromotionRequest,
+    PersonPromotionResponse,
+    PersonResearchBriefResponse,
+    PersonResearchRequest,
+)
+from revenueos.prospect_people_services import ProspectPeopleService
 from revenueos.prospect_services import ProspectService
 
 router = APIRouter(prefix="/api/v1/prospect", tags=["prospect"])
 Service = Annotated[ProspectService, Depends(get_prospect_service)]
+PeopleService = Annotated[ProspectPeopleService, Depends(get_prospect_people_service)]
 
 
 @router.get("/availability", response_model=ProspectAvailabilityResponse)
@@ -92,3 +104,83 @@ async def delete_research(target_id: UUID, service: Service) -> Response:
 )
 async def account_research_link(company_id: UUID, service: Service) -> AccountResearchLinkResponse:
     return await service.account_research_link(company_id)
+
+
+@router.get("/research/{target_id}/people", response_model=PersonDiscoveryResponse)
+async def list_people(target_id: UUID, service: PeopleService) -> PersonDiscoveryResponse:
+    return await service.list_people(target_id)
+
+
+@router.post("/research/{target_id}/people/discover", response_model=PersonDiscoveryResponse)
+async def discover_people(target_id: UUID, service: PeopleService) -> PersonDiscoveryResponse:
+    return await service.discover_people(target_id)
+
+
+@router.get("/people/{person_id}", response_model=PersonResearchBriefResponse)
+async def get_person_research(person_id: UUID, service: PeopleService) -> PersonResearchBriefResponse:
+    return await service.get_person_research(person_id)
+
+
+@router.post(
+    "/people/{person_id}/research",
+    response_model=PersonResearchBriefResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def research_person(
+    person_id: UUID,
+    request: PersonResearchRequest,
+    service: PeopleService,
+) -> PersonResearchBriefResponse:
+    return await service.research_person(person_id, request)
+
+
+@router.post(
+    "/people/{person_id}/refresh",
+    response_model=PersonResearchBriefResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def refresh_person(
+    person_id: UUID,
+    request: PersonResearchRequest,
+    service: PeopleService,
+) -> PersonResearchBriefResponse:
+    return await service.refresh_person(person_id, request)
+
+
+@router.patch(
+    "/people/{person_id}/buying-roles/{hypothesis_id}",
+    response_model=BuyingRoleHypothesisResponse,
+)
+async def review_buying_role(
+    person_id: UUID,
+    hypothesis_id: UUID,
+    request: BuyingRoleReviewRequest,
+    service: PeopleService,
+) -> BuyingRoleHypothesisResponse:
+    return await service.review_buying_role(person_id, hypothesis_id, request)
+
+
+@router.post("/people/{person_id}/promote", response_model=PersonPromotionResponse)
+async def promote_person(
+    person_id: UUID,
+    request: PersonPromotionRequest,
+    service: PeopleService,
+) -> PersonPromotionResponse:
+    return await service.promote_person(person_id, request)
+
+
+@router.delete("/people/{person_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_person(person_id: UUID, service: PeopleService) -> Response:
+    await service.delete_person(person_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/contacts/{contact_id}/research-link",
+    response_model=ContactProspectResearchLinkResponse,
+)
+async def contact_research_link(
+    contact_id: UUID,
+    service: PeopleService,
+) -> ContactProspectResearchLinkResponse:
+    return await service.contact_research_link(contact_id)

@@ -1,5 +1,15 @@
 # Security and privacy
 
+## Prospect Person Intelligence
+
+WO-027 is company-scoped, quota-bound and mock-provider-only. It prohibits private
+social scraping, sensitive/private trait collection, personality profiling, personal
+contact harvesting and profile-photo processing. New person tables force RLS; typed
+validation requires professional sources and rejects inferred contact values. Logs
+are metadata-only. Contact verification is never presented as permission to contact.
+See the [dedicated review](prospect-person-security-privacy-review.md) and
+[exclusion policy](prospect-sensitive-data-exclusion-policy.md).
+
 This is the engineering baseline through WO-009, not legal advice or a
 certification claim.
 

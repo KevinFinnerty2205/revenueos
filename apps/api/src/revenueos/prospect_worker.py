@@ -14,21 +14,30 @@ from revenueos.ai_worker_services import calculate_retry_delay_seconds
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.models import (
+    ProspectBuyingRoleHypothesis,
+    ProspectBuyingRoleSource,
+    ProspectContactPoint,
     ProspectResearchObservation,
     ProspectResearchObservationSource,
     ProspectResearchRun,
     ProspectResearchSource,
 )
 from revenueos.prospect_provider import (
+    PersonTargetSnapshot,
     ProspectProviderError,
     ProspectResearchProvider,
+    ProviderPersonResearchResult,
     ProviderResearchResult,
     ResearchTargetSnapshot,
     create_prospect_provider,
 )
 from revenueos.prospect_repositories import ProspectWorkerRepository
 from revenueos.prospect_url_security import PublicUrlSafetyError, canonicalize_public_https_url
-from revenueos.prospect_validation import ProspectResultValidationError, validate_research_result
+from revenueos.prospect_validation import (
+    ProspectResultValidationError,
+    validate_person_research_result,
+    validate_research_result,
+)
 
 logger = logging.getLogger("revenueos.prospect_worker")
 Clock = Callable[[], datetime]
@@ -41,6 +50,7 @@ class ClaimedProspectRun:
     organisation_id: UUID
     run_id: UUID
     target_id: UUID
+    person_id: UUID | None
     requested_by_user_id: UUID
     provider_key: str
     provider_version: str
@@ -49,6 +59,7 @@ class ClaimedProspectRun:
     worker_id: str
     run_sequence: int
     target: ResearchTargetSnapshot
+    person: PersonTargetSnapshot | None
 
 
 class ProspectWorkerService:
@@ -113,12 +124,22 @@ class ProspectWorkerService:
             if target is None:
                 self._fail(run, now, "research_target_deleted", "The research target is no longer available.")
                 return None
+            person = await repository.person(organisation_id, run.person_id) if run.person_id is not None else None
+            if run.person_id is not None and (person is None or person.target_id != run.target_id):
+                self._fail(run, now, "person_target_deleted", "The person research target is no longer available.")
+                return None
+            person_condition = (
+                ProspectResearchRun.person_id.is_(None)
+                if run.person_id is None
+                else ProspectResearchRun.person_id == run.person_id
+            )
             sequence = await session.scalar(
                 select(func.count())
                 .select_from(ProspectResearchRun)
                 .where(
                     ProspectResearchRun.organisation_id == organisation_id,
                     ProspectResearchRun.target_id == run.target_id,
+                    person_condition,
                     ProspectResearchRun.created_at <= run.created_at,
                 )
             )
@@ -135,6 +156,7 @@ class ProspectWorkerService:
                 organisation_id=run.organisation_id,
                 run_id=run.id,
                 target_id=run.target_id,
+                person_id=run.person_id,
                 requested_by_user_id=run.requested_by_user_id,
                 provider_key=run.provider_key,
                 provider_version=run.provider_version,
@@ -149,6 +171,19 @@ class ProspectWorkerService:
                     website_url=target.website_url,
                     location=target.location,
                     industry=target.industry,
+                ),
+                person=(
+                    PersonTargetSnapshot(
+                        provider_person_id=person.provider_person_id,
+                        first_name=person.first_name,
+                        last_name=person.last_name,
+                        display_name=person.display_name,
+                        current_role=person.current_role,
+                        current_company=person.current_company,
+                        public_profile_url=person.public_profile_url,
+                    )
+                    if person is not None
+                    else None
                 ),
             )
         logger.info("prospect_run_claimed", extra=self._log_context(claim))
@@ -166,8 +201,19 @@ class ProspectWorkerService:
                     "The configured company research provider no longer matches the queued run.",
                     retryable=False,
                 )
-            result = await self._provider.research(claim.target, run_sequence=claim.run_sequence)
-            validate_research_result(result)
+            if claim.person is None:
+                result: ProviderResearchResult | ProviderPersonResearchResult = await self._provider.research(
+                    claim.target,
+                    run_sequence=claim.run_sequence,
+                )
+                validate_research_result(result)
+            else:
+                result = await self._provider.research_person(
+                    claim.target,
+                    claim.person,
+                    run_sequence=claim.run_sequence,
+                )
+                validate_person_research_result(result, company_domain=claim.target.domain)
             await self._complete(claim, result)
         except ProspectProviderError as exc:
             await self._record_failure(claim, exc.code, exc.safe_message, retryable=exc.retryable)
@@ -175,21 +221,21 @@ class ProspectWorkerService:
             await self._record_failure(
                 claim,
                 exc.code,
-                "Company research did not pass source and citation validation.",
+                "Prospect research did not pass source and citation validation.",
                 retryable=False,
             )
         except PublicUrlSafetyError as exc:
             await self._record_failure(
                 claim,
                 exc.code,
-                "Company research included a blocked public URL.",
+                "Prospect research included a blocked public URL.",
                 retryable=False,
             )
         except Exception:
             await self._record_failure(
                 claim,
                 "research_processing_failed",
-                "Company research could not be completed.",
+                "Prospect research could not be completed.",
                 retryable=False,
             )
 
@@ -217,7 +263,11 @@ class ProspectWorkerService:
                     retryable=False,
                 )
 
-    async def _complete(self, claim: ClaimedProspectRun, result: ProviderResearchResult) -> None:
+    async def _complete(
+        self,
+        claim: ClaimedProspectRun,
+        result: ProviderResearchResult | ProviderPersonResearchResult,
+    ) -> None:
         now = self._clock()
         async with self._session_factory() as session, session.begin():
             await set_tenant_database_context(session, claim.organisation_id)
@@ -232,6 +282,9 @@ class ProspectWorkerService:
                 return
             target = await repository.target(claim.organisation_id, claim.target_id)
             if target is None:
+                return
+            person = await repository.person(claim.organisation_id, claim.person_id) if claim.person_id else None
+            if claim.person_id is not None and person is None:
                 return
             sources_by_key: dict[str, ProspectResearchSource] = {}
             for provider_source in result.sources:
@@ -286,6 +339,61 @@ class ProspectWorkerService:
                         )
                     )
                 trust_counts[provider_observation.trust_state.value] += 1
+            if isinstance(result, ProviderPersonResearchResult):
+                if person is None:
+                    return
+                for provider_hypothesis in result.buying_roles:
+                    hypothesis = ProspectBuyingRoleHypothesis(
+                        id=uuid4(),
+                        organisation_id=claim.organisation_id,
+                        target_id=run.target_id,
+                        person_id=person.id,
+                        run_id=run.id,
+                        hypothesized_role=provider_hypothesis.role.value,
+                        rationale=provider_hypothesis.rationale,
+                        trust_state=provider_hypothesis.trust_state.value,
+                        review_state="needs_validation",
+                        assessment_origin="system_hypothesis",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(hypothesis)
+                    await session.flush()
+                    for source_key in provider_hypothesis.source_keys:
+                        session.add(
+                            ProspectBuyingRoleSource(
+                                organisation_id=claim.organisation_id,
+                                hypothesis_id=hypothesis.id,
+                                source_id=sources_by_key[source_key].id,
+                                run_id=run.id,
+                            )
+                        )
+                for provider_contact in result.contact_points:
+                    value = provider_contact.value.strip()
+                    session.add(
+                        ProspectContactPoint(
+                            id=uuid4(),
+                            organisation_id=claim.organisation_id,
+                            target_id=run.target_id,
+                            person_id=person.id,
+                            run_id=run.id,
+                            source_id=sources_by_key[provider_contact.source_key].id,
+                            point_type=provider_contact.point_type.value,
+                            value=value,
+                            value_fingerprint=hashlib.sha256(value.casefold().encode()).hexdigest(),
+                            trust_state=provider_contact.trust_state.value,
+                            verification_method=provider_contact.verification_method,
+                            observed_at=provider_contact.observed_at,
+                            expires_at=provider_contact.expires_at,
+                            active=True,
+                            export_allowed=provider_contact.export_allowed,
+                            created_at=now,
+                        )
+                    )
+                person.current_role = result.current_role
+                person.employment_state = result.employment_state.value
+                person.why_may_matter = result.why_may_matter
+                person.updated_at = now
             run.status = result.outcome
             run.completed_at = now
             run.source_fingerprint = hashlib.sha256(
@@ -301,6 +409,15 @@ class ProspectWorkerService:
                 "source_count": len(result.sources),
                 "observation_count": len(result.observations),
                 "trust_state_counts": trust_counts,
+                "person_research": claim.person_id is not None,
+                "buying_role_count": len(result.buying_roles)
+                if isinstance(result, ProviderPersonResearchResult)
+                else 0,
+                "contact_point_type_count": (
+                    len({item.point_type.value for item in result.contact_points})
+                    if isinstance(result, ProviderPersonResearchResult)
+                    else 0
+                ),
             },
         )
 
@@ -372,6 +489,7 @@ class ProspectWorkerService:
         return {
             "organisation_id": str(claim.organisation_id),
             "target_id": str(claim.target_id),
+            "person_id": str(claim.person_id) if claim.person_id is not None else None,
             "run_id": str(claim.run_id),
             "worker_id": claim.worker_id,
             "attempt_count": claim.attempt_count,

@@ -650,7 +650,7 @@ def test_authorised_export_contains_safe_research_schema_without_raw_pages(clien
     async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
         async with session_factory() as session:
             payload = await _export_payload(session, PRIMARY_ORGANISATION_ID, _settings())
-        assert payload["exportVersion"] == EXPORT_VERSION == 16
+        assert payload["exportVersion"] == EXPORT_VERSION == 17
         assert len(payload["prospectTargets"]) == 1  # type: ignore[arg-type]
         assert len(payload["prospectRuns"]) == 1  # type: ignore[arg-type]
         assert len(payload["prospectSources"]) >= 1  # type: ignore[arg-type]

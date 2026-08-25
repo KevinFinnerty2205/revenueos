@@ -54,7 +54,54 @@ class ProspectObservationCategory(StrEnum):
     CUSTOMER_MARKET = "customer_market"
     TRIGGER = "trigger"
     POTENTIAL_FIT = "potential_fit"
+    CURRENT_ROLE = "current_role"
+    CURRENT_COMPANY = "current_company"
+    CAREER_HISTORY = "career_history"
+    RESPONSIBILITY = "responsibility"
+    EXPERTISE = "expertise"
+    PROFESSIONAL_INTEREST = "professional_interest"
+    PROFESSIONAL_ACTIVITY = "professional_activity"
+    COMPANY_INITIATIVE = "company_initiative"
+    PUBLIC_STATEMENT = "public_statement"
+    AUTHORED_CONTENT = "authored_content"
+    CONFERENCE_ACTIVITY = "conference_activity"
+    WHY_PERSON_MATTERS = "why_person_matters"
+    CONVERSATION_CONTEXT = "conversation_context"
+    OTHER_PROFESSIONAL = "other_professional"
     OTHER = "other"
+
+
+class ProspectPersonEmploymentState(StrEnum):
+    CURRENT = "current"
+    UNCERTAIN = "uncertain"
+    NO_LONGER_CURRENT = "no_longer_current"
+
+
+class ProspectBuyingRole(StrEnum):
+    EXECUTIVE_SPONSOR = "executive_sponsor"
+    ECONOMIC_BUYER_CANDIDATE = "economic_buyer_candidate"
+    CHAMPION_CANDIDATE = "champion_candidate"
+    BUSINESS_BUYER = "business_buyer"
+    TECHNICAL_EVALUATOR = "technical_evaluator"
+    SECURITY = "security"
+    PROCUREMENT = "procurement"
+    LEGAL = "legal"
+    FINANCE = "finance"
+    END_USER_INFLUENCER = "end_user_influencer"
+    OTHER_RELEVANT = "other_relevant"
+
+
+class ProspectHypothesisReviewState(StrEnum):
+    NEEDS_VALIDATION = "needs_validation"
+    RELEVANT = "relevant"
+    NOT_RELEVANT = "not_relevant"
+
+
+class ProspectContactPointType(StrEnum):
+    BUSINESS_EMAIL = "business_email"
+    BUSINESS_PHONE = "business_phone"
+    COMPANY_SWITCHBOARD = "company_switchboard"
+    PUBLIC_PROFESSIONAL_PROFILE = "public_professional_profile"
 
 
 class OpportunityStage(StrEnum):

@@ -1,6 +1,6 @@
 # RevenueOS Prospect
 
-- **Status:** WO-026 company Account Research implemented; later Prospect stages remain future
+- **Status:** WO-026 company Account Research and WO-027 company-scoped Prospect Person Intelligence implemented; ICP/territory and outreach remain future
 - **Purpose:** Find the right customers and the right people
 
 ## Product outcome
@@ -11,15 +11,21 @@ the selected relationship into the Core sales workflow.
 
 ## Capability boundary
 
-The current WO-026 slice includes bounded company name/domain search, explicit
+The current WO-026/027 slice includes bounded company name/domain search, explicit
 candidate selection, versioned sourced Account Research and duplicate-safe promotion
-to a canonical Company. See the
+to a canonical Company, followed by bounded relevant-person discovery, versioned
+professional research, buying-role hypotheses and explicit duplicate-safe Contact
+promotion. See the
 [implementation guide](prospect-account-research.md),
+[person implementation guide](prospect-person-intelligence.md),
+[buying-committee guide](buying-committee-hypotheses.md),
+[business-contact trust guide](business-contact-trust.md),
+[professional safety guide](professional-research-safety.md),
 [trust/source guide](account-research-trust-and-sources.md) and
 [customer Evidence boundary](prospect-research-vs-customer-evidence.md).
 
-The following is the broader target capability boundary; ICP/territory, person
-research, contact intelligence and outreach are not implemented by WO-026:
+The following is the broader target capability boundary; ICP/territory and outreach
+are not implemented by WO-027:
 
 - account discovery and prioritisation;
 - ICP and territory definitions;
@@ -87,9 +93,9 @@ recipient without the required validation and outreach policy.
 ## First-time and power-user experience
 
 Current first-time experience: type a company name or domain, choose an unambiguous
-candidate, inspect a sourced brief and deliberately Add to Sales. Current mobile
-keeps that same concise flow. The ICP, person and power-user behaviours below remain
-future.
+candidate, inspect a sourced brief and deliberately Add to Sales. From that company,
+find a small set of relevant people, research one and explicitly add/link a Contact.
+Current mobile keeps that concise flow. ICP and power-user territory behaviours remain future.
 
 - First-time: choose an ICP or describe a bounded territory, review sourced results,
   save one target.

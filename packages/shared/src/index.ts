@@ -336,7 +336,7 @@ export interface Contact extends TenantEntity {
   companyId: string;
   firstName: string;
   lastName: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   jobTitle: string | null;
   linkedinUrl: string | null;
@@ -2899,4 +2899,140 @@ export interface ProspectAccountResearchLink {
   companyId: string;
   updatedAt: string;
   status: "ready" | "partial";
+}
+
+export type ProspectPersonEmploymentState =
+  | "current"
+  | "uncertain"
+  | "no_longer_current";
+export type ProspectBuyingRole =
+  | "executive_sponsor"
+  | "economic_buyer_candidate"
+  | "champion_candidate"
+  | "business_buyer"
+  | "technical_evaluator"
+  | "security"
+  | "procurement"
+  | "legal"
+  | "finance"
+  | "end_user_influencer"
+  | "other_relevant";
+export type ProspectContactPointType =
+  | "business_email"
+  | "business_phone"
+  | "company_switchboard"
+  | "public_professional_profile";
+
+export interface ProspectRelevantFunction {
+  functionKey: string;
+  label: string;
+  whyItMayMatter: string;
+}
+
+export interface ProspectPerson {
+  id: string;
+  companyTargetId: string;
+  displayName: string;
+  currentRole: string;
+  currentCompany: string;
+  publicProfessionalLocation: string | null;
+  publicProfileUrl: string | null;
+  relevantFunction: string;
+  whyMayMatter: string;
+  providerAttribution: string;
+  identityState: "supported" | "ambiguous";
+  employmentState: ProspectPersonEmploymentState;
+  researchStatus:
+    | "not_started"
+    | "pending"
+    | "researching"
+    | "ready"
+    | "partial"
+    | "failed";
+  promotedContactId: string | null;
+  promotedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProspectBuyingCommitteeGap {
+  role: ProspectBuyingRole;
+  label: string;
+  message: string;
+}
+
+export interface ProspectPersonDiscovery {
+  companyTargetId: string;
+  functions: ProspectRelevantFunction[];
+  people: ProspectPerson[];
+  gaps: ProspectBuyingCommitteeGap[];
+  resultLimit: number;
+  message: string;
+}
+
+export interface ProspectBuyingRoleHypothesis {
+  id: string;
+  role: ProspectBuyingRole;
+  rationale: string;
+  trustState: ProspectTrustState;
+  reviewState: "needs_validation" | "relevant" | "not_relevant";
+  assessmentOrigin: "system_hypothesis" | "seller_assessed";
+  sourceIds: string[];
+  reviewedAt: string | null;
+}
+
+export interface ProspectContactPoint {
+  id: string;
+  pointType: ProspectContactPointType;
+  value: string;
+  trustState: ProspectTrustState;
+  verificationMethod:
+    | "authoritative_public"
+    | "provider_reported"
+    | "not_verified";
+  sourceId: string;
+  observedAt: string;
+  expiresAt: string | null;
+  exportAllowed: boolean;
+  permissionStatus: "not_assessed";
+}
+
+export interface ProspectExistingContactMatch {
+  id: string;
+  displayName: string;
+  email: string | null;
+  companyId: string;
+  matchStrength: "strong" | "possible";
+  matchReason: "exact_business_email" | "same_name_and_company";
+}
+
+export interface ProspectPersonResearchBrief {
+  person: ProspectPerson;
+  status: ProspectResearchStatus;
+  statusMessage: string;
+  currentRun: ProspectResearchRun | null;
+  latestRun: ProspectResearchRun | null;
+  observations: ProspectResearchObservation[];
+  sources: ProspectResearchSource[];
+  buyingRoles: ProspectBuyingRoleHypothesis[];
+  contactPoints: ProspectContactPoint[];
+  changes: ProspectResearchChange[];
+  history: ProspectResearchRun[];
+  existingContactMatches: ProspectExistingContactMatch[];
+}
+
+export interface ProspectPersonPromotion {
+  status: "created" | "attached" | "already_promoted";
+  contactId: string;
+  companyId: string;
+  prospectPersonId: string;
+  message: string;
+}
+
+export interface ContactProspectResearchLink {
+  contactId: string;
+  prospectPersonId: string;
+  companyTargetId: string;
+  updatedAt: string;
+  label: "Public professional research";
 }

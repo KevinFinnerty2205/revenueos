@@ -1,5 +1,14 @@
 # Target domain model
 
+## Current Prospect Person and Contact boundary
+
+WO-027 adds `ProspectPerson` as company-scoped public research beneath
+`ProspectResearchTarget`. It is not the canonical `Contact`. Explicit promotion
+creates or links one Contact only after duplicate review and stores trust per copied
+field. Unknown email is valid for a promoted Contact; manual Contact creation still
+requires an email through its current API contract. Prospect refresh/deletion does
+not silently update/delete the Contact.
+
 **Status:** Current entities through WO-011 plus conceptual model through the
 Interaction Platform private beta. Target rows do not authorise implementation.
 
