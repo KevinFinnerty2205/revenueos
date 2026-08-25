@@ -1,6 +1,6 @@
 # RevenueOS Prospect
 
-- **Status:** Future paid add-on; not implemented
+- **Status:** WO-026 company Account Research implemented; later Prospect stages remain future
 - **Purpose:** Find the right customers and the right people
 
 ## Product outcome
@@ -10,6 +10,16 @@ and person research. It helps a seller decide whom to approach and why, then sav
 the selected relationship into the Core sales workflow.
 
 ## Capability boundary
+
+The current WO-026 slice includes bounded company name/domain search, explicit
+candidate selection, versioned sourced Account Research and duplicate-safe promotion
+to a canonical Company. See the
+[implementation guide](prospect-account-research.md),
+[trust/source guide](account-research-trust-and-sources.md) and
+[customer Evidence boundary](prospect-research-vs-customer-evidence.md).
+
+The following is the broader target capability boundary; ICP/territory, person
+research, contact intelligence and outreach are not implemented by WO-026:
 
 - account discovery and prioritisation;
 - ICP and territory definitions;
@@ -75,6 +85,11 @@ or unknown. An inferred corporate email pattern cannot be used as a verified
 recipient without the required validation and outreach policy.
 
 ## First-time and power-user experience
+
+Current first-time experience: type a company name or domain, choose an unambiguous
+candidate, inspect a sourced brief and deliberately Add to Sales. Current mobile
+keeps that same concise flow. The ICP, person and power-user behaviours below remain
+future.
 
 - First-time: choose an ICP or describe a bounded territory, review sourced results,
   save one target.

@@ -1,4 +1,5 @@
 import { BetaFeatureGate } from "@/components/beta-feature-gate";
+import { AccountPublicResearch } from "@/components/account-public-research";
 import { RevenueBrainTimeline } from "@/components/revenue-brain-timeline";
 
 export default async function CompanyAccountPage({
@@ -8,8 +9,11 @@ export default async function CompanyAccountPage({
 }) {
   const { id } = await params;
   return (
-    <BetaFeatureGate feature="revenueBrain">
-      <RevenueBrainTimeline accountId={id} />
-    </BetaFeatureGate>
+    <>
+      <AccountPublicResearch companyId={id} />
+      <BetaFeatureGate feature="revenueBrain">
+        <RevenueBrainTimeline accountId={id} />
+      </BetaFeatureGate>
+    </>
   );
 }

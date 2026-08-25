@@ -461,7 +461,8 @@ provider or navigation described there exists until a separate work order implem
 WO-024 is now the first realised post-blueprint module. It remains inside the same
 web/API/PostgreSQL modular monolith: standard definition registry, tenant custom
 definition repository, deterministic projection service and Opportunity/Settings UI.
-Migration `0033_sales_methodology` is the current Alembic head. No service, queue,
+Migration `0033_sales_methodology` introduced that domain; `0035_prospect_research`
+is now the current Alembic head. No service, queue,
 provider, datastore or top-level navigation area was added.
 
 WO-025B adds strict Ask contracts, a tenant-scoped repository and a deterministic
@@ -470,3 +471,20 @@ accepted Evidence, Daily and Action records without adding a service, queue,
 datastore, vector index, provider call or schema migration. The web exposes it through
 the existing Search route and contextual workspace links. See
 [ADR 0036](../08-decisions/0036-ephemeral-deterministic-ask-revenueos.md).
+
+## WO-026 Prospect Account Research extension
+
+WO-026 adds a separate tenant-owned Prospect Research Target, immutable Research
+Run, source metadata, observation and citation graph. It reuses the existing API,
+PostgreSQL persistence and worker process; there is no new service, queue or
+datastore. An organisation module entitlement and atomic daily/concurrent counters
+gate the path. Forced RLS, composite tenant foreign keys and explicit repository
+predicates apply to every new row.
+
+Research Targets do not become Companies until explicit duplicate-safe promotion.
+Public research remains separate from customer Evidence and cannot mutate
+Methodology, Revenue Brain or Ask RevenueOS. The current provider is a deterministic
+no-network adapter; production mock configuration fails closed and no public-page
+fetcher or AI synthesis exists. See the
+[Prospect architecture](prospect-account-research-architecture.md) and
+[ADR 0038](../08-decisions/0038-separate-prospect-research-domain.md).

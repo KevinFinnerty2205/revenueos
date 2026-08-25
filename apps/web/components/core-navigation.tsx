@@ -1,7 +1,10 @@
 "use client";
 
+import type { ProspectAvailability } from "@revenueos/shared";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { apiRequest } from "@/lib/api";
 
 const desktopGroups = [
   {
@@ -41,12 +44,31 @@ function isActive(pathname: string | null, href: string) {
 
 export function CoreNavigation() {
   const pathname = usePathname();
+  const [prospectEnabled, setProspectEnabled] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiRequest<ProspectAvailability>("/api/v1/prospect/availability", {
+      signal: controller.signal,
+    })
+      .then((availability) => setProspectEnabled(availability.enabled))
+      .catch(() => setProspectEnabled(false));
+    return () => controller.abort();
+  }, []);
+
+  const navigationGroups = prospectEnabled
+    ? [
+        desktopGroups[0],
+        { label: "Prospect", items: [{ href: "/find", label: "Find" }] },
+        ...desktopGroups.slice(1),
+      ]
+    : desktopGroups;
 
   return (
     <>
       <nav aria-label="Main navigation" className="mt-10 hidden lg:block">
         <div className="space-y-7">
-          {desktopGroups.map((group, index) => (
+          {navigationGroups.map((group, index) => (
             <div key={group.label ?? `group-${index}`}>
               {group.label ? (
                 <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">

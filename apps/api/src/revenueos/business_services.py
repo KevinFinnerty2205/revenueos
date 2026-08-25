@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -31,6 +32,10 @@ from revenueos.models import (
     Opportunity,
     OpportunityAuditEvent,
     Task,
+)
+from revenueos.prospect_url_security import (
+    PublicUrlSafetyError,
+    normalise_company_website,
 )
 from revenueos.tenant import TenantContext
 
@@ -75,11 +80,13 @@ class BusinessService:
     async def create_company(self, request: CompanyCreate) -> Company:
         owner_user_id = request.owner_user_id or self.tenant.user_id
         await self._require_member(owner_user_id, "ownerUserId")
+        website = str(request.website) if request.website else None
         company = Company(
             organisation_id=self.tenant.organisation_id,
             owner_user_id=owner_user_id,
             name=request.name,
-            website=str(request.website) if request.website else None,
+            website=website,
+            normalized_domain=self._normalise_website_domain(website) if website else None,
             industry=request.industry,
             employee_count=request.employee_count,
             status=request.status.value,
@@ -91,6 +98,10 @@ class BusinessService:
         values = request.model_dump(exclude_unset=True)
         if "owner_user_id" in values:
             await self._require_member(values["owner_user_id"], "ownerUserId")
+        if "website" in values:
+            website = str(values["website"]) if values["website"] else None
+            values["website"] = website
+            values["normalized_domain"] = self._normalise_website_domain(website) if website else None
         self._apply_values(company, values)
         return await self._save(company)
 
@@ -528,3 +539,13 @@ class BusinessService:
             f"The requested {entity_name} was not found.",
             404,
         )
+
+    @staticmethod
+    def _normalise_website_domain(value: str) -> str | None:
+        try:
+            host = urlsplit(value).hostname
+            if host is None:
+                return None
+            return normalise_company_website(f"https://{host}/").domain
+        except (PublicUrlSafetyError, ValueError):
+            return None

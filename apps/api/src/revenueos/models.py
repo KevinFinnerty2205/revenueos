@@ -60,6 +60,7 @@ from revenueos.domain import (
     OpportunityStage,
     OpportunityStatus,
     ParticipantRole,
+    ProspectResearchRunStatus,
     ProvisionalSignalLifecycle,
     TaskPriority,
     TaskStatus,
@@ -189,6 +190,66 @@ class OrganisationBetaSettings(TimestampMixin, Base):
         primary_key=True,
     )
     retention_days: Mapped[int | None] = mapped_column(Integer)
+
+
+class OrganisationModuleEntitlement(TimestampMixin, Base):
+    __tablename__ = "organisation_module_entitlements"
+    __table_args__ = (
+        CheckConstraint("module_key = 'prospect'", name="ck_module_entitlements_key"),
+        CheckConstraint("source = 'manual_private_beta'", name="ck_module_entitlements_source"),
+        ForeignKeyConstraint(
+            ["organisation_id", "configured_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_module_entitlements_configurer",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    module_key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    source: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="manual_private_beta",
+        server_default="manual_private_beta",
+    )
+    configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProspectUsageCounter(Base):
+    __tablename__ = "prospect_usage_counters"
+    __table_args__ = (
+        CheckConstraint(
+            "scope_key = 'organisation' OR scope_key LIKE 'user:%'",
+            name="ck_prospect_usage_scope",
+        ),
+        CheckConstraint("research_run_count >= 0", name="ck_prospect_usage_count"),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    research_run_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class DataNoticeAcknowledgement(Base):
@@ -337,6 +398,7 @@ class Company(TimestampMixin, Base):
         ),
         UniqueConstraint("organisation_id", "id", name="uq_companies_organisation_id_id"),
         Index("ix_companies_organisation_name", "organisation_id", "name"),
+        Index("ix_companies_organisation_domain", "organisation_id", "normalized_domain"),
         Index("ix_companies_organisation_status", "organisation_id", "status"),
     )
 
@@ -348,6 +410,7 @@ class Company(TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     website: Mapped[str | None] = mapped_column(String(2048))
+    normalized_domain: Mapped[str | None] = mapped_column(String(253))
     industry: Mapped[str | None] = mapped_column(String(120))
     employee_count: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(
@@ -357,6 +420,310 @@ class Company(TimestampMixin, Base):
         server_default=CompanyStatus.PROSPECT.value,
     )
     owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class ProspectResearchTarget(TimestampMixin, Base):
+    __tablename__ = "prospect_research_targets"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) > 0", name="ck_prospect_targets_name"),
+        CheckConstraint("length(trim(normalized_domain)) > 0", name="ck_prospect_targets_domain"),
+        CheckConstraint(
+            "(promoted_company_id IS NULL AND promoted_by_user_id IS NULL AND promoted_at IS NULL) OR "
+            "(promoted_company_id IS NOT NULL AND promoted_by_user_id IS NOT NULL AND promoted_at IS NOT NULL)",
+            name="ck_prospect_targets_promotion",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "promoted_company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_prospect_targets_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "promoted_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_prospect_targets_promoter",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_prospect_targets_org_id"),
+        UniqueConstraint("organisation_id", "normalized_domain", name="uq_prospect_targets_org_domain"),
+        UniqueConstraint(
+            "organisation_id",
+            "provider_key",
+            "provider_candidate_id",
+            name="uq_prospect_targets_provider_candidate",
+        ),
+        Index("ix_prospect_targets_org_updated", "organisation_id", "updated_at"),
+        Index("ix_prospect_targets_org_company", "organisation_id", "promoted_company_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_candidate_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    normalized_domain: Mapped[str] = mapped_column(String(253), nullable=False)
+    website_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    location: Mapped[str | None] = mapped_column(String(200))
+    industry: Mapped[str | None] = mapped_column(String(120))
+    provider_attribution: Mapped[str] = mapped_column(String(120), nullable=False)
+    promoted_company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    promoted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProspectResearchRun(TimestampMixin, Base):
+    __tablename__ = "prospect_research_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'fetching', 'synthesizing', 'completed', 'partial', 'failed')",
+            name="ck_prospect_runs_status",
+        ),
+        CheckConstraint("schema_version > 0", name="ck_prospect_runs_schema_version"),
+        CheckConstraint("attempt_count >= 0", name="ck_prospect_runs_attempts"),
+        CheckConstraint("max_attempts >= 1", name="ck_prospect_runs_max_attempts"),
+        CheckConstraint(
+            "last_error_message_safe IS NULL OR length(last_error_message_safe) <= 500",
+            name="ck_prospect_runs_error_length",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "target_id"],
+            ["prospect_research_targets.organisation_id", "prospect_research_targets.id"],
+            name="fk_prospect_runs_target",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "requested_by_user_id"],
+            [
+                "organisation_memberships.organisation_id",
+                "organisation_memberships.user_id",
+            ],
+            name="fk_prospect_runs_requester",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "refresh_of_run_id", "target_id"],
+            [
+                "prospect_research_runs.organisation_id",
+                "prospect_research_runs.id",
+                "prospect_research_runs.target_id",
+            ],
+            name="fk_prospect_runs_refresh",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_prospect_runs_org_id"),
+        UniqueConstraint("organisation_id", "id", "target_id", name="uq_prospect_runs_org_id_target"),
+        UniqueConstraint(
+            "organisation_id",
+            "target_id",
+            "idempotency_key",
+            name="uq_prospect_runs_idempotency",
+        ),
+        Index("ix_prospect_runs_org_target_created", "organisation_id", "target_id", "created_at"),
+        Index("ix_prospect_runs_org_status", "organisation_id", "status"),
+        Index("ix_prospect_runs_status_attempt", "status", "next_attempt_at"),
+        Index("ix_prospect_runs_status_lease", "status", "lease_expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    refresh_of_run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=ProspectResearchRunStatus.PENDING.value,
+        server_default=ProspectResearchRunStatus.PENDING.value,
+    )
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(100))
+    last_error_message_safe: Mapped[str | None] = mapped_column(String(500))
+    source_fingerprint: Mapped[str | None] = mapped_column(String(64))
+
+
+class ProspectResearchSource(Base):
+    __tablename__ = "prospect_research_sources"
+    __table_args__ = (
+        CheckConstraint(
+            "source_type IN ('official_website', 'company_newsroom', 'careers_page', "
+            "'structured_provider', 'public_filing', 'reputable_news', 'other_public')",
+            name="ck_prospect_sources_type",
+        ),
+        CheckConstraint(
+            "authority_class IN ('primary', 'official_public', 'regulatory', 'reputable_secondary', "
+            "'structured_provider', 'other_public')",
+            name="ck_prospect_sources_authority",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "run_id", "target_id"],
+            [
+                "prospect_research_runs.organisation_id",
+                "prospect_research_runs.id",
+                "prospect_research_runs.target_id",
+            ],
+            name="fk_prospect_sources_run",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_prospect_sources_org_id"),
+        UniqueConstraint("organisation_id", "id", "run_id", name="uq_prospect_sources_org_id_run"),
+        UniqueConstraint("organisation_id", "run_id", "source_key", name="uq_prospect_sources_run_key"),
+        UniqueConstraint("organisation_id", "run_id", "canonical_url", name="uq_prospect_sources_run_url"),
+        UniqueConstraint(
+            "organisation_id",
+            "run_id",
+            "content_fingerprint",
+            name="uq_prospect_sources_run_fingerprint",
+        ),
+        Index("ix_prospect_sources_org_run", "organisation_id", "run_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    canonical_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    domain: Mapped[str] = mapped_column(String(253), nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    publisher: Mapped[str] = mapped_column(String(200), nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    authority_class: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_source_id: Mapped[str | None] = mapped_column(String(200))
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class ProspectResearchObservation(Base):
+    __tablename__ = "prospect_research_observations"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('company_profile', 'industry', 'location', 'size', 'business_model', "
+            "'product_service', 'strategic_initiative', 'expansion', 'hiring', 'leadership_change', "
+            "'funding_financial', 'technology', 'regulatory', 'partnership', 'customer_market', "
+            "'trigger', 'potential_fit', 'other')",
+            name="ck_prospect_observations_category",
+        ),
+        CheckConstraint(
+            "trust_state IN ('verified', 'provider_supplied', 'inferred', 'unknown')",
+            name="ck_prospect_observations_trust",
+        ),
+        CheckConstraint("relevance IN ('high', 'normal')", name="ck_prospect_observations_relevance"),
+        CheckConstraint(
+            "freshness IN ('stable', 'time_sensitive')",
+            name="ck_prospect_observations_freshness",
+        ),
+        CheckConstraint("status = 'current'", name="ck_prospect_observations_status"),
+        CheckConstraint(
+            "length(trim(statement)) BETWEEN 1 AND 600",
+            name="ck_prospect_observations_statement",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "run_id", "target_id"],
+            [
+                "prospect_research_runs.organisation_id",
+                "prospect_research_runs.id",
+                "prospect_research_runs.target_id",
+            ],
+            name="fk_prospect_observations_run",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_prospect_observations_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            "run_id",
+            name="uq_prospect_observations_org_id_run",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "run_id",
+            "observation_key",
+            name="uq_prospect_observations_run_key",
+        ),
+        Index("ix_prospect_observations_org_run", "organisation_id", "run_id"),
+        Index("ix_prospect_observations_org_trust", "organisation_id", "trust_state"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    observation_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    category: Mapped[str] = mapped_column(String(40), nullable=False)
+    statement: Mapped[str] = mapped_column(String(600), nullable=False)
+    trust_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    relevance: Mapped[str] = mapped_column(String(12), nullable=False, default="normal", server_default="normal")
+    observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    freshness: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="current", server_default="current")
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProspectResearchObservationSource(Base):
+    __tablename__ = "prospect_research_observation_sources"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organisation_id", "observation_id", "run_id"],
+            [
+                "prospect_research_observations.organisation_id",
+                "prospect_research_observations.id",
+                "prospect_research_observations.run_id",
+            ],
+            name="fk_prospect_observation_sources_observation",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "source_id", "run_id"],
+            [
+                "prospect_research_sources.organisation_id",
+                "prospect_research_sources.id",
+                "prospect_research_sources.run_id",
+            ],
+            name="fk_prospect_observation_sources_source",
+            ondelete="CASCADE",
+        ),
+        Index("ix_prospect_observation_sources_org_run", "organisation_id", "run_id"),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    observation_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    source_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
 
 
 class Contact(TimestampMixin, Base):

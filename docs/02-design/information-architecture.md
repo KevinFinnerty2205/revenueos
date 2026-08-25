@@ -245,11 +245,19 @@ On small screens, use a compact menu and preserve direct access to Dashboard, Me
 - [User journeys](../01-product/user-journeys.md)
 - [Privacy, security and trust model](../03-engineering/privacy-security-and-trust-model.md)
 
+## WO-026 Prospect navigation follow-through
+
+The protected desktop shell now adds one **Prospect** group containing **Find** only
+when the server confirms the organisation entitlement. Find owns company discovery
+and Account Research. Research detail remains a nested route. Mobile navigation does
+not add another permanent item; the responsive Find route remains accessible through
+links and direct navigation. Non-entitled Core navigation is unchanged.
+
 ## WO-023 future navigation
 
 This document remains the detailed current-through-beta screen inventory. WO-023
 proposes the longer-lived goal-based shell—Home, Find, Sell, Pipeline, Create and
 Insights, with Search and Settings as utilities—in
 [RevenueOS information architecture](revenueos-information-architecture.md). The
-future design nests entity routes under user goals and preserves deep links; no
-navigation change is implemented by WO-023.
+future design nests entity routes under user goals and preserves deep links. WO-026
+implements only the conditional Prospect/Find slice of that direction.

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BetaAdmin } from "@/components/beta-admin";
 import { PageHeader } from "@/components/page-header";
+import { ProspectModuleSettings } from "@/components/prospect-module-settings";
 import { SalesMethodologySettings } from "@/components/sales-methodology-settings";
 import { apiRequest } from "@/lib/api";
 
@@ -93,6 +94,7 @@ export function SettingsExperience() {
 
       {isAdmin ? (
         <>
+          <ProspectModuleSettings />
           <SalesMethodologySettings />
           <BetaAdmin />
         </>

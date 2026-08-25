@@ -23,10 +23,10 @@ through a separate read-only preview and explicit final confirmation. Email,
 calendar, CRM and task outcomes are simulations only; no external system is
 contacted or changed.
 
-WO-023 adds documentation—not product behaviour—for the proposed end-to-end Sales
-OS. [RevenueOS Core](revenueos-core-product.md) remains independently valuable;
-[Prospect](revenueos-prospect.md), [Engage](revenueos-engage.md),
-[Create](revenueos-create.md) and [CRM](revenueos-crm.md) are future optional modules.
+WO-023 adds the proposed end-to-end Sales OS blueprint. [RevenueOS Core](revenueos-core-product.md)
+remains independently valuable. WO-026 now implements the first bounded
+[Prospect](revenueos-prospect.md) account-research slice; [Engage](revenueos-engage.md),
+[Create](revenueos-create.md) and [CRM](revenueos-crm.md) remain future optional modules.
 See the [platform vision](end-to-end-sales-platform-vision.md) and
 [information architecture](../02-design/revenueos-information-architecture.md).
 
@@ -111,6 +111,8 @@ The current implementation provides:
   requests, usage limits, feedback and an admin-only organisation view; and
 - deterministic Search plus evidence-backed Ask RevenueOS for explicit Opportunity,
   Account and user-owned workspace questions;
+- an entitled Prospect Find journey with bounded company resolution, sourced public
+  Account Research, controlled refresh and explicit duplicate-safe Add to Sales;
 - a tenant-isolated Interaction list/create/detail path with controlled types and
   lifecycle, plus stable bidirectional links to existing Meetings; and
 - preparation-only AI Companion briefs for all ten Interaction types, with
@@ -249,6 +251,6 @@ Ask RevenueOS as an ephemeral evidence-backed mode and contextual deal/account u
 Ask cannot research the web or execute an Action. Production customer-data use also remains prohibited
 until the target-environment gates are approved.
 
-WO-025A and WO-025B are now implemented. The recommended next sequence is WO-025C one
-selected Core CRM Sync path, followed by observed Checkpoint 1B before WO-026 Prospect;
-the recommendation does not itself authorise that work.
+WO-025A/B/C and Checkpoint 1B are complete. WO-026 now adds the separately entitled,
+company-only Prospect research path. It does not authorise production provider
+activation, WO-027 person research or WO-028 ICP/territory discovery.

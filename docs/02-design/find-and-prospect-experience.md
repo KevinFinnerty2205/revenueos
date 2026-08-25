@@ -1,9 +1,17 @@
 # Find and Prospect experience
 
-- **Status:** Future Prospect experience; not implemented
+- **Status:** WO-026 company Find and Account Research implemented; later discovery remains future
 - **Question:** Who should I target?
 
 ## Find landing
+
+The current entitled Prospect landing asks “Which company are you looking for?” and
+supports bounded company name/domain search, explicit candidate selection and recent
+research. Non-entitled users receive a restrained module explanation. The detailed
+implemented flow is in
+[Find and Account Research UX](find-account-research-implementation.md).
+
+The guided ICP, territory and person-search alternatives below remain target design:
 
 The first action is a search field with guided alternatives:
 
@@ -17,6 +25,16 @@ Contacts and opportunities. Discovery results are replaced with a concise module
 explanation, not an advertisement wall.
 
 ## Discovery flow
+
+The current WO-026 flow is:
+
+1. Search a company name or domain.
+2. Choose one candidate when identity is ambiguous.
+3. Run and inspect versioned sourced Account Research.
+4. Refresh deliberately when needed.
+5. Confirm Add to Sales, linking an exact-domain Company or creating one.
+
+The broader flow below is future WO-027/028/029 scope:
 
 1. Select or create a bounded ICP/territory.
 2. Review explainable account matches and missing data.

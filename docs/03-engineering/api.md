@@ -683,3 +683,22 @@ Action execution continues through `execution-options`, `execution-preview`,
 authority and provider update time. `POST /api/v1/executions/{id}/reconcile` is
 available only for live `unknown_external_state` and performs no write. See the
 [Focused CRM Sync guide](focused-crm-sync.md) for the complete route list.
+
+## Prospect Account Research API
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| `GET` | `/api/v1/prospect/availability` | Resolve server feature, tenant entitlement and production provider capability. |
+| `PATCH` | `/api/v1/prospect/admin/entitlement` | Admin-only organisation Prospect switch. |
+| `GET` | `/api/v1/prospect/companies/search?q=…` | Bounded entitled company name/domain candidates. |
+| `GET` | `/api/v1/prospect/research` | Recent tenant Research Targets. |
+| `POST` | `/api/v1/prospect/research` | Idempotently enqueue selected-candidate research. |
+| `GET` | `/api/v1/prospect/research/{targetId}` | Read persisted brief, current usable run, history and changes. |
+| `POST` | `/api/v1/prospect/research/{targetId}/refresh` | Enqueue one controlled refresh. |
+| `POST` | `/api/v1/prospect/research/{targetId}/promote` | Confirm exact-domain Company link/create. |
+| `DELETE` | `/api/v1/prospect/research/{targetId}` | Delete research without deleting a promoted Company. |
+| `GET` | `/api/v1/prospect/accounts/{companyId}/research-link` | Read separately labelled public-research link for a Company. |
+
+No route accepts an organisation ID, arbitrary URL, provider name, fetch instruction,
+prompt, trust override, observation payload, Contact/Opportunity creation request or
+customer Evidence mutation. The production mock provider fails closed.
