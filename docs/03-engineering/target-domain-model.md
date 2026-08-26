@@ -1,5 +1,15 @@
 # Target domain model
 
+## Current Target Market and discovery boundary
+
+WO-028 persists one `ProspectTargetMarket` aggregate with immutable
+`ProspectTargetMarketVersion` revisions. `ProspectDiscoveryRun`,
+`ProspectDiscoveryCandidate` and `ProspectCandidateReason` retain point-in-time,
+explainable results; `ProspectTargetFeedback` holds per-user save/exclude state.
+Candidates reuse `ProspectResearchTarget` identity. Exact-domain Company and open
+Opportunity links are contextual only and no discovery action mutates canonical
+sales truth. See the [architecture guide](target-market-intelligence-architecture.md).
+
 ## Current Prospect Person and Contact boundary
 
 WO-027 adds `ProspectPerson` as company-scoped public research beneath
@@ -75,6 +85,10 @@ and public APIs remain future implementation decisions.
 | ProspectResearchRun | Immutable execution/version for one Research Target with refresh lineage | Tenant-owned worker lifecycle; provider output is execution input only | Pending/fetching/synthesising → completed/partial/failed; bounded leases and attempts | **Current — WO-026** |
 | ProspectResearchSource | Bounded public/provider source metadata for one run | Tenant-owned canonical URL/fingerprint and authority metadata | Immutable with run; no full page or raw provider payload | **Current — WO-026** |
 | ProspectResearchObservation | Structured company finding with exact trust state and run-local citations | Tenant-owned validated provider result; never customer-direct truth | Immutable with run; refresh creates another version | **Current — WO-026** |
+| ProspectTargetMarket | Named ICP/territory aggregate pointing to a current immutable definition revision | Tenant-owned; administrator-defined | Draft/active → archived; no hard-delete API | **Current — WO-028** |
+| ProspectDiscoveryRun | Bounded provider execution pinned to one Target Market revision | Tenant-owned; RevenueOS owns lifecycle and explanation | Pending/running → completed/partial/failed; refresh appends | **Current — WO-028** |
+| ProspectDiscoveryCandidate/Reason | Point-in-time company context plus criterion-level explanations | Provider-supplied facts plus exact tenant relationship context | Immutable with run; no canonical truth mutation | **Current — WO-028** |
+| ProspectTargetFeedback | User-specific saved/excluded state for a staged company identity | Tenant/user-owned feedback | Saved/excluded or restored by deletion | **Current — WO-028** |
 | Contact                | Person linked to a company and meetings                                                                                                          | Tenant-owned; manual now, CRM/provider identity may be authoritative by field                       | Active/merged/deleted; personal data follows deletion and source policy                                | **Current — Sprint 2**                  |
 | Opportunity            | Commercial context with optional company, manual value/date, owner, tasks and associated meetings; its workspace derives the latest meeting view | Tenant-owned; manual now, supported CRM may later become authoritative for explicitly mapped fields | `open`, `won`, `lost` or `on_hold`; stage remains independently user-managed                           | **Current — Sprint 2, expanded WO-007** |
 | Task                   | Human-owned commitment linked to company/contact/opportunity and later source evidence                                                           | Tenant-owned; RevenueOS authoritative for native tasks, external task system if later mapped        | Open/in progress → completed/cancelled; configurable operational retention                             | **Current — Sprint 2**                  |

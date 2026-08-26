@@ -2901,6 +2901,176 @@ export interface ProspectAccountResearchLink {
   status: "ready" | "partial";
 }
 
+export type ProspectTargetMarketStatus = "draft" | "active" | "archived";
+export type ProspectEmployeeBand =
+  | "50_199"
+  | "200_499"
+  | "500_999"
+  | "1000_4999"
+  | "5000_plus";
+export type ProspectOrganisationType =
+  | "private_company"
+  | "public_company"
+  | "government"
+  | "education"
+  | "healthcare"
+  | "not_for_profit";
+export type ProspectBusinessCharacteristic =
+  | "multi_site"
+  | "international"
+  | "expanding"
+  | "regulated"
+  | "b2b";
+export type ProspectDiscoveryStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "partial"
+  | "failed";
+export type ProspectCandidatePriority =
+  | "high"
+  | "worth_researching"
+  | "needs_more_information"
+  | "excluded";
+export type ProspectCandidateMatchState = "match" | "partial" | "excluded";
+export type ProspectRelationshipState =
+  | "new_prospect"
+  | "existing_account_no_active_opportunity"
+  | "active_opportunity";
+
+export interface ProspectDiscoveryCapabilities {
+  industries: string[];
+  countries: string[];
+  regions: string[];
+  employeeBands: ProspectEmployeeBand[];
+  organisationTypes: ProspectOrganisationType[];
+  businessCharacteristics: ProspectBusinessCharacteristic[];
+  maxCandidatesPerRun: number;
+  maxActiveTargetMarkets: number;
+  liveData: boolean;
+  message: string;
+}
+
+export interface ProspectTargetMarketVersion {
+  id: string;
+  version: number;
+  description: string | null;
+  industries: string[];
+  countries: string[];
+  regions: string[];
+  minimumEmployeeBand: ProspectEmployeeBand | null;
+  organisationTypes: ProspectOrganisationType[];
+  preferredBusinessCharacteristics: ProspectBusinessCharacteristic[];
+  excludedIndustries: string[];
+  excludeExistingAccounts: boolean;
+  researchObjective: string | null;
+  createdAt: string;
+}
+
+export interface ProspectDiscoveryRun {
+  id: string;
+  targetMarketId: string;
+  targetMarketVersionId: string;
+  targetMarketVersion: number;
+  status: ProspectDiscoveryStatus;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  candidateCount: number;
+  eligibleCount: number;
+  excludedCount: number;
+  partialCount: number;
+  failureCode: string | null;
+  refreshedFromRunId: string | null;
+}
+
+export interface ProspectTargetMarket {
+  id: string;
+  name: string;
+  status: ProspectTargetMarketStatus;
+  currentVersion: number;
+  canManage: boolean;
+  definition: ProspectTargetMarketVersion;
+  latestRun: ProspectDiscoveryRun | null;
+  recentRuns: ProspectDiscoveryRun[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProspectTargetMarketList {
+  items: ProspectTargetMarket[];
+  activeLimit: number;
+  canCreate: boolean;
+}
+
+export interface ProspectCandidateReason {
+  reasonCode: string;
+  criterionKey: string;
+  state: "matched" | "missing" | "excluded" | "context";
+  text: string;
+  dataOrigin:
+    | "provider_supplied"
+    | "verified_research"
+    | "existing_revenueos_data"
+    | "unknown";
+  trustState: ProspectTrustState;
+  observedValueClass: string | null;
+  sourceReference: string | null;
+}
+
+export interface ProspectDiscoveryCandidate {
+  id: string;
+  prospectTargetId: string;
+  providerCandidateId: string;
+  companyName: string;
+  domain: string;
+  location: string | null;
+  industry: string | null;
+  employeeBand: ProspectEmployeeBand | null;
+  matchState: ProspectCandidateMatchState;
+  priority: ProspectCandidatePriority;
+  reasons: ProspectCandidateReason[];
+  missingInformation: string[];
+  relationshipState: ProspectRelationshipState;
+  matchedCompanyId: string | null;
+  activeOpportunityId: string | null;
+  saved: boolean;
+  excludedByUser: boolean;
+  exclusionReason: string | null;
+  researchStatus:
+    | "not_started"
+    | "pending"
+    | "researching"
+    | "ready"
+    | "partial"
+    | "failed";
+}
+
+export interface ProspectDiscovery {
+  targetMarket: ProspectTargetMarket;
+  run: ProspectDiscoveryRun;
+  summary: {
+    totalCandidates: number;
+    highPriority: number;
+    worthResearching: number;
+    needsMoreInformation: number;
+    excluded: number;
+    existingAccounts: number;
+    activeOpportunities: number;
+    newProspects: number;
+  };
+  candidates: ProspectDiscoveryCandidate[];
+  message: string;
+  highPriorityExplanation: string;
+}
+
+export interface ProspectCandidateFeedback {
+  prospectTargetId: string;
+  saved: boolean;
+  excludedByUser: boolean;
+  exclusionReason: string | null;
+}
+
 export type ProspectPersonEmploymentState =
   | "current"
   | "uncertain"

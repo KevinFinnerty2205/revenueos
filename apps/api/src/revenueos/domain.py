@@ -104,6 +104,44 @@ class ProspectContactPointType(StrEnum):
     PUBLIC_PROFESSIONAL_PROFILE = "public_professional_profile"
 
 
+class ProspectTargetMarketStatus(StrEnum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class ProspectDiscoveryRunStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
+class ProspectCandidateMatchState(StrEnum):
+    MATCH = "match"
+    PARTIAL = "partial"
+    EXCLUDED = "excluded"
+
+
+class ProspectCandidatePriority(StrEnum):
+    HIGH = "high"
+    WORTH_RESEARCHING = "worth_researching"
+    NEEDS_MORE_INFORMATION = "needs_more_information"
+    EXCLUDED = "excluded"
+
+
+class ProspectRelationshipState(StrEnum):
+    NEW_PROSPECT = "new_prospect"
+    EXISTING_ACCOUNT_NO_ACTIVE_OPPORTUNITY = "existing_account_no_active_opportunity"
+    ACTIVE_OPPORTUNITY = "active_opportunity"
+
+
+class ProspectCandidateFeedbackState(StrEnum):
+    SAVED = "saved"
+    EXCLUDED = "excluded"
+
+
 class OpportunityStage(StrEnum):
     QUALIFICATION = "qualification"
     DISCOVERY = "discovery"

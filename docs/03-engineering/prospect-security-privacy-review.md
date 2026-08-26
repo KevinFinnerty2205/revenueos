@@ -13,6 +13,20 @@ personal contact harvesting, sensitive/personality inference, photos, bulk expor
 outreach was added. See the
 [Person Intelligence review](prospect-person-security-privacy-review.md).
 
+## WO-028 extension
+
+Target Market discovery accepts only advertised company criteria, rejects sensitive
+or contradictory targeting, and applies deterministic categorical matching. Six new
+tenant tables use repository predicates, composite tenant foreign keys and forced
+RLS. Exact-domain Account/Opportunity reconciliation is read-only. Source links are
+canonical public HTTPS URLs; no page is fetched, no raw response is stored and no
+text is sent to a model.
+
+Daily tenant/user quotas, a 50-company result cap, active-market cap, fresh-result
+reuse and production mock fail-closed behaviour bound cost and abuse. There is no
+score, intent claim, outreach, bulk export, automated downstream record creation or
+background surveillance.
+
 **Status:** Passed for the implemented WO-026 boundary
 
 ## Threat findings and controls

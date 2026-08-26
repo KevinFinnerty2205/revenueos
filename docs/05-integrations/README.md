@@ -38,3 +38,9 @@ professional research and expiring business contact fields. The
 [licensing/storage decision](person-provider-licensing-storage-decision.md) document
 why no live provider, trial or paid service was activated. No scraping fallback was
 added and standard tests make no real external provider request.
+
+WO-028 adds a provider-neutral company-discovery boundary for Target Markets. Apollo,
+People Data Labs and Crunchbase were reviewed, but no live account-data provider was
+approved or activated. The [company discovery provider evaluation](company-discovery-provider-evaluation.md)
+records the decision. The shipped adapter returns deterministic synthetic fixtures,
+makes no network request and fails closed in production.

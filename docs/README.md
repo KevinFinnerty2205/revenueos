@@ -44,6 +44,11 @@ This is the canonical product and engineering documentation index. Documents dis
 38. [Prospect Person security and privacy review](03-engineering/prospect-person-security-privacy-review.md)
 39. [Person/contact provider evaluation](05-integrations/person-contact-provider-evaluation.md)
 40. [ADR 0039: Separate Prospect Person from Contact](08-decisions/0039-separate-prospect-person-from-contact.md)
+41. [Target Market Intelligence](01-product/target-market-intelligence.md) — current WO-028 ICP/territory boundary
+42. [Target Market experience](02-design/target-market-experience.md)
+43. [Target Market Intelligence architecture](03-engineering/target-market-intelligence-architecture.md)
+44. [Company discovery provider evaluation](05-integrations/company-discovery-provider-evaluation.md)
+45. [ADR 0042: Unified, versioned Target Markets](08-decisions/0042-unified-versioned-target-markets.md)
 
 ## 00 — Company
 
@@ -80,6 +85,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Buying Committee Hypothesis guide](01-product/buying-committee-hypotheses.md)
 - [Business Contact Trust guide](01-product/business-contact-trust.md)
 - [Professional Research Safety guide](01-product/professional-research-safety.md)
+- [Target Market Intelligence](01-product/target-market-intelligence.md)
 
 ## 02 — Design
 
@@ -126,6 +132,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Person Research UX implementation](02-design/person-research-ux-implementation.md)
 - [Buying Committee UX](02-design/buying-committee-ux.md)
 - [Prospect Person mobile and simplicity review](02-design/prospect-person-mobile-simplicity-review.md)
+- [Target Market experience](02-design/target-market-experience.md)
 
 ## 03 — Engineering
 
@@ -263,6 +270,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Prospect-to-Contact promotion](03-engineering/prospect-to-contact-promotion.md)
 - [Prospect Person retention, export and deletion](03-engineering/prospect-person-retention-export-deletion.md)
 - [Prospect quotas and anti-abuse](03-engineering/prospect-quotas-anti-abuse.md)
+- [Target Market Intelligence architecture](03-engineering/target-market-intelligence-architecture.md)
 
 ### Target through beta
 
@@ -313,6 +321,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [HubSpot connection and operations](05-integrations/hubspot-connection-guide.md)
 - [CRM administrator setup](05-integrations/crm-admin-setup.md)
 - [Prospect research provider boundary and deferred provider decision](05-integrations/prospect-research-provider-boundary.md)
+- [Company discovery provider evaluation](05-integrations/company-discovery-provider-evaluation.md)
 - [Person and contact provider evaluation](05-integrations/person-contact-provider-evaluation.md)
 - [Person provider licensing and storage decision](05-integrations/person-provider-licensing-storage-decision.md)
 
@@ -376,6 +385,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Checkpoint 1B: Core readiness before Prospect](07-sprints/checkpoint-1b-core-readiness.md)
 - [WO-026: Account & Lead Research](07-sprints/wo-026-account-lead-research.md)
 - [WO-027: Prospect & Decision-Maker Intelligence](07-sprints/wo-027-prospect-decision-maker-intelligence.md)
+- [WO-028: Territory & ICP Intelligence](07-sprints/wo-028-territory-icp-intelligence.md)
 
 ## 08 — Decision records
 
@@ -420,14 +430,15 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0039: Separate Prospect Person research from canonical Contact](08-decisions/0039-separate-prospect-person-from-contact.md)
 - [ADR 0040: Preserve trust per promoted Contact field](08-decisions/0040-contact-field-provenance.md)
 - [ADR 0041: No-scrape, mock-only professional research](08-decisions/0041-no-scrape-professional-research.md)
+- [ADR 0042: Unified, versioned Target Markets](08-decisions/0042-unified-versioned-target-markets.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
-implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026/027 now
-provide mock-backed company and person Prospect research. WO-028–045 remain unauthorised.
+implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026/027/028 now
+provide mock-backed company/person research and Target Market discovery. WO-029–045 remain unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

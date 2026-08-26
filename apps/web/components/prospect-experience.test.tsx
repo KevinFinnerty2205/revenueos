@@ -336,6 +336,8 @@ describe("RevenueOS Prospect experience", () => {
         return jsonResponse(availability);
       if (url.endsWith("/prospect/research") && !init?.method)
         return jsonResponse({ items: [] });
+      if (url.endsWith("/prospect/target-markets"))
+        return jsonResponse({ items: [], activeLimit: 10, canCreate: true });
       if (url.includes("/prospect/companies/search"))
         return jsonResponse({
           items: candidates,

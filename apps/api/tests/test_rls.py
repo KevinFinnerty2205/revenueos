@@ -171,6 +171,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "prospect_buying_role_hypotheses",
         "prospect_buying_role_sources",
         "prospect_contact_points",
+        "prospect_target_markets",
+        "prospect_target_market_versions",
+        "prospect_discovery_runs",
+        "prospect_discovery_candidates",
+        "prospect_candidate_reasons",
+        "prospect_target_feedback",
         "contact_field_sources",
     )
     tenant_a = {
@@ -246,6 +252,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "prospect_person_id": uuid.uuid4(),
         "prospect_hypothesis_id": uuid.uuid4(),
         "prospect_contact_point_id": uuid.uuid4(),
+        "prospect_target_market_id": uuid.uuid4(),
+        "prospect_target_market_version_id": uuid.uuid4(),
+        "prospect_discovery_run_id": uuid.uuid4(),
+        "prospect_discovery_candidate_id": uuid.uuid4(),
+        "prospect_candidate_reason_id": uuid.uuid4(),
         "contact_field_source_id": uuid.uuid4(),
     }
     tenant_b = {
@@ -321,6 +332,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "prospect_person_id": uuid.uuid4(),
         "prospect_hypothesis_id": uuid.uuid4(),
         "prospect_contact_point_id": uuid.uuid4(),
+        "prospect_target_market_id": uuid.uuid4(),
+        "prospect_target_market_version_id": uuid.uuid4(),
+        "prospect_discovery_run_id": uuid.uuid4(),
+        "prospect_discovery_candidate_id": uuid.uuid4(),
+        "prospect_candidate_reason_id": uuid.uuid4(),
         "contact_field_source_id": uuid.uuid4(),
     }
 
@@ -437,6 +453,113 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             "target_domain": f"rls-prospect-{suffix.lower()}.example",
                             "target_url": f"https://rls-prospect-{suffix.lower()}.example/",
                         },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_target_markets
+                                (id, organisation_id, name, status,
+                                 current_version, created_by_user_id)
+                            VALUES
+                                (:prospect_target_market_id, :organisation_id,
+                                 :market_name, 'active', 1, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "market_name": f"RLS Target Market {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_target_market_versions
+                                (id, organisation_id, target_market_id, version,
+                                 industries, countries, regions,
+                                 organisation_types,
+                                 preferred_business_characteristics,
+                                 excluded_industries, created_by_user_id)
+                            VALUES
+                                (:prospect_target_market_version_id,
+                                 :organisation_id, :prospect_target_market_id, 1,
+                                 '["Business software"]'::json, '["AU"]'::json,
+                                 '[]'::json, '[]'::json, '[]'::json, '[]'::json,
+                                 :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_discovery_runs
+                                (id, organisation_id, target_market_id,
+                                 target_market_version_id, requested_by_user_id,
+                                 provider_key, provider_version, status,
+                                 fingerprint, idempotency_key, requested_at,
+                                 completed_at, candidate_count, eligible_count)
+                            VALUES
+                                (:prospect_discovery_run_id, :organisation_id,
+                                 :prospect_target_market_id,
+                                 :prospect_target_market_version_id, :user_id,
+                                 'deterministic_mock', 'fixture-v1', 'completed',
+                                 :fingerprint, :discovery_idempotency_key, now(),
+                                 now(), 1, 1)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "fingerprint": suffix.lower() * 64,
+                            "discovery_idempotency_key": f"rls-discovery:{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_discovery_candidates
+                                (id, organisation_id, run_id, target_id,
+                                 match_state, priority, relationship_state,
+                                 business_characteristics,
+                                 provider_observed_at)
+                            VALUES
+                                (:prospect_discovery_candidate_id,
+                                 :organisation_id, :prospect_discovery_run_id,
+                                 :prospect_target_id, 'match', 'high',
+                                 'new_prospect', '["b2b"]'::json, now())
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_candidate_reasons
+                                (id, organisation_id, candidate_id, run_id,
+                                 reason_code, criterion_key, state,
+                                 product_safe_text, data_origin, trust_state)
+                            VALUES
+                                (:prospect_candidate_reason_id,
+                                 :organisation_id,
+                                 :prospect_discovery_candidate_id,
+                                 :prospect_discovery_run_id, 'industry_match',
+                                 'industry', 'matched',
+                                 'Industry matches the Target Market.',
+                                 'provider_supplied', 'provider_supplied')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO prospect_target_feedback
+                                (organisation_id, user_id, target_id, state)
+                            VALUES
+                                (:organisation_id, :user_id,
+                                 :prospect_target_id, 'saved')
+                            """
+                        ),
+                        identity_parameters,
                     )
                     await connection.execute(
                         text(
@@ -1988,6 +2111,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'prospect_buying_role_hypotheses',
                                     'prospect_buying_role_sources',
                                     'prospect_contact_points',
+                                    'prospect_target_markets',
+                                    'prospect_target_market_versions',
+                                    'prospect_discovery_runs',
+                                    'prospect_discovery_candidates',
+                                    'prospect_candidate_reasons',
+                                    'prospect_target_feedback',
                                     'contact_field_sources'
                                 )
                                 """
@@ -2050,6 +2179,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["prospect_contact_point_id"]},
                 )
                 assert contact_point_delete.rowcount == 0
+                discovery_delete = await connection.execute(
+                    text("DELETE FROM prospect_discovery_runs WHERE id = :id"),
+                    {"id": tenant_b["prospect_discovery_run_id"]},
+                )
+                assert discovery_delete.rowcount == 0
                 savepoint = await connection.begin_nested()
                 with pytest.raises(DBAPIError):
                     await connection.execute(
@@ -2444,6 +2578,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 )
                 for table in (
                     "contact_field_sources",
+                    "prospect_target_feedback",
+                    "prospect_candidate_reasons",
+                    "prospect_discovery_candidates",
+                    "prospect_discovery_runs",
+                    "prospect_target_market_versions",
+                    "prospect_target_markets",
                     "prospect_contact_points",
                     "prospect_buying_role_sources",
                     "prospect_buying_role_hypotheses",

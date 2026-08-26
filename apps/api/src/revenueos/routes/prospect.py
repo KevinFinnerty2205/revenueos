@@ -15,7 +15,11 @@ from revenueos.prospect_contracts import (
     ResearchCreateRequest,
     ResearchRefreshRequest,
 )
-from revenueos.prospect_dependencies import get_prospect_people_service, get_prospect_service
+from revenueos.prospect_dependencies import (
+    get_prospect_people_service,
+    get_prospect_service,
+    get_prospect_target_market_service,
+)
 from revenueos.prospect_people_contracts import (
     BuyingRoleHypothesisResponse,
     BuyingRoleReviewRequest,
@@ -28,10 +32,25 @@ from revenueos.prospect_people_contracts import (
 )
 from revenueos.prospect_people_services import ProspectPeopleService
 from revenueos.prospect_services import ProspectService
+from revenueos.prospect_target_market_contracts import (
+    CandidateExclusionRequest,
+    CandidateFeedbackResponse,
+    DiscoveryCapabilitiesResponse,
+    DiscoveryRequest,
+    DiscoveryResponse,
+    TargetMarketDefinitionRequest,
+    TargetMarketListResponse,
+    TargetMarketResponse,
+)
+from revenueos.prospect_target_market_services import ProspectTargetMarketService
 
 router = APIRouter(prefix="/api/v1/prospect", tags=["prospect"])
 Service = Annotated[ProspectService, Depends(get_prospect_service)]
 PeopleService = Annotated[ProspectPeopleService, Depends(get_prospect_people_service)]
+TargetMarketService = Annotated[
+    ProspectTargetMarketService,
+    Depends(get_prospect_target_market_service),
+]
 
 
 @router.get("/availability", response_model=ProspectAvailabilityResponse)
@@ -45,6 +64,93 @@ async def update_entitlement(
     service: Service,
 ) -> ProspectAvailabilityResponse:
     return await service.update_entitlement(request)
+
+
+@router.get(
+    "/discovery/capabilities",
+    response_model=DiscoveryCapabilitiesResponse,
+)
+async def discovery_capabilities(service: TargetMarketService) -> DiscoveryCapabilitiesResponse:
+    return await service.capabilities()
+
+
+@router.get("/target-markets", response_model=TargetMarketListResponse)
+async def list_target_markets(service: TargetMarketService) -> TargetMarketListResponse:
+    return await service.list_markets()
+
+
+@router.post(
+    "/target-markets",
+    response_model=TargetMarketResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_target_market(
+    request: TargetMarketDefinitionRequest,
+    service: TargetMarketService,
+) -> TargetMarketResponse:
+    return await service.create_market(request)
+
+
+@router.get("/target-markets/{target_market_id}", response_model=TargetMarketResponse)
+async def get_target_market(
+    target_market_id: UUID,
+    service: TargetMarketService,
+) -> TargetMarketResponse:
+    return await service.get_market(target_market_id)
+
+
+@router.patch("/target-markets/{target_market_id}", response_model=TargetMarketResponse)
+async def update_target_market(
+    target_market_id: UUID,
+    request: TargetMarketDefinitionRequest,
+    service: TargetMarketService,
+) -> TargetMarketResponse:
+    return await service.update_market(target_market_id, request)
+
+
+@router.post("/target-markets/{target_market_id}/archive", response_model=TargetMarketResponse)
+async def archive_target_market(
+    target_market_id: UUID,
+    service: TargetMarketService,
+) -> TargetMarketResponse:
+    return await service.archive_market(target_market_id)
+
+
+@router.post(
+    "/target-markets/{target_market_id}/discover",
+    response_model=DiscoveryResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def discover_target_market(
+    target_market_id: UUID,
+    request: DiscoveryRequest,
+    service: TargetMarketService,
+) -> DiscoveryResponse:
+    return await service.discover(target_market_id, request)
+
+
+@router.get("/discovery/{run_id}", response_model=DiscoveryResponse)
+async def get_discovery(run_id: UUID, service: TargetMarketService) -> DiscoveryResponse:
+    return await service.get_discovery(run_id)
+
+
+@router.post("/candidates/{candidate_id}/save", response_model=CandidateFeedbackResponse)
+async def save_candidate(candidate_id: UUID, service: TargetMarketService) -> CandidateFeedbackResponse:
+    return await service.save_candidate(candidate_id)
+
+
+@router.post("/candidates/{candidate_id}/exclude", response_model=CandidateFeedbackResponse)
+async def exclude_candidate(
+    candidate_id: UUID,
+    request: CandidateExclusionRequest,
+    service: TargetMarketService,
+) -> CandidateFeedbackResponse:
+    return await service.exclude_candidate(candidate_id, request)
+
+
+@router.post("/candidates/{candidate_id}/restore", response_model=CandidateFeedbackResponse)
+async def restore_candidate(candidate_id: UUID, service: TargetMarketService) -> CandidateFeedbackResponse:
+    return await service.restore_candidate(candidate_id)
 
 
 @router.get("/companies/search", response_model=CompanySearchResponse)
