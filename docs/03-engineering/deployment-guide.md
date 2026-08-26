@@ -56,6 +56,14 @@ It is safe for local/CI synthetic data but deliberately unavailable in productio
 no provider credential exists. Keep production Prospect disabled until an approved
 adapter and its terms/security review are implemented.
 
+WO-030 adds `API_FEATURE_ENGAGE_CAMPAIGNS_ENABLED` as a separate staged-rollout
+gate under the existing Engage entitlement and `API_FEATURE_ENGAGE_ENABLED` flag.
+Production Campaign execution also requires the existing Action Execution,
+Integrations and an approved non-mock user mailbox path. No such mailbox path is
+implemented: production rejects Mock Email and therefore Campaign sending must remain
+disabled/fail closed. Disabling Engage or Campaign availability halts unsent work;
+history remains available under retention policy.
+
 ## Release order
 
 1. Build and scan one immutable release.
@@ -155,6 +163,15 @@ module entitlement/usage tables, worker discovery function, downgrade/re-upgrade
 drift. Local development seeds the Prospect entitlement for the fixed development
 organisation. Production with the mock provider fails closed and must not be
 described as working public research.
+
+WO-030 advances the single head to `0039_campaign_sequences`. Deploy API, worker and
+web together; verify the six forced-RLS Campaign tables, published-version and
+audience immutability guards, tenant worker-discovery function, downgrade/re-upgrade,
+identifier length and drift. Keep the Campaign flag disabled in production until a
+mailbox provider, sender authority, compliance and operational rollout are separately
+approved. Rollback first disables Engage Campaigns and drains/cancels unsent work;
+prefer retaining the forward schema because downgrading to
+`0038_personalized_outreach` permanently removes Campaign definitions and history.
 
 Rollback first disables HubSpot and Action Execution. Existing external updates
 cannot be undone by RevenueOS. Disconnect/revoke tenant connections before retiring

@@ -1,5 +1,20 @@
 # Application architecture
 
+## Engage Campaigns & Sequences (WO-030)
+
+The modular monolith adds six tenant-owned Campaign tables and a bounded Campaign
+scheduler inside the existing durable worker. Campaign services own explicit
+audience/version/lifecycle policy; WO-029 owns exact Outreach composition/versioning;
+WO-021/022 own approval, preview, execution idempotency and adapter receipts. No
+microservice, broker, datastore, AI provider call or direct mail adapter was added.
+
+Migration `0039_campaign_sequences` enforces composite tenant relationships, forced
+RLS, table caps and published audience/sequence/version immutability. PostgreSQL
+worker discovery returns opaque organisation IDs; claims/recovery execute under
+trusted tenant context. Production and missing sender-bound mailbox conditions fail
+closed. See [Campaign domain architecture](campaign-domain-architecture.md) and
+[scheduler architecture](campaign-scheduling-architecture.md).
+
 ## Engage personalised outreach (WO-029)
 
 The modular monolith now contains an entitled, Contact-scoped one-to-one outreach
@@ -11,8 +26,9 @@ PostgreSQL RLS. Migration `0038_personalized_outreach` owns the schema.
 The slice reuses canonical Contact/Company/User, eligible Prospect provenance,
 versioned Action review and the Execution Foundation. Sender/recipient/content are
 server-pinned; approval remains distinct from exact preview and confirmation. Mock
-Email is deterministic and unavailable in production. No mailbox OAuth/provider,
-campaign, sequence, tracking or new worker infrastructure exists. See the
+Email is deterministic and unavailable in production. No mailbox OAuth/provider or
+tracking exists. WO-030 now reuses these records for bounded Campaign sequences and
+the existing worker process. See the
 [architecture guide](personalised-outreach-architecture.md).
 
 ## Prospect Person Intelligence (WO-027)
@@ -487,12 +503,13 @@ research, outreach, Create, CRM and entitlement boundaries are indexed from the
 add-on and information-architecture boundaries. No schema, endpoint, worker,
 provider or navigation described there exists until a separate work order implements it.
 
-WO-024 is now the first realised post-blueprint module. It remains inside the same
+WO-024 is the first realised post-blueprint module. It remains inside the same
 web/API/PostgreSQL modular monolith: standard definition registry, tenant custom
 definition repository, deterministic projection service and Opportunity/Settings UI.
-Migration `0033_sales_methodology` introduced that domain; `0035_prospect_research`
-is now the current Alembic head. No service, queue,
-provider, datastore or top-level navigation area was added.
+Migration `0033_sales_methodology` introduced that domain. Later work orders advance
+the single head through Prospect, CRM and Engage to
+`0039_campaign_sequences`. Campaign scheduling remains in the same durable worker;
+no second service, queue, provider or datastore was added.
 
 WO-025B adds strict Ask contracts, a tenant-scoped repository and a deterministic
 service/router inside that same API. It composes current Methodology, Revenue Brain,

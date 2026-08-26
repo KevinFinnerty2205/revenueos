@@ -1,6 +1,6 @@
 # RevenueOS Engage
 
-- **Status:** WO-029 one-to-one outreach implemented as an entitled add-on; campaigns/sequences remain future
+- **Status:** WO-029 one-to-one outreach and WO-030 bounded campaigns/sequences implemented as an entitled add-on
 - **Purpose:** Turn target accounts into conversations
 
 ## Product outcome
@@ -9,7 +9,7 @@ Engage uses authorised account/person research, ICP context and approved company
 positioning to help a seller create relevant, respectful outreach. The user can edit
 and approve messages; campaign controls prevent unbounded or deceptive automation.
 
-## Current WO-029 capability
+## Current WO-029/WO-030 capability
 
 - one-person personalised outreach;
 - four explicit purposes and role/company-aware value messaging;
@@ -19,6 +19,12 @@ and approve messages; campaign controls prevent unbounded or deceptive automatio
 - durable suppression, cooldown and daily limits; and
 - visibly labelled deterministic email simulation outside production.
 
+WO-030 adds explicit canonical-Contact Campaigns with an immutable audience/sequence
+launch snapshot, one to four per-recipient source-backed steps, review-each-send and
+policy-gated bounded auto-send modes, local send windows, pause/resume/stop, active
+Opportunity/collision/suppression controls and seller-reported outcomes. See the
+[Campaign guide](campaigns-and-sequences.md).
+
 Production mailbox sending is not enabled. Gmail and Microsoft Graph were evaluated
 and deliberately deferred; no mailbox OAuth, unsubscribe route, bounce/reply event,
 tracking or delivery claim exists. See the
@@ -27,10 +33,8 @@ tracking or delivery claim exists. See the
 
 ## Future capabilities, not implemented
 
-- short sequences with per-step content and personalisation;
-- campaigns with review and scheduling;
 - event invitation and follow-up workflows; and
-- reply/outcome analytics only after a supported provider path exists.
+- automatic reply/provider analytics only after a supported mailbox path exists.
 
 ## Outreach contract
 
@@ -79,9 +83,10 @@ suppression rules follow each attendee.
 ## Experience and packaging
 
 Engage lives within Find for target-to-outreach flow and within an Account/Contact
-context for individual outreach. Campaign management is a secondary area under Find
-or Sell, not a seventh top-level product. Mobile supports review, approve, pause and
-event capture; campaign authoring is desktop-first.
+context for individual outreach. Campaign management is under the existing desktop
+**Sell** group and contextually linked from People, not a seventh top-level product.
+The four-item mobile navigation remains unchanged; mobile supports Campaign summary,
+recipient review/approve and pause/stop while authoring is desktop-oriented.
 
 If Engage is unavailable, the seller can still copy a Core follow-up draft and act
 manually. See [engagement experience](../02-design/engage-campaign-event-experience.md)
@@ -90,7 +95,7 @@ and [campaign architecture](../03-engineering/outreach-campaign-architecture.md)
 ## Simplicity test
 
 - **Where/first action:** From Find, Account or Contact, choose **Create outreach**.
-- **Navigation:** No new permanent item; campaigns are secondary under Find/Sell.
+- **Navigation:** Campaigns is a secondary item under the existing desktop Sell group.
 - **Hidden until needed:** Sequence timing, batch controls, exceptions and provider
   detail follow purpose, recipient and exact-message review.
 - **Mobile:** Review, approve, pause/stop and capture event follow-up; campaign building
@@ -99,5 +104,6 @@ and [campaign architecture](../03-engineering/outreach-campaign-architecture.md)
   explanation may be shown without repeated upsell.
 - **First-time/power user:** A first-time seller sends one reviewed message; a power
   user manages bounded sequences, campaigns and exceptions.
-- **AI/manual work:** AI drafts from sourced context but cannot approve; users edit,
-  reject, correct sources and stop delivery.
+- **AI/manual work:** deterministic sourced composition cannot choose an audience or
+  approve itself; users review/launch/stop, and bounded auto-send requires explicit
+  organisation and Campaign authority.

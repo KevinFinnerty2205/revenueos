@@ -70,7 +70,7 @@ verified, or turn private information into outreach context.
 Saving a Prospect should resolve duplicates and preserve research provenance rather
 than create a second Account or Contact model.
 
-## WO-029 Engage handoff
+## WO-029/WO-030 Engage handoff
 
 Engage receives only the canonical Contact ID. It resolves the current Prospect
 Person link and current completed research runs server-side, then selects bounded
@@ -79,6 +79,13 @@ untrusted observations are excluded. If no reliable hook remains, the outreach
 composer says so and uses approved role/company/value context without inventing a
 hook. Prospect trust remains provenance; it never establishes outreach permission.
 See [Personalised one-to-one outreach](personalised-outreach.md).
+
+WO-030 Campaigns still accepts only canonical Contact IDs. It never enrols a
+Prospect Person, Target Market result or discovered email directly. Target Market
+selection may help a seller decide whom to promote, but Campaign audience is an
+explicit bounded Contact snapshot and does not self-expand. Each Campaign step
+reuses the same current, non-sensitive, source-backed observations and revalidates
+them before auto-send. See [Campaigns & Sequences](campaigns-and-sequences.md).
 
 ## ICP and territory
 

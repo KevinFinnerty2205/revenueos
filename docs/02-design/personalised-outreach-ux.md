@@ -9,7 +9,10 @@ The user opens a canonical Contact and follows one linear path:
 Create outreach is placed in Contact context rather than a campaign dashboard. The
 left column presents business address trust, separate permission language,
 contactability and history. The wider working column contains the one current task.
-There is no campaign, sequence, audience-list, scheduling or performance UI.
+This Contact-scoped route deliberately contains no campaign, sequence, audience-list,
+scheduling or performance UI. WO-030 adds those bounded controls in the separate
+[Campaigns & Sequences workspace](campaigns-and-sequences-ux.md) while continuing to
+reuse this exact review and send journey.
 
 ## Screen states
 

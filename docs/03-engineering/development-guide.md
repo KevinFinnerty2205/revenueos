@@ -130,6 +130,15 @@ or credential and make no external request. Keep the Action Layer, Integrations,
 Action Execution and Mock Connectors flags aligned. Production configuration rejects
 Mock Connectors.
 
+WO-030 Campaign development additionally requires the Engage entitlement plus
+`API_FEATURE_ENGAGE_ENABLED=true` and
+`API_FEATURE_ENGAGE_CAMPAIGNS_ENABLED=true`. The ordinary worker performs bounded
+Campaign due-step preparation and reconciliation before and after Action Execution;
+do not start an extra scheduler. Connect the user-bound Mock Email adapter to exercise
+the synthetic journey. It remains visibly simulation-only, uses canonical Contacts
+and makes no network request. The current single Alembic head is
+`0039_campaign_sequences`.
+
 ## Database workflow
 
 SQLAlchemy metadata and Alembic migration history must agree:

@@ -51,3 +51,12 @@ but customer ecosystem, OAuth, sender identity, reconciliation and compliance-ev
 readiness did not support a production choice. No mailbox OAuth or paid email service
 was activated. Production email fails closed; Mock Email remains visibly simulation-
 only outside production.
+
+WO-030 re-evaluates that decision for bounded Campaigns and reaches the same
+fail-closed result. Campaign orchestration uses the existing user-bound Mock Email
+simulation, exact execution preview, idempotent receipt and reconciliation contract;
+it does not introduce generic SMTP, shared senders or a live mailbox connector.
+Automatic reply detection is also deferred because it would require a separately
+approved inbound-mail privacy and scope expansion. Sellers may report a reply,
+meeting or not-interested outcome, clearly labelled seller-reported. See the
+[reply-detection decision](reply-detection-decision.md).

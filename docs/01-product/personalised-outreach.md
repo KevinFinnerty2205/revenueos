@@ -119,12 +119,15 @@ reconciliation are deferred with production sending.
 ## Current limitations and handoff
 
 WO-029 has no Gmail/Microsoft OAuth, live sending, delivered/read semantics, inbound
-reply sync, unsubscribe route, campaign, sequence, bulk recipient import, automatic
-follow-up, scheduling, LinkedIn/call automation, tracking, predictive send time or
-arbitrary recipient address. HubSpot logging is not performed: seller outreach stays
-inside RevenueOS until a separately reviewed CRM-activity contract exists.
+reply sync, unsubscribe route, bulk recipient import, LinkedIn/call automation,
+tracking, predictive send time or arbitrary recipient address. HubSpot logging is not
+performed: seller outreach stays inside RevenueOS until a separately reviewed
+CRM-activity contract exists.
 
-WO-030 may add campaign/sequence orchestration only by preserving canonical Contacts,
-per-person immutable rendering, suppression, quotas, exact review, idempotency and
-provider reconciliation. It is not implemented by WO-029. WO-031 Event Intelligence
-is also outside this slice.
+WO-030 now reuses this exact Outreach Message, source-backed rendering, suppression,
+quota, review, idempotency and provider-reconciliation path for bounded Campaigns and
+one-to-four-step sequences. It does not change the one-to-one contract described here:
+audiences remain canonical Contacts, every message is rendered per recipient, and
+production email remains unavailable. See
+[Campaigns & Sequences](campaigns-and-sequences.md). WO-031 Event Intelligence remains
+outside this slice.

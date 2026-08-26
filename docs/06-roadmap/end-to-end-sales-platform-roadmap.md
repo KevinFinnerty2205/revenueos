@@ -312,6 +312,15 @@ forward. See the [WO-029 record](../07-sprints/wo-029-personalised-outreach.md).
 
 ### WO-030 — Campaigns & Sequences
 
+**Current implementation note (26 August 2026):** WO-030 is implemented as
+canonical-Contact-only Campaigns with a 50-recipient/four-step cap, immutable
+audience/sequence/policy launch snapshot, review-each-send and administrator plus
+launch-confirmed bounded auto-send, per-recipient source-backed Outreach reuse,
+timezone/window scheduling, pause/stop, collision/suppression/quota/active-Opportunity
+checks and seller-reported outcomes. The existing durable worker and Mock Email
+simulation are reused; production mailbox and automatic reply detection remain
+deferred. See the [WO-030 record](../07-sprints/wo-030-campaigns-and-sequences.md).
+
 - **Objective/value/package:** Coordinate bounded multi-step outreach while preserving
   message-level control and recipient safety. **Engage**.
 - **Dependencies/checkpoint:** Proven safe WO-029 execution, suppression and provider
@@ -320,10 +329,11 @@ forward. See the [WO-029 record](../07-sprints/wo-029-personalised-outreach.md).
   inspectable person messages, schedule, progress, pause/stop and simple exceptions.
 - **Domain/data:** Campaign, immutable SequenceVersion, steps, enrolment and terminal
   reason; no copied identity records.
-- **Backend/frontend/AI:** Lifecycle services, scheduler using existing durable job
-  patterns, versioned preview and exception UI; AI personalisation stays schema-bound.
-- **Integrations:** Same proven provider first; additional channels need separate
-  policy and connector work orders.
+- **Backend/frontend/AI:** Lifecycle services and scheduler use existing durable job
+  patterns, versioned preview and exception UI; deterministic WO-029 personalisation
+  is reused and WO-030 adds no AI call.
+- **Integrations:** Mock Email simulation only outside production; production mail and
+  additional channels need separate policy/connector work orders.
 - **Security/privacy/operations:** Batch limits, revalidation at every step, global
   suppression propagation, bounce/complaint stops, concurrency and queue-drain runbooks.
 - **Acceptance:** Pause/stop wins races; replies/unsubscribes end enrolment; published

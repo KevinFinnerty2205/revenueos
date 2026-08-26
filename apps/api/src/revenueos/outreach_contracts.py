@@ -39,12 +39,14 @@ class OutreachPolicyUpdate(StrictOutreachModel):
     max_daily_sends_user: int = Field(ge=1, le=500)
     max_daily_sends_org: int = Field(ge=1, le=2_000)
     require_opt_out_mechanism: bool = False
+    campaign_auto_send_allowed: bool = False
     offering_name: OfferingName
     value_proposition: ValueProposition
     approved_cta: ApprovedCTA
 
 
 class OutreachPolicyResponse(APIModel):
+    version: int
     configured: bool
     outbound_enabled: bool
     provider_supplied_email_allowed: bool
@@ -52,6 +54,7 @@ class OutreachPolicyResponse(APIModel):
     max_daily_sends_user: int
     max_daily_sends_org: int
     require_opt_out_mechanism: bool
+    campaign_auto_send_allowed: bool
     offering_name: str | None
     value_proposition: str | None
     approved_cta: str | None

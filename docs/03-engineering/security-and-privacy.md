@@ -1,5 +1,22 @@
 # Security and privacy
 
+## Engage Campaigns & Sequences
+
+WO-030 accepts only one to 50 canonical Contact IDs and one to four ordered steps.
+Six new organisation-owned tables use composite tenant keys, explicit predicates and
+forced PostgreSQL RLS. Published audience/sequence/version state is immutable;
+Contact deletion may scrub the live reference while retaining bounded history.
+Suppression, trust, policy, entitlement, sender mailbox, quota/cooldown, source
+currency, campaign collision and active Opportunity are checked before due work.
+Unknown provider state never auto-retries. Logs/metrics exclude identities, copy,
+source excerpts, credentials and provider payloads. See the
+[Campaign security review](campaign-security-privacy-abuse-review.md).
+
+Production mailbox work fails closed. No CSV/list import, tracking pixel/open/click,
+sender/domain rotation, mailbox reading/reply inference, autonomous audience, Event
+Intelligence, real test email or paid service was introduced. Seller-reported
+outcomes and outbound content do not create customer Evidence.
+
 ## Prospect Person Intelligence
 
 WO-027 is company-scoped, quota-bound and mock-provider-only. It prohibits private
@@ -35,7 +52,8 @@ controlled priority type, counts, source availability and a partial flag. See th
 
 - Organisation-owned queries include explicit organisation predicates.
 - PostgreSQL RLS policies use transaction-local trusted organisation context.
-- Companies, contacts, opportunities, tasks, meetings, participants,
+- Companies, contacts, opportunities, tasks, Engage Campaign/version/sequence/
+  audience/enrolment/step records, meetings, participants,
   transcripts, meeting audit events, AI jobs, AI artefacts, Revenue Brain
   snapshots, Revenue Brain insights and all seven private-beta control tables
   have non-null organisation ownership and forced RLS.

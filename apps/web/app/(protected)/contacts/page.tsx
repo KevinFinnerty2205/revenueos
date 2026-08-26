@@ -1,5 +1,11 @@
 import { BusinessEntityList } from "@/components/business-entity-list";
+import { CampaignShortcut } from "@/components/campaign-workspace";
 
 export default function ContactsPage() {
-  return <BusinessEntityList entity="contacts" />;
+  return (
+    <>
+      <CampaignShortcut />
+      <BusinessEntityList entity="contacts" />
+    </>
+  );
 }

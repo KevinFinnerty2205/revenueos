@@ -198,6 +198,8 @@ defaults:
 | `API_FEATURE_ONLINE_MEETING_AUTO_INGEST_ENABLED`             | `false` |
 | `API_FEATURE_LIVE_INTERACTION_INTELLIGENCE_ENABLED`          | `false` |
 | `API_FEATURE_LIVE_INTERACTION_EXTERNAL_AI_ENABLED`           | `false` |
+| `API_FEATURE_ENGAGE_ENABLED`                                | `true`  |
+| `API_FEATURE_ENGAGE_CAMPAIGNS_ENABLED`                      | `true`  |
 | `API_FEATURE_DATA_EXPORT_ENABLED`                            | `true`  |
 | `API_FEATURE_ORGANISATION_DELETION_ENABLED`                  | `false` |
 
@@ -210,7 +212,7 @@ There is deliberately no feature-flag administration UI.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  Alembic head `0032_integration_execution`, identity configuration, selected
+  current Alembic head (`0039_campaign_sequences` for WO-030), identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.

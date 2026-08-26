@@ -19,3 +19,12 @@ research is reused and page reads never call the provider.
 A future paid company or person adapter must add provider request/record caps based on documented unit
 economics without weakening current tenant and concurrency controls. Rate-limit logs
 contain IDs, provider key, state and counts only.
+
+## Engage Campaign controls
+
+WO-030 adds independent server-side Campaign caps: 50 explicit Contacts, one to four
+steps, five active Campaigns per owner, ten per organisation, 100 Campaign drafts per
+organisation/day and five-minute recipient launch spacing. The existing Outreach
+per-user/per-organisation daily send limits and global Contact cooldown apply across
+one-to-one and Campaign sends. Quota/cooldown defers rather than releases a backlog.
+See [Campaign quotas and cost controls](campaign-quotas-cost-controls.md).

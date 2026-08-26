@@ -102,6 +102,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "outreach_versions",
         "outreach_personalization_sources",
         "contact_suppressions",
+        "engage_campaigns",
+        "engage_campaign_versions",
+        "engage_sequence_steps",
+        "engage_campaign_audience",
+        "engage_campaign_enrollments",
+        "engage_enrollment_steps",
         "integration_connections",
         "execution_previews",
         "action_executions",
@@ -351,6 +357,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "outreach_version_id": uuid.uuid4(),
                 "outreach_source_id": uuid.uuid4(),
                 "contact_suppression_id": uuid.uuid4(),
+                "engage_campaign_id": uuid.uuid4(),
+                "engage_campaign_version_id": uuid.uuid4(),
+                "engage_sequence_step_id": uuid.uuid4(),
+                "engage_campaign_audience_id": uuid.uuid4(),
+                "engage_campaign_enrollment_id": uuid.uuid4(),
+                "engage_enrollment_step_id": uuid.uuid4(),
             }
         )
 
@@ -829,7 +841,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  now() + interval '10 minutes')
                             """
                         ),
-                        {**identity_parameters, "state_hash": suffix.lower() * 64},
+                        {**identity_parameters, "state_hash": uuid.uuid4().hex * 2},
                     )
                     await connection.execute(
                         text(
@@ -1171,6 +1183,109 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             **identity_parameters,
                             "suppression_fingerprint": suffix.upper() * 64,
                         },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO engage_campaigns
+                                (id, organisation_id, owner_user_id, state)
+                            VALUES
+                                (:engage_campaign_id, :organisation_id,
+                                 :user_id, 'ready')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO engage_campaign_versions
+                                (id, organisation_id, campaign_id, version,
+                                 status, name, purpose, approval_mode,
+                                 sender_user_id, sender_timezone,
+                                 created_by_user_id)
+                            VALUES
+                                (:engage_campaign_version_id, :organisation_id,
+                                 :engage_campaign_id, 1, 'draft', 'RLS campaign',
+                                 'Tenant-isolated campaign', 'review_each_send',
+                                 :user_id, 'Australia/Sydney', :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO engage_sequence_steps
+                                (id, organisation_id, campaign_version_id,
+                                 step_order, delay_days, objective,
+                                 content_strategy)
+                            VALUES
+                                (:engage_sequence_step_id, :organisation_id,
+                                 :engage_campaign_version_id, 1, 0,
+                                 'introduction', 'source_backed_value')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO engage_campaign_audience
+                                (id, organisation_id, campaign_version_id,
+                                 contact_id, company_id, recipient_name,
+                                 recipient_email, recipient_trust, eligible,
+                                 eligibility_code, eligibility_reason)
+                            VALUES
+                                (:engage_campaign_audience_id, :organisation_id,
+                                 :engage_campaign_version_id, :contact_id,
+                                 :company_id, 'RLS Recipient', :contact_email,
+                                 'provider_supplied', true, 'eligible',
+                                 'Eligible RLS Contact')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "contact_email": f"rls-contact-{suffix.lower()}-{tenant['contact_id']}@example.test",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO engage_campaign_enrollments
+                                (id, organisation_id, campaign_id,
+                                 campaign_version_id, contact_id, company_id,
+                                 sender_user_id, recipient_name,
+                                 recipient_email, recipient_trust, state,
+                                 current_step_order, created_by_user_id)
+                            VALUES
+                                (:engage_campaign_enrollment_id, :organisation_id,
+                                 :engage_campaign_id, :engage_campaign_version_id,
+                                 :contact_id, :company_id, :user_id,
+                                 'RLS Recipient', :contact_email,
+                                 'provider_supplied', 'ready', 1, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "contact_email": f"rls-contact-{suffix.lower()}-{tenant['contact_id']}@example.test",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO engage_enrollment_steps
+                                (id, organisation_id, enrollment_id,
+                                 sequence_step_id, scheduled_at, prepare_at,
+                                 state, outreach_message_id)
+                            VALUES
+                                (:engage_enrollment_step_id, :organisation_id,
+                                 :engage_campaign_enrollment_id,
+                                 :engage_sequence_step_id, now(), now(),
+                                 'ready_for_review', :outreach_message_id)
+                            """
+                        ),
+                        identity_parameters,
                     )
                     await connection.execute(
                         text(
@@ -2149,6 +2264,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'outreach_versions',
                                     'outreach_personalization_sources',
                                     'contact_suppressions',
+                                    'engage_campaigns',
+                                    'engage_campaign_versions',
+                                    'engage_sequence_steps',
+                                    'engage_campaign_audience',
+                                    'engage_campaign_enrollments',
+                                    'engage_enrollment_steps',
                                     'integration_connections',
                                     'execution_previews',
                                     'action_executions',
@@ -2689,6 +2810,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "engage_enrollment_steps",
+                    "engage_campaign_enrollments",
+                    "engage_campaign_audience",
+                    "engage_sequence_steps",
+                    "engage_campaign_versions",
+                    "engage_campaigns",
                     "outreach_personalization_sources",
                     "outreach_versions",
                     "outreach_messages",

@@ -32,6 +32,7 @@ class OutreachContactability(StrEnum):
     PROVIDER_SUPPLIED_BLOCKED = "provider_supplied_blocked"
     SUPPRESSED = "suppressed"
     COOLDOWN = "cooldown"
+    QUOTA_REACHED = "quota_reached"
     POLICY_NOT_CONFIGURED = "policy_not_configured"
     OUTBOUND_DISABLED = "outbound_disabled"
     ENGAGE_UNAVAILABLE = "engage_unavailable"
@@ -43,6 +44,59 @@ class SuppressionReason(StrEnum):
     RECIPIENT_OPT_OUT = "recipient_opt_out"
     COMPLAINT = "complaint"
     PERMANENT_BOUNCE = "permanent_bounce"
+
+
+class CampaignState(StrEnum):
+    DRAFT = "draft"
+    READY = "ready"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    STOPPED = "stopped"
+    NEEDS_ATTENTION = "needs_attention"
+
+
+class CampaignApprovalMode(StrEnum):
+    REVIEW_EACH_SEND = "review_each_send"
+    APPROVED_CAMPAIGN_AUTO_SEND = "approved_campaign_auto_send"
+
+
+class CampaignEnrollmentState(StrEnum):
+    READY = "ready"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    STOPPED = "stopped"
+    COMPLETED = "completed"
+    BLOCKED = "blocked"
+    NEEDS_ATTENTION = "needs_attention"
+
+
+class CampaignStepState(StrEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    READY_FOR_REVIEW = "ready_for_review"
+    PREPARED = "prepared"
+    QUEUED = "queued"
+    SENT = "sent"
+    DEFERRED = "deferred"
+    BLOCKED = "blocked"
+    CANCELLED = "cancelled"
+    UNKNOWN_DELIVERY_STATE = "unknown_delivery_state"
+
+
+class SequenceStepObjective(StrEnum):
+    INTRODUCTION = "introduction"
+    FOLLOW_UP = "follow_up"
+    SHARE_RELEVANT_INFORMATION = "share_relevant_information"
+    DIFFERENT_ANGLE = "different_angle"
+    MEETING_REQUEST = "meeting_request"
+    FINAL_FOLLOW_UP = "final_follow_up"
+
+
+class CampaignOutcome(StrEnum):
+    REPLIED = "replied"
+    MEETING_BOOKED = "meeting_booked"
+    NOT_INTERESTED = "not_interested"
 
 
 class ProspectResearchRunStatus(StrEnum):
