@@ -1,6 +1,13 @@
 # Prospect retention, export and deletion
 
-WO-027 extends this lifecycle to Prospect People, person runs, professional
+WO-028 export schema 18 adds Target Market definitions/revisions, discovery runs,
+candidates, criterion-level reasons and per-user feedback. Discovery history is
+point-in-time and retained until organisation deletion; the research-retention sweep
+does not remove a shared Prospect Research Target while a discovery candidate refers
+to it. Organisation deletion explicitly removes feedback, reasons, candidates, runs,
+versions and markets before shared targets. Raw provider responses remain excluded.
+
+WO-027 extends the earlier lifecycle to Prospect People, person runs, professional
 observations, buying-role hypotheses and contact points. Provider-specific contact
 expiry can be shorter than organisation retention. Export schema 17 excludes provider
 person IDs and non-exportable contact fields. Person/target deletion preserves any

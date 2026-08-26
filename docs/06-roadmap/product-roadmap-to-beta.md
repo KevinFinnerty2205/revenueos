@@ -576,7 +576,8 @@ Not every listed integration is a prerequisite for the first pilot or private be
 
 ## Next sequencing decision
 
-WO-022 Integrations and Execution Foundation is the current implemented baseline.
+WO-028 Territory & ICP Intelligence is the current implemented baseline, following
+WO-026 Account Research and WO-027 Prospect Person Intelligence.
 WO-009 supplies the smallest verified
 identity, organisation-administration and operational controls needed for a
 controlled beta, so the older Sprint 4 description below is retained as target

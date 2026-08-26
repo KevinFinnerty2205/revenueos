@@ -1,6 +1,6 @@
 # RevenueOS Prospect
 
-- **Status:** WO-026 company Account Research and WO-027 company-scoped Prospect Person Intelligence implemented; ICP/territory and outreach remain future
+- **Status:** WO-026 Account Research, WO-027 Prospect Person Intelligence and WO-028 Target Market discovery implemented; outreach remains future
 - **Purpose:** Find the right customers and the right people
 
 ## Product outcome
@@ -11,7 +11,8 @@ the selected relationship into the Core sales workflow.
 
 ## Capability boundary
 
-The current WO-026/027 slice includes bounded company name/domain search, explicit
+The current WO-026/027/028 slice includes versioned bounded Target Markets,
+explainable account discovery and whitespace context, company name/domain search, explicit
 candidate selection, versioned sourced Account Research and duplicate-safe promotion
 to a canonical Company, followed by bounded relevant-person discovery, versioned
 professional research, buying-role hypotheses and explicit duplicate-safe Contact
@@ -22,10 +23,11 @@ promotion. See the
 [business-contact trust guide](business-contact-trust.md),
 [professional safety guide](professional-research-safety.md),
 [trust/source guide](account-research-trust-and-sources.md) and
-[customer Evidence boundary](prospect-research-vs-customer-evidence.md).
+[customer Evidence boundary](prospect-research-vs-customer-evidence.md) and
+[Target Market guide](target-market-intelligence.md).
 
-The following is the broader target capability boundary; ICP/territory and outreach
-are not implemented by WO-027:
+The following is the broader target capability boundary. WO-028 implements the first
+two items as bounded Target Markets; outreach remains future:
 
 - account discovery and prioritisation;
 - ICP and territory definitions;
@@ -92,10 +94,11 @@ recipient without the required validation and outreach policy.
 
 ## First-time and power-user experience
 
-Current first-time experience: type a company name or domain, choose an unambiguous
-candidate, inspect a sourced brief and deliberately Add to Sales. From that company,
+Current first-time experience: create or select one Target Market and review a bounded,
+explainable set of candidate accounts, or type a known company name/domain. A seller
+can then inspect a sourced brief and deliberately Add to Sales. From that company,
 find a small set of relevant people, research one and explicitly add/link a Contact.
-Current mobile keeps that concise flow. ICP and power-user territory behaviours remain future.
+Current mobile keeps review/save concise; complex Target Market editing remains desktop-oriented.
 
 - First-time: choose an ICP or describe a bounded territory, review sourced results,
   save one target.

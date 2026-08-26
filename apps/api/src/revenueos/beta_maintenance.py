@@ -81,13 +81,19 @@ from revenueos.models import (
     PreInteractionBrief,
     ProspectBuyingRoleHypothesis,
     ProspectBuyingRoleSource,
+    ProspectCandidateReason,
     ProspectContactPoint,
+    ProspectDiscoveryCandidate,
+    ProspectDiscoveryRun,
     ProspectPerson,
     ProspectResearchObservation,
     ProspectResearchObservationSource,
     ProspectResearchRun,
     ProspectResearchSource,
     ProspectResearchTarget,
+    ProspectTargetFeedback,
+    ProspectTargetMarket,
+    ProspectTargetMarketVersion,
     ProspectUsageCounter,
     ProvisionalSignal,
     RecordingChunk,
@@ -114,7 +120,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 17
+EXPORT_VERSION = 18
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -295,6 +301,9 @@ async def run_retention(
             ProspectResearchRun.organisation_id == organisation_id,
             ProspectResearchRun.status.in_(("pending", "fetching", "synthesizing")),
         )
+        discovery_candidate_targets = select(ProspectDiscoveryCandidate.target_id).where(
+            ProspectDiscoveryCandidate.organisation_id == organisation_id
+        )
         prospect_target_ids = list(
             (
                 await session.scalars(
@@ -303,6 +312,7 @@ async def run_retention(
                         ProspectResearchTarget.organisation_id == organisation_id,
                         ProspectResearchTarget.updated_at < cutoff,
                         ProspectResearchTarget.id.not_in(active_prospect_targets),
+                        ProspectResearchTarget.id.not_in(discovery_candidate_targets),
                     )
                     .order_by(ProspectResearchTarget.updated_at, ProspectResearchTarget.id)
                     .limit(bounded_batch_size)
@@ -837,6 +847,24 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(ProspectResearchRun).where(ProspectResearchRun.organisation_id == organisation_id))
         await session.execute(delete(ProspectPerson).where(ProspectPerson.organisation_id == organisation_id))
+        await session.execute(
+            delete(ProspectTargetFeedback).where(ProspectTargetFeedback.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProspectCandidateReason).where(ProspectCandidateReason.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProspectDiscoveryCandidate).where(ProspectDiscoveryCandidate.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProspectDiscoveryRun).where(ProspectDiscoveryRun.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProspectTargetMarketVersion).where(ProspectTargetMarketVersion.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProspectTargetMarket).where(ProspectTargetMarket.organisation_id == organisation_id)
+        )
         await session.execute(
             delete(ProspectResearchTarget).where(ProspectResearchTarget.organisation_id == organisation_id)
         )
@@ -2247,6 +2275,48 @@ async def _export_payload(
         return list((await session.scalars(statement)).all())
 
     companies = await rows(select(Company).where(Company.organisation_id == organisation_id).order_by(Company.id))
+    prospect_target_markets = await rows(
+        select(ProspectTargetMarket)
+        .where(ProspectTargetMarket.organisation_id == organisation_id)
+        .order_by(ProspectTargetMarket.created_at, ProspectTargetMarket.id)
+    )
+    prospect_target_market_versions = await rows(
+        select(ProspectTargetMarketVersion)
+        .where(ProspectTargetMarketVersion.organisation_id == organisation_id)
+        .order_by(
+            ProspectTargetMarketVersion.target_market_id,
+            ProspectTargetMarketVersion.version,
+        )
+    )
+    prospect_discovery_runs = await rows(
+        select(ProspectDiscoveryRun)
+        .where(ProspectDiscoveryRun.organisation_id == organisation_id)
+        .order_by(
+            ProspectDiscoveryRun.target_market_id,
+            ProspectDiscoveryRun.requested_at,
+            ProspectDiscoveryRun.id,
+        )
+    )
+    prospect_discovery_candidates = await rows(
+        select(ProspectDiscoveryCandidate)
+        .where(ProspectDiscoveryCandidate.organisation_id == organisation_id)
+        .order_by(ProspectDiscoveryCandidate.run_id, ProspectDiscoveryCandidate.id)
+    )
+    prospect_candidate_reasons = await rows(
+        select(ProspectCandidateReason)
+        .where(ProspectCandidateReason.organisation_id == organisation_id)
+        .order_by(
+            ProspectCandidateReason.run_id,
+            ProspectCandidateReason.candidate_id,
+            ProspectCandidateReason.display_order,
+            ProspectCandidateReason.id,
+        )
+    )
+    prospect_target_feedback = await rows(
+        select(ProspectTargetFeedback)
+        .where(ProspectTargetFeedback.organisation_id == organisation_id)
+        .order_by(ProspectTargetFeedback.user_id, ProspectTargetFeedback.target_id)
+    )
     prospect_targets = await rows(
         select(ProspectResearchTarget)
         .where(ProspectResearchTarget.organisation_id == organisation_id)
@@ -2688,6 +2758,132 @@ async def _export_payload(
                 ),
             )
             for item in companies
+        ],
+        "prospectTargetMarkets": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "name",
+                    "status",
+                    "current_version",
+                    "created_by_user_id",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in prospect_target_markets
+        ],
+        "prospectTargetMarketVersions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "target_market_id",
+                    "version",
+                    "description",
+                    "industries",
+                    "countries",
+                    "regions",
+                    "minimum_employee_band",
+                    "organisation_types",
+                    "preferred_business_characteristics",
+                    "excluded_industries",
+                    "exclude_existing_accounts",
+                    "research_objective",
+                    "created_by_user_id",
+                    "created_at",
+                ),
+            )
+            for item in prospect_target_market_versions
+        ],
+        "prospectDiscoveryRuns": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "target_market_id",
+                    "target_market_version_id",
+                    "requested_by_user_id",
+                    "provider_key",
+                    "provider_version",
+                    "status",
+                    "schema_version",
+                    "fingerprint",
+                    "idempotency_key",
+                    "refresh_of_run_id",
+                    "requested_at",
+                    "started_at",
+                    "completed_at",
+                    "candidate_count",
+                    "eligible_count",
+                    "excluded_count",
+                    "partial_count",
+                    "failure_code",
+                    "created_at",
+                ),
+            )
+            for item in prospect_discovery_runs
+        ],
+        "prospectDiscoveryCandidates": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "run_id",
+                    "target_id",
+                    "match_state",
+                    "priority",
+                    "relationship_state",
+                    "matched_company_id",
+                    "active_opportunity_id",
+                    "employee_band",
+                    "country_code",
+                    "region",
+                    "organisation_type",
+                    "business_characteristics",
+                    "provider_observed_at",
+                    "data_expires_at",
+                    "created_at",
+                ),
+            )
+            for item in prospect_discovery_candidates
+        ],
+        "prospectCandidateReasons": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "candidate_id",
+                    "run_id",
+                    "reason_code",
+                    "criterion_key",
+                    "state",
+                    "product_safe_text",
+                    "data_origin",
+                    "trust_state",
+                    "observed_value_class",
+                    "source_reference",
+                    "display_order",
+                    "created_at",
+                ),
+            )
+            for item in prospect_candidate_reasons
+        ],
+        "prospectTargetFeedback": [
+            _columns(
+                item,
+                (
+                    "user_id",
+                    "target_id",
+                    "state",
+                    "exclusion_reason",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in prospect_target_feedback
         ],
         "prospectTargets": [
             _columns(

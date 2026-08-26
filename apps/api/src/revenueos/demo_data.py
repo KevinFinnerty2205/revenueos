@@ -58,6 +58,10 @@ from revenueos.models import (
     OrganisationMembership,
     OrganisationMethodologySetting,
     PreInteractionBrief,
+    ProspectDiscoveryCandidate,
+    ProspectDiscoveryRun,
+    ProspectTargetFeedback,
+    ProspectTargetMarket,
     ProvisionalSignal,
     RecordingConsent,
     RecordingSession,
@@ -79,11 +83,14 @@ from revenueos.pre_interaction_contracts import (
     PreInteractionBriefContent,
     PreInteractionSourceReference,
 )
+from revenueos.prospect_target_market_contracts import DiscoveryRequest, TargetMarketDefinitionRequest
+from revenueos.prospect_target_market_services import ProspectTargetMarketService
 from revenueos.tenant import TenantContext
 from revenueos.visual_storage import create_visual_storage
 
 DEMO_NAMESPACE = UUID("d7838892-ce0b-434a-a8e9-445767115063")
 INTERACTION_BACKFILL_NAMESPACE = UUID("cf709ef5-e59d-4ce2-9c93-547a4a5e5990")
+DEMO_TARGET_MARKET_NAME = "[DEMO] Australian multi-site enterprises"
 
 TRANSCRIPTS = (
     """SYNTHETIC DEMO TRANSCRIPT — no real person or customer data.\nSeller: Thanks for discussing the evaluation. What outcome matters most?\nBuyer: We need a consistent handover after sales calls. The operations lead supports a pilot, but the finance approver has not reviewed the budget.\nSeller: What timing are you working towards?\nBuyer: We would like a decision by the end of the quarter. Please send the security summary and a clear pilot plan next Tuesday.\nSeller: I will send both items next Tuesday and arrange a finance review.\nBuyer: That works. The unresolved questions are data retention and implementation effort.""",
@@ -2216,17 +2223,23 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 13},
+                    metadata_json={"dataset_version": 14},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 13}
+            event.metadata_json = {"dataset_version": 14}
     methodology_versions = await _seed_methodology_views(
         session_factory,
         organisation_id,
         user_id,
         active_settings,
         opportunity_id,
+    )
+    target_market = await _seed_target_market(
+        session_factory,
+        organisation_id,
+        user_id,
+        active_settings,
     )
     return {
         "status": "ready",
@@ -2248,8 +2261,57 @@ async def seed_demo_data(
         "marker_ids": marker_ids,
         "live_interaction_id": live_ids["interaction"],
         "methodology_projection_versions": methodology_versions,
+        "target_market_id": target_market["target_market_id"],
+        "target_market_candidate_count": target_market["candidate_count"],
+        "saved_prospect_target_id": target_market["saved_prospect_target_id"],
         "provider_calls": 0,
     }
+
+
+async def _seed_target_market(
+    session_factory: async_sessionmaker[AsyncSession],
+    organisation_id: UUID,
+    user_id: UUID,
+    settings: Settings,
+) -> dict[str, UUID | int]:
+    """Seed the bounded synthetic WO-028 flagship journey without external calls."""
+
+    tenant = TenantContext(organisation_id=organisation_id, user_id=user_id, role="admin")
+    async with session_factory() as session:
+        await set_tenant_database_context(session, organisation_id)
+        service = ProspectTargetMarketService(session, tenant, settings)
+        markets = await service.list_markets()
+        market = next((item for item in markets.items if item.name == DEMO_TARGET_MARKET_NAME), None)
+        if market is None:
+            market = await service.create_market(
+                TargetMarketDefinitionRequest(
+                    name=DEMO_TARGET_MARKET_NAME,
+                    status="active",
+                    description="Synthetic large Australian organisations with distributed operations.",
+                    industries=["Facilities services", "Healthcare", "Business software"],
+                    countries=["AU"],
+                    minimum_employee_band="500_999",
+                    preferred_business_characteristics=["multi_site"],
+                    excluded_industries=["Retail"],
+                    research_objective="Access-control and physical-security opportunity",
+                )
+            )
+        discovery = await service.discover(
+            market.id,
+            DiscoveryRequest(idempotency_key=f"demo-target-market:{organisation_id}"),
+        )
+        if not discovery.candidates:
+            raise ValueError("The deterministic Target Market demo returned no candidate accounts.")
+        candidate = next(
+            (item for item in discovery.candidates if item.priority.value == "high"),
+            discovery.candidates[0],
+        )
+        await service.save_candidate(candidate.id)
+        return {
+            "target_market_id": market.id,
+            "candidate_count": len(discovery.candidates),
+            "saved_prospect_target_id": candidate.prospect_target_id,
+        }
 
 
 async def _seed_methodology_views(
@@ -2363,6 +2425,30 @@ async def reset_demo_data(
         await session.execute(
             delete(OrganisationMethodologySetting).where(
                 OrganisationMethodologySetting.organisation_id == organisation_id,
+            )
+        )
+        demo_market_ids = select(ProspectTargetMarket.id).where(
+            ProspectTargetMarket.organisation_id == organisation_id,
+            ProspectTargetMarket.name == DEMO_TARGET_MARKET_NAME,
+        )
+        demo_discovery_run_ids = select(ProspectDiscoveryRun.id).where(
+            ProspectDiscoveryRun.organisation_id == organisation_id,
+            ProspectDiscoveryRun.target_market_id.in_(demo_market_ids),
+        )
+        demo_prospect_target_ids = select(ProspectDiscoveryCandidate.target_id).where(
+            ProspectDiscoveryCandidate.organisation_id == organisation_id,
+            ProspectDiscoveryCandidate.run_id.in_(demo_discovery_run_ids),
+        )
+        await session.execute(
+            delete(ProspectTargetFeedback).where(
+                ProspectTargetFeedback.organisation_id == organisation_id,
+                ProspectTargetFeedback.target_id.in_(demo_prospect_target_ids),
+            )
+        )
+        await session.execute(
+            delete(ProspectTargetMarket).where(
+                ProspectTargetMarket.organisation_id == organisation_id,
+                ProspectTargetMarket.id.in_(demo_market_ids),
             )
         )
         await session.execute(

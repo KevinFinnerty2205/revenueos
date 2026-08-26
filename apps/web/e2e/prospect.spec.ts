@@ -464,6 +464,13 @@ async function routeShell(page: Page, enabled = true) {
     "http://localhost:8000/api/v1/prospect/research/*/people",
     async (route) => route.fulfill({ json: peopleDiscovery(false) }),
   );
+  await page.route(
+    "http://localhost:8000/api/v1/prospect/target-markets",
+    async (route) =>
+      route.fulfill({
+        json: { items: [], activeLimit: 10, canCreate: true },
+      }),
+  );
 }
 
 test("flagship account research path is sourced, refreshable and explicitly promoted", async ({

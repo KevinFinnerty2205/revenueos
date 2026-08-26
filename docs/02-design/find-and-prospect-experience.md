@@ -1,6 +1,6 @@
 # Find and Prospect experience
 
-- **Status:** WO-026 company Find/Account Research and WO-027 company-scoped Person Intelligence implemented; ICP/territory remains future
+- **Status:** WO-026 Account Research, WO-027 Person Intelligence and WO-028 Target Markets implemented
 - **Question:** Who should I target?
 
 ## Current WO-027 person path
@@ -21,13 +21,15 @@ The canonical Contact links back to separately labelled public research. See
 
 ## Find landing
 
-The current entitled Prospect landing asks “Which company are you looking for?” and
-supports bounded company name/domain search, explicit candidate selection and recent
-research. Non-entitled users receive a restrained module explanation. The detailed
+The current entitled Prospect landing leads with saved Target Markets and a guided
+create action while preserving “Which company are you looking for?” for direct
+company name/domain search and recent research. Non-entitled users receive a
+restrained module explanation. The detailed
 implemented flow is in
 [Find and Account Research UX](find-account-research-implementation.md).
 
-The guided ICP, territory and person-search alternatives below remain target design:
+The bounded ICP/territory alternative is implemented as a single Target Market; broad
+person search remains target design:
 
 The first action is a search field with guided alternatives:
 
@@ -50,7 +52,7 @@ The current WO-026 flow is:
 4. Refresh deliberately when needed.
 5. Confirm Add to Sales, linking an exact-domain Company or creating one.
 
-The broader flow below is future WO-027/028/029 scope:
+Steps 1–4 are current across WO-026–028; reviewed outreach remains future WO-029 scope:
 
 1. Select or create a bounded ICP/territory.
 2. Review explainable account matches and missing data.
@@ -94,10 +96,12 @@ save selected facts. Saving never upgrades an inference to verified evidence.
 
 ## ICP and territory administration
 
-Guided forms support industries, size, geography, revenue, employee count, permitted
-technology characteristics, business problems and exclusions. Show example results
-before save. Advanced weighting is bounded, explainable and initially deterministic.
-No arbitrary code or predictive black box is provided.
+The current four-step form supports provider-advertised industry, country/region,
+minimum employee band, organisation type, preferred business characteristics and
+explicit exclusions. Revenue and technology filters are not exposed because the
+active adapter does not support them. Prioritisation is categorical, deterministic
+and explainable; there is no arbitrary weighting or predictive black box. See the
+[implemented Target Market experience](target-market-experience.md).
 
 ## First-time, power-user and mobile
 

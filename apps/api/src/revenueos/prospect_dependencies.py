@@ -10,6 +10,7 @@ from revenueos.database import get_db, set_tenant_database_context
 from revenueos.prospect_people_services import ProspectPeopleService
 from revenueos.prospect_provider import ProspectResearchProvider, create_prospect_provider
 from revenueos.prospect_services import ProspectService
+from revenueos.prospect_target_market_services import ProspectTargetMarketService
 from revenueos.tenant import TenantContext, get_tenant_context
 
 
@@ -35,3 +36,12 @@ async def get_prospect_people_service(
 ) -> AsyncIterator[ProspectPeopleService]:
     await set_tenant_database_context(session, tenant.organisation_id)
     yield ProspectPeopleService(session, tenant, settings, provider=provider)
+
+
+async def get_prospect_target_market_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[ProspectTargetMarketService]:
+    await set_tenant_database_context(session, tenant.organisation_id)
+    yield ProspectTargetMarketService(session, tenant, settings)

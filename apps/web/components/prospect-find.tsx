@@ -7,6 +7,7 @@ import type {
   ProspectRecentResearch,
   ProspectResearchBrief,
   ProspectResearchStatus,
+  ProspectTargetMarketList,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,6 +30,8 @@ export function ProspectFind() {
     null,
   );
   const [recent, setRecent] = useState<ProspectRecentResearch | null>(null);
+  const [targetMarkets, setTargetMarkets] =
+    useState<ProspectTargetMarketList | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProspectCompanySearch | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,12 +49,17 @@ export function ProspectFind() {
       .then(async (nextAvailability) => {
         setAvailability(nextAvailability);
         if (nextAvailability.enabled) {
-          setRecent(
-            await apiRequest<ProspectRecentResearch>(
-              "/api/v1/prospect/research",
+          const [nextRecent, nextTargetMarkets] = await Promise.all([
+            apiRequest<ProspectRecentResearch>("/api/v1/prospect/research", {
+              signal: controller.signal,
+            }),
+            apiRequest<ProspectTargetMarketList>(
+              "/api/v1/prospect/target-markets",
               { signal: controller.signal },
             ),
-          );
+          ]);
+          setRecent(nextRecent);
+          setTargetMarkets(nextTargetMarkets);
         }
       })
       .catch((reason: unknown) => {
@@ -154,8 +162,8 @@ export function ProspectFind() {
     <div className="space-y-8">
       <PageHeader
         eyebrow="RevenueOS Prospect"
-        title="Find companies"
-        description="Turn public business information into a concise, sourced account brief."
+        title="Find"
+        description="Research a company you know or discover accounts in a target market."
       />
 
       <section
@@ -266,6 +274,98 @@ export function ProspectFind() {
           )}
         </section>
       ) : null}
+
+      <section aria-labelledby="target-markets-title">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+              Discover accounts
+            </p>
+            <h2
+              id="target-markets-title"
+              className="mt-2 text-xl font-semibold text-slate-950"
+            >
+              Target markets
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600">
+              Define the organisations you want to sell to, then see exactly why
+              each account may fit.
+            </p>
+          </div>
+          {targetMarkets?.canCreate ? (
+            <Link
+              href="/find/target-markets/new"
+              className="secondary-button shrink-0"
+            >
+              New target market
+            </Link>
+          ) : null}
+        </div>
+        {!targetMarkets || targetMarkets.items.length === 0 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white/60 p-6">
+            <h3 className="font-semibold text-slate-950">
+              Find accounts beyond the companies you already know
+            </h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Create a guided target market with industry, geography, size and
+              exclusions. RevenueOS will return a bounded list with transparent
+              fit reasons—not an intent score.
+            </p>
+            {targetMarkets?.canCreate ? (
+              <Link
+                href="/find/target-markets/new"
+                className="primary-button mt-4"
+              >
+                Create target market
+              </Link>
+            ) : (
+              <p className="mt-3 text-sm font-medium text-slate-700">
+                An organisation administrator can create shared target markets.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {targetMarkets.items.map((market) => (
+              <Link
+                key={market.id}
+                href={`/find/target-markets/${market.id}`}
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-600"
+              >
+                <span className="flex items-start justify-between gap-4">
+                  <span>
+                    <span className="block text-lg font-semibold text-slate-950">
+                      {market.name}
+                    </span>
+                    <span className="mt-1 block text-sm text-slate-600">
+                      {[
+                        market.definition.industries.join(", "),
+                        market.definition.countries.join(" + "),
+                        market.definition.minimumEmployeeBand
+                          ? `${market.definition.minimumEmployeeBand.replaceAll("_", "–")} employees`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold capitalize text-slate-700">
+                    {market.status}
+                  </span>
+                </span>
+                <span className="mt-5 flex items-center justify-between gap-4 border-t border-slate-100 pt-4 text-sm">
+                  <span className="text-slate-600">
+                    {market.latestRun
+                      ? `${market.latestRun.candidateCount} accounts found`
+                      : "Ready for first search"}
+                  </span>
+                  <span className="font-bold text-teal-800">Open →</span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section aria-labelledby="recent-research-title">
         <h2
