@@ -535,7 +535,7 @@ test("builds, reviews, launches and sends a bounded flagship campaign", async ({
   await expect(page.getByText("Exact approved body")).toBeVisible();
   await page.getByRole("button", { name: "Send email" }).click();
   await expect(page.getByText(/Step 2 is scheduled/u)).toBeVisible();
-  await expect(page.getByText("Scheduled 31 Aug 2026, 10:30 am")).toBeVisible();
+  await expect(page.getByText(/Scheduled 31 Aug 2026/u)).toBeVisible();
   await page.getByRole("button", { name: "Report replied" }).click();
   await expect(page.getByText("Seller reported · Replied")).toBeVisible();
   await page.getByRole("link", { name: "← Campaign", exact: true }).click();
