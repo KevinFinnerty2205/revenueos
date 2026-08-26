@@ -97,6 +97,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "action_proposals",
         "action_proposal_versions",
         "action_audit_events",
+        "outreach_policies",
+        "outreach_messages",
+        "outreach_versions",
+        "outreach_personalization_sources",
+        "contact_suppressions",
         "integration_connections",
         "execution_previews",
         "action_executions",
@@ -339,6 +344,15 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "prospect_candidate_reason_id": uuid.uuid4(),
         "contact_field_source_id": uuid.uuid4(),
     }
+    for tenant in (tenant_a, tenant_b):
+        tenant.update(
+            {
+                "outreach_message_id": uuid.uuid4(),
+                "outreach_version_id": uuid.uuid4(),
+                "outreach_source_id": uuid.uuid4(),
+                "contact_suppression_id": uuid.uuid4(),
+            }
+        )
 
     async def scenario() -> None:
         engine = create_async_engine(database_url)
@@ -1064,6 +1078,99 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO outreach_policies
+                                (organisation_id, configured, outbound_enabled,
+                                 provider_supplied_email_allowed, cooldown_hours,
+                                 max_daily_sends_user, max_daily_sends_org,
+                                 require_opt_out_mechanism, offering_name,
+                                 value_proposition, approved_cta,
+                                 configured_by_user_id)
+                            VALUES
+                                (:organisation_id, true, true, true, 72, 25, 100,
+                                 false, 'RLS offering', 'RLS value proposition',
+                                 'Discuss next week?', :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO outreach_messages
+                                (id, organisation_id, contact_id, sender_user_id,
+                                 action_id, purpose, state, current_version)
+                            VALUES
+                                (:outreach_message_id, :organisation_id,
+                                 :contact_id, :user_id, :action_id,
+                                 'introduction', 'draft', 1)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO outreach_versions
+                                (id, organisation_id, outreach_id, version,
+                                 subject, body, sender_name, sender_email,
+                                 recipient_name, recipient_email, recipient_trust,
+                                 offering_name, value_proposition, approved_cta,
+                                 personalization_plan_json, composer_version,
+                                 creation_type, content_fingerprint,
+                                 created_by_user_id)
+                            VALUES
+                                (:outreach_version_id, :organisation_id,
+                                 :outreach_message_id, 1, 'RLS subject',
+                                 'RLS body', 'RLS Sender', :email,
+                                 'RLS Recipient', :contact_email,
+                                 'provider_supplied', 'RLS offering',
+                                 'RLS value proposition', 'Discuss next week?',
+                                 '{}'::json, 'outreach_deterministic_v1',
+                                 'generated', :outreach_fingerprint, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "contact_email": f"rls-contact-{suffix.lower()}-{tenant['contact_id']}@example.test",
+                            "outreach_fingerprint": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO outreach_personalization_sources
+                                (id, organisation_id, outreach_version_id,
+                                 source_type, source_id, label, trust_state)
+                            VALUES
+                                (:outreach_source_id, :organisation_id,
+                                 :outreach_version_id, 'approved_seller_context',
+                                 :organisation_id, 'Approved seller offering',
+                                 'approved')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO contact_suppressions
+                                (id, organisation_id, contact_id,
+                                 email_fingerprint, reason, source, active,
+                                 created_by_user_id)
+                            VALUES
+                                (:contact_suppression_id, :organisation_id,
+                                 :contact_id, :suppression_fingerprint,
+                                 'manual_do_not_contact', 'user', true, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "suppression_fingerprint": suffix.upper() * 64,
+                        },
                     )
                     await connection.execute(
                         text(
@@ -2037,6 +2144,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'action_proposals',
                                     'action_proposal_versions',
                                     'action_audit_events',
+                                    'outreach_policies',
+                                    'outreach_messages',
+                                    'outreach_versions',
+                                    'outreach_personalization_sources',
+                                    'contact_suppressions',
                                     'integration_connections',
                                     'execution_previews',
                                     'action_executions',
@@ -2577,6 +2689,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "outreach_personalization_sources",
+                    "outreach_versions",
+                    "outreach_messages",
+                    "contact_suppressions",
+                    "outreach_policies",
                     "contact_field_sources",
                     "prospect_target_feedback",
                     "prospect_candidate_reasons",

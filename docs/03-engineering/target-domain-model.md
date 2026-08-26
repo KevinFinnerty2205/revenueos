@@ -19,6 +19,16 @@ field. Unknown email is valid for a promoted Contact; manual Contact creation st
 requires an email through its current API contract. Prospect refresh/deletion does
 not silently update/delete the Contact.
 
+## Current Engage outreach boundary
+
+WO-029 adds `OutreachPolicy`, `OutreachMessage`, immutable `OutreachVersion`,
+immutable `OutreachPersonalizationSource` and `ContactSuppression`. Outreach belongs
+to an organisation, canonical Contact (nullable only after deletion), authenticated
+sender and versioned Action. It is not an Interaction, Evidence, campaign or Lead.
+Suppression is keyed by organisation plus HMAC-normalised email so it can survive
+Contact deletion/re-discovery. `action_proposals.opportunity_id` is nullable only to
+support legitimate Contact-scoped Actions; tenant and target IDs remain explicit.
+
 **Status:** Current entities through WO-011 plus conceptual model through the
 Interaction Platform private beta. Target rows do not authorise implementation.
 

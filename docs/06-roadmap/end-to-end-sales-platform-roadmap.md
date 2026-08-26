@@ -280,18 +280,26 @@ owns future reviewed personalised outreach.
 
 ### WO-029 — Personalised Outreach
 
+**Current implementation note (26 August 2026):** WO-029 is implemented as
+one-to-one, canonical-Contact, review-first Engage outreach with deterministic
+non-production simulation. Gmail/Microsoft production sending was evaluated and
+deferred because provider/customer/OAuth/reconciliation readiness was insufficient.
+No campaign, sequence, scheduling, tracking or live mailbox capability was pulled
+forward. See the [WO-029 record](../07-sprints/wo-029-personalised-outreach.md).
+
 - **Objective/value/package:** Create relevant, person-specific outreach with exact
   human review and safe provider execution. **Engage**.
-- **Dependencies/checkpoint:** WO-026–028 validation, Action/Execution Foundation,
-  suppression policy and one chosen mail ecosystem from WO-040 or WO-041 discovery.
+- **Dependencies/checkpoint:** WO-026–028, Action/Execution Foundation and suppression
+  policy are reused; a chosen mail ecosystem remains a later production-send gate.
 - **Experience:** From Find/Sell, choose purpose → draft → inspect sources/content/
   recipient/channel → approve → see receipt; clear pause/stop and unavailable states.
 - **Domain/data:** Outreach message, suppression and delivery-attempt concepts linked
   to canonical Contact/Lead and immutable Action proposal inputs.
 - **Backend/frontend/AI:** Policy/preflight plus idempotent adapter; exact review UI;
   bounded drafting that cannot self-approve or invent personal facts.
-- **Integrations:** Implement one mail provider first based on customer evidence;
-  scopes, sender identity, sandbox/test and reconciliation are explicit.
+- **Integrations:** Provider-neutral Mock Email simulation only. A future work order
+  must implement one mail provider first based on customer evidence; scopes, sender
+  identity, sandbox/test and reconciliation remain explicit gates.
 - **Security/privacy/operations:** Lawful basis, jurisdiction, unsubscribe, do-not-contact,
   frequency/quiet-hour/reputation limits, kill switch and provider incident runbook.
 - **Acceptance:** Recipient/content mutations invalidate approval; suppression wins at

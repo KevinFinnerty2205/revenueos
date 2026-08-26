@@ -1,5 +1,20 @@
 # Application architecture
 
+## Engage personalised outreach (WO-029)
+
+The modular monolith now contains an entitled, Contact-scoped one-to-one outreach
+slice. Five tenant tables persist organisation policy, outreach aggregates, immutable
+versions, immutable source references and HMAC-addressed suppressions. Every table
+uses composite tenant relationships, explicit repository predicates and forced
+PostgreSQL RLS. Migration `0038_personalized_outreach` owns the schema.
+
+The slice reuses canonical Contact/Company/User, eligible Prospect provenance,
+versioned Action review and the Execution Foundation. Sender/recipient/content are
+server-pinned; approval remains distinct from exact preview and confirmation. Mock
+Email is deterministic and unavailable in production. No mailbox OAuth/provider,
+campaign, sequence, tracking or new worker infrastructure exists. See the
+[architecture guide](personalised-outreach-architecture.md).
+
 ## Prospect Person Intelligence (WO-027)
 
 The modular monolith now includes a company-scoped Prospect Person research slice.

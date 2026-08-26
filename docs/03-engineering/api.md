@@ -128,6 +128,26 @@ syntactically valid email address. A Prospect Person promotion may create a Cont
 with null email when no permitted address is established; the UI shows “Not
 established” rather than guessing.
 
+## Engage personalised outreach
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/engage/availability` | Read current organisation Engage availability |
+| `PATCH` | `/api/v1/engage/admin/entitlement` | Admin-only private-beta Engage grant/change |
+| `GET/PUT` | `/api/v1/engage/policy` | Read or admin-configure outreach policy/seller context |
+| `GET` | `/api/v1/engage/contacts/{contactId}` | Read Contact trust, contactability and outreach history |
+| `POST` | `/api/v1/engage/contacts/{contactId}/outreach` | Create one source-backed draft for an explicit purpose |
+| `GET/PATCH` | `/api/v1/engage/outreach/{outreachId}` | Read current exact version or append an edited version |
+| `POST` | `/api/v1/engage/outreach/{outreachId}/approve` | Approve the expected current version without execution |
+| `POST/DELETE` | `/api/v1/engage/contacts/{contactId}/suppression` | Create or restore an authorised suppression |
+| `POST` | `/api/v1/engage/outreach/{outreachId}/execution-preview` | Create exact approved simulation preview |
+| `POST` | `/api/v1/engage/outreach/{outreachId}/send` | Explicitly confirm the exact preview |
+
+Recipient and sender addresses are never request inputs. The recipient resolves from
+the tenant-owned canonical Contact and the sender from the authenticated user's
+active connection. Production email is unavailable; non-production Mock Email is
+clearly simulation-only. See [Engage outreach architecture](personalised-outreach-architecture.md).
+
 ## Opportunities
 
 | Method   | Path                                                                        | Purpose                                                        |

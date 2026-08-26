@@ -39,6 +39,7 @@ from revenueos.models import (
     Company,
     Contact,
     ContactFieldSource,
+    ContactSuppression,
     CRMEntityMapping,
     CRMFieldMapping,
     CRMStageMapping,
@@ -78,6 +79,10 @@ from revenueos.models import (
     OrganisationMembership,
     OrganisationMethodologySetting,
     OrganisationModuleEntitlement,
+    OutreachMessage,
+    OutreachPersonalizationSource,
+    OutreachPolicy,
+    OutreachVersion,
     PreInteractionBrief,
     ProspectBuyingRoleHypothesis,
     ProspectBuyingRoleSource,
@@ -120,7 +125,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 18
+EXPORT_VERSION = 19
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -319,6 +324,19 @@ async def run_retention(
                 )
             ).all()
         )
+        outreach_action_ids = list(
+            (
+                await session.scalars(
+                    select(OutreachMessage.action_id)
+                    .where(
+                        OutreachMessage.organisation_id == organisation_id,
+                        OutreachMessage.created_at < cutoff,
+                    )
+                    .order_by(OutreachMessage.created_at, OutreachMessage.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
         counts = await _meeting_deletion_counts(session, organisation_id, meeting_ids)
         interaction_counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
         counts = _merge_counts(counts, interaction_counts)
@@ -343,6 +361,7 @@ async def run_retention(
         prospect_counts = await _prospect_deletion_counts(session, organisation_id, prospect_target_ids)
         counts.update(prospect_counts)
         counts["expired_prospect_contact_points"] = len(expired_contact_point_ids)
+        counts["outreach_messages"] = len(outreach_action_ids)
         expired_live_count = int(
             (
                 await session.scalar(
@@ -365,6 +384,7 @@ async def run_retention(
             and not email_ids
             and not methodology_projection_ids
             and not prospect_target_ids
+            and not outreach_action_ids
             and not expired_live_count
             and not expired_contact_point_ids
         ):
@@ -377,6 +397,26 @@ async def run_retention(
                 counts,
             )
         removed = await _expire_prospect_contact_points(session, organisation_id, expired_contact_point_ids)
+        if outreach_action_ids:
+            await session.execute(
+                delete(ActionAuditEvent).where(
+                    ActionAuditEvent.organisation_id == organisation_id,
+                    ActionAuditEvent.action_id.in_(outreach_action_ids),
+                )
+            )
+            await session.execute(
+                delete(ActionProposalVersion).where(
+                    ActionProposalVersion.organisation_id == organisation_id,
+                    ActionProposalVersion.action_id.in_(outreach_action_ids),
+                )
+            )
+            await session.execute(
+                delete(ActionProposal).where(
+                    ActionProposal.organisation_id == organisation_id,
+                    ActionProposal.id.in_(outreach_action_ids),
+                )
+            )
+            removed["outreach_messages"] = len(outreach_action_ids)
         if expired_live_count:
             await expire_live_intelligence(
                 session,
@@ -745,6 +785,13 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(ActionAuditEvent).where(ActionAuditEvent.organisation_id == organisation_id))
         await session.execute(
+            delete(OutreachPersonalizationSource).where(
+                OutreachPersonalizationSource.organisation_id == organisation_id
+            )
+        )
+        await session.execute(delete(OutreachVersion).where(OutreachVersion.organisation_id == organisation_id))
+        await session.execute(delete(OutreachMessage).where(OutreachMessage.organisation_id == organisation_id))
+        await session.execute(
             delete(ActionProposalVersion).where(ActionProposalVersion.organisation_id == organisation_id)
         )
         await session.execute(delete(ActionProposal).where(ActionProposal.organisation_id == organisation_id))
@@ -825,6 +872,7 @@ async def _delete_organisation_records(
             delete(OpportunityAuditEvent).where(OpportunityAuditEvent.organisation_id == organisation_id)
         )
         await session.execute(delete(ContactFieldSource).where(ContactFieldSource.organisation_id == organisation_id))
+        await session.execute(delete(ContactSuppression).where(ContactSuppression.organisation_id == organisation_id))
         await session.execute(
             delete(ProspectBuyingRoleSource).where(ProspectBuyingRoleSource.organisation_id == organisation_id)
         )
@@ -889,6 +937,7 @@ async def _delete_organisation_records(
                 OrganisationModuleEntitlement.organisation_id == organisation_id
             )
         )
+        await session.execute(delete(OutreachPolicy).where(OutreachPolicy.organisation_id == organisation_id))
         await session.execute(delete(BetaDataRequest).where(BetaDataRequest.organisation_id == organisation_id))
         await session.execute(
             delete(OrganisationMembership).where(OrganisationMembership.organisation_id == organisation_id)
@@ -2382,6 +2431,31 @@ async def _export_payload(
         .where(ContactFieldSource.organisation_id == organisation_id)
         .order_by(ContactFieldSource.contact_id, ContactFieldSource.field_key, ContactFieldSource.id)
     )
+    outreach_policies = await rows(select(OutreachPolicy).where(OutreachPolicy.organisation_id == organisation_id))
+    outreach_messages = await rows(
+        select(OutreachMessage)
+        .where(OutreachMessage.organisation_id == organisation_id)
+        .order_by(OutreachMessage.created_at, OutreachMessage.id)
+    )
+    outreach_versions = await rows(
+        select(OutreachVersion)
+        .where(OutreachVersion.organisation_id == organisation_id)
+        .order_by(OutreachVersion.outreach_id, OutreachVersion.version)
+    )
+    outreach_sources = await rows(
+        select(OutreachPersonalizationSource)
+        .where(OutreachPersonalizationSource.organisation_id == organisation_id)
+        .order_by(
+            OutreachPersonalizationSource.outreach_version_id,
+            OutreachPersonalizationSource.created_at,
+            OutreachPersonalizationSource.id,
+        )
+    )
+    contact_suppressions = await rows(
+        select(ContactSuppression)
+        .where(ContactSuppression.organisation_id == organisation_id)
+        .order_by(ContactSuppression.created_at, ContactSuppression.id)
+    )
     contacts = await rows(select(Contact).where(Contact.organisation_id == organisation_id).order_by(Contact.id))
     opportunities = await rows(
         select(Opportunity).where(Opportunity.organisation_id == organisation_id).order_by(Opportunity.id)
@@ -3070,6 +3144,108 @@ async def _export_payload(
                 ),
             )
             for item in contact_field_sources
+        ],
+        "outreachPolicies": [
+            _columns(
+                item,
+                (
+                    "configured",
+                    "outbound_enabled",
+                    "provider_supplied_email_allowed",
+                    "cooldown_hours",
+                    "max_daily_sends_user",
+                    "max_daily_sends_org",
+                    "require_opt_out_mechanism",
+                    "offering_name",
+                    "value_proposition",
+                    "approved_cta",
+                    "configured_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in outreach_policies
+        ],
+        "outreachMessages": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "contact_id",
+                    "sender_user_id",
+                    "action_id",
+                    "purpose",
+                    "state",
+                    "current_version",
+                    "approved_version",
+                    "approved_by_user_id",
+                    "approved_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in outreach_messages
+        ],
+        "outreachVersions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "outreach_id",
+                    "version",
+                    "subject",
+                    "body",
+                    "sender_name",
+                    "sender_email",
+                    "recipient_name",
+                    "recipient_email",
+                    "recipient_trust",
+                    "offering_name",
+                    "value_proposition",
+                    "approved_cta",
+                    "personalization_plan_json",
+                    "composer_version",
+                    "creation_type",
+                    "content_fingerprint",
+                    "created_by_user_id",
+                    "created_at",
+                ),
+            )
+            for item in outreach_versions
+        ],
+        "outreachPersonalizationSources": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "outreach_version_id",
+                    "source_type",
+                    "source_id",
+                    "supporting_source_id",
+                    "label",
+                    "trust_state",
+                    "created_at",
+                ),
+            )
+            for item in outreach_sources
+        ],
+        "contactSuppressions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "contact_id",
+                    "email_fingerprint",
+                    "reason",
+                    "source",
+                    "active",
+                    "created_by_user_id",
+                    "created_at",
+                    "revoked_by_user_id",
+                    "revoked_at",
+                ),
+            )
+            for item in contact_suppressions
         ],
         "contacts": [
             _columns(

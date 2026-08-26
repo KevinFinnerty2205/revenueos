@@ -234,15 +234,22 @@ Targets are hypotheses until real workload tests establish provider and file-siz
 - Which data may be retained for evaluation and under what explicit customer agreement.
 - Model/provider regional availability for the first launch geography.
 
-## WO-023 future Sales OS consumers
+## Sales OS consumers and WO-029 outreach
 
-The proposed Methodology Engine, Daily, Prospect, Engage, Create, forecasting,
+The Methodology Engine, Daily, Prospect, WO-029 Engage outreach, and proposed Create, forecasting,
 Manager Intelligence and closed-won handover remain bounded consumers of the same
 authorised Evidence → Revenue Brain → review/Action architecture. They do not create
 independent agent authority or a second memory store. Research inferences stay
 labelled and sourced; methodology and forecast outputs are versioned projections;
 generated commercial content distinguishes Evidence, approved content, user input
 and suggestion; external outreach still requires policy and exact human approval.
+
+WO-029 uses no model/provider. Its deterministic composer receives a bounded set of
+eligible, cited professional Prospect observations plus approved seller context and
+persists only sources actually used. The server rejects sensitive, manipulative,
+deceptive and unsupported-percentage copy. A future AI composer may not expand this
+authority: it must return strict structured copy and source IDs drawn from the
+server-supplied set, pass claim/copy validation and remain unable to approve or send.
 
 The detailed contracts are indexed by the
 [WO-023 sprint record](../07-sprints/wo-023-end-to-end-sales-platform-blueprint.md).

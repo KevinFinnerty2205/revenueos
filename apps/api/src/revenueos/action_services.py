@@ -30,6 +30,7 @@ from revenueos.action_contracts import (
     LogInteractionPayload,
     OpportunityUpdatePayload,
     OtherActionPayload,
+    PersonalizedOutreachPayload,
     PrepareNextInteractionPayload,
     RecordCommitmentPayload,
     RecordDecisionPayload,
@@ -349,6 +350,8 @@ class ActionService:
         self._require_expected_version(proposal, request.expected_version)
         if proposal.status not in _ACTIVE_REVIEW_STATUSES:
             raise PublicAPIError("invalid_action_transition", "Only pending Actions can be edited.", 409)
+        if proposal.opportunity_id is None:
+            raise PublicAPIError("invalid_action_transition", "Use the Engage outreach editor for this Action.", 409)
         self._require_payload_type(proposal.action_type, request.proposed_payload)
         await self._validate_payload_relationships(proposal.opportunity_id, request.proposed_payload)
         await self._require_current_sources(record)
@@ -406,6 +409,8 @@ class ActionService:
         self._require_expected_version(proposal, request.expected_version)
         if proposal.status not in _ACTIVE_REVIEW_STATUSES:
             raise PublicAPIError("invalid_action_transition", "Only pending Actions can be approved.", 409)
+        if proposal.opportunity_id is None:
+            raise PublicAPIError("invalid_action_transition", "Use the Engage outreach review for this Action.", 409)
         payload = self._payload(record.version.payload_json)
         await self._validate_payload_relationships(proposal.opportunity_id, payload)
         await self._require_current_sources(record)
@@ -1383,15 +1388,18 @@ class ActionService:
         return record
 
     async def _require_current_sources(self, record: ActionRecord) -> None:
+        if record.proposal.opportunity_id is None:
+            raise PublicAPIError("action_target_stale", "The Action target is no longer available.", 409)
+        opportunity_id = record.proposal.opportunity_id
         references = self._source_refs(record.version.source_refs_json)
         for reference in references:
             if reference.source_type == "methodology_projection":
-                methodology = await self.methodology.read(record.proposal.opportunity_id)
+                methodology = await self.methodology.read(opportunity_id)
                 is_current = methodology.state == "current" and methodology.projection_id == reference.source_id
             else:
                 is_current = await self.repository.source_is_current(
                     self.tenant.organisation_id,
-                    record.proposal.opportunity_id,
+                    opportunity_id,
                     reference,
                 )
             if is_current:
@@ -1723,7 +1731,7 @@ class ActionService:
             isinstance(payload, FollowUpEmailPayload)
             and payload.recipient_contact_id is not None
             and payload.recipient_confirmed
-        )
+        ) or isinstance(payload, PersonalizedOutreachPayload)
         return ActionProposalResponse(
             id=proposal.id,
             organisation_id=proposal.organisation_id,

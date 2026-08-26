@@ -980,6 +980,8 @@ class AskRevenueOSService:
             return []
         candidates: list[AskCandidate] = []
         for item in actions:
+            if item.proposal.opportunity_id is None:
+                continue
             prefix = f"{names.get(item.proposal.opportunity_id, 'Opportunity')} · " if len(names) > 1 else ""
             due = f" Due {item.version.proposed_due_at.date().isoformat()}." if item.version.proposed_due_at else ""
             source = AskSource(

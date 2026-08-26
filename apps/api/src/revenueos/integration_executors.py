@@ -15,6 +15,7 @@ from revenueos.action_contracts import (
     CreateTaskPayload,
     FollowUpEmailPayload,
     OpportunityUpdatePayload,
+    PersonalizedOutreachPayload,
     ScheduleInteractionPayload,
 )
 from revenueos.domain import ActionRiskClass, ConnectorCapability, ConnectorKey
@@ -113,7 +114,7 @@ class ApprovedActionInput:
     organisation_id: UUID
     action_id: UUID
     action_version: int
-    opportunity_id: UUID
+    opportunity_id: UUID | None
     action_type: str
     risk_class: ActionRiskClass
     title: str
@@ -232,7 +233,7 @@ class MockEmailExecutor(_MockExecutor):
     definition = CONNECTOR_DEFINITIONS[ConnectorKey.MOCK_EMAIL]
 
     def validate_action(self, action: ApprovedActionInput) -> None:
-        if not isinstance(action.payload, FollowUpEmailPayload):
+        if not isinstance(action.payload, (FollowUpEmailPayload, PersonalizedOutreachPayload)):
             raise PermanentExecutionFailure("unsupported_action", "This connector cannot simulate that Action type.")
         payload = action.payload
         if not payload.recipient_confirmed or payload.recipient_email is None:
@@ -254,10 +255,15 @@ class MockEmailExecutor(_MockExecutor):
     ) -> ExecutionPreviewContent:
         del current_external_state
         self.validate_action(action)
-        payload = cast(FollowUpEmailPayload, action.payload)
+        payload = action.payload
+        if not isinstance(payload, (FollowUpEmailPayload, PersonalizedOutreachPayload)):
+            raise PermanentExecutionFailure("unsupported_action", "This connector cannot simulate that Action type.")
         assert payload.recipient_email is not None
         return EmailExecutionPreview(
             kind="email",
+            sender_name=payload.sender_name if isinstance(payload, PersonalizedOutreachPayload) else None,
+            sender_email=payload.sender_email if isinstance(payload, PersonalizedOutreachPayload) else None,
+            recipient_name=payload.recipient_name if isinstance(payload, PersonalizedOutreachPayload) else None,
             recipient=payload.recipient_email,
             subject=payload.subject,
             body=payload.body,
@@ -542,6 +548,7 @@ def capability_for_action(action_type: str) -> ConnectorCapability:
     try:
         return {
             "follow_up_email": ConnectorCapability.SEND_EMAIL,
+            "personalized_outreach": ConnectorCapability.SEND_EMAIL,
             "schedule_interaction": ConnectorCapability.CREATE_CALENDAR_EVENT,
             "update_opportunity": ConnectorCapability.UPDATE_OPPORTUNITY,
             "update_contact": ConnectorCapability.UPDATE_CONTACT,

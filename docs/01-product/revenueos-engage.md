@@ -1,6 +1,6 @@
 # RevenueOS Engage
 
-- **Status:** Future paid add-on; not implemented
+- **Status:** WO-029 one-to-one outreach implemented as an entitled add-on; campaigns/sequences remain future
 - **Purpose:** Turn target accounts into conversations
 
 ## Product outcome
@@ -9,11 +9,24 @@ Engage uses authorised account/person research, ICP context and approved company
 positioning to help a seller create relevant, respectful outreach. The user can edit
 and approve messages; campaign controls prevent unbounded or deceptive automation.
 
-## Capabilities
+## Current WO-029 capability
 
 - one-person personalised outreach;
-- role-aware messaging for executives, operational buyers, technical evaluators,
-  security and procurement;
+- four explicit purposes and role/company-aware value messaging;
+- source-backed eligible professional personalisation with **Why this message?**;
+- immutable edit/re-approval and exact send review;
+- separate contact-data trust, policy permission and server contactability;
+- durable suppression, cooldown and daily limits; and
+- visibly labelled deterministic email simulation outside production.
+
+Production mailbox sending is not enabled. Gmail and Microsoft Graph were evaluated
+and deliberately deferred; no mailbox OAuth, unsubscribe route, bounce/reply event,
+tracking or delivery claim exists. See the
+[WO-029 guide](personalised-outreach.md) and
+[provider evaluation](../05-integrations/mailbox-provider-evaluation.md).
+
+## Future capabilities, not implemented
+
 - short sequences with per-step content and personalisation;
 - campaigns with review and scheduling;
 - event invitation and follow-up workflows; and

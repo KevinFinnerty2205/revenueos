@@ -53,9 +53,21 @@ can call HubSpot. A live current-value preview and a separate **Update CRM** or
 **Log interaction in CRM** confirmation remain mandatory. See the
 [Focused CRM Sync guide](../03-engineering/focused-crm-sync.md).
 
+## WO-029 Contact-scoped Engage outreach
+
+WO-029 adds `personalized_outreach` as a Contact-scoped Action whose Opportunity may
+be null. The exact immutable Action payload pins the outreach revision, authenticated
+sender, canonical Contact/recipient trust, subject and body. Editing creates a new
+Action and outreach revision and clears approval. Approval still never executes.
+
+Exact preview, separate confirmation, idempotency and worker revalidation reuse the
+WO-022 boundary. Only Mock Email simulation is available outside production; no live
+mailbox adapter exists. Outbound seller email is activity, never customer-direct
+Evidence and cannot confirm Methodology or Revenue Brain facts.
+
 ## Explicit limitations
 
-- no real email sending, mailbox connection or recipient delivery confirmation;
+- no real email sending, production mailbox connection or recipient delivery confirmation;
 - no second CRM, real calendar, task-system or collaboration-tool connector;
 - no autonomous agent loop or autonomous external execution;
 - no automatic Opportunity, Contact, Stakeholder or Task mutation;

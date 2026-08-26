@@ -110,6 +110,20 @@ def test_production_rejects_mock_authentication() -> None:
         )
 
 
+def test_production_engage_requires_deployment_suppression_key() -> None:
+    with pytest.raises(ValidationError, match="suppression HMAC key"):
+        Settings(
+            environment="production",
+            auth_mode="clerk",
+            mock_auth_enabled=False,
+            clerk_jwks_url="https://identity.example.test/jwks",
+            clerk_issuer="https://identity.example.test",
+            clerk_audience="revenueos",
+            database_url="postgresql+asyncpg://example.invalid/revenueos",
+            cors_origins="https://app.example.test",
+        )
+
+
 def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
     response = client.get("/openapi.json")
 
@@ -178,6 +192,16 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/api/v1/prospect/people/{person_id}/promote",
         "/api/v1/prospect/accounts/{company_id}/research-link",
         "/api/v1/prospect/contacts/{contact_id}/research-link",
+        "/api/v1/engage/availability",
+        "/api/v1/engage/admin/entitlement",
+        "/api/v1/engage/policy",
+        "/api/v1/engage/contacts/{contact_id}",
+        "/api/v1/engage/contacts/{contact_id}/outreach",
+        "/api/v1/engage/contacts/{contact_id}/suppression",
+        "/api/v1/engage/outreach/{outreach_id}",
+        "/api/v1/engage/outreach/{outreach_id}/approve",
+        "/api/v1/engage/outreach/{outreach_id}/execution-preview",
+        "/api/v1/engage/outreach/{outreach_id}/send",
         "/api/v1/companies",
         "/api/v1/companies/{company_id}",
         "/api/v1/contacts",

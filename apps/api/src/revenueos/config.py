@@ -107,6 +107,8 @@ class Settings(BaseSettings):
     private_beta_max_discovery_runs_per_user_per_day: int = Field(default=5, ge=1, le=100)
     private_beta_max_discovery_runs_per_organisation_per_day: int = Field(default=25, ge=1, le=500)
     private_beta_max_candidates_per_discovery: int = Field(default=50, ge=1, le=50)
+    private_beta_max_outreach_per_user_per_day: int = Field(default=25, ge=1, le=500)
+    private_beta_max_outreach_per_organisation_per_day: int = Field(default=100, ge=1, le=2_000)
     private_beta_max_action_generations_per_day: int = Field(default=100, ge=1, le=5_000)
     private_beta_max_email_executions_per_day: int = Field(default=50, ge=1, le=5_000)
     private_beta_max_calendar_executions_per_day: int = Field(default=25, ge=1, le=2_000)
@@ -164,6 +166,11 @@ class Settings(BaseSettings):
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     feature_prospect_enabled: bool = True
+    feature_engage_enabled: bool = True
+    outreach_suppression_hmac_key: SecretStr = Field(
+        default=SecretStr("local-development-outreach-suppression-key"),
+        min_length=24,
+    )
     prospect_research_provider_name: ProspectResearchProviderName = "mock"
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
     worker_lease_duration_seconds: int = Field(default=60, ge=10, le=3600)
@@ -309,6 +316,12 @@ class Settings(BaseSettings):
                 raise ValueError("Production requires PostgreSQL persistence.")
             if self.feature_mock_connectors_enabled:
                 raise ValueError("Mock connectors are prohibited in production.")
+            if (
+                self.feature_engage_enabled
+                and self.outreach_suppression_hmac_key.get_secret_value()
+                == "local-development-outreach-suppression-key"
+            ):
+                raise ValueError("Production Engage requires a deployment-managed suppression HMAC key.")
         if self.worker_heartbeat_interval_seconds >= self.worker_lease_duration_seconds:
             raise ValueError("Worker heartbeat interval must be shorter than the lease duration.")
         if self.worker_base_retry_delay_seconds > self.worker_max_retry_delay_seconds:
@@ -475,6 +488,7 @@ class Settings(BaseSettings):
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
             "prospect": self.feature_prospect_enabled,
+            "engage": self.feature_engage_enabled,
         }
 
 

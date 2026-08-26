@@ -275,13 +275,17 @@ function EntityRows({
               href={
                 entity === "opportunities"
                   ? `/opportunities/${row.id}`
-                  : `/${entity}/${row.id}/edit`
+                  : entity === "contacts"
+                    ? `/contacts/${row.id}`
+                    : `/${entity}/${row.id}/edit`
               }
               className="mt-5 inline-flex text-sm font-bold text-teal-700 hover:text-teal-900"
             >
               {entity === "opportunities"
                 ? "Open workspace"
-                : `Edit ${entityLabels[entity].singular}`}
+                : entity === "contacts"
+                  ? "Open Contact"
+                  : `Edit ${entityLabels[entity].singular}`}
             </Link>
           </article>
         ))}
@@ -317,11 +321,15 @@ function EntityRows({
                       href={
                         entity === "opportunities"
                           ? `/opportunities/${row.id}`
-                          : `/${entity}/${row.id}/edit`
+                          : entity === "contacts"
+                            ? `/contacts/${row.id}`
+                            : `/${entity}/${row.id}/edit`
                       }
                       className="font-bold text-teal-700 hover:text-teal-900"
                     >
-                      {entity === "opportunities" ? "Open" : "Edit"}
+                      {entity === "opportunities" || entity === "contacts"
+                        ? "Open"
+                        : "Edit"}
                     </Link>
                   </td>
                 </tr>
@@ -365,7 +373,14 @@ function displayCells(
     return [
       {
         label: "Name",
-        value: `${contact.firstName} ${contact.lastName}`,
+        value: (
+          <Link
+            href={`/contacts/${contact.id}`}
+            className="font-bold text-teal-700 hover:text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+          >
+            {contact.firstName} {contact.lastName}
+          </Link>
+        ),
       },
       { label: "Email", value: contact.email ?? "Not established" },
       { label: "Job title", value: contact.jobTitle ?? "—" },

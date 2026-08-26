@@ -297,6 +297,17 @@ server-authoritative. Execution export v13 is metadata-only; opaque credential
 references and internal replay/worker fields are excluded. Unknown outcomes stop
 without blind retry. See [integration security review](integration-security-review.md).
 
+## Current Engage outreach trust boundary
+
+WO-029 makes address provenance, organisation permission and current contactability
+separate visible/server concepts. Only a canonical Contact with verified or policy-
+permitted provider-supplied email can proceed; inferred/unknown addresses cannot.
+Eligible professional research stays cited and distinct from customer Evidence.
+Server-selected sources, immutable review, user-bound sender identity, HMAC
+suppression, quotas and execution-time checks constrain abuse. Production mailbox
+sending and tracking remain unavailable. See the
+[Engage outreach security review](personalised-outreach-security-review.md).
+
 ## WO-023 extension
 
 The [End-to-End Sales Platform security and privacy review](end-to-end-sales-platform-security-privacy.md)

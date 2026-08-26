@@ -82,6 +82,22 @@ class FollowUpEmailPayload(StrictActionModel):
         return self
 
 
+class PersonalizedOutreachPayload(StrictActionModel):
+    kind: Literal["personalized_outreach"]
+    outreach_id: UUID
+    outreach_version: int = Field(ge=1)
+    sender_user_id: UUID
+    sender_name: ShortText
+    sender_email: EmailText
+    recipient_contact_id: UUID
+    recipient_name: ShortText
+    recipient_email: EmailText
+    recipient_trust: Literal["verified", "provider_supplied"]
+    recipient_confirmed: Literal[True] = True
+    subject: ShortText
+    body: BodyText
+
+
 class RequestedMaterialPayload(StrictActionModel):
     kind: Literal["send_requested_material"]
     material: ShortText
@@ -274,6 +290,7 @@ class OtherActionPayload(StrictActionModel):
 
 ActionPayload = Annotated[
     FollowUpEmailPayload
+    | PersonalizedOutreachPayload
     | RequestedMaterialPayload
     | CreateTaskPayload
     | FollowUpStakeholderPayload
@@ -301,7 +318,7 @@ ActionPayload = Annotated[
 class ActionProposalResponse(APIModel):
     id: UUID
     organisation_id: UUID
-    opportunity_id: UUID
+    opportunity_id: UUID | None
     interaction_id: UUID | None
     action_type: ActionType
     status: ActionStatus
