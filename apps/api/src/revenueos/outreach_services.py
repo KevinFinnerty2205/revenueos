@@ -11,6 +11,7 @@ from datetime import UTC, datetime, time, timedelta
 from typing import Literal, cast
 from uuid import UUID
 
+from sqlalchemy import and_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +39,9 @@ from revenueos.models import (
     ActionProposalVersion,
     Contact,
     ContactSuppression,
+    EngageCampaign,
+    EngageCampaignEnrollment,
+    EngageEnrollmentStep,
     OrganisationModuleEntitlement,
     OutreachMessage,
     OutreachPersonalizationSource,
@@ -45,6 +49,7 @@ from revenueos.models import (
     OutreachVersion,
     ProspectResearchObservation,
     ProspectResearchSource,
+    User,
 )
 from revenueos.outreach_contracts import (
     ContactabilityResponse,
@@ -134,6 +139,17 @@ class SelectedSource:
     scope: Literal["company", "person"]
 
 
+@dataclass(frozen=True)
+class CampaignOutreachContext:
+    step_instance_id: UUID
+    objective: str
+    content_strategy: str
+    step_order: int
+    total_steps: int
+    previous_sent_at: datetime | None
+    excluded_source_ids: frozenset[UUID]
+
+
 def _normalise_address(value: str) -> str:
     return value.strip().casefold()
 
@@ -168,6 +184,7 @@ async def evaluate_contactability(
     *,
     action_id: UUID | None = None,
     sender_user_id: UUID | None = None,
+    check_frequency_limits: bool = True,
 ) -> ContactabilityResult:
     entitlement = await repository.entitlement(tenant.organisation_id)
     if not settings.feature_engage_enabled or entitlement is None or not entitlement.enabled:
@@ -242,37 +259,38 @@ async def evaluate_contactability(
             "Organisation policy allows only verified business email addresses.",
             trust,
         )
-    excluded_action_id = action_id or _ZERO_UUID
-    if policy.cooldown_hours > 0 and await repository.successful_contact_send_since(
-        tenant.organisation_id,
-        contact.id,
-        datetime.now(UTC) - timedelta(hours=policy.cooldown_hours),
-        excluding_action_id=excluded_action_id,
-    ):
-        return ContactabilityResult(
-            OutreachContactability.COOLDOWN,
-            f"This Contact is within the organisation's {policy.cooldown_hours}-hour outreach cooldown.",
-            trust,
+    if check_frequency_limits:
+        excluded_action_id = action_id or _ZERO_UUID
+        if policy.cooldown_hours > 0 and await repository.successful_contact_send_since(
+            tenant.organisation_id,
+            contact.id,
+            datetime.now(UTC) - timedelta(hours=policy.cooldown_hours),
+            excluding_action_id=excluded_action_id,
+        ):
+            return ContactabilityResult(
+                OutreachContactability.COOLDOWN,
+                f"This Contact is within the organisation's {policy.cooldown_hours}-hour outreach cooldown.",
+                trust,
+            )
+        start = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)
+        user_count, org_count = await repository.send_counts_since(
+            tenant.organisation_id,
+            sender_id,
+            start,
+            excluding_action_id=excluded_action_id,
         )
-    start = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)
-    user_count, org_count = await repository.send_counts_since(
-        tenant.organisation_id,
-        sender_id,
-        start,
-        excluding_action_id=excluded_action_id,
-    )
-    if user_count >= min(policy.max_daily_sends_user, settings.private_beta_max_outreach_per_user_per_day):
-        return ContactabilityResult(
-            OutreachContactability.OUTBOUND_DISABLED,
-            "The sender's one-to-one outreach limit has been reached for today.",
-            trust,
-        )
-    if org_count >= min(policy.max_daily_sends_org, settings.private_beta_max_outreach_per_organisation_per_day):
-        return ContactabilityResult(
-            OutreachContactability.OUTBOUND_DISABLED,
-            "The organisation's one-to-one outreach limit has been reached for today.",
-            trust,
-        )
+        if user_count >= min(policy.max_daily_sends_user, settings.private_beta_max_outreach_per_user_per_day):
+            return ContactabilityResult(
+                OutreachContactability.QUOTA_REACHED,
+                "The sender's one-to-one outreach limit has been reached for today.",
+                trust,
+            )
+        if org_count >= min(policy.max_daily_sends_org, settings.private_beta_max_outreach_per_organisation_per_day):
+            return ContactabilityResult(
+                OutreachContactability.QUOTA_REACHED,
+                "The organisation's one-to-one outreach limit has been reached for today.",
+                trust,
+            )
     if policy.require_opt_out_mechanism:
         return ContactabilityResult(
             OutreachContactability.POLICY_NOT_CONFIGURED,
@@ -395,6 +413,8 @@ class OutreachService:
             entitlement.configured_by_user_id = self.tenant.user_id
             entitlement.enabled_at = now if request.enabled else entitlement.enabled_at
             entitlement.disabled_at = None if request.enabled else now
+        if not request.enabled:
+            await self._halt_active_campaigns("engage_unavailable", now)
         await self._commit("The Engage entitlement could not be saved.")
         logger.info(
             "engage_entitlement_changed",
@@ -415,6 +435,7 @@ class OutreachService:
         now = datetime.now(UTC)
         policy = await self.repository.policy(self.tenant.organisation_id, for_update=True)
         values = request.model_dump()
+        materially_changed = policy is not None and any(getattr(policy, key) != value for key, value in values.items())
         if policy is None:
             policy = OutreachPolicy(
                 organisation_id=self.tenant.organisation_id,
@@ -426,9 +447,12 @@ class OutreachService:
         else:
             for key, value in values.items():
                 setattr(policy, key, value)
+            policy.version += 1
             policy.configured = True
             policy.configured_by_user_id = self.tenant.user_id
             policy.updated_at = now
+        if materially_changed:
+            await self._halt_active_campaigns("campaign_policy_changed", now)
         await self._commit("The Engage sending policy could not be saved.")
         logger.info(
             "outreach_policy_updated",
@@ -491,7 +515,6 @@ class OutreachService:
                 "An administrator must add an approved offering before a trustworthy draft can be created.",
                 409,
             )
-        trust = await self._sendable_trust(contact)
         sources = await self._selected_sources(contact)
         subject, body, used = self._compose(
             contact=contact,
@@ -503,6 +526,91 @@ class OutreachService:
             sources=sources,
         )
         self._validate_copy(subject, body)
+        record = await self._persist_draft(
+            contact=contact,
+            policy=policy,
+            sender=sender,
+            purpose=request.purpose,
+            subject=subject,
+            body=body,
+            used=used,
+            composer_version="outreach_deterministic_v1",
+            plan_extra={},
+            commit=True,
+        )
+        logger.info(
+            "outreach_draft_created",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "outreach_id": str(record.message.id),
+                "contact_id": str(contact.id),
+                "purpose": request.purpose.value,
+                "source_count": len(used),
+            },
+        )
+        return await self.get(record.message.id)
+
+    async def prepare_campaign_draft(
+        self,
+        contact_id: UUID,
+        context: CampaignOutreachContext,
+    ) -> OutreachRecord:
+        """Prepare one campaign step within the caller's transaction."""
+        await self._require_entitled()
+        contact = await self._contact(contact_id)
+        company = await self.repository.company(self.tenant.organisation_id, contact.company_id)
+        policy = await self.repository.policy(self.tenant.organisation_id)
+        sender = await self.repository.user(self.tenant.user_id)
+        organisation = await self.repository.organisation(self.tenant.organisation_id)
+        assert company is not None and sender is not None and organisation is not None
+        if policy is None or not policy.configured:
+            raise PublicAPIError("outreach_profile_required", "The approved seller context is unavailable.", 409)
+        sources = await self._selected_sources(contact, excluded_source_ids=context.excluded_source_ids)
+        purpose = self._campaign_purpose(context.objective)
+        subject, body, used = self._compose_campaign(
+            contact=contact,
+            company_name=company.name,
+            sender_name=sender.display_name,
+            organisation_name=organisation.name,
+            policy=policy,
+            purpose=purpose,
+            sources=sources,
+            context=context,
+        )
+        self._validate_copy(subject, body)
+        return await self._persist_draft(
+            contact=contact,
+            policy=policy,
+            sender=sender,
+            purpose=purpose,
+            subject=subject,
+            body=body,
+            used=used,
+            composer_version="outreach_campaign_deterministic_v1",
+            plan_extra={
+                "campaignStepInstanceId": str(context.step_instance_id),
+                "sequenceObjective": context.objective,
+                "sequenceStepOrder": context.step_order,
+                "previousSentAt": context.previous_sent_at.isoformat() if context.previous_sent_at else None,
+            },
+            commit=False,
+        )
+
+    async def _persist_draft(
+        self,
+        *,
+        contact: Contact,
+        policy: OutreachPolicy,
+        sender: User,
+        purpose: OutreachPurpose,
+        subject: str,
+        body: str,
+        used: list[SelectedSource],
+        composer_version: str,
+        plan_extra: dict[str, object],
+        commit: bool,
+    ) -> OutreachRecord:
+        trust = await self._sendable_trust(contact)
         now = datetime.now(UTC)
         outreach_id = uuid.uuid4()
         action_id = uuid.uuid4()
@@ -542,7 +650,7 @@ class OutreachService:
                 {
                     "contactId": str(contact.id),
                     "senderId": str(sender.id),
-                    "purpose": request.purpose.value,
+                    "purpose": purpose.value,
                     "outreachId": str(outreach_id),
                 }
             ),
@@ -555,7 +663,7 @@ class OutreachService:
             contact_id=contact.id,
             sender_user_id=sender.id,
             action_id=action_id,
-            purpose=request.purpose.value,
+            purpose=purpose.value,
             state=OutreachState.DRAFT.value,
             current_version=1,
             created_at=now,
@@ -578,11 +686,12 @@ class OutreachService:
             approved_cta=policy.approved_cta,
             personalization_plan_json={
                 "schemaVersion": 1,
-                "purpose": request.purpose.value,
+                "purpose": purpose.value,
                 "sourceIds": [str(item.observation.id) for item in used],
                 "noReliablePersonalizedHook": not used,
+                **plan_extra,
             },
-            composer_version="outreach_deterministic_v1",
+            composer_version=composer_version,
             creation_type="generated",
             content_fingerprint=self._content_fingerprint(subject, body, payload_json),
             created_by_user_id=self.tenant.user_id,
@@ -606,7 +715,7 @@ class OutreachService:
                 proposal_version=1,
                 metadata_json={
                     "action_type": "personalized_outreach",
-                    "purpose": request.purpose.value,
+                    "purpose": purpose.value,
                     "source_count": len(used) + 1,
                 },
                 created_at=now,
@@ -639,18 +748,11 @@ class OutreachService:
                 created_at=now,
             )
         )
-        await self._commit("The outreach draft could not be created.")
-        logger.info(
-            "outreach_draft_created",
-            extra={
-                "organisation_id": str(self.tenant.organisation_id),
-                "outreach_id": str(outreach_id),
-                "contact_id": str(contact.id),
-                "purpose": request.purpose.value,
-                "source_count": len(used),
-            },
-        )
-        return await self.get(outreach_id)
+        if commit:
+            await self._commit("The outreach draft could not be created.")
+        else:
+            await self._flush("The campaign outreach draft could not be prepared.")
+        return OutreachRecord(message, version)
 
     async def get(self, outreach_id: UUID) -> OutreachResponse:
         await self._require_entitled()
@@ -769,6 +871,26 @@ class OutreachService:
         return await self.get(message.id)
 
     async def approve(self, outreach_id: UUID, request: OutreachApproveRequest) -> OutreachResponse:
+        return await self._approve(outreach_id, request, campaign_step_id=None)
+
+    async def approve_campaign_authorized(
+        self,
+        outreach_id: UUID,
+        request: OutreachApproveRequest,
+        *,
+        campaign_step_id: UUID,
+    ) -> OutreachResponse:
+        """Approve an auto-send draft under the immutable campaign launch authority."""
+
+        return await self._approve(outreach_id, request, campaign_step_id=campaign_step_id)
+
+    async def _approve(
+        self,
+        outreach_id: UUID,
+        request: OutreachApproveRequest,
+        *,
+        campaign_step_id: UUID | None,
+    ) -> OutreachResponse:
         await self._require_entitled()
         record = await self._message(outreach_id, for_update=True)
         message, version = record.message, record.version
@@ -827,6 +949,8 @@ class OutreachService:
                     "action_type": "personalized_outreach",
                     "external_execution": False,
                     "contactability": "allowed",
+                    "approval_basis": ("campaign_launch" if campaign_step_id is not None else "seller_review"),
+                    **({"campaign_step_instance_id": str(campaign_step_id)} if campaign_step_id is not None else {}),
                 },
                 created_at=now,
             )
@@ -838,6 +962,8 @@ class OutreachService:
                 "organisation_id": str(self.tenant.organisation_id),
                 "outreach_id": str(message.id),
                 "version": message.current_version,
+                "approval_basis": "campaign_launch" if campaign_step_id is not None else "seller_review",
+                **({"campaign_step_id": str(campaign_step_id)} if campaign_step_id is not None else {}),
             },
         )
         return await self.get(message.id)
@@ -944,7 +1070,12 @@ class OutreachService:
         )
         return self._suppression_response(existing)
 
-    async def _selected_sources(self, contact: Contact) -> list[SelectedSource]:
+    async def _selected_sources(
+        self,
+        contact: Contact,
+        *,
+        excluded_source_ids: frozenset[UUID] = frozenset(),
+    ) -> list[SelectedSource]:
         person = await self.repository.prospect_person_for_contact(self.tenant.organisation_id, contact.id)
         if person is None or person.employment_state != "current":
             return []
@@ -965,6 +1096,8 @@ class OutreachService:
                 self.tenant.organisation_id,
                 run.id,
             ):
+                if observation.id in excluded_source_ids:
+                    continue
                 if observation.category not in allowed or observation.trust_state not in _USABLE_TRUST:
                     continue
                 if _SENSITIVE_TERMS.search(observation.statement):
@@ -980,6 +1113,148 @@ class OutreachService:
                 if selected >= 3:
                     break
         return results
+
+    async def campaign_sources_are_current(self, contact_id: UUID, outreach_version_id: UUID) -> bool:
+        """Revalidate every unsent campaign claim against the current Prospect run."""
+        contact = await self._contact(contact_id)
+        person = await self.repository.prospect_person_for_contact(self.tenant.organisation_id, contact.id)
+        sources = await self.repository.version_sources(self.tenant.organisation_id, outreach_version_id)
+        for source in sources:
+            if source.source_type == "approved_seller_context":
+                continue
+            if person is None or person.employment_state != "current":
+                return False
+            observation = await self.repository.observation(self.tenant.organisation_id, source.source_id)
+            if observation is None or observation.trust_state not in _USABLE_TRUST:
+                return False
+            is_person = source.source_type == "prospect_person_observation"
+            if observation.category not in (_PERSON_CATEGORIES if is_person else _COMPANY_CATEGORIES):
+                return False
+            if _SENSITIVE_TERMS.search(observation.statement):
+                return False
+            if observation.freshness == "time_sensitive":
+                observed_at = observation.observed_at
+                if observed_at is not None and observed_at.tzinfo is None:
+                    observed_at = observed_at.replace(tzinfo=UTC)
+                if observed_at is None or observed_at < datetime.now(UTC) - timedelta(days=365):
+                    return False
+            run = await self.repository.current_run(
+                self.tenant.organisation_id,
+                person.target_id,
+                person_id=person.id if is_person else None,
+            )
+            if run is None or observation.run_id != run.id:
+                return False
+        return True
+
+    @staticmethod
+    def _campaign_purpose(objective: str) -> OutreachPurpose:
+        return {
+            "introduction": OutreachPurpose.INTRODUCTION,
+            "meeting_request": OutreachPurpose.REQUEST_MEETING,
+            "share_relevant_information": OutreachPurpose.SHARE_RELEVANT_INFORMATION,
+            "follow_up": OutreachPurpose.RE_ENGAGE,
+            "different_angle": OutreachPurpose.RE_ENGAGE,
+            "final_follow_up": OutreachPurpose.RE_ENGAGE,
+        }[objective]
+
+    @classmethod
+    def _compose_campaign(
+        cls,
+        *,
+        contact: Contact,
+        company_name: str,
+        sender_name: str,
+        organisation_name: str,
+        policy: OutreachPolicy,
+        purpose: OutreachPurpose,
+        sources: list[SelectedSource],
+        context: CampaignOutreachContext,
+    ) -> tuple[str, str, list[SelectedSource]]:
+        if context.step_order == 1:
+            return cls._compose(
+                contact=contact,
+                company_name=company_name,
+                sender_name=sender_name,
+                organisation_name=organisation_name,
+                policy=policy,
+                purpose=purpose,
+                sources=sources,
+            )
+        if context.previous_sent_at is None:
+            raise PublicAPIError(
+                "campaign_sequence_context_invalid",
+                "A follow-up cannot be prepared until the previous message was successfully sent.",
+                409,
+            )
+        if context.objective == "final_follow_up" and context.step_order != context.total_steps:
+            raise PublicAPIError(
+                "campaign_sequence_context_invalid",
+                "A final follow-up must be the last enabled sequence step.",
+                409,
+            )
+        weekday = context.previous_sent_at.strftime("%A")
+        follow_up = f"I wanted to follow up on my note from {weekday}."
+        used: list[SelectedSource] = []
+        if context.objective in {"different_angle", "share_relevant_information"}:
+            _, generated_body, used = cls._compose(
+                contact=contact,
+                company_name=company_name,
+                sender_name=sender_name,
+                organisation_name=organisation_name,
+                policy=policy,
+                purpose=purpose,
+                sources=sources,
+            )
+            if not used:
+                consolidation = next(
+                    (
+                        item
+                        for item in sources
+                        if item.observation.observation_key == "technology_consolidation"
+                        and "technology consolidation" in item.observation.statement.casefold()
+                    ),
+                    None,
+                )
+                if consolidation is not None:
+                    used = [consolidation]
+                    generated_body = (
+                        f"Hi {contact.first_name},\n\n"
+                        "Your public comments on technology consolidation during business growth offered another "
+                        "relevant angle."
+                    )
+            paragraphs = generated_body.split("\n\n")
+            angle = paragraphs[1] if len(paragraphs) > 1 else f"A different relevant angle for {company_name}."
+            subject = (
+                f"A different angle for {company_name}"
+                if context.objective == "different_angle"
+                else f"A useful overview for {company_name}"
+            )[:200]
+            body = (
+                f"Hi {contact.first_name},\n\n"
+                f"{follow_up}\n\n"
+                f"{angle}\n\n"
+                f"{policy.value_proposition} {policy.approved_cta}\n\n"
+                f"Kind regards,\n{sender_name}\n{organisation_name}"
+            )
+            return subject, body, used
+        if context.objective == "final_follow_up":
+            subject = f"Leaving this with you — {policy.offering_name}"[:200]
+            body = (
+                f"Hi {contact.first_name},\n\n"
+                f"{follow_up} I'll leave it here for now so I don't crowd your inbox.\n\n"
+                f"If {policy.offering_name} becomes relevant, {policy.approved_cta.lower()}\n\n"
+                f"Kind regards,\n{sender_name}\n{organisation_name}"
+            )
+            return subject, body, used
+        subject = f"Following up — {policy.offering_name}"[:200]
+        body = (
+            f"Hi {contact.first_name},\n\n"
+            f"{follow_up}\n\n"
+            f"{policy.value_proposition} {policy.approved_cta}\n\n"
+            f"Kind regards,\n{sender_name}\n{organisation_name}"
+        )
+        return subject, body, used
 
     @staticmethod
     def _compose(
@@ -1173,6 +1448,7 @@ class OutreachService:
 
     def _policy_response(self, policy: OutreachPolicy | None) -> OutreachPolicyResponse:
         return OutreachPolicyResponse(
+            version=policy.version if policy else 1,
             configured=bool(policy and policy.configured),
             outbound_enabled=bool(policy and policy.outbound_enabled),
             provider_supplied_email_allowed=bool(policy and policy.provider_supplied_email_allowed),
@@ -1184,6 +1460,7 @@ class OutreachService:
             if policy
             else self.settings.private_beta_max_outreach_per_organisation_per_day,
             require_opt_out_mechanism=bool(policy and policy.require_opt_out_mechanism),
+            campaign_auto_send_allowed=bool(policy and policy.campaign_auto_send_allowed),
             offering_name=policy.offering_name if policy else None,
             value_proposition=policy.value_proposition if policy else None,
             approved_cta=policy.approved_cta if policy else None,
@@ -1325,6 +1602,90 @@ class OutreachService:
         if record is None:
             raise PublicAPIError("outreach_not_found", "The requested outreach message was not found.", 404)
         return record
+
+    async def _halt_active_campaigns(self, reason: str, now: datetime) -> None:
+        """Fail closed for every unsent step after an organisation-level control changes."""
+
+        organisation_id = self.tenant.organisation_id
+        campaign_ids = select(EngageCampaign.id).where(
+            EngageCampaign.organisation_id == organisation_id,
+            EngageCampaign.state.in_(("active", "paused", "needs_attention")),
+        )
+        enrollment_ids = select(EngageCampaignEnrollment.id).where(
+            EngageCampaignEnrollment.organisation_id == organisation_id,
+            EngageCampaignEnrollment.campaign_id.in_(campaign_ids),
+            EngageCampaignEnrollment.state.in_(("ready", "active", "paused", "needs_attention")),
+        )
+        outreach_action_ids = (
+            select(OutreachMessage.action_id)
+            .join(
+                EngageEnrollmentStep,
+                and_(
+                    EngageEnrollmentStep.organisation_id == OutreachMessage.organisation_id,
+                    EngageEnrollmentStep.outreach_message_id == OutreachMessage.id,
+                ),
+            )
+            .where(
+                OutreachMessage.organisation_id == organisation_id,
+                EngageEnrollmentStep.organisation_id == organisation_id,
+                EngageEnrollmentStep.enrollment_id.in_(enrollment_ids),
+            )
+        )
+        await self.session.execute(
+            update(ActionExecution)
+            .where(
+                ActionExecution.organisation_id == organisation_id,
+                ActionExecution.action_id.in_(outreach_action_ids),
+                ActionExecution.execution_status.in_(("queued", "failed_retryable")),
+            )
+            .values(
+                execution_status="cancelled",
+                completed_at=now,
+                next_attempt_at=None,
+                safe_failure_code=reason,
+                worker_id=None,
+                lease_expires_at=None,
+                updated_at=now,
+            )
+        )
+        await self.session.execute(
+            update(EngageEnrollmentStep)
+            .where(
+                EngageEnrollmentStep.organisation_id == organisation_id,
+                EngageEnrollmentStep.enrollment_id.in_(enrollment_ids),
+                EngageEnrollmentStep.state.in_(
+                    ("pending", "processing", "ready_for_review", "prepared", "queued", "deferred")
+                ),
+            )
+            .values(
+                state="blocked",
+                safe_status_code=reason,
+                worker_id=None,
+                lease_expires_at=None,
+                updated_at=now,
+            )
+        )
+        await self.session.execute(
+            update(EngageCampaignEnrollment)
+            .where(
+                EngageCampaignEnrollment.organisation_id == organisation_id,
+                EngageCampaignEnrollment.id.in_(enrollment_ids),
+            )
+            .values(
+                state="needs_attention",
+                stop_reason=reason,
+                next_scheduled_at=None,
+                updated_at=now,
+            )
+        )
+        await self.session.execute(
+            update(EngageCampaign)
+            .where(
+                EngageCampaign.organisation_id == organisation_id,
+                EngageCampaign.id.in_(campaign_ids),
+            )
+            .values(state="needs_attention", needs_attention_reason=reason, updated_at=now)
+        )
 
     def _require_sender(self, message: OutreachMessage) -> None:
         if message.sender_user_id != self.tenant.user_id:

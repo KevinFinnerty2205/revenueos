@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,9 +24,13 @@ from revenueos.business_repositories import BusinessRepository, PageResult
 from revenueos.domain import OpportunityAuditAction
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
+    ActionExecution,
     Company,
     Contact,
     ContactSuppression,
+    EngageCampaignAudience,
+    EngageCampaignEnrollment,
+    EngageEnrollmentStep,
     Evidence,
     MethodologyProjection,
     MethodologyReview,
@@ -167,6 +171,82 @@ class BusinessService:
     async def delete_contact(self, contact_id: UUID) -> None:
         contact = await self.get_contact(contact_id)
         organisation_id = self.tenant.organisation_id
+        enrollment_ids = select(EngageCampaignEnrollment.id).where(
+            EngageCampaignEnrollment.organisation_id == organisation_id,
+            EngageCampaignEnrollment.contact_id == contact.id,
+        )
+        outreach_action_ids = (
+            select(OutreachMessage.action_id)
+            .join(
+                EngageEnrollmentStep,
+                and_(
+                    EngageEnrollmentStep.organisation_id == OutreachMessage.organisation_id,
+                    EngageEnrollmentStep.outreach_message_id == OutreachMessage.id,
+                ),
+            )
+            .where(
+                OutreachMessage.organisation_id == organisation_id,
+                EngageEnrollmentStep.organisation_id == organisation_id,
+                EngageEnrollmentStep.enrollment_id.in_(enrollment_ids),
+            )
+        )
+        now = datetime.now(UTC)
+        await self.repository.session.execute(
+            update(ActionExecution)
+            .where(
+                ActionExecution.organisation_id == organisation_id,
+                ActionExecution.action_id.in_(outreach_action_ids),
+                ActionExecution.execution_status.in_(("queued", "failed_retryable")),
+            )
+            .values(
+                execution_status="cancelled",
+                completed_at=now,
+                next_attempt_at=None,
+                safe_failure_code="contact_deleted",
+                worker_id=None,
+                lease_expires_at=None,
+                updated_at=now,
+            )
+        )
+        await self.repository.session.execute(
+            update(EngageEnrollmentStep)
+            .where(
+                EngageEnrollmentStep.organisation_id == organisation_id,
+                EngageEnrollmentStep.enrollment_id.in_(enrollment_ids),
+                EngageEnrollmentStep.state.in_(
+                    ("pending", "processing", "ready_for_review", "prepared", "queued", "deferred")
+                ),
+            )
+            .values(
+                state="cancelled",
+                safe_status_code="contact_deleted",
+                worker_id=None,
+                lease_expires_at=None,
+                updated_at=now,
+            )
+        )
+        await self.repository.session.execute(
+            update(EngageCampaignEnrollment)
+            .where(
+                EngageCampaignEnrollment.organisation_id == organisation_id,
+                EngageCampaignEnrollment.contact_id == contact.id,
+            )
+            .values(
+                contact_id=None,
+                state="stopped",
+                stop_reason="contact_deleted",
+                next_scheduled_at=None,
+                updated_at=now,
+            )
+        )
+        await self.repository.session.execute(
+            update(EngageCampaignAudience)
+            .where(
+                EngageCampaignAudience.organisation_id == organisation_id,
+                EngageCampaignAudience.contact_id == contact.id,
+            )
+            .values(contact_id=None)
+        )
         await self.repository.session.execute(
             update(OutreachMessage)
             .where(

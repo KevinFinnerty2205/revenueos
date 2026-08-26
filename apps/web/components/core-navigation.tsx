@@ -1,6 +1,9 @@
 "use client";
 
-import type { ProspectAvailability } from "@revenueos/shared";
+import type {
+  EngageAvailability,
+  ProspectAvailability,
+} from "@revenueos/shared";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -45,6 +48,7 @@ function isActive(pathname: string | null, href: string) {
 export function CoreNavigation() {
   const pathname = usePathname();
   const [prospectEnabled, setProspectEnabled] = useState(false);
+  const [engageEnabled, setEngageEnabled] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -53,16 +57,28 @@ export function CoreNavigation() {
     })
       .then((availability) => setProspectEnabled(availability.enabled))
       .catch(() => setProspectEnabled(false));
+    apiRequest<EngageAvailability>("/api/v1/engage/availability", {
+      signal: controller.signal,
+    })
+      .then((availability) => setEngageEnabled(availability.enabled))
+      .catch(() => setEngageEnabled(false));
     return () => controller.abort();
   }, []);
 
+  const sellGroup = {
+    ...desktopGroups[1],
+    items: engageEnabled
+      ? [...desktopGroups[1].items, { href: "/campaigns", label: "Campaigns" }]
+      : desktopGroups[1].items,
+  };
+  const baseGroups = [desktopGroups[0], sellGroup, desktopGroups[2]];
   const navigationGroups = prospectEnabled
     ? [
-        desktopGroups[0],
+        baseGroups[0],
         { label: "Prospect", items: [{ href: "/find", label: "Find" }] },
-        ...desktopGroups.slice(1),
+        ...baseGroups.slice(1),
       ]
-    : desktopGroups;
+    : baseGroups;
 
   return (
     <>

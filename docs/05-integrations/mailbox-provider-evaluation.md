@@ -1,7 +1,7 @@
 # Mailbox provider evaluation for one-to-one outreach
 
 - **Assessment date:** 26 August 2026
-- **WO-029 decision:** defer a production provider; retain a provider-neutral,
+- **WO-029/WO-030 decision:** defer a production provider; retain a provider-neutral,
   user-bound send contract and deterministic non-production simulation
 
 ## Requirements
@@ -89,3 +89,19 @@ provider-specific reconciliation. No automatic blind resend is allowed.
 
 Inbound full-mailbox sync, tracking pixels, click redirects, shared mailboxes,
 arbitrary aliases and dual-provider implementation remain separate decisions.
+
+## WO-030 campaign re-evaluation
+
+Campaign scale strengthens rather than removes the unresolved requirements. Safe
+sequences need sender-bound authority for scheduled work, durable ambiguous-send
+reconciliation, suppression/opt-out/bounce/complaint operations, throttling across
+users and campaigns and a separately justified reply-detection permission model.
+Neither Gmail nor Graph resolves those operational questions without provider-specific
+implementation and support commitments.
+
+WO-030 therefore retains Mock Email outside production and a production fail-closed
+worker. No OAuth scopes, tokens, live provider calls or paid service were added.
+Campaign reply outcomes remain seller-reported under the
+[reply-detection decision](reply-detection-decision.md). One provider may be selected
+later only with current design-partner ecosystem evidence and an approved security,
+privacy, reconciliation and incident-response work order.

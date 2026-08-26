@@ -46,6 +46,12 @@ from revenueos.models import (
     DocumentSource,
     EmailSource,
     EncryptedConnectorCredential,
+    EngageCampaign,
+    EngageCampaignAudience,
+    EngageCampaignEnrollment,
+    EngageCampaignVersion,
+    EngageEnrollmentStep,
+    EngageSequenceStep,
     Evidence,
     EvidenceFragment,
     ExecutionPreview,
@@ -271,6 +277,12 @@ def clean_business_entities() -> Iterator[None]:
                 ActionExecution,
                 ExecutionPreview,
                 IntegrationConnection,
+                EngageEnrollmentStep,
+                EngageCampaignEnrollment,
+                EngageCampaignAudience,
+                EngageSequenceStep,
+                EngageCampaignVersion,
+                EngageCampaign,
                 ContactSuppression,
                 OutreachPersonalizationSource,
                 OutreachVersion,
@@ -354,6 +366,12 @@ def clean_business_entities() -> Iterator[None]:
             )
             await session.execute(update(User).values(status="active"))
             await session.execute(update(OrganisationMembership).values(status="active"))
+            await session.execute(
+                update(OrganisationModuleEntitlement).values(
+                    enabled=True,
+                    disabled_at=None,
+                )
+            )
             await session.commit()
 
     shutil.rmtree(TEST_VISUAL_STORAGE, ignore_errors=True)

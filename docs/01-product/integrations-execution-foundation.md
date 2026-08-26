@@ -20,6 +20,14 @@ Engage entitlement, policy, suppression, address/version and membership at previ
 confirmation and worker execution. Gmail/Microsoft production adapters remain
 deferred and fail closed.
 
+WO-030 creates per-recipient Campaign Outreach/Action records and integrates a
+leased due-step pass into the existing worker. Review mode stops before approval.
+Bounded auto-send may call the same approval, preview and confirmation services only
+under versioned administrator policy plus explicit immutable Campaign launch. The
+Action worker remains the sole adapter executor and unknown provider state halts the
+sequence. Mock Email remains the only mail capability and production still fails
+closed.
+
 ## User promise
 
 - Approval and execution confirmation remain separate decisions.

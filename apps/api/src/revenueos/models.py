@@ -35,6 +35,10 @@ from revenueos.domain import (
     AIJobStatus,
     AIJobType,
     AttendanceStatus,
+    CampaignApprovalMode,
+    CampaignEnrollmentState,
+    CampaignState,
+    CampaignStepState,
     CaptureSessionStatus,
     CaptureSessionType,
     CompanyStatus,
@@ -1887,6 +1891,7 @@ class MethodologyReview(Base):
 class OutreachPolicy(TimestampMixin, Base):
     __tablename__ = "outreach_policies"
     __table_args__ = (
+        CheckConstraint("version > 0", name="ck_outreach_policies_version"),
         CheckConstraint("cooldown_hours BETWEEN 0 AND 720", name="ck_outreach_policies_cooldown"),
         CheckConstraint("max_daily_sends_user BETWEEN 1 AND 500", name="ck_outreach_policies_user_limit"),
         CheckConstraint("max_daily_sends_org BETWEEN 1 AND 2000", name="ck_outreach_policies_org_limit"),
@@ -1915,6 +1920,10 @@ class OutreachPolicy(TimestampMixin, Base):
     cooldown_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=72, server_default="72")
     max_daily_sends_user: Mapped[int] = mapped_column(Integer, nullable=False, default=25, server_default="25")
     max_daily_sends_org: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    campaign_auto_send_allowed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     require_opt_out_mechanism: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
@@ -2121,6 +2130,396 @@ class ContactSuppression(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     revoked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EngageCampaign(TimestampMixin, Base):
+    __tablename__ = "engage_campaigns"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('draft', 'ready', 'active', 'paused', 'completed', 'stopped', 'needs_attention')",
+            name="ck_engage_campaigns_state",
+        ),
+        CheckConstraint("current_version > 0", name="ck_engage_campaigns_version"),
+        ForeignKeyConstraint(
+            ["organisation_id", "owner_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_engage_campaigns_owner",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_engage_campaigns_org_id"),
+        Index("ix_engage_campaigns_org_owner_state", "organisation_id", "owner_user_id", "state", "updated_at"),
+        Index("ix_engage_campaigns_org_state", "organisation_id", "state", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=CampaignState.DRAFT.value, server_default=CampaignState.DRAFT.value
+    )
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    needs_attention_reason: Mapped[str | None] = mapped_column(String(64))
+    launched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EngageCampaignVersion(Base):
+    __tablename__ = "engage_campaign_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_engage_campaign_versions_number"),
+        CheckConstraint("status IN ('draft', 'published')", name="ck_engage_campaign_versions_status"),
+        CheckConstraint("length(trim(name)) BETWEEN 1 AND 160", name="ck_engage_campaign_versions_name"),
+        CheckConstraint("length(trim(purpose)) BETWEEN 1 AND 300", name="ck_engage_campaign_versions_purpose"),
+        CheckConstraint(
+            "approval_mode IN ('review_each_send', 'approved_campaign_auto_send')",
+            name="ck_engage_campaign_versions_approval",
+        ),
+        CheckConstraint(
+            "source_type IN ('manual_contacts', 'target_market')", name="ck_engage_campaign_versions_source"
+        ),
+        CheckConstraint(
+            "send_window_start_minutes BETWEEN 0 AND 1438 AND "
+            "send_window_end_minutes BETWEEN 1 AND 1439 AND "
+            "send_window_start_minutes < send_window_end_minutes",
+            name="ck_engage_campaign_versions_window",
+        ),
+        CheckConstraint("audience_count BETWEEN 0 AND 50", name="ck_engage_campaign_versions_audience"),
+        CheckConstraint(
+            "policy_fingerprint IS NULL OR length(policy_fingerprint) = 64",
+            name="ck_engage_campaign_versions_policy_fp",
+        ),
+        CheckConstraint(
+            "launch_fingerprint IS NULL OR length(launch_fingerprint) = 64",
+            name="ck_engage_campaign_versions_launch_fp",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "campaign_id"],
+            ["engage_campaigns.organisation_id", "engage_campaigns.id"],
+            name="fk_engage_campaign_versions_campaign",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "sender_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_engage_campaign_versions_sender",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_engage_campaign_versions_approver",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_engage_campaign_versions_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_engage_campaign_versions_org_id"),
+        UniqueConstraint("organisation_id", "campaign_id", "version", name="uq_engage_campaign_versions_number"),
+        UniqueConstraint("organisation_id", "campaign_id", "id", name="uq_engage_campaign_versions_campaign_id"),
+        Index("ix_engage_campaign_versions_org_campaign", "organisation_id", "campaign_id", "version"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", server_default="draft")
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(300), nullable=False)
+    approval_mode: Mapped[str] = mapped_column(
+        String(40), nullable=False, default=CampaignApprovalMode.REVIEW_EACH_SEND.value
+    )
+    sender_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False, default="manual_contacts")
+    sender_timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    send_days_json: Mapped[list[int]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    send_window_start_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=510, server_default="510")
+    send_window_end_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=1020, server_default="1020")
+    stop_on_active_opportunity: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    policy_version: Mapped[int | None] = mapped_column(Integer)
+    policy_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    launch_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    audience_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    auto_send_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class EngageSequenceStep(Base):
+    __tablename__ = "engage_sequence_steps"
+    __table_args__ = (
+        CheckConstraint("step_order BETWEEN 1 AND 4", name="ck_engage_sequence_steps_order"),
+        CheckConstraint("delay_days BETWEEN 0 AND 30", name="ck_engage_sequence_steps_delay"),
+        CheckConstraint(
+            "objective IN ('introduction', 'follow_up', 'share_relevant_information', 'different_angle', "
+            "'meeting_request', 'final_follow_up')",
+            name="ck_engage_sequence_steps_objective",
+        ),
+        CheckConstraint(
+            "content_strategy IN ('source_backed_value', 'truthful_follow_up', 'source_backed_new_angle', "
+            "'respectful_close')",
+            name="ck_engage_sequence_steps_strategy",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "campaign_version_id"],
+            ["engage_campaign_versions.organisation_id", "engage_campaign_versions.id"],
+            name="fk_engage_sequence_steps_version",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_engage_sequence_steps_org_id"),
+        UniqueConstraint("organisation_id", "campaign_version_id", "step_order", name="uq_engage_sequence_steps_order"),
+        Index("ix_engage_sequence_steps_org_version", "organisation_id", "campaign_version_id", "step_order"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    campaign_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    delay_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    objective: Mapped[str] = mapped_column(String(40), nullable=False)
+    content_strategy: Mapped[str] = mapped_column(String(40), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class EngageCampaignAudience(Base):
+    __tablename__ = "engage_campaign_audience"
+    __table_args__ = (
+        CheckConstraint(
+            "recipient_trust IN ('verified', 'provider_supplied', 'unknown')",
+            name="ck_engage_campaign_audience_trust",
+        ),
+        CheckConstraint("length(trim(eligibility_code)) BETWEEN 1 AND 64", name="ck_engage_campaign_audience_code"),
+        CheckConstraint(
+            "length(trim(eligibility_reason)) BETWEEN 1 AND 300", name="ck_engage_campaign_audience_reason"
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "campaign_version_id"],
+            ["engage_campaign_versions.organisation_id", "engage_campaign_versions.id"],
+            name="fk_engage_campaign_audience_version",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_engage_campaign_audience_contact",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_engage_campaign_audience_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_engage_campaign_audience_org_id"),
+        UniqueConstraint(
+            "organisation_id", "campaign_version_id", "contact_id", name="uq_engage_campaign_audience_contact"
+        ),
+        Index(
+            "ix_engage_campaign_audience_org_version",
+            "organisation_id",
+            "campaign_version_id",
+            "eligible",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    campaign_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    recipient_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    recipient_email: Mapped[str | None] = mapped_column(String(320))
+    recipient_trust: Mapped[str] = mapped_column(String(24), nullable=False, default="unknown")
+    eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    eligibility_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    eligibility_reason: Mapped[str] = mapped_column(String(300), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class EngageCampaignEnrollment(TimestampMixin, Base):
+    __tablename__ = "engage_campaign_enrollments"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('ready', 'active', 'paused', 'stopped', 'completed', 'blocked', 'needs_attention')",
+            name="ck_engage_campaign_enrollments_state",
+        ),
+        CheckConstraint("current_step_order BETWEEN 1 AND 4", name="ck_engage_campaign_enrollments_step"),
+        CheckConstraint(
+            "recipient_trust IN ('verified', 'provider_supplied')",
+            name="ck_engage_campaign_enrollments_trust",
+        ),
+        CheckConstraint(
+            "outcome IS NULL OR outcome IN ('replied', 'meeting_booked', 'not_interested')",
+            name="ck_engage_campaign_enrollments_outcome",
+        ),
+        CheckConstraint(
+            "outcome_provenance IS NULL OR outcome_provenance = 'seller_reported'",
+            name="ck_engage_campaign_enrollments_provenance",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "campaign_id"],
+            ["engage_campaigns.organisation_id", "engage_campaigns.id"],
+            name="fk_engage_campaign_enrollments_campaign",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "campaign_id", "campaign_version_id"],
+            [
+                "engage_campaign_versions.organisation_id",
+                "engage_campaign_versions.campaign_id",
+                "engage_campaign_versions.id",
+            ],
+            name="fk_engage_campaign_enrollments_version",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_engage_campaign_enrollments_contact",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_engage_campaign_enrollments_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "sender_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_engage_campaign_enrollments_sender",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "outcome_reported_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_engage_campaign_enrollments_outcome_user",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_engage_campaign_enrollments_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_engage_campaign_enrollments_org_id"),
+        UniqueConstraint("organisation_id", "campaign_id", "contact_id", name="uq_engage_campaign_enrollments_contact"),
+        Index(
+            "ix_engage_campaign_enrollments_org_campaign",
+            "organisation_id",
+            "campaign_id",
+            "state",
+            "next_scheduled_at",
+        ),
+        Index("ix_engage_campaign_enrollments_org_contact", "organisation_id", "contact_id", "state"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    campaign_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    sender_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    recipient_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    recipient_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    recipient_trust: Mapped[str] = mapped_column(String(24), nullable=False)
+    job_title_snapshot: Mapped[str | None] = mapped_column(String(200))
+    state: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=CampaignEnrollmentState.READY.value,
+        server_default=CampaignEnrollmentState.READY.value,
+    )
+    current_step_order: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    next_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stop_reason: Mapped[str | None] = mapped_column(String(64))
+    outcome: Mapped[str | None] = mapped_column(String(32))
+    outcome_provenance: Mapped[str | None] = mapped_column(String(24))
+    outcome_reported_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    outcome_reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    used_source_ids_json: Mapped[list[str]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class EngageEnrollmentStep(TimestampMixin, Base):
+    __tablename__ = "engage_enrollment_steps"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('pending', 'processing', 'ready_for_review', 'prepared', 'queued', 'sent', "
+            "'deferred', 'blocked', 'cancelled', 'unknown_delivery_state')",
+            name="ck_engage_enrollment_steps_state",
+        ),
+        CheckConstraint("attempt_count BETWEEN 0 AND 20", name="ck_engage_enrollment_steps_attempts"),
+        ForeignKeyConstraint(
+            ["organisation_id", "enrollment_id"],
+            ["engage_campaign_enrollments.organisation_id", "engage_campaign_enrollments.id"],
+            name="fk_engage_enrollment_steps_enrollment",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "sequence_step_id"],
+            ["engage_sequence_steps.organisation_id", "engage_sequence_steps.id"],
+            name="fk_engage_enrollment_steps_sequence",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "outreach_message_id"],
+            ["outreach_messages.organisation_id", "outreach_messages.id"],
+            name="fk_engage_enrollment_steps_outreach",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_engage_enrollment_steps_org_id"),
+        UniqueConstraint(
+            "organisation_id", "enrollment_id", "sequence_step_id", name="uq_engage_enrollment_steps_sequence"
+        ),
+        UniqueConstraint("organisation_id", "outreach_message_id", name="uq_engage_enrollment_steps_outreach"),
+        Index("ix_engage_enrollment_steps_due", "organisation_id", "state", "prepare_at", "scheduled_at"),
+        Index("ix_engage_enrollment_steps_lease", "organisation_id", "state", "lease_expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    enrollment_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    sequence_step_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    prepare_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=CampaignStepState.PENDING.value,
+        server_default=CampaignStepState.PENDING.value,
+    )
+    outreach_message_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    safe_status_code: Mapped[str | None] = mapped_column(String(64))
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    prepared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ActionProposal(Base):

@@ -1,6 +1,6 @@
 # Sales OS module entitlement architecture
 
-- **Status:** WO-026/027 use one bounded Prospect organisation switch; the wider commercial model remains proposed
+- **Status:** Prospect and Engage use bounded organisation switches; the wider commercial model remains proposed
 - **Principle:** Core remains coherent; module discovery is contextual and restrained
 
 ## Package model
@@ -12,11 +12,12 @@ future decisions.
 
 ## Effective availability
 
-Current WO-026 availability is intentionally smaller than the target equation below:
-the server combines the global Prospect feature flag, active tenant/membership,
-organisation `prospect` entitlement and production-capable provider configuration.
-Only admins can change the organisation switch. There is no billing, plan catalogue,
-trial or grace-period model yet.
+Current availability is intentionally smaller than the target equation below. The
+server combines the relevant global feature flag, active tenant/membership and
+organisation `prospect` or `engage` entitlement. Engage additionally requires
+configured policy and sender capability for mutations; Campaign execution is
+non-production Mock Email only. Only admins can change organisation switches. There
+is no billing, plan catalogue, trial or grace-period model yet.
 
 The server produces one product-safe availability projection:
 
@@ -46,10 +47,14 @@ Only authorised billing administrators receive commercial detail.
 | `UsageCounter`                   | Idempotent, period-scoped metered consumption where justified |
 | `AvailabilityProjection`         | Safe response for a user/context with reason and next step    |
 
-Except for the bounded `organisation_module_entitlements` Prospect row and usage
-counters added by WO-026, these are future concepts. Plan mappings are versioned and
+Except for bounded `organisation_module_entitlements` Prospect/Engage rows and usage
+counters added by current work, these are future concepts. Plan mappings are versioned and
 centralised; page code must never contain price or package rules. Tenant-owned state,
 counts and keys include organisation scope.
+
+Disabling Engage immediately halts active Campaigns and cancels queued retryable
+email simulations; it does not delete history. Re-enabling does not silently approve
+or resume halted work.
 
 ## Server and client contract
 

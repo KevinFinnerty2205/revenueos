@@ -65,11 +65,23 @@ WO-022 boundary. Only Mock Email simulation is available outside production; no 
 mailbox adapter exists. Outbound seller email is activity, never customer-direct
 Evidence and cannot confirm Methodology or Revenue Brain facts.
 
+## WO-030 Campaign step execution
+
+Every prepared Campaign step creates the same Contact-scoped `personalized_outreach`
+Action and immutable exact Outreach version. Review mode uses ordinary seller
+approval. Bounded auto-send uses only the published Campaign launch authority and
+records `approval_basis=campaign_launch` plus the Campaign step instance in the
+Action audit. Both modes still use exact preview/confirmation, execute-time
+revalidation and Action Execution idempotency. A Campaign scheduler never writes to
+an external provider directly and outbound content/outcomes remain outside customer
+Evidence.
+
 ## Explicit limitations
 
 - no real email sending, production mailbox connection or recipient delivery confirmation;
 - no second CRM, real calendar, task-system or collaboration-tool connector;
-- no autonomous agent loop or autonomous external execution;
+- no autonomous agent loop; only explicitly policy/launch-authorised Campaign mock
+  execution exists, with per-step fail-closed checks;
 - no automatic Opportunity, Contact, Stakeholder or Task mutation;
 - no use of provisional Live Intelligence;
 - no predictive scoring or guarantee that a recommendation is correct.

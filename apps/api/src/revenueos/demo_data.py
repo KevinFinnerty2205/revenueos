@@ -39,6 +39,12 @@ from revenueos.models import (
     DocumentFragment,
     DocumentSource,
     EmailSource,
+    EngageCampaign,
+    EngageCampaignAudience,
+    EngageCampaignEnrollment,
+    EngageCampaignVersion,
+    EngageEnrollmentStep,
+    EngageSequenceStep,
     Evidence,
     EvidenceFragment,
     Interaction,
@@ -91,6 +97,28 @@ from revenueos.visual_storage import create_visual_storage
 DEMO_NAMESPACE = UUID("d7838892-ce0b-434a-a8e9-445767115063")
 INTERACTION_BACKFILL_NAMESPACE = UUID("cf709ef5-e59d-4ce2-9c93-547a4a5e5990")
 DEMO_TARGET_MARKET_NAME = "[DEMO] Australian multi-site enterprises"
+
+
+def demo_campaign_ids(organisation_id: UUID) -> dict[str, UUID]:
+    return {
+        label: uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:campaign:{label}")
+        for label in (
+            "company",
+            "contact-jane",
+            "contact-sam",
+            "campaign",
+            "version",
+            "sequence-1",
+            "sequence-2",
+            "sequence-3",
+            "sequence-4",
+            "audience-jane",
+            "audience-sam",
+            "enrollment-jane",
+            "enrollment-step-jane",
+        )
+    }
+
 
 TRANSCRIPTS = (
     """SYNTHETIC DEMO TRANSCRIPT — no real person or customer data.\nSeller: Thanks for discussing the evaluation. What outcome matters most?\nBuyer: We need a consistent handover after sales calls. The operations lead supports a pilot, but the finance approver has not reviewed the budget.\nSeller: What timing are you working towards?\nBuyer: We would like a decision by the end of the quarter. Please send the security summary and a clear pilot plan next Tuesday.\nSeller: I will send both items next Tuesday and arrange a finance review.\nBuyer: That works. The unresolved questions are data retention and implementation effort.""",
@@ -2223,11 +2251,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 14},
+                    metadata_json={"dataset_version": 15},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 14}
+            event.metadata_json = {"dataset_version": 15}
     methodology_versions = await _seed_methodology_views(
         session_factory,
         organisation_id,
@@ -2241,6 +2269,7 @@ async def seed_demo_data(
         user_id,
         active_settings,
     )
+    campaign_id = await _seed_demo_campaign(session_factory, organisation_id, user_id)
     return {
         "status": "ready",
         "company_id": company_id,
@@ -2264,8 +2293,190 @@ async def seed_demo_data(
         "target_market_id": target_market["target_market_id"],
         "target_market_candidate_count": target_market["candidate_count"],
         "saved_prospect_target_id": target_market["saved_prospect_target_id"],
+        "campaign_id": campaign_id,
         "provider_calls": 0,
     }
+
+
+async def _seed_demo_campaign(
+    session_factory: async_sessionmaker[AsyncSession],
+    organisation_id: UUID,
+    user_id: UUID,
+) -> UUID:
+    """Seed a paused, synthetic campaign without any external execution."""
+
+    ids = demo_campaign_ids(organisation_id)
+    now = datetime.now(UTC)
+    async with session_factory() as session, session.begin():
+        await set_tenant_database_context(session, organisation_id)
+        if await session.get(EngageCampaign, ids["campaign"]) is not None:
+            return ids["campaign"]
+        session.add(
+            Company(
+                id=ids["company"],
+                organisation_id=organisation_id,
+                name="[DEMO] Northstar Facilities Group",
+                website="https://northstar.example.test",
+                industry="Synthetic multi-site facilities",
+                employee_count=850,
+                status="prospect",
+                owner_user_id=user_id,
+            )
+        )
+        session.add_all(
+            (
+                Contact(
+                    id=ids["contact-jane"],
+                    organisation_id=organisation_id,
+                    company_id=ids["company"],
+                    first_name="[DEMO] Jane",
+                    last_name="Smith",
+                    email="jane.smith@northstar.example.test",
+                    phone=None,
+                    job_title="Chief Information Officer",
+                    owner_user_id=user_id,
+                ),
+                Contact(
+                    id=ids["contact-sam"],
+                    organisation_id=organisation_id,
+                    company_id=ids["company"],
+                    first_name="[DEMO] Sam",
+                    last_name="Rivera",
+                    email=None,
+                    phone=None,
+                    job_title="Technology Director",
+                    owner_user_id=user_id,
+                ),
+            )
+        )
+        campaign = EngageCampaign(
+            id=ids["campaign"],
+            organisation_id=organisation_id,
+            owner_user_id=user_id,
+            state="paused",
+            current_version=1,
+            launched_at=now - timedelta(days=1),
+            paused_at=now,
+            created_at=now - timedelta(days=2),
+            updated_at=now,
+        )
+        version = EngageCampaignVersion(
+            id=ids["version"],
+            organisation_id=organisation_id,
+            campaign_id=ids["campaign"],
+            version=1,
+            status="published",
+            name="[DEMO] Australian Multi-Site CIO Outreach",
+            purpose="Book respectful introductory meetings",
+            approval_mode="review_each_send",
+            sender_user_id=user_id,
+            source_type="manual_contacts",
+            sender_timezone="Australia/Sydney",
+            send_days_json=[1, 2, 3, 4, 5],
+            send_window_start_minutes=510,
+            send_window_end_minutes=1020,
+            stop_on_active_opportunity=True,
+            policy_version=1,
+            policy_fingerprint="d" * 64,
+            launch_fingerprint="e" * 64,
+            audience_count=2,
+            approved_by_user_id=user_id,
+            approved_at=now - timedelta(days=1),
+            auto_send_confirmed_at=None,
+            created_by_user_id=user_id,
+            created_at=now - timedelta(days=2),
+        )
+        session.add_all((campaign, version))
+        await session.flush()
+        sequence_definitions = (
+            (1, 0, "introduction", "source_backed_value"),
+            (2, 4, "follow_up", "truthful_follow_up"),
+            (3, 5, "different_angle", "source_backed_new_angle"),
+            (4, 7, "final_follow_up", "respectful_close"),
+        )
+        for order, delay_days, objective, strategy in sequence_definitions:
+            session.add(
+                EngageSequenceStep(
+                    id=ids[f"sequence-{order}"],
+                    organisation_id=organisation_id,
+                    campaign_version_id=ids["version"],
+                    step_order=order,
+                    delay_days=delay_days,
+                    objective=objective,
+                    content_strategy=strategy,
+                    enabled=True,
+                    created_at=now - timedelta(days=2),
+                )
+            )
+        session.add_all(
+            (
+                EngageCampaignAudience(
+                    id=ids["audience-jane"],
+                    organisation_id=organisation_id,
+                    campaign_version_id=ids["version"],
+                    contact_id=ids["contact-jane"],
+                    company_id=ids["company"],
+                    recipient_name="[DEMO] Jane Smith",
+                    recipient_email="jane.smith@northstar.example.test",
+                    recipient_trust="verified",
+                    eligible=True,
+                    eligibility_code="eligible",
+                    eligibility_reason="Eligible under the synthetic launch policy snapshot.",
+                    created_at=now - timedelta(days=1),
+                ),
+                EngageCampaignAudience(
+                    id=ids["audience-sam"],
+                    organisation_id=organisation_id,
+                    campaign_version_id=ids["version"],
+                    contact_id=ids["contact-sam"],
+                    company_id=ids["company"],
+                    recipient_name="[DEMO] Sam Rivera",
+                    recipient_email=None,
+                    recipient_trust="unknown",
+                    eligible=False,
+                    eligibility_code="no_business_email",
+                    eligibility_reason="This synthetic Contact has no supported business email.",
+                    created_at=now - timedelta(days=1),
+                ),
+            )
+        )
+        enrollment = EngageCampaignEnrollment(
+            id=ids["enrollment-jane"],
+            organisation_id=organisation_id,
+            campaign_id=ids["campaign"],
+            campaign_version_id=ids["version"],
+            contact_id=ids["contact-jane"],
+            company_id=ids["company"],
+            sender_user_id=user_id,
+            recipient_name="[DEMO] Jane Smith",
+            recipient_email="jane.smith@northstar.example.test",
+            recipient_trust="verified",
+            job_title_snapshot="Chief Information Officer",
+            state="paused",
+            current_step_order=1,
+            next_scheduled_at=now + timedelta(days=1),
+            used_source_ids_json=[],
+            created_by_user_id=user_id,
+            created_at=now - timedelta(days=1),
+            updated_at=now,
+        )
+        session.add(enrollment)
+        await session.flush()
+        session.add(
+            EngageEnrollmentStep(
+                id=ids["enrollment-step-jane"],
+                organisation_id=organisation_id,
+                enrollment_id=ids["enrollment-jane"],
+                sequence_step_id=ids["sequence-1"],
+                scheduled_at=now + timedelta(days=1),
+                prepare_at=now + timedelta(hours=12),
+                state="pending",
+                attempt_count=0,
+                created_at=now - timedelta(days=1),
+                updated_at=now,
+            )
+        )
+    return ids["campaign"]
 
 
 async def _seed_target_market(
@@ -2375,6 +2586,7 @@ async def reset_demo_data(
 ) -> dict[str, object]:
     active_settings = settings or get_settings()
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
+    campaign_ids = demo_campaign_ids(organisation_id)
     phone_contact_id = demo_phone_contact_id(organisation_id)
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
     live_ids = demo_live_ids(organisation_id)
@@ -2455,6 +2667,24 @@ async def reset_demo_data(
             delete(Opportunity).where(
                 Opportunity.organisation_id == organisation_id,
                 Opportunity.id == opportunity_id,
+            )
+        )
+        await session.execute(
+            delete(EngageCampaign).where(
+                EngageCampaign.organisation_id == organisation_id,
+                EngageCampaign.id == campaign_ids["campaign"],
+            )
+        )
+        await session.execute(
+            delete(Contact).where(
+                Contact.organisation_id == organisation_id,
+                Contact.id.in_((campaign_ids["contact-jane"], campaign_ids["contact-sam"])),
+            )
+        )
+        await session.execute(
+            delete(Company).where(
+                Company.organisation_id == organisation_id,
+                Company.id == campaign_ids["company"],
             )
         )
         await session.execute(

@@ -55,6 +55,13 @@ This is the canonical product and engineering documentation index. Documents dis
 49. [Engage outreach security review](03-engineering/personalised-outreach-security-review.md)
 50. [Mailbox provider evaluation](05-integrations/mailbox-provider-evaluation.md)
 51. [ADR 0043: Review-first outreach and deferred mailbox](08-decisions/0043-review-first-one-to-one-outreach-and-deferred-mailbox.md)
+52. [Campaigns & Sequences](01-product/campaigns-and-sequences.md) — current WO-030 Engage boundary
+53. [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
+54. [Campaign domain architecture](03-engineering/campaign-domain-architecture.md)
+55. [Campaign security review](03-engineering/campaign-security-privacy-abuse-review.md)
+56. [ADR 0044: Bounded campaign auto-send](08-decisions/0044-bounded-campaign-level-auto-send.md)
+57. [ADR 0045: Explicit Campaign audience snapshot](08-decisions/0045-explicit-immutable-campaign-audience-snapshot.md)
+58. [ADR 0046: Deferred reply detection](08-decisions/0046-defer-campaign-reply-detection.md)
 
 ## 00 — Company
 
@@ -93,6 +100,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Professional Research Safety guide](01-product/professional-research-safety.md)
 - [Target Market Intelligence](01-product/target-market-intelligence.md)
 - [Personalised one-to-one outreach](01-product/personalised-outreach.md)
+- [Campaigns & Sequences implementation](01-product/campaigns-and-sequences.md)
 
 ## 02 — Design
 
@@ -121,6 +129,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Opportunity and Account Workspace UX](02-design/opportunity-and-account-workspace-ux.md)
 - [Find and Prospect experience](02-design/find-and-prospect-experience.md)
 - [Engage, campaign and event experience](02-design/engage-campaign-event-experience.md)
+- [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
 - [Create presentation and proposal experience](02-design/create-presentation-proposal-experience.md)
 - [Manager Intelligence experience](02-design/manager-intelligence-experience.md)
 - [Mobile Sales OS experience](02-design/mobile-sales-os-experience.md)
@@ -141,6 +150,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Prospect Person mobile and simplicity review](02-design/prospect-person-mobile-simplicity-review.md)
 - [Target Market experience](02-design/target-market-experience.md)
 - [Personalised outreach UX and simplicity review](02-design/personalised-outreach-ux.md)
+- [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
 
 ## 03 — Engineering
 
@@ -281,6 +291,15 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Target Market Intelligence architecture](03-engineering/target-market-intelligence-architecture.md)
 - [Personalised outreach architecture](03-engineering/personalised-outreach-architecture.md)
 - [Engage outreach security, privacy and abuse review](03-engineering/personalised-outreach-security-review.md)
+- [Campaign domain architecture](03-engineering/campaign-domain-architecture.md)
+- [Campaign scheduling architecture](03-engineering/campaign-scheduling-architecture.md)
+- [Campaign approval and auto-send safety](03-engineering/campaign-approval-auto-send-safety.md)
+- [Campaign enrolment and stop conditions](03-engineering/campaign-enrollment-stop-conditions.md)
+- [Campaign worker and idempotency](03-engineering/campaign-worker-idempotency.md)
+- [Campaign personalisation reuse](03-engineering/campaign-personalisation-reuse.md)
+- [Campaign security, privacy and abuse review](03-engineering/campaign-security-privacy-abuse-review.md)
+- [Campaign retention, export and deletion](03-engineering/campaign-retention-export-deletion.md)
+- [Campaign quotas and cost controls](03-engineering/campaign-quotas-cost-controls.md)
 
 ### Target through beta
 
@@ -316,6 +335,8 @@ This is the canonical product and engineering documentation index. Documents dis
 ## 05 — Integrations
 
 - [Integrations documentation index](05-integrations/README.md)
+- [Mailbox provider evaluation](05-integrations/mailbox-provider-evaluation.md)
+- [Campaign reply-detection decision](05-integrations/reply-detection-decision.md)
 - [Integration strategy](05-integrations/integration-strategy.md)
 - [Telephony integration boundary](05-integrations/telephony-integration-boundary.md)
 - [Online Meeting provider adapter](05-integrations/online-meeting-provider-adapter.md)
@@ -398,6 +419,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-027: Prospect & Decision-Maker Intelligence](07-sprints/wo-027-prospect-decision-maker-intelligence.md)
 - [WO-028: Territory & ICP Intelligence](07-sprints/wo-028-territory-icp-intelligence.md)
 - [WO-029: Personalised Outreach](07-sprints/wo-029-personalised-outreach.md)
+- [WO-030: Campaigns & Sequences](07-sprints/wo-030-campaigns-and-sequences.md)
 
 ## 08 — Decision records
 
@@ -444,16 +466,21 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0041: No-scrape, mock-only professional research](08-decisions/0041-no-scrape-professional-research.md)
 - [ADR 0042: Unified, versioned Target Markets](08-decisions/0042-unified-versioned-target-markets.md)
 - [ADR 0043: Review-first one-to-one outreach with deferred production mailbox](08-decisions/0043-review-first-one-to-one-outreach-and-deferred-mailbox.md)
+- [ADR 0044: Bounded campaign-level auto-send](08-decisions/0044-bounded-campaign-level-auto-send.md)
+- [ADR 0045: Explicit immutable Campaign audience snapshot](08-decisions/0045-explicit-immutable-campaign-audience-snapshot.md)
+- [ADR 0046: Defer Campaign reply detection](08-decisions/0046-defer-campaign-reply-detection.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
 implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026/027/028 now
 provide mock-backed company/person research and Target Market discovery. WO-029 adds
-one-to-one Engage outreach with deterministic non-production email simulation;
-production mailbox sending is deferred. WO-030–045 remain unauthorised.
+one-to-one Engage outreach with deterministic non-production email simulation.
+WO-030 adds bounded canonical-Contact Campaigns and sequences using the same Mock
+Email boundary; production mailbox sending and reply detection remain deferred.
+WO-031–045 remain unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

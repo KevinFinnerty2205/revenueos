@@ -37,6 +37,26 @@ ReDoc. JSON fields use camel case; database and Python fields use snake case.
 - Transcript writes and every intelligence POST require acknowledgement of the
   current server-owned private-beta notice version.
 
+## Engage Campaigns
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET/POST` | `/api/v1/engage/campaigns` | List or create bounded Campaign drafts |
+| `GET/PATCH` | `/api/v1/engage/campaigns/{campaignId}` | Read or replace a mutable draft version |
+| `POST` | `/api/v1/engage/campaigns/{campaignId}/launch` | Explicitly publish/launch the exact version |
+| `POST` | `/api/v1/engage/campaigns/{campaignId}/pause` | Pause Campaign and active enrolments |
+| `POST` | `/api/v1/engage/campaigns/{campaignId}/resume` | Resume with safely recalculated overdue times |
+| `POST` | `/api/v1/engage/campaigns/{campaignId}/stop` | Stop Campaign and cancel unsent steps |
+| `GET` | `/api/v1/engage/campaigns/{campaignId}/enrollments` | List recipient state/timeline/current Outreach |
+| `GET` | `/api/v1/engage/enrollments/{enrollmentId}` | Read one recipient detail |
+| `POST` | `/api/v1/engage/enrollments/{enrollmentId}/stop` | Stop one recipient |
+| `POST` | `/api/v1/engage/enrollments/{enrollmentId}/outcome` | Report replied/meeting/not interested as seller-reported |
+
+Create/update accepts one to 50 unique canonical `contactIds` and one to four ordered
+steps; extra fields and arbitrary recipient addresses are rejected. Launch requires
+exact expected version and confirmation; auto-send additionally requires organisation
+policy and `autoSendConfirmed=true`. Pydantic/OpenAPI remains canonical.
+
 ## Private beta controls
 
 | Method      | Path                                              | Purpose                                                        |

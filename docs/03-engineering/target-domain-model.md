@@ -19,7 +19,7 @@ field. Unknown email is valid for a promoted Contact; manual Contact creation st
 requires an email through its current API contract. Prospect refresh/deletion does
 not silently update/delete the Contact.
 
-## Current Engage outreach boundary
+## Current Engage outreach and Campaign boundary
 
 WO-029 adds `OutreachPolicy`, `OutreachMessage`, immutable `OutreachVersion`,
 immutable `OutreachPersonalizationSource` and `ContactSuppression`. Outreach belongs
@@ -28,6 +28,15 @@ sender and versioned Action. It is not an Interaction, Evidence, campaign or Lea
 Suppression is keyed by organisation plus HMAC-normalised email so it can survive
 Contact deletion/re-discovery. `action_proposals.opportunity_id` is nullable only to
 support legitimate Contact-scoped Actions; tenant and target IDs remain explicit.
+
+WO-030 adds organisation-owned `EngageCampaign` control state, immutable published
+`EngageCampaignVersion`, ordered `EngageSequenceStep`, exact
+`EngageCampaignAudience`, per-Contact `EngageCampaignEnrollment` and due
+`EngageEnrollmentStep`. An enrolment points to a canonical Contact and Company while
+retaining bounded recipient snapshots for history; live references may become null
+after deletion. Each prepared step points to the existing exact `OutreachMessage`
+and Action/Execution graph. Campaign outbound activity and seller-reported outcomes
+are not customer Interaction/Evidence or Opportunity truth.
 
 **Status:** Current entities through WO-011 plus conceptual model through the
 Interaction Platform private beta. Target rows do not authorise implementation.
@@ -166,6 +175,10 @@ Organisation
 │   │   └── SuggestedAction ── Approval ── SyncOperation?
 │   ├── RelationshipEvent
 │   └── MemoryItem ── MemorySource ── source entity
+├── EngageCampaign ── CampaignVersion
+│   ├── SequenceStep
+│   ├── AudienceSnapshot ── Contact?
+│   └── Enrollment ── EnrollmentStep ── OutreachMessage/Action?
 ├── SourceConnection ── ExternalIdentity
 ├── IngestionJob
 ├── AuditEvent

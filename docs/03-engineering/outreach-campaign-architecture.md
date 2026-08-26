@@ -1,6 +1,6 @@
 # Outreach, campaign and event architecture
 
-- **Status:** Proposed Engage architecture; not implemented
+- **Status:** WO-029 individual outreach and WO-030 bounded Campaign subset implemented; Event subset remains future
 - **Boundary:** Human-governed business outreach, not autonomous bulk messaging
 
 ## Relationship to current foundations
@@ -37,15 +37,18 @@ flowchart LR
 | `SalesEvent`                   | Organisation-managed event purpose, date, authority and lifecycle           |
 | `EventAttendee`                | Authorised attendee association, invitation/contact status and provenance   |
 
-These are future planning concepts. Campaign membership, uniqueness, idempotency and
-all reads are organisation-scoped. A Contact or Lead remains canonical; enrolment
-does not copy identity data.
+WO-030 implements Campaign, CampaignVersion, SequenceStep, explicit audience,
+enrolment and enrolment-step records. Membership, uniqueness, idempotency and all
+reads are organisation-scoped. Canonical Contact is required; snapshots support
+audit/history and live Contact references may be nulled on privacy deletion. Event
+concepts remain future planning only.
 
 ## Sequence lifecycle
 
-`draft → reviewed → scheduled/active → paused → completed/stopped`, with `cancelled`
-available before completion. Publishing freezes a `SequenceVersion`; edits create a
-new version and never change already approved messages invisibly.
+`draft/ready → active ↔ paused → completed/stopped`, with `needs_attention` as a
+fail-closed halt. Publishing freezes CampaignVersion, audience and sequence with
+database immutability guards; privacy reference scrubbing and approved retention
+deletion are the explicit exceptions.
 
 The default individual flow is draft → review exact recipient/content/channel →
 approve → preflight → execute → receipt. Campaigns may allow an authorised approver
@@ -119,6 +122,7 @@ provider outcomes.
 
 ## Explicitly out of scope
 
-WO-023 implements no Campaign schema or sends. Generic marketing automation, inbound
-marketing suites, consumer messaging, purchased-list blasting, arbitrary workflows,
-autonomous cold calling and an AI SDR are not near-term scope.
+WO-030 implements only the bounded Campaign subset documented in
+[Campaign domain architecture](campaign-domain-architecture.md). Generic marketing
+automation, Event Intelligence, inbound suites, purchased-list blasting, arbitrary
+workflows, autonomous cold calling and an AI SDR remain out of scope.

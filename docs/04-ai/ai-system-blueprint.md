@@ -65,11 +65,20 @@ source-neutral engine below but adds no prompt, schema, job, provider or behavio
 - **Outputs:** `SuggestedAction`, `Approval`, internal task and `SyncOperation` state; notifications for exceptions.
 - **Storage boundaries:** Action content and execution metadata are tenant-owned; secrets remain in a secret manager/token vault; provider receipts store only necessary identifiers.
 - **Confidence handling:** Confidence affects whether an action may be proposed and its review priority. It never authorises execution.
-- **Human review:** Every external communication and CRM write requires a specific, current user approval during beta. AI-created accountable tasks also require acceptance.
+- **Human review:** Every external communication and CRM write requires specific
+  current authority during beta. WO-030's deterministic Campaign composer is not an
+  AI capability; its separately approved bounded auto-send mode uses administrator
+  policy plus immutable Campaign launch and per-step revalidation. No AI selects an
+  audience, grants content authority or approves execution. AI-created accountable
+  tasks still require acceptance.
 - **Failure behaviour:** Expired/stale approvals fail closed; ambiguous external results reconcile before retry; permanent failures return to an exception queue.
 - **Observability:** Proposal-to-approval time, edit/reject rates, approval actor, execution latency, retry class, reconciliation outcome and duplicate-prevention signal.
 - **Pilot/Beta scope:** Follow-up draft, task and CRM field proposals; approval centre; one supported adapter path at a time.
-- **Future scope:** Policy-based batches and low-risk automation only after separate product approval, safety evidence and reversible controls.
+- **Current bounded extension:** WO-030 adds policy/launch-authorised Campaign email
+  simulation through the existing Action/Execution boundary, with stored exact
+  content, suppression/policy/source checks and fail-closed unknown outcomes. It
+  calls no model/provider and creates no customer intelligence.
+- **Future scope:** Further policy-based batches and low-risk automation only after separate product approval, safety evidence and reversible controls.
 
 ## 4. AI Reasoning Engine
 

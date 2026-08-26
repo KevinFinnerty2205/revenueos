@@ -63,6 +63,7 @@ def _configure_policy(
     cooldown_hours: int = 72,
     max_daily_sends_user: int = 25,
     max_daily_sends_org: int = 100,
+    campaign_auto_send_allowed: bool = False,
 ) -> None:
     response = client.put(
         "/api/v1/engage/policy",
@@ -73,6 +74,7 @@ def _configure_policy(
             "maxDailySendsUser": max_daily_sends_user,
             "maxDailySendsOrg": max_daily_sends_org,
             "requireOptOutMechanism": False,
+            "campaignAutoSendAllowed": campaign_auto_send_allowed,
             "offeringName": offering_name,
             "valueProposition": (
                 "RevenueOS helps growing teams coordinate secure access across locations without adding manual work."
@@ -243,7 +245,7 @@ def test_flagship_outreach_is_source_backed_reviewed_exact_and_simulated(
         json={"expectedVersion": 1},
     )
     assert quota_block.status_code == 409, quota_block.text
-    assert quota_block.json()["code"] == "outbound_disabled"
+    assert quota_block.json()["code"] == "quota_reached"
 
 
 def test_suppression_blocks_approval_and_survives_contact_deletion(

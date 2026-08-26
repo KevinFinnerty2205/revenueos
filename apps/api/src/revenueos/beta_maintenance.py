@@ -49,6 +49,12 @@ from revenueos.models import (
     DocumentFragment,
     DocumentSource,
     EmailSource,
+    EngageCampaign,
+    EngageCampaignAudience,
+    EngageCampaignEnrollment,
+    EngageCampaignVersion,
+    EngageEnrollmentStep,
+    EngageSequenceStep,
     Evidence,
     EvidenceFragment,
     ExecutionPreview,
@@ -125,7 +131,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 19
+EXPORT_VERSION = 20
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -324,19 +330,70 @@ async def run_retention(
                 )
             ).all()
         )
-        outreach_action_ids = list(
+        terminal_campaign_ids = list(
+            (
+                await session.scalars(
+                    select(EngageCampaign.id)
+                    .where(
+                        EngageCampaign.organisation_id == organisation_id,
+                        EngageCampaign.state.in_(("completed", "stopped")),
+                        EngageCampaign.updated_at < cutoff,
+                    )
+                    .order_by(EngageCampaign.updated_at, EngageCampaign.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
+        linked_campaign_action_ids = (
+            select(OutreachMessage.action_id)
+            .join(
+                EngageEnrollmentStep,
+                (EngageEnrollmentStep.organisation_id == OutreachMessage.organisation_id)
+                & (EngageEnrollmentStep.outreach_message_id == OutreachMessage.id),
+            )
+            .where(
+                OutreachMessage.organisation_id == organisation_id,
+                EngageEnrollmentStep.organisation_id == organisation_id,
+            )
+        )
+        terminal_campaign_action_ids = list(
+            (
+                await session.scalars(
+                    select(OutreachMessage.action_id)
+                    .join(
+                        EngageEnrollmentStep,
+                        (EngageEnrollmentStep.organisation_id == OutreachMessage.organisation_id)
+                        & (EngageEnrollmentStep.outreach_message_id == OutreachMessage.id),
+                    )
+                    .join(
+                        EngageCampaignEnrollment,
+                        (EngageCampaignEnrollment.organisation_id == EngageEnrollmentStep.organisation_id)
+                        & (EngageCampaignEnrollment.id == EngageEnrollmentStep.enrollment_id),
+                    )
+                    .where(
+                        OutreachMessage.organisation_id == organisation_id,
+                        EngageEnrollmentStep.organisation_id == organisation_id,
+                        EngageCampaignEnrollment.organisation_id == organisation_id,
+                        EngageCampaignEnrollment.campaign_id.in_(terminal_campaign_ids),
+                    )
+                )
+            ).all()
+        )
+        standalone_outreach_action_ids = list(
             (
                 await session.scalars(
                     select(OutreachMessage.action_id)
                     .where(
                         OutreachMessage.organisation_id == organisation_id,
                         OutreachMessage.created_at < cutoff,
+                        OutreachMessage.action_id.not_in(linked_campaign_action_ids),
                     )
                     .order_by(OutreachMessage.created_at, OutreachMessage.id)
                     .limit(bounded_batch_size)
                 )
             ).all()
         )
+        outreach_action_ids = list(dict.fromkeys([*terminal_campaign_action_ids, *standalone_outreach_action_ids]))
         counts = await _meeting_deletion_counts(session, organisation_id, meeting_ids)
         interaction_counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
         counts = _merge_counts(counts, interaction_counts)
@@ -361,6 +418,7 @@ async def run_retention(
         prospect_counts = await _prospect_deletion_counts(session, organisation_id, prospect_target_ids)
         counts.update(prospect_counts)
         counts["expired_prospect_contact_points"] = len(expired_contact_point_ids)
+        counts["engage_campaigns"] = len(terminal_campaign_ids)
         counts["outreach_messages"] = len(outreach_action_ids)
         expired_live_count = int(
             (
@@ -384,6 +442,7 @@ async def run_retention(
             and not email_ids
             and not methodology_projection_ids
             and not prospect_target_ids
+            and not terminal_campaign_ids
             and not outreach_action_ids
             and not expired_live_count
             and not expired_contact_point_ids
@@ -397,6 +456,14 @@ async def run_retention(
                 counts,
             )
         removed = await _expire_prospect_contact_points(session, organisation_id, expired_contact_point_ids)
+        if terminal_campaign_ids:
+            await session.execute(
+                delete(EngageCampaign).where(
+                    EngageCampaign.organisation_id == organisation_id,
+                    EngageCampaign.id.in_(terminal_campaign_ids),
+                )
+            )
+            removed["engage_campaigns"] = len(terminal_campaign_ids)
         if outreach_action_ids:
             await session.execute(
                 delete(ActionAuditEvent).where(
@@ -486,6 +553,7 @@ async def run_retention(
                     "interaction_count": len(interaction_ids),
                     "meeting_count": len(meeting_ids),
                     "prospect_target_count": len(prospect_target_ids),
+                    "campaign_count": len(terminal_campaign_ids),
                     "expired_prospect_contact_point_count": len(expired_contact_point_ids),
                     "retention_days": retention_days,
                 },
@@ -722,7 +790,6 @@ async def _delete_organisation_records(
         )
         await _delete_document_objects(session, settings, organisation_id, document_ids)
         await _enable_approved_deletion(session)
-        await _delete_source_database_rows(session, organisation_id, document_ids, email_ids)
         user_ids = list(
             (
                 await session.scalars(
@@ -768,6 +835,20 @@ async def _delete_organisation_records(
         await session.execute(delete(AIArtifact).where(AIArtifact.organisation_id == organisation_id))
         await session.execute(delete(AIJob).where(AIJob.organisation_id == organisation_id))
         await session.execute(delete(MockConnectorObject).where(MockConnectorObject.organisation_id == organisation_id))
+        await session.execute(
+            delete(EngageEnrollmentStep).where(EngageEnrollmentStep.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(EngageCampaignEnrollment).where(EngageCampaignEnrollment.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(EngageCampaignAudience).where(EngageCampaignAudience.organisation_id == organisation_id)
+        )
+        await session.execute(delete(EngageSequenceStep).where(EngageSequenceStep.organisation_id == organisation_id))
+        await session.execute(
+            delete(EngageCampaignVersion).where(EngageCampaignVersion.organisation_id == organisation_id)
+        )
+        await session.execute(delete(EngageCampaign).where(EngageCampaign.organisation_id == organisation_id))
         await _attempt_hubspot_revocation(session, settings, organisation_id)
         await session.execute(
             delete(IntegrationAuditEvent).where(IntegrationAuditEvent.organisation_id == organisation_id)
@@ -851,6 +932,7 @@ async def _delete_organisation_records(
         await session.execute(
             delete(MethodologyDefinition).where(MethodologyDefinition.organisation_id == organisation_id)
         )
+        await _delete_source_database_rows(session, organisation_id, document_ids, email_ids)
         if clarification_evidence_ids:
             await session.execute(
                 delete(Evidence).where(
@@ -2431,6 +2513,36 @@ async def _export_payload(
         .where(ContactFieldSource.organisation_id == organisation_id)
         .order_by(ContactFieldSource.contact_id, ContactFieldSource.field_key, ContactFieldSource.id)
     )
+    engage_campaigns = await rows(
+        select(EngageCampaign)
+        .where(EngageCampaign.organisation_id == organisation_id)
+        .order_by(EngageCampaign.created_at, EngageCampaign.id)
+    )
+    engage_campaign_versions = await rows(
+        select(EngageCampaignVersion)
+        .where(EngageCampaignVersion.organisation_id == organisation_id)
+        .order_by(EngageCampaignVersion.campaign_id, EngageCampaignVersion.version)
+    )
+    engage_sequence_steps = await rows(
+        select(EngageSequenceStep)
+        .where(EngageSequenceStep.organisation_id == organisation_id)
+        .order_by(EngageSequenceStep.campaign_version_id, EngageSequenceStep.step_order)
+    )
+    engage_campaign_audience = await rows(
+        select(EngageCampaignAudience)
+        .where(EngageCampaignAudience.organisation_id == organisation_id)
+        .order_by(EngageCampaignAudience.campaign_version_id, EngageCampaignAudience.created_at)
+    )
+    engage_campaign_enrollments = await rows(
+        select(EngageCampaignEnrollment)
+        .where(EngageCampaignEnrollment.organisation_id == organisation_id)
+        .order_by(EngageCampaignEnrollment.campaign_id, EngageCampaignEnrollment.created_at)
+    )
+    engage_enrollment_steps = await rows(
+        select(EngageEnrollmentStep)
+        .where(EngageEnrollmentStep.organisation_id == organisation_id)
+        .order_by(EngageEnrollmentStep.enrollment_id, EngageEnrollmentStep.scheduled_at)
+    )
     outreach_policies = await rows(select(OutreachPolicy).where(OutreachPolicy.organisation_id == organisation_id))
     outreach_messages = await rows(
         select(OutreachMessage)
@@ -3149,9 +3261,11 @@ async def _export_payload(
             _columns(
                 item,
                 (
+                    "version",
                     "configured",
                     "outbound_enabled",
                     "provider_supplied_email_allowed",
+                    "campaign_auto_send_allowed",
                     "cooldown_hours",
                     "max_daily_sends_user",
                     "max_daily_sends_org",
@@ -3165,6 +3279,138 @@ async def _export_payload(
                 ),
             )
             for item in outreach_policies
+        ],
+        "engageCampaigns": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "owner_user_id",
+                    "state",
+                    "current_version",
+                    "needs_attention_reason",
+                    "launched_at",
+                    "paused_at",
+                    "stopped_at",
+                    "completed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in engage_campaigns
+        ],
+        "engageCampaignVersions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "campaign_id",
+                    "version",
+                    "status",
+                    "name",
+                    "purpose",
+                    "approval_mode",
+                    "sender_user_id",
+                    "source_type",
+                    "sender_timezone",
+                    "send_days_json",
+                    "send_window_start_minutes",
+                    "send_window_end_minutes",
+                    "stop_on_active_opportunity",
+                    "policy_version",
+                    "audience_count",
+                    "approved_by_user_id",
+                    "approved_at",
+                    "auto_send_confirmed_at",
+                    "created_by_user_id",
+                    "created_at",
+                ),
+            )
+            for item in engage_campaign_versions
+        ],
+        "engageSequenceSteps": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "campaign_version_id",
+                    "step_order",
+                    "delay_days",
+                    "objective",
+                    "content_strategy",
+                    "enabled",
+                    "created_at",
+                ),
+            )
+            for item in engage_sequence_steps
+        ],
+        "engageCampaignAudience": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "campaign_version_id",
+                    "contact_id",
+                    "company_id",
+                    "recipient_name",
+                    "recipient_email",
+                    "recipient_trust",
+                    "eligible",
+                    "eligibility_code",
+                    "eligibility_reason",
+                    "created_at",
+                ),
+            )
+            for item in engage_campaign_audience
+        ],
+        "engageCampaignEnrollments": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "campaign_id",
+                    "campaign_version_id",
+                    "contact_id",
+                    "company_id",
+                    "sender_user_id",
+                    "recipient_name",
+                    "recipient_email",
+                    "recipient_trust",
+                    "job_title_snapshot",
+                    "state",
+                    "current_step_order",
+                    "next_scheduled_at",
+                    "stop_reason",
+                    "outcome",
+                    "outcome_provenance",
+                    "outcome_reported_by_user_id",
+                    "outcome_reported_at",
+                    "created_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in engage_campaign_enrollments
+        ],
+        "engageEnrollmentSteps": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "enrollment_id",
+                    "sequence_step_id",
+                    "scheduled_at",
+                    "prepare_at",
+                    "state",
+                    "outreach_message_id",
+                    "safe_status_code",
+                    "prepared_at",
+                    "sent_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in engage_enrollment_steps
         ],
         "outreachMessages": [
             _columns(

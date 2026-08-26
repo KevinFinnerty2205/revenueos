@@ -2802,6 +2802,7 @@ export type OutreachContactability =
   | "provider_supplied_blocked"
   | "suppressed"
   | "cooldown"
+  | "quota_reached"
   | "policy_not_configured"
   | "outbound_disabled"
   | "engage_unavailable"
@@ -2816,9 +2817,11 @@ export interface EngageAvailability {
 }
 
 export interface OutreachPolicy {
+  version: number;
   configured: boolean;
   outboundEnabled: boolean;
   providerSuppliedEmailAllowed: boolean;
+  campaignAutoSendAllowed: boolean;
   cooldownHours: number;
   maxDailySendsUser: number;
   maxDailySendsOrg: number;
@@ -2928,6 +2931,178 @@ export interface ContactOutreachWorkspace {
   productionMailboxAvailable: false;
   simulationAvailable: boolean;
   history: OutreachHistoryItem[];
+}
+
+export type CampaignState =
+  | "draft"
+  | "ready"
+  | "active"
+  | "paused"
+  | "completed"
+  | "stopped"
+  | "needs_attention";
+export type CampaignApprovalMode =
+  | "review_each_send"
+  | "approved_campaign_auto_send";
+export type CampaignEnrollmentState =
+  | "ready"
+  | "active"
+  | "paused"
+  | "stopped"
+  | "completed"
+  | "blocked"
+  | "needs_attention";
+export type CampaignStepState =
+  | "pending"
+  | "processing"
+  | "ready_for_review"
+  | "prepared"
+  | "queued"
+  | "sent"
+  | "deferred"
+  | "blocked"
+  | "cancelled"
+  | "unknown_delivery_state";
+export type CampaignStepObjective =
+  | "introduction"
+  | "follow_up"
+  | "share_relevant_information"
+  | "different_angle"
+  | "meeting_request"
+  | "final_follow_up";
+export type CampaignOutcome =
+  | "replied"
+  | "meeting_booked"
+  | "not_interested";
+
+export interface CampaignSequenceStep {
+  id: string;
+  stepOrder: number;
+  delayDays: number;
+  objective: CampaignStepObjective;
+  contentStrategy: string;
+  enabled: boolean;
+}
+
+export interface CampaignAudienceItem {
+  id: string;
+  contactId: string | null;
+  companyId: string | null;
+  recipientName: string;
+  recipientEmail: string | null;
+  recipientTrust: "verified" | "provider_supplied" | "unknown";
+  eligible: boolean;
+  eligibilityCode: string;
+  eligibilityReason: string;
+}
+
+export interface CampaignMetrics {
+  recipients: number;
+  active: number;
+  completed: number;
+  stopped: number;
+  blocked: number;
+  needsAttention: number;
+  messagesSent: number;
+  messagesReadyForReview: number;
+  messagesFailed: number;
+  repliesReported: number;
+  meetingsReported: number;
+}
+
+export interface CampaignListItem {
+  id: string;
+  name: string;
+  purpose: string;
+  state: CampaignState;
+  approvalMode: CampaignApprovalMode;
+  ownerUserId: string;
+  audienceCount: number;
+  eligibleCount: number;
+  blockedCount: number;
+  currentVersion: number;
+  launchedAt: string | null;
+  updatedAt: string;
+}
+
+export interface CampaignListResponse {
+  items: CampaignListItem[];
+  total: number;
+  canCreate: boolean;
+  simulationOnly: boolean;
+  productionMailboxAvailable: false;
+}
+
+export interface Campaign {
+  id: string;
+  versionId: string;
+  version: number;
+  name: string;
+  purpose: string;
+  state: CampaignState;
+  approvalMode: CampaignApprovalMode;
+  ownerUserId: string;
+  senderUserId: string;
+  sourceType: "manual_contacts" | "target_market";
+  senderTimezone: string;
+  sendDays: number[];
+  sendWindowStartMinutes: number;
+  sendWindowEndMinutes: number;
+  stopOnActiveOpportunity: boolean;
+  policyVersion: number | null;
+  audienceCount: number;
+  eligibleCount: number;
+  blockedCount: number;
+  steps: CampaignSequenceStep[];
+  audience: CampaignAudienceItem[];
+  metrics: CampaignMetrics;
+  canManage: boolean;
+  canLaunch: boolean;
+  campaignAutoSendAllowed: boolean;
+  simulationOnly: boolean;
+  productionMailboxAvailable: false;
+  launchWarning: string | null;
+  needsAttentionReason: string | null;
+  launchedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignEnrollmentStep {
+  id: string;
+  stepOrder: number;
+  objective: CampaignStepObjective;
+  scheduledAt: string;
+  state: CampaignStepState;
+  safeStatusCode: string | null;
+  outreachMessageId: string | null;
+  preparedAt: string | null;
+  sentAt: string | null;
+}
+
+export interface CampaignEnrollment {
+  id: string;
+  campaignId: string;
+  contactId: string | null;
+  companyId: string | null;
+  recipientName: string;
+  recipientEmail: string;
+  recipientTrust: "verified" | "provider_supplied";
+  state: CampaignEnrollmentState;
+  currentStepOrder: number;
+  nextScheduledAt: string | null;
+  stopReason: string | null;
+  outcome: CampaignOutcome | null;
+  outcomeProvenance: "seller_reported" | null;
+  steps: CampaignEnrollmentStep[];
+  currentOutreach: OutreachMessage | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignEnrollmentListResponse {
+  items: CampaignEnrollment[];
+  total: number;
 }
 
 export interface ProspectCompanyCandidate {

@@ -65,6 +65,13 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
         engine = create_async_engine(TEST_DB_URL)
         start, end = _local_day_bounds()
         now = datetime.now(UTC)
+        remaining_today = end.astimezone(UTC) - now
+        next_interaction_at = now + min(timedelta(hours=2), remaining_today / 3)
+        prepared_interaction_at = now + min(timedelta(hours=5), remaining_today * 2 / 3)
+        prepared_interaction_end = min(
+            prepared_interaction_at + timedelta(hours=1),
+            end.astimezone(UTC) - remaining_today / 10,
+        )
         company_id = uuid.uuid4()
         opportunity_id = uuid.uuid4()
         next_interaction_id = uuid.uuid4()
@@ -136,8 +143,8 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     interaction_type="workshop",
                     lifecycle_status="planned",
                     title="Technical review",
-                    scheduled_start_at=now + timedelta(hours=2),
-                    scheduled_end_at=now + timedelta(hours=3),
+                    scheduled_start_at=next_interaction_at,
+                    scheduled_end_at=next_interaction_at + timedelta(hours=1),
                     timezone="Australia/Sydney",
                     creation_origin="manual",
                     created_by_user_id=PRIMARY_USER_ID,
@@ -150,8 +157,8 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     interaction_type="phone_call",
                     lifecycle_status="planned",
                     title="Commercial follow-up",
-                    scheduled_start_at=min(now + timedelta(hours=5), end.astimezone(UTC) - timedelta(minutes=30)),
-                    scheduled_end_at=min(now + timedelta(hours=6), end.astimezone(UTC) - timedelta(minutes=5)),
+                    scheduled_start_at=prepared_interaction_at,
+                    scheduled_end_at=prepared_interaction_end,
                     timezone="Australia/Sydney",
                     creation_origin="manual",
                     call_direction="outbound",
@@ -186,20 +193,35 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
             )
             session.add_all(interactions)
             await session.flush()
-            session.add(
-                PreInteractionBrief(
-                    organisation_id=PRIMARY_ORGANISATION_ID,
-                    interaction_id=prepared_interaction_id,
-                    company_id=company_id,
-                    opportunity_id=opportunity_id,
-                    source_context_fingerprint=hashlib.sha256(b"daily-test-brief").hexdigest(),
-                    brief_version=1,
-                    schema_version=1,
-                    status="completed",
-                    content_json={"test": "bounded"},
-                    source_references_json=[],
-                    created_by_user_id=PRIMARY_USER_ID,
-                )
+            session.add_all(
+                [
+                    PreInteractionBrief(
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=prepared_interaction_id,
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        source_context_fingerprint=hashlib.sha256(b"daily-test-brief").hexdigest(),
+                        brief_version=1,
+                        schema_version=1,
+                        status="completed",
+                        content_json={"test": "bounded"},
+                        source_references_json=[],
+                        created_by_user_id=PRIMARY_USER_ID,
+                    ),
+                    PreInteractionBrief(
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        interaction_id=tomorrow_interaction_id,
+                        company_id=company_id,
+                        opportunity_id=opportunity_id,
+                        source_context_fingerprint=hashlib.sha256(b"daily-test-tomorrow-brief").hexdigest(),
+                        brief_version=1,
+                        schema_version=1,
+                        status="completed",
+                        content_json={"test": "bounded"},
+                        source_references_json=[],
+                        created_by_user_id=PRIMARY_USER_ID,
+                    ),
+                ]
             )
             source_fingerprint = hashlib.sha256(b"daily-action-source").hexdigest()
             session.add(
