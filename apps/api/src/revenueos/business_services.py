@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,11 +26,14 @@ from revenueos.errors import PublicAPIError
 from revenueos.models import (
     Company,
     Contact,
+    ContactSuppression,
     Evidence,
     MethodologyProjection,
     MethodologyReview,
     Opportunity,
     OpportunityAuditEvent,
+    OutreachMessage,
+    ProspectPerson,
     Task,
 )
 from revenueos.prospect_url_security import (
@@ -162,7 +165,33 @@ class BusinessService:
         return await self._save(contact)
 
     async def delete_contact(self, contact_id: UUID) -> None:
-        await self._delete(await self.get_contact(contact_id), "contact")
+        contact = await self.get_contact(contact_id)
+        organisation_id = self.tenant.organisation_id
+        await self.repository.session.execute(
+            update(OutreachMessage)
+            .where(
+                OutreachMessage.organisation_id == organisation_id,
+                OutreachMessage.contact_id == contact.id,
+            )
+            .values(contact_id=None)
+        )
+        await self.repository.session.execute(
+            update(ContactSuppression)
+            .where(
+                ContactSuppression.organisation_id == organisation_id,
+                ContactSuppression.contact_id == contact.id,
+            )
+            .values(contact_id=None)
+        )
+        await self.repository.session.execute(
+            update(ProspectPerson)
+            .where(
+                ProspectPerson.organisation_id == organisation_id,
+                ProspectPerson.promoted_contact_id == contact.id,
+            )
+            .values(promoted_contact_id=None, promoted_by_user_id=None, promoted_at=None)
+        )
+        await self._delete(contact, "contact")
 
     async def list_opportunities(
         self,

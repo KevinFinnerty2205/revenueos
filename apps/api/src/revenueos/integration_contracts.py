@@ -101,6 +101,9 @@ class ConnectionHealthResponse(APIModel):
 
 class EmailExecutionPreview(StrictIntegrationModel):
     kind: Literal["email"]
+    sender_name: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    sender_email: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    recipient_name: str | None = Field(default=None, exclude_if=lambda value: value is None)
     recipient: str
     subject: str
     body: str

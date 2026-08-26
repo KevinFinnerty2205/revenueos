@@ -151,6 +151,13 @@ Find, Sell, Pipeline, Create and Insights. The authoritative expansion contract 
 [conditional roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md). It does not
 change the implemented WO-022 baseline or authorise a later work order.
 
+WO-029 now implements the first Engage slice: separately entitled, one-to-one
+personalised outreach for a canonical Contact, using bounded sourced professional
+research, approved seller context, immutable review, durable suppression and exact
+execution preview. Execution is deterministic simulation outside production;
+Gmail/Microsoft production sending, campaigns and sequences remain deferred. See
+[Personalised one-to-one outreach](personalised-outreach.md).
+
 ## Product boundaries
 
 RevenueOS owns:

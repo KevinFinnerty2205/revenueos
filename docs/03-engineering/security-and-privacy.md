@@ -414,3 +414,15 @@ graph while preserving any separately promoted Company. Production mock configur
 fails closed. See the dedicated
 [security/privacy review](prospect-security-privacy-review.md) and
 [SSRF/public-content guide](prospect-ssrf-public-content-security.md).
+
+## WO-029 Engage outreach controls
+
+Engage adds five forced-RLS tenant tables, canonical Contact recipients, current-user
+sender binding, immutable exact versions, server-selected source references,
+organisation-scoped HMAC suppression, cooldown/daily quotas and execute-time
+revalidation. Address trust is displayed separately from policy permission. Sensitive
+or manipulative personalisation, inferred addresses, arbitrary recipients/From,
+tracking and campaigns are absent. Subject, body, address and source excerpts remain
+outside logs/audits. Export/retention/deletion cover outreach and active suppression
+survives Contact deletion. Production mailbox execution fails closed. See the
+[dedicated review](personalised-outreach-security-review.md).

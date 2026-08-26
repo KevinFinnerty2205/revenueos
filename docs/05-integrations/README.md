@@ -44,3 +44,10 @@ People Data Labs and Crunchbase were reviewed, but no live account-data provider
 approved or activated. The [company discovery provider evaluation](company-discovery-provider-evaluation.md)
 records the decision. The shipped adapter returns deterministic synthetic fixtures,
 makes no network request and fails closed in production.
+
+WO-029 reuses the user-bound Mock Email simulation for reviewed one-to-one Engage
+outreach. [Gmail and Microsoft Graph were evaluated](mailbox-provider-evaluation.md),
+but customer ecosystem, OAuth, sender identity, reconciliation and compliance-event
+readiness did not support a production choice. No mailbox OAuth or paid email service
+was activated. Production email fails closed; Mock Email remains visibly simulation-
+only outside production.

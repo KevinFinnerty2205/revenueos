@@ -37,6 +37,7 @@ from revenueos.routes import (
     meetings,
     methodologies,
     opportunities,
+    outreach,
     prospect,
     tasks,
 )
@@ -148,6 +149,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(actions.router)
     app.include_router(ask.router)
     app.include_router(integrations.router)
+    app.include_router(outreach.router)
     return app
 
 

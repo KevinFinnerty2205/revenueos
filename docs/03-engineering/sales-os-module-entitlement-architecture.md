@@ -122,6 +122,13 @@ boundaries. A separate client flag was intentionally not added. Disabling Prospe
 blocks person capability according to the same read/write policy; Core Accounts and
 Contacts remain usable.
 
+WO-029 introduces a distinct `engage` entitlement. Prospect entitlement or Contact
+ownership alone cannot grant outreach. The API checks Engage at availability,
+workspace, draft, edit, approval, preview, confirmation and worker execution. A
+downgrade blocks new consequential operations immediately while retained outreach
+content remains subject to export/retention policy. The current entitlement source is
+manual private-beta administration; no billing integration or price is implied.
+
 ## Explicitly out of scope
 
 WO-026/027 add no billing or plan table. Exact prices,

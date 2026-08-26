@@ -110,6 +110,113 @@ def test_explicit_postgresql_migration_identifiers_fit_server_limit() -> None:
     )
 
 
+def test_personalized_outreach_migration_schema_guards_and_cycle(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "personalized-outreach-migration.db"
+    monkeypatch.setenv(  # type: ignore[attr-defined]
+        "DATABASE_URL",
+        f"sqlite+aiosqlite:///{database_path}",
+    )
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "0037_territory_icp")
+    with connect(database_path) as connection:
+        assert "outreach_messages" not in {
+            row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+
+    command.upgrade(configuration, "head")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    action_id = str(uuid.uuid4())
+    outreach_id = str(uuid.uuid4())
+    version_id = str(uuid.uuid4())
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert {
+            "outreach_policies",
+            "outreach_messages",
+            "outreach_versions",
+            "outreach_personalization_sources",
+            "contact_suppressions",
+        }.issubset(tables)
+        triggers = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'trigger'")}
+        assert {
+            "outreach_versions_immutable_update",
+            "outreach_personalization_sources_immutable_update",
+        }.issubset(triggers)
+        action_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(action_proposals)")}
+        assert action_columns["opportunity_id"] == 0
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Outreach migration', ?)",
+            (organisation_id, f"outreach-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Migration user')",
+            (user_id, f"user-{user_id}", "outreach-migration@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO organisation_module_entitlements "
+            "(organisation_id, module_key, enabled, source, configured_by_user_id) "
+            "VALUES (?, 'engage', 1, 'manual_private_beta', ?)",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO action_proposals "
+            "(id, organisation_id, opportunity_id, action_type, status, priority, audience, risk_class, "
+            "current_version, source_fingerprint, semantic_key, created_by_user_id) "
+            "VALUES (?, ?, NULL, 'personalized_outreach', 'proposed', 'normal', 'customer_facing', "
+            "'external_customer_facing', 1, ?, ?, ?)",
+            (action_id, organisation_id, "a" * 64, "b" * 64, user_id),
+        )
+        connection.execute(
+            "INSERT INTO outreach_messages "
+            "(id, organisation_id, sender_user_id, action_id, purpose, state, current_version) "
+            "VALUES (?, ?, ?, ?, 'introduction', 'draft', 1)",
+            (outreach_id, organisation_id, user_id, action_id),
+        )
+        connection.execute(
+            "INSERT INTO outreach_versions "
+            "(id, organisation_id, outreach_id, version, subject, body, sender_name, sender_email, "
+            "recipient_name, recipient_email, recipient_trust, offering_name, value_proposition, approved_cta, "
+            "personalization_plan_json, composer_version, creation_type, content_fingerprint, created_by_user_id) "
+            "VALUES (?, ?, ?, 1, 'Subject', 'Body', 'Sender', 'sender@example.test', 'Recipient', "
+            "'recipient@example.test', 'verified', 'Offering', 'Value proposition', 'Talk next week?', '{}', "
+            "'outreach_deterministic_v1', 'generated', ?, ?)",
+            (version_id, organisation_id, outreach_id, "c" * 64, user_id),
+        )
+        connection.commit()
+        with pytest.raises(IntegrityError):
+            connection.execute("UPDATE outreach_versions SET subject = 'Changed' WHERE id = ?", (version_id,))
+
+    command.downgrade(configuration, "0037_territory_icp")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert (
+            not {
+                "outreach_policies",
+                "outreach_messages",
+                "outreach_versions",
+                "outreach_personalization_sources",
+                "contact_suppressions",
+            }
+            & tables
+        )
+        action_columns = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(action_proposals)")}
+        assert action_columns["opportunity_id"] == 1
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
+
+
 def test_prospect_research_migration_schema_backfill_and_cycle(
     tmp_path: Path,
     monkeypatch: object,
@@ -182,7 +289,9 @@ def test_prospect_research_migration_schema_backfill_and_cycle(
             "SELECT normalized_domain FROM companies WHERE id = ?",
             (company_id,),
         ).fetchone() == ("example.com",)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
         run_columns = {row[1] for row in connection.execute("PRAGMA table_info(prospect_research_runs)")}
         usage_columns = {row[1] for row in connection.execute("PRAGMA table_info(prospect_usage_counters)")}
@@ -217,7 +326,9 @@ def test_prospect_research_migration_schema_backfill_and_cycle(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
     command.downgrade(configuration, "0034_crm_sync")
     with connect(database_path) as connection:
@@ -228,7 +339,9 @@ def test_prospect_research_migration_schema_backfill_and_cycle(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
 
 def test_integration_execution_migration_indexes_guards_and_cycle(
@@ -307,7 +420,9 @@ def test_integration_execution_migration_indexes_guards_and_cycle(
             row[1] for row in connection.execute("PRAGMA table_info(integration_connections)").fetchall()
         }
         assert {"external_account_id", "external_account_name", "granted_scopes_json"}.issubset(connection_columns)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
     command.downgrade(configuration, "0033_sales_methodology")
     with connect(database_path) as connection:
@@ -341,7 +456,9 @@ def test_integration_execution_migration_indexes_guards_and_cycle(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
 
 def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
@@ -426,7 +543,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "methodology_projections",
             "methodology_reviews",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
         }
@@ -1169,7 +1288,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -1221,7 +1342,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
         connection.execute(
             """
             INSERT INTO ai_jobs
@@ -1265,7 +1388,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             row[1] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
     with connect(database_path) as connection:
@@ -1279,7 +1404,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
     command.downgrade(configuration, "0003_meeting_domain")
     with connect(database_path) as connection:
@@ -1315,7 +1442,9 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "revenue_brain_insights",
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
     command.downgrade(configuration, "0002_core_business_entities")
     with connect(database_path) as connection:
@@ -1380,7 +1509,9 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_snapshots",
             "revenue_brain_insights",
         }.issubset(tables)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
     command.downgrade(configuration, "0018_revenue_brain")
     with connect(database_path) as connection:
@@ -1398,7 +1529,9 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
         assert "revenue_brain_insights" in {
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
 
 def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_deterministically(
@@ -1411,6 +1544,7 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
     assert [revision.revision for revision in script.walk_revisions()][:9] == [
+        "0038_personalized_outreach",
         "0037_territory_icp",
         "0036_prospect_people",
         "0035_prospect_research",
@@ -1419,9 +1553,8 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
         "0032_integration_execution",
         "0031_action_layer",
         "0030_live_interaction_intel",
-        "0029_doc_email_evidence",
     ]
-    assert script.get_heads() == ["0037_territory_icp"]
+    assert script.get_heads() == ["0038_personalized_outreach"]
     command.upgrade(configuration, "0020_private_beta_readiness")
 
     organisation_a = uuid.uuid4()
@@ -1530,7 +1663,9 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
         assert {row[0]: row[1] for row in connection.execute("SELECT id, interaction_id FROM meetings")} == expected
         assert connection.execute("SELECT count(*) FROM interactions").fetchone() == (3,)
 
@@ -1644,7 +1779,9 @@ def test_pre_interaction_brief_migration_is_immutable_and_reupgrades_cleanly(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM pre_interaction_briefs").fetchone() == (0,)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
 
 def test_visual_evidence_migration_review_guard_and_downgrade_reupgrade(
@@ -1772,7 +1909,9 @@ def test_visual_evidence_migration_review_guard_and_downgrade_reupgrade(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM visual_assets").fetchone() == (0,)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
 
 def test_recording_transcription_migration_backfills_history_and_reupgrades_cleanly(
@@ -1838,7 +1977,9 @@ def test_recording_transcription_migration_backfills_history_and_reupgrades_clea
 
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
         assert connection.execute("SELECT transcript_id, version, raw_text FROM transcript_versions").fetchone() == (
             transcript_id,
             2,
@@ -1866,7 +2007,9 @@ def test_recording_transcription_migration_backfills_history_and_reupgrades_clea
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM transcript_versions").fetchone() == (1,)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
 
 def test_face_to_face_companion_marker_migration_is_immutable_and_reupgrades_cleanly(
@@ -1945,7 +2088,9 @@ def test_face_to_face_companion_marker_migration_is_immutable_and_reupgrades_cle
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM interaction_markers").fetchone() == (0,)
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037_territory_icp",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0038_personalized_outreach",
+        )
 
 
 def test_phone_call_migration_backfills_provenance_and_downgrades_cleanly(
@@ -2098,7 +2243,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0037_territory_icp"
+                    assert version == "0038_personalized_outreach"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False

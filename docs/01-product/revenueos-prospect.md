@@ -1,6 +1,6 @@
 # RevenueOS Prospect
 
-- **Status:** WO-026 Account Research, WO-027 Prospect Person Intelligence and WO-028 Target Market discovery implemented; outreach remains future
+- **Status:** WO-026 Account Research, WO-027 Prospect Person Intelligence, WO-028 Target Market discovery and the WO-029 Engage handoff implemented
 - **Purpose:** Find the right customers and the right people
 
 ## Product outcome
@@ -27,7 +27,9 @@ promotion. See the
 [Target Market guide](target-market-intelligence.md).
 
 The following is the broader target capability boundary. WO-028 implements the first
-two items as bounded Target Markets; outreach remains future:
+two items as bounded Target Markets. WO-029 may consume only eligible, sourced
+professional research after a Person has been explicitly promoted to a canonical
+Contact and Engage is separately entitled. Prospect itself never sends email:
 
 - account discovery and prioritisation;
 - ICP and territory definitions;
@@ -67,6 +69,16 @@ verified, or turn private information into outreach context.
 
 Saving a Prospect should resolve duplicates and preserve research provenance rather
 than create a second Account or Contact model.
+
+## WO-029 Engage handoff
+
+Engage receives only the canonical Contact ID. It resolves the current Prospect
+Person link and current completed research runs server-side, then selects bounded
+source-backed company/person observations. Sensitive, stale, unsupported and
+untrusted observations are excluded. If no reliable hook remains, the outreach
+composer says so and uses approved role/company/value context without inventing a
+hook. Prospect trust remains provenance; it never establishes outreach permission.
+See [Personalised one-to-one outreach](personalised-outreach.md).
 
 ## ICP and territory
 

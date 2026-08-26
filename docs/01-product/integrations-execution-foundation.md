@@ -13,6 +13,13 @@ It supports reviewed Opportunity/Contact field updates and interaction activitie
 not autonomous sync. HubSpot is off until OAuth and encrypted credential settings
 are complete; simulation connectors remain prohibited in production.
 
+WO-029 adds one-to-one `personalized_outreach` Actions to the same Mock Email
+simulation path. It binds the sender to the authenticated user's connection and the
+recipient to a canonical Contact, shows the exact approved message and revalidates
+Engage entitlement, policy, suppression, address/version and membership at preview,
+confirmation and worker execution. Gmail/Microsoft production adapters remain
+deferred and fail closed.
+
 ## User promise
 
 - Approval and execution confirmation remain separate decisions.

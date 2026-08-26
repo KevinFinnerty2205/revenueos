@@ -4,7 +4,14 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.database import set_tenant_database_context
-from revenueos.models import Organisation, OrganisationMembership, OrganisationModuleEntitlement, User
+from revenueos.models import (
+    IntegrationConnection,
+    Organisation,
+    OrganisationMembership,
+    OrganisationModuleEntitlement,
+    OutreachPolicy,
+    User,
+)
 
 DEVELOPMENT_USER_ID = UUID("00000000-0000-4000-8000-000000000001")
 DEVELOPMENT_ORGANISATION_ID = UUID("00000000-0000-4000-8000-000000000002")
@@ -49,19 +56,58 @@ async def ensure_development_identity(
                 )
             )
         await session.flush()
-        entitlement = await session.get(
-            OrganisationModuleEntitlement,
-            (DEVELOPMENT_ORGANISATION_ID, "prospect"),
-        )
-        if entitlement is None:
+        for module_key in ("prospect", "engage"):
+            entitlement = await session.get(
+                OrganisationModuleEntitlement,
+                (DEVELOPMENT_ORGANISATION_ID, module_key),
+            )
+            if entitlement is None:
+                session.add(
+                    OrganisationModuleEntitlement(
+                        organisation_id=DEVELOPMENT_ORGANISATION_ID,
+                        module_key=module_key,
+                        enabled=True,
+                        source="manual_private_beta",
+                        configured_by_user_id=DEVELOPMENT_USER_ID,
+                        enabled_at=datetime.now(UTC),
+                    )
+                )
+        policy = await session.get(OutreachPolicy, DEVELOPMENT_ORGANISATION_ID)
+        if policy is None:
             session.add(
-                OrganisationModuleEntitlement(
+                OutreachPolicy(
                     organisation_id=DEVELOPMENT_ORGANISATION_ID,
-                    module_key="prospect",
-                    enabled=True,
-                    source="manual_private_beta",
+                    configured=True,
+                    outbound_enabled=True,
+                    provider_supplied_email_allowed=True,
+                    cooldown_hours=72,
+                    max_daily_sends_user=25,
+                    max_daily_sends_org=100,
+                    require_opt_out_mechanism=False,
+                    offering_name="Multi-site Access Management",
+                    value_proposition=(
+                        "RevenueOS helps growing teams coordinate secure access across locations without adding manual work."
+                    ),
+                    approved_cta="Would a short conversation next week be useful?",
                     configured_by_user_id=DEVELOPMENT_USER_ID,
-                    enabled_at=datetime.now(UTC),
+                )
+            )
+        mock_email = await session.get(
+            IntegrationConnection,
+            UUID("00000000-0000-4000-8000-000000000029"),
+        )
+        if mock_email is None:
+            session.add(
+                IntegrationConnection(
+                    id=UUID("00000000-0000-4000-8000-000000000029"),
+                    organisation_id=DEVELOPMENT_ORGANISATION_ID,
+                    connector_key="mock_email",
+                    connection_status="active",
+                    created_by_user_id=DEVELOPMENT_USER_ID,
+                    connected_at=datetime.now(UTC),
+                    last_verified_at=datetime.now(UTC),
+                    capability_state_json=["send_email"],
+                    metadata_version=1,
                 )
             )
         await session.commit()

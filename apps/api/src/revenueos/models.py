@@ -59,6 +59,8 @@ from revenueos.domain import (
     OpportunityAuditAction,
     OpportunityStage,
     OpportunityStatus,
+    OutreachPurpose,
+    OutreachState,
     ParticipantRole,
     ProspectCandidateFeedbackState,
     ProspectDiscoveryRunStatus,
@@ -199,7 +201,7 @@ class OrganisationBetaSettings(TimestampMixin, Base):
 class OrganisationModuleEntitlement(TimestampMixin, Base):
     __tablename__ = "organisation_module_entitlements"
     __table_args__ = (
-        CheckConstraint("module_key = 'prospect'", name="ck_module_entitlements_key"),
+        CheckConstraint("module_key IN ('prospect', 'engage')", name="ck_module_entitlements_key"),
         CheckConstraint("source = 'manual_private_beta'", name="ck_module_entitlements_source"),
         ForeignKeyConstraint(
             ["organisation_id", "configured_by_user_id"],
@@ -1882,11 +1884,250 @@ class MethodologyReview(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class OutreachPolicy(TimestampMixin, Base):
+    __tablename__ = "outreach_policies"
+    __table_args__ = (
+        CheckConstraint("cooldown_hours BETWEEN 0 AND 720", name="ck_outreach_policies_cooldown"),
+        CheckConstraint("max_daily_sends_user BETWEEN 1 AND 500", name="ck_outreach_policies_user_limit"),
+        CheckConstraint("max_daily_sends_org BETWEEN 1 AND 2000", name="ck_outreach_policies_org_limit"),
+        CheckConstraint("length(trim(offering_name)) BETWEEN 1 AND 120", name="ck_outreach_policies_offering"),
+        CheckConstraint(
+            "length(trim(value_proposition)) BETWEEN 1 AND 1000",
+            name="ck_outreach_policies_value",
+        ),
+        CheckConstraint("length(trim(approved_cta)) BETWEEN 1 AND 300", name="ck_outreach_policies_cta"),
+        ForeignKeyConstraint(
+            ["organisation_id", "configured_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_outreach_policies_configurer",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), primary_key=True
+    )
+    configured: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    outbound_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    provider_supplied_email_allowed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    cooldown_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=72, server_default="72")
+    max_daily_sends_user: Mapped[int] = mapped_column(Integer, nullable=False, default=25, server_default="25")
+    max_daily_sends_org: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    require_opt_out_mechanism: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    offering_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    value_proposition: Mapped[str] = mapped_column(String(1000), nullable=False)
+    approved_cta: Mapped[str] = mapped_column(String(300), nullable=False)
+    configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class OutreachMessage(TimestampMixin, Base):
+    __tablename__ = "outreach_messages"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('introduction', 'request_meeting', 'share_relevant_information', 're_engage')",
+            name="ck_outreach_messages_purpose",
+        ),
+        CheckConstraint("state IN ('draft', 'approved', 'cancelled')", name="ck_outreach_messages_state"),
+        CheckConstraint("current_version > 0", name="ck_outreach_messages_version"),
+        CheckConstraint(
+            "approved_version IS NULL OR approved_version BETWEEN 1 AND current_version",
+            name="ck_outreach_messages_approved",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_outreach_messages_contact",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "sender_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_outreach_messages_sender",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_outreach_messages_approver",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "action_id"],
+            ["action_proposals.organisation_id", "action_proposals.id"],
+            name="fk_outreach_messages_action",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_outreach_messages_org_id"),
+        UniqueConstraint("organisation_id", "action_id", name="uq_outreach_messages_action"),
+        Index("ix_outreach_messages_org_contact", "organisation_id", "contact_id", "created_at"),
+        Index("ix_outreach_messages_org_sender", "organisation_id", "sender_user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    sender_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(40), nullable=False, default=OutreachPurpose.INTRODUCTION.value)
+    state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=OutreachState.DRAFT.value, server_default=OutreachState.DRAFT.value
+    )
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    approved_version: Mapped[int | None] = mapped_column(Integer)
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OutreachVersion(Base):
+    __tablename__ = "outreach_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_outreach_versions_version"),
+        CheckConstraint("length(trim(subject)) BETWEEN 1 AND 200", name="ck_outreach_versions_subject"),
+        CheckConstraint("length(trim(body)) BETWEEN 1 AND 10000", name="ck_outreach_versions_body"),
+        CheckConstraint(
+            "creation_type IN ('generated', 'user_edited')",
+            name="ck_outreach_versions_creation",
+        ),
+        CheckConstraint("recipient_trust IN ('verified', 'provider_supplied')", name="ck_outreach_versions_trust"),
+        CheckConstraint("length(content_fingerprint) = 64", name="ck_outreach_versions_fingerprint"),
+        ForeignKeyConstraint(
+            ["organisation_id", "outreach_id"],
+            ["outreach_messages.organisation_id", "outreach_messages.id"],
+            name="fk_outreach_versions_message",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_outreach_versions_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_outreach_versions_org_id"),
+        UniqueConstraint("organisation_id", "outreach_id", "version", name="uq_outreach_versions_number"),
+        Index("ix_outreach_versions_org_message", "organisation_id", "outreach_id", "version"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    outreach_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    sender_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    sender_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    recipient_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    recipient_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    recipient_trust: Mapped[str] = mapped_column(String(24), nullable=False)
+    offering_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    value_proposition: Mapped[str] = mapped_column(String(1000), nullable=False)
+    approved_cta: Mapped[str] = mapped_column(String(300), nullable=False)
+    personalization_plan_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
+    )
+    composer_version: Mapped[str] = mapped_column(String(80), nullable=False, default="outreach_deterministic_v1")
+    creation_type: Mapped[str] = mapped_column(String(20), nullable=False, default="generated")
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class OutreachPersonalizationSource(Base):
+    __tablename__ = "outreach_personalization_sources"
+    __table_args__ = (
+        CheckConstraint(
+            "source_type IN ('prospect_observation', 'prospect_person_observation', 'approved_seller_context')",
+            name="ck_outreach_sources_type",
+        ),
+        CheckConstraint(
+            "trust_state IN ('verified', 'provider_supplied', 'approved')", name="ck_outreach_sources_trust"
+        ),
+        CheckConstraint("length(trim(label)) BETWEEN 1 AND 300", name="ck_outreach_sources_label"),
+        ForeignKeyConstraint(
+            ["organisation_id", "outreach_version_id"],
+            ["outreach_versions.organisation_id", "outreach_versions.id"],
+            name="fk_outreach_sources_version",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_outreach_sources_org_id"),
+        UniqueConstraint(
+            "organisation_id", "outreach_version_id", "source_type", "source_id", name="uq_outreach_sources_ref"
+        ),
+        Index("ix_outreach_sources_org_version", "organisation_id", "outreach_version_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    outreach_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    supporting_source_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    label: Mapped[str] = mapped_column(String(300), nullable=False)
+    trust_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ContactSuppression(Base):
+    __tablename__ = "contact_suppressions"
+    __table_args__ = (
+        CheckConstraint("length(email_fingerprint) = 64", name="ck_contact_suppressions_fingerprint"),
+        CheckConstraint(
+            "reason IN ('manual_do_not_contact', 'recipient_opt_out', 'complaint', 'permanent_bounce')",
+            name="ck_contact_suppressions_reason",
+        ),
+        CheckConstraint("source IN ('user', 'recipient', 'provider')", name="ck_contact_suppressions_source"),
+        ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_contact_suppressions_contact",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_contact_suppressions_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "revoked_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_contact_suppressions_revoker",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_contact_suppressions_org_id"),
+        UniqueConstraint("organisation_id", "email_fingerprint", name="uq_contact_suppressions_email"),
+        Index("ix_contact_suppressions_org_contact", "organisation_id", "contact_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    email_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(String(40), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    revoked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ActionProposal(Base):
     __tablename__ = "action_proposals"
     __table_args__ = (
         CheckConstraint(
-            "action_type IN ('follow_up_email', 'send_requested_material', 'create_task', "
+            "action_type IN ('follow_up_email', 'personalized_outreach', 'send_requested_material', 'create_task', "
             "'follow_up_stakeholder', 'schedule_interaction', 'update_opportunity', "
             "'update_contact', 'log_interaction', 'update_stakeholder', 'add_decision', 'add_commitment', "
             "'add_risk', 'update_timeline', 'update_procurement', 'update_security_legal', "
@@ -1999,7 +2240,7 @@ class ActionProposal(Base):
         ForeignKey("organisations.id", ondelete="CASCADE"),
         nullable=False,
     )
-    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     action_type: Mapped[str] = mapped_column(
         String(40), nullable=False, default=ActionType.OTHER.value, server_default=ActionType.OTHER.value

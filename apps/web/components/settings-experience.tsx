@@ -4,6 +4,7 @@ import type { MeResponse } from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BetaAdmin } from "@/components/beta-admin";
+import { EngageSettings } from "@/components/engage-settings";
 import { PageHeader } from "@/components/page-header";
 import { ProspectModuleSettings } from "@/components/prospect-module-settings";
 import { SalesMethodologySettings } from "@/components/sales-methodology-settings";
@@ -95,6 +96,7 @@ export function SettingsExperience() {
       {isAdmin ? (
         <>
           <ProspectModuleSettings />
+          <EngageSettings />
           <SalesMethodologySettings />
           <BetaAdmin />
         </>

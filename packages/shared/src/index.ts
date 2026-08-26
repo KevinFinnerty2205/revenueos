@@ -2249,6 +2249,7 @@ export interface OpportunityInteractionCaptureStatus {
 
 export type ActionType =
   | "follow_up_email"
+  | "personalized_outreach"
   | "send_requested_material"
   | "create_task"
   | "follow_up_stakeholder"
@@ -2489,6 +2490,9 @@ export interface ActionExecutionOptionListResponse {
 export type ExecutionPreviewContent =
   | {
       kind: "email";
+      senderName?: string;
+      senderEmail?: string;
+      recipientName?: string;
       recipient: string;
       subject: string;
       body: string;
@@ -2783,6 +2787,147 @@ export interface ProspectAvailability {
   enabled: boolean;
   canManage: boolean;
   message: string;
+}
+
+export type OutreachPurpose =
+  | "introduction"
+  | "request_meeting"
+  | "share_relevant_information"
+  | "re_engage";
+
+export type OutreachContactability =
+  | "allowed"
+  | "no_business_email"
+  | "email_trust_unknown"
+  | "provider_supplied_blocked"
+  | "suppressed"
+  | "cooldown"
+  | "policy_not_configured"
+  | "outbound_disabled"
+  | "engage_unavailable"
+  | "sender_disabled";
+
+export interface EngageAvailability {
+  moduleKey: "engage";
+  state: ProspectAvailabilityState;
+  enabled: boolean;
+  canManage: boolean;
+  message: string;
+}
+
+export interface OutreachPolicy {
+  configured: boolean;
+  outboundEnabled: boolean;
+  providerSuppliedEmailAllowed: boolean;
+  cooldownHours: number;
+  maxDailySendsUser: number;
+  maxDailySendsOrg: number;
+  requireOptOutMechanism: boolean;
+  offeringName: string | null;
+  valueProposition: string | null;
+  approvedCta: string | null;
+  canManage: boolean;
+  complianceNotice: string;
+}
+
+export interface Contactability {
+  state: OutreachContactability;
+  allowed: boolean;
+  reason: string;
+  trustState: "verified" | "provider_supplied" | "unknown";
+  permissionAssessedSeparately: true;
+}
+
+export interface OutreachSource {
+  id: string;
+  sourceType:
+    | "prospect_observation"
+    | "prospect_person_observation"
+    | "approved_seller_context";
+  sourceId: string;
+  label: string;
+  trustState: "verified" | "provider_supplied" | "approved";
+  publisher: string | null;
+  publishedAt: string | null;
+  url: string | null;
+}
+
+export interface OutreachVersion {
+  id: string;
+  version: number;
+  subject: string;
+  body: string;
+  senderName: string;
+  senderEmail: string;
+  recipientName: string;
+  recipientEmail: string;
+  recipientTrust: "verified" | "provider_supplied";
+  creationType: "generated" | "user_edited";
+  composerVersion: string;
+  personalizationUsed: boolean;
+  sources: OutreachSource[];
+  warnings: string[];
+  createdAt: string;
+}
+
+export interface OutreachExecutionSummary {
+  id: string;
+  status:
+    | "queued"
+    | "sending"
+    | "submitted"
+    | "sent"
+    | "failed"
+    | "unknown_delivery_state"
+    | "cancelled"
+    | "simulated";
+  simulationOnly: boolean;
+  safeMessage: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface OutreachMessage {
+  id: string;
+  actionId: string;
+  contactId: string | null;
+  purpose: OutreachPurpose;
+  state: "draft" | "approved" | "cancelled";
+  currentVersion: number;
+  approvedVersion: number | null;
+  version: OutreachVersion;
+  contactability: Contactability;
+  relationshipWarning: string | null;
+  execution: OutreachExecutionSummary | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OutreachHistoryItem {
+  id: string;
+  purpose: OutreachPurpose;
+  subject: string;
+  status: string;
+  simulationOnly: boolean;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface ContactOutreachWorkspace {
+  availability: EngageAvailability;
+  contactId: string;
+  contactName: string;
+  companyId: string;
+  companyName: string;
+  jobTitle: string | null;
+  email: string | null;
+  emailTrust: "verified" | "provider_supplied" | "unknown";
+  permissionStatus: "assessed_by_organisation_policy" | "not_assessed";
+  contactability: Contactability;
+  policyConfigured: boolean;
+  productionMailboxAvailable: false;
+  simulationAvailable: boolean;
+  history: OutreachHistoryItem[];
 }
 
 export interface ProspectCompanyCandidate {

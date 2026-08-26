@@ -385,6 +385,8 @@ class RevenueOSDailyService:
         )
         items: list[DailyAction] = []
         for record in ranked[:5]:
+            if record.proposal.opportunity_id is None:
+                continue
             state, state_label, cta_label = RevenueOSDailyService._action_state(record)
             items.append(
                 DailyAction(
@@ -563,6 +565,8 @@ class RevenueOSDailyService:
         overdue_by_opportunity: set[UUID] = set()
         high_action_by_opportunity: set[UUID] = set()
         for record in action_records:
+            if record.proposal.opportunity_id is None:
+                continue
             due_at = record.version.proposed_due_at
             if due_at is not None:
                 aware_due = due_at.replace(tzinfo=UTC) if due_at.tzinfo is None else due_at.astimezone(UTC)

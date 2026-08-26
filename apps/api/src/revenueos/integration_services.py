@@ -23,6 +23,7 @@ from revenueos.action_contracts import (
     FollowUpEmailPayload,
     LogInteractionPayload,
     OpportunityUpdatePayload,
+    PersonalizedOutreachPayload,
     ScheduleInteractionPayload,
 )
 from revenueos.action_repositories import ActionRecord, ActionRepository
@@ -102,6 +103,7 @@ from revenueos.models import (
     OrganisationMembership,
     User,
 )
+from revenueos.outreach_services import validate_personalized_outreach_action
 from revenueos.tenant import TenantContext
 
 if TYPE_CHECKING:
@@ -1079,6 +1081,7 @@ class ActionExecutionService:
         action_record = await self._require_approved_action(action_id)
         connection = await self._require_active_connection(connection_id, for_update=True)
         action = await self._action_input(action_record)
+        self._require_outreach_mailbox_binding(action, connection)
         action = await self._bind_external_target(action, connection)
         capability = self._capability(action.action_type)
         executor = self._executor(connection, capability, action.risk_class)
@@ -1133,6 +1136,7 @@ class ActionExecutionService:
             if connection.connection_status != ConnectionStatus.ACTIVE.value:
                 continue
             try:
+                self._require_outreach_mailbox_binding(action, connection)
                 self._executor(connection, capability, action.risk_class)
             except PublicAPIError:
                 continue
@@ -1182,6 +1186,7 @@ class ActionExecutionService:
             )
         connection = await self._require_active_connection(request.connection_id, for_update=True)
         action = await self._action_input(action_record)
+        self._require_outreach_mailbox_binding(action, connection)
         action = await self._bind_external_target(action, connection)
         capability = self._capability(action.action_type)
         if capability.value != preview.capability:
@@ -1332,7 +1337,9 @@ class ActionExecutionService:
         )
         if action_record is None or action_record.proposal.approved_version != execution.action_version:
             raise PublicAPIError("action_version_stale", "The approved Action version is unavailable.", 409)
-        action = await self._bind_external_target(await self._action_input(action_record), connection)
+        action = await self._action_input(action_record)
+        self._require_outreach_mailbox_binding(action, connection)
+        action = await self._bind_external_target(action, connection)
         capability = ConnectorCapability(execution.capability)
         executor = self._executor(connection, capability, action.risk_class)
         context = ExecutorConnectionContext(
@@ -1460,9 +1467,20 @@ class ActionExecutionService:
             raise PublicAPIError(
                 "action_not_approved", "Only the current approved Action version can be executed.", 409
             )
+        if proposal.action_type == "personalized_outreach":
+            await validate_personalized_outreach_action(
+                self.session,
+                self.tenant,
+                self.settings,
+                record,
+            )
+            return record
+        if proposal.opportunity_id is None:
+            raise PublicAPIError("action_target_stale", "The Action target is no longer available.", 409)
+        opportunity_id = proposal.opportunity_id
         opportunity_statement = select(Opportunity).where(
             Opportunity.organisation_id == self.tenant.organisation_id,
-            Opportunity.id == proposal.opportunity_id,
+            Opportunity.id == opportunity_id,
         )
         if for_update:
             opportunity_statement = opportunity_statement.with_for_update()
@@ -1475,7 +1493,7 @@ class ActionExecutionService:
         for reference in references:
             if not await self.action_repository.source_is_current(
                 self.tenant.organisation_id,
-                proposal.opportunity_id,
+                opportunity_id,
                 reference,
             ):
                 raise PublicAPIError(
@@ -1491,12 +1509,29 @@ class ActionExecutionService:
         except ValidationError as exc:
             raise PublicAPIError("action_content_unavailable", "The approved Action content is invalid.", 409) from exc
         proposal = record.proposal
+        if isinstance(payload, PersonalizedOutreachPayload):
+            return ApprovedActionInput(
+                organisation_id=self.tenant.organisation_id,
+                action_id=proposal.id,
+                action_version=cast(int, proposal.approved_version),
+                opportunity_id=None,
+                action_type=proposal.action_type,
+                risk_class=ActionRiskClass(proposal.risk_class),
+                title=record.version.title,
+                target_entity_type=record.version.target_entity_type,
+                target_entity_id=record.version.target_entity_id,
+                payload=payload,
+                revenueos_currency=None,
+            )
+        if proposal.opportunity_id is None:
+            raise PublicAPIError("action_target_stale", "The Action target is no longer available.", 409)
+        opportunity_id = proposal.opportunity_id
         opportunity = cast(
             Opportunity | None,
             await self.session.scalar(
                 select(Opportunity).where(
                     Opportunity.organisation_id == self.tenant.organisation_id,
-                    Opportunity.id == proposal.opportunity_id,
+                    Opportunity.id == opportunity_id,
                 )
             ),
         )
@@ -1542,8 +1577,7 @@ class ActionExecutionService:
                 for contact_id in payload.participant_contact_ids
             )
         if isinstance(payload, OpportunityUpdatePayload) and (
-            record.version.target_entity_type != "opportunity"
-            or record.version.target_entity_id != proposal.opportunity_id
+            record.version.target_entity_type != "opportunity" or record.version.target_entity_id != opportunity_id
         ):
             raise PublicAPIError("action_target_stale", "The approved Opportunity target is unavailable.", 409)
         if isinstance(payload, ContactUpdatePayload) and payload.operation == "update":
@@ -1564,9 +1598,9 @@ class ActionExecutionService:
             ):
                 raise PublicAPIError("action_target_stale", "The approved Contact target is unavailable.", 409)
         if isinstance(payload, CreateTaskPayload) and (
-            payload.linked_opportunity_id != proposal.opportunity_id
+            payload.linked_opportunity_id != opportunity_id
             or record.version.target_entity_type != "opportunity"
-            or record.version.target_entity_id != proposal.opportunity_id
+            or record.version.target_entity_id != opportunity_id
         ):
             raise PublicAPIError("action_target_stale", "The approved task target is unavailable.", 409)
         if isinstance(payload, LogInteractionPayload):
@@ -1574,7 +1608,7 @@ class ActionExecutionService:
                 select(Interaction).where(
                     Interaction.organisation_id == self.tenant.organisation_id,
                     Interaction.id == payload.interaction_id,
-                    Interaction.opportunity_id == proposal.opportunity_id,
+                    Interaction.opportunity_id == opportunity_id,
                 )
             )
             if interaction is None:
@@ -1583,7 +1617,7 @@ class ActionExecutionService:
             organisation_id=self.tenant.organisation_id,
             action_id=proposal.id,
             action_version=cast(int, proposal.approved_version),
-            opportunity_id=proposal.opportunity_id,
+            opportunity_id=opportunity_id,
             action_type=proposal.action_type,
             risk_class=ActionRiskClass(proposal.risk_class),
             title=record.version.title,
@@ -1606,6 +1640,8 @@ class ActionExecutionService:
         field_name: str | None = None
         proposed: object | None = None
         if isinstance(action.payload, OpportunityUpdatePayload):
+            if action.opportunity_id is None:
+                raise PublicAPIError("action_target_stale", "The Action target is no longer available.", 409)
             entity_type = "opportunity"
             entity_id = action.opportunity_id
             field_name = action.payload.field
@@ -1636,6 +1672,8 @@ class ActionExecutionService:
                 )
             field_name, proposed = changes[0]
         elif isinstance(action.payload, LogInteractionPayload):
+            if action.opportunity_id is None:
+                raise PublicAPIError("action_target_stale", "The Action target is no longer available.", 409)
             entity_type = "opportunity"
             entity_id = action.opportunity_id
         else:
@@ -1718,6 +1756,30 @@ class ActionExecutionService:
         if connection.connection_status != ConnectionStatus.ACTIVE.value:
             raise PublicAPIError("connection_revoked", "This connection has been revoked.", 409)
         return connection
+
+    def _require_outreach_mailbox_binding(
+        self,
+        action: ApprovedActionInput,
+        connection: IntegrationConnection,
+    ) -> None:
+        if not isinstance(action.payload, PersonalizedOutreachPayload):
+            return
+        if self.settings.environment == "production":
+            raise PublicAPIError(
+                "production_mailbox_unavailable",
+                "Production mailbox sending is not available in this release.",
+                409,
+            )
+        if (
+            connection.connector_key != ConnectorKey.MOCK_EMAIL.value
+            or connection.created_by_user_id != action.payload.sender_user_id
+            or action.payload.sender_user_id != self.tenant.user_id
+        ):
+            raise PublicAPIError(
+                "mailbox_owner_mismatch",
+                "Select the sender's own email simulation connection.",
+                409,
+            )
 
     def _executor(
         self,

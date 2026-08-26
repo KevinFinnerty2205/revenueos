@@ -9,6 +9,40 @@ class CompanyStatus(StrEnum):
 
 class ProductModule(StrEnum):
     PROSPECT = "prospect"
+    ENGAGE = "engage"
+
+
+class OutreachPurpose(StrEnum):
+    INTRODUCTION = "introduction"
+    REQUEST_MEETING = "request_meeting"
+    SHARE_RELEVANT_INFORMATION = "share_relevant_information"
+    RE_ENGAGE = "re_engage"
+
+
+class OutreachState(StrEnum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    CANCELLED = "cancelled"
+
+
+class OutreachContactability(StrEnum):
+    ALLOWED = "allowed"
+    NO_BUSINESS_EMAIL = "no_business_email"
+    EMAIL_TRUST_UNKNOWN = "email_trust_unknown"
+    PROVIDER_SUPPLIED_BLOCKED = "provider_supplied_blocked"
+    SUPPRESSED = "suppressed"
+    COOLDOWN = "cooldown"
+    POLICY_NOT_CONFIGURED = "policy_not_configured"
+    OUTBOUND_DISABLED = "outbound_disabled"
+    ENGAGE_UNAVAILABLE = "engage_unavailable"
+    SENDER_DISABLED = "sender_disabled"
+
+
+class SuppressionReason(StrEnum):
+    MANUAL_DO_NOT_CONTACT = "manual_do_not_contact"
+    RECIPIENT_OPT_OUT = "recipient_opt_out"
+    COMPLAINT = "complaint"
+    PERMANENT_BOUNCE = "permanent_bounce"
 
 
 class ProspectResearchRunStatus(StrEnum):
@@ -171,6 +205,7 @@ class OpportunityAuditAction(StrEnum):
 
 class ActionType(StrEnum):
     FOLLOW_UP_EMAIL = "follow_up_email"
+    PERSONALIZED_OUTREACH = "personalized_outreach"
     SEND_REQUESTED_MATERIAL = "send_requested_material"
     CREATE_TASK = "create_task"
     FOLLOW_UP_STAKEHOLDER = "follow_up_stakeholder"
