@@ -1,6 +1,6 @@
 # RevenueOS commercial packaging
 
-- **Status:** WO-023 recommendation; no price, billing or entitlement implementation
+- **Status:** Checkpoint 2 packaging direction; no price or billing implementation
 - **Principle:** Core is enough to love RevenueOS. Add-ons expand what RevenueOS can do.
 
 ## Recommended package
@@ -41,7 +41,9 @@ Essential evidence or explanation is never removed to manufacture an upsell.
 - **Prospect** expands how pipeline is found; it does not own saved Accounts,
   Contacts or Revenue Brain.
 - **Engage** expands customer outreach execution; it consumes approved research and
-  creates Interaction/Action evidence under Core trust rules.
+  supports Campaign and Event preparation/follow-up. Event-list and seller activity
+  remain Engage context; a deliberately captured Interaction and its accepted customer
+  Evidence belong to Core.
 - **Create** expands reusable customer material; it consumes Revenue Brain and
   approved organisation content but does not own customer truth.
 - **CRM** expands native record administration. It is a capability of Sell and
@@ -103,3 +105,8 @@ limitations.
 - region-specific tax, data-processing and enterprise support obligations.
 
 Exact prices require market research and customer interviews outside WO-023.
+
+Checkpoint 2 keeps this package structure. Prospect and Engage may be demonstrated
+with labelled synthetic providers, but real research and external delivery must not be
+sold as available until their provider-specific launch gates pass. See the
+[Prospect and Engage readiness review](prospect-engage-readiness.md).

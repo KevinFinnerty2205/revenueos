@@ -69,6 +69,10 @@ This is the canonical product and engineering documentation index. Documents dis
 63. [Event security review](03-engineering/event-security-privacy-abuse.md)
 64. [Event-platform boundary](05-integrations/event-platform-boundary.md)
 65. [ADR 0047: Separate Event attendee, encounter and contactability](08-decisions/0047-separate-event-attendee-encounter-and-contactability.md)
+66. [Checkpoint 2 Prospect and Engage validation](06-roadmap/checkpoint-2-prospect-engage-validation.md) — GO decision for WO-032
+67. [Prospect and Engage product readiness](01-product/prospect-engage-readiness.md)
+68. [Prospect and Engage simplicity review](02-design/prospect-engage-simplicity-review.md)
+69. [Prospect and Engage foundation review](03-engineering/prospect-engage-foundation-review.md)
 
 ## 00 — Company
 
@@ -93,6 +97,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [RevenueOS versus the revenue-intelligence category](01-product/revenueos-vs-revenue-intelligence-category.md)
 - [RevenueOS Prospect](01-product/revenueos-prospect.md)
 - [RevenueOS Engage](01-product/revenueos-engage.md)
+- [Prospect and Engage product readiness](01-product/prospect-engage-readiness.md)
 - [RevenueOS Create](01-product/revenueos-create.md)
 - [RevenueOS CRM](01-product/revenueos-crm.md)
 - [Standard sales methodologies](01-product/standard-sales-methodologies.md)
@@ -139,6 +144,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Find and Prospect experience](02-design/find-and-prospect-experience.md)
 - [Engage, campaign and event experience](02-design/engage-campaign-event-experience.md)
 - [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
+- [Prospect and Engage simplicity review](02-design/prospect-engage-simplicity-review.md)
 - [Create presentation and proposal experience](02-design/create-presentation-proposal-experience.md)
 - [Manager Intelligence experience](02-design/manager-intelligence-experience.md)
 - [Mobile Sales OS experience](02-design/mobile-sales-os-experience.md)
@@ -166,6 +172,7 @@ This is the canonical product and engineering documentation index. Documents dis
 ### Current implementation
 
 - [Application architecture](03-engineering/architecture.md)
+- [Prospect and Engage foundation review](03-engineering/prospect-engage-foundation-review.md)
 - [Core experience readiness implementation](03-engineering/core-experience-readiness-implementation.md)
 - [AI database foundation](03-engineering/ai-database-foundation.md)
 - [AI domain services](03-engineering/ai-domain-services.md)
@@ -381,6 +388,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Checkpoint 1 Core competitive readiness](06-roadmap/checkpoint-1-core-competitive-readiness.md)
 - [Core roadmap adjustments after Checkpoint 1](06-roadmap/core-roadmap-adjustments-after-checkpoint-1.md)
 - [Checkpoint 1B Core readiness](06-roadmap/checkpoint-1b-core-readiness.md)
+- [Checkpoint 2 Prospect and Engage validation](06-roadmap/checkpoint-2-prospect-engage-validation.md)
 
 ## 07 — Sprint records
 
@@ -435,6 +443,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-029: Personalised Outreach](07-sprints/wo-029-personalised-outreach.md)
 - [WO-030: Campaigns & Sequences](07-sprints/wo-030-campaigns-and-sequences.md)
 - [WO-031: Event Intelligence](07-sprints/wo-031-event-intelligence.md)
+- [Checkpoint 2: Prospect and Engage validation](07-sprints/checkpoint-2-prospect-engage-validation.md)
 
 ## 08 — Decision records
 

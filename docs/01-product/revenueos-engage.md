@@ -2,6 +2,9 @@
 
 - **Status:** WO-029 outreach, WO-030 campaigns and WO-031 Events implemented as an entitled add-on
 - **Purpose:** Turn target accounts into conversations
+- **Checkpoint 2:** Keep Engage and proceed to Create; external sending remains
+  unavailable until one production mailbox and its operating gates exist. See
+  [Prospect and Engage readiness](prospect-engage-readiness.md).
 
 ## Product outcome
 

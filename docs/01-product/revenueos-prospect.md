@@ -2,6 +2,9 @@
 
 - **Status:** WO-026 Account Research, WO-027 Prospect Person Intelligence, WO-028 Target Market discovery and the WO-029 Engage handoff implemented
 - **Purpose:** Find the right customers and the right people
+- **Checkpoint 2:** Keep Prospect and proceed to Create; real provider-backed use
+  remains separately gated. See
+  [Prospect and Engage readiness](prospect-engage-readiness.md).
 
 ## Product outcome
 
