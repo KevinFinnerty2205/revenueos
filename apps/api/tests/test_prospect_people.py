@@ -312,7 +312,7 @@ def test_export_includes_licensed_person_research_without_provider_person_ids(cl
             exported.update(await _export_payload(session, PRIMARY_ORGANISATION_ID, _settings()))
 
     _run(scenario)
-    assert exported["exportVersion"] == 20
+    assert exported["exportVersion"] == 21
     people = exported["prospectPeople"]
     assert isinstance(people, list) and people[0]["display_name"] == "Jane Smith"
     assert "provider_person_id" not in repr(people)

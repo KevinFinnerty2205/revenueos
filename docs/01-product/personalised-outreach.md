@@ -129,5 +129,7 @@ quota, review, idempotency and provider-reconciliation path for bounded Campaign
 one-to-four-step sequences. It does not change the one-to-one contract described here:
 audiences remain canonical Contacts, every message is rendered per recipient, and
 production email remains unavailable. See
-[Campaigns & Sequences](campaigns-and-sequences.md). WO-031 Event Intelligence remains
-outside this slice.
+[Campaigns & Sequences](campaigns-and-sequences.md). WO-031 now reuses this exact
+contract for canonical Contacts selected from an Event. Event attendance is a visible
+`event_attendance` source, never permission; “Good meeting” requires a recorded Event
+encounter/Interaction. See [Events](event-intelligence.md).

@@ -137,6 +137,7 @@ class InteractionResponse(APIModel):
     opportunity_id: UUID | None
     contact_id: UUID | None
     meeting_id: UUID | None = None
+    event_id: UUID | None = None
     interaction_type: InteractionType
     lifecycle_status: InteractionLifecycleStatus
     title: str

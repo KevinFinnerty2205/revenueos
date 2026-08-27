@@ -6,6 +6,19 @@
 Ratings are qualitative planning signals, not compliance findings. `Gate` identifies
 the evidence required before release; residual risk assumes the listed controls work.
 
+## WO-031 Event controls
+
+- Attendee overcollection/list authority: approved-field allowlist, mandatory
+  versioned attestation, one-hour preview and metadata-only logging.
+- False identity merge: person-specific exact email/profile only; generic inbox and
+  name-only rows cannot auto-link.
+- Attendance treated as consent or intent: canonical Contact/contactability remains
+  mandatory; no Evidence, Methodology, Buying Signal, Revenue Brain or numeric score.
+- Bulk abuse: 5 MB/500-row/50-column/five-import/50-active-Event caps, explicit
+  single promotion and WO-030's 50-Contact audience cap.
+- Deceptive post-Event copy: meeting language requires encounter/Interaction and
+  execution reuses WO-029 suppression/source validation.
+
 | ID  | Area             | Risk and impact                                                       | Required controls                                                       | Release gate                                  | Residual |
 | --- | ---------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------- | -------- |
 | R01 | Scope            | Feature accumulation obscures Sales Brain and increases learning cost | Six-area IA, one-question pages, simplicity gate, remove/defer reviews  | First-use usability evidence                  | Medium   |

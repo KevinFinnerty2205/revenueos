@@ -84,6 +84,8 @@ grouping work.
 ## Known limitations
 
 Production Gmail/Microsoft mailbox delivery and inbound reply detection remain
-deferred. There is no Inbox, LinkedIn messaging, cold calling, event workflow,
+deferred. There is no Inbox, LinkedIn messaging, cold calling,
 multi-sender/domain rotation, warm-up/evasion tooling, autonomous SDR or generic
-marketing automation. WO-031 owns any separately approved Event Intelligence work.
+marketing automation. WO-031 Events may hand off only explicitly selected canonical
+Contacts with an Event/stage link; no raw attendee or self-expanding audience is
+accepted. See [Events](event-intelligence.md).

@@ -560,6 +560,7 @@ export interface Interaction extends TenantEntity {
   opportunityId: string | null;
   contactId: string | null;
   meetingId: string | null;
+  eventId?: string | null;
   interactionType: InteractionType;
   lifecycleStatus: InteractionLifecycleStatus;
   title: string;
@@ -2846,10 +2847,16 @@ export interface OutreachSource {
   sourceType:
     | "prospect_observation"
     | "prospect_person_observation"
-    | "approved_seller_context";
+    | "approved_seller_context"
+    | "event_attendance"
+    | "event_encounter";
   sourceId: string;
   label: string;
-  trustState: "verified" | "provider_supplied" | "approved";
+  trustState:
+    | "verified"
+    | "provider_supplied"
+    | "approved"
+    | "seller_reported";
   publisher: string | null;
   publishedAt: string | null;
   url: string | null;
@@ -3043,7 +3050,9 @@ export interface Campaign {
   approvalMode: CampaignApprovalMode;
   ownerUserId: string;
   senderUserId: string;
-  sourceType: "manual_contacts" | "target_market";
+  sourceType: "manual_contacts" | "target_market" | "event_attendees";
+  eventId: string | null;
+  eventStage: "pre_event" | "post_event" | null;
   senderTimezone: string;
   sendDays: number[];
   sendWindowStartMinutes: number;
@@ -3525,4 +3534,175 @@ export interface ContactProspectResearchLink {
   companyTargetId: string;
   updatedAt: string;
   label: "Public professional research";
+}
+
+export type SalesEventType =
+  | "conference"
+  | "trade_show"
+  | "networking_event"
+  | "customer_event"
+  | "partner_event"
+  | "industry_event"
+  | "executive_roundtable"
+  | "internal_hosted_event"
+  | "other_business_event";
+
+export type SalesEventState =
+  | "draft"
+  | "upcoming"
+  | "active"
+  | "completed"
+  | "archived";
+
+export type SalesEventGoal =
+  | "meet_new_prospects"
+  | "progress_active_opportunities"
+  | "meet_strategic_accounts"
+  | "reconnect_existing_contacts"
+  | "find_partners"
+  | "other";
+
+export type EventPlanState =
+  | "not_planned"
+  | "planned"
+  | "met"
+  | "follow_up"
+  | "complete"
+  | "not_relevant";
+
+export interface SalesEventSummary {
+  attendeesImported: number;
+  priorityPeople: number;
+  planned: number;
+  met: number;
+  followUp: number;
+  addedToSales: number;
+  interactionsCaptured: number;
+  activeOpportunityContacts: number;
+}
+
+export interface EventCampaignLinkSummary {
+  campaignId: string;
+  name: string;
+  state: string;
+  stage: "pre_event" | "post_event";
+}
+
+export interface SalesEvent {
+  id: string;
+  name: string;
+  eventType: SalesEventType;
+  startAt: string;
+  endAt: string;
+  timezone: string;
+  locationName: string | null;
+  city: string | null;
+  country: string | null;
+  eventUrl: string | null;
+  organiser: string | null;
+  description: string | null;
+  goalType: SalesEventGoal | null;
+  goalDetail: string | null;
+  sourceType: "manual";
+  state: SalesEventState;
+  ownerUserId: string;
+  readOnly: boolean;
+  prospectEnrichmentAvailable: boolean;
+  summary: SalesEventSummary;
+  campaigns: EventCampaignLinkSummary[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SalesEventList {
+  items: SalesEvent[];
+  total: number;
+  canCreate: boolean;
+  readOnly: boolean;
+  maxActiveEvents: number;
+}
+
+export interface EventImportColumn {
+  sourceColumn: string;
+  mappedField: string | null;
+  reason: string | null;
+}
+
+export interface EventImportIssue {
+  code: string;
+  count: number;
+  rows: number[];
+  message: string;
+}
+
+export interface EventImportPreview {
+  id: string;
+  eventId: string;
+  fileName: string;
+  fileSizeBytes: number;
+  rowCount: number;
+  validRowCount: number;
+  recognised: EventImportColumn[];
+  ignored: EventImportColumn[];
+  issues: EventImportIssue[];
+  previewRows: Array<{
+    sourceRow: number;
+    firstName: string | null;
+    lastName: string | null;
+    companyName: string | null;
+    jobTitle: string | null;
+    businessEmail: string | null;
+  }>;
+  expiresAt: string;
+  alreadyImported: boolean;
+  authorityStatement: string;
+  permissionNotice: string;
+}
+
+export interface EventAttendee {
+  id: string;
+  eventId: string;
+  firstName: string | null;
+  lastName: string | null;
+  displayName: string;
+  companyName: string | null;
+  jobTitle: string | null;
+  businessEmail: string | null;
+  emailTrustState: "provider_supplied" | "unknown";
+  permissionStatus: "not_assessed";
+  countryOrLocation: string | null;
+  profileUrl: string | null;
+  companyDomain: string | null;
+  registrationCategory: string | null;
+  matchState:
+    | "matched_contact"
+    | "matched_prospect_person"
+    | "matched_company"
+    | "possible_match"
+    | "unmatched";
+  priorityState:
+    | "priority_to_meet"
+    | "worth_meeting"
+    | "context_only"
+    | "needs_more_information";
+  priorityReasons: string[];
+  contactId: string | null;
+  companyId: string | null;
+  prospectPersonId: string | null;
+  activeOpportunityId: string | null;
+  planState: EventPlanState;
+  meetingArranged: boolean;
+  plannedByTeammateCount: number;
+  encounterId: string | null;
+  interactionId: string | null;
+  sellerNote: string | null;
+  canResearch: boolean;
+  createdAt: string;
+}
+
+export interface EventAttendeeList {
+  items: EventAttendee[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

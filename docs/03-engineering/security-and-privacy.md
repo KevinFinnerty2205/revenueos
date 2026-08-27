@@ -1,5 +1,15 @@
 # Security and privacy
 
+## Engage Events
+
+WO-031 accepts deliberately selected UTF-8 CSV only after a versioned authority
+attestation. Approved business fields, strict parser/size caps, one-hour preview,
+strong-identity-only matching, explicit Contact promotion and canonical-Contact-only
+outreach prevent overcollection and bulk-send bypass. Six tenant tables use composite
+keys, explicit predicates and forced PostgreSQL RLS. Logs are metadata-only. Event
+attendance is not consent, Evidence or buying intent. See the
+[Event security review](event-security-privacy-abuse.md).
+
 ## Engage Campaigns & Sequences
 
 WO-030 accepts only one to 50 canonical Contact IDs and one to four ordered steps.
@@ -52,8 +62,9 @@ controlled priority type, counts, source availability and a partial flag. See th
 
 - Organisation-owned queries include explicit organisation predicates.
 - PostgreSQL RLS policies use transaction-local trusted organisation context.
-- Companies, contacts, opportunities, tasks, Engage Campaign/version/sequence/
-  audience/enrolment/step records, meetings, participants,
+- Companies, contacts, opportunities, tasks, Engage Event/import/attendee/user-state/
+  encounter/Campaign-link records, Engage Campaign/version/sequence/audience/
+  enrolment/step records, meetings, participants,
   transcripts, meeting audit events, AI jobs, AI artefacts, Revenue Brain
   snapshots, Revenue Brain insights and all seven private-beta control tables
   have non-null organisation ownership and forced RLS.

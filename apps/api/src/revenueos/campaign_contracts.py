@@ -41,7 +41,9 @@ class CampaignDraftFields(StrictCampaignModel):
     name: CampaignName
     purpose: CampaignPurpose
     approval_mode: CampaignApprovalMode = CampaignApprovalMode.REVIEW_EACH_SEND
-    source_type: Literal["manual_contacts", "target_market"] = "manual_contacts"
+    source_type: Literal["manual_contacts", "target_market", "event_attendees"] = "manual_contacts"
+    event_id: UUID | None = None
+    event_stage: Literal["pre_event", "post_event"] | None = None
     sender_timezone: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] = (
         "Australia/Sydney"
     )
@@ -69,6 +71,11 @@ class CampaignDraftFields(StrictCampaignModel):
         ]
         if final_positions and final_positions != [len(self.steps) - 1]:
             raise ValueError("Final follow-up may appear only as the last step.")
+        if self.source_type == "event_attendees":
+            if self.event_id is None or self.event_stage is None:
+                raise ValueError("Event attendee campaigns require an Event and a pre- or post-Event stage.")
+        elif self.event_id is not None or self.event_stage is not None:
+            raise ValueError("Event context is only accepted for an Event attendee campaign.")
         return self
 
 
@@ -162,7 +169,9 @@ class CampaignResponse(APIModel):
     approval_mode: CampaignApprovalMode
     owner_user_id: UUID
     sender_user_id: UUID
-    source_type: Literal["manual_contacts", "target_market"]
+    source_type: Literal["manual_contacts", "target_market", "event_attendees"]
+    event_id: UUID | None = None
+    event_stage: Literal["pre_event", "post_event"] | None = None
     sender_timezone: str
     send_days: list[int]
     send_window_start_minutes: int

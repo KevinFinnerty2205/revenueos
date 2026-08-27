@@ -64,6 +64,11 @@ implemented: production rejects Mock Email and therefore Campaign sending must r
 disabled/fail closed. Disabling Engage or Campaign availability halts unsent work;
 history remains available under retention policy.
 
+WO-031 adds `API_FEATURE_ENGAGE_EVENTS_ENABLED`. Keep it disabled in production until
+the target `0040_event_intelligence` migration, all six forced-RLS policies, import
+authority/privacy review, retention/export and 5 MB/500-row/five-import/50-Event caps
+are verified. No Event provider credential is required or supported.
+
 ## Release order
 
 1. Build and scan one immutable release.
@@ -172,6 +177,13 @@ mailbox provider, sender authority, compliance and operational rollout are separ
 approved. Rollback first disables Engage Campaigns and drains/cancels unsent work;
 prefer retaining the forward schema because downgrading to
 `0038_personalized_outreach` permanently removes Campaign definitions and history.
+
+WO-031 advances the single head to `0040_event_intelligence`. Deploy API and web
+together; verify Event constraints, all six forced-RLS tables, Interaction nullable
+link, downgrade/re-upgrade, SQLite immutability-trigger restoration and no drift.
+Rollback first disables Events; prefer the forward schema because downgrade deletes
+Event-local history after normalising Event source values. Canonical Contacts,
+Interactions and Campaigns are outside that cascade.
 
 Rollback first disables HubSpot and Action Execution. Existing external updates
 cannot be undone by RevenueOS. Disconnect/revoke tenant connections before retiring

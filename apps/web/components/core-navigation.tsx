@@ -35,6 +35,10 @@ const mobileItems = [
   { href: "/assistant", label: "Search" },
 ] as const;
 
+interface BetaCapabilities {
+  featureFlags: Record<string, boolean>;
+}
+
 function isActive(pathname: string | null, href: string) {
   if (href.includes("#")) return false;
   const path = href.split("#", 1)[0];
@@ -49,6 +53,7 @@ export function CoreNavigation() {
   const pathname = usePathname();
   const [prospectEnabled, setProspectEnabled] = useState(false);
   const [engageEnabled, setEngageEnabled] = useState(false);
+  const [eventsEnabled, setEventsEnabled] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,13 +67,24 @@ export function CoreNavigation() {
     })
       .then((availability) => setEngageEnabled(availability.enabled))
       .catch(() => setEngageEnabled(false));
+    apiRequest<BetaCapabilities>("/api/v1/beta/capabilities", {
+      signal: controller.signal,
+    })
+      .then((capabilities) =>
+        setEventsEnabled(capabilities.featureFlags.engageEvents === true),
+      )
+      .catch(() => setEventsEnabled(false));
     return () => controller.abort();
   }, []);
 
   const sellGroup = {
     ...desktopGroups[1],
     items: engageEnabled
-      ? [...desktopGroups[1].items, { href: "/campaigns", label: "Campaigns" }]
+      ? [
+          ...desktopGroups[1].items,
+          { href: "/campaigns", label: "Campaigns" },
+          ...(eventsEnabled ? [{ href: "/events", label: "Events" }] : []),
+        ]
       : desktopGroups[1].items,
   };
   const baseGroups = [desktopGroups[0], sellGroup, desktopGroups[2]];

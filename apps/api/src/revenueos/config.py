@@ -116,6 +116,9 @@ class Settings(BaseSettings):
     private_beta_max_campaign_drafts_per_day: int = Field(default=100, ge=1, le=500)
     campaign_draft_preparation_hours: int = Field(default=24, ge=1, le=72)
     campaign_recipient_spacing_minutes: int = Field(default=5, ge=1, le=60)
+    private_beta_max_active_events_per_organisation: int = Field(default=50, ge=1, le=100)
+    private_beta_max_event_attendees: int = Field(default=500, ge=1, le=1_000)
+    private_beta_max_event_imports_per_day: int = Field(default=5, ge=1, le=20)
     private_beta_max_action_generations_per_day: int = Field(default=100, ge=1, le=5_000)
     private_beta_max_email_executions_per_day: int = Field(default=50, ge=1, le=5_000)
     private_beta_max_calendar_executions_per_day: int = Field(default=25, ge=1, le=2_000)
@@ -175,6 +178,7 @@ class Settings(BaseSettings):
     feature_prospect_enabled: bool = True
     feature_engage_enabled: bool = True
     feature_engage_campaigns_enabled: bool = True
+    feature_engage_events_enabled: bool = False
     outreach_suppression_hmac_key: SecretStr = Field(
         default=SecretStr("local-development-outreach-suppression-key"),
         min_length=24,
@@ -498,6 +502,7 @@ class Settings(BaseSettings):
             "prospect": self.feature_prospect_enabled,
             "engage": self.feature_engage_enabled,
             "engageCampaigns": self.feature_engage_campaigns_enabled,
+            "engageEvents": self.feature_engage_events_enabled,
         }
 
 

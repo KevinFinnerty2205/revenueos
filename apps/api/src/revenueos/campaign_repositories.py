@@ -18,8 +18,11 @@ from revenueos.models import (
     EngageCampaignVersion,
     EngageEnrollmentStep,
     EngageSequenceStep,
+    EventAttendee,
+    EventCampaignLink,
     IntegrationConnection,
     OutreachMessage,
+    SalesEvent,
 )
 
 
@@ -115,6 +118,48 @@ class CampaignRepository:
             .order_by(Contact.first_name, Contact.last_name, Contact.id)
         )
         return list(values.all())
+
+    async def event_accepts_contacts(self, organisation_id: UUID, event_id: UUID, contact_ids: list[UUID]) -> bool:
+        event_exists = int(
+            await self.session.scalar(
+                select(func.count())
+                .select_from(SalesEvent)
+                .where(SalesEvent.organisation_id == organisation_id, SalesEvent.id == event_id)
+            )
+            or 0
+        )
+        if event_exists != 1:
+            return False
+        linked_count = int(
+            await self.session.scalar(
+                select(func.count(func.distinct(EventAttendee.contact_id))).where(
+                    EventAttendee.organisation_id == organisation_id,
+                    EventAttendee.event_id == event_id,
+                    EventAttendee.contact_id.in_(contact_ids),
+                )
+            )
+            or 0
+        )
+        return linked_count == len(contact_ids)
+
+    async def event_campaign_link(self, organisation_id: UUID, campaign_id: UUID) -> EventCampaignLink | None:
+        return cast(
+            EventCampaignLink | None,
+            await self.session.scalar(
+                select(EventCampaignLink).where(
+                    EventCampaignLink.organisation_id == organisation_id,
+                    EventCampaignLink.campaign_id == campaign_id,
+                )
+            ),
+        )
+
+    async def delete_event_campaign_link(self, organisation_id: UUID, campaign_id: UUID) -> None:
+        await self.session.execute(
+            delete(EventCampaignLink).where(
+                EventCampaignLink.organisation_id == organisation_id,
+                EventCampaignLink.campaign_id == campaign_id,
+            )
+        )
 
     async def enrollments(self, organisation_id: UUID, campaign_id: UUID) -> list[EngageCampaignEnrollment]:
         values = await self.session.scalars(

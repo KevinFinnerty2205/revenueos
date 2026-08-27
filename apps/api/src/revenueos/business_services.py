@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from sqlalchemy import and_, delete, select, update
+from sqlalchemy import and_, case, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ from revenueos.models import (
     EngageCampaignAudience,
     EngageCampaignEnrollment,
     EngageEnrollmentStep,
+    EventAttendee,
     Evidence,
     MethodologyProjection,
     MethodologyReview,
@@ -270,6 +271,21 @@ class BusinessService:
                 ProspectPerson.promoted_contact_id == contact.id,
             )
             .values(promoted_contact_id=None, promoted_by_user_id=None, promoted_at=None)
+        )
+        await self.repository.session.execute(
+            update(EventAttendee)
+            .where(
+                EventAttendee.organisation_id == organisation_id,
+                EventAttendee.contact_id == contact.id,
+            )
+            .values(
+                contact_id=None,
+                match_state=case(
+                    (EventAttendee.prospect_person_id.is_not(None), "matched_prospect_person"),
+                    (EventAttendee.company_id.is_not(None), "matched_company"),
+                    else_="unmatched",
+                ),
+            )
         )
         await self._delete(contact, "contact")
 

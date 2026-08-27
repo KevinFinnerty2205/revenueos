@@ -162,6 +162,14 @@ Gmail/Microsoft production sending and automatic reply detection remain deferred
 See [Personalised one-to-one outreach](personalised-outreach.md) and
 [Campaigns & Sequences](campaigns-and-sequences.md).
 
+WO-031 implements manual business Events under Engage: authorised bounded CSV
+attendee import, conservative relationship matching, explainable categorical
+priority, per-user planning, seller-reported encounters, explicit Contact promotion,
+existing Companion capture and truthful WO-029/WO-030 handoff. EventAttendee remains
+separate from Contact; attendance is neither contact permission nor customer Evidence,
+buying intent, Methodology state or Revenue Brain truth. See
+[Events](event-intelligence.md).
+
 ## Product boundaries
 
 RevenueOS owns:

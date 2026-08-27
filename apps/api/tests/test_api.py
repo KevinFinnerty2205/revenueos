@@ -124,6 +124,10 @@ def test_production_engage_requires_deployment_suppression_key() -> None:
         )
 
 
+def test_event_intelligence_rollout_defaults_off() -> None:
+    assert Settings().feature_engage_events_enabled is False
+
+
 def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
     response = client.get("/openapi.json")
 
@@ -212,6 +216,17 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/api/v1/engage/enrollments/{enrollment_id}",
         "/api/v1/engage/enrollments/{enrollment_id}/stop",
         "/api/v1/engage/enrollments/{enrollment_id}/outcome",
+        "/api/v1/engage/events",
+        "/api/v1/engage/events/{event_id}",
+        "/api/v1/engage/events/{event_id}/attendee-imports/preview",
+        "/api/v1/engage/events/{event_id}/attendee-imports/{import_id}",
+        "/api/v1/engage/events/{event_id}/attendee-imports/{import_id}/confirm",
+        "/api/v1/engage/events/{event_id}/attendees",
+        "/api/v1/engage/events/{event_id}/attendees/{attendee_id}",
+        "/api/v1/engage/events/{event_id}/attendees/{attendee_id}/plan",
+        "/api/v1/engage/events/{event_id}/attendees/{attendee_id}/encounter",
+        "/api/v1/engage/events/{event_id}/attendees/{attendee_id}/promote",
+        "/api/v1/engage/events/{event_id}/attendees/{attendee_id}/outreach",
         "/api/v1/companies",
         "/api/v1/companies/{company_id}",
         "/api/v1/contacts",
