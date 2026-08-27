@@ -1,8 +1,8 @@
 # End-to-end Sales Platform roadmap
 
-- **Status:** Revised by Checkpoint 1B; WO-026 is the recommended next work order but
+- **Status:** Revised by Checkpoint 2; WO-032 is the recommended next work order but
   still requires separate authorisation
-- **Baseline:** WO-024–025C and the Checkpoint 1B Core readiness review are complete
+- **Baseline:** WO-024–031 and the Checkpoint 2 Prospect/Engage review are complete
 - **Decision rule:** Validate each loop before funding the next layer
 
 Checkpoint 1 selected **Option 2**: Core design-partner readiness, Ask RevenueOS and
@@ -11,6 +11,10 @@ one selected production CRM path must precede WO-026. See the
 [roadmap adjustments](core-roadmap-adjustments-after-checkpoint-1.md). Checkpoint 1B
 subsequently recorded a [GO decision for WO-026](checkpoint-1b-core-readiness.md),
 subject to a separate work-order approval and target-environment launch gates.
+Checkpoint 2 records a
+[GO decision for WO-032](checkpoint-2-prospect-engage-validation.md): Prospect and
+Engage remain in the roadmap, while production research and mailbox capability stay
+separate real-use gates.
 
 ## Outcome and sequencing principles
 
@@ -377,11 +381,25 @@ absent. See the [WO-031 record](../07-sprints/wo-031-event-intelligence.md).
 
 ## Checkpoint 2 — Top-of-funnel validation
 
-Review Prospect and Engage separately and together. Decide **keep, modify, defer or
-remove** using source trust/correction, target-list usefulness, qualified Opportunity
-creation, legitimate response, opt-out/complaint, provider cost and support burden.
-Stop or narrow Engage if safe human control degrades at campaign scale. Do not make
-Create or CRM dependent on purchasing Prospect/Engage.
+**Decision recorded 27 August 2026:** **GO** to plan WO-032. Prospect and Engage are
+coherent and safe enough to keep; neither needs another foundational work order before
+Create. See the full
+[Checkpoint 2 decision](checkpoint-2-prospect-engage-validation.md),
+[product readiness review](../01-product/prospect-engage-readiness.md),
+[simplicity review](../02-design/prospect-engage-simplicity-review.md) and
+[foundation review](../03-engineering/prospect-engage-foundation-review.md).
+
+Create can proceed without a production Prospect or mailbox provider because it
+depends on the existing source-class, canonical relationship and Evidence boundaries.
+Real provider-backed Prospect use still requires one approved provider and
+coverage/quality/cost evidence. External Engage use still requires one named-partner-
+selected Gmail or Microsoft mailbox slice with seller-bound OAuth, exact send,
+reconciliation, unsubscribe/suppression and bounce/complaint operations. Keep
+review-each-send for the first live cohort; bounded auto-send remains default-off.
+
+These provider and target-environment gates run independently of WO-032 and do not
+authorise production customer-data use. Create and CRM must remain useful without
+purchasing Prospect or Engage.
 
 ## Stage C — Convert, manage and understand revenue
 
@@ -389,8 +407,10 @@ Create or CRM dependent on purchasing Prospect/Engage.
 
 - **Objective/value/package:** Generate evidence-grounded presentations and proposals
   inside approved organisation templates and content. **Create**.
-- **Dependencies/checkpoint:** Checkpoint 2, Revenue Brain Evidence, Workspace file
-  policy, secure object storage/processing decision and entitlement contract.
+- **Dependencies/checkpoint:** Checkpoint 2 GO, Revenue Brain Evidence, Workspace file
+  policy, secure object storage/processing decision, entitlement contract and a
+  source-class manifest that keeps public Prospect research, seller/Event context,
+  approved organisation content and customer-direct Evidence distinct.
 - **Experience:** Guided Create → type → Opportunity → purpose → audience → template →
   review; version history, source inspection and accessible previews.
 - **Domain/data:** Template/version, layout, brand rules, approved content item,
@@ -615,6 +635,14 @@ WO-040 and WO-041 are discovery competitors as well as roadmap items. Implement 
 first ecosystem demanded by validated customers; the other may follow only when its
 incremental reach justifies duplicate provider/security/operations work.
 
+Checkpoint 2 makes the first ecosystem's smallest safe Engage delivery slice a gate
+before external Engage design-partner sending, but not before WO-032. The slice must
+include seller-bound OAuth, exact mailbox identity and send, provider receipt/unknown
+state, reconciliation, revoke/re-auth, unsubscribe/suppression intake and bounce/
+complaint operations. Add least-privilege reply detection with that selected provider
+when safe; do not add open/click tracking. The broader Daily, Interaction and calendar
+scope remains conditional on customer evidence.
+
 ### WO-040 — Microsoft 365
 
 - **Objective/value/package:** Connect the first validated Microsoft ecosystem data and
@@ -827,10 +855,14 @@ code, contracts, schema, UI states, documentation, security behaviour, observabi
 and validation agree. This roadmap should be updated when evidence changes; preserving
 the numbering is less important than preserving trust and simplicity.
 
-## Implementation checkpoint — Checkpoint 1B
+## Implementation checkpoint — Checkpoint 2
 
-The Sales Methodology Engine, RevenueOS Daily, Core experience readiness, Ask
-RevenueOS and HubSpot-first Focused CRM Sync are implemented. Checkpoint 1B records a
-GO recommendation for WO-026 with no further Core work order inserted. WO-026 still
-requires its own approval; WO-027–045, production customer-data use and design-partner
-launch remain unauthorised by this roadmap.
+WO-026 Account Research, WO-027 Prospect Person Intelligence, WO-028 Target Market
+Intelligence, WO-029 Personalised Outreach, WO-030 Campaigns & Sequences and WO-031
+Events are implemented with deterministic mock providers and production fail-closed
+external effects. Checkpoint 2 records a GO recommendation for WO-032 with no further
+Prospect/Engage foundation work order inserted.
+
+WO-032 still requires its own approval. Production provider activation, customer-data
+use, external Engage sending, auto-send, design-partner launch and WO-033–045 remain
+unauthorised by this roadmap.
