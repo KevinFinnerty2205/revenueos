@@ -1,6 +1,6 @@
 # Sales OS module entitlement architecture
 
-- **Status:** Prospect and Engage use bounded organisation switches; the wider commercial model remains proposed
+- **Status:** Prospect, Engage and Create use bounded organisation switches; the wider commercial model remains proposed
 - **Principle:** Core remains coherent; module discovery is contextual and restrained
 
 ## Package model
@@ -14,7 +14,7 @@ future decisions.
 
 Current availability is intentionally smaller than the target equation below. The
 server combines the relevant global feature flag, active tenant/membership and
-organisation `prospect` or `engage` entitlement. Engage additionally requires
+organisation `prospect`, `engage` or `create` entitlement. Engage additionally requires
 configured policy and sender capability for mutations; Campaign execution is
 non-production Mock Email only. Only admins can change organisation switches. There
 is no billing, plan catalogue, trial or grace-period model yet.
@@ -47,7 +47,7 @@ Only authorised billing administrators receive commercial detail.
 | `UsageCounter`                   | Idempotent, period-scoped metered consumption where justified |
 | `AvailabilityProjection`         | Safe response for a user/context with reason and next step    |
 
-Except for bounded `organisation_module_entitlements` Prospect/Engage rows and usage
+Except for bounded `organisation_module_entitlements` Prospect/Engage/Create rows and usage
 counters added by current work, these are future concepts. Plan mappings are versioned and
 centralised; page code must never contain price or package rules. Tenant-owned state,
 counts and keys include organisation scope.
@@ -61,6 +61,14 @@ WO-031 Events uses the same `engage` entitlement plus the server-authoritative
 read-only/exportable but blocks create, import, plan, encounter, promotion and
 outreach. Prospect entitlement only controls the optional explicit research link; an
 Engage-only seller can still import, plan and capture Event context.
+
+WO-032 Create requires both `API_FEATURE_CREATE_ENABLED` and the tenant `create`
+entitlement at every template, presentation, review, approval and download boundary.
+Only administrators may change the entitlement or manage/approve templates; ordinary
+members may use approved versions. A downgrade immediately blocks Create reads and
+mutations while retained objects remain covered by export and organisation deletion.
+The current source is manual private-beta administration; there is no billing, trial,
+price or grace-period implementation.
 
 ## Server and client contract
 

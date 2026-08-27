@@ -195,6 +195,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "prospect_candidate_reasons",
         "prospect_target_feedback",
         "contact_field_sources",
+        "create_usage_counters",
+        "create_templates",
+        "create_template_versions",
+        "create_template_slides",
+        "create_approved_content_items",
+        "create_presentations",
+        "create_presentation_versions",
     )
     tenant_a = {
         "suffix": "A",
@@ -375,6 +382,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "event_user_state_id": uuid.uuid4(),
                 "event_encounter_id": uuid.uuid4(),
                 "event_campaign_link_id": uuid.uuid4(),
+                "create_template_id": uuid.uuid4(),
+                "create_template_version_id": uuid.uuid4(),
+                "create_template_slide_id": uuid.uuid4(),
+                "create_content_item_id": uuid.uuid4(),
+                "create_presentation_id": uuid.uuid4(),
+                "create_presentation_version_id": uuid.uuid4(),
             }
         )
 
@@ -814,6 +827,170 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_usage_counters
+                                (organisation_id, usage_date, scope_key,
+                                 generation_count)
+                            VALUES
+                                (:organisation_id, current_date,
+                                 'organisation', 1)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_templates
+                                (id, organisation_id, name, state,
+                                 created_by_user_id)
+                            VALUES
+                                (:create_template_id, :organisation_id,
+                                 :template_name, 'active', :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "template_name": f"RLS Create Template {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_template_versions
+                                (id, organisation_id, template_id, version,
+                                 uploaded_by_user_id, processing_state,
+                                 approval_state, display_filename, storage_key,
+                                 storage_status, mime_type, byte_size,
+                                 checksum_sha256, slide_count,
+                                 authority_attested_by_user_id,
+                                 authority_attested_at, processed_at,
+                                 approved_by_user_id, approved_at)
+                            VALUES
+                                (:create_template_version_id, :organisation_id,
+                                 :create_template_id, 1, :user_id, 'ready',
+                                 'approved', :display_filename, :storage_key,
+                                 'available',
+                                 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                                 1, :checksum_sha256, 1, :user_id, now(), now(),
+                                 :user_id, now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "display_filename": f"rls-create-{suffix.lower()}.pptx",
+                            "storage_key": (
+                                f"create/{tenant['organisation_id']}/templates/"
+                                f"{tenant['create_template_version_id']}.pptx"
+                            ),
+                            "checksum_sha256": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_template_slides
+                                (id, organisation_id, template_id,
+                                 template_version_id, slide_number, title,
+                                 category, reuse_state, modification_policy,
+                                 customer_safe, required, exact_text_required,
+                                 hidden, text_blocks_json,
+                                 placeholder_mappings_json,
+                                 reviewed_by_user_id, reviewed_at)
+                            VALUES
+                                (:create_template_slide_id, :organisation_id,
+                                 :create_template_id,
+                                 :create_template_version_id, 1,
+                                 'Approved RLS slide', 'title', 'approved',
+                                 'locked', true, true, true, false,
+                                 '[{"text":"Approved synthetic content"}]'::json,
+                                 '{}'::json, :user_id, now())
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_approved_content_items
+                                (id, organisation_id, template_id,
+                                 template_version_id, slide_id, content_type,
+                                 title, approved_text, status,
+                                 modification_policy, customer_safe,
+                                 exact_text_required, approved_by_user_id,
+                                 approved_at)
+                            VALUES
+                                (:create_content_item_id, :organisation_id,
+                                 :create_template_id,
+                                 :create_template_version_id,
+                                 :create_template_slide_id, 'slide_text',
+                                 'Approved RLS slide',
+                                 'Approved synthetic content', 'approved',
+                                 'locked', true, true, :user_id, now())
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_presentations
+                                (id, organisation_id, account_id,
+                                 opportunity_id, template_id,
+                                 template_version_id, created_by_user_id,
+                                 title, objective, audience_json, state,
+                                 review_state, plan_json,
+                                 source_context_fingerprint, idempotency_key)
+                            VALUES
+                                (:create_presentation_id, :organisation_id,
+                                 :company_id, :opportunity_id,
+                                 :create_template_id,
+                                 :create_template_version_id, :user_id,
+                                 :presentation_title, 'introductory_meeting',
+                                 '[]'::json, 'needs_review', 'pending',
+                                 '[]'::json, :source_fingerprint,
+                                 :presentation_idempotency_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "presentation_title": f"RLS Create Presentation {suffix}",
+                            "source_fingerprint": suffix.lower() * 64,
+                            "presentation_idempotency_key": f"rls-create-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_presentation_versions
+                                (id, organisation_id, presentation_id,
+                                 template_id, template_version_id, version,
+                                 created_by_user_id, state, review_state,
+                                 plan_snapshot_json, audience_snapshot_json,
+                                 source_context_json,
+                                 source_context_fingerprint,
+                                 generated_content_json, claim_manifest_json,
+                                 warning_codes_json, idempotency_key,
+                                 storage_status)
+                            VALUES
+                                (:create_presentation_version_id,
+                                 :organisation_id, :create_presentation_id,
+                                 :create_template_id,
+                                 :create_template_version_id, 1, :user_id,
+                                 'needs_review', 'pending', '[]'::json,
+                                 '[]'::json, '{}'::json, :source_fingerprint,
+                                 '[]'::json, '[]'::json, '[]'::json,
+                                 :version_idempotency_key, 'pending')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "source_fingerprint": suffix.lower() * 64,
+                            "version_idempotency_key": f"rls-create-version-{suffix.lower()}",
+                        },
                     )
                     await connection.execute(
                         text(
@@ -2487,7 +2664,14 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'prospect_discovery_candidates',
                                     'prospect_candidate_reasons',
                                     'prospect_target_feedback',
-                                    'contact_field_sources'
+                                    'contact_field_sources',
+                                    'create_usage_counters',
+                                    'create_templates',
+                                    'create_template_versions',
+                                    'create_template_slides',
+                                    'create_approved_content_items',
+                                    'create_presentations',
+                                    'create_presentation_versions'
                                 )
                                 """
                             )
@@ -2635,6 +2819,36 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["ai_artifact_id"]},
                 )
                 assert artifact_update.rowcount == 0
+                create_template_update = await connection.execute(
+                    text("UPDATE create_templates SET name = 'Blocked' WHERE id = :id"),
+                    {"id": tenant_b["create_template_id"]},
+                )
+                assert create_template_update.rowcount == 0
+                create_presentation_delete = await connection.execute(
+                    text("DELETE FROM create_presentations WHERE id = :id"),
+                    {"id": tenant_b["create_presentation_id"]},
+                )
+                assert create_presentation_delete.rowcount == 0
+                create_insert_savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_templates
+                                (id, organisation_id, name, state,
+                                 created_by_user_id)
+                            VALUES
+                                (:id, :organisation_id, 'Forged Create template',
+                                 'active', :created_by_user_id)
+                            """
+                        ),
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "created_by_user_id": tenant_b["user_id"],
+                        },
+                    )
+                await create_insert_savepoint.rollback()
                 brief_update = await connection.execute(
                     text("UPDATE pre_interaction_briefs SET status = 'failed' WHERE id = :id"),
                     {"id": tenant_b["brief_id"]},
@@ -2980,6 +3194,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "create_presentation_versions",
+                    "create_presentations",
+                    "create_approved_content_items",
+                    "create_template_slides",
+                    "create_template_versions",
+                    "create_templates",
+                    "create_usage_counters",
                     "event_campaign_links",
                     "event_encounters",
                     "event_attendee_user_states",

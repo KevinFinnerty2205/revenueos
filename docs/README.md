@@ -73,6 +73,14 @@ This is the canonical product and engineering documentation index. Documents dis
 67. [Prospect and Engage product readiness](01-product/prospect-engage-readiness.md)
 68. [Prospect and Engage simplicity review](02-design/prospect-engage-simplicity-review.md)
 69. [Prospect and Engage foundation review](03-engineering/prospect-engage-foundation-review.md)
+70. [RevenueOS Create](01-product/revenueos-create.md) — current WO-032 presentation boundary
+71. [Create presentation experience](02-design/create-presentation-proposal-experience.md)
+72. [Create template architecture](03-engineering/presentation-proposal-template-architecture.md)
+73. [Create security review](03-engineering/create-security-privacy-review.md)
+74. [Create operator runbook](03-engineering/create-operator-runbook.md)
+75. [ADR 0048: Approved-template-driven Create](08-decisions/0048-approved-template-driven-create.md)
+76. [ADR 0049: Customer-safe Create context](08-decisions/0049-customer-safe-create-context.md)
+77. [ADR 0050: Deterministic PPTX rendering](08-decisions/0050-deterministic-pptx-rendering.md)
 
 ## 00 — Company
 
@@ -320,6 +328,10 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Event attendee import, matching and prioritisation](03-engineering/event-attendee-import-and-matching.md)
 - [Event encounters, outreach and Campaign integration](03-engineering/event-interaction-outreach-campaign.md)
 - [Event security, privacy, retention and abuse review](03-engineering/event-security-privacy-abuse.md)
+- [Create presentation and template architecture](03-engineering/presentation-proposal-template-architecture.md)
+- [Create security, privacy and abuse review](03-engineering/create-security-privacy-review.md)
+- [Create retention, export, deletion and reconciliation](03-engineering/create-retention-export-deletion.md)
+- [Create operator runbook](03-engineering/create-operator-runbook.md)
 
 ### Target through beta
 
@@ -444,6 +456,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-030: Campaigns & Sequences](07-sprints/wo-030-campaigns-and-sequences.md)
 - [WO-031: Event Intelligence](07-sprints/wo-031-event-intelligence.md)
 - [Checkpoint 2: Prospect and Engage validation](07-sprints/checkpoint-2-prospect-engage-validation.md)
+- [WO-032: RevenueOS Create Sales Content Studio](07-sprints/wo-032-sales-content-studio.md)
 
 ## 08 — Decision records
 
@@ -494,10 +507,13 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0045: Explicit immutable Campaign audience snapshot](08-decisions/0045-explicit-immutable-campaign-audience-snapshot.md)
 - [ADR 0046: Defer Campaign reply detection](08-decisions/0046-defer-campaign-reply-detection.md)
 - [ADR 0047: Separate Event attendee, encounter and contactability](08-decisions/0047-separate-event-attendee-encounter-and-contactability.md)
+- [ADR 0048: Approved-template-driven Create](08-decisions/0048-approved-template-driven-create.md)
+- [ADR 0049: Typed customer-safe Create context](08-decisions/0049-customer-safe-create-context.md)
+- [ADR 0050: Deterministic in-process PPTX rendering](08-decisions/0050-deterministic-pptx-rendering.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031/032 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
 implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026/027/028 now
@@ -505,7 +521,8 @@ provide mock-backed company/person research and Target Market discovery. WO-029 
 one-to-one Engage outreach with deterministic non-production email simulation.
 WO-030 adds bounded canonical-Contact Campaigns and sequences using the same Mock
 Email boundary; production mailbox sending and reply detection remain deferred.
-WO-031 adds manual authorised-list Event workflows. WO-032–045 remain unauthorised.
+WO-031 adds manual authorised-list Event workflows. WO-032 adds the separately
+entitled, approved-template Create presentation slice. WO-033–045 remain unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

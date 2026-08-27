@@ -11,6 +11,9 @@ vi.mock("@/components/sales-methodology-settings", () => ({
 vi.mock("@/components/prospect-module-settings", () => ({
   ProspectModuleSettings: () => <section>Prospect controls</section>,
 }));
+vi.mock("@/components/create-module-settings", () => ({
+  CreateModuleSettings: () => <section>Create controls</section>,
+}));
 
 function me(role: "admin" | "member") {
   return {
@@ -72,6 +75,7 @@ describe("SettingsExperience", () => {
     render(<SettingsExperience />);
     expect(await screen.findByText("Methodology controls")).toBeVisible();
     expect(screen.getByText("Prospect controls")).toBeVisible();
+    expect(screen.getByText("Create controls")).toBeVisible();
     expect(screen.getByText("Administrator controls")).toBeVisible();
   });
 });

@@ -90,6 +90,32 @@ class Settings(BaseSettings):
         ge=1_000_000,
         le=20_000_000_000,
     )
+    private_beta_max_pptx_bytes: int = Field(default=50_000_000, ge=100_000, le=100_000_000)
+    private_beta_max_pptx_slides: int = Field(default=100, ge=1, le=200)
+    private_beta_max_pptx_zip_entries: int = Field(default=2_000, ge=10, le=10_000)
+    private_beta_max_pptx_expanded_bytes: int = Field(
+        default=250_000_000,
+        ge=1_000_000,
+        le=1_000_000_000,
+    )
+    private_beta_max_pptx_media_assets: int = Field(default=500, ge=0, le=1_000)
+    private_beta_max_pptx_media_bytes: int = Field(default=10_000_000, ge=1_000, le=50_000_000)
+    private_beta_max_pptx_xml_bytes: int = Field(default=5_000_000, ge=10_000, le=25_000_000)
+    private_beta_max_pptx_extracted_characters: int = Field(
+        default=250_000,
+        ge=1_000,
+        le=1_000_000,
+    )
+    private_beta_max_create_templates: int = Field(default=20, ge=1, le=100)
+    private_beta_max_create_template_versions: int = Field(default=20, ge=1, le=100)
+    private_beta_max_create_presentations_per_user_per_day: int = Field(default=10, ge=1, le=100)
+    private_beta_max_create_presentations_per_organisation_per_day: int = Field(
+        default=50,
+        ge=1,
+        le=1_000,
+    )
+    private_beta_max_create_slides: int = Field(default=30, ge=1, le=30)
+    private_beta_create_processing_retries: int = Field(default=3, ge=1, le=3)
     private_beta_max_email_analyses_per_day: int = Field(default=50, ge=1, le=2_000)
     private_beta_max_ask_questions_per_user_per_day: int = Field(default=75, ge=1, le=1_000)
     private_beta_max_ask_questions_per_organisation_per_day: int = Field(default=500, ge=1, le=10_000)
@@ -179,6 +205,7 @@ class Settings(BaseSettings):
     feature_engage_enabled: bool = True
     feature_engage_campaigns_enabled: bool = True
     feature_engage_events_enabled: bool = False
+    feature_create_enabled: bool = True
     outreach_suppression_hmac_key: SecretStr = Field(
         default=SecretStr("local-development-outreach-suppression-key"),
         min_length=24,
@@ -379,6 +406,7 @@ class Settings(BaseSettings):
             self.feature_visual_evidence_enabled
             or self.feature_recording_capture_enabled
             or self.feature_document_evidence_enabled
+            or self.feature_create_enabled
         ):
             if self.visual_storage_backend != "s3_compatible":
                 raise ValueError("Production binary evidence requires private S3-compatible object storage.")
@@ -503,6 +531,7 @@ class Settings(BaseSettings):
             "engage": self.feature_engage_enabled,
             "engageCampaigns": self.feature_engage_campaigns_enabled,
             "engageEvents": self.feature_engage_events_enabled,
+            "create": self.feature_create_enabled,
         }
 
 

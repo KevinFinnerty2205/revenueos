@@ -29,6 +29,7 @@ from revenueos.routes import (
     campaigns,
     companies,
     contacts,
+    create,
     daily,
     events,
     evidence,
@@ -154,6 +155,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(outreach.router)
     app.include_router(campaigns.router)
     app.include_router(events.router)
+    app.include_router(create.router)
     return app
 
 

@@ -1,13 +1,14 @@
 # Presentation, proposal and template architecture
 
-- **Status:** Proposed Create architecture; not implemented
-- **Output direction:** Template-constrained PPTX and DOCX first
+- **Status:** WO-032 PPTX slice implemented; DOCX/proposal/ROI remain future
+- **Output direction:** Approved-template-constrained editable PPTX
 
 ## Architecture principle
 
-Create combines approved organisation assets with authorised Opportunity context.
-Generative systems may propose narrative and layout choices inside explicit schemas;
-they must not invent customer facts, commercial terms, pricing or ROI inputs.
+Create combines approved organisation assets with bounded authorised Account context.
+The current implementation uses a deterministic planner/composer and makes no AI
+provider call. It must not invent customer facts, commercial terms, pricing or ROI
+inputs.
 
 ```mermaid
 flowchart LR
@@ -26,30 +27,36 @@ flowchart LR
 
 | Concept                             | Responsibility                                                                    |
 | ----------------------------------- | --------------------------------------------------------------------------------- |
-| `AssetTemplate` / `TemplateVersion` | Organisation-scoped presentation/proposal template and immutable approved version |
-| `LayoutDefinition`                  | Supported page/slide masters, slots, constraints and reading order                |
-| `BrandRuleSet`                      | Fonts, colours, logos, spacing, imagery and accessibility constraints             |
-| `ApprovedContentItem`               | Versioned reusable text, image, proof point, disclaimer or legal/commercial block |
-| `GenerationRequest`                 | Opportunity, purpose, audience, chosen template and user inputs                   |
-| `GenerationPlan`                    | Ordered structured sections with source class and placement                       |
-| `GeneratedAsset`                    | Private output, status, versions, expiry/retention and owner                      |
-| `ProvenanceManifest`                | Evidence/content/input references for each material statement                     |
-| `ROIModel` / `ROIRun`               | Versioned deterministic formula, labelled inputs, output and sensitivity          |
+| `CreateTemplate` / `CreateTemplateVersion` | Tenant template and immutable uploaded/approved version                     |
+| `CreateTemplateSlide`                     | Structural manifest, policy, safety and administrator review per source slide |
+| `CreateApprovedContentItem`                | Approved reusable text materialised from an approved source slide            |
+| `CreatePresentation`                       | Account-bound brief, deterministic plan and current lifecycle                 |
+| `CreatePresentationVersion`                | Immutable source context, claim manifest, render state and private PPTX key    |
+| `CreateUsageCounter`                       | Atomic UTC-day generation reservations for organisation and user scopes        |
 
-These concepts are not implemented tables. Every asset, key and storage path includes
-organisation scope; access uses verified membership and least privilege.
+Migration `0041_create_studio` owns these tables. Every row, unique key, relationship
+and storage path includes organisation scope. Explicit repository predicates and
+forced PostgreSQL RLS apply defence in depth; the worker sets trusted transaction-local
+tenant context and claims bounded work through a `SECURITY DEFINER` eligibility
+function that returns opaque organisation IDs only.
 
 ## Template ingestion
 
-1. Validate declared type, extension, size and actual file signature.
-2. Malware-scan in an isolated boundary before parsing.
-3. Reject encrypted files, executable content, macros, external relationships,
+1. Validate declared type, `.pptx` extension, checksum, size and ZIP signature.
+2. Reject unsafe names, duplicate entries, encryption, unsupported compression,
+   decompression bombs and bounded entry/XML/media/character limits before parsing.
+3. Reject executable content, macros, external relationships,
    embedded packages and unsupported active objects.
-4. Parse only supported PPTX/DOCX structures with bounded resources.
-5. extract masters/styles, theme, placeholders, geometry, reading order and permitted
-   images into a typed layout model;
-6. show unsupported or accessibility issues and a visual preview;
+4. Reject embedded fonts, SVG and unrecognised media signatures; allow bounded
+   PNG/JPEG/GIF only.
+5. Parse supported PPTX structures into typed slide/text-block metadata; do not
+   execute Office, scripts, links or embedded content.
+6. show structural text, hidden/notes warnings and review controls;
 7. require an authorised human to publish an immutable template version.
+
+The repository does not include an antivirus service. The strict format parser is a
+defence boundary, not a malware-scanner claim; target deployment may add an approved
+scanner before object persistence without changing the domain contract.
 
 Raw uploads and generated files stay in private object storage with short-lived
 authorised access. Metadata lives in PostgreSQL; Alembic remains the future schema
@@ -70,25 +77,33 @@ scope unless later evidence justifies a separate decision.
 
 ## Generation contract
 
-The guided request chooses output type, Opportunity/account, purpose, audience and
-template before optional advanced controls. A structured planner assigns every
-material statement to one of four visible source classes:
+The guided request requires an Account, objective, audience and approved template;
+Opportunity and focus are optional. A structured planner assigns every material
+statement to visible source classes:
 
 1. **Customer Evidence** — cited Revenue Brain Evidence;
 2. **Approved corporate content** — cited content-item version;
 3. **User input** — supplied and confirmed for this request;
-4. **Generated suggestion** — clearly marked for human review and prohibited from
-   asserting new customer, price, legal or performance facts.
+4. **User edited** — bounded seller text that becomes a pending reviewed claim.
 
-The renderer accepts a schema-validated plan and deterministic slot constraints. It
-must not rewrite masters or silently overflow content. Validation checks missing
-citations, unsupported facts, truncation/overlap, broken assets, page/slide order,
-heading structure, contrast, alt text and declared brand rules. Failure returns an
-actionable issue rather than a plausible-looking broken file.
+The `customer_safe_presentation_context_v1` builder reads an allow-list only. It never
+passes raw database rows or serialises transcripts, notes, recordings, opportunity
+financials, probability/forecast, methodology scores, internal risks/coaching,
+contactability or suppression. Current public Prospect observations remain labelled
+`prospect_public`; customer Evidence remains source-labelled and lifecycle checked.
 
-The final review shows source class and citation for consequential claims, warnings,
-preview and an explicit approval/download action. Regeneration creates a new version;
-it does not overwrite an approved asset.
+The deterministic `deterministic_pptx_v1` renderer selects approved source slides,
+keeps source masters/layouts/media, replaces only explicitly editable text shapes,
+and writes a new PPTX. It removes every unselected slide relationship plus notes,
+comments, custom properties, thumbnails and source-derived application-property title
+lists; it resets customer-visible core properties. It does not run LibreOffice or
+Microsoft Office in production. Structural review is the product preview; local deck
+rendering is a development-only visual QA step.
+
+The claim manifest records exact claim text, content type, origin, support state,
+customer-safe classification, source IDs/labels, freshness, paraphrase permission,
+exact-text requirement and review state. Approval revalidates every referenced source.
+Regeneration/editing creates a new version and cannot overwrite an approved version.
 
 ## Proposals, pricing and ROI
 
@@ -108,14 +123,28 @@ identify a missing input; it cannot invent the numbers or conceal assumptions.
   and never logged.
 - Treat all uploaded/generated content as confidential customer information.
 - Prevent template instructions or embedded text from overriding system policy.
-- Apply retention, export, legal-hold and erasure policy to source and derived assets.
+- Include source and derived binaries plus metadata in export v22; organisation
+  deletion removes objects before database rows and stops on object-store failure.
 - Record safe job/version/status metadata, not document bodies, prompts or customer
   facts, in logs and audit events.
 - Test hostile files, decompression/resource exhaustion, external links, tenant
   isolation, deterministic rendering, citation coverage and deletion propagation.
 
+## Quotas, idempotency and operation
+
+The server atomically reserves 10 generations per user/day and 50 per organisation/
+day (UTC). It limits active templates to 20, versions per template to 20, uploaded
+PPTX to 50 MB/100 slides/500 media and generated plans to 30 slides. Idempotency keys
+cover creation and generation. The existing durable worker claims template and render
+work, uses bounded leases and records safe failure codes; retries are capped at three.
+`API_FEATURE_CREATE_ENABLED` and the tenant `create` entitlement are both required.
+
+See [operator runbook](create-operator-runbook.md), [security review](create-security-privacy-review.md)
+and [retention/export/deletion](create-retention-export-deletion.md).
+
 ## Explicitly out of scope
 
-WO-023 adds no upload, parser, generator, storage or download feature. Free-form
-design software, a general DAM/SharePoint replacement, electronic signature, full
-CPQ, unrestricted website scraping and unsupported numeric claims are not authorised.
+DOCX/proposals/PDF, speaker-note generation, generated images, logo/website scraping,
+free-form design software, a DAM replacement, external sending, electronic signature,
+full CPQ, pricing/ROI, Office execution and unsupported numeric claims are not
+authorised by WO-032.

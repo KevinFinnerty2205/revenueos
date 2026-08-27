@@ -2,6 +2,7 @@
 
 import type {
   EngageAvailability,
+  CreateAvailability,
   ProspectAvailability,
 } from "@revenueos/shared";
 import Link from "next/link";
@@ -54,6 +55,7 @@ export function CoreNavigation() {
   const [prospectEnabled, setProspectEnabled] = useState(false);
   const [engageEnabled, setEngageEnabled] = useState(false);
   const [eventsEnabled, setEventsEnabled] = useState(false);
+  const [createEnabled, setCreateEnabled] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -74,6 +76,11 @@ export function CoreNavigation() {
         setEventsEnabled(capabilities.featureFlags.engageEvents === true),
       )
       .catch(() => setEventsEnabled(false));
+    apiRequest<CreateAvailability>("/api/v1/create/availability", {
+      signal: controller.signal,
+    })
+      .then((availability) => setCreateEnabled(availability.enabled))
+      .catch(() => setCreateEnabled(false));
     return () => controller.abort();
   }, []);
 
@@ -88,13 +95,19 @@ export function CoreNavigation() {
       : desktopGroups[1].items,
   };
   const baseGroups = [desktopGroups[0], sellGroup, desktopGroups[2]];
-  const navigationGroups = prospectEnabled
+  const moduleGroups = prospectEnabled
     ? [
         baseGroups[0],
         { label: "Prospect", items: [{ href: "/find", label: "Find" }] },
         ...baseGroups.slice(1),
       ]
     : baseGroups;
+  const navigationGroups = createEnabled
+    ? [
+        ...moduleGroups,
+        { label: "Create", items: [{ href: "/create", label: "Studio" }] },
+      ]
+    : moduleGroups;
 
   return (
     <>

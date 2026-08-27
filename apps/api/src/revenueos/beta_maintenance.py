@@ -40,6 +40,13 @@ from revenueos.models import (
     Contact,
     ContactFieldSource,
     ContactSuppression,
+    CreateApprovedContentItem,
+    CreatePresentation,
+    CreatePresentationVersion,
+    CreateTemplate,
+    CreateTemplateSlide,
+    CreateTemplateVersion,
+    CreateUsageCounter,
     CRMEntityMapping,
     CRMFieldMapping,
     CRMStageMapping,
@@ -137,7 +144,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 21
+EXPORT_VERSION = 22
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -631,9 +638,33 @@ async def reconcile_visual_storage(
             ).all()
         )
         database_keys = {asset.storage_key for asset in assets}
+        create_template_keys = set(
+            (
+                await session.scalars(
+                    select(CreateTemplateVersion.storage_key).where(
+                        CreateTemplateVersion.organisation_id == organisation_id,
+                        CreateTemplateVersion.storage_status != "deleted",
+                    )
+                )
+            ).all()
+        )
+        create_presentation_keys = {
+            key
+            for key in (
+                await session.scalars(
+                    select(CreatePresentationVersion.pptx_storage_key).where(
+                        CreatePresentationVersion.organisation_id == organisation_id,
+                        CreatePresentationVersion.pptx_storage_key.is_not(None),
+                        CreatePresentationVersion.storage_status != "deleted",
+                    )
+                )
+            ).all()
+            if key is not None
+        }
+        reserved_non_visual_keys = create_template_keys | create_presentation_keys
         storage_keys = set(await storage.list_keys(prefix))
         missing = tuple(sorted(database_keys - storage_keys))
-        orphaned = tuple(sorted(storage_keys - database_keys))
+        orphaned = tuple(sorted(storage_keys - database_keys - reserved_non_visual_keys))
         repaired_missing = 0
         removed_orphans = 0
         if repair:
@@ -828,6 +859,7 @@ async def _delete_organisation_records(
             (await session.scalars(select(EmailSource.id).where(EmailSource.organisation_id == organisation_id))).all()
         )
         await _delete_document_objects(session, settings, organisation_id, document_ids)
+        await _delete_create_objects(session, settings, organisation_id)
         await _enable_approved_deletion(session)
         user_ids = list(
             (
@@ -1049,6 +1081,19 @@ async def _delete_organisation_records(
             delete(ProspectUsageCounter).where(ProspectUsageCounter.organisation_id == organisation_id)
         )
         await session.execute(delete(Task).where(Task.organisation_id == organisation_id))
+        await session.execute(
+            delete(CreatePresentationVersion).where(CreatePresentationVersion.organisation_id == organisation_id)
+        )
+        await session.execute(delete(CreatePresentation).where(CreatePresentation.organisation_id == organisation_id))
+        await session.execute(
+            delete(CreateApprovedContentItem).where(CreateApprovedContentItem.organisation_id == organisation_id)
+        )
+        await session.execute(delete(CreateTemplateSlide).where(CreateTemplateSlide.organisation_id == organisation_id))
+        await session.execute(
+            delete(CreateTemplateVersion).where(CreateTemplateVersion.organisation_id == organisation_id)
+        )
+        await session.execute(delete(CreateTemplate).where(CreateTemplate.organisation_id == organisation_id))
+        await session.execute(delete(CreateUsageCounter).where(CreateUsageCounter.organisation_id == organisation_id))
         await session.execute(delete(Contact).where(Contact.organisation_id == organisation_id))
         await session.execute(delete(Opportunity).where(Opportunity.organisation_id == organisation_id))
         await session.execute(delete(Company).where(Company.organisation_id == organisation_id))
@@ -1278,6 +1323,33 @@ async def _delete_document_objects(
             await storage.delete(key)
     except VisualStorageError as exc:
         raise RuntimeError("Document object deletion did not complete; database deletion was stopped.") from exc
+
+
+async def _delete_create_objects(
+    session: AsyncSession,
+    settings: Settings,
+    organisation_id: UUID,
+) -> None:
+    template_keys = await session.scalars(
+        select(CreateTemplateVersion.storage_key).where(
+            CreateTemplateVersion.organisation_id == organisation_id,
+            CreateTemplateVersion.storage_status != "deleted",
+        )
+    )
+    presentation_keys = await session.scalars(
+        select(CreatePresentationVersion.pptx_storage_key).where(
+            CreatePresentationVersion.organisation_id == organisation_id,
+            CreatePresentationVersion.pptx_storage_key.is_not(None),
+            CreatePresentationVersion.storage_status != "deleted",
+        )
+    )
+    keys = [*template_keys.all(), *(key for key in presentation_keys.all() if key is not None)]
+    storage = create_visual_storage(settings)
+    try:
+        for key in keys:
+            await storage.delete(key)
+    except VisualStorageError as exc:
+        raise RuntimeError("Create object deletion did not complete; database deletion was stopped.") from exc
 
 
 async def _delete_source_database_rows(
@@ -2453,6 +2525,36 @@ async def _export_payload(
         return list((await session.scalars(statement)).all())
 
     companies = await rows(select(Company).where(Company.organisation_id == organisation_id).order_by(Company.id))
+    create_templates = await rows(
+        select(CreateTemplate)
+        .where(CreateTemplate.organisation_id == organisation_id)
+        .order_by(CreateTemplate.created_at, CreateTemplate.id)
+    )
+    create_template_versions = await rows(
+        select(CreateTemplateVersion)
+        .where(CreateTemplateVersion.organisation_id == organisation_id)
+        .order_by(CreateTemplateVersion.template_id, CreateTemplateVersion.version)
+    )
+    create_template_slides = await rows(
+        select(CreateTemplateSlide)
+        .where(CreateTemplateSlide.organisation_id == organisation_id)
+        .order_by(CreateTemplateSlide.template_version_id, CreateTemplateSlide.slide_number)
+    )
+    create_content_items = await rows(
+        select(CreateApprovedContentItem)
+        .where(CreateApprovedContentItem.organisation_id == organisation_id)
+        .order_by(CreateApprovedContentItem.template_version_id, CreateApprovedContentItem.created_at)
+    )
+    create_presentations = await rows(
+        select(CreatePresentation)
+        .where(CreatePresentation.organisation_id == organisation_id)
+        .order_by(CreatePresentation.created_at, CreatePresentation.id)
+    )
+    create_presentation_versions = await rows(
+        select(CreatePresentationVersion)
+        .where(CreatePresentationVersion.organisation_id == organisation_id)
+        .order_by(CreatePresentationVersion.presentation_id, CreatePresentationVersion.version)
+    )
     prospect_target_markets = await rows(
         select(ProspectTargetMarket)
         .where(ProspectTargetMarket.organisation_id == organisation_id)
@@ -2909,6 +3011,105 @@ async def _export_payload(
         select(BetaFeedback).where(BetaFeedback.organisation_id == organisation_id).order_by(BetaFeedback.id)
     )
     storage = create_visual_storage(settings)
+    exported_create_template_versions: list[dict[str, object]] = []
+    for template_version_item in create_template_versions:
+        create_content_base64: str | None = None
+        content_export_status = "deleted" if template_version_item.storage_status == "deleted" else "unavailable"
+        if template_version_item.storage_status == "available":
+            try:
+                create_content_base64 = base64.b64encode(await storage.read(template_version_item.storage_key)).decode(
+                    "ascii"
+                )
+                content_export_status = "included"
+            except VisualStorageError:
+                content_export_status = "unavailable"
+        exported_create_template_versions.append(
+            {
+                **_columns(
+                    template_version_item,
+                    (
+                        "id",
+                        "template_id",
+                        "version",
+                        "uploaded_by_user_id",
+                        "processing_state",
+                        "approval_state",
+                        "display_filename",
+                        "storage_status",
+                        "mime_type",
+                        "byte_size",
+                        "checksum_sha256",
+                        "processing_schema_version",
+                        "slide_count",
+                        "width_emu",
+                        "height_emu",
+                        "warning_codes_json",
+                        "safe_failure_code",
+                        "authority_attestation_version",
+                        "authority_attested_by_user_id",
+                        "authority_attested_at",
+                        "processed_at",
+                        "approved_by_user_id",
+                        "approved_at",
+                        "revoked_at",
+                        "created_at",
+                    ),
+                ),
+                "contentExportStatus": content_export_status,
+                **({"contentBase64": create_content_base64} if create_content_base64 is not None else {}),
+            }
+        )
+    exported_create_presentation_versions: list[dict[str, object]] = []
+    for presentation_version_item in create_presentation_versions:
+        create_content_base64 = None
+        content_export_status = "deleted" if presentation_version_item.storage_status == "deleted" else "unavailable"
+        if (
+            presentation_version_item.storage_status == "available"
+            and presentation_version_item.pptx_storage_key is not None
+        ):
+            try:
+                create_content_base64 = base64.b64encode(
+                    await storage.read(presentation_version_item.pptx_storage_key)
+                ).decode("ascii")
+                content_export_status = "included"
+            except VisualStorageError:
+                content_export_status = "unavailable"
+        exported_create_presentation_versions.append(
+            {
+                **_columns(
+                    presentation_version_item,
+                    (
+                        "id",
+                        "presentation_id",
+                        "template_id",
+                        "template_version_id",
+                        "version",
+                        "created_by_user_id",
+                        "state",
+                        "review_state",
+                        "plan_snapshot_json",
+                        "audience_snapshot_json",
+                        "source_context_json",
+                        "source_context_fingerprint",
+                        "generated_content_json",
+                        "claim_manifest_json",
+                        "warning_codes_json",
+                        "renderer_version",
+                        "generation_schema_version",
+                        "storage_status",
+                        "byte_size",
+                        "checksum_sha256",
+                        "safe_failure_code",
+                        "generated_at",
+                        "approved_by_user_id",
+                        "approved_at",
+                        "created_at",
+                    ),
+                ),
+                "contentExportStatus": content_export_status,
+                **({"contentBase64": create_content_base64} if create_content_base64 is not None else {}),
+            }
+        )
     exported_visuals: list[dict[str, object]] = []
     for item in visual_assets:
         image_base64: str | None = None
@@ -3026,6 +3227,98 @@ async def _export_payload(
             )
             for item in companies
         ],
+        "createTemplates": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "name",
+                    "state",
+                    "created_by_user_id",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in create_templates
+        ],
+        "createTemplateVersions": exported_create_template_versions,
+        "createTemplateSlides": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "template_id",
+                    "template_version_id",
+                    "slide_number",
+                    "title",
+                    "category",
+                    "reuse_state",
+                    "modification_policy",
+                    "customer_safe",
+                    "required",
+                    "exact_text_required",
+                    "hidden",
+                    "approved_description",
+                    "text_blocks_json",
+                    "placeholder_mappings_json",
+                    "reviewed_by_user_id",
+                    "reviewed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in create_template_slides
+        ],
+        "createApprovedContentItems": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "template_id",
+                    "template_version_id",
+                    "slide_id",
+                    "content_type",
+                    "title",
+                    "approved_text",
+                    "status",
+                    "modification_policy",
+                    "customer_safe",
+                    "exact_text_required",
+                    "approved_by_user_id",
+                    "approved_at",
+                    "revoked_at",
+                    "created_at",
+                ),
+            )
+            for item in create_content_items
+        ],
+        "createPresentations": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "account_id",
+                    "opportunity_id",
+                    "template_id",
+                    "template_version_id",
+                    "created_by_user_id",
+                    "title",
+                    "objective",
+                    "audience_json",
+                    "focus_instruction",
+                    "state",
+                    "review_state",
+                    "plan_json",
+                    "source_context_fingerprint",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in create_presentations
+        ],
+        "createPresentationVersions": exported_create_presentation_versions,
         "prospectTargetMarkets": [
             _columns(
                 item,

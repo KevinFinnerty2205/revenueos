@@ -2852,11 +2852,7 @@ export interface OutreachSource {
     | "event_encounter";
   sourceId: string;
   label: string;
-  trustState:
-    | "verified"
-    | "provider_supplied"
-    | "approved"
-    | "seller_reported";
+  trustState: "verified" | "provider_supplied" | "approved" | "seller_reported";
   publisher: string | null;
   publishedAt: string | null;
   url: string | null;
@@ -2949,8 +2945,7 @@ export type CampaignState =
   | "stopped"
   | "needs_attention";
 export type CampaignApprovalMode =
-  | "review_each_send"
-  | "approved_campaign_auto_send";
+  "review_each_send" | "approved_campaign_auto_send";
 export type CampaignEnrollmentState =
   | "ready"
   | "active"
@@ -2977,10 +2972,7 @@ export type CampaignStepObjective =
   | "different_angle"
   | "meeting_request"
   | "final_follow_up";
-export type CampaignOutcome =
-  | "replied"
-  | "meeting_booked"
-  | "not_interested";
+export type CampaignOutcome = "replied" | "meeting_booked" | "not_interested";
 
 export interface CampaignSequenceStep {
   id: string;
@@ -3232,11 +3224,7 @@ export interface ProspectAccountResearchLink {
 
 export type ProspectTargetMarketStatus = "draft" | "active" | "archived";
 export type ProspectEmployeeBand =
-  | "50_199"
-  | "200_499"
-  | "500_999"
-  | "1000_4999"
-  | "5000_plus";
+  "50_199" | "200_499" | "500_999" | "1000_4999" | "5000_plus";
 export type ProspectOrganisationType =
   | "private_company"
   | "public_company"
@@ -3245,22 +3233,11 @@ export type ProspectOrganisationType =
   | "healthcare"
   | "not_for_profit";
 export type ProspectBusinessCharacteristic =
-  | "multi_site"
-  | "international"
-  | "expanding"
-  | "regulated"
-  | "b2b";
+  "multi_site" | "international" | "expanding" | "regulated" | "b2b";
 export type ProspectDiscoveryStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "partial"
-  | "failed";
+  "pending" | "running" | "completed" | "partial" | "failed";
 export type ProspectCandidatePriority =
-  | "high"
-  | "worth_researching"
-  | "needs_more_information"
-  | "excluded";
+  "high" | "worth_researching" | "needs_more_information" | "excluded";
 export type ProspectCandidateMatchState = "match" | "partial" | "excluded";
 export type ProspectRelationshipState =
   | "new_prospect"
@@ -3367,12 +3344,7 @@ export interface ProspectDiscoveryCandidate {
   excludedByUser: boolean;
   exclusionReason: string | null;
   researchStatus:
-    | "not_started"
-    | "pending"
-    | "researching"
-    | "ready"
-    | "partial"
-    | "failed";
+    "not_started" | "pending" | "researching" | "ready" | "partial" | "failed";
 }
 
 export interface ProspectDiscovery {
@@ -3401,9 +3373,7 @@ export interface ProspectCandidateFeedback {
 }
 
 export type ProspectPersonEmploymentState =
-  | "current"
-  | "uncertain"
-  | "no_longer_current";
+  "current" | "uncertain" | "no_longer_current";
 export type ProspectBuyingRole =
   | "executive_sponsor"
   | "economic_buyer_candidate"
@@ -3442,12 +3412,7 @@ export interface ProspectPerson {
   identityState: "supported" | "ambiguous";
   employmentState: ProspectPersonEmploymentState;
   researchStatus:
-    | "not_started"
-    | "pending"
-    | "researching"
-    | "ready"
-    | "partial"
-    | "failed";
+    "not_started" | "pending" | "researching" | "ready" | "partial" | "failed";
   promotedContactId: string | null;
   promotedAt: string | null;
   createdAt: string;
@@ -3486,9 +3451,7 @@ export interface ProspectContactPoint {
   value: string;
   trustState: ProspectTrustState;
   verificationMethod:
-    | "authoritative_public"
-    | "provider_reported"
-    | "not_verified";
+    "authoritative_public" | "provider_reported" | "not_verified";
   sourceId: string;
   observedAt: string;
   expiresAt: string | null;
@@ -3548,11 +3511,7 @@ export type SalesEventType =
   | "other_business_event";
 
 export type SalesEventState =
-  | "draft"
-  | "upcoming"
-  | "active"
-  | "completed"
-  | "archived";
+  "draft" | "upcoming" | "active" | "completed" | "archived";
 
 export type SalesEventGoal =
   | "meet_new_prospects"
@@ -3563,12 +3522,7 @@ export type SalesEventGoal =
   | "other";
 
 export type EventPlanState =
-  | "not_planned"
-  | "planned"
-  | "met"
-  | "follow_up"
-  | "complete"
-  | "not_relevant";
+  "not_planned" | "planned" | "met" | "follow_up" | "complete" | "not_relevant";
 
 export interface SalesEventSummary {
   attendeesImported: number;
@@ -3705,4 +3659,235 @@ export interface EventAttendeeList {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export type CreateAvailabilityState =
+  "available" | "temporarily_unavailable" | "not_in_plan";
+export type CreateTemplateProcessingState =
+  "processing" | "ready" | "partial" | "failed" | "archived";
+export type CreateSlideCategory =
+  | "title"
+  | "agenda"
+  | "company_overview"
+  | "problem"
+  | "solution"
+  | "product"
+  | "capability"
+  | "architecture"
+  | "case_study"
+  | "proof_point"
+  | "process"
+  | "pricing_placeholder"
+  | "next_steps"
+  | "appendix"
+  | "unknown";
+export type CreateModificationPolicy =
+  "locked" | "text_placeholders_only" | "editable_text" | "reuse_as_is";
+export type CreatePresentationObjective =
+  | "introductory_meeting"
+  | "discovery_follow_up"
+  | "solution_overview"
+  | "technical_workshop"
+  | "executive_presentation"
+  | "proposal_presentation"
+  | "business_case"
+  | "event_follow_up";
+
+export interface CreateAvailability {
+  moduleKey: "create";
+  state: CreateAvailabilityState;
+  enabled: boolean;
+  canManage: boolean;
+  canUploadTemplates: boolean;
+  canCreatePresentations: boolean;
+  message: string;
+  description: string;
+  learnMorePath: "/create";
+}
+
+export interface CreateTemplateTextBlock {
+  shapeId: number;
+  shapeName: string;
+  text: string;
+  placeholderType: string | null;
+  editable: boolean;
+  mappedRole: string | null;
+}
+
+export interface CreateTemplateSlide {
+  id: string;
+  slideNumber: number;
+  title: string;
+  category: CreateSlideCategory;
+  reuseState: "pending" | "approved" | "excluded";
+  modificationPolicy: CreateModificationPolicy;
+  customerSafe: boolean;
+  required: boolean;
+  exactTextRequired: boolean;
+  hidden: boolean;
+  approvedDescription: string | null;
+  textBlocks: CreateTemplateTextBlock[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateApprovedContentItem {
+  id: string;
+  slideId: string;
+  contentType: CreateSlideCategory;
+  title: string;
+  approvedText: string;
+  status: "approved" | "revoked";
+  modificationPolicy: CreateModificationPolicy;
+  customerSafe: boolean;
+  exactTextRequired: boolean;
+  approvedByUserId: string;
+  approvedAt: string;
+}
+
+export interface CreateTemplateVersion {
+  id: string;
+  templateId: string;
+  version: number;
+  processingState: CreateTemplateProcessingState;
+  approvalState: "pending" | "approved" | "revoked";
+  fileName: string;
+  byteSize: number;
+  checksumSha256: string;
+  slideCount: number;
+  approvedSlideCount: number;
+  requiredSlideCount: number;
+  widthEmu: number | null;
+  heightEmu: number | null;
+  warningCodes: string[];
+  safeFailureCode: string | null;
+  authorityAttestationVersion: 1;
+  authorityAttestedAt: string;
+  processedAt: string | null;
+  approvedAt: string | null;
+  slides: CreateTemplateSlide[];
+  contentItems: CreateApprovedContentItem[];
+  createdAt: string;
+}
+
+export interface CreateTemplateSummary {
+  id: string;
+  name: string;
+  state: "active" | "archived";
+  latestVersion: CreateTemplateVersion;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTemplateList {
+  items: CreateTemplateSummary[];
+  canUpload: boolean;
+  maxActiveTemplates: number;
+}
+
+export interface CreateAudience {
+  contactId: string | null;
+  name: string | null;
+  role: string | null;
+  audienceType:
+    "executive" | "technical" | "finance" | "procurement" | "mixed" | "other";
+}
+
+export interface CreatePresentationPlanItem {
+  id: string;
+  templateSlideId: string;
+  order: number;
+  title: string;
+  category: CreateSlideCategory;
+  required: boolean;
+  exactTextRequired: boolean;
+  modificationPolicy: CreateModificationPolicy;
+  sourceClasses: string[];
+  included: boolean;
+}
+
+export interface CreatePresentationClaim {
+  id: string;
+  planItemId: string;
+  blockIndex: number;
+  claim: string;
+  contentType: string;
+  origin: string;
+  supportState: string;
+  customerSafeClassification:
+    "customer_safe" | "requires_review" | "internal_only";
+  sourceIds: string[];
+  sourceLabels: string[];
+  freshness: "current" | "stale" | "unknown";
+  paraphraseAllowed: boolean;
+  exactTextRequired: boolean;
+  reviewState: "not_required" | "pending" | "kept" | "removed";
+}
+
+export interface CreateGeneratedSlide {
+  planItemId: string;
+  templateSlideId: string;
+  order: number;
+  title: string;
+  bodyBlocks: string[];
+  required: boolean;
+  modificationPolicy: CreateModificationPolicy;
+  reviewState: "ready" | "needs_review" | "blocked";
+  warningCodes: string[];
+}
+
+export interface CreatePresentationVersion {
+  id: string;
+  version: number;
+  state: "generating" | "needs_review" | "ready" | "failed";
+  reviewState: "pending" | "approved";
+  slides: CreateGeneratedSlide[];
+  claims: CreatePresentationClaim[];
+  warningCodes: string[];
+  safeFailureCode: string | null;
+  generatedAt: string | null;
+  approvedAt: string | null;
+  downloadAvailable: boolean;
+  createdAt: string;
+}
+
+export interface CreatePresentation {
+  id: string;
+  title: string;
+  accountId: string;
+  accountName: string;
+  opportunityId: string | null;
+  opportunityName: string | null;
+  objective: CreatePresentationObjective;
+  audience: CreateAudience[];
+  focusInstruction: string | null;
+  templateVersionId: string;
+  templateName: string;
+  templateVersion: number;
+  state:
+    | "draft_plan"
+    | "generating"
+    | "needs_review"
+    | "ready"
+    | "failed"
+    | "archived";
+  reviewState: "pending" | "approved";
+  plan: CreatePresentationPlanItem[];
+  currentVersion: CreatePresentationVersion | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePresentationList {
+  items: CreatePresentation[];
+  canCreate: boolean;
+  maxPresentationsPerUserPerDay: number;
+  maxPresentationsPerOrganisationPerDay: number;
+}
+
+export interface CreateDownloadGrant {
+  downloadUrl: string;
+  expiresAt: string;
+  fileName: string;
 }

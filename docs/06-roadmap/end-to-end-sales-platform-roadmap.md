@@ -1,8 +1,7 @@
 # End-to-end Sales Platform roadmap
 
-- **Status:** Revised by Checkpoint 2; WO-032 is the recommended next work order but
-  still requires separate authorisation
-- **Baseline:** WO-024–031 and the Checkpoint 2 Prospect/Engage review are complete
+- **Status:** Revised for implemented WO-032; WO-033 remains separately unauthorised
+- **Baseline:** WO-024–032 and the Checkpoint 2 Prospect/Engage review are complete
 - **Decision rule:** Validate each loop before funding the next layer
 
 Checkpoint 1 selected **Option 2**: Core design-partner readiness, Ask RevenueOS and
@@ -405,28 +404,31 @@ purchasing Prospect or Engage.
 
 ### WO-032 — Sales Content Studio
 
-- **Objective/value/package:** Generate evidence-grounded presentations and proposals
-  inside approved organisation templates and content. **Create**.
+- **Implementation status:** Complete for the approved-template editable PPTX slice;
+  proposal/DOCX/PDF and AI-backed generation remain future.
+
+- **Objective/value/package:** Generate evidence-grounded presentations inside
+  approved organisation templates and content. **Create**.
 - **Dependencies/checkpoint:** Checkpoint 2 GO, Revenue Brain Evidence, Workspace file
   policy, secure object storage/processing decision, entitlement contract and a
   source-class manifest that keeps public Prospect research, seller/Event context,
   approved organisation content and customer-direct Evidence distinct.
-- **Experience:** Guided Create → type → Opportunity → purpose → audience → template →
-  review; version history, source inspection and accessible previews.
-- **Domain/data:** Template/version, layout, brand rules, approved content item,
-  generation request/plan, asset and provenance manifest.
-- **Backend/frontend/AI:** Isolated bounded PPTX/DOCX parse, structured planner,
-  deterministic renderer and validation; guided responsive UI; AI suggestions remain
-  citation- and schema-constrained.
+- **Experience:** Guided Create → Account → optional Opportunity → objective → audience
+  → approved template → plan → claim review → approval/download; structured review is
+  accessible and mobile keeps the compact four-item navigation.
+- **Domain/data:** Tenant template/version, slide policy, approved content item,
+  presentation/immutable version, typed source context and exact claim manifest.
+- **Backend/frontend/AI:** Bounded PPTX parse, deterministic structured planner/
+  renderer and validation; guided responsive UI; no Create AI-provider call.
 - **Integrations:** Private object storage is required; Office/Google editing export is
   evaluated later, not assumed.
-- **Security/privacy/operations:** Malware/active-content/resource controls, scoped
+- **Security/privacy/operations:** Hostile-package/active-content/resource controls, scoped
   object access, retention/erasure, queue limits, render diagnostics and kill switch.
 - **Acceptance:** Hostile files fail safely; every material claim has a source class;
   layouts pass visual/accessibility checks; users approve a version before export;
   cross-tenant file access is denied.
-- **Out of scope:** Generic design tool, DAM/SharePoint clone, free-form document AI,
-  CPQ and electronic signature.
+- **Out of scope:** Proposal/DOCX/PDF, pricing/ROI, generated imagery, external send,
+  Office execution, generic design tool, DAM clone, CPQ and electronic signature.
 - **Validate:** Test time-to-useful first draft, factual correction and template/render
   success before extending content types.
 
@@ -863,6 +865,6 @@ Events are implemented with deterministic mock providers and production fail-clo
 external effects. Checkpoint 2 records a GO recommendation for WO-032 with no further
 Prospect/Engage foundation work order inserted.
 
-WO-032 still requires its own approval. Production provider activation, customer-data
-use, external Engage sending, auto-send, design-partner launch and WO-033–045 remain
-unauthorised by this roadmap.
+WO-032 is now implemented within its separately approved PPTX boundary. Production
+provider activation, customer-data use, external Engage sending, auto-send,
+design-partner launch and WO-033–045 remain unauthorised by this roadmap.

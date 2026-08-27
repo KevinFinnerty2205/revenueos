@@ -1,50 +1,47 @@
 # Create presentation and proposal experience
 
-- **Status:** Future Create experience; not implemented
+- **Status:** WO-032 presentation experience implemented; proposal/ROI paths remain future
 - **Question:** What should RevenueOS create for me?
 
 ## Create landing
 
-Four primary choices are shown with recent outputs below:
-
-- Presentation;
-- Proposal;
-- Business Case; and
-- ROI.
-
-The primary experience is guided. A blank prompt appears only as an optional detail
-after the customer, purpose and template are established.
+The current Studio shows recent presentations and one primary **New presentation**
+action. When no approved template exists, the first-use state explains that an
+administrator must upload, review and approve an authorised PPTX. Future Proposal,
+Business Case and ROI choices are not exposed.
 
 ## Presentation flow
 
 ```text
 Create presentation
-Opportunity     Qantas — Network Modernisation
-Purpose         Technical proposal
-Audience        CIO, CISO, Head of Infrastructure
-Duration        15 minutes
-Sections        Situation, requirements, solution, implementation,
-                ROI, case study, next steps
-Template        Acme Corporate
-[Review source plan]                                      [Generate]
+Account         Northstar Facilities
+Opportunity     Secure rollout (optional)
+Objective       Solution overview
+Audience        Operations leadership
+Template        Summit Corporate v1
+Focus           Keep implementation concise (optional)
+[Review slide plan]
 ```
 
-The source plan separates customer-supported facts, approved corporate claims,
-seller-selected assumptions and missing evidence. Generation cannot proceed with an
-unapproved template or required unsupported claim.
+The plan appears before generation and shows slide order, category, approved source
+classes, required state and exact-text treatment. The seller can reorder or exclude
+optional slides and add another approved slide. Generation cannot proceed with an
+unapproved template, a removed required slide or more than 30 included slides.
 
-The review shows slide thumbnails, source/claim warnings and layout overflow. Users
-can regenerate one section, replace an approved content item, edit text and export
-only after validation.
+The review is structured rather than a pixel-perfect in-app Office preview. It shows
+slide order, bounded editable text, source class, support/freshness, exact-text state,
+and seller/inferred claim review. Users keep or remove claims, then explicitly approve
+the complete version. Editing creates a new rendering cycle and invalidates approval.
+Only the approved current version can be downloaded.
 
-## Proposal flow
+## Proposal flow — future
 
 Choose opportunity, proposal type, template, scope, pricing inputs, timeline and
 terms source. Review customer facts, assumptions and exclusions before generation.
 The result is section-based, supports comments and exports DOCX/PDF after human
 review. Legal/contract wording remains approved content or explicit input.
 
-## ROI and business case
+## ROI and business case — future
 
 The calculation editor displays inputs, units, formula, source/owner and scenarios.
 Calculated values are locked to the deterministic model. AI explanation is a
@@ -53,24 +50,28 @@ assumption caused the outcome.
 
 ## Template and content administration
 
-Administrators upload, validate and approve templates; map supported layouts;
-replace assets; and manage content status/effective dates. Unsupported fonts,
-missing placeholders, macros/active content, overflow-prone layouts and brand
-conflicts are actionable errors. Template administration is desktop-only.
+Administrators upload an authorised `.pptx`, wait for durable structural processing,
+then review every slide. They choose category, reuse state, customer-safety status,
+modification policy, required state and exact-text state. Hidden or pricing-placeholder
+slides cannot be approved; internal-only content fails approval. Published versions
+are immutable. Template administration is desktop-only.
 
 ## First-time, power-user, mobile and unavailable states
 
-- First-time: select a recent Opportunity and a recommended approved template.
-- Power user: duplicate a prior source plan, choose sections and pin content versions.
-- Mobile: review, comment, approve and download; generation may be started from an
-  Opportunity, but detailed layout editing is desktop-first.
-- No Create entitlement: Opportunity Files remain accessible; one contextual learn-
-  more action replaces generation controls.
+- First-time: follow the admin template setup state, then choose an Account and an
+  approved template.
+- Power user: adjust the deterministic plan before generating.
+- Mobile: review, approve and download; no fifth compact-navigation item and no
+  template administration.
+- No Create entitlement: Core remains accessible and Create fails closed without an
+  aggressive upgrade prompt.
 - Missing evidence: produce an explicit gap checklist or omit the section; never fill
   it with plausible prose.
 
 ## Accessibility
 
-All source and validation state is available outside thumbnails. Slide order,
-headings, alt text, table semantics, colour contrast and reading order are validated
-where the output format permits. Status never depends on colour alone.
+All source and validation state is available without relying on a rendered thumbnail.
+Controls are keyboard reachable, labels and landmarks are semantic, focus is visible,
+reduced motion is respected and status never depends on colour alone. The source PPTX
+remains responsible for its authored reading order, alt text, contrast and layout;
+RevenueOS does not claim to repair unsupported accessibility defects.

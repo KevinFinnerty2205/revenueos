@@ -170,6 +170,14 @@ separate from Contact; attendance is neither contact permission nor customer Evi
 buying intent, Methodology state or Revenue Brain truth. See
 [Events](event-intelligence.md).
 
+WO-032 implements the first Create slice: an organisation-entitled Sales Content
+Studio for administrator-attested and approved PPTX templates, Account-bound
+deterministic plans, typed customer-safe context, exact claim provenance, seller
+review and private editable PPTX download. It makes no AI-provider call and adds no
+proposal/DOCX/PDF, pricing, ROI, generated imagery, external sending or Office
+execution. See [RevenueOS Create](revenueos-create.md). WO-033 and broader Create
+outputs remain future and require separate approval.
+
 ## Product boundaries
 
 RevenueOS owns:
