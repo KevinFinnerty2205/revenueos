@@ -108,6 +108,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "engage_campaign_audience",
         "engage_campaign_enrollments",
         "engage_enrollment_steps",
+        "sales_events",
+        "event_attendee_imports",
+        "event_attendees",
+        "event_attendee_user_states",
+        "event_encounters",
+        "event_campaign_links",
         "integration_connections",
         "execution_previews",
         "action_executions",
@@ -363,6 +369,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "engage_campaign_audience_id": uuid.uuid4(),
                 "engage_campaign_enrollment_id": uuid.uuid4(),
                 "engage_enrollment_step_id": uuid.uuid4(),
+                "sales_event_id": uuid.uuid4(),
+                "event_import_id": uuid.uuid4(),
+                "event_attendee_id": uuid.uuid4(),
+                "event_user_state_id": uuid.uuid4(),
+                "event_encounter_id": uuid.uuid4(),
+                "event_campaign_link_id": uuid.uuid4(),
             }
         )
 
@@ -1283,6 +1295,125 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  :engage_campaign_enrollment_id,
                                  :engage_sequence_step_id, now(), now(),
                                  'ready_for_review', :outreach_message_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO sales_events
+                                (id, organisation_id, owner_user_id, name,
+                                 event_type, start_at, end_at, timezone,
+                                 source_type, state)
+                            VALUES
+                                (:sales_event_id, :organisation_id, :user_id,
+                                 'RLS Event', 'conference', now(),
+                                 now() + interval '1 day', 'Australia/Sydney',
+                                 'manual', 'active')
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO event_attendee_imports
+                                (id, organisation_id, event_id,
+                                 requested_by_user_id, state, display_filename,
+                                 file_fingerprint, file_size_bytes, row_count,
+                                 valid_row_count, imported_row_count,
+                                 column_mapping_json, recognised_columns_json,
+                                 ignored_columns_json, issues_json,
+                                 preview_rows_json, expires_at,
+                                 attestation_version, attested_by_user_id,
+                                 attested_at, confirmed_at)
+                            VALUES
+                                (:event_import_id, :organisation_id,
+                                 :sales_event_id, :user_id, 'confirmed',
+                                 'rls-attendees.csv', :event_fingerprint, 100,
+                                 1, 1, 1, '{}'::json, '[]'::json,
+                                 '[]'::json, '[]'::json, '[]'::json,
+                                 now() + interval '1 hour', 1, :user_id,
+                                 now(), now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "event_fingerprint": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO event_attendees
+                                (id, organisation_id, event_id, import_id,
+                                 first_name, last_name, company_name, job_title,
+                                 business_email, normalised_business_email,
+                                 company_domain, source_row, source_type,
+                                 email_trust_state, contact_id, company_id,
+                                 prospect_person_id, match_state,
+                                 priority_state, priority_reasons_json,
+                                 active_opportunity_id)
+                            VALUES
+                                (:event_attendee_id, :organisation_id,
+                                 :sales_event_id, :event_import_id, 'RLS',
+                                 'Attendee', :event_company_name, 'Director',
+                                 :event_email, :event_email, :event_domain, 2,
+                                 'event_list', 'provider_supplied', :contact_id,
+                                 :company_id, :prospect_person_id,
+                                 'matched_contact', 'priority_to_meet',
+                                 '["Active Opportunity"]'::json,
+                                 :opportunity_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "event_company_name": f"RLS Company {suffix}",
+                            "event_email": f"event-{suffix.lower()}-{tenant['contact_id']}@example.test",
+                            "event_domain": f"rls-event-{suffix.lower()}.example",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO event_attendee_user_states
+                                (id, organisation_id, event_id, attendee_id,
+                                 user_id, plan_state, meeting_arranged)
+                            VALUES
+                                (:event_user_state_id, :organisation_id,
+                                 :sales_event_id, :event_attendee_id, :user_id,
+                                 'planned', true)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO event_encounters
+                                (id, organisation_id, event_id, attendee_id,
+                                 user_id, state, occurred_at, note_origin,
+                                 interaction_id)
+                            VALUES
+                                (:event_encounter_id, :organisation_id,
+                                 :sales_event_id, :event_attendee_id, :user_id,
+                                 'met', now(), 'seller_reported_activity',
+                                 :interaction_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO event_campaign_links
+                                (id, organisation_id, event_id, campaign_id,
+                                 stage, created_by_user_id)
+                            VALUES
+                                (:event_campaign_link_id, :organisation_id,
+                                 :sales_event_id, :engage_campaign_id,
+                                 'post_event', :user_id)
                             """
                         ),
                         identity_parameters,
@@ -2270,6 +2401,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'engage_campaign_audience',
                                     'engage_campaign_enrollments',
                                     'engage_enrollment_steps',
+                                    'sales_events',
+                                    'event_attendee_imports',
+                                    'event_attendees',
+                                    'event_attendee_user_states',
+                                    'event_encounters',
+                                    'event_campaign_links',
                                     'integration_connections',
                                     'execution_previews',
                                     'action_executions',
@@ -2386,6 +2523,16 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["company_id"]},
                 )
                 assert company_update.rowcount == 0
+                event_update = await connection.execute(
+                    text("UPDATE sales_events SET name = 'Blocked' WHERE id = :id"),
+                    {"id": tenant_b["sales_event_id"]},
+                )
+                assert event_update.rowcount == 0
+                event_delete = await connection.execute(
+                    text("DELETE FROM event_attendees WHERE id = :id"),
+                    {"id": tenant_b["event_attendee_id"]},
+                )
+                assert event_delete.rowcount == 0
                 prospect_update = await connection.execute(
                     text(
                         """
@@ -2439,6 +2586,29 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         },
                     )
                 await savepoint.rollback()
+                event_savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO sales_events
+                                (id, organisation_id, owner_user_id, name,
+                                 event_type, start_at, end_at, timezone,
+                                 source_type, state)
+                            VALUES
+                                (:id, :organisation_id, :owner_user_id,
+                                 'Forged Event', 'conference', now(),
+                                 now() + interval '1 day', 'Australia/Sydney',
+                                 'manual', 'active')
+                            """
+                        ),
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "owner_user_id": tenant_b["user_id"],
+                        },
+                    )
+                await event_savepoint.rollback()
                 crm_mapping_update = await connection.execute(
                     text(
                         """
@@ -2810,6 +2980,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "event_campaign_links",
+                    "event_encounters",
+                    "event_attendee_user_states",
+                    "event_attendees",
+                    "event_attendee_imports",
                     "engage_enrollment_steps",
                     "engage_campaign_enrollments",
                     "engage_campaign_audience",
@@ -2897,6 +3072,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "meetings",
                     "online_meeting_metadata",
                     "interactions",
+                    "sales_events",
                     "tasks",
                     "contacts",
                     "opportunities",

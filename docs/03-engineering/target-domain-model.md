@@ -21,6 +21,13 @@ not silently update/delete the Contact.
 
 ## Current Engage outreach and Campaign boundary
 
+WO-031 adds `SalesEvent`, `EventAttendeeImport`, `EventAttendee`, per-user
+`EventAttendeeUserState`, `EventEncounter` and `EventCampaignLink`. EventAttendee is
+an Event-local authorised-list identity that may reference—but never substitutes
+for—canonical Contact/Company/Prospect Person/Opportunity. EventEncounter is
+seller-reported activity and optional Interaction linkage, not Evidence. Contact
+promotion and Campaign audience remain explicit canonical boundaries.
+
 WO-029 adds `OutreachPolicy`, `OutreachMessage`, immutable `OutreachVersion`,
 immutable `OutreachPersonalizationSource` and `ContactSuppression`. Outreach belongs
 to an organisation, canonical Contact (nullable only after deletion), authenticated

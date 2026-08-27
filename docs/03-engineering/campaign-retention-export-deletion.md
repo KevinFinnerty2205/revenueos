@@ -6,9 +6,11 @@ enrolment/step/audience/version graph, then deletes linked Outreach/Action recor
 Outreach linked to a non-terminal Campaign is excluded from ordinary standalone
 Outreach expiry so history cannot be orphaned.
 
-Export schema version 20 includes Campaign lifecycle, public version/approval fields,
-ordered sequence, exact audience/eligibility snapshot, enrolment state/outcome and
-schedule/Outreach references. It deliberately excludes worker IDs, leases, internal
+Export schema version 21 includes Campaign lifecycle, public version/approval fields,
+ordered sequence, exact audience/eligibility snapshot, enrolment state/outcome,
+schedule/Outreach references and explicit Event-Campaign context. The Event
+collections added in v21 exclude raw CSV bytes, preview data, filenames and import
+fingerprints. The wider export deliberately excludes worker IDs, leases, internal
 launch/policy fingerprints, credentials and provider payloads. Message subject/body
 remain covered by the existing authorised Outreach export.
 

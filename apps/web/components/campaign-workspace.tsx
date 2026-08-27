@@ -257,6 +257,10 @@ export function CampaignListWorkspace() {
 
 export function CampaignBuilder() {
   const router = useRouter();
+  const [eventContext, setEventContext] = useState<{
+    eventId: string;
+    eventStage: "pre_event" | "post_event";
+  } | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [policy, setPolicy] = useState<OutreachPolicy | null>(null);
   const [name, setName] = useState("Australian Multi-Site CIO Outreach");
@@ -270,6 +274,35 @@ export function CampaignBuilder() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const parameters = new URLSearchParams(window.location.search);
+      const eventId = parameters.get("eventId");
+      const eventStage = parameters.get("eventStage");
+      const contactIds = (parameters.get("contactIds") ?? "")
+        .split(",")
+        .filter(Boolean);
+      if (
+        eventId &&
+        (eventStage === "pre_event" || eventStage === "post_event")
+      ) {
+        setEventContext({ eventId, eventStage });
+        setSelected([...new Set(contactIds)]);
+        setName(
+          eventStage === "pre_event"
+            ? "Event meeting requests"
+            : "Event follow-up",
+        );
+        setPurpose(
+          eventStage === "pre_event"
+            ? "Arrange relevant meetings before the Event"
+            : "Follow up truthfully after the Event",
+        );
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -303,6 +336,9 @@ export function CampaignBuilder() {
         .reduce((total, step) => total + step.delayDays, 0),
     );
   }, [steps]);
+  const visibleContacts = eventContext
+    ? contacts.filter((contact) => selected.includes(contact.id))
+    : contacts;
 
   function updateStep(index: number, update: Partial<StepDraft>) {
     setSteps((current) =>
@@ -339,7 +375,9 @@ export function CampaignBuilder() {
           name,
           purpose,
           approvalMode,
-          sourceType: "manual_contacts",
+          sourceType: eventContext ? "event_attendees" : "manual_contacts",
+          eventId: eventContext?.eventId ?? null,
+          eventStage: eventContext?.eventStage ?? null,
           senderTimezone: "Australia/Sydney",
           sendDays: [1, 2, 3, 4, 5],
           sendWindowStartMinutes: 510,
@@ -385,6 +423,13 @@ export function CampaignBuilder() {
           Choose existing Contacts and one to four ordered steps. RevenueOS
           evaluates every recipient before launch and again before every send.
         </p>
+        {eventContext ? (
+          <p className="mt-4 rounded-2xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950">
+            Event audience · {humanise(eventContext.eventStage)}. Only canonical
+            Contacts linked to the Event are accepted, and normal Engage policy
+            checks still apply.
+          </p>
+        ) : null}
       </div>
       <Notice error={error} />
       {loading ? (
@@ -439,8 +484,8 @@ export function CampaignBuilder() {
               pasted or uploaded here.
             </p>
             <div className="mt-5 max-h-80 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 p-2">
-              {contacts.length ? (
-                contacts.map((contact) => {
+              {visibleContacts.length ? (
+                visibleContacts.map((contact) => {
                   const checked = selected.includes(contact.id);
                   return (
                     <label

@@ -1,6 +1,6 @@
 # RevenueOS Engage
 
-- **Status:** WO-029 one-to-one outreach and WO-030 bounded campaigns/sequences implemented as an entitled add-on
+- **Status:** WO-029 outreach, WO-030 campaigns and WO-031 Events implemented as an entitled add-on
 - **Purpose:** Turn target accounts into conversations
 
 ## Product outcome
@@ -33,7 +33,6 @@ tracking or delivery claim exists. See the
 
 ## Future capabilities, not implemented
 
-- event invitation and follow-up workflows; and
 - automatic reply/provider analytics only after a supported mailbox path exists.
 
 ## Outreach contract
@@ -69,6 +68,10 @@ ever allowed, is bounded to a visible recipient set and exact rendered versions.
 WO-022's execution boundary is reused for live adapters; approval is not execution.
 
 ## Event workflow
+
+WO-031 now implements this bounded manual/CSV workflow. See the
+[Events guide](event-intelligence.md); event-platform connectors, registration and
+ticketing remain future/out of scope.
 
 - **Before:** ingest an authorised attendee source, identify existing Accounts and
   opportunities, rank relevant people, research and prepare invitations.

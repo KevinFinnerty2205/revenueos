@@ -8,6 +8,8 @@ import type {
   DailyPriority,
   DailyRecommendation,
   DailyResponse,
+  SalesEvent,
+  SalesEventList,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -19,6 +21,7 @@ export function RevenueOSDaily() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeEvent, setActiveEvent] = useState<SalesEvent | null>(null);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -49,6 +52,20 @@ export function RevenueOSDaily() {
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
+    return () => controller.abort();
+  }, [refreshKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiRequest<SalesEventList>("/api/v1/engage/events", {
+      signal: controller.signal,
+    })
+      .then((response) => {
+        setActiveEvent(
+          response.items.find((item) => item.state === "active") ?? null,
+        );
+      })
+      .catch(() => setActiveEvent(null));
     return () => controller.abort();
   }, [refreshKey]);
 
@@ -127,6 +144,30 @@ export function RevenueOSDaily() {
       ) : null}
 
       {!daily.hasOpportunities ? <NewUserWelcome /> : null}
+
+      {activeEvent ? (
+        <Link
+          href={`/events/${activeEvent.id}`}
+          className="mb-5 block rounded-3xl border border-teal-200 bg-teal-950 p-5 text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+        >
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">
+            Active Event
+          </p>
+          <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">{activeEvent.name}</h2>
+              <p className="mt-1 text-sm text-slate-300">
+                {activeEvent.summary.planned} planned ·{" "}
+                {activeEvent.summary.met} met · {activeEvent.summary.followUp}{" "}
+                follow-up
+              </p>
+            </div>
+            <span className="font-bold text-teal-200">
+              Open Event workspace →
+            </span>
+          </div>
+        </Link>
+      ) : null}
 
       {daily.hasOpportunities && daily.nextInteraction ? (
         <div className="mb-5 lg:hidden">

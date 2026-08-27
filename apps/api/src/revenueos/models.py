@@ -44,6 +44,11 @@ from revenueos.domain import (
     CompanyStatus,
     ConnectionStatus,
     ConnectorKey,
+    EventAttendeeMatchState,
+    EventAttendeePriority,
+    EventPlanState,
+    EventState,
+    EventType,
     EvidenceLifecycleStatus,
     EvidenceOriginClass,
     EvidenceRetentionClass,
@@ -1424,7 +1429,7 @@ class ContactFieldSource(Base):
             "trust_state IN ('verified', 'provider_supplied', 'inferred', 'unknown')",
             name="ck_contact_field_sources_trust",
         ),
-        CheckConstraint("source_type = 'prospect_person'", name="ck_contact_field_sources_type"),
+        CheckConstraint("source_type IN ('prospect_person', 'event_list')", name="ck_contact_field_sources_type"),
         CheckConstraint(
             "source_organisation_id IS NULL OR source_organisation_id = organisation_id",
             name="ck_contact_field_sources_tenant",
@@ -2052,11 +2057,13 @@ class OutreachPersonalizationSource(Base):
     __tablename__ = "outreach_personalization_sources"
     __table_args__ = (
         CheckConstraint(
-            "source_type IN ('prospect_observation', 'prospect_person_observation', 'approved_seller_context')",
+            "source_type IN ('prospect_observation', 'prospect_person_observation', 'approved_seller_context', "
+            "'event_attendance', 'event_encounter')",
             name="ck_outreach_sources_type",
         ),
         CheckConstraint(
-            "trust_state IN ('verified', 'provider_supplied', 'approved')", name="ck_outreach_sources_trust"
+            "trust_state IN ('verified', 'provider_supplied', 'approved', 'seller_reported')",
+            name="ck_outreach_sources_trust",
         ),
         CheckConstraint("length(trim(label)) BETWEEN 1 AND 300", name="ck_outreach_sources_label"),
         ForeignKeyConstraint(
@@ -2132,6 +2139,378 @@ class ContactSuppression(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class SalesEvent(TimestampMixin, Base):
+    __tablename__ = "sales_events"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) BETWEEN 1 AND 160", name="ck_sales_events_name"),
+        CheckConstraint(
+            "event_type IN ('conference', 'trade_show', 'networking_event', 'customer_event', "
+            "'partner_event', 'industry_event', 'executive_roundtable', 'internal_hosted_event', "
+            "'other_business_event')",
+            name="ck_sales_events_type",
+        ),
+        CheckConstraint(
+            "state IN ('draft', 'upcoming', 'active', 'completed', 'archived')",
+            name="ck_sales_events_state",
+        ),
+        CheckConstraint(
+            "goal_type IS NULL OR goal_type IN ('meet_new_prospects', 'progress_active_opportunities', "
+            "'meet_strategic_accounts', 'reconnect_existing_contacts', 'find_partners', 'other')",
+            name="ck_sales_events_goal",
+        ),
+        CheckConstraint("end_at >= start_at", name="ck_sales_events_range"),
+        CheckConstraint("length(trim(timezone)) BETWEEN 1 AND 64", name="ck_sales_events_timezone"),
+        CheckConstraint("description IS NULL OR length(description) <= 1000", name="ck_sales_events_description"),
+        CheckConstraint("goal_detail IS NULL OR length(goal_detail) <= 300", name="ck_sales_events_goal_detail"),
+        CheckConstraint("source_type = 'manual'", name="ck_sales_events_source"),
+        ForeignKeyConstraint(
+            ["organisation_id", "owner_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_sales_events_owner",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_sales_events_org_id"),
+        Index("ix_sales_events_org_time", "organisation_id", "start_at", "end_at"),
+        Index("ix_sales_events_org_state", "organisation_id", "state", "start_at"),
+        Index("ix_sales_events_org_owner", "organisation_id", "owner_user_id", "start_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False, default=EventType.CONFERENCE.value)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    location_name: Mapped[str | None] = mapped_column(String(200))
+    city: Mapped[str | None] = mapped_column(String(120))
+    country: Mapped[str | None] = mapped_column(String(100))
+    event_url: Mapped[str | None] = mapped_column(String(1000))
+    organiser: Mapped[str | None] = mapped_column(String(160))
+    description: Mapped[str | None] = mapped_column(String(1000))
+    goal_type: Mapped[str | None] = mapped_column(String(40))
+    goal_detail: Mapped[str | None] = mapped_column(String(300))
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="manual", server_default="manual")
+    state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=EventState.UPCOMING.value, server_default=EventState.UPCOMING.value
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EventAttendeeImport(TimestampMixin, Base):
+    __tablename__ = "event_attendee_imports"
+    __table_args__ = (
+        CheckConstraint("state IN ('previewed', 'confirmed', 'expired', 'failed')", name="ck_event_imports_state"),
+        CheckConstraint("length(file_fingerprint) = 64", name="ck_event_imports_fingerprint"),
+        CheckConstraint("row_count BETWEEN 0 AND 500", name="ck_event_imports_rows"),
+        CheckConstraint("valid_row_count BETWEEN 0 AND 500", name="ck_event_imports_valid_rows"),
+        CheckConstraint("imported_row_count BETWEEN 0 AND 500", name="ck_event_imports_imported_rows"),
+        CheckConstraint("attestation_version IS NULL OR attestation_version = 1", name="ck_event_imports_attestation"),
+        ForeignKeyConstraint(
+            ["organisation_id", "event_id"],
+            ["sales_events.organisation_id", "sales_events.id"],
+            name="fk_event_imports_event",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "requested_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_event_imports_requester",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "attested_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_event_imports_attester",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_event_imports_org_id"),
+        UniqueConstraint("organisation_id", "event_id", "id", name="uq_event_imports_org_event_id"),
+        UniqueConstraint("organisation_id", "event_id", "file_fingerprint", name="uq_event_imports_org_event_file"),
+        Index("ix_event_imports_org_event", "organisation_id", "event_id", "created_at"),
+        Index("ix_event_imports_org_expiry", "organisation_id", "state", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="previewed", server_default="previewed")
+    display_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    valid_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    imported_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    column_mapping_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=dict
+    )
+    recognised_columns_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    ignored_columns_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    issues_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    preview_rows_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attestation_version: Mapped[int | None] = mapped_column(Integer)
+    attested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    attested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EventAttendee(TimestampMixin, Base):
+    __tablename__ = "event_attendees"
+    __table_args__ = (
+        CheckConstraint(
+            "COALESCE(length(trim(normalised_business_email)), 0) > 0 OR "
+            "(COALESCE(length(trim(first_name)), 0) > 0 AND COALESCE(length(trim(company_name)), 0) > 0)",
+            name="ck_event_attendees_identity",
+        ),
+        CheckConstraint("source_type = 'event_list'", name="ck_event_attendees_source"),
+        CheckConstraint("email_trust_state IN ('provider_supplied', 'unknown')", name="ck_event_attendees_email_trust"),
+        CheckConstraint(
+            "match_state IN ('matched_contact', 'matched_prospect_person', 'matched_company', "
+            "'possible_match', 'unmatched')",
+            name="ck_event_attendees_match",
+        ),
+        CheckConstraint(
+            "priority_state IN ('priority_to_meet', 'worth_meeting', 'context_only', 'needs_more_information')",
+            name="ck_event_attendees_priority",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "event_id"],
+            ["sales_events.organisation_id", "sales_events.id"],
+            name="fk_event_attendees_event",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "event_id", "import_id"],
+            ["event_attendee_imports.organisation_id", "event_attendee_imports.event_id", "event_attendee_imports.id"],
+            name="fk_event_attendees_import",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_event_attendees_contact",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_event_attendees_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "prospect_person_id"],
+            ["prospect_people.organisation_id", "prospect_people.id"],
+            name="fk_event_attendees_person",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "active_opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_event_attendees_opportunity",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_event_attendees_org_id"),
+        UniqueConstraint("organisation_id", "event_id", "id", name="uq_event_attendees_org_event_id"),
+        UniqueConstraint(
+            "organisation_id", "event_id", "normalised_business_email", name="uq_event_attendees_org_event_email"
+        ),
+        UniqueConstraint(
+            "organisation_id", "event_id", "normalised_profile_url", name="uq_event_attendees_org_event_profile"
+        ),
+        UniqueConstraint(
+            "organisation_id", "event_id", "import_id", "source_row", name="uq_event_attendees_import_row"
+        ),
+        Index("ix_event_attendees_org_event_name", "organisation_id", "event_id", "last_name", "first_name"),
+        Index("ix_event_attendees_org_event_company", "organisation_id", "event_id", "company_name"),
+        Index("ix_event_attendees_org_event_priority", "organisation_id", "event_id", "priority_state"),
+        Index("ix_event_attendees_org_contact", "organisation_id", "contact_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    import_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    first_name: Mapped[str | None] = mapped_column(String(100))
+    last_name: Mapped[str | None] = mapped_column(String(100))
+    company_name: Mapped[str | None] = mapped_column(String(200))
+    job_title: Mapped[str | None] = mapped_column(String(200))
+    business_email: Mapped[str | None] = mapped_column(String(320))
+    normalised_business_email: Mapped[str | None] = mapped_column(String(320))
+    country_or_location: Mapped[str | None] = mapped_column(String(200))
+    profile_url: Mapped[str | None] = mapped_column(String(1000))
+    normalised_profile_url: Mapped[str | None] = mapped_column(String(1000))
+    company_domain: Mapped[str | None] = mapped_column(String(253))
+    registration_category: Mapped[str | None] = mapped_column(String(80))
+    source_row: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_type: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="event_list", server_default="event_list"
+    )
+    email_trust_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="unknown", server_default="unknown"
+    )
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    prospect_person_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    match_state: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=EventAttendeeMatchState.UNMATCHED.value,
+        server_default=EventAttendeeMatchState.UNMATCHED.value,
+    )
+    priority_state: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=EventAttendeePriority.NEEDS_MORE_INFORMATION.value,
+        server_default=EventAttendeePriority.NEEDS_MORE_INFORMATION.value,
+    )
+    priority_reasons_json: Mapped[list[object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=list, server_default="[]"
+    )
+    active_opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+
+
+class EventAttendeeUserState(TimestampMixin, Base):
+    __tablename__ = "event_attendee_user_states"
+    __table_args__ = (
+        CheckConstraint(
+            "plan_state IN ('not_planned', 'planned', 'met', 'follow_up', 'complete', 'not_relevant')",
+            name="ck_event_user_states_plan",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "event_id"],
+            ["sales_events.organisation_id", "sales_events.id"],
+            name="fk_event_user_states_event",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "event_id", "attendee_id"],
+            ["event_attendees.organisation_id", "event_attendees.event_id", "event_attendees.id"],
+            name="fk_event_user_states_attendee",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_event_user_states_user",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_event_user_states_org_id"),
+        UniqueConstraint("organisation_id", "event_id", "attendee_id", "user_id", name="uq_event_user_states_person"),
+        Index("ix_event_user_states_org_event_user", "organisation_id", "event_id", "user_id", "plan_state"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    attendee_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    plan_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=EventPlanState.NOT_PLANNED.value, server_default="not_planned"
+    )
+    meeting_arranged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+
+class EventEncounter(TimestampMixin, Base):
+    __tablename__ = "event_encounters"
+    __table_args__ = (
+        CheckConstraint("state IN ('met', 'follow_up', 'complete')", name="ck_event_encounters_state"),
+        CheckConstraint("seller_note IS NULL OR length(seller_note) <= 1000", name="ck_event_encounters_note"),
+        CheckConstraint("note_origin = 'seller_reported_activity'", name="ck_event_encounters_origin"),
+        ForeignKeyConstraint(
+            ["organisation_id", "event_id"],
+            ["sales_events.organisation_id", "sales_events.id"],
+            name="fk_event_encounters_event",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "event_id", "attendee_id"],
+            ["event_attendees.organisation_id", "event_attendees.event_id", "event_attendees.id"],
+            name="fk_event_encounters_attendee",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_event_encounters_user",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_event_encounters_interaction",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_event_encounters_org_id"),
+        UniqueConstraint("organisation_id", "event_id", "attendee_id", "user_id", name="uq_event_encounters_person"),
+        Index("ix_event_encounters_org_event_user", "organisation_id", "event_id", "user_id", "occurred_at"),
+        Index("ix_event_encounters_org_interaction", "organisation_id", "interaction_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    attendee_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="met", server_default="met")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    seller_note: Mapped[str | None] = mapped_column(String(1000))
+    note_origin: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="seller_reported_activity", server_default="seller_reported_activity"
+    )
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+
+
+class EventCampaignLink(Base):
+    __tablename__ = "event_campaign_links"
+    __table_args__ = (
+        CheckConstraint("stage IN ('pre_event', 'post_event')", name="ck_event_campaign_links_stage"),
+        ForeignKeyConstraint(
+            ["organisation_id", "event_id"],
+            ["sales_events.organisation_id", "sales_events.id"],
+            name="fk_event_campaign_links_event",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "campaign_id"],
+            ["engage_campaigns.organisation_id", "engage_campaigns.id"],
+            name="fk_event_campaign_links_campaign",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_event_campaign_links_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_event_campaign_links_org_id"),
+        UniqueConstraint("organisation_id", "event_id", "campaign_id", name="uq_event_campaign_links_pair"),
+        Index("ix_event_campaign_links_org_event", "organisation_id", "event_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    stage: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class EngageCampaign(TimestampMixin, Base):
     __tablename__ = "engage_campaigns"
     __table_args__ = (
@@ -2179,7 +2558,8 @@ class EngageCampaignVersion(Base):
             name="ck_engage_campaign_versions_approval",
         ),
         CheckConstraint(
-            "source_type IN ('manual_contacts', 'target_market')", name="ck_engage_campaign_versions_source"
+            "source_type IN ('manual_contacts', 'target_market', 'event_attendees')",
+            name="ck_engage_campaign_versions_source",
         ),
         CheckConstraint(
             "send_window_start_minutes BETWEEN 0 AND 1438 AND "
@@ -3503,6 +3883,12 @@ class Interaction(TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["organisation_id", "event_id"],
+            ["sales_events.organisation_id", "sales_events.id"],
+            name="fk_interactions_event_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["organisation_id", "created_by_user_id"],
             [
                 "organisation_memberships.organisation_id",
@@ -3518,6 +3904,7 @@ class Interaction(TimestampMixin, Base):
         Index("ix_interactions_organisation_company", "organisation_id", "company_id"),
         Index("ix_interactions_organisation_opportunity", "organisation_id", "opportunity_id"),
         Index("ix_interactions_organisation_contact", "organisation_id", "contact_id"),
+        Index("ix_interactions_organisation_event", "organisation_id", "event_id"),
         Index("ix_interactions_organisation_deleted", "organisation_id", "deleted_at"),
     )
 
@@ -3530,6 +3917,7 @@ class Interaction(TimestampMixin, Base):
     company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    event_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     interaction_type: Mapped[str] = mapped_column(
         String(40),
         nullable=False,

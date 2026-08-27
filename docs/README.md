@@ -62,6 +62,13 @@ This is the canonical product and engineering documentation index. Documents dis
 56. [ADR 0044: Bounded campaign auto-send](08-decisions/0044-bounded-campaign-level-auto-send.md)
 57. [ADR 0045: Explicit Campaign audience snapshot](08-decisions/0045-explicit-immutable-campaign-audience-snapshot.md)
 58. [ADR 0046: Deferred reply detection](08-decisions/0046-defer-campaign-reply-detection.md)
+59. [Events implementation](01-product/event-intelligence.md) — current WO-031 Engage boundary
+60. [Events UX](02-design/events-ux.md)
+61. [Event domain architecture](03-engineering/event-domain-architecture.md)
+62. [Event attendee import and matching](03-engineering/event-attendee-import-and-matching.md)
+63. [Event security review](03-engineering/event-security-privacy-abuse.md)
+64. [Event-platform boundary](05-integrations/event-platform-boundary.md)
+65. [ADR 0047: Separate Event attendee, encounter and contactability](08-decisions/0047-separate-event-attendee-encounter-and-contactability.md)
 
 ## 00 — Company
 
@@ -101,6 +108,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Target Market Intelligence](01-product/target-market-intelligence.md)
 - [Personalised one-to-one outreach](01-product/personalised-outreach.md)
 - [Campaigns & Sequences implementation](01-product/campaigns-and-sequences.md)
+- [Events implementation](01-product/event-intelligence.md)
 
 ## 02 — Design
 
@@ -113,6 +121,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Presentation mode](02-design/presentation-mode.md)
 - [Presentation Mode implementation guide](02-design/presentation-mode-guide.md)
 - [Mobile companion strategy](02-design/mobile-companion-strategy.md)
+- [Events UX and simplicity review](02-design/events-ux.md)
 - [Browser face-to-face Companion guide](02-design/browser-face-to-face-companion-guide.md)
 - [Phone-call preparation](02-design/phone-call-preparation.md)
 - [Phone Call Intelligence guide](02-design/phone-call-intelligence-guide.md)
@@ -300,6 +309,10 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Campaign security, privacy and abuse review](03-engineering/campaign-security-privacy-abuse-review.md)
 - [Campaign retention, export and deletion](03-engineering/campaign-retention-export-deletion.md)
 - [Campaign quotas and cost controls](03-engineering/campaign-quotas-cost-controls.md)
+- [Event domain architecture](03-engineering/event-domain-architecture.md)
+- [Event attendee import, matching and prioritisation](03-engineering/event-attendee-import-and-matching.md)
+- [Event encounters, outreach and Campaign integration](03-engineering/event-interaction-outreach-campaign.md)
+- [Event security, privacy, retention and abuse review](03-engineering/event-security-privacy-abuse.md)
 
 ### Target through beta
 
@@ -356,6 +369,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Mailbox provider evaluation](05-integrations/mailbox-provider-evaluation.md)
 - [Person and contact provider evaluation](05-integrations/person-contact-provider-evaluation.md)
 - [Person provider licensing and storage decision](05-integrations/person-provider-licensing-storage-decision.md)
+- [Event-platform integration boundary](05-integrations/event-platform-boundary.md)
 
 ## 06 — Roadmap
 
@@ -420,6 +434,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-028: Territory & ICP Intelligence](07-sprints/wo-028-territory-icp-intelligence.md)
 - [WO-029: Personalised Outreach](07-sprints/wo-029-personalised-outreach.md)
 - [WO-030: Campaigns & Sequences](07-sprints/wo-030-campaigns-and-sequences.md)
+- [WO-031: Event Intelligence](07-sprints/wo-031-event-intelligence.md)
 
 ## 08 — Decision records
 
@@ -469,10 +484,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0044: Bounded campaign-level auto-send](08-decisions/0044-bounded-campaign-level-auto-send.md)
 - [ADR 0045: Explicit immutable Campaign audience snapshot](08-decisions/0045-explicit-immutable-campaign-audience-snapshot.md)
 - [ADR 0046: Defer Campaign reply detection](08-decisions/0046-defer-campaign-reply-detection.md)
+- [ADR 0047: Separate Event attendee, encounter and contactability](08-decisions/0047-separate-event-attendee-encounter-and-contactability.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
 implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026/027/028 now
@@ -480,7 +496,7 @@ provide mock-backed company/person research and Target Market discovery. WO-029 
 one-to-one Engage outreach with deterministic non-production email simulation.
 WO-030 adds bounded canonical-Contact Campaigns and sequences using the same Mock
 Email boundary; production mailbox sending and reply detection remain deferred.
-WO-031–045 remain unauthorised.
+WO-031 adds manual authorised-list Event workflows. WO-032–045 remain unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

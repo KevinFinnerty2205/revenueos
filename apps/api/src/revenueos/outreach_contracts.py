@@ -76,10 +76,12 @@ class OutreachSourceResponse(APIModel):
         "prospect_observation",
         "prospect_person_observation",
         "approved_seller_context",
+        "event_attendance",
+        "event_encounter",
     ]
     source_id: UUID
     label: str
-    trust_state: Literal["verified", "provider_supplied", "approved"]
+    trust_state: Literal["verified", "provider_supplied", "approved", "seller_reported"]
     publisher: str | None
     published_at: datetime | None
     url: str | None

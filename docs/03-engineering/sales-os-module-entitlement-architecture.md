@@ -56,6 +56,12 @@ Disabling Engage immediately halts active Campaigns and cancels queued retryable
 email simulations; it does not delete history. Re-enabling does not silently approve
 or resume halted work.
 
+WO-031 Events uses the same `engage` entitlement plus the server-authoritative
+`engageEvents` feature. Loss of availability preserves retained Event history as
+read-only/exportable but blocks create, import, plan, encounter, promotion and
+outreach. Prospect entitlement only controls the optional explicit research link; an
+Engage-only seller can still import, plan and capture Event context.
+
 ## Server and client contract
 
 API policy remains authoritative. Route/service authorisation checks the concrete

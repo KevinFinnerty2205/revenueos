@@ -200,6 +200,7 @@ defaults:
 | `API_FEATURE_LIVE_INTERACTION_EXTERNAL_AI_ENABLED`           | `false` |
 | `API_FEATURE_ENGAGE_ENABLED`                                | `true`  |
 | `API_FEATURE_ENGAGE_CAMPAIGNS_ENABLED`                      | `true`  |
+| `API_FEATURE_ENGAGE_EVENTS_ENABLED`                         | `true`  |
 | `API_FEATURE_DATA_EXPORT_ENABLED`                            | `true`  |
 | `API_FEATURE_ORGANISATION_DELETION_ENABLED`                  | `false` |
 
@@ -208,11 +209,15 @@ fail closed with a product-safe `404`; browser feature gates do not render the
 disabled workspace. Unknown flags are never returned and are treated as off.
 There is deliberately no feature-flag administration UI.
 
+The table reflects local/private-beta defaults. A production environment must
+explicitly override `API_FEATURE_ENGAGE_EVENTS_ENABLED=false` until the WO-031
+privacy, migration/RLS and rollout evidence is approved.
+
 ## Health and safe monitoring
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  current Alembic head (`0039_campaign_sequences` for WO-030), identity configuration, selected
+  current Alembic head (`0040_event_intelligence` for WO-031), identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.

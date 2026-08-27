@@ -57,6 +57,26 @@ steps; extra fields and arbitrary recipient addresses are rejected. Launch requi
 exact expected version and confirmation; auto-send additionally requires organisation
 policy and `autoSendConfirmed=true`. Pydantic/OpenAPI remains canonical.
 
+## Engage Events
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET/POST` | `/api/v1/engage/events` | List/search or create manual Events |
+| `GET/PATCH/DELETE` | `/api/v1/engage/events/{eventId}` | Read/edit/delete an Event |
+| `POST` | `/api/v1/engage/events/{eventId}/attendee-imports/preview` | Parse a bounded selected CSV into a one-hour preview |
+| `GET` | `/api/v1/engage/events/{eventId}/attendee-imports/{importId}` | Read the approved-field preview |
+| `POST` | `/api/v1/engage/events/{eventId}/attendee-imports/{importId}/confirm` | Confirm mapping plus authority attestation |
+| `GET` | `/api/v1/engage/events/{eventId}/attendees` | Page/search/filter Event-local attendees |
+| `GET` | `/api/v1/engage/events/{eventId}/attendees/{attendeeId}` | Read attendee match/priority/context |
+| `PUT` | `/api/v1/engage/events/{eventId}/attendees/{attendeeId}/plan` | Save current-user planning state |
+| `POST` | `/api/v1/engage/events/{eventId}/attendees/{attendeeId}/encounter` | Mark met/follow-up and optionally link an Interaction |
+| `POST` | `/api/v1/engage/events/{eventId}/attendees/{attendeeId}/promote` | Explicitly link/create canonical Contact |
+| `POST` | `/api/v1/engage/events/{eventId}/attendees/{attendeeId}/outreach` | Create a review-required truthful WO-029 draft |
+
+Import content is strict base64 CSV and authority confirmation is server-validated.
+Raw attendees cannot be recipients; Event Campaign linkage is validated through the
+existing Campaign create contract.
+
 ## Private beta controls
 
 | Method      | Path                                              | Purpose                                                        |

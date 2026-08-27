@@ -405,7 +405,7 @@ def test_published_campaign_version_carries_launch_fingerprint(app: FastAPI, cli
             assert version.launch_fingerprint is not None and len(version.launch_fingerprint) == 64
             assert version.approved_by_user_id is not None
             export = await _export_payload(session, PRIMARY_ORGANISATION_ID, app.state.settings)
-            assert export["exportVersion"] == EXPORT_VERSION == 20
+            assert export["exportVersion"] == EXPORT_VERSION == 21
             assert len(export["engageCampaigns"]) == 1  # type: ignore[arg-type]
             assert len(export["engageCampaignVersions"]) == 1  # type: ignore[arg-type]
             assert len(export["engageSequenceSteps"]) == 2  # type: ignore[arg-type]

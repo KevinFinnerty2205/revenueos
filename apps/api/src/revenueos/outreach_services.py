@@ -150,6 +150,14 @@ class CampaignOutreachContext:
     excluded_source_ids: frozenset[UUID]
 
 
+@dataclass(frozen=True)
+class AdditionalOutreachSource:
+    source_type: Literal["event_attendance", "event_encounter"]
+    source_id: UUID
+    label: str
+    trust_state: Literal["provider_supplied", "seller_reported"]
+
+
 def _normalise_address(value: str) -> str:
     return value.strip().casefold()
 
@@ -596,6 +604,100 @@ class OutreachService:
             commit=False,
         )
 
+    async def prepare_event_draft(
+        self,
+        contact_id: UUID,
+        *,
+        event_id: UUID,
+        attendee_id: UUID,
+        event_name: str,
+        event_date_label: str,
+        stage: Literal["pre_event", "post_event"],
+        met: bool,
+        encounter_id: UUID | None,
+    ) -> OutreachRecord:
+        """Prepare one truthful Event message while retaining the canonical Contact boundary."""
+        await self._require_entitled()
+        contact = await self._contact(contact_id)
+        company = await self.repository.company(self.tenant.organisation_id, contact.company_id)
+        policy = await self.repository.policy(self.tenant.organisation_id)
+        sender = await self.repository.user(self.tenant.user_id)
+        organisation = await self.repository.organisation(self.tenant.organisation_id)
+        assert company is not None and sender is not None and organisation is not None
+        if policy is None or not policy.configured:
+            raise PublicAPIError("outreach_profile_required", "The approved seller context is unavailable.", 409)
+        sources = await self._selected_sources(contact)
+        _, base_body, used = self._compose(
+            contact=contact,
+            company_name=company.name,
+            sender_name=sender.display_name,
+            organisation_name=organisation.name,
+            policy=policy,
+            purpose=(OutreachPurpose.REQUEST_MEETING if stage == "pre_event" else OutreachPurpose.RE_ENGAGE),
+            sources=sources,
+        )
+        base_parts = base_body.split("\n\n")
+        research_hook = base_parts[1] if len(base_parts) > 1 and used else None
+        if stage == "pre_event":
+            subject = f"Meeting at {event_name}"[:200]
+            event_line = (
+                f"An authorised attendee list indicates you may be attending {event_name} on {event_date_label}. "
+                "If so, I would value a short conversation."
+            )
+            purpose_line = policy.approved_cta
+        else:
+            subject = (f"Following up after {event_name}" if met else f"After {event_name}")[:200]
+            event_line = (
+                f"Good meeting you at {event_name}." if met else f"I wanted to get in touch following {event_name}."
+            )
+            purpose_line = "Would it be useful to compare notes?"
+        paragraphs = [f"Hi {contact.first_name},", event_line]
+        if research_hook:
+            paragraphs.append(research_hook)
+        paragraphs.extend(
+            (
+                f"{policy.value_proposition} {purpose_line}",
+                f"Kind regards,\n{sender.display_name}\n{organisation.name}",
+            )
+        )
+        body = "\n\n".join(paragraphs)
+        self._validate_copy(subject, body)
+        additional_sources = [
+            AdditionalOutreachSource(
+                source_type="event_attendance",
+                source_id=attendee_id,
+                label=f"Authorised Event attendee list: {event_name}",
+                trust_state="provider_supplied",
+            )
+        ]
+        if met and encounter_id is not None:
+            additional_sources.append(
+                AdditionalOutreachSource(
+                    source_type="event_encounter",
+                    source_id=encounter_id,
+                    label=f"Seller-recorded encounter at {event_name}",
+                    trust_state="seller_reported",
+                )
+            )
+        return await self._persist_draft(
+            contact=contact,
+            policy=policy,
+            sender=sender,
+            purpose=(OutreachPurpose.REQUEST_MEETING if stage == "pre_event" else OutreachPurpose.RE_ENGAGE),
+            subject=subject,
+            body=body,
+            used=used,
+            composer_version="outreach_event_deterministic_v1",
+            plan_extra={
+                "eventId": str(event_id),
+                "eventStage": stage,
+                "eventMet": met,
+                "eventConversationClaimsIncluded": False,
+            },
+            additional_sources=tuple(additional_sources),
+            commit=False,
+        )
+
     async def _persist_draft(
         self,
         *,
@@ -609,6 +711,7 @@ class OutreachService:
         composer_version: str,
         plan_extra: dict[str, object],
         commit: bool,
+        additional_sources: tuple[AdditionalOutreachSource, ...] = (),
     ) -> OutreachRecord:
         trust = await self._sendable_trust(contact)
         now = datetime.now(UTC)
@@ -716,7 +819,7 @@ class OutreachService:
                 metadata_json={
                     "action_type": "personalized_outreach",
                     "purpose": purpose.value,
-                    "source_count": len(used) + 1,
+                    "source_count": len(used) + len(additional_sources) + 1,
                 },
                 created_at=now,
             )
@@ -732,6 +835,20 @@ class OutreachService:
                     supporting_source_id=item.source.id,
                     label=self._source_label(item.observation),
                     trust_state=item.observation.trust_state,
+                    created_at=now,
+                )
+            )
+        for additional_source in additional_sources:
+            self.repository.add(
+                OutreachPersonalizationSource(
+                    id=uuid.uuid4(),
+                    organisation_id=self.tenant.organisation_id,
+                    outreach_version_id=version_id,
+                    source_type=additional_source.source_type,
+                    source_id=additional_source.source_id,
+                    supporting_source_id=None,
+                    label=additional_source.label,
+                    trust_state=additional_source.trust_state,
                     created_at=now,
                 )
             )
@@ -1120,7 +1237,7 @@ class OutreachService:
         person = await self.repository.prospect_person_for_contact(self.tenant.organisation_id, contact.id)
         sources = await self.repository.version_sources(self.tenant.organisation_id, outreach_version_id)
         for source in sources:
-            if source.source_type == "approved_seller_context":
+            if source.source_type in {"approved_seller_context", "event_attendance", "event_encounter"}:
                 continue
             if person is None or person.employment_state != "current":
                 return False
@@ -1370,6 +1487,7 @@ class OutreachService:
         prospect_sources = [
             item for item in sources if item.source_type in {"prospect_observation", "prospect_person_observation"}
         ]
+        event_sources = [item for item in sources if item.source_type in {"event_attendance", "event_encounter"}]
         warnings = (
             ["Edited by you. Source-backed provenance applies only to the generated personalisation you retained."]
             if user_edited
@@ -1399,7 +1517,7 @@ class OutreachService:
                 recipient_trust=cast(Literal["verified", "provider_supplied"], version.recipient_trust),
                 creation_type=cast(Literal["generated", "user_edited"], version.creation_type),
                 composer_version=version.composer_version,
-                personalization_used=bool(prospect_sources),
+                personalization_used=bool(prospect_sources or event_sources),
                 sources=sources,
                 warnings=warnings,
                 created_at=version.created_at,
@@ -1419,6 +1537,17 @@ class OutreachService:
                 source_id=item.source_id,
                 label=item.label,
                 trust_state="approved",
+                publisher=None,
+                published_at=None,
+                url=None,
+            )
+        if item.source_type in {"event_attendance", "event_encounter"}:
+            return OutreachSourceResponse(
+                id=item.id,
+                source_type=cast(Literal["event_attendance", "event_encounter"], item.source_type),
+                source_id=item.source_id,
+                label=item.label,
+                trust_state=cast(Literal["provider_supplied", "seller_reported"], item.trust_state),
                 publisher=None,
                 published_at=None,
                 url=None,

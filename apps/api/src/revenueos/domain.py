@@ -99,6 +99,59 @@ class CampaignOutcome(StrEnum):
     NOT_INTERESTED = "not_interested"
 
 
+class EventType(StrEnum):
+    CONFERENCE = "conference"
+    TRADE_SHOW = "trade_show"
+    NETWORKING_EVENT = "networking_event"
+    CUSTOMER_EVENT = "customer_event"
+    PARTNER_EVENT = "partner_event"
+    INDUSTRY_EVENT = "industry_event"
+    EXECUTIVE_ROUNDTABLE = "executive_roundtable"
+    INTERNAL_HOSTED_EVENT = "internal_hosted_event"
+    OTHER_BUSINESS_EVENT = "other_business_event"
+
+
+class EventState(StrEnum):
+    DRAFT = "draft"
+    UPCOMING = "upcoming"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
+
+
+class EventGoal(StrEnum):
+    MEET_NEW_PROSPECTS = "meet_new_prospects"
+    PROGRESS_ACTIVE_OPPORTUNITIES = "progress_active_opportunities"
+    MEET_STRATEGIC_ACCOUNTS = "meet_strategic_accounts"
+    RECONNECT_EXISTING_CONTACTS = "reconnect_existing_contacts"
+    FIND_PARTNERS = "find_partners"
+    OTHER = "other"
+
+
+class EventAttendeeMatchState(StrEnum):
+    MATCHED_CONTACT = "matched_contact"
+    MATCHED_PROSPECT_PERSON = "matched_prospect_person"
+    MATCHED_COMPANY = "matched_company"
+    POSSIBLE_MATCH = "possible_match"
+    UNMATCHED = "unmatched"
+
+
+class EventAttendeePriority(StrEnum):
+    PRIORITY_TO_MEET = "priority_to_meet"
+    WORTH_MEETING = "worth_meeting"
+    CONTEXT_ONLY = "context_only"
+    NEEDS_MORE_INFORMATION = "needs_more_information"
+
+
+class EventPlanState(StrEnum):
+    NOT_PLANNED = "not_planned"
+    PLANNED = "planned"
+    MET = "met"
+    FOLLOW_UP = "follow_up"
+    COMPLETE = "complete"
+    NOT_RELEVANT = "not_relevant"
+
+
 class ProspectResearchRunStatus(StrEnum):
     PENDING = "pending"
     FETCHING = "fetching"

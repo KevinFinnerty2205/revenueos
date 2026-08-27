@@ -55,6 +55,11 @@ from revenueos.models import (
     EngageCampaignVersion,
     EngageEnrollmentStep,
     EngageSequenceStep,
+    EventAttendee,
+    EventAttendeeImport,
+    EventAttendeeUserState,
+    EventCampaignLink,
+    EventEncounter,
     Evidence,
     EvidenceFragment,
     ExecutionPreview,
@@ -115,6 +120,7 @@ from revenueos.models import (
     RevenueBrainInteractionSnapshot,
     RevenueBrainSnapshot,
     RevenueBrainSourceSnapshot,
+    SalesEvent,
     SourceCandidateEvidence,
     Task,
     Transcript,
@@ -131,7 +137,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 20
+EXPORT_VERSION = 21
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -344,6 +350,20 @@ async def run_retention(
                 )
             ).all()
         )
+        expired_event_ids = list(
+            (
+                await session.scalars(
+                    select(SalesEvent.id)
+                    .where(
+                        SalesEvent.organisation_id == organisation_id,
+                        SalesEvent.state != "draft",
+                        SalesEvent.end_at < cutoff,
+                    )
+                    .order_by(SalesEvent.end_at, SalesEvent.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
         linked_campaign_action_ids = (
             select(OutreachMessage.action_id)
             .join(
@@ -419,6 +439,7 @@ async def run_retention(
         counts.update(prospect_counts)
         counts["expired_prospect_contact_points"] = len(expired_contact_point_ids)
         counts["engage_campaigns"] = len(terminal_campaign_ids)
+        counts["sales_events"] = len(expired_event_ids)
         counts["outreach_messages"] = len(outreach_action_ids)
         expired_live_count = int(
             (
@@ -443,6 +464,7 @@ async def run_retention(
             and not methodology_projection_ids
             and not prospect_target_ids
             and not terminal_campaign_ids
+            and not expired_event_ids
             and not outreach_action_ids
             and not expired_live_count
             and not expired_contact_point_ids
@@ -456,6 +478,22 @@ async def run_retention(
                 counts,
             )
         removed = await _expire_prospect_contact_points(session, organisation_id, expired_contact_point_ids)
+        if expired_event_ids:
+            await session.execute(
+                update(Interaction)
+                .where(
+                    Interaction.organisation_id == organisation_id,
+                    Interaction.event_id.in_(expired_event_ids),
+                )
+                .values(event_id=None)
+            )
+            await session.execute(
+                delete(SalesEvent).where(
+                    SalesEvent.organisation_id == organisation_id,
+                    SalesEvent.id.in_(expired_event_ids),
+                )
+            )
+            removed["sales_events"] = len(expired_event_ids)
         if terminal_campaign_ids:
             await session.execute(
                 delete(EngageCampaign).where(
@@ -554,6 +592,7 @@ async def run_retention(
                     "meeting_count": len(meeting_ids),
                     "prospect_target_count": len(prospect_target_ids),
                     "campaign_count": len(terminal_campaign_ids),
+                    "event_count": len(expired_event_ids),
                     "expired_prospect_contact_point_count": len(expired_contact_point_ids),
                     "retention_days": retention_days,
                 },
@@ -835,6 +874,7 @@ async def _delete_organisation_records(
         await session.execute(delete(AIArtifact).where(AIArtifact.organisation_id == organisation_id))
         await session.execute(delete(AIJob).where(AIJob.organisation_id == organisation_id))
         await session.execute(delete(MockConnectorObject).where(MockConnectorObject.organisation_id == organisation_id))
+        await session.execute(delete(EventCampaignLink).where(EventCampaignLink.organisation_id == organisation_id))
         await session.execute(
             delete(EngageEnrollmentStep).where(EngageEnrollmentStep.organisation_id == organisation_id)
         )
@@ -949,7 +989,14 @@ async def _delete_organisation_records(
         await session.execute(
             delete(OnlineMeetingMetadata).where(OnlineMeetingMetadata.organisation_id == organisation_id)
         )
+        await session.execute(delete(EventEncounter).where(EventEncounter.organisation_id == organisation_id))
         await session.execute(delete(Interaction).where(Interaction.organisation_id == organisation_id))
+        await session.execute(
+            delete(EventAttendeeUserState).where(EventAttendeeUserState.organisation_id == organisation_id)
+        )
+        await session.execute(delete(EventAttendee).where(EventAttendee.organisation_id == organisation_id))
+        await session.execute(delete(EventAttendeeImport).where(EventAttendeeImport.organisation_id == organisation_id))
+        await session.execute(delete(SalesEvent).where(SalesEvent.organisation_id == organisation_id))
         await session.execute(
             delete(OpportunityAuditEvent).where(OpportunityAuditEvent.organisation_id == organisation_id)
         )
@@ -2513,6 +2560,40 @@ async def _export_payload(
         .where(ContactFieldSource.organisation_id == organisation_id)
         .order_by(ContactFieldSource.contact_id, ContactFieldSource.field_key, ContactFieldSource.id)
     )
+    sales_events = await rows(
+        select(SalesEvent)
+        .where(SalesEvent.organisation_id == organisation_id)
+        .order_by(SalesEvent.start_at, SalesEvent.id)
+    )
+    event_imports = await rows(
+        select(EventAttendeeImport)
+        .where(EventAttendeeImport.organisation_id == organisation_id)
+        .order_by(EventAttendeeImport.event_id, EventAttendeeImport.created_at, EventAttendeeImport.id)
+    )
+    event_attendees = await rows(
+        select(EventAttendee)
+        .where(EventAttendee.organisation_id == organisation_id)
+        .order_by(EventAttendee.event_id, EventAttendee.source_row, EventAttendee.id)
+    )
+    event_user_states = await rows(
+        select(EventAttendeeUserState)
+        .where(EventAttendeeUserState.organisation_id == organisation_id)
+        .order_by(
+            EventAttendeeUserState.event_id,
+            EventAttendeeUserState.user_id,
+            EventAttendeeUserState.attendee_id,
+        )
+    )
+    event_encounters = await rows(
+        select(EventEncounter)
+        .where(EventEncounter.organisation_id == organisation_id)
+        .order_by(EventEncounter.event_id, EventEncounter.occurred_at, EventEncounter.id)
+    )
+    event_campaign_links = await rows(
+        select(EventCampaignLink)
+        .where(EventCampaignLink.organisation_id == organisation_id)
+        .order_by(EventCampaignLink.event_id, EventCampaignLink.created_at, EventCampaignLink.id)
+    )
     engage_campaigns = await rows(
         select(EngageCampaign)
         .where(EngageCampaign.organisation_id == organisation_id)
@@ -3256,6 +3337,140 @@ async def _export_payload(
                 ),
             )
             for item in contact_field_sources
+        ],
+        "salesEvents": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "owner_user_id",
+                    "name",
+                    "event_type",
+                    "start_at",
+                    "end_at",
+                    "timezone",
+                    "location_name",
+                    "city",
+                    "country",
+                    "event_url",
+                    "organiser",
+                    "description",
+                    "goal_type",
+                    "goal_detail",
+                    "source_type",
+                    "state",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in sales_events
+        ],
+        "eventAttendeeImports": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "event_id",
+                    "requested_by_user_id",
+                    "state",
+                    "row_count",
+                    "valid_row_count",
+                    "imported_row_count",
+                    "column_mapping_json",
+                    "recognised_columns_json",
+                    "ignored_columns_json",
+                    "issues_json",
+                    "attestation_version",
+                    "attested_by_user_id",
+                    "attested_at",
+                    "confirmed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in event_imports
+        ],
+        "eventAttendees": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "event_id",
+                    "import_id",
+                    "first_name",
+                    "last_name",
+                    "company_name",
+                    "job_title",
+                    "business_email",
+                    "country_or_location",
+                    "profile_url",
+                    "company_domain",
+                    "registration_category",
+                    "source_row",
+                    "source_type",
+                    "email_trust_state",
+                    "contact_id",
+                    "company_id",
+                    "prospect_person_id",
+                    "match_state",
+                    "priority_state",
+                    "priority_reasons_json",
+                    "active_opportunity_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in event_attendees
+        ],
+        "eventAttendeeUserStates": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "event_id",
+                    "attendee_id",
+                    "user_id",
+                    "plan_state",
+                    "meeting_arranged",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in event_user_states
+        ],
+        "eventEncounters": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "event_id",
+                    "attendee_id",
+                    "user_id",
+                    "state",
+                    "occurred_at",
+                    "seller_note",
+                    "note_origin",
+                    "interaction_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in event_encounters
+        ],
+        "eventCampaignLinks": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "event_id",
+                    "campaign_id",
+                    "stage",
+                    "created_by_user_id",
+                    "created_at",
+                ),
+            )
+            for item in event_campaign_links
         ],
         "outreachPolicies": [
             _columns(

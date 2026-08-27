@@ -1,5 +1,15 @@
 # Application architecture
 
+## Engage Events (WO-031)
+
+The modular monolith adds six tenant-owned Event tables and a nullable Event link on
+Interaction. Engage services own manual Event CRUD, safe attendee preview/import,
+planning, encounters, promotion and outreach handoff; existing Core, Prospect,
+Outreach and Campaign services keep their own truth and execution policy. Set-based
+matching and bounded synchronous CSV processing require no queue, provider or new
+datastore. Migration `0040_event_intelligence` enforces composite tenant keys and
+forced RLS. See [Event domain architecture](event-domain-architecture.md).
+
 ## Engage Campaigns & Sequences (WO-030)
 
 The modular monolith adds six tenant-owned Campaign tables and a bounded Campaign

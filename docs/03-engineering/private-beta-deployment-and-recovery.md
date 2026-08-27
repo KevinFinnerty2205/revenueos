@@ -56,7 +56,7 @@ production decisions include:
 - explicit TLS web/API URLs and CORS origins;
 - data-notice version, default retention, transcript/generation/provider/visual limits,
   retry/timeout limits and restricted export directory;
-- feature flags, with OpenAI and organisation deletion off initially;
+- feature flags, with OpenAI, Engage Events and organisation deletion off initially;
 - server-only OpenAI key/model only after approval;
 - private S3-compatible visual endpoint/bucket/region/credentials, a
   deployment-specific signing secret and short signed-URL lifetime; and

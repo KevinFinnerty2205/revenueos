@@ -345,6 +345,15 @@ deferred. See the [WO-030 record](../07-sprints/wo-030-campaigns-and-sequences.m
 
 ### WO-031 — Event Intelligence
 
+**Current implementation note (27 August 2026):** WO-031 is implemented as manual
+business Events, authorised UTF-8 CSV preview/mapping/attestation, Event-local
+attendees, conservative set-based matching, categorical priority, per-user planning,
+seller-reported encounters, explicit Contact promotion, existing Companion capture
+and truthful WO-029/030 handoff. Attendance cannot grant contactability or create
+Evidence, Buying Signal, Methodology state or Revenue Brain truth. Event-platform
+connectors, ticketing, badge/OCR, bulk promotion and mass attendee email remain
+absent. See the [WO-031 record](../07-sprints/wo-031-event-intelligence.md).
+
 - **Objective/value/package:** Prepare for, capture and follow up authorised business
   events without treating attendance as consent. **Engage**.
 - **Dependencies/checkpoint:** WO-026–030 foundations, current Interaction/Evidence

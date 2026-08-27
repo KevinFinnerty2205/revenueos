@@ -87,6 +87,11 @@ explicit bounded Contact snapshot and does not self-expand. Each Campaign step
 reuses the same current, non-sensitive, source-backed observations and revalidates
 them before auto-send. See [Campaigns & Sequences](campaigns-and-sequences.md).
 
+WO-031 Events may expose the existing explicit Find/research link when Prospect is
+entitled. Event-list data stays `event_list` provenance and is not reclassified as
+public research; conflicts remain visible and no attendee-wide provider fan-out runs.
+Engage-only users retain Event planning and capture without research.
+
 ## ICP and territory
 
 An organisation can define bounded industries, size, geography, revenue, employee

@@ -136,8 +136,14 @@ WO-030 Campaign development additionally requires the Engage entitlement plus
 Campaign due-step preparation and reconciliation before and after Action Execution;
 do not start an extra scheduler. Connect the user-bound Mock Email adapter to exercise
 the synthetic journey. It remains visibly simulation-only, uses canonical Contacts
-and makes no network request. The current single Alembic head is
-`0039_campaign_sequences`.
+and makes no network request.
+
+WO-031 Event development additionally uses
+`API_FEATURE_ENGAGE_EVENTS_ENABLED=true`, 50 active/upcoming Events per organisation,
+500 attendees per Event and five confirmed imports per Event/day. Use synthetic UTF-8
+CSV through the browser or preview API; raw bytes are not retained and standard tests
+make no Event-platform, Prospect-provider or email-provider request. The current
+single Alembic head is `0040_event_intelligence`.
 
 ## Database workflow
 

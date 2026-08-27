@@ -50,6 +50,7 @@ from revenueos.models import (
     EngageCampaignVersion,
     EngageEnrollmentStep,
     EngageSequenceStep,
+    EventCampaignLink,
     OutreachPolicy,
 )
 from revenueos.outreach_repositories import OutreachRepository
@@ -137,6 +138,7 @@ class CampaignService:
         self.repository.add(version)
         await self._flush("The campaign version could not be created.")
         await self._replace_draft_children(campaign, version, request)
+        await self._sync_event_link(campaign, request)
         campaign.state = CampaignState.READY.value
         await self._commit("The campaign could not be created.")
         logger.info(
@@ -175,6 +177,7 @@ class CampaignService:
         await self.repository.delete_draft_children(self.tenant.organisation_id, version.id)
         await self._flush("The previous campaign draft could not be replaced.")
         await self._replace_draft_children(record.campaign, version, request)
+        await self._sync_event_link(record.campaign, request)
         record.campaign.state = CampaignState.READY.value
         record.campaign.updated_at = datetime.now(UTC)
         await self._commit("The campaign draft could not be updated.")
@@ -504,6 +507,15 @@ class CampaignService:
         contacts = await self.repository.contacts(self.tenant.organisation_id, request.contact_ids)
         if len(contacts) != len(request.contact_ids):
             raise PublicAPIError("contact_not_found", "One or more selected Contacts were not found.", 404)
+        if request.source_type == "event_attendees":
+            if request.event_id is None or not await self.repository.event_accepts_contacts(
+                self.tenant.organisation_id, request.event_id, request.contact_ids
+            ):
+                raise PublicAPIError(
+                    "event_audience_invalid",
+                    "Every Event campaign recipient must be a canonical Contact linked to that Event.",
+                    422,
+                )
         contact_map = {item.id: item for item in contacts}
         for contact_id in request.contact_ids:
             contact = contact_map[contact_id]
@@ -525,6 +537,25 @@ class CampaignService:
                 )
             )
         await self._flush("The campaign audience could not be saved.")
+
+    async def _sync_event_link(self, campaign: EngageCampaign, request: CampaignDraftFields) -> None:
+        await self.repository.delete_event_campaign_link(self.tenant.organisation_id, campaign.id)
+        if request.source_type != "event_attendees":
+            return
+        if request.event_id is None or request.event_stage is None:
+            raise PublicAPIError("event_context_required", "Event campaign context is required.", 422)
+        self.repository.add(
+            EventCampaignLink(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                event_id=request.event_id,
+                campaign_id=campaign.id,
+                stage=request.event_stage,
+                created_by_user_id=self.tenant.user_id,
+                created_at=datetime.now(UTC),
+            )
+        )
+        await self._flush("The Event campaign link could not be saved.")
 
     async def _refresh_audience(
         self, campaign: EngageCampaign, version: EngageCampaignVersion
@@ -593,6 +624,7 @@ class CampaignService:
         metrics = await self.repository.campaign_counts(self.tenant.organisation_id, campaign.id)
         can_manage = self.tenant.can_manage() or campaign.owner_user_id == self.tenant.user_id
         auto = version.approval_mode == CampaignApprovalMode.APPROVED_CAMPAIGN_AUTO_SEND.value
+        event_link = await self.repository.event_campaign_link(self.tenant.organisation_id, campaign.id)
         return CampaignResponse(
             id=campaign.id,
             version_id=version.id,
@@ -603,7 +635,11 @@ class CampaignService:
             approval_mode=CampaignApprovalMode(version.approval_mode),
             owner_user_id=campaign.owner_user_id,
             sender_user_id=version.sender_user_id,
-            source_type=cast(Literal["manual_contacts", "target_market"], version.source_type),
+            source_type=cast(Literal["manual_contacts", "target_market", "event_attendees"], version.source_type),
+            event_id=event_link.event_id if event_link is not None else None,
+            event_stage=(
+                cast(Literal["pre_event", "post_event"], event_link.stage) if event_link is not None else None
+            ),
             sender_timezone=version.sender_timezone,
             send_days=list(version.send_days_json),
             send_window_start_minutes=version.send_window_start_minutes,

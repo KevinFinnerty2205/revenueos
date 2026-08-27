@@ -1,5 +1,13 @@
 # Interaction domain architecture
 
+## WO-031 Event linkage
+
+Interaction now has an optional tenant-scoped `event_id`. A deliberate Event capture
+can create one planned Interaction and open the existing Companion, while EventEncounter
+retains the attendee/user seller-report state. Mark-met alone does not create an
+Interaction or Evidence. Event deletion nulls `event_id` before removing Event-local
+data so canonical Interaction history and all reviewed sources survive.
+
 - **Status:** Approved target architecture; WO-011 implements Interaction/Meeting
   compatibility and the Evidence/Capture Session foundation, WO-012 adds preparation,
   WO-013 executes reviewed AI Debrief/Voice Journal, WO-014 visual evidence and

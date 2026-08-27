@@ -30,6 +30,7 @@ from revenueos.routes import (
     companies,
     contacts,
     daily,
+    events,
     evidence,
     health,
     integrations,
@@ -152,6 +153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(integrations.router)
     app.include_router(outreach.router)
     app.include_router(campaigns.router)
+    app.include_router(events.router)
     return app
 
 
