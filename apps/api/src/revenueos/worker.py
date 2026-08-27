@@ -8,6 +8,7 @@ import uuid
 from revenueos.ai_worker_services import AIWorkerService
 from revenueos.campaign_worker import CampaignWorkerService
 from revenueos.config import Settings, get_settings
+from revenueos.create_worker import CreateWorkerService
 from revenueos.database import create_engine, create_session_factory
 from revenueos.integration_worker import ActionExecutionWorkerService
 from revenueos.observability import configure_logging
@@ -27,6 +28,7 @@ class AIWorker:
         execution_service: ActionExecutionWorkerService | None = None,
         prospect_service: ProspectWorkerService | None = None,
         campaign_service: CampaignWorkerService | None = None,
+        create_service: CreateWorkerService | None = None,
         worker_id: str | None = None,
     ) -> None:
         self._service = service
@@ -35,6 +37,7 @@ class AIWorker:
         self._execution_service = execution_service
         self._prospect_service = prospect_service
         self._campaign_service = campaign_service
+        self._create_service = create_service
         resolved_worker_id = (worker_id or f"worker-{uuid.uuid4().hex}").strip()
         if not resolved_worker_id or len(resolved_worker_id) > 200:
             raise ValueError("Worker identity must contain 1 to 200 characters.")
@@ -71,9 +74,17 @@ class AIWorker:
         campaign_reconciled = (
             await self._campaign_service.run_once(self.worker_id) if self._campaign_service is not None else False
         )
+        create_processed = (
+            await self._create_service.run_once(self.worker_id) if self._create_service is not None else False
+        )
         organisations = await self._service.discover_eligible_organisations()
         processed = (
-            prospect_processed or recording_processed or campaign_prepared or execution_processed or campaign_reconciled
+            prospect_processed
+            or recording_processed
+            or campaign_prepared
+            or execution_processed
+            or campaign_reconciled
+            or create_processed
         )
         for organisation_id in organisations:
             cancelled = await self._service.cancel_pending_jobs(organisation_id)
@@ -108,6 +119,7 @@ async def run_worker(settings: Settings | None = None) -> None:
         execution_service=ActionExecutionWorkerService(session_factory, resolved_settings),
         prospect_service=ProspectWorkerService(session_factory, resolved_settings),
         campaign_service=CampaignWorkerService(session_factory, resolved_settings),
+        create_service=CreateWorkerService(session_factory, resolved_settings),
     )
     try:
         await worker.run(stop)

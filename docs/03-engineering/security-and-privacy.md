@@ -394,14 +394,22 @@ deletion controls are implemented. Provider/privacy approval, target-environment
 operational evidence and production audit/legal policy are not complete. See
 [the WO-009 security review](private-beta-security-review.md).
 
-## WO-023 future Sales OS threat boundary
+## WO-023 Sales OS threat boundary
 
-The proposed research, outreach, event, Create, CRM, forecast, manager, entitlement,
-file and handover capabilities add material risks but change no current control. Their
-minimum gates and explicit prohibitions are defined in the
+The broader research, outreach, event, Create, CRM, forecast, manager, entitlement,
+file and handover direction adds material risks. Implemented slices are reviewed in
+their work orders; future slices remain unimplemented. Minimum gates and explicit
+prohibitions are defined in the
 [End-to-End Sales Platform security and privacy review](end-to-end-sales-platform-security-privacy.md)
 and [risk register](end-to-end-sales-platform-risk-register.md). Each future work
 order must re-assess those risks; WO-023 authorises no provider or production data use.
+
+WO-032 now implements only the approved-template PPTX presentation boundary. It adds
+bounded hostile-package parsing, forced-RLS Create rows, typed customer-safe context,
+exact claim provenance, immutable human approval, private downloads and object-first
+deletion without adding an AI provider or Office execution. See the
+[Create security review](create-security-privacy-review.md). Proposals, ROI, generated
+images, external sending and broader Create features remain future.
 
 WO-024 implements only the methodology boundary. Its strict bounded custom
 configuration, forced RLS, review provenance, source invalidation, metadata-only

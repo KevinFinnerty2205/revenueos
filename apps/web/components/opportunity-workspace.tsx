@@ -289,6 +289,14 @@ export function OpportunityWorkspace({
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            {opportunity.companyId ? (
+              <Link
+                href={`/create/presentations/new?accountId=${opportunity.companyId}&opportunityId=${opportunity.id}`}
+                className="primary-button"
+              >
+                Create presentation
+              </Link>
+            ) : null}
             <Link href="#recommended-actions" className="primary-button">
               Review next actions
             </Link>

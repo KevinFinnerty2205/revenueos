@@ -56,7 +56,7 @@ async def ensure_development_identity(
                 )
             )
         await session.flush()
-        for module_key in ("prospect", "engage"):
+        for module_key in ("prospect", "engage", "create"):
             entitlement = await session.get(
                 OrganisationModuleEntitlement,
                 (DEVELOPMENT_ORGANISATION_ID, module_key),

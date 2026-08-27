@@ -1,5 +1,33 @@
 # API reference
 
+## RevenueOS Create
+
+FastAPI/OpenAPI is authoritative for the WO-032 camel-case contracts under
+`/api/v1/create`. Both the environment feature flag and the server-side organisation
+entitlement are required. Administrator-only operations are marked below.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/availability` | Return available, temporarily unavailable or not-in-plan plus role capabilities |
+| `PATCH` | `/admin/entitlement` | Enable/disable the tenant Create entitlement (administrator) |
+| `GET/POST` | `/templates` | List approved/processing templates; upload attested PPTX (POST administrator) |
+| `GET` | `/templates/{templateId}` | Read one tenant template and structural slide manifest |
+| `PATCH` | `/template-slides/{slideId}` | Classify/policy one unapproved slide (administrator) |
+| `POST` | `/templates/{templateId}/versions/{versionId}/approve` | Publish immutable reviewed version (administrator) |
+| `GET/POST` | `/presentations` | List presentations or create an Account-bound deterministic plan |
+| `GET` | `/presentations/{presentationId}` | Read brief, plan, current version, claims and approval state |
+| `PUT` | `/presentations/{presentationId}/plan` | Reorder/include approved slides before generation |
+| `POST` | `/presentations/{presentationId}/generate` | Atomically reserve quota and queue a version |
+| `PATCH` | `/presentations/{presentationId}/slides/{planItemId}` | Apply bounded text edit and queue a new unapproved render |
+| `POST` | `/presentations/{presentationId}/review` | Keep/remove pending seller/inferred claims |
+| `POST` | `/presentations/{presentationId}/approve` | Revalidate sources and approve the current exact version |
+| `POST` | `/presentations/{presentationId}/download-grant` | Issue a short-lived private grant for an approved version |
+| `GET` | `/presentations/{presentationId}/download?token=…` | Return editable PPTX with `private, no-store` |
+
+Creation/generation use bounded idempotency keys. Errors contain safe codes such as
+`create_not_entitled`, `unsafe_pptx`, `required_slide`, `claim_review_required` and
+`claim_source_changed`; they never echo uploaded/customer content.
+
 ## RevenueOS Daily
 
 `GET /api/v1/daily?timezone=<IANA>` returns one strict, bounded personal Home read

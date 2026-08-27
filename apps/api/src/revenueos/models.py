@@ -210,7 +210,7 @@ class OrganisationBetaSettings(TimestampMixin, Base):
 class OrganisationModuleEntitlement(TimestampMixin, Base):
     __tablename__ = "organisation_module_entitlements"
     __table_args__ = (
-        CheckConstraint("module_key IN ('prospect', 'engage')", name="ck_module_entitlements_key"),
+        CheckConstraint("module_key IN ('prospect', 'engage', 'create')", name="ck_module_entitlements_key"),
         CheckConstraint("source = 'manual_private_beta'", name="ck_module_entitlements_source"),
         ForeignKeyConstraint(
             ["organisation_id", "configured_by_user_id"],
@@ -2137,6 +2137,480 @@ class ContactSuppression(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     revoked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CreateUsageCounter(Base):
+    __tablename__ = "create_usage_counters"
+    __table_args__ = (
+        CheckConstraint(
+            "scope_key = 'organisation' OR scope_key LIKE 'user:%'",
+            name="ck_create_usage_scope",
+        ),
+        CheckConstraint("generation_count >= 0", name="ck_create_usage_generations"),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    generation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class CreateTemplate(TimestampMixin, Base):
+    __tablename__ = "create_templates"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) BETWEEN 1 AND 200", name="ck_create_templates_name"),
+        CheckConstraint("state IN ('active', 'archived')", name="ck_create_templates_state"),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_templates_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_templates_org_id"),
+        UniqueConstraint("organisation_id", "name", name="uq_create_templates_org_name"),
+        Index("ix_create_templates_org_state", "organisation_id", "state", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CreateTemplateVersion(Base):
+    __tablename__ = "create_template_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_create_template_versions_number"),
+        CheckConstraint(
+            "processing_state IN ('processing', 'ready', 'partial', 'failed', 'archived')",
+            name="ck_create_template_versions_processing",
+        ),
+        CheckConstraint(
+            "approval_state IN ('pending', 'approved', 'revoked')",
+            name="ck_create_template_versions_approval",
+        ),
+        CheckConstraint("byte_size BETWEEN 1 AND 52428800", name="ck_create_template_versions_bytes"),
+        CheckConstraint("length(checksum_sha256) = 64", name="ck_create_template_versions_checksum"),
+        CheckConstraint("slide_count BETWEEN 0 AND 100", name="ck_create_template_versions_slides"),
+        CheckConstraint("processing_schema_version = 1", name="ck_create_template_versions_schema"),
+        CheckConstraint("authority_attestation_version = 1", name="ck_create_template_versions_attestation"),
+        CheckConstraint("processing_attempts BETWEEN 0 AND 3", name="ck_create_template_versions_attempts"),
+        CheckConstraint(
+            "storage_status IN ('available', 'deletion_pending', 'delete_failed', 'deleted')",
+            name="ck_create_template_versions_storage",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "template_id"],
+            ["create_templates.organisation_id", "create_templates.id"],
+            name="fk_create_template_versions_template",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "uploaded_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_template_versions_uploader",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "authority_attested_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_template_versions_attester",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_template_versions_approver",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_template_versions_org_id"),
+        UniqueConstraint("organisation_id", "id", "template_id", name="uq_create_template_versions_org_id_template"),
+        UniqueConstraint("organisation_id", "template_id", "version", name="uq_create_template_versions_number"),
+        UniqueConstraint("organisation_id", "checksum_sha256", name="uq_create_template_versions_checksum"),
+        UniqueConstraint("organisation_id", "storage_key", name="uq_create_template_versions_storage"),
+        Index(
+            "ix_create_template_versions_org_template",
+            "organisation_id",
+            "template_id",
+            "version",
+        ),
+        Index(
+            "ix_create_template_versions_org_processing",
+            "organisation_id",
+            "processing_state",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    processing_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="processing", server_default="processing"
+    )
+    approval_state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    display_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="available", server_default="available"
+    )
+    mime_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    processing_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    slide_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    width_emu: Mapped[int | None] = mapped_column(BigInteger)
+    height_emu: Mapped[int | None] = mapped_column(BigInteger)
+    warning_codes_json: Mapped[list[object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=list, server_default="[]"
+    )
+    manifest_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
+    )
+    safe_failure_code: Mapped[str | None] = mapped_column(String(100))
+    authority_attestation_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    authority_attested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    authority_attested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CreateTemplateSlide(TimestampMixin, Base):
+    __tablename__ = "create_template_slides"
+    __table_args__ = (
+        CheckConstraint("slide_number BETWEEN 1 AND 100", name="ck_create_template_slides_number"),
+        CheckConstraint(
+            "category IN ('title', 'agenda', 'company_overview', 'problem', 'solution', 'product', "
+            "'capability', 'architecture', 'case_study', 'proof_point', 'process', 'pricing_placeholder', "
+            "'next_steps', 'appendix', 'unknown')",
+            name="ck_create_template_slides_category",
+        ),
+        CheckConstraint("reuse_state IN ('pending', 'approved', 'excluded')", name="ck_create_template_slides_reuse"),
+        CheckConstraint(
+            "modification_policy IN ('locked', 'text_placeholders_only', 'editable_text', 'reuse_as_is')",
+            name="ck_create_template_slides_modification",
+        ),
+        CheckConstraint(
+            "NOT required OR (reuse_state = 'approved' AND customer_safe)", name="ck_create_template_slides_required"
+        ),
+        CheckConstraint(
+            "NOT exact_text_required OR modification_policy IN ('locked', 'reuse_as_is')",
+            name="ck_create_template_slides_exact",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "template_version_id", "template_id"],
+            [
+                "create_template_versions.organisation_id",
+                "create_template_versions.id",
+                "create_template_versions.template_id",
+            ],
+            name="fk_create_template_slides_version",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "reviewed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_template_slides_reviewer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_template_slides_org_id"),
+        UniqueConstraint(
+            "organisation_id", "template_version_id", "slide_number", name="uq_create_template_slides_number"
+        ),
+        Index(
+            "ix_create_template_slides_org_version",
+            "organisation_id",
+            "template_version_id",
+            "slide_number",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    template_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    slide_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown", server_default="unknown")
+    reuse_state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    modification_policy: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="reuse_as_is", server_default="reuse_as_is"
+    )
+    customer_safe: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    exact_text_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    approved_description: Mapped[str | None] = mapped_column(String(400))
+    text_blocks_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    placeholder_mappings_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
+    )
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CreateApprovedContentItem(Base):
+    __tablename__ = "create_approved_content_items"
+    __table_args__ = (
+        CheckConstraint("status IN ('approved', 'revoked')", name="ck_create_content_items_status"),
+        CheckConstraint("length(trim(title)) BETWEEN 1 AND 240", name="ck_create_content_items_title"),
+        CheckConstraint("length(trim(approved_text)) BETWEEN 1 AND 12000", name="ck_create_content_items_text"),
+        ForeignKeyConstraint(
+            ["organisation_id", "template_version_id", "template_id"],
+            [
+                "create_template_versions.organisation_id",
+                "create_template_versions.id",
+                "create_template_versions.template_id",
+            ],
+            name="fk_create_content_items_version",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "slide_id"],
+            ["create_template_slides.organisation_id", "create_template_slides.id"],
+            name="fk_create_content_items_slide",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_content_items_approver",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_content_items_org_id"),
+        UniqueConstraint("organisation_id", "slide_id", name="uq_create_content_items_slide"),
+        Index(
+            "ix_create_content_items_org_version",
+            "organisation_id",
+            "template_version_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    template_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    slide_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    approved_text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="approved", server_default="approved")
+    modification_policy: Mapped[str] = mapped_column(String(32), nullable=False)
+    customer_safe: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    exact_text_required: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    approved_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CreatePresentation(TimestampMixin, Base):
+    __tablename__ = "create_presentations"
+    __table_args__ = (
+        CheckConstraint("length(trim(title)) BETWEEN 1 AND 240", name="ck_create_presentations_title"),
+        CheckConstraint(
+            "objective IN ('introductory_meeting', 'discovery_follow_up', 'solution_overview', "
+            "'technical_workshop', 'executive_presentation', 'proposal_presentation', 'business_case', "
+            "'event_follow_up')",
+            name="ck_create_presentations_objective",
+        ),
+        CheckConstraint(
+            "state IN ('draft_plan', 'generating', 'needs_review', 'ready', 'failed', 'archived')",
+            name="ck_create_presentations_state",
+        ),
+        CheckConstraint("review_state IN ('pending', 'approved')", name="ck_create_presentations_review"),
+        ForeignKeyConstraint(
+            ["organisation_id", "account_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_create_presentations_account",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_create_presentations_opportunity",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "template_version_id", "template_id"],
+            [
+                "create_template_versions.organisation_id",
+                "create_template_versions.id",
+                "create_template_versions.template_id",
+            ],
+            name="fk_create_presentations_template_version",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_presentations_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_presentations_org_id"),
+        UniqueConstraint(
+            "organisation_id", "created_by_user_id", "idempotency_key", name="uq_create_presentations_idempotency"
+        ),
+        Index("ix_create_presentations_org_created", "organisation_id", "created_at"),
+        Index("ix_create_presentations_org_account", "organisation_id", "account_id", "updated_at"),
+        Index("ix_create_presentations_org_opportunity", "organisation_id", "opportunity_id", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    template_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    template_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    objective: Mapped[str] = mapped_column(String(40), nullable=False)
+    audience_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    focus_instruction: Mapped[str | None] = mapped_column(String(500))
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default="draft_plan", server_default="draft_plan")
+    review_state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    plan_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    source_context_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CreatePresentationVersion(Base):
+    __tablename__ = "create_presentation_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_create_presentation_versions_number"),
+        CheckConstraint(
+            "state IN ('generating', 'needs_review', 'ready', 'failed')",
+            name="ck_create_presentation_versions_state",
+        ),
+        CheckConstraint("review_state IN ('pending', 'approved')", name="ck_create_presentation_versions_review"),
+        CheckConstraint("renderer_version = 'deterministic_pptx_v1'", name="ck_create_presentation_versions_renderer"),
+        CheckConstraint("generation_schema_version = 1", name="ck_create_presentation_versions_schema"),
+        CheckConstraint("processing_attempts BETWEEN 0 AND 3", name="ck_create_presentation_versions_attempts"),
+        CheckConstraint(
+            "storage_status IN ('pending', 'available', 'deletion_pending', 'delete_failed', 'deleted')",
+            name="ck_create_presentation_versions_storage",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "presentation_id"],
+            ["create_presentations.organisation_id", "create_presentations.id"],
+            name="fk_create_presentation_versions_presentation",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "template_version_id", "template_id"],
+            [
+                "create_template_versions.organisation_id",
+                "create_template_versions.id",
+                "create_template_versions.template_id",
+            ],
+            name="fk_create_presentation_versions_template",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_presentation_versions_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_presentation_versions_approver",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_presentation_versions_org_id"),
+        UniqueConstraint(
+            "organisation_id", "presentation_id", "version", name="uq_create_presentation_versions_number"
+        ),
+        UniqueConstraint(
+            "organisation_id", "presentation_id", "idempotency_key", name="uq_create_presentation_versions_key"
+        ),
+        UniqueConstraint("organisation_id", "pptx_storage_key", name="uq_create_presentation_versions_storage"),
+        Index(
+            "ix_create_presentation_versions_org_presentation",
+            "organisation_id",
+            "presentation_id",
+            "version",
+        ),
+        Index(
+            "ix_create_presentation_versions_org_state",
+            "organisation_id",
+            "state",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    presentation_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    template_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    template_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="generating", server_default="generating")
+    review_state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    plan_snapshot_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    audience_snapshot_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    source_context_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
+    )
+    source_context_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    generated_content_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    claim_manifest_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    warning_codes_json: Mapped[list[object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=list, server_default="[]"
+    )
+    renderer_version: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="deterministic_pptx_v1", server_default="deterministic_pptx_v1"
+    )
+    generation_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pptx_storage_key: Mapped[str | None] = mapped_column(String(255))
+    storage_status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", server_default="pending")
+    byte_size: Mapped[int | None] = mapped_column(BigInteger)
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64))
+    safe_failure_code: Mapped[str | None] = mapped_column(String(100))
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class SalesEvent(TimestampMixin, Base):

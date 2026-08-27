@@ -513,6 +513,23 @@ research, outreach, Create, CRM and entitlement boundaries are indexed from the
 add-on and information-architecture boundaries. No schema, endpoint, worker,
 provider or navigation described there exists until a separate work order implements it.
 
+## WO-032 Create extension
+
+WO-032 realises the PPTX presentation subset inside the existing modular monolith.
+Migration `0041_create_studio` adds tenant templates, immutable versions, slide policy,
+approved content, presentations and immutable presentation versions with forced RLS
+and composite tenant relationships. Thin `/api/v1/create` routes call one explicit
+service/repository boundary. The existing worker claims template processing and
+presentation rendering with trusted transaction-local tenant context; no second
+service, queue or datastore was introduced.
+
+Private object storage holds source/generated PPTX. The in-process bounded ZIP/XML
+processor and deterministic renderer never execute Office or call an AI provider.
+Typed context, exact claim provenance, revalidation and human approval form the
+customer-facing trust boundary. See the
+[Create architecture](presentation-proposal-template-architecture.md) and
+[ADR 0050](../08-decisions/0050-deterministic-pptx-rendering.md).
+
 WO-024 is the first realised post-blueprint module. It remains inside the same
 web/API/PostgreSQL modular monolith: standard definition registry, tenant custom
 definition repository, deterministic projection service and Opportunity/Settings UI.
