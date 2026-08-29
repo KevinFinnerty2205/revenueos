@@ -350,3 +350,14 @@ speech cannot establish customer intent and unknown speakers are restricted to
 conservative operational categories. Final evidence processing and reconciliation
 can confirm, revise, reject or leave the live interpretation unresolved. See
 [speaker and provenance safety](live-intelligence-speaker-provenance-safety.md).
+
+## WO-033 numeric-input provenance
+
+Business Case input snapshots distinguish approved organisation assumptions,
+approved Company data, validated customer Evidence, salesperson-reported values,
+direct user entry, public prospect information and unknown origin. A seller cannot
+label a manual value as customer-confirmed without typed supporting Evidence.
+Where the current Evidence surface cannot safely expose an exact typed number, the
+seller enters it explicitly and it remains seller-originated. Linked source identifiers,
+review dates and observation age are revalidated before approval and Create reuse;
+deleted or stale sources move the case to review instead of silently preserving truth.

@@ -148,3 +148,16 @@ DOCX/proposals/PDF, speaker-note generation, generated images, logo/website scra
 free-form design software, a DAM replacement, external sending, electronic signature,
 full CPQ, pricing/ROI, Office execution and unsupported numeric claims are not
 authorised by WO-032.
+
+## WO-033 approved Business Case source
+
+WO-033 narrowly supersedes the earlier ROI exclusion: a presentation brief may pin
+one approved tenant-scoped `CreateBusinessCaseVersion` and request its base scenario
+or all approved scenarios. The typed context contains only customer-facing outputs,
+material assumptions, cautious model language and the approved disclaimer. The claim
+manifest retains the exact case/version/scenario source. Source deletion, staleness,
+supersession or review expiry blocks generation, approval and download grants.
+
+Templates still cannot execute formulas or accept output overrides. The deterministic
+engine runs only in the Business Case service, and an unapproved case never enters
+Create.

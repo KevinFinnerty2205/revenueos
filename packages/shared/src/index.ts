@@ -3692,6 +3692,208 @@ export type CreatePresentationObjective =
   | "proposal_presentation"
   | "business_case"
   | "event_follow_up";
+export type ValueUnit =
+  | "count"
+  | "currency"
+  | "currency_per_year"
+  | "currency_per_hour"
+  | "percentage"
+  | "hours"
+  | "hours_per_year"
+  | "minutes"
+  | "days"
+  | "months"
+  | "years"
+  | "dimensionless";
+export type BusinessCaseInputOrigin =
+  | "validated_customer_evidence"
+  | "salesperson_reported"
+  | "organisation_assumption"
+  | "approved_company_data"
+  | "prospect_public"
+  | "user_entered"
+  | "unknown";
+
+export interface ValueModelInputDefinition {
+  key: string;
+  label: string;
+  description: string;
+  valueType:
+    | "integer"
+    | "decimal"
+    | "currency"
+    | "percentage"
+    | "hours"
+    | "days"
+    | "minutes"
+    | "count";
+  unit: ValueUnit;
+  required: boolean;
+  minimum: string | null;
+  maximum: string | null;
+  decimalPrecision: number;
+  defaultValue: string | null;
+  defaultOrigin: "organisation_assumption" | "approved_company_data" | null;
+  defaultSourceReference: string | null;
+  reviewExpiresOn: string | null;
+  maxSourceAgeDays: number | null;
+  assumptionLocked: boolean;
+  sourcePolicy:
+    | "reviewed_manual"
+    | "customer_or_manual"
+    | "approved_org_only"
+    | "public_or_manual";
+  customerFacing: boolean;
+  material: boolean;
+  sensitivityEligible: boolean;
+  scenarioPreset: {
+    conservative: string | null;
+    base: string | null;
+    upside: string | null;
+  } | null;
+  displayOrder: number;
+}
+
+export interface ValueModelOutputDefinition {
+  key: string;
+  label: string;
+  description: string;
+  formula: string;
+  unit: ValueUnit;
+  displayPrecision: number;
+  customerFacing: boolean;
+  highlight: boolean;
+  scenarioSensitive: boolean;
+  displayOrder: number;
+}
+
+export interface ValueModelDefinition {
+  inputs: ValueModelInputDefinition[];
+  outputs: ValueModelOutputDefinition[];
+  customerDisclaimer: string | null;
+}
+
+export interface ValueModelVersion {
+  id: string;
+  version: number;
+  state: "draft" | "approved" | "archived";
+  definition: ValueModelDefinition;
+  formulaEngineVersion: "bounded_decimal_v1";
+  fingerprint: string;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface ValueModel {
+  id: string;
+  name: string;
+  description: string;
+  state: "active" | "archived";
+  latestVersion: ValueModelVersion;
+  canManage: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ValueModelList {
+  items: ValueModel[];
+  canManage: boolean;
+  maxActiveModels: number;
+}
+
+export interface BusinessCaseCalculationInput {
+  key: string;
+  label: string;
+  value: string;
+  calculationValue: string;
+  unit: ValueUnit;
+  origin: BusinessCaseInputOrigin;
+  sourceId: string | null;
+  sourceLabel: string;
+  assumption: boolean;
+  material: boolean;
+  customerFacing: boolean;
+  observedAt: string;
+  freshness: "current" | "stale" | "unknown" | "deleted_source";
+}
+
+export interface BusinessCaseCalculationOutput {
+  key: string;
+  label: string;
+  description: string;
+  unit: ValueUnit;
+  exactValue: string | null;
+  displayValue: string | null;
+  unavailableReason:
+    | "division_by_zero"
+    | "non_positive_denominator"
+    | "dependency_unavailable"
+    | null;
+  formula: string;
+  inputDependencies: string[];
+  outputDependencies: string[];
+  customerFacing: boolean;
+  highlight: boolean;
+}
+
+export interface BusinessCaseScenario {
+  name: "base" | "conservative" | "upside";
+  overrides: Array<{ key: string; value: string }>;
+  outputs: BusinessCaseCalculationOutput[];
+}
+
+export interface BusinessCaseVersion {
+  id: string;
+  version: number;
+  currency: string;
+  modelVersionId: string;
+  modelVersion: number;
+  formulaEngineVersion: "bounded_decimal_v1";
+  modelFingerprint: string;
+  calculationFingerprint: string;
+  inputs: BusinessCaseCalculationInput[];
+  scenarios: BusinessCaseScenario[];
+  sensitivity: {
+    inputKey: string;
+    rows: Array<{
+      inputValue: string;
+      outputs: BusinessCaseCalculationOutput[];
+    }>;
+  } | null;
+  reviewState: "pending" | "approved" | "needs_review";
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface BusinessCase {
+  id: string;
+  title: string;
+  accountId: string;
+  accountName: string;
+  opportunityId: string | null;
+  opportunityName: string | null;
+  modelId: string;
+  modelName: string;
+  modelVersionId: string;
+  modelVersion: number;
+  modelDefinition: ValueModelDefinition;
+  currency: string;
+  state: "draft" | "calculated" | "needs_review" | "approved" | "archived";
+  currentVersion: BusinessCaseVersion | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BusinessCaseList {
+  items: BusinessCase[];
+  canCreate: boolean;
+  maxActiveCasesPerAccount: number;
+}
 
 export interface CreateAvailability {
   moduleKey: "create";
@@ -3864,6 +4066,9 @@ export interface CreatePresentation {
   templateVersionId: string;
   templateName: string;
   templateVersion: number;
+  businessCaseId: string | null;
+  businessCaseVersionId: string | null;
+  businessCaseScenario: "base" | "all" | null;
   state:
     | "draft_plan"
     | "generating"

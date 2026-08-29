@@ -193,6 +193,20 @@ describe("RevenueOS Create", () => {
             maxPresentationsPerOrganisationPerDay: 50,
           });
         }
+        if (url.endsWith("/api/v1/create/business-cases")) {
+          return jsonResponse({
+            items: [],
+            canCreate: true,
+            maxActiveCasesPerAccount: 20,
+          });
+        }
+        if (url.endsWith("/api/v1/create/value-models")) {
+          return jsonResponse({
+            items: [],
+            canManage: true,
+            maxActiveModels: 50,
+          });
+        }
         return jsonResponse({}, 404);
       }),
     );

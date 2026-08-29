@@ -81,6 +81,13 @@ This is the canonical product and engineering documentation index. Documents dis
 75. [ADR 0048: Approved-template-driven Create](08-decisions/0048-approved-template-driven-create.md)
 76. [ADR 0049: Customer-safe Create context](08-decisions/0049-customer-safe-create-context.md)
 77. [ADR 0050: Deterministic PPTX rendering](08-decisions/0050-deterministic-pptx-rendering.md)
+78. [ROI & Business Case Builder](01-product/roi-business-case-builder.md) — current WO-033 deterministic value-model boundary
+79. [Business Case UX](02-design/business-case-ux.md)
+80. [Value Model domain architecture](03-engineering/value-model-domain-architecture.md)
+81. [Business Case security and privacy review](03-engineering/business-case-security-privacy-review.md)
+82. [ADR 0051: Bounded deterministic Value Model engine](08-decisions/0051-bounded-deterministic-value-model-engine.md)
+83. [ADR 0052: Immutable approved Value Model versions](08-decisions/0052-immutable-approved-value-model-versions.md)
+84. [ADR 0053: Approved Business Case as a Create source](08-decisions/0053-approved-business-case-create-source.md)
 
 ## 00 — Company
 
@@ -122,6 +129,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Personalised one-to-one outreach](01-product/personalised-outreach.md)
 - [Campaigns & Sequences implementation](01-product/campaigns-and-sequences.md)
 - [Events implementation](01-product/event-intelligence.md)
+- [ROI & Business Case Builder](01-product/roi-business-case-builder.md)
+- [Value Model administration](01-product/value-model-administration.md)
+- [Business Case assumptions and provenance](01-product/business-case-assumptions-provenance.md)
+- [Business Case scenarios and sensitivity](01-product/business-case-scenarios-sensitivity.md)
+- [Business Case and Create integration](01-product/business-case-create-integration.md)
 
 ## 02 — Design
 
@@ -152,6 +164,10 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Find and Prospect experience](02-design/find-and-prospect-experience.md)
 - [Engage, campaign and event experience](02-design/engage-campaign-event-experience.md)
 - [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
+- [Business Case UX](02-design/business-case-ux.md)
+- [Value Model builder UX](02-design/value-model-builder-ux.md)
+- [Business Case scenario and sensitivity UX](02-design/business-case-scenario-sensitivity-ux.md)
+- [Business Case mobile and simplicity review](02-design/business-case-mobile-simplicity-review.md)
 - [Prospect and Engage simplicity review](02-design/prospect-engage-simplicity-review.md)
 - [Create presentation and proposal experience](02-design/create-presentation-proposal-experience.md)
 - [Manager Intelligence experience](02-design/manager-intelligence-experience.md)
@@ -203,6 +219,15 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Revenue Brain foundation](03-engineering/revenue-brain-foundation.md)
 - [Revenue Brain longitudinal reasoning](03-engineering/revenue-brain-reasoning.md)
 - [API reference](03-engineering/api.md)
+- [Value Model domain architecture](03-engineering/value-model-domain-architecture.md)
+- [Deterministic formula engine](03-engineering/deterministic-formula-engine.md)
+- [Formula parser security](03-engineering/formula-parser-security.md)
+- [Business Case units and currency](03-engineering/business-case-units-currency.md)
+- [Business Case provenance and lineage](03-engineering/business-case-provenance-lineage.md)
+- [Business Case scenarios and sensitivity](03-engineering/business-case-scenario-sensitivity.md)
+- [Create and Business Case integration](03-engineering/create-business-case-integration.md)
+- [Business Case security and privacy review](03-engineering/business-case-security-privacy-review.md)
+- [Business Case retention, export and deletion](03-engineering/business-case-retention-export-deletion.md)
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
 - [Deployment guide](03-engineering/deployment-guide.md)
@@ -457,6 +482,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-031: Event Intelligence](07-sprints/wo-031-event-intelligence.md)
 - [Checkpoint 2: Prospect and Engage validation](07-sprints/checkpoint-2-prospect-engage-validation.md)
 - [WO-032: RevenueOS Create Sales Content Studio](07-sprints/wo-032-sales-content-studio.md)
+- [WO-033: ROI & Business Case Builder](07-sprints/wo-033-roi-business-case-builder.md)
 
 ## 08 — Decision records
 
@@ -510,10 +536,13 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0048: Approved-template-driven Create](08-decisions/0048-approved-template-driven-create.md)
 - [ADR 0049: Typed customer-safe Create context](08-decisions/0049-customer-safe-create-context.md)
 - [ADR 0050: Deterministic in-process PPTX rendering](08-decisions/0050-deterministic-pptx-rendering.md)
+- [ADR 0051: Bounded deterministic Value Model engine](08-decisions/0051-bounded-deterministic-value-model-engine.md)
+- [ADR 0052: Immutable approved Value Model versions](08-decisions/0052-immutable-approved-value-model-versions.md)
+- [ADR 0053: Approved Business Case as a Create source](08-decisions/0053-approved-business-case-create-source.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031/032 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031/032/033 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
 implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026/027/028 now
@@ -522,7 +551,8 @@ one-to-one Engage outreach with deterministic non-production email simulation.
 WO-030 adds bounded canonical-Contact Campaigns and sequences using the same Mock
 Email boundary; production mailbox sending and reply detection remain deferred.
 WO-031 adds manual authorised-list Event workflows. WO-032 adds the separately
-entitled, approved-template Create presentation slice. WO-033–045 remain unauthorised.
+entitled, approved-template Create presentation slice. WO-033 adds bounded,
+deterministic Value Models and versioned Business Cases. WO-034–045 remain unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

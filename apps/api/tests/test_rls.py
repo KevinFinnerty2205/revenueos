@@ -202,6 +202,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "create_approved_content_items",
         "create_presentations",
         "create_presentation_versions",
+        "create_value_models",
+        "create_value_model_versions",
+        "create_business_cases",
+        "create_business_case_versions",
     )
     tenant_a = {
         "suffix": "A",
@@ -388,6 +392,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "create_content_item_id": uuid.uuid4(),
                 "create_presentation_id": uuid.uuid4(),
                 "create_presentation_version_id": uuid.uuid4(),
+                "create_value_model_id": uuid.uuid4(),
+                "create_value_model_version_id": uuid.uuid4(),
+                "create_business_case_id": uuid.uuid4(),
+                "create_business_case_version_id": uuid.uuid4(),
             }
         )
 
@@ -990,6 +998,102 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             **identity_parameters,
                             "source_fingerprint": suffix.lower() * 64,
                             "version_idempotency_key": f"rls-create-version-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_value_models
+                                (id, organisation_id, name, description, state,
+                                 created_by_user_id, idempotency_key)
+                            VALUES
+                                (:create_value_model_id, :organisation_id,
+                                 :value_model_name,
+                                 'Synthetic tenant-isolation value model.',
+                                 'active', :user_id, :value_model_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "value_model_name": f"RLS Value Model {suffix}",
+                            "value_model_key": f"rls-value-model-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_value_model_versions
+                                (id, organisation_id, model_id, version, state,
+                                 definition_json, canonical_ast_json,
+                                 formula_engine_version, fingerprint,
+                                 created_by_user_id, approved_by_user_id,
+                                 approved_at, idempotency_key)
+                            VALUES
+                                (:create_value_model_version_id,
+                                 :organisation_id, :create_value_model_id, 1,
+                                 'approved', '{}'::json, '{}'::json,
+                                 'bounded_decimal_v1', :model_fingerprint,
+                                 :user_id, :user_id, now(),
+                                 :value_model_version_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "model_fingerprint": suffix.lower() * 64,
+                            "value_model_version_key": f"rls-value-model-version-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_business_cases
+                                (id, organisation_id, account_id,
+                                 opportunity_id, model_id, model_version_id,
+                                 created_by_user_id, title, currency, state,
+                                 idempotency_key)
+                            VALUES
+                                (:create_business_case_id, :organisation_id,
+                                 :company_id, :opportunity_id,
+                                 :create_value_model_id,
+                                 :create_value_model_version_id, :user_id,
+                                 :business_case_title, 'AUD', 'approved',
+                                 :business_case_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "business_case_title": f"RLS Business Case {suffix}",
+                            "business_case_key": f"rls-business-case-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_business_case_versions
+                                (id, organisation_id, case_id, model_id,
+                                 model_version_id, version, currency,
+                                 formula_engine_version, model_fingerprint,
+                                 calculation_fingerprint, inputs_json,
+                                 scenarios_json, lineage_json, review_state,
+                                 created_by_user_id, approved_by_user_id,
+                                 approved_at, idempotency_key)
+                            VALUES
+                                (:create_business_case_version_id,
+                                 :organisation_id, :create_business_case_id,
+                                 :create_value_model_id,
+                                 :create_value_model_version_id, 1, 'AUD',
+                                 'bounded_decimal_v1', :model_fingerprint,
+                                 :calculation_fingerprint, '[]'::json,
+                                 '[]'::json, '{}'::json, 'approved',
+                                 :user_id, :user_id, now(),
+                                 :business_case_version_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "model_fingerprint": suffix.lower() * 64,
+                            "calculation_fingerprint": suffix.upper() * 64,
+                            "business_case_version_key": f"rls-business-case-version-{suffix.lower()}",
                         },
                     )
                     await connection.execute(
@@ -2671,7 +2775,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'create_template_slides',
                                     'create_approved_content_items',
                                     'create_presentations',
-                                    'create_presentation_versions'
+                                    'create_presentation_versions',
+                                    'create_value_models',
+                                    'create_value_model_versions',
+                                    'create_business_cases',
+                                    'create_business_case_versions'
                                 )
                                 """
                             )
@@ -3194,6 +3302,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "create_business_case_versions",
+                    "create_business_cases",
+                    "create_value_model_versions",
+                    "create_value_models",
                     "create_presentation_versions",
                     "create_presentations",
                     "create_approved_content_items",

@@ -29,6 +29,7 @@ from revenueos.visual_storage import create_visual_storage
 
 from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL
 from .test_business_api import create_company, create_contact, create_opportunity
+from .test_business_cases import _create_approved_model, _inputs
 from .test_meeting_api import cast_auth_dependency, secondary_user
 
 
@@ -468,6 +469,103 @@ def test_create_template_plan_generation_review_approval_and_private_download(
         },
     )
     assert member_plan.status_code == 201, member_plan.text
+
+
+def test_approved_business_case_flows_into_create_with_exact_scenario_provenance(
+    client: TestClient,
+    app: FastAPI,
+) -> None:
+    company = create_company(client, name="Business Case Customer")
+    opportunity = create_opportunity(client, str(company["id"]), name="Access transformation")
+    model = _create_approved_model(client)
+    created_case = client.post(
+        "/api/v1/create/business-cases",
+        json={
+            "accountId": company["id"],
+            "opportunityId": opportunity["id"],
+            "modelVersionId": model["latestVersion"]["id"],
+            "currency": "AUD",
+            "idempotencyKey": "create-integration-case-1",
+        },
+    )
+    assert created_case.status_code == 201, created_case.text
+    business_case = created_case.json()
+    calculated = client.post(
+        f"/api/v1/create/business-cases/{business_case['id']}/calculate",
+        json={
+            "inputs": _inputs(),
+            "scenarios": [
+                {"name": "conservative", "overrides": [{"key": "minutes_future", "value": "10"}]},
+                {"name": "upside", "overrides": [{"key": "minutes_future", "value": "2"}]},
+            ],
+            "idempotencyKey": "create-integration-calculate-1",
+        },
+    )
+    assert calculated.status_code == 200, calculated.text
+    approved_case = client.post(
+        f"/api/v1/create/business-cases/{business_case['id']}/approve",
+        json={"confirmed": True},
+    )
+    assert approved_case.status_code == 200, approved_case.text
+    case_version = approved_case.json()["currentVersion"]
+
+    queued = _upload(client)
+    assert _run_worker(app)
+    template = client.get(f"/api/v1/create/templates/{queued['id']}").json()
+    template = _review_and_approve(client, template)
+    presentation_response = client.post(
+        "/api/v1/create/presentations",
+        json={
+            "accountId": company["id"],
+            "opportunityId": opportunity["id"],
+            "objective": "business_case",
+            "audience": [{"name": "Finance leadership", "audienceType": "finance"}],
+            "templateVersionId": template["latestVersion"]["id"],
+            "businessCaseVersionId": case_version["id"],
+            "businessCaseScenario": "all",
+            "idempotencyKey": "create-business-case-plan-1",
+        },
+    )
+    assert presentation_response.status_code == 201, presentation_response.text
+    presentation = presentation_response.json()
+    assert presentation["businessCaseId"] == business_case["id"]
+    assert presentation["businessCaseVersionId"] == case_version["id"]
+    assert presentation["businessCaseScenario"] == "all"
+    assert any("approved_business_case" in item["sourceClasses"] for item in presentation["plan"])
+
+    generated = client.post(
+        f"/api/v1/create/presentations/{presentation['id']}/generate",
+        json={"idempotencyKey": "create-business-case-generate-1"},
+    )
+    assert generated.status_code == 200, generated.text
+    assert _run_worker(app)
+    presentation = client.get(f"/api/v1/create/presentations/{presentation['id']}").json()
+    business_claims = [
+        claim for claim in presentation["currentVersion"]["claims"] if claim["origin"] == "approved_business_case"
+    ]
+    assert business_claims
+    assert all(claim["sourceIds"] == [case_version["id"]] for claim in business_claims)
+    claim_text = " ".join(claim["claim"] for claim in business_claims)
+    assert "conservative assumptions" in claim_text
+    assert "base-case assumptions" in claim_text
+    assert "upside assumptions" in claim_text
+    assert "Material assumption" in claim_text
+    assert "not a guarantee of future results" in claim_text
+    assert "safe_divide" not in claim_text
+    approved_presentation = client.post(
+        f"/api/v1/create/presentations/{presentation['id']}/approve",
+        json={"confirmed": True},
+    )
+    assert approved_presentation.status_code == 200, approved_presentation.text
+
+    superseded = client.post(
+        f"/api/v1/create/business-cases/{business_case['id']}/calculate",
+        json={"inputs": _inputs(rekey_cost="0"), "idempotencyKey": "create-integration-calculate-2"},
+    )
+    assert superseded.status_code == 200, superseded.text
+    blocked_export = client.post(f"/api/v1/create/presentations/{presentation['id']}/download-grant")
+    assert blocked_export.status_code == 409
+    assert blocked_export.json()["code"] == "claim_source_changed"
 
     app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
     cross_tenant = client.get(f"/api/v1/create/templates/{template['id']}")

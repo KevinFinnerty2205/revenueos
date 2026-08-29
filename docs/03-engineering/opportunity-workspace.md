@@ -370,3 +370,11 @@ workspace read model. Source links return to existing meeting, customer Evidence
 Methodology, Revenue Brain and recommended-Action sections so the seller can inspect
 or correct the underlying work. Account Revenue Brain adds the equivalent
 **Ask about this account** link.
+
+## WO-033 Business Case action
+
+The Opportunity workspace adds a contextual **Create Business Case** link carrying
+the Account and Opportunity identifiers. The Business Case service reloads both under
+the active tenant and rejects mismatched relationships. Calculation, scenario review,
+approval and presentation reuse remain in Create; the Opportunity read model does not
+store duplicated ROI outputs or treat them as Revenue Brain/Methodology truth.

@@ -609,3 +609,13 @@ as a contradictory plan.
 - [Integration strategy](../05-integrations/integration-strategy.md)
 - [ADR 0003](../08-decisions/0003-product-blueprint-and-beta-sequencing.md)
 - [End-to-End Sales Platform roadmap](end-to-end-sales-platform-roadmap.md)
+
+## WO-033 current boundary
+
+WO-033 is now implemented after WO-032: Create includes organisation-administered,
+versioned Value Models; Account/optional-Opportunity Business Cases; deterministic
+Decimal calculation; explicit scenarios and one-variable sensitivity; approval; and
+approved-case reuse in branded presentations. It does not advance the later roadmap
+into CPQ, pricing automation, AI-produced numbers, spreadsheet import, FX/tax,
+NPV/IRR, probabilistic simulation or external execution. WO-034 and later still
+require separate authorisation.

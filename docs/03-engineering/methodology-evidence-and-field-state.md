@@ -26,3 +26,11 @@ Supported source classes in v1 are final AI artefacts, accepted documentary/emai
 findings, final Interaction Intelligence, safe Opportunity metadata and review
 clarification Evidence. Provisional live output and raw customer content are outside
 this boundary.
+
+## WO-033 Business Case boundary
+
+Business Case inputs and outputs do not satisfy, confirm or overwrite Methodology
+fields. Model approval means the organisation approves a formula definition; case
+approval means a seller reviewed one exact calculation. Neither is evidence that a
+customer accepted the assumption, benefit or forecast. Any future Methodology use
+must require its own typed Evidence policy and separately authorised work order.

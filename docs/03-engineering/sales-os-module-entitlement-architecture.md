@@ -153,3 +153,12 @@ manual private-beta administration; no billing integration or price is implied.
 WO-026/027 add no billing or plan table. Exact prices,
 contracts, tax, invoicing, proration, trials and payment flows require later commercial
 and legal decisions.
+
+## WO-033 Create entitlement reuse
+
+Value Model administration, Business Case creation/calculation and Business Case use
+in presentations all reuse the existing organisation-level Create entitlement. There
+is no separate SKU, billing state or browser-trusted switch. Missing or disabled
+entitlement fails closed. Administrator role is additionally required to create,
+version, approve or archive Value Models; case workflows remain available to entitled
+members.

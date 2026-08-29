@@ -195,3 +195,11 @@ non-superseded artefacts in one bounded set and links conclusions back to their 
 or Opportunity. Ask does not edit Brain snapshots, reread raw transcript text, invoke
 the Brain provider or create replacement recommendations. “What changed recently?”
 uses the existing insight; “what should I do next?” reuses existing Next Best Action.
+
+## WO-033 boundary
+
+Revenue Brain does not propose ROI inputs, execute Value Models, confirm assumptions
+or persist Business Case outputs as deal truth. An approved case may be linked from an
+Account/Opportunity and used as a typed Create source, but it remains a separate,
+versioned deterministic artefact. Brain and Ask may only describe such a case in a
+future explicitly authorised read path; WO-033 adds no such reasoning path.

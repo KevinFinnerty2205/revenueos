@@ -2165,6 +2165,280 @@ class CreateUsageCounter(Base):
     )
 
 
+class CreateValueModel(TimestampMixin, Base):
+    __tablename__ = "create_value_models"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) BETWEEN 1 AND 200", name="ck_create_value_models_name"),
+        CheckConstraint("length(trim(description)) BETWEEN 1 AND 800", name="ck_create_value_models_description"),
+        CheckConstraint("state IN ('active', 'archived')", name="ck_create_value_models_state"),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_value_models_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_value_models_org_id"),
+        UniqueConstraint("organisation_id", "name", name="uq_create_value_models_org_name"),
+        UniqueConstraint(
+            "organisation_id", "created_by_user_id", "idempotency_key", name="uq_create_value_models_idempotency"
+        ),
+        Index("ix_create_value_models_org_state", "organisation_id", "state", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(String(800), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CreateValueModelVersion(Base):
+    __tablename__ = "create_value_model_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_create_value_model_versions_number"),
+        CheckConstraint("state IN ('draft', 'approved', 'archived')", name="ck_create_value_model_versions_state"),
+        CheckConstraint("formula_engine_version = 'bounded_decimal_v1'", name="ck_create_value_model_versions_engine"),
+        CheckConstraint("length(fingerprint) = 64", name="ck_create_value_model_versions_fingerprint"),
+        ForeignKeyConstraint(
+            ["organisation_id", "model_id"],
+            ["create_value_models.organisation_id", "create_value_models.id"],
+            name="fk_create_value_model_versions_model",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_value_model_versions_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_value_model_versions_approver",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_value_model_versions_org_id"),
+        UniqueConstraint("organisation_id", "id", "model_id", name="uq_create_value_model_versions_org_id_model"),
+        UniqueConstraint("organisation_id", "model_id", "version", name="uq_create_value_model_versions_number"),
+        UniqueConstraint(
+            "organisation_id", "model_id", "idempotency_key", name="uq_create_value_model_versions_idempotency"
+        ),
+        Index(
+            "ix_create_value_model_versions_org_model",
+            "organisation_id",
+            "model_id",
+            "version",
+        ),
+        Index(
+            "ix_create_value_model_versions_org_state",
+            "organisation_id",
+            "state",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    model_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", server_default="draft")
+    definition_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    canonical_ast_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    formula_engine_version: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="bounded_decimal_v1", server_default="bounded_decimal_v1"
+    )
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CreateBusinessCase(TimestampMixin, Base):
+    __tablename__ = "create_business_cases"
+    __table_args__ = (
+        CheckConstraint("length(trim(title)) BETWEEN 1 AND 240", name="ck_create_business_cases_title"),
+        CheckConstraint(
+            "state IN ('draft', 'calculated', 'needs_review', 'approved', 'archived')",
+            name="ck_create_business_cases_state",
+        ),
+        CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)", name="ck_create_business_cases_currency"
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "account_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_create_business_cases_account",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_create_business_cases_opportunity",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "model_id"],
+            ["create_value_models.organisation_id", "create_value_models.id"],
+            name="fk_create_business_cases_model",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "model_version_id", "model_id"],
+            [
+                "create_value_model_versions.organisation_id",
+                "create_value_model_versions.id",
+                "create_value_model_versions.model_id",
+            ],
+            name="fk_create_business_cases_model_version",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_business_cases_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_business_cases_org_id"),
+        UniqueConstraint(
+            "organisation_id", "created_by_user_id", "idempotency_key", name="uq_create_business_cases_idempotency"
+        ),
+        Index("ix_create_business_cases_org_account", "organisation_id", "account_id", "updated_at"),
+        Index(
+            "ix_create_business_cases_org_opportunity",
+            "organisation_id",
+            "opportunity_id",
+            "updated_at",
+        ),
+        Index("ix_create_business_cases_org_state", "organisation_id", "state", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    model_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    model_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default="draft", server_default="draft")
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CreateBusinessCaseVersion(Base):
+    __tablename__ = "create_business_case_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_create_business_case_versions_number"),
+        CheckConstraint(
+            "review_state IN ('pending', 'approved', 'needs_review')",
+            name="ck_create_business_case_versions_review",
+        ),
+        CheckConstraint(
+            "formula_engine_version = 'bounded_decimal_v1'", name="ck_create_business_case_versions_engine"
+        ),
+        CheckConstraint("length(model_fingerprint) = 64", name="ck_create_business_case_versions_model_hash"),
+        CheckConstraint(
+            "length(calculation_fingerprint) = 64", name="ck_create_business_case_versions_calculation_hash"
+        ),
+        CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)", name="ck_create_business_case_versions_currency"
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "case_id"],
+            ["create_business_cases.organisation_id", "create_business_cases.id"],
+            name="fk_create_business_case_versions_case",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "model_version_id", "model_id"],
+            [
+                "create_value_model_versions.organisation_id",
+                "create_value_model_versions.id",
+                "create_value_model_versions.model_id",
+            ],
+            name="fk_create_business_case_versions_model",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_business_case_versions_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_business_case_versions_approver",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_business_case_versions_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "id",
+            "case_id",
+            name="uq_create_business_case_versions_org_id_case",
+        ),
+        UniqueConstraint("organisation_id", "case_id", "version", name="uq_create_business_case_versions_number"),
+        UniqueConstraint(
+            "organisation_id", "case_id", "idempotency_key", name="uq_create_business_case_versions_idempotency"
+        ),
+        Index(
+            "ix_create_business_case_versions_org_case",
+            "organisation_id",
+            "case_id",
+            "version",
+        ),
+        Index(
+            "ix_create_business_case_versions_org_model",
+            "organisation_id",
+            "model_version_id",
+        ),
+        Index(
+            "ix_create_business_case_versions_org_review",
+            "organisation_id",
+            "review_state",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    model_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    model_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    formula_engine_version: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="bounded_decimal_v1", server_default="bounded_decimal_v1"
+    )
+    model_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    calculation_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    inputs_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    scenarios_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    sensitivity_json: Mapped[dict[str, object] | None] = mapped_column(JSON(none_as_null=True))
+    lineage_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    review_state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class CreateTemplate(TimestampMixin, Base):
     __tablename__ = "create_templates"
     __table_args__ = (
@@ -2448,6 +2722,12 @@ class CreatePresentation(TimestampMixin, Base):
             name="ck_create_presentations_state",
         ),
         CheckConstraint("review_state IN ('pending', 'approved')", name="ck_create_presentations_review"),
+        CheckConstraint(
+            "(business_case_id IS NULL AND business_case_version_id IS NULL AND business_case_scenario IS NULL) "
+            "OR (business_case_id IS NOT NULL AND business_case_version_id IS NOT NULL "
+            "AND business_case_scenario IN ('base', 'all'))",
+            name="ck_create_presentations_business_case_selection",
+        ),
         ForeignKeyConstraint(
             ["organisation_id", "account_id"],
             ["companies.organisation_id", "companies.id"],
@@ -2468,6 +2748,22 @@ class CreatePresentation(TimestampMixin, Base):
                 "create_template_versions.template_id",
             ],
             name="fk_create_presentations_template_version",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "business_case_id"],
+            ["create_business_cases.organisation_id", "create_business_cases.id"],
+            name="fk_create_presentations_business_case",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "business_case_version_id", "business_case_id"],
+            [
+                "create_business_case_versions.organisation_id",
+                "create_business_case_versions.id",
+                "create_business_case_versions.case_id",
+            ],
+            name="fk_create_presentations_business_case_version",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -2493,6 +2789,9 @@ class CreatePresentation(TimestampMixin, Base):
     opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     template_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     template_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    business_case_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    business_case_version_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    business_case_scenario: Mapped[str | None] = mapped_column(String(12))
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     title: Mapped[str] = mapped_column(String(240), nullable=False)
     objective: Mapped[str] = mapped_column(String(40), nullable=False)

@@ -561,3 +561,14 @@ no-network adapter; production mock configuration fails closed and no public-pag
 fetcher or AI synthesis exists. See the
 [Prospect architecture](prospect-account-research-architecture.md) and
 [ADR 0038](../08-decisions/0038-separate-prospect-research-domain.md).
+
+## WO-033 Value Model and Business Case modules
+
+The modular monolith now includes tenant-scoped Value Model and Business Case
+repositories/services in the API and guided Create pages in the web app. PostgreSQL
+RLS, composite tenant foreign keys and forced tenant policies protect all four new
+tables. Approved model definitions and approved Business Case versions are immutable.
+A bounded parser produces a canonical AST; evaluation uses Decimal arithmetic and
+never invokes Python evaluation, JavaScript, a spreadsheet runtime or an AI provider.
+See the [domain architecture](value-model-domain-architecture.md) and
+[engine decision](../08-decisions/0051-bounded-deterministic-value-model-engine.md).

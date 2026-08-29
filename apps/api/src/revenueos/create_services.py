@@ -11,9 +11,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal, cast
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.business_case_contracts import (
+    CalculationInputResponse,
+    CalculationOutputResponse,
+    ScenarioCalculationResponse,
+)
 from revenueos.config import Settings
 from revenueos.create_contracts import (
     ApprovedContentItemResponse,
@@ -49,6 +55,8 @@ from revenueos.errors import PublicAPIError
 from revenueos.models import (
     Company,
     CreateApprovedContentItem,
+    CreateBusinessCase,
+    CreateBusinessCaseVersion,
     CreatePresentation,
     CreatePresentationVersion,
     CreateTemplate,
@@ -456,7 +464,17 @@ class CreateService:
         if template is None or template.state != "active":
             raise PublicAPIError("template_not_approved", "Choose an active approved template.", 422)
         audience = await self._validated_audience(request, company)
-        context = await self._build_context(company, opportunity)
+        business_case_selection = await self._validated_business_case_selection(
+            request.business_case_version_id,
+            company,
+            opportunity,
+        )
+        context = await self._build_context(
+            company,
+            opportunity,
+            business_case_selection,
+            request.business_case_scenario,
+        )
         plan = await self._build_plan(
             template_version,
             request.objective,
@@ -472,6 +490,9 @@ class CreateService:
             opportunity_id=opportunity.id if opportunity else None,
             template_id=template.id,
             template_version_id=template_version.id,
+            business_case_id=business_case_selection[0].id if business_case_selection else None,
+            business_case_version_id=business_case_selection[1].id if business_case_selection else None,
+            business_case_scenario=request.business_case_scenario,
             created_by_user_id=self.tenant.user_id,
             title=title,
             objective=request.objective,
@@ -492,6 +513,14 @@ class CreateService:
             opportunity_id=str(opportunity.id) if opportunity else None,
             slide_count=sum(bool(item.get("included")) for item in plan),
         )
+        if business_case_selection is not None:
+            self._audit(
+                "business_case_used_in_create",
+                presentation_id=str(presentation.id),
+                business_case_id=str(business_case_selection[0].id),
+                business_case_version_id=str(business_case_selection[1].id),
+                scenario=request.business_case_scenario,
+            )
         return await self._presentation_response(presentation)
 
     async def list_presentations(self) -> PresentationListResponse:
@@ -593,7 +622,17 @@ class CreateService:
         )
         if company is None:
             raise PublicAPIError("account_not_found", "The linked Account is no longer available.", 409)
-        context = await self._build_context(company, opportunity)
+        business_case_selection = await self._validated_business_case_selection(
+            presentation.business_case_version_id,
+            company,
+            opportunity,
+        )
+        context = await self._build_context(
+            company,
+            opportunity,
+            business_case_selection,
+            cast(Literal["base", "all"] | None, presentation.business_case_scenario),
+        )
         fingerprint = _json_fingerprint(context)
         await self._reserve_generation_quota()
         version = CreatePresentationVersion(
@@ -845,6 +884,7 @@ class CreateService:
             or version.pptx_storage_key is None
         ):
             raise PublicAPIError("presentation_not_approved", "Approve the current version before download.", 409)
+        await self._revalidate_claim_sources(version)
         expires_at = datetime.now(UTC) + timedelta(seconds=self.settings.visual_signed_url_ttl_seconds)
         direct_url = self.storage.download_url(version.pptx_storage_key, expires_at)
         if direct_url is None:
@@ -883,6 +923,7 @@ class CreateService:
             )
         ):
             raise PublicAPIError("invalid_download_grant", "The download link is invalid or has expired.", 403)
+        await self._revalidate_claim_sources(version)
         try:
             content = await self.storage.read(version.pptx_storage_key)
         except VisualStorageError as exc:
@@ -897,7 +938,13 @@ class CreateService:
         )
         return content, f"{_safe_file_name(presentation.title)}.pptx"
 
-    async def _build_context(self, company: Company, opportunity: Opportunity | None) -> dict[str, object]:
+    async def _build_context(
+        self,
+        company: Company,
+        opportunity: Opportunity | None,
+        business_case_selection: tuple[CreateBusinessCase, CreateBusinessCaseVersion] | None = None,
+        business_case_scenario: Literal["base", "all"] | None = None,
+    ) -> dict[str, object]:
         items: list[dict[str, object]] = [
             {
                 "id": str(company.id),
@@ -1007,6 +1054,93 @@ class CreateService:
             seen.add(observation.statement)
             if len(items) >= 20:
                 break
+        if business_case_selection is not None:
+            business_case, business_case_version = business_case_selection
+            try:
+                inputs = [CalculationInputResponse.model_validate(item) for item in business_case_version.inputs_json]
+                scenarios = [
+                    ScenarioCalculationResponse.model_validate(item) for item in business_case_version.scenarios_json
+                ]
+            except ValidationError as exc:
+                raise PublicAPIError(
+                    "business_case_snapshot_invalid",
+                    "The approved Business Case snapshot could not be used.",
+                    409,
+                ) from exc
+            selected_names = {"base"} if business_case_scenario != "all" else {"base", "conservative", "upside"}
+            selected_scenarios = [item for item in scenarios if item.name in selected_names]
+            selected_scenarios.sort(key=lambda item: ("conservative", "base", "upside").index(item.name))
+            for scenario in selected_scenarios:
+                outputs = [item for item in scenario.outputs if item.customer_facing]
+                outputs.sort(key=lambda item: (not item.highlight, item.label.casefold()))
+                for output in outputs[:6]:
+                    items.append(
+                        {
+                            "id": str(business_case_version.id),
+                            "category": "business_case_output",
+                            "statement": _business_case_output_statement(
+                                output,
+                                scenario.name,
+                                business_case.currency,
+                            ),
+                            "origin": "approved_business_case",
+                            "supportState": "approved",
+                            "customerSafeClassification": "customer_safe",
+                            "sourceLabel": (
+                                f"Approved Business Case v{business_case_version.version} — {business_case.title}"
+                            ),
+                            "freshness": "current",
+                            "paraphraseAllowed": False,
+                            "exactTextRequired": True,
+                            "scenario": scenario.name,
+                        }
+                    )
+            for input_item in [item for item in inputs if item.material and item.customer_facing][:4]:
+                items.append(
+                    {
+                        "id": str(business_case_version.id),
+                        "category": "business_case_assumption",
+                        "statement": _business_case_assumption_statement(
+                            input_item,
+                            business_case.currency,
+                        ),
+                        "origin": "approved_business_case",
+                        "supportState": "approved",
+                        "customerSafeClassification": "customer_safe",
+                        "sourceLabel": (
+                            f"Approved Business Case v{business_case_version.version} — {business_case.title}"
+                        ),
+                        "freshness": "current",
+                        "paraphraseAllowed": False,
+                        "exactTextRequired": True,
+                        "scenario": "base",
+                    }
+                )
+            model_version = await self.repository.value_model_version(
+                self.tenant.organisation_id,
+                business_case_version.model_version_id,
+            )
+            customer_disclaimer = (
+                model_version.definition_json.get("customerDisclaimer") if model_version is not None else None
+            )
+            if isinstance(customer_disclaimer, str) and customer_disclaimer.strip():
+                items.append(
+                    {
+                        "id": str(business_case_version.id),
+                        "category": "business_case_disclaimer",
+                        "statement": customer_disclaimer,
+                        "origin": "approved_business_case",
+                        "supportState": "approved",
+                        "customerSafeClassification": "customer_safe",
+                        "sourceLabel": (
+                            f"Approved Business Case v{business_case_version.version} — {business_case.title}"
+                        ),
+                        "freshness": "current",
+                        "paraphraseAllowed": False,
+                        "exactTextRequired": True,
+                        "scenario": "base",
+                    }
+                )
         return {
             "schemaVersion": 1,
             "policy": "customer_safe_create_context_v1",
@@ -1063,7 +1197,14 @@ class CreateService:
             str(item.get("origin")) for item in cast(list[object], context.get("items", [])) if isinstance(item, dict)
         }
         dynamic_origins = [
-            value for value in ("customer_direct", "salesperson_reported", "prospect_public") if value in origins
+            value
+            for value in (
+                "approved_business_case",
+                "customer_direct",
+                "salesperson_reported",
+                "prospect_public",
+            )
+            if value in origins
         ]
         plan: list[dict[str, object]] = []
         for slide in ranked[: min(12, self.settings.private_beta_max_create_slides)]:
@@ -1076,6 +1217,7 @@ class CreateService:
     async def _revalidate_claim_sources(self, version: CreatePresentationVersion) -> None:
         grouped: dict[str, set[UUID]] = {
             "approved_company_content": set(),
+            "approved_business_case": set(),
             "customer_evidence": set(),
             "prospect_public": set(),
         }
@@ -1085,6 +1227,8 @@ class CreateService:
             origin = str(claim.get("origin"))
             if origin == "approved_company_content":
                 group = "approved_company_content"
+            elif origin == "approved_business_case":
+                group = "approved_business_case"
             elif origin in {"customer_direct", "salesperson_reported", "validated_intelligence"}:
                 group = "customer_evidence"
             elif origin == "prospect_public":
@@ -1245,6 +1389,9 @@ class CreateService:
                 "templateVersionId": presentation.template_version_id,
                 "templateName": template.name,
                 "templateVersion": template_version.version,
+                "businessCaseId": presentation.business_case_id,
+                "businessCaseVersionId": presentation.business_case_version_id,
+                "businessCaseScenario": presentation.business_case_scenario,
                 "state": presentation.state,
                 "reviewState": presentation.review_state,
                 "plan": presentation.plan_json,
@@ -1373,6 +1520,41 @@ class CreateService:
             }
         )
 
+    async def _validated_business_case_selection(
+        self,
+        version_id: UUID | None,
+        company: Company,
+        opportunity: Opportunity | None,
+    ) -> tuple[CreateBusinessCase, CreateBusinessCaseVersion] | None:
+        if version_id is None:
+            return None
+        selected = await self.repository.approved_business_case_version(
+            self.tenant.organisation_id,
+            version_id,
+        )
+        if selected is None:
+            raise PublicAPIError(
+                "business_case_not_approved",
+                "Choose the current approved Business Case version.",
+                422,
+            )
+        business_case, _ = selected
+        if business_case.account_id != company.id:
+            raise PublicAPIError(
+                "business_case_account_mismatch",
+                "The Business Case must belong to the selected Account.",
+                422,
+            )
+        if business_case.opportunity_id is not None and (
+            opportunity is None or business_case.opportunity_id != opportunity.id
+        ):
+            raise PublicAPIError(
+                "business_case_opportunity_mismatch",
+                "The Business Case must belong to the selected Opportunity.",
+                422,
+            )
+        return selected
+
     async def _require_entitled(self) -> None:
         if not self.settings.feature_create_enabled:
             raise PublicAPIError("create_unavailable", "RevenueOS Create is temporarily unavailable.", 503)
@@ -1411,3 +1593,51 @@ def _json_fingerprint(value: object) -> str:
 def _safe_file_name(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9._ -]+", "", value).strip(" .")
     return cleaned[:120] or "RevenueOS presentation"
+
+
+def _business_case_output_statement(
+    output: CalculationOutputResponse,
+    scenario: str,
+    currency: str,
+) -> str:
+    scenario_label = {
+        "base": "base-case",
+        "conservative": "conservative",
+        "upside": "upside",
+    }[scenario]
+    if output.display_value is None:
+        return (
+            f"Under the {scenario_label} assumptions, {output.label.lower()} is not achieved under the approved model."
+        )
+    return (
+        f"Under the {scenario_label} assumptions, the approved model estimates "
+        f"{output.label.lower()} at {_business_case_value(output.display_value, output.unit, currency)}."
+    )
+
+
+def _business_case_assumption_statement(value: CalculationInputResponse, currency: str) -> str:
+    return (
+        f"Material assumption — {value.label}: {_business_case_value(value.value, value.unit, currency)} "
+        f"({value.source_label})."
+    )
+
+
+def _business_case_value(value: str, unit: str, currency: str) -> str:
+    if unit == "currency":
+        return f"{currency} {value}"
+    if unit == "currency_per_year":
+        return f"{currency} {value} per year"
+    if unit == "currency_per_hour":
+        return f"{currency} {value} per hour"
+    if unit == "percentage":
+        return f"{value}%"
+    suffixes = {
+        "hours": "hours",
+        "hours_per_year": "hours per year",
+        "minutes": "minutes",
+        "days": "days",
+        "months": "months",
+        "years": "years",
+    }
+    suffix = suffixes.get(unit)
+    return f"{value} {suffix}" if suffix else value

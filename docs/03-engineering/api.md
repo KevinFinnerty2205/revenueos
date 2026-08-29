@@ -811,3 +811,26 @@ state. Raw provider payloads and provider person IDs are not API fields.
 No route accepts an organisation ID, arbitrary URL, provider name, fetch instruction,
 prompt, trust override, observation payload, Contact/Opportunity creation request or
 customer Evidence mutation. The production mock provider fails closed.
+
+## Value Model and Business Case API
+
+All routes below are beneath `/api/v1/create`, require the Create entitlement and
+derive organisation scope from verified authentication context.
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| `GET/POST` | `/value-models` | List usable models or create an admin-owned draft. |
+| `GET` | `/value-models/{modelId}` | Read the tenant model and latest permitted version. |
+| `POST` | `/value-models/{modelId}/versions` | Append and validate a draft definition. |
+| `POST` | `/value-models/{modelId}/versions/{versionId}/approve` | Approve an immutable definition. |
+| `POST` | `/value-models/{modelId}/archive` | Admin archive; historical snapshots remain. |
+| `GET/POST` | `/business-cases` | Filter/list cases or create an Account-linked draft. |
+| `GET` | `/business-cases/{caseId}` | Read and source-revalidate one case. |
+| `POST` | `/business-cases/{caseId}/calculate` | Append deterministic inputs, scenarios and outputs. |
+| `POST` | `/business-cases/{caseId}/approve` | Approve the current reviewed version. |
+| `POST` | `/business-cases/{caseId}/archive` | Archive the case. |
+
+The server rejects output fields, organisation IDs, unknown inputs, invalid units,
+unsupported currencies, out-of-bound values, formula cycles and unapproved Create
+sources. Responses expose formulas and input lineage for inspection but never allow
+clients to override calculated results.

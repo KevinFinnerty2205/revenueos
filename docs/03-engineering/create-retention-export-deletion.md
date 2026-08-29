@@ -46,3 +46,13 @@ No Create-specific legal-hold or individual presentation/template delete endpoin
 implemented in WO-032. Do not promise either control. A future retention work order
 must define approval-history consequences, object/version tombstones, export effects
 and organisation-policy precedence before adding them.
+
+## WO-033 Business Case extension
+
+Organisation export schema v23 includes Value Models, their versions, Business Cases,
+calculation versions and presentation-to-case lineage. Organisation erasure deletes
+presentations before Business Cases, then model versions/models, preserving foreign-key
+order. Case/model archive is a soft lifecycle operation, not erasure. Deleting linked
+Evidence does not mutate an immutable snapshot; it makes the case ineligible for new
+approval or Create reuse until a new calculation is reviewed. The same customer-data
+retention policy applies; no standalone legal hold or per-version delete was added.

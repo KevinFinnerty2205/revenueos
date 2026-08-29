@@ -463,3 +463,14 @@ tracking and campaigns are absent. Subject, body, address and source excerpts re
 outside logs/audits. Export/retention/deletion cover outreach and active suppression
 survives Contact deletion. Production mailbox execution fails closed. See the
 [dedicated review](personalised-outreach-security-review.md).
+
+## WO-033 Business Case controls
+
+Value Models and Business Cases are tenant-scoped at route, repository, composite
+foreign-key and forced-RLS layers. Only organisation administrators manage model
+definitions; all members may use approved models when Create is entitled. The formula
+language is ASCII-only, length/node/depth bounded, dimension checked and parsed into a
+closed AST—there is no `eval`, arbitrary function, property access, string, file,
+network or provider capability. Numeric input/output content and formulas are excluded
+from logs and audits; telemetry records identifiers, counts, states and elapsed time.
+See the [dedicated review](business-case-security-privacy-review.md).

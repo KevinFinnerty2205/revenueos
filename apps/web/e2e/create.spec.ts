@@ -199,6 +199,18 @@ async function mockCreateApi(page: Page) {
       });
       return;
     }
+    if (path === "/api/v1/create/business-cases") {
+      await route.fulfill({
+        json: { items: [], canCreate: true, maxActiveCasesPerAccount: 20 },
+      });
+      return;
+    }
+    if (path === "/api/v1/create/value-models") {
+      await route.fulfill({
+        json: { items: [], canManage: true, maxActiveModels: 50 },
+      });
+      return;
+    }
     if (path === "/api/v1/create/presentations/presentation-plan/plan") {
       await route.fulfill({
         json: presentation("presentation-plan", "draft_plan"),

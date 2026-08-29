@@ -41,12 +41,16 @@ from revenueos.models import (
     ContactFieldSource,
     ContactSuppression,
     CreateApprovedContentItem,
+    CreateBusinessCase,
+    CreateBusinessCaseVersion,
     CreatePresentation,
     CreatePresentationVersion,
     CreateTemplate,
     CreateTemplateSlide,
     CreateTemplateVersion,
     CreateUsageCounter,
+    CreateValueModel,
+    CreateValueModelVersion,
     CRMEntityMapping,
     CRMFieldMapping,
     CRMStageMapping,
@@ -144,7 +148,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 22
+EXPORT_VERSION = 23
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1085,6 +1089,14 @@ async def _delete_organisation_records(
             delete(CreatePresentationVersion).where(CreatePresentationVersion.organisation_id == organisation_id)
         )
         await session.execute(delete(CreatePresentation).where(CreatePresentation.organisation_id == organisation_id))
+        await session.execute(
+            delete(CreateBusinessCaseVersion).where(CreateBusinessCaseVersion.organisation_id == organisation_id)
+        )
+        await session.execute(delete(CreateBusinessCase).where(CreateBusinessCase.organisation_id == organisation_id))
+        await session.execute(
+            delete(CreateValueModelVersion).where(CreateValueModelVersion.organisation_id == organisation_id)
+        )
+        await session.execute(delete(CreateValueModel).where(CreateValueModel.organisation_id == organisation_id))
         await session.execute(
             delete(CreateApprovedContentItem).where(CreateApprovedContentItem.organisation_id == organisation_id)
         )
@@ -2555,6 +2567,26 @@ async def _export_payload(
         .where(CreatePresentationVersion.organisation_id == organisation_id)
         .order_by(CreatePresentationVersion.presentation_id, CreatePresentationVersion.version)
     )
+    create_value_models = await rows(
+        select(CreateValueModel)
+        .where(CreateValueModel.organisation_id == organisation_id)
+        .order_by(CreateValueModel.created_at, CreateValueModel.id)
+    )
+    create_value_model_versions = await rows(
+        select(CreateValueModelVersion)
+        .where(CreateValueModelVersion.organisation_id == organisation_id)
+        .order_by(CreateValueModelVersion.model_id, CreateValueModelVersion.version)
+    )
+    create_business_cases = await rows(
+        select(CreateBusinessCase)
+        .where(CreateBusinessCase.organisation_id == organisation_id)
+        .order_by(CreateBusinessCase.created_at, CreateBusinessCase.id)
+    )
+    create_business_case_versions = await rows(
+        select(CreateBusinessCaseVersion)
+        .where(CreateBusinessCaseVersion.organisation_id == organisation_id)
+        .order_by(CreateBusinessCaseVersion.case_id, CreateBusinessCaseVersion.version)
+    )
     prospect_target_markets = await rows(
         select(ProspectTargetMarket)
         .where(ProspectTargetMarket.organisation_id == organisation_id)
@@ -3302,6 +3334,9 @@ async def _export_payload(
                     "opportunity_id",
                     "template_id",
                     "template_version_id",
+                    "business_case_id",
+                    "business_case_version_id",
+                    "business_case_scenario",
                     "created_by_user_id",
                     "title",
                     "objective",
@@ -3319,6 +3354,88 @@ async def _export_payload(
             for item in create_presentations
         ],
         "createPresentationVersions": exported_create_presentation_versions,
+        "createValueModels": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "name",
+                    "description",
+                    "state",
+                    "created_by_user_id",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in create_value_models
+        ],
+        "createValueModelVersions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "model_id",
+                    "version",
+                    "state",
+                    "definition_json",
+                    "canonical_ast_json",
+                    "formula_engine_version",
+                    "fingerprint",
+                    "created_by_user_id",
+                    "approved_by_user_id",
+                    "approved_at",
+                    "created_at",
+                ),
+            )
+            for item in create_value_model_versions
+        ],
+        "createBusinessCases": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "account_id",
+                    "opportunity_id",
+                    "model_id",
+                    "model_version_id",
+                    "created_by_user_id",
+                    "title",
+                    "currency",
+                    "state",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in create_business_cases
+        ],
+        "createBusinessCaseVersions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "case_id",
+                    "model_id",
+                    "model_version_id",
+                    "version",
+                    "currency",
+                    "formula_engine_version",
+                    "model_fingerprint",
+                    "calculation_fingerprint",
+                    "inputs_json",
+                    "scenarios_json",
+                    "sensitivity_json",
+                    "lineage_json",
+                    "review_state",
+                    "created_by_user_id",
+                    "approved_by_user_id",
+                    "approved_at",
+                    "created_at",
+                ),
+            )
+            for item in create_business_case_versions
+        ],
         "prospectTargetMarkets": [
             _columns(
                 item,

@@ -129,3 +129,18 @@ and [security review](../03-engineering/create-security-privacy-review.md).
   approved briefs, templates/content and version history.
 - **AI/manual work:** AI removes blank-page effort inside constraints; users inspect
   sources, correct claims/assumptions and approve the exact output.
+
+## WO-033 Business Case extension
+
+Create now includes Business Cases alongside presentations and templates. An entitled
+seller chooses an administrator-approved Value Model, enters or reviews every numeric
+input, inspects deterministic outputs, scenarios, sensitivity and provenance, then
+approves an exact immutable Business Case version. Only that approved version may be
+selected for a new presentation. The source manifest pins its case/version/scenario,
+material assumptions and disclaimer; generation, approval and download revalidate it.
+
+This extension does not authorise AI-generated numbers, arbitrary spreadsheet or
+Excel execution, FX conversion, tax/GST, NPV/IRR or Monte Carlo modelling. Negative
+results remain visible and payback is explicitly unavailable when it cannot be
+achieved. See the [implementation guide](roi-business-case-builder.md) and
+[Create integration contract](business-case-create-integration.md).

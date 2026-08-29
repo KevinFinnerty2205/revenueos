@@ -1,10 +1,12 @@
 "use client";
 
 import type {
+  BusinessCaseList,
   CreateAvailability,
   CreatePresentationList,
   CreateTemplateList,
   CreateTemplateSummary,
+  ValueModelList,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
@@ -39,6 +41,10 @@ export function CreateStudio() {
   const [templates, setTemplates] = useState<CreateTemplateList | null>(null);
   const [presentations, setPresentations] =
     useState<CreatePresentationList | null>(null);
+  const [businessCases, setBusinessCases] = useState<BusinessCaseList | null>(
+    null,
+  );
+  const [valueModels, setValueModels] = useState<ValueModelList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
@@ -50,14 +56,23 @@ export function CreateStudio() {
     );
     setAvailability(nextAvailability);
     if (!nextAvailability.enabled) return;
-    const [nextTemplates, nextPresentations] = await Promise.all([
+    const [
+      nextTemplates,
+      nextPresentations,
+      nextBusinessCases,
+      nextValueModels,
+    ] = await Promise.all([
       apiRequest<CreateTemplateList>("/api/v1/create/templates", { signal }),
       apiRequest<CreatePresentationList>("/api/v1/create/presentations", {
         signal,
       }),
+      apiRequest<BusinessCaseList>("/api/v1/create/business-cases", { signal }),
+      apiRequest<ValueModelList>("/api/v1/create/value-models", { signal }),
     ]);
     setTemplates(nextTemplates);
     setPresentations(nextPresentations);
+    setBusinessCases(nextBusinessCases);
+    setValueModels(nextValueModels);
   }, []);
 
   useEffect(() => {
@@ -180,15 +195,115 @@ export function CreateStudio() {
         title="Sales Content Studio"
         description="Plan first, generate from approved sources, review every claim, then download an editable PowerPoint."
         actions={
-          <Link
-            href="/create/presentations/new"
-            className="primary-button"
-            aria-disabled={approvedTemplates.length === 0}
-          >
-            New presentation
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/create/business-cases/new" className="primary-button">
+              New Business Case
+            </Link>
+            <Link
+              href="/create/presentations/new"
+              className="secondary-button"
+              aria-disabled={approvedTemplates.length === 0}
+            >
+              New presentation
+            </Link>
+          </div>
         }
       />
+
+      <section aria-labelledby="business-cases-title" className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+              Transparent value modelling
+            </p>
+            <h2
+              id="business-cases-title"
+              className="mt-1 text-2xl font-semibold text-slate-950"
+            >
+              Business Cases
+            </h2>
+          </div>
+          {valueModels?.canManage ? (
+            <Link href="/create/value-models" className="secondary-button">
+              Manage Value Models
+            </Link>
+          ) : null}
+        </div>
+        {valueModels &&
+        !valueModels.items.some(
+          (item) => item.latestVersion.state === "approved",
+        ) ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+            <h3 className="font-semibold text-amber-950">
+              No approved Value Models available
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-amber-900">
+              An administrator must define and approve the typed inputs, bounded
+              formulas and visible assumptions first.
+            </p>
+          </div>
+        ) : businessCases?.items.length ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {businessCases.items.map((item) => {
+              const base = item.currentVersion?.scenarios.find(
+                (scenario) => scenario.name === "base",
+              );
+              const headline = base?.outputs.find((output) => output.highlight);
+              return (
+                <Link
+                  key={item.id}
+                  href={`/create/business-cases/${item.id}`}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="font-semibold text-slate-950">
+                        {item.title}
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {item.accountName}
+                        {item.opportunityName
+                          ? ` · ${item.opportunityName}`
+                          : ""}
+                      </p>
+                    </div>
+                    <StateBadge state={item.state} />
+                  </div>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {item.modelName} · model v{item.modelVersion}
+                  </p>
+                  {headline ? (
+                    <p className="mt-2 text-sm text-slate-800">
+                      Base case · {headline.label}:{" "}
+                      {formatBusinessOutput(
+                        headline.displayValue,
+                        headline.unit,
+                        item.currency,
+                      )}
+                    </p>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+            <h3 className="font-semibold text-slate-950">
+              Build a credible customer business case
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Use explicit inputs and your organisation’s approved deterministic
+              model—never invented benchmarks.
+            </p>
+            <Link
+              href="/create/business-cases/new"
+              className="primary-button mt-5"
+            >
+              Create Business Case
+            </Link>
+          </div>
+        )}
+      </section>
 
       {approvedTemplates.length === 0 ? (
         <section className="rounded-3xl border border-teal-200 bg-teal-50 p-6 sm:p-8">
@@ -389,4 +504,16 @@ function CreateError({ message }: { message: string }) {
       </Link>
     </section>
   );
+}
+
+function formatBusinessOutput(
+  value: string | null,
+  unit: string,
+  currency: string,
+) {
+  if (value === null) return "Not achieved under these assumptions";
+  if (unit === "currency" || unit === "currency_per_year")
+    return `${currency} ${value}`;
+  if (unit === "percentage") return `${value}%`;
+  return `${value} ${humanise(unit)}`;
 }
