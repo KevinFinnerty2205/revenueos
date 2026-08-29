@@ -1,125 +1,73 @@
 # Native CRM architecture
 
-- **Status:** Proposed RevenueOS CRM add-on architecture; not implemented
-- **Product decision:** CRM enhances Sell and Pipeline; it is not a separate top-level app
+- **Status:** Implemented by WO-034
+- **Migration:** `0043_native_crm`
+- **Principle:** Company, Contact and Opportunity are the CRM records; Sales Brain remains the product centre.
 
-## Purpose
+## Product boundary
 
-RevenueOS CRM is the minimum relationship and pipeline system of record needed by a
-team that chooses to run natively. It reuses Sales Brain rather than placing a second
-CRM database beside it. Teams with an external CRM use integrated mode, where source
-authority and sync policy are explicit.
+RevenueOS supports one canonical sales graph in two organisation modes:
 
-```mermaid
-flowchart TB
-    UI["Home, Sell and Pipeline"] --> D["Canonical RevenueOS domain"]
-    subgraph Native["Native mode"]
-        D --> N["RevenueOS is authoritative for enabled CRM fields"]
-    end
-    subgraph Integrated["Integrated mode"]
-        D <--> S["Versioned sync and conflict policy"]
-        S <--> X["External CRM adapter"]
-    end
-    D --> B["Revenue Brain, Workspace and Actions"]
-```
+- **RevenueOS-native:** local canonical fields are authoritative and normal record editing needs no connector.
+- **External CRM:** local canonical records remain available to Sales Brain, while active HubSpot mappings retain the WO-025C field-authority rules.
 
-## Reused canonical foundation
+There is no `CRMAccount`, `CRMContact`, `CRMOpportunity`, Lead, CRM Task, CRM Note or CRM Activity model. Accounts are `companies`; People are `contacts`; Actions are existing tasks/proposals; recent activity is a bounded read model over Interactions, Outreach, Tasks, Event encounters and Opportunities.
 
-CRM must reuse Organisation, User/membership, Company, Contact, Opportunity, Task,
-Meeting/Interaction, Evidence, AI artefact/Revenue Brain projections and Action
-concepts. It must not fork `CRMCompany`, `CRMContact` or a second Opportunity model.
-Existing APIs and routes remain backward compatible.
+## Current data model
 
-## Future domain additions
+| Storage                                  | Purpose                                               | Guardrails                                                                         |
+| ---------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `companies`, `contacts`, `opportunities` | Canonical CRM records                                 | Organisation-scoped repositories and forced RLS; archive timestamp; existing owner |
+| `organisation_crm_settings`              | One explicit system-of-record choice per organisation | `native` or `external`; external v1 is HubSpot; admin only                         |
+| `crm_custom_field_definitions`           | Bounded schema metadata                               | Account/Contact/Opportunity only; 25 active fields per type; immutable key/type    |
+| `crm_custom_field_values`                | One strictly typed value per record/definition        | Text, number, date or boolean columns; no executable/arbitrary JSON value          |
+| `crm_record_changes`                     | Human-readable field change history                   | Field, safe old/new value, actor, source and timestamp; never operationally logged |
 
-| Concept                 | Purpose and boundary                                                                                       |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `Lead`                  | An assigned pursuit before qualification; links to a Company/Contact or staged prospect, never copies them |
-| `Product`               | Organisation sales-catalogue item with stable identity; not inventory or billing                           |
-| `OpportunityProduct`    | Opportunity line association, quantity/value and source; not full CPQ                                      |
-| `StageDefinition`       | Versioned organisation pipeline stages and transition policy                                               |
-| `StageHistory`          | Effective stage movement, actor/source and correction history                                              |
-| `CustomFieldDefinition` | Typed, scoped extension metadata with limits and lifecycle                                                 |
-| `CustomFieldValue`      | Validated value attached to an approved entity type                                                        |
-| `ImportJob`             | Idempotent CSV/provider import lifecycle, mapping version and safe error report                            |
-| `SyncBinding`           | External system/record identity, authority policy, cursor/version and sync health                          |
+All new tables include organisation scope in keys and relationships and use PostgreSQL forced RLS. The polymorphic record ID in custom values/history is checked by the tenant-scoped service before write; definitions and actor membership have composite tenant FKs.
 
-These concepts are planning vocabulary. Tenant isolation requires organisation scope
-on every row, unique constraint, query, import and sync identifier.
+## Core-record evolution
 
-## Minimum lovable CRM
+WO-034 adds Company location, Contact employment status (`active` or `left_company`) and soft archive timestamps. Existing Opportunity stage/status/value/currency/close-date fields are reused; WO-035 owns pipeline definitions, board movement and stage history. Strong partial unique indexes enforce organisation plus normalised Company domain and organisation plus case-normalised Contact business email. Names are never auto-merged.
 
-The first useful add-on should include:
+The `0043` migration performs a metadata-only duplicate preflight before creating these indexes. If existing strong duplicates exist, deployment stops with a content-free remediation message. There is no automatic destructive merge.
 
-- simple lead acceptance/qualification into canonical Company, Contact and Opportunity;
-- configurable but bounded stages, list/board pipeline, filters, owner, value, close
-  date, next action, risk and methodology summary;
-- Company, Contact and Opportunity create/edit with duplicate handling;
-- Opportunity products sufficient for value composition;
-- stage history and core field history;
-- reviewed Revenue Brain proposals that reduce manual updates;
-- CSV import with dry run, mapping, validation and rollback/recovery plan;
-- basic role/permission and source-authority controls.
+## Policy and entitlement
 
-It excludes marketing automation, service desk, billing, inventory, unrestricted
-objects, formula language, page-layout builder and Salesforce Flow parity.
+Basic canonical record create/read/update and readable canonical activity/history remain Core. The `crm` organisation entitlement and `API_FEATURE_NATIVE_CRM_ENABLED` gate system-of-record setup, custom-field definitions/mutation and record archive/restore. Disabling CRM preserves custom values as read-only and does not delete or hide Core records. Only administrators configure the mode, entitlement or field definitions and archive/restore records; archived records reject all field mutation.
 
-## Source authority modes
+Owners are active organisation members. Administrators may assign any active member; members may assign only themselves. Disabled owners remain readable historical references and can be reassigned; no owner change cascades to related records.
 
-Native mode makes RevenueOS authoritative for the enabled CRM fields. Integrated mode
-assigns authority by field family: external-authoritative, RevenueOS-authoritative or
-reviewed bidirectional. Authority must be visible in edit and error states.
+## Authority and provenance
 
-Sync uses provider adapters, stable external IDs, cursors/webhooks as appropriate,
-idempotent upsert, tombstone/deletion policy, retries and reconciliation. Conflicts
-are never silently last-write-wins for consequential fields. Existing Action review
-and execution contracts govern outbound updates. Provider availability does not block
-read-only Core access to the last safely stored state.
+Native mode defaults core fields to `revenueos_authoritative`. External mode reuses enabled HubSpot field mappings with `crm_authoritative`, `revenueos_authoritative` or `review_before_sync`. A CRM-authoritative mapped field is visually marked read-only, omitted by the web edit form and rejected by the API if submitted. Mode change requires confirmation; external mode requires an active HubSpot connection, and native mode is blocked while active mappings remain.
 
-## Typed custom-field boundary
+Record authority is separate from evidence provenance. Manual, Prospect promotion, Event promotion, external CRM and future reviewed-Action origins remain distinguishable. Promoted Contact field provenance continues to use the WO-027 field-source model.
 
-Supported types begin with short/long text, number, currency, date, boolean, single
-select, multi-select and a bounded entity reference. A definition declares entity
-type, stable key, label, help, requiredness, options, sensitivity and lifecycle.
-Limits apply per organisation and entity; indexed/filterable fields need an explicit
-policy. Published keys are stable and type changes use migration/version rules.
+## Custom fields
 
-Custom fields cannot execute code, alter tenant scope, create arbitrary joins,
-replace canonical semantics, contain secrets, modify authorisation or become a
-general schema/no-code engine. Core fields remain first-class and normalised.
+Supported v1 types are `short_text`, `number`, `date`, `boolean`, `single_select` and `url`. Single-select has at most 50 unique bounded options; URL values must be HTTP(S); text is rendered as text; fields are optional and secondary in the workspace. Definitions are admin-owned, reserved core keys are rejected, labels/order/options may be edited, and archive preserves values/history. Retired select values remain readable rather than being silently rewritten. Currency, multi-select, formula, relation, required, rich-text and executable field types are deliberately absent.
 
-## Limited workflows
+## Change history and activity
 
-Only evidence-backed, bounded workflows should be considered: stage-entry checklist,
-required review, task/Action proposal, reminder and approved field update. Triggers,
-conditions and effects come from a small typed catalogue. Every consequential effect
-uses the Action/Execution safety model. No arbitrary scripts, loops, HTTP calls or
-unbounded recursive automation.
+Manual canonical edits, record creation, archive/restore, custom-field changes and explicit Prospect/Event promotion hooks append field-level history with actor and source. The history store is tenant data, not an application log. The activity projection reads existing sources, applies their module/feature availability, orders them by occurrence and returns at most 50 items. It does not copy customer content or create a second activity ledger.
 
-## UX and entitlements
+## Concurrency and failures
 
-CRM does not appear in permanent navigation. Enabled capabilities enrich Sell and
-Pipeline; configuration lives in Settings. Without CRM, users retain the current
-Core relationship/Opportunity experience and external-system links. A contextual
-module explanation may appear where a CRM-only edit or pipeline capability is
-relevant, without repeated ads or dead navigation.
+Company, Contact and Opportunity edit contracts accept `expectedUpdatedAt`; custom-value writes accept `expectedRecordUpdatedAt`. A stale value returns a safe `stale_write` conflict. Database duplicate races resolve to safe 409 responses with an existing-record identifier where available. Errors contain code, safe message, request ID and bounded metadata, never field contents.
 
-## Security and operation
+## Deliberate deferrals
 
-Derive organisation from verified auth, apply RLS defence in depth and test every
-relationship/import/sync operation across tenants. Imports require size/type limits,
-malware-safe handling where relevant, duplicate preview and downloadable safe error
-reports without leaking other rows. Sync credentials use secret managers and never
-enter application rows/logs.
+- Native reviewed-Action execution is not wired in WO-034. The existing executor is provider/connection-oriented; adding a local path without a provider-neutral intent/revalidation contract would risk bypassing human review. AI cannot mutate CRM state.
+- Operational CRM CSV import/export is deferred. The existing organisation export is advanced to version 24 and includes settings, definitions, typed values and history, so data is not held hostage. A future operational CSV flow must add preview, attestation, duplicate review, formula escaping and no-outreach-permission semantics before release.
+- Tags are deferred because bounded single-select custom fields cover categorisation without adding another taxonomy.
+- Merge, bulk edit, custom objects/workflows, team ownership, round robin, territories and custom-field search/filtering are not implemented.
 
-Observability records connector, entity class, counts, cursor/version, latency and
-safe error codes—not record contents or provider payloads. Audit source, actor,
-authority and before/after metadata for consequential changes without copying
-sensitive content.
+## Related documents
 
-## Long-term possibilities, not commitments
-
-Deeper forecasting fields, richer product catalogues, governance, advanced imports
-and selected enterprise connectors may follow evidence. RevenueOS should not become a
-full Salesforce clone; the durable advantage remains the connected Evidence → Brain
-→ Action workflow.
+- [Native CRM product guide](../01-product/native-crm.md)
+- [Native CRM UX](../02-design/native-crm-ux.md)
+- [CRM source of truth](crm-source-of-truth.md)
+- [Native CRM API](native-crm-api.md)
+- [Native CRM security review](native-crm-security-privacy-review.md)
+- [Migration and portability playbook](crm-data-migration-playbook.md)
+- [ADR 0054](../08-decisions/0054-canonical-record-native-crm.md)

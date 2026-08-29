@@ -29,6 +29,16 @@ describe("CoreSearch", () => {
       .mockImplementationOnce(() =>
         response([
           {
+            id: "contact-1",
+            firstName: "Avery",
+            lastName: "Stone",
+            email: "avery@acme.example",
+          },
+        ]),
+      )
+      .mockImplementationOnce(() =>
+        response([
+          {
             id: "opportunity-1",
             name: "Acme expansion",
             companyName: "Acme",
@@ -57,7 +67,11 @@ describe("CoreSearch", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(screen.getByRole("link", { name: /Avery Stone/i })).toHaveAttribute(
+      "href",
+      "/contacts/contact-1",
+    );
     expect(
       screen.getByRole("link", { name: /Acme Technology/i }),
     ).toHaveAttribute("href", "/companies/company-1");
@@ -68,6 +82,7 @@ describe("CoreSearch", () => {
       screen.getByRole("link", { name: /Acme workshop/i }),
     ).toHaveAttribute("href", "/interactions/interaction-1");
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("search=Acme");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/api/v1/contacts");
     expect(screen.getByText(/does not generate an AI answer/i)).toBeVisible();
   });
 

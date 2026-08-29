@@ -28,6 +28,7 @@ export class ApiClientError extends Error {
     readonly status: number,
     readonly code: string,
     readonly requestId?: string,
+    readonly details?: Record<string, string>,
   ) {
     super(message);
     this.name = "ApiClientError";
@@ -62,6 +63,7 @@ export async function apiRequest<T>(
       response.status,
       error?.code ?? "request_failed",
       error?.requestId,
+      error?.details,
     );
   }
 

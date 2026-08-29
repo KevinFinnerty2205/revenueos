@@ -1,4 +1,5 @@
 import { ContactOutreachWorkspace } from "@/components/contact-outreach-workspace";
+import { CRMRecordPanel } from "@/components/crm-record-panel";
 
 export default async function ContactPage({
   params,
@@ -6,5 +7,10 @@ export default async function ContactPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <ContactOutreachWorkspace contactId={id} />;
+  return (
+    <div className="space-y-7">
+      <CRMRecordPanel entityType="contact" entityId={id} />
+      <ContactOutreachWorkspace contactId={id} />
+    </div>
+  );
 }

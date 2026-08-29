@@ -7,3 +7,10 @@ The design deliberately avoids one aggregate “Contact verified” flag. Email,
 Attach-research never overwrites canonical fields. Create-separate requires explicit duplicate review. Later Prospect refresh does not propagate changes. If provider contact data expires, retention compares the stored fingerprint with the current Contact value, clears only an unchanged matching field, deactivates its provenance and preserves the Contact. Deleting Prospect Person research nulls the source link where required but does not delete the Contact.
 
 The provenance table is tenant-scoped with forced RLS. It contains hashes and metadata, not raw provider payloads or hidden provider person identifiers.
+
+WO-034 keeps this evidence provenance separate from CRM record authority. Manual
+Contact creation/edit appends `manual_user_entry` record history but does not
+fabricate a `contact_field_sources` provider row or verification state.
+Prospect/Event promotion retains its specialised source rows and also appends a
+bounded `prospect_promotion`/`event_promotion` CRM creation history. Native-system
+authority therefore never means customer-confirmed truth.

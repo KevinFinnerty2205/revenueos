@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Literal, Protocol, cast
 from uuid import UUID
 
 from pydantic import (
@@ -27,6 +27,7 @@ Name200 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, 
 Name100 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 OptionalText120 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 OptionalText150 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=150)]
+OptionalText200 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 OptionalPhone = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000)]
 CurrencyCode = Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True, pattern=r"^[A-Z]{3}$")]
@@ -57,6 +58,7 @@ class CompanyCreate(APIModel):
     name: Name200
     website: HttpUrl | None = None
     industry: OptionalText120 | None = None
+    location: OptionalText200 | None = None
     employee_count: int | None = Field(default=None, ge=0, le=2_147_483_647)
     status: CompanyStatus = CompanyStatus.PROSPECT
     owner_user_id: UUID | None = None
@@ -68,9 +70,15 @@ class CompanyUpdate(UpdateRequest):
     name: Name200 | None = None
     website: HttpUrl | None = None
     industry: OptionalText120 | None = None
+    location: OptionalText200 | None = None
     employee_count: int | None = Field(default=None, ge=0, le=2_147_483_647)
     status: CompanyStatus | None = None
     owner_user_id: UUID | None = None
+    expected_updated_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_concurrency(self) -> CompanyUpdate:
+        return _validate_expected_update(self)
 
 
 class CompanyResponse(APIModel):
@@ -79,9 +87,11 @@ class CompanyResponse(APIModel):
     name: str
     website: str | None
     industry: str | None
+    location: str | None
     employee_count: int | None
     status: CompanyStatus
     owner_user_id: UUID
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -90,15 +100,16 @@ class ContactCreate(APIModel):
     company_id: UUID
     first_name: Name100
     last_name: Name100
-    email: EmailStr
+    email: EmailStr | None = None
     phone: OptionalPhone | None = None
     job_title: OptionalText150 | None = None
     linkedin_url: HttpUrl | None = None
+    status: Literal["active", "left_company"] = "active"
     owner_user_id: UUID | None = None
 
 
 class ContactUpdate(UpdateRequest):
-    required_when_present = frozenset({"company_id", "first_name", "last_name", "email", "owner_user_id"})
+    required_when_present = frozenset({"company_id", "first_name", "last_name", "owner_user_id", "status"})
 
     company_id: UUID | None = None
     first_name: Name100 | None = None
@@ -107,7 +118,13 @@ class ContactUpdate(UpdateRequest):
     phone: OptionalPhone | None = None
     job_title: OptionalText150 | None = None
     linkedin_url: HttpUrl | None = None
+    status: Literal["active", "left_company"] | None = None
     owner_user_id: UUID | None = None
+    expected_updated_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_concurrency(self) -> ContactUpdate:
+        return _validate_expected_update(self)
 
 
 class ContactResponse(APIModel):
@@ -120,7 +137,9 @@ class ContactResponse(APIModel):
     phone: str | None
     job_title: str | None
     linkedin_url: str | None
+    status: Literal["active", "left_company"]
     owner_user_id: UUID
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -194,8 +213,29 @@ class OpportunityResponse(APIModel):
     expected_close_date: date | None
     owner_user_id: UUID
     description: str | None
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class ExpectedUpdate(Protocol):
+    expected_updated_at: datetime | None
+
+
+def _validate_expected_update[T: UpdateRequest](request: T) -> T:
+    expected_request = cast(ExpectedUpdate, request)
+    if "expected_updated_at" in request.model_fields_set:
+        value = expected_request.expected_updated_at
+        if value is None:
+            raise ValueError("expectedUpdatedAt cannot be null.")
+        if not isinstance(value, datetime):
+            raise ValueError("expectedUpdatedAt must be a date-time.")
+        if value.utcoffset() is None:
+            expected_request.expected_updated_at = value.replace(tzinfo=UTC)
+    changed = request.model_fields_set - {"expected_updated_at"}
+    if not changed:
+        raise ValueError("At least one record field must be supplied.")
+    return request
 
 
 class TaskCreate(APIModel):

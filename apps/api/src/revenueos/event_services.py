@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.config import Settings
+from revenueos.crm_history import crm_creation_changes
 from revenueos.domain import (
     EventAttendeeMatchState,
     EventAttendeePriority,
@@ -711,6 +712,24 @@ class EventService:
         )
         self.repository.add(contact)
         await self.repository.flush()
+        for change in crm_creation_changes(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            "contact",
+            contact.id,
+            "event_promotion",
+            {
+                "company_id": contact.company_id,
+                "first_name": contact.first_name,
+                "last_name": contact.last_name,
+                "email": contact.email,
+                "job_title": contact.job_title,
+                "linkedin_url": contact.linkedin_url,
+                "status": contact.status,
+                "owner_user_id": contact.owner_user_id,
+            },
+        ):
+            self.repository.add(change)
         for field_key, value, trust in (
             ("email", contact.email, attendee.email_trust_state),
             ("job_title", contact.job_title, "provider_supplied"),
@@ -1029,6 +1048,20 @@ class EventService:
         )
         self.repository.add(company)
         await self.repository.flush()
+        for change in crm_creation_changes(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            "account",
+            company.id,
+            "event_promotion",
+            {
+                "name": company.name,
+                "website": company.website,
+                "status": company.status,
+                "owner_user_id": company.owner_user_id,
+            },
+        ):
+            self.repository.add(change)
         return company
 
     @staticmethod

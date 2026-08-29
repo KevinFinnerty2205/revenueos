@@ -337,7 +337,7 @@ An integration appears in beta only after its real adapter, authorisation, idemp
 
 ## Explicit non-goals through beta
 
-- replacing Salesforce, HubSpot or another system of record;
+- recreating Salesforce/HubSpot breadth; RevenueOS may be the intentionally lightweight native sales system of record selected by an entitled organisation;
 - silently sending email, changing CRM data or performing consequential actions;
 - broad sales engagement automation or generic workflow building;
 - lead generation, contact enrichment, prospect databases or automated outreach;
@@ -381,3 +381,18 @@ This is not forecasting, CPQ or an autonomous recommendation system. It cannot i
 inputs or outputs, confirm customer truth, mutate Methodology/Revenue Brain, import or
 execute spreadsheets, convert currencies, calculate tax/GST or provide NPV, IRR or
 Monte Carlo analysis. See [ROI & Business Case Builder](roi-business-case-builder.md).
+
+## WO-034 implemented extension
+
+RevenueOS can now be deliberately configured as the lightweight native sales CRM or
+continue alongside connected HubSpot. Existing Company, Contact and Opportunity are
+the only CRM records. Core keeps their basic CRUD and readable canonical
+activity/history; the CRM add-on provides explicit system-of-record administration,
+bounded typed custom fields and admin archive/restore. Existing activity domains are
+composed rather than copied.
+
+Exact domain/email dedupe, one-person ownership, archive/restore, optimistic
+concurrency and field-authority controls provide the v1 governance boundary. There
+is no Lead, CRM Task/Note/Activity, custom object/workflow, destructive merge,
+autonomous AI mutation or Pipeline redesign. Operational CRM CSV is deferred while
+organisation export includes the new CRM data. See [Native CRM](native-crm.md).

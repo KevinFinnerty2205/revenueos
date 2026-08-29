@@ -133,3 +133,12 @@ action. The action carries the Account and, when present, Opportunity into the g
 Create flow; the server revalidates that relationship. Account-only cases are valid.
 The workspace does not calculate values inline, promote an estimate into Methodology,
 or present a Business Case as customer-confirmed truth.
+
+## WO-034 CRM enrichment
+
+Existing Account and Opportunity routes now add one compact CRM record panel rather
+than a parallel “CRM page”. It shows owner/mode/archive state, bounded core fields,
+secondary custom fields, a recent canonical activity projection and human-readable
+field history. HubSpot-authoritative fields carry a read-only cue. The short edit
+page remains the only core-field mutation surface. On mobile all sections stack and
+no additional navigation item is introduced. See [Native CRM UX](native-crm-ux.md).

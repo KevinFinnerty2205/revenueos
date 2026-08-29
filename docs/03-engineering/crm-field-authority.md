@@ -22,3 +22,13 @@ Owner, provider-controlled values and read-only properties are not sync targets.
 `crm_authoritative` is enforced again inside the HubSpot adapter, not only in the
 UI. Future low-risk auto-sync policy must be a separate work order and must not
 reinterpret field authority as permission to execute unreviewed AI output.
+
+## WO-034 native-mode reuse
+
+Organisation CRM settings now explicitly choose RevenueOS (`native`) or connected
+HubSpot (`external`). Native mode defaults normal local fields to
+`revenueos_authoritative`; it does not change evidence trust. External mode uses the
+same active mapping rows described above. `crm_authoritative` fields appear read-only
+in record/edit UX, are omitted from browser PATCH payloads and remain rejected by the
+service. A disconnected external choice is setup-required, and switching to native
+is blocked while active mappings exist. No autonomous writer was added.

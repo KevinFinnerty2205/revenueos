@@ -175,8 +175,11 @@ class OpportunityWorkspaceRepository:
         status: str | None,
         sort_by: str,
         sort_order: str,
+        include_archived: bool = False,
     ) -> PageResult[OpportunityDisplayRecord]:
         conditions: list[ColumnElement[bool]] = [Opportunity.organisation_id == organisation_id]
+        if not include_archived:
+            conditions.append(Opportunity.archived_at.is_(None))
         if search:
             conditions.append(Opportunity.name.ilike(f"%{search}%"))
         if company_id:

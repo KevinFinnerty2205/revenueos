@@ -30,6 +30,7 @@ from revenueos.routes import (
     companies,
     contacts,
     create,
+    crm,
     daily,
     events,
     evidence,
@@ -140,6 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(beta.router)
     app.include_router(companies.router)
     app.include_router(contacts.router)
+    app.include_router(crm.router)
     app.include_router(daily.router)
     app.include_router(evidence.router)
     app.include_router(opportunities.router)

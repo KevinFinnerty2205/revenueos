@@ -3,6 +3,7 @@
 import type {
   AskScopeType,
   Company,
+  Contact,
   EntityPage,
   Interaction,
   OpportunityListItem,
@@ -14,12 +15,14 @@ import { AskRevenueOS } from "@/components/ask-revenueos";
 
 interface SearchResults {
   companies: Company[];
+  contacts: Contact[];
   opportunities: OpportunityListItem[];
   interactions: Interaction[];
 }
 
 const emptyResults: SearchResults = {
   companies: [],
+  contacts: [],
   opportunities: [],
   interactions: [],
 };
@@ -54,19 +57,24 @@ export function CoreSearch({
     setError(null);
     const encoded = encodeURIComponent(value);
     try {
-      const [companies, opportunities, interactions] = await Promise.all([
-        apiRequest<EntityPage<Company>>(
-          `/api/v1/companies?page=1&pageSize=6&search=${encoded}`,
-        ),
-        apiRequest<EntityPage<OpportunityListItem>>(
-          `/api/v1/opportunities?page=1&pageSize=6&search=${encoded}`,
-        ),
-        apiRequest<EntityPage<Interaction>>(
-          `/api/v1/interactions?page=1&pageSize=6&sortBy=start_at&sortOrder=desc&search=${encoded}`,
-        ),
-      ]);
+      const [companies, contacts, opportunities, interactions] =
+        await Promise.all([
+          apiRequest<EntityPage<Company>>(
+            `/api/v1/companies?page=1&pageSize=6&search=${encoded}`,
+          ),
+          apiRequest<EntityPage<Contact>>(
+            `/api/v1/contacts?page=1&pageSize=6&search=${encoded}`,
+          ),
+          apiRequest<EntityPage<OpportunityListItem>>(
+            `/api/v1/opportunities?page=1&pageSize=6&search=${encoded}`,
+          ),
+          apiRequest<EntityPage<Interaction>>(
+            `/api/v1/interactions?page=1&pageSize=6&sortBy=start_at&sortOrder=desc&search=${encoded}`,
+          ),
+        ]);
       setResults({
         companies: companies.items,
+        contacts: contacts.items,
         opportunities: opportunities.items,
         interactions: interactions.items,
       });
@@ -84,6 +92,7 @@ export function CoreSearch({
 
   const resultCount =
     results.companies.length +
+    results.contacts.length +
     results.opportunities.length +
     results.interactions.length;
 
@@ -116,7 +125,7 @@ export function CoreSearch({
             Search your workspace
           </label>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Find an account, opportunity or interaction by name. Search stays
+            Find an account, contact, opportunity or interaction. Search stays
             inside your organisation and does not generate an AI answer.
           </p>
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -165,6 +174,14 @@ export function CoreSearch({
               </div>
             ) : (
               <div className="grid gap-4">
+                <ResultGroup
+                  title="Contacts"
+                  items={results.contacts.map((contact) => ({
+                    href: `/contacts/${contact.id}`,
+                    title: `${contact.firstName} ${contact.lastName}`,
+                    detail: contact.email ?? contact.jobTitle ?? "Contact",
+                  }))}
+                />
                 <ResultGroup
                   title="Accounts"
                   items={results.companies.map((company) => ({

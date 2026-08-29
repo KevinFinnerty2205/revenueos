@@ -617,5 +617,15 @@ versioned Value Models; Account/optional-Opportunity Business Cases; determinist
 Decimal calculation; explicit scenarios and one-variable sensitivity; approval; and
 approved-case reuse in branded presentations. It does not advance the later roadmap
 into CPQ, pricing automation, AI-produced numbers, spreadsheet import, FX/tax,
-NPV/IRR, probabilistic simulation or external execution. WO-034 and later still
-require separate authorisation.
+NPV/IRR, probabilistic simulation or external execution.
+
+## WO-034 current boundary
+
+WO-034 is now implemented as the opinionated native CRM foundation. Canonical
+Company/Contact/Opportunity records support explicit RevenueOS or external HubSpot
+system-of-record mode, ownership, strong dedupe, archive/restore, bounded typed
+custom fields, authority cues, canonical activity and field history. Operational CSV
+and native reviewed-Action execution are deliberately deferred with organisation
+export and no-autonomous-mutation boundaries documented. WO-035 and later still
+require separate authorisation; in particular WO-035 owns configurable Pipeline,
+stages, board movement and stage history.

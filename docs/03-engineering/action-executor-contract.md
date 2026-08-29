@@ -38,3 +38,12 @@ The HubSpot implementation preserves this contract, adds least-privilege encrypt
 credentials and comparison/marker reconciliation, and passes the WO-025C code and
 security review. Target-environment/customer launch approval remains separate;
 merely enabling the feature flag is not release approval.
+
+## Native CRM boundary after WO-034
+
+WO-034 does not register RevenueOS itself as a connector and does not route approved
+Actions through an external-connection-shaped executor. Native `update_contact` or
+`update_opportunity` execution remains deferred until the server can select the
+organisation system of record, construct an exact local preview, revalidate current
+state/authority/concurrency, apply idempotently and append `reviewed_action` history.
+Until then manual CRUD is the only native mutation path and AI cannot mutate CRM.

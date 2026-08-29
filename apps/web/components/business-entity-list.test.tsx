@@ -18,16 +18,21 @@ describe("BusinessEntityList", () => {
     let resolveFetch: ((response: Response) => void) | undefined;
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        () =>
-          new Promise<Response>((resolve) => {
-            resolveFetch = resolve;
-          }),
+      vi.fn((input: RequestInfo | URL) =>
+        String(input).includes("/api/v1/crm/members")
+          ? Promise.resolve(
+              jsonResponse([
+                { userId: "user-1", displayName: "Alex Morgan", active: true },
+              ]),
+            )
+          : new Promise<Response>((resolve) => {
+              resolveFetch = resolve;
+            }),
       ),
     );
 
     render(<BusinessEntityList entity="companies" />);
-    expect(screen.getByRole("status")).toHaveTextContent("Loading companies");
+    expect(screen.getByRole("status")).toHaveTextContent("Loading accounts");
 
     resolveFetch?.(
       jsonResponse({
@@ -53,8 +58,9 @@ describe("BusinessEntityList", () => {
     );
 
     expect(await screen.findAllByText("Acme Australia")).not.toHaveLength(0);
+    expect(screen.getAllByText("Alex Morgan")).not.toHaveLength(0);
     expect(
-      screen.getByRole("link", { name: "Create company" }),
+      screen.getByRole("link", { name: "Create account" }),
     ).toHaveAttribute("href", "/companies/new");
     expect(screen.getAllByRole("link", { name: /edit/i })[0]).toHaveAttribute(
       "href",
@@ -63,11 +69,19 @@ describe("BusinessEntityList", () => {
   });
 
   it("renders an empty state and applies search input", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse({ items: [], page: 1, pageSize: 20, total: 0, pages: 0 }),
-      );
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      Promise.resolve(
+        String(input).includes("/api/v1/crm/members")
+          ? jsonResponse([])
+          : jsonResponse({
+              items: [],
+              page: 1,
+              pageSize: 20,
+              total: 0,
+              pages: 0,
+            }),
+      ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     render(<BusinessEntityList entity="contacts" />);
@@ -80,8 +94,12 @@ describe("BusinessEntityList", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("search=Jordan+Lee");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).includes("search=Jordan+Lee"),
+      ),
+    ).toBe(true);
   });
 
   it("shows a recoverable error state", async () => {

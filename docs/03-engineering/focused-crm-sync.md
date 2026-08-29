@@ -63,3 +63,12 @@ No second CRM, bulk import, full inbound sync, webhook platform, autonomous writ
 contact creation, task creation, company-association mutation or native CRM
 expansion is included. The Opportunity page does not contact HubSpot until the
 user opens the contextual link control.
+
+## WO-034 compatibility
+
+The native CRM layer does not replace the HubSpot connector or its review, preview,
+confirmation, worker, idempotency and reconciliation path. External mode simply
+projects existing field authority into the canonical record experience and blocks
+direct writes to CRM-authoritative fields. Native mode requires active mappings to be
+resolved first. Standard CRM tests seed connection/mapping records locally and make
+no provider request.

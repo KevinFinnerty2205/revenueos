@@ -51,8 +51,11 @@ from revenueos.models import (
     CreateUsageCounter,
     CreateValueModel,
     CreateValueModelVersion,
+    CRMCustomFieldDefinition,
+    CRMCustomFieldValue,
     CRMEntityMapping,
     CRMFieldMapping,
+    CRMRecordChange,
     CRMStageMapping,
     DataNoticeAcknowledgement,
     DebriefSession,
@@ -98,6 +101,7 @@ from revenueos.models import (
     OpportunityAuditEvent,
     Organisation,
     OrganisationBetaSettings,
+    OrganisationCRMSetting,
     OrganisationMembership,
     OrganisationMethodologySetting,
     OrganisationModuleEntitlement,
@@ -148,7 +152,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 23
+EXPORT_VERSION = 24
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1106,6 +1110,14 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(CreateTemplate).where(CreateTemplate.organisation_id == organisation_id))
         await session.execute(delete(CreateUsageCounter).where(CreateUsageCounter.organisation_id == organisation_id))
+        await session.execute(delete(CRMRecordChange).where(CRMRecordChange.organisation_id == organisation_id))
+        await session.execute(delete(CRMCustomFieldValue).where(CRMCustomFieldValue.organisation_id == organisation_id))
+        await session.execute(
+            delete(CRMCustomFieldDefinition).where(CRMCustomFieldDefinition.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(OrganisationCRMSetting).where(OrganisationCRMSetting.organisation_id == organisation_id)
+        )
         await session.execute(delete(Contact).where(Contact.organisation_id == organisation_id))
         await session.execute(delete(Opportunity).where(Opportunity.organisation_id == organisation_id))
         await session.execute(delete(Company).where(Company.organisation_id == organisation_id))
@@ -2854,6 +2866,24 @@ async def _export_payload(
         .where(CRMStageMapping.organisation_id == organisation_id)
         .order_by(CRMStageMapping.connection_id, CRMStageMapping.revenueos_stage)
     )
+    crm_settings = await rows(
+        select(OrganisationCRMSetting).where(OrganisationCRMSetting.organisation_id == organisation_id)
+    )
+    crm_custom_field_definitions = await rows(
+        select(CRMCustomFieldDefinition)
+        .where(CRMCustomFieldDefinition.organisation_id == organisation_id)
+        .order_by(CRMCustomFieldDefinition.entity_type, CRMCustomFieldDefinition.display_order)
+    )
+    crm_custom_field_values = await rows(
+        select(CRMCustomFieldValue)
+        .where(CRMCustomFieldValue.organisation_id == organisation_id)
+        .order_by(CRMCustomFieldValue.entity_type, CRMCustomFieldValue.entity_id, CRMCustomFieldValue.definition_id)
+    )
+    crm_record_changes = await rows(
+        select(CRMRecordChange)
+        .where(CRMRecordChange.organisation_id == organisation_id)
+        .order_by(CRMRecordChange.entity_type, CRMRecordChange.entity_id, CRMRecordChange.changed_at)
+    )
     action_executions = await rows(
         select(ActionExecution)
         .where(ActionExecution.organisation_id == organisation_id)
@@ -3250,9 +3280,11 @@ async def _export_payload(
                     "website",
                     "normalized_domain",
                     "industry",
+                    "location",
                     "employee_count",
                     "status",
                     "owner_user_id",
+                    "archived_at",
                     "created_at",
                     "updated_at",
                 ),
@@ -4130,7 +4162,9 @@ async def _export_payload(
                     "phone",
                     "job_title",
                     "linkedin_url",
+                    "status",
                     "owner_user_id",
+                    "archived_at",
                     "created_at",
                     "updated_at",
                 ),
@@ -4151,6 +4185,7 @@ async def _export_payload(
                     "expected_close_date",
                     "owner_user_id",
                     "description",
+                    "archived_at",
                     "created_at",
                     "updated_at",
                 ),
@@ -4379,6 +4414,77 @@ async def _export_payload(
                 ),
             )
             for item in crm_stage_mappings
+        ],
+        "crmSettings": [
+            _columns(
+                item,
+                (
+                    "mode",
+                    "external_provider",
+                    "configured_by_user_id",
+                    "configured_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_settings
+        ],
+        "crmCustomFieldDefinitions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "entity_type",
+                    "field_key",
+                    "label",
+                    "field_type",
+                    "options_json",
+                    "active",
+                    "display_order",
+                    "created_by_user_id",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_custom_field_definitions
+        ],
+        "crmCustomFieldValues": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "definition_id",
+                    "entity_type",
+                    "entity_id",
+                    "text_value",
+                    "number_value",
+                    "date_value",
+                    "boolean_value",
+                    "source",
+                    "changed_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_custom_field_values
+        ],
+        "crmRecordChanges": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "entity_type",
+                    "entity_id",
+                    "field_key",
+                    "old_value_json",
+                    "new_value_json",
+                    "source",
+                    "changed_by_user_id",
+                    "changed_at",
+                ),
+            )
+            for item in crm_record_changes
         ],
         "actionExecutions": [
             _columns(

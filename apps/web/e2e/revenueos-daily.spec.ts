@@ -367,26 +367,38 @@ test("mobile Search finds bounded Core records without an AI answer", async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await routeDaily(page);
-  for (const entity of ["companies", "opportunities", "interactions"]) {
+  for (const entity of [
+    "companies",
+    "contacts",
+    "opportunities",
+    "interactions",
+  ]) {
     await page.route(
       `http://localhost:8000/api/v1/${entity}**`,
       async (route) => {
         const item =
           entity === "companies"
             ? { id: "company-search", name: "Qantas", industry: "Aviation" }
-            : entity === "opportunities"
+            : entity === "contacts"
               ? {
-                  id: "opportunity-search",
-                  name: "Network modernisation",
-                  companyName: "Qantas",
-                  stage: "proposal",
+                  id: "contact-search",
+                  firstName: "Taylor",
+                  lastName: "Nguyen",
+                  email: "taylor@qantas.example",
                 }
-              : {
-                  id: "interaction-search",
-                  title: "Qantas technical review",
-                  interactionType: "workshop",
-                  lifecycleStatus: "planned",
-                };
+              : entity === "opportunities"
+                ? {
+                    id: "opportunity-search",
+                    name: "Network modernisation",
+                    companyName: "Qantas",
+                    stage: "proposal",
+                  }
+                : {
+                    id: "interaction-search",
+                    title: "Qantas technical review",
+                    interactionType: "workshop",
+                    lifecycleStatus: "planned",
+                  };
         await route.fulfill({
           json: {
             items: [item],

@@ -14,7 +14,7 @@ future decisions.
 
 Current availability is intentionally smaller than the target equation below. The
 server combines the relevant global feature flag, active tenant/membership and
-organisation `prospect`, `engage` or `create` entitlement. Engage additionally requires
+organisation `prospect`, `engage`, `create` or `crm` entitlement. Engage additionally requires
 configured policy and sender capability for mutations; Campaign execution is
 non-production Mock Email only. Only admins can change organisation switches. There
 is no billing, plan catalogue, trial or grace-period model yet.
@@ -162,3 +162,13 @@ is no separate SKU, billing state or browser-trusted switch. Missing or disabled
 entitlement fails closed. Administrator role is additionally required to create,
 version, approve or archive Value Models; case workflows remain available to entitled
 members.
+
+## WO-034 CRM entitlement
+
+`API_FEATURE_NATIVE_CRM_ENABLED` and the organisation `crm` row jointly gate CRM
+system-of-record configuration, custom-field mutation and administrator-only record
+archive/restore. Admins manage entitlement, mode and definitions; members may use
+entitled values. Core Company/Contact/Opportunity CRUD never depends on this add-on.
+Disabling CRM makes existing custom values read-only and preserves them in organisation
+export/deletion. This is a manual private-beta switch, not a billing or plan
+implementation.

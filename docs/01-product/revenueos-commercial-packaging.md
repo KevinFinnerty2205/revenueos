@@ -110,3 +110,17 @@ Checkpoint 2 keeps this package structure. Prospect and Engage may be demonstrat
 with labelled synthetic providers, but real research and external delivery must not be
 sold as available until their provider-specific launch gates pass. See the
 [Prospect and Engage readiness review](prospect-engage-readiness.md).
+
+## WO-034 CRM entitlement boundary
+
+The implemented private-beta `crm` entitlement does not hide or disable the
+Company, Contact and Opportunity records required by Core. It unlocks the explicit
+RevenueOS system-of-record setup and bounded custom-field administration/mutation;
+administrator-only archive/restore is gated by the same entitlement. Existing custom
+values become read-only after entitlement loss. Ownership is shown on Core records and
+enforced by normal membership policy. There is no price, subscription, trial or billing
+implementation attached to the manual entitlement.
+
+External HubSpot field authority remains a Core integration safety boundary rather
+than being weakened to manufacture an add-on. WO-035 will decide which configurable
+Pipeline capabilities join the CRM package.

@@ -19,11 +19,12 @@ def create_company(
     name: str = "Acme Australia",
     status: str = "prospect",
 ) -> dict[str, object]:
+    domain = name.lower().replace(" ", "-")
     response = client.post(
         "/api/v1/companies",
         json={
             "name": name,
-            "website": "https://acme.example",
+            "website": f"https://{domain}.example",
             "industry": "Software",
             "employeeCount": 125,
             "status": status,

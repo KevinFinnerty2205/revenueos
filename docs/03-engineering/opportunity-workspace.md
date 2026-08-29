@@ -378,3 +378,13 @@ the Account and Opportunity identifiers. The Business Case service reloads both 
 the active tenant and rejects mismatched relationships. Calculation, scenario review,
 approval and presentation reuse remain in Create; the Opportunity read model does not
 store duplicated ROI outputs or treat them as Revenue Brain/Methodology truth.
+
+## WO-034 canonical CRM record
+
+Opportunity remains the sole deal record in native and external CRM modes. The
+existing route now places a compact owner/core-field/custom-field/activity/history
+panel before the deeper Workspace, while the original Methodology, Evidence,
+Revenue Brain and Actions consumers remain unchanged. Core edit uses optimistic
+concurrency and respects active HubSpot field authority; admin archive/restore is
+CRM-entitled. Migration `0043_native_crm` adds only `archived_at` to Opportunity,
+leaving Pipeline definitions and stage history to WO-035.
