@@ -199,6 +199,7 @@ class Settings(BaseSettings):
     feature_action_execution_enabled: bool = False
     feature_mock_connectors_enabled: bool = False
     feature_hubspot_crm_enabled: bool = False
+    feature_native_crm_enabled: bool = True
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     feature_prospect_enabled: bool = True

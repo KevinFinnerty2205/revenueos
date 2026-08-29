@@ -58,6 +58,7 @@ def create_supported_interaction(
     app: FastAPI,
     client: TestClient,
     *,
+    company_name: str = "Live intelligence account",
     segments: tuple[tuple[str, str], ...] = (
         ("salesperson", "Our platform reduces cost and supports rapid rollout."),
         ("customer", "We are ready to move forward and asked about an October rollout."),
@@ -65,7 +66,7 @@ def create_supported_interaction(
     ),
 ) -> tuple[str, UUID]:
     enable_live(app)
-    company_id = str(create_company(client, name="Live intelligence account")["id"])
+    company_id = str(create_company(client, name=company_name)["id"])
     meeting = create_meeting(
         client,
         title="Authorised live workshop",
@@ -556,7 +557,7 @@ def test_export_excludes_internal_fingerprints_and_meeting_deletion_removes_live
         return payload, meeting_id
 
     payload, meeting_id = asyncio.run(export_and_meeting_id())
-    assert payload["exportVersion"] == 23
+    assert payload["exportVersion"] == 24
     live_sessions = payload["liveInteractionSessions"]
     signals = payload["provisionalSignals"]
     assert isinstance(live_sessions, list) and len(live_sessions) == 1
@@ -634,7 +635,11 @@ def test_live_character_and_concurrency_quotas_fail_closed(
 
     app.state.settings.private_beta_max_live_characters_per_interaction = 200_000
     app.state.settings.private_beta_max_concurrent_live_interactions = 1
-    second_interaction_id, _ = create_supported_interaction(app, client)
+    second_interaction_id, _ = create_supported_interaction(
+        app,
+        client,
+        company_name="Second live intelligence account",
+    )
     concurrency_limited = client.post(
         f"/api/v1/interactions/{second_interaction_id}/live-intelligence/start",
         json={},

@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.config import Settings
+from revenueos.crm_history import crm_creation_changes
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
@@ -453,6 +454,24 @@ class ProspectPeopleService:
             )
             self.repository.add(contact)
             await self.repository.flush()
+            for change in crm_creation_changes(
+                self.tenant.organisation_id,
+                self.tenant.user_id,
+                "contact",
+                contact.id,
+                "prospect_promotion",
+                {
+                    "company_id": contact.company_id,
+                    "first_name": contact.first_name,
+                    "last_name": contact.last_name,
+                    "email": contact.email,
+                    "job_title": contact.job_title,
+                    "linkedin_url": contact.linkedin_url,
+                    "status": contact.status,
+                    "owner_user_id": contact.owner_user_id,
+                },
+            ):
+                self.repository.add(change)
             promotion_status = "created"
 
         now = datetime.now(UTC)

@@ -21,6 +21,7 @@ from revenueos.business_contracts import (
     TaskUpdate,
 )
 from revenueos.business_repositories import BusinessRepository, PageResult
+from revenueos.crm_repositories import CRMRepository
 from revenueos.domain import OpportunityAuditAction
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
@@ -28,6 +29,8 @@ from revenueos.models import (
     Company,
     Contact,
     ContactSuppression,
+    CRMCustomFieldValue,
+    CRMRecordChange,
     EngageCampaignAudience,
     EngageCampaignEnrollment,
     EngageEnrollmentStep,
@@ -55,6 +58,7 @@ class BusinessService:
 
     def __init__(self, session: AsyncSession, tenant: TenantContext) -> None:
         self.repository = BusinessRepository(session)
+        self.crm_repository = CRMRepository(session)
         self.tenant = tenant
 
     async def list_companies(
@@ -67,6 +71,7 @@ class BusinessService:
         industry: str | None,
         sort_by: str,
         sort_order: str,
+        include_archived: bool = False,
     ) -> PageResult[Company]:
         return await self.repository.list_companies(
             self.tenant.organisation_id,
@@ -77,6 +82,7 @@ class BusinessService:
             industry=industry,
             sort_by=sort_by,
             sort_order=sort_order,
+            include_archived=include_archived,
         )
 
     async def get_company(self, company_id: UUID) -> Company:
@@ -89,29 +95,47 @@ class BusinessService:
         owner_user_id = request.owner_user_id or self.tenant.user_id
         await self._require_member(owner_user_id, "ownerUserId")
         website = str(request.website) if request.website else None
+        normalized_domain = self._normalise_website_domain(website) if website else None
+        if normalized_domain is not None:
+            await self._reject_duplicate_company(normalized_domain)
         company = Company(
             organisation_id=self.tenant.organisation_id,
             owner_user_id=owner_user_id,
             name=request.name,
             website=website,
-            normalized_domain=self._normalise_website_domain(website) if website else None,
+            normalized_domain=normalized_domain,
             industry=request.industry,
+            location=request.location,
             employee_count=request.employee_count,
             status=request.status.value,
         )
-        return await self._save(company)
+        return await self._save(
+            company,
+            crm_entity_type="account",
+            changes=self._creation_changes(
+                company,
+                ("name", "website", "industry", "location", "employee_count", "status", "owner_user_id"),
+            ),
+        )
 
     async def update_company(self, company_id: UUID, request: CompanyUpdate) -> Company:
         company = await self.get_company(company_id)
+        self._require_active_record(company)
         values = request.model_dump(exclude_unset=True)
+        expected_updated_at = values.pop("expected_updated_at", None)
+        self._check_concurrency(company.updated_at, expected_updated_at, "company")
         if "owner_user_id" in values:
             await self._require_member(values["owner_user_id"], "ownerUserId")
         if "website" in values:
             website = str(values["website"]) if values["website"] else None
             values["website"] = website
             values["normalized_domain"] = self._normalise_website_domain(website) if website else None
+            if values["normalized_domain"] is not None:
+                await self._reject_duplicate_company(values["normalized_domain"], excluding=company.id)
+        changes = self._changed_values(company, values)
         self._apply_values(company, values)
-        return await self._save(company)
+        company.updated_at = datetime.now(UTC)
+        return await self._save(company, crm_entity_type="account", changes=changes)
 
     async def delete_company(self, company_id: UUID) -> None:
         await self._delete(await self.get_company(company_id), "company")
@@ -125,6 +149,7 @@ class BusinessService:
         company_id: UUID | None,
         sort_by: str,
         sort_order: str,
+        include_archived: bool = False,
     ) -> PageResult[Contact]:
         return await self.repository.list_contacts(
             self.tenant.organisation_id,
@@ -134,6 +159,7 @@ class BusinessService:
             company_id=company_id,
             sort_by=sort_by,
             sort_order=sort_order,
+            include_archived=include_archived,
         )
 
     async def get_contact(self, contact_id: UUID) -> Contact:
@@ -144,30 +170,65 @@ class BusinessService:
 
     async def create_contact(self, request: ContactCreate) -> Contact:
         await self.get_company(request.company_id)
+        await self._guard_authoritative_fields(
+            "contact",
+            set(request.model_dump(exclude_none=True)),
+        )
         owner_user_id = request.owner_user_id or self.tenant.user_id
         await self._require_member(owner_user_id, "ownerUserId")
+        email = str(request.email) if request.email else None
+        if email is not None:
+            await self._reject_duplicate_contact(email)
         contact = Contact(
             organisation_id=self.tenant.organisation_id,
             company_id=request.company_id,
             first_name=request.first_name,
             last_name=request.last_name,
-            email=str(request.email),
+            email=email,
             phone=request.phone,
             job_title=request.job_title,
             linkedin_url=str(request.linkedin_url) if request.linkedin_url else None,
+            status=request.status,
             owner_user_id=owner_user_id,
         )
-        return await self._save(contact)
+        return await self._save(
+            contact,
+            crm_entity_type="contact",
+            changes=self._creation_changes(
+                contact,
+                (
+                    "company_id",
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "phone",
+                    "job_title",
+                    "linkedin_url",
+                    "status",
+                    "owner_user_id",
+                ),
+            ),
+        )
 
     async def update_contact(self, contact_id: UUID, request: ContactUpdate) -> Contact:
         contact = await self.get_contact(contact_id)
+        self._require_active_record(contact)
         values = request.model_dump(exclude_unset=True)
+        expected_updated_at = values.pop("expected_updated_at", None)
+        self._check_concurrency(contact.updated_at, expected_updated_at, "contact")
         if "company_id" in values:
             await self.get_company(values["company_id"])
         if "owner_user_id" in values:
             await self._require_member(values["owner_user_id"], "ownerUserId")
+        await self._guard_authoritative_fields("contact", set(values))
+        if "email" in values and values["email"] is not None:
+            email = str(values["email"])
+            values["email"] = email
+            await self._reject_duplicate_contact(email, excluding=contact.id)
+        changes = self._changed_values(contact, values)
         self._apply_values(contact, values)
-        return await self._save(contact)
+        contact.updated_at = datetime.now(UTC)
+        return await self._save(contact, crm_entity_type="contact", changes=changes)
 
     async def delete_contact(self, contact_id: UUID) -> None:
         contact = await self.get_contact(contact_id)
@@ -342,6 +403,10 @@ class BusinessService:
     async def create_opportunity(self, request: OpportunityCreate) -> Opportunity:
         if request.company_id is not None:
             await self.get_company(request.company_id)
+        await self._guard_authoritative_fields(
+            "opportunity",
+            set(request.model_dump(exclude_none=True)),
+        )
         owner_user_id = request.owner_user_id or self.tenant.user_id
         await self._require_member(owner_user_id, "ownerUserId")
         opportunity = Opportunity(
@@ -359,6 +424,22 @@ class BusinessService:
         self.repository.add(opportunity)
         try:
             await self.repository.flush()
+            for change in self._creation_changes(
+                opportunity,
+                (
+                    "company_id",
+                    "name",
+                    "stage",
+                    "status",
+                    "estimated_value",
+                    "currency",
+                    "expected_close_date",
+                    "owner_user_id",
+                    "description",
+                ),
+            ).items():
+                field_name, (old_value, new_value) = change
+                self.repository.add(self._crm_change("opportunity", opportunity.id, field_name, old_value, new_value))
             self.repository.add(
                 self._opportunity_audit(
                     opportunity.id,
@@ -401,6 +482,7 @@ class BusinessService:
         request: OpportunityUpdate,
     ) -> Opportunity:
         opportunity = await self._get_opportunity_for_update(opportunity_id)
+        self._require_active_record(opportunity)
         values = request.model_dump(exclude_unset=True)
         expected_updated_at = values.pop("expected_updated_at", None)
         if expected_updated_at is not None and not self._same_instant(
@@ -417,6 +499,8 @@ class BusinessService:
                 await self.get_company(values["company_id"])
         if "owner_user_id" in values:
             await self._require_member(values["owner_user_id"], "ownerUserId")
+        await self._guard_authoritative_fields("opportunity", set(values))
+        changes = self._changed_values(opportunity, values)
         self._apply_values(opportunity, values)
         opportunity.updated_at = datetime.now(UTC)
         self.repository.add(
@@ -426,7 +510,7 @@ class BusinessService:
                 list(values),
             )
         )
-        saved = await self._save(opportunity)
+        saved = await self._save(opportunity, crm_entity_type="opportunity", changes=changes)
         logger.info(
             "opportunity_updated",
             extra={
@@ -581,6 +665,12 @@ class BusinessService:
         return next(iter(related_company_ids), None)
 
     async def _require_member(self, user_id: UUID, field_name: str) -> None:
+        if not self.tenant.can_manage() and user_id != self.tenant.user_id:
+            raise PublicAPIError(
+                "forbidden_owner_assignment",
+                "Members can only assign CRM records to themselves.",
+                403,
+            )
         if not await self.repository.membership_exists(self.tenant.organisation_id, user_id):
             raise PublicAPIError(
                 "invalid_relationship",
@@ -591,10 +681,17 @@ class BusinessService:
     async def _save[TEntity: (Company, Contact, Opportunity, Task)](
         self,
         entity: TEntity,
+        *,
+        crm_entity_type: str | None = None,
+        changes: dict[str, tuple[object | None, object | None]] | None = None,
     ) -> TEntity:
         self.repository.add(entity)
         try:
             await self.repository.flush()
+            if crm_entity_type is not None and changes:
+                for field_name, (old_value, new_value) in changes.items():
+                    self.repository.add(self._crm_change(crm_entity_type, entity.id, field_name, old_value, new_value))
+                await self.repository.flush()
             await self.repository.refresh(entity)
             await self.repository.commit()
         except IntegrityError as exc:
@@ -611,6 +708,28 @@ class BusinessService:
         entity: Company | Contact | Opportunity | Task,
         entity_name: str,
     ) -> None:
+        if isinstance(entity, (Company, Contact, Opportunity)):
+            crm_entity_type = (
+                "account"
+                if isinstance(entity, Company)
+                else "contact"
+                if isinstance(entity, Contact)
+                else "opportunity"
+            )
+            await self.repository.session.execute(
+                delete(CRMCustomFieldValue).where(
+                    CRMCustomFieldValue.organisation_id == self.tenant.organisation_id,
+                    CRMCustomFieldValue.entity_type == crm_entity_type,
+                    CRMCustomFieldValue.entity_id == entity.id,
+                )
+            )
+            await self.repository.session.execute(
+                delete(CRMRecordChange).where(
+                    CRMRecordChange.organisation_id == self.tenant.organisation_id,
+                    CRMRecordChange.entity_type == crm_entity_type,
+                    CRMRecordChange.entity_id == entity.id,
+                )
+            )
         await self.repository.delete(entity)
         try:
             await self.repository.commit()
@@ -647,6 +766,112 @@ class BusinessService:
             changed_fields=sorted(changed_fields),
             metadata_json=metadata or {},
         )
+
+    async def _guard_authoritative_fields(self, entity_type: str, fields: set[str]) -> None:
+        setting = await self.crm_repository.setting(self.tenant.organisation_id)
+        connection = await self.crm_repository.active_hubspot_connection(self.tenant.organisation_id)
+        external = (setting is not None and setting.mode == "external") or (setting is None and connection is not None)
+        if not external:
+            return
+        authority = await self.crm_repository.field_authority(self.tenant.organisation_id, entity_type)
+        blocked = sorted(field for field in fields if authority.get(field) == "crm_authoritative")
+        if blocked:
+            raise PublicAPIError(
+                "crm_authoritative_field",
+                "One or more fields are controlled by the connected CRM.",
+                409,
+                details={"fields": ",".join(blocked)},
+            )
+
+    async def _reject_duplicate_company(self, domain: str, *, excluding: UUID | None = None) -> None:
+        existing = await self.repository.company_by_domain(self.tenant.organisation_id, domain)
+        if existing is not None and existing.id != excluding:
+            raise PublicAPIError(
+                "duplicate_company_domain",
+                "An account with this website domain already exists.",
+                409,
+                details={"entityType": "account", "entityId": str(existing.id)},
+            )
+
+    async def _reject_duplicate_contact(self, email: str, *, excluding: UUID | None = None) -> None:
+        existing = await self.repository.contact_by_email(self.tenant.organisation_id, email)
+        if existing is not None and existing.id != excluding:
+            raise PublicAPIError(
+                "duplicate_contact_email",
+                "A contact with this business email already exists.",
+                409,
+                details={"entityType": "contact", "entityId": str(existing.id)},
+            )
+
+    def _crm_change(
+        self,
+        entity_type: str,
+        entity_id: UUID,
+        field_name: str,
+        old_value: object | None,
+        new_value: object | None,
+    ) -> CRMRecordChange:
+        return CRMRecordChange(
+            organisation_id=self.tenant.organisation_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            field_key=field_name,
+            old_value_json=self._json_value(old_value),
+            new_value_json=self._json_value(new_value),
+            source="manual_user_entry",
+            changed_by_user_id=self.tenant.user_id,
+        )
+
+    @classmethod
+    def _creation_changes(
+        cls, entity: Company | Contact | Opportunity, fields: tuple[str, ...]
+    ) -> dict[str, tuple[object | None, object | None]]:
+        return {
+            field: (None, cls._plain_value(getattr(entity, field)))
+            for field in fields
+            if getattr(entity, field) is not None
+        }
+
+    @classmethod
+    def _changed_values(
+        cls, entity: Company | Contact | Opportunity, values: dict[str, Any]
+    ) -> dict[str, tuple[object | None, object | None]]:
+        return {
+            field: (cls._plain_value(getattr(entity, field)), cls._plain_value(value))
+            for field, value in values.items()
+            if field != "normalized_domain" and cls._plain_value(getattr(entity, field)) != cls._plain_value(value)
+        }
+
+    @staticmethod
+    def _plain_value(value: object | None) -> object | None:
+        return value.value if hasattr(value, "value") else value
+
+    @staticmethod
+    def _json_value(value: object | None) -> object | None:
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if hasattr(value, "isoformat"):
+            return str(value.isoformat())
+        if hasattr(value, "value"):
+            return str(value.value)
+        return str(value) if value is not None and not isinstance(value, (str, int, float, bool)) else value
+
+    def _check_concurrency(self, current: datetime, expected: datetime | None, entity_name: str) -> None:
+        if expected is not None and not self._same_instant(current, expected):
+            raise PublicAPIError(
+                "stale_write",
+                f"This {entity_name} changed after it was loaded. Refresh and try again.",
+                409,
+            )
+
+    @staticmethod
+    def _require_active_record(entity: Company | Contact | Opportunity) -> None:
+        if entity.archived_at is not None:
+            raise PublicAPIError(
+                "record_archived",
+                "Restore this record before changing it.",
+                409,
+            )
 
     @staticmethod
     def _same_instant(first: datetime, second: datetime) -> bool:

@@ -125,6 +125,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "crm_entity_mappings",
         "crm_field_mappings",
         "crm_stage_mappings",
+        "organisation_crm_settings",
+        "crm_custom_field_definitions",
+        "crm_custom_field_values",
+        "crm_record_changes",
         "tasks",
         "interactions",
         "online_meeting_metadata",
@@ -2699,6 +2703,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'crm_entity_mappings',
                                     'crm_field_mappings',
                                     'crm_stage_mappings',
+                                    'organisation_crm_settings',
+                                    'crm_custom_field_definitions',
+                                    'crm_custom_field_values',
+                                    'crm_record_changes',
                                     'tasks',
                                     'interactions',
                                     'online_meeting_metadata',
@@ -2804,6 +2812,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "action_execution_attempts",
                     "integration_audit_events",
                     "mock_connector_objects",
+                    "organisation_crm_settings",
+                    "crm_custom_field_definitions",
+                    "crm_custom_field_values",
+                    "crm_record_changes",
                 }
                 expected_tenant_a_counts = {
                     table: (0 if table in empty_wo022_tables else 2 if table == "revenue_brain_snapshots" else 1)

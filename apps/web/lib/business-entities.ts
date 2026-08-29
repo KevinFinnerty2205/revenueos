@@ -13,6 +13,7 @@ export interface BusinessEntityMap {
 export interface EntityOption {
   label: string;
   value: string;
+  disabled?: boolean;
 }
 
 export const entityLabels: Record<
@@ -20,8 +21,8 @@ export const entityLabels: Record<
   { singular: string; plural: string; eyebrow: string; description: string }
 > = {
   companies: {
-    singular: "company",
-    plural: "Companies",
+    singular: "account",
+    plural: "Accounts",
     eyebrow: "Relationships",
     description:
       "Keep the organisations your team works with in one clear view.",

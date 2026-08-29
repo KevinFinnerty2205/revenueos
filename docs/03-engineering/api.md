@@ -1,5 +1,14 @@
 # API reference
 
+## Native CRM
+
+WO-034 adds `/api/v1/crm` availability, admin entitlement/mode, organisation-member,
+custom-definition, record read-model, typed custom-value and archive/restore routes.
+The canonical Company/Contact/Opportunity endpoints remain the CRUD source of truth,
+accept archive filtering and return safe exact-duplicate metadata. See the complete
+[Native CRM API contract](native-crm-api.md). FastAPI/Pydantic/OpenAPI remains
+authoritative.
+
 ## RevenueOS Create
 
 FastAPI/OpenAPI is authoritative for the WO-032 camel-case contracts under

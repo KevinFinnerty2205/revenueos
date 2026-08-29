@@ -3,6 +3,7 @@
 import type {
   Company,
   Contact,
+  CRMMember,
   EntityPage,
   Opportunity,
   Task,
@@ -67,6 +68,7 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
+  const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,11 +83,25 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
       parameters.set(entity === "opportunities" ? "stage" : "status", filter);
     }
 
-    apiRequest<EntityPage<BusinessEntity>>(
-      `/api/v1/${entity}?${parameters.toString()}`,
-      { signal: controller.signal },
-    )
-      .then(setResult)
+    Promise.all([
+      apiRequest<EntityPage<BusinessEntity>>(
+        `/api/v1/${entity}?${parameters.toString()}`,
+        { signal: controller.signal },
+      ),
+      entity === "companies" || entity === "contacts"
+        ? apiRequest<CRMMember[]>("/api/v1/crm/members", {
+            signal: controller.signal,
+          })
+        : Promise.resolve([]),
+    ])
+      .then(([nextResult, members]) => {
+        setResult(nextResult);
+        setOwnerNames(
+          Object.fromEntries(
+            members.map((member) => [member.userId, member.displayName]),
+          ),
+        );
+      })
       .catch((requestError: unknown) => {
         if (
           requestError instanceof DOMException &&
@@ -205,7 +221,11 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
       ) : null}
       {!loading && !error && result && result.items.length > 0 ? (
         <>
-          <EntityRows entity={entity} items={result.items} />
+          <EntityRows
+            entity={entity}
+            items={result.items}
+            ownerNames={ownerNames}
+          />
           <nav
             aria-label={`${labels.plural} pagination`}
             className="mt-5 flex items-center justify-between gap-4"
@@ -241,13 +261,15 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
 function EntityRows({
   entity,
   items,
+  ownerNames,
 }: {
   entity: BusinessEntityName;
   items: BusinessEntity[];
+  ownerNames: Record<string, string>;
 }) {
   const rows = items.map((item) => ({
     id: item.id,
-    cells: displayCells(entity, item),
+    cells: displayCells(entity, item, ownerNames),
   }));
   const labels = rows[0]?.cells.map((cell) => cell.label) ?? [];
 
@@ -345,6 +367,7 @@ function EntityRows({
 function displayCells(
   entity: BusinessEntityName,
   item: BusinessEntity,
+  ownerNames: Record<string, string>,
 ): DisplayCell[] {
   if (entity === "companies") {
     const company = item as Company;
@@ -362,6 +385,10 @@ function displayCells(
       },
       { label: "Industry", value: company.industry ?? "—" },
       { label: "Status", value: humanise(company.status) },
+      {
+        label: "Owner",
+        value: ownerNames[company.ownerUserId] ?? "Inactive member",
+      },
       {
         label: "Employees",
         value: company.employeeCount?.toLocaleString("en-AU") ?? "—",
@@ -384,7 +411,11 @@ function displayCells(
       },
       { label: "Email", value: contact.email ?? "Not established" },
       { label: "Job title", value: contact.jobTitle ?? "—" },
-      { label: "Phone", value: contact.phone ?? "—" },
+      { label: "Status", value: humanise(contact.status) },
+      {
+        label: "Owner",
+        value: ownerNames[contact.ownerUserId] ?? "Inactive member",
+      },
     ];
   }
   if (entity === "opportunities") {

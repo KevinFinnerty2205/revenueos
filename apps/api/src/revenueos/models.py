@@ -21,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
@@ -210,7 +211,7 @@ class OrganisationBetaSettings(TimestampMixin, Base):
 class OrganisationModuleEntitlement(TimestampMixin, Base):
     __tablename__ = "organisation_module_entitlements"
     __table_args__ = (
-        CheckConstraint("module_key IN ('prospect', 'engage', 'create')", name="ck_module_entitlements_key"),
+        CheckConstraint("module_key IN ('prospect', 'engage', 'create', 'crm')", name="ck_module_entitlements_key"),
         CheckConstraint("source = 'manual_private_beta'", name="ck_module_entitlements_source"),
         ForeignKeyConstraint(
             ["organisation_id", "configured_by_user_id"],
@@ -824,6 +825,15 @@ class Company(TimestampMixin, Base):
         Index("ix_companies_organisation_name", "organisation_id", "name"),
         Index("ix_companies_organisation_domain", "organisation_id", "normalized_domain"),
         Index("ix_companies_organisation_status", "organisation_id", "status"),
+        Index("ix_companies_org_archived", "organisation_id", "archived_at", "name"),
+        Index(
+            "uq_companies_org_normalized_domain",
+            "organisation_id",
+            "normalized_domain",
+            unique=True,
+            postgresql_where=text("normalized_domain IS NOT NULL"),
+            sqlite_where=text("normalized_domain IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -836,6 +846,7 @@ class Company(TimestampMixin, Base):
     website: Mapped[str | None] = mapped_column(String(2048))
     normalized_domain: Mapped[str | None] = mapped_column(String(253))
     industry: Mapped[str | None] = mapped_column(String(120))
+    location: Mapped[str | None] = mapped_column(String(200))
     employee_count: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(
         String(20),
@@ -844,6 +855,7 @@ class Company(TimestampMixin, Base):
         server_default=CompanyStatus.PROSPECT.value,
     )
     owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ProspectResearchTarget(TimestampMixin, Base):
@@ -1476,6 +1488,7 @@ class Contact(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("length(trim(first_name)) > 0", name="ck_contacts_first_name"),
         CheckConstraint("length(trim(last_name)) > 0", name="ck_contacts_last_name"),
+        CheckConstraint("status IN ('active', 'left_company')", name="ck_contacts_status"),
         ForeignKeyConstraint(
             ["organisation_id", "company_id"],
             ["companies.organisation_id", "companies.id"],
@@ -1495,6 +1508,15 @@ class Contact(TimestampMixin, Base):
         Index("ix_contacts_organisation_name", "organisation_id", "last_name", "first_name"),
         Index("ix_contacts_organisation_company", "organisation_id", "company_id"),
         Index("ix_contacts_organisation_email", "organisation_id", "email"),
+        Index("ix_contacts_org_archived", "organisation_id", "archived_at", "last_name", "first_name"),
+        Index(
+            "uq_contacts_org_business_email",
+            "organisation_id",
+            text("lower(email)"),
+            unique=True,
+            postgresql_where=text("email IS NOT NULL"),
+            sqlite_where=text("email IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1510,7 +1532,9 @@ class Contact(TimestampMixin, Base):
     phone: Mapped[str | None] = mapped_column(String(50))
     job_title: Mapped[str | None] = mapped_column(String(150))
     linkedin_url: Mapped[str | None] = mapped_column(String(2048))
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", server_default="active")
     owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Opportunity(TimestampMixin, Base):
@@ -1557,6 +1581,7 @@ class Opportunity(TimestampMixin, Base):
         Index("ix_opportunities_organisation_status", "organisation_id", "status"),
         Index("ix_opportunities_organisation_close", "organisation_id", "expected_close_date"),
         Index("ix_opportunities_organisation_updated", "organisation_id", "updated_at"),
+        Index("ix_opportunities_org_archived", "organisation_id", "archived_at", "updated_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1587,6 +1612,7 @@ class Opportunity(TimestampMixin, Base):
     expected_close_date: Mapped[date | None] = mapped_column(Date)
     owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class OpportunityAuditEvent(Base):
@@ -4209,6 +4235,181 @@ class CRMStageMapping(TimestampMixin, Base):
     external_pipeline_id: Mapped[str] = mapped_column(String(128), nullable=False)
     external_stage_id: Mapped[str] = mapped_column(String(128), nullable=False)
     configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class OrganisationCRMSetting(TimestampMixin, Base):
+    __tablename__ = "organisation_crm_settings"
+    __table_args__ = (
+        CheckConstraint("mode IN ('native', 'external')", name="ck_organisation_crm_settings_mode"),
+        CheckConstraint(
+            "(mode = 'native' AND external_provider IS NULL) OR (mode = 'external' AND external_provider = 'hubspot')",
+            name="ck_organisation_crm_settings_provider",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "configured_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_organisation_crm_settings_configurer",
+            ondelete="RESTRICT",
+        ),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), primary_key=True
+    )
+    mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    external_provider: Mapped[str | None] = mapped_column(String(40))
+    configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    configured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CRMCustomFieldDefinition(TimestampMixin, Base):
+    __tablename__ = "crm_custom_field_definitions"
+    __table_args__ = (
+        CheckConstraint(
+            "entity_type IN ('account', 'contact', 'opportunity')",
+            name="ck_crm_custom_fields_entity_type",
+        ),
+        CheckConstraint(
+            "field_type IN ('short_text', 'number', 'date', 'boolean', 'single_select', 'url')",
+            name="ck_crm_custom_fields_field_type",
+        ),
+        CheckConstraint("length(trim(field_key)) BETWEEN 1 AND 64", name="ck_crm_custom_fields_key"),
+        CheckConstraint("length(trim(label)) BETWEEN 1 AND 100", name="ck_crm_custom_fields_label"),
+        CheckConstraint("display_order BETWEEN 0 AND 24", name="ck_crm_custom_fields_order"),
+        CheckConstraint(
+            "(active AND archived_at IS NULL) OR (NOT active AND archived_at IS NOT NULL)",
+            name="ck_crm_custom_fields_archive",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_custom_fields_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_custom_fields_org_id"),
+        UniqueConstraint("organisation_id", "entity_type", "field_key", name="uq_crm_custom_fields_org_entity_key"),
+        Index(
+            "ix_crm_custom_fields_org_entity",
+            "organisation_id",
+            "entity_type",
+            "active",
+            "display_order",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    field_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    field_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    options_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CRMCustomFieldValue(TimestampMixin, Base):
+    __tablename__ = "crm_custom_field_values"
+    __table_args__ = (
+        CheckConstraint(
+            "entity_type IN ('account', 'contact', 'opportunity')",
+            name="ck_crm_custom_values_entity_type",
+        ),
+        CheckConstraint(
+            "source IN ('manual_user_entry', 'crm_import', 'prospect_promotion', "
+            "'event_promotion', 'external_crm', 'reviewed_action', 'system')",
+            name="ck_crm_custom_values_source",
+        ),
+        CheckConstraint(
+            "(CASE WHEN text_value IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN number_value IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN date_value IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN boolean_value IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_crm_custom_values_one_typed_value",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "definition_id"],
+            ["crm_custom_field_definitions.organisation_id", "crm_custom_field_definitions.id"],
+            name="fk_crm_custom_values_definition",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "changed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_custom_values_actor",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_custom_values_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "definition_id",
+            "entity_type",
+            "entity_id",
+            name="uq_crm_custom_values_record_field",
+        ),
+        Index("ix_crm_custom_values_org_record", "organisation_id", "entity_type", "entity_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    definition_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    text_value: Mapped[str | None] = mapped_column(String(2048))
+    number_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    date_value: Mapped[date | None] = mapped_column(Date)
+    boolean_value: Mapped[bool | None] = mapped_column(Boolean)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual_user_entry")
+    changed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class CRMRecordChange(Base):
+    __tablename__ = "crm_record_changes"
+    __table_args__ = (
+        CheckConstraint(
+            "entity_type IN ('account', 'contact', 'opportunity')",
+            name="ck_crm_record_changes_entity_type",
+        ),
+        CheckConstraint(
+            "source IN ('manual_user_entry', 'crm_import', 'prospect_promotion', "
+            "'event_promotion', 'external_crm', 'reviewed_action', 'system')",
+            name="ck_crm_record_changes_source",
+        ),
+        CheckConstraint("length(trim(field_key)) BETWEEN 1 AND 80", name="ck_crm_record_changes_field"),
+        ForeignKeyConstraint(
+            ["organisation_id", "changed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_record_changes_actor",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_record_changes_org_id"),
+        Index(
+            "ix_crm_record_changes_org_record",
+            "organisation_id",
+            "entity_type",
+            "entity_id",
+            "changed_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    field_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    old_value_json: Mapped[object | None] = mapped_column(JSON(none_as_null=True))
+    new_value_json: Mapped[object | None] = mapped_column(JSON(none_as_null=True))
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    changed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class ExecutionPreview(Base):

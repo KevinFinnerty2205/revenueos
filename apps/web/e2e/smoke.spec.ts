@@ -110,9 +110,9 @@ test("core entity pages remain usable at a mobile viewport", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/companies");
 
-  await expect(page.getByRole("heading", { name: "Companies" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Create company" }),
+    page.getByRole("link", { name: "Create account" }),
   ).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Mobile navigation" }),
@@ -289,12 +289,15 @@ test("private beta onboarding, consent, feedback and admin controls stay product
 test("company creation exposes required validation and navigation", async ({
   page,
 }) => {
+  await page.route("http://localhost:8000/api/v1/crm/members", async (route) =>
+    route.fulfill({ json: [] }),
+  );
   await page.goto("/companies/new");
 
   await expect(
-    page.getByRole("heading", { name: "Create company" }),
+    page.getByRole("heading", { name: "Create account" }),
   ).toBeVisible();
-  await expect(page.getByLabel(/company name/i)).toHaveAttribute(
+  await expect(page.getByLabel(/account name/i)).toHaveAttribute(
     "required",
     "",
   );
@@ -3176,6 +3179,11 @@ test("opportunity workspace persists an associated meeting and composes stored i
   let associated = false;
   let reasoningGenerated = false;
 
+  await page.route("http://localhost:8000/api/v1/crm/members", async (route) =>
+    route.fulfill({
+      json: [{ userId: "user-1", displayName: "Alex Morgan", active: true }],
+    }),
+  );
   await page.route(
     "http://localhost:8000/api/v1/opportunities**",
     async (route) => {
@@ -3290,7 +3298,7 @@ test("opportunity workspace persists an associated meeting and composes stored i
     page.getByRole("heading", { name: "Opportunities", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Create opportunity" }).first().click();
-  await page.getByLabel("Company").selectOption("company-1");
+  await page.getByLabel("Account").selectOption("company-1");
   await page.getByLabel("Opportunity name").fill("Platform expansion");
   await page.getByLabel("Stage").selectOption("proposal");
   await page.getByLabel("Estimated value").fill("125000.50");

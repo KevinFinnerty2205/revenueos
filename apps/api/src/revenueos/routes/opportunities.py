@@ -59,6 +59,7 @@ async def list_opportunities(
         Query(alias="sortBy"),
     ] = "updated_at",
     sort_order: Annotated[Literal["asc", "desc"], Query(alias="sortOrder")] = "desc",
+    include_archived: Annotated[bool, Query(alias="includeArchived")] = False,
 ) -> Page[OpportunityListItemResponse]:
     result = await service.list_opportunities(
         page=page,
@@ -69,6 +70,7 @@ async def list_opportunities(
         status=opportunity_status.value if opportunity_status else None,
         sort_by=sort_by,
         sort_order=sort_order,
+        include_archived=include_archived,
     )
     return page_response(result, OpportunityListItemResponse, page=page, page_size=page_size)
 

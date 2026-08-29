@@ -9,3 +9,8 @@ If a possible Contact exists, the API returns a conflict until the seller choose
 Promotion updates the Prospect Person with Contact, actor and timestamp. It creates no Opportunity, stakeholder, Evidence, Methodology answer, Revenue Brain fact, task, action or outreach. Refresh remains one-way research: it cannot silently update the Contact.
 
 Deleting the Prospect Person removes research and promotion linkage but preserves the Contact. The UI warns about that distinction. Canonical Contact deletion remains a separate Core operation.
+
+WO-034 additionally appends field-level CRM creation history with source
+`prospect_promotion` in the same transaction. This makes the origin readable without
+changing the existing field-source trust model, and native CRM mode does not push
+the promoted Contact to HubSpot.

@@ -327,9 +327,11 @@ export interface Company extends TenantEntity {
   name: string;
   website: string | null;
   industry: string | null;
+  location: string | null;
   employeeCount: number | null;
   status: CompanyStatus;
   ownerUserId: string;
+  archivedAt: string | null;
 }
 
 export interface Contact extends TenantEntity {
@@ -340,7 +342,9 @@ export interface Contact extends TenantEntity {
   phone: string | null;
   jobTitle: string | null;
   linkedinUrl: string | null;
+  status: "active" | "left_company";
   ownerUserId: string;
+  archivedAt: string | null;
 }
 
 export interface Opportunity extends TenantEntity {
@@ -353,6 +357,106 @@ export interface Opportunity extends TenantEntity {
   expectedCloseDate: string | null;
   ownerUserId: string;
   description: string | null;
+  archivedAt: string | null;
+}
+
+export type CRMEntityType = "account" | "contact" | "opportunity";
+export type CRMMode = "unconfigured" | "native" | "external";
+export type CRMCustomFieldType =
+  "short_text" | "number" | "date" | "boolean" | "single_select" | "url";
+
+export interface CRMAvailability {
+  moduleKey: "crm";
+  state:
+    "available" | "not_in_plan" | "setup_required" | "temporarily_unavailable";
+  enabled: boolean;
+  canManage: boolean;
+  mode: CRMMode;
+  externalProvider: "hubspot" | null;
+  externalConnected: boolean;
+  customFieldsReadOnly: boolean;
+  message: string;
+}
+
+export interface CRMMember {
+  userId: string;
+  displayName: string;
+  active: boolean;
+}
+
+export interface CRMCustomFieldDefinition {
+  id: string;
+  entityType: CRMEntityType;
+  fieldKey: string;
+  label: string;
+  fieldType: CRMCustomFieldType;
+  options: string[];
+  active: boolean;
+  displayOrder: number;
+  createdByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CRMCustomFieldValue {
+  definition: CRMCustomFieldDefinition;
+  value: string | boolean | null;
+  source: string | null;
+  changedByUserId: string | null;
+  updatedAt: string | null;
+  editable: boolean;
+}
+
+export interface CRMRecordChange {
+  id: string;
+  fieldKey: string;
+  oldValue: unknown;
+  newValue: unknown;
+  source: string;
+  changedByUserId: string;
+  changedByName: string;
+  changedAt: string;
+}
+
+export interface CRMActivityItem {
+  id: string;
+  activityType: "interaction" | "outreach" | "action" | "event" | "opportunity";
+  title: string;
+  detail: string | null;
+  occurredAt: string;
+  href: string | null;
+  sourceLabel: string;
+}
+
+export interface CRMCoreField {
+  key: string;
+  label: string;
+  value: string | null;
+  authority:
+    "revenueos_authoritative" | "crm_authoritative" | "review_before_sync";
+}
+
+export interface CRMRecord {
+  entityType: CRMEntityType;
+  entityId: string;
+  title: string;
+  ownerUserId: string;
+  ownerName: string;
+  archivedAt: string | null;
+  recordUpdatedAt: string;
+  mode: CRMMode;
+  crmEnabled: boolean;
+  canManage: boolean;
+  customFieldsReadOnly: boolean;
+  fieldAuthority: Record<
+    string,
+    "revenueos_authoritative" | "crm_authoritative" | "review_before_sync"
+  >;
+  coreFields: CRMCoreField[];
+  customFields: CRMCustomFieldValue[];
+  history: CRMRecordChange[];
+  activity: CRMActivityItem[];
 }
 
 export interface OpportunityListItem extends Opportunity {

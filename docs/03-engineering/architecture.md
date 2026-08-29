@@ -1,5 +1,15 @@
 # Application architecture
 
+## Native CRM Foundation (WO-034)
+
+The modular monolith now treats existing Company, Contact and Opportunity as the
+only native CRM records. Migration `0043_native_crm` adds one tenant setting, bounded
+typed custom-field definitions/values, field-change history, strong dedupe indexes
+and archive/core-field extensions. Existing activity tables are composed into a
+bounded read model; there is no CRM Activity/Task/Note/Lead or service. Native and
+external HubSpot modes share canonical IDs and the WO-025C authority model. See
+[Native CRM architecture](native-crm-architecture.md).
+
 ## Engage Events (WO-031)
 
 The modular monolith adds six tenant-owned Event tables and a nullable Event link on

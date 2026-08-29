@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BetaAdmin } from "@/components/beta-admin";
 import { CreateModuleSettings } from "@/components/create-module-settings";
+import { CRMSettings } from "@/components/crm-settings";
 import { EngageSettings } from "@/components/engage-settings";
 import { PageHeader } from "@/components/page-header";
 import { ProspectModuleSettings } from "@/components/prospect-module-settings";
@@ -99,6 +100,7 @@ export function SettingsExperience() {
           <ProspectModuleSettings />
           <EngageSettings />
           <CreateModuleSettings />
+          <CRMSettings />
           <SalesMethodologySettings />
           <BetaAdmin />
         </>

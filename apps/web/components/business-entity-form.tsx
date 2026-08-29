@@ -3,13 +3,15 @@
 import type {
   Company,
   Contact,
+  CRMRecord,
   EntityPage,
   Opportunity,
+  CRMMember,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { apiRequest } from "@/lib/api";
+import { ApiClientError, apiRequest } from "@/lib/api";
 import {
   type BusinessEntityName,
   type EntityOption,
@@ -35,7 +37,7 @@ interface FieldConfig {
   kind: FieldKind;
   required?: boolean;
   options?: string[];
-  reference?: "companies" | "contacts" | "opportunities";
+  reference?: "companies" | "contacts" | "opportunities" | "members";
   min?: number;
   max?: number;
   step?: string;
@@ -49,7 +51,7 @@ type ReferenceOptions = Partial<
 
 const fields: Record<BusinessEntityName, FieldConfig[]> = {
   companies: [
-    { name: "name", label: "Company name", kind: "text", required: true },
+    { name: "name", label: "Account name", kind: "text", required: true },
     {
       name: "website",
       label: "Website",
@@ -57,12 +59,19 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
       placeholder: "https://example.com",
     },
     { name: "industry", label: "Industry", kind: "text" },
+    { name: "location", label: "Location", kind: "text" },
     {
       name: "employeeCount",
       label: "Employee count",
       kind: "number",
       min: 0,
       step: "1",
+    },
+    {
+      name: "ownerUserId",
+      label: "Owner",
+      kind: "reference",
+      reference: "members",
     },
     {
       name: "status",
@@ -75,7 +84,7 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
   contacts: [
     {
       name: "companyId",
-      label: "Company",
+      label: "Account",
       kind: "reference",
       reference: "companies",
       required: true,
@@ -83,7 +92,7 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
     },
     { name: "firstName", label: "First name", kind: "text", required: true },
     { name: "lastName", label: "Last name", kind: "text", required: true },
-    { name: "email", label: "Email", kind: "email", required: true },
+    { name: "email", label: "Business email", kind: "email" },
     { name: "phone", label: "Phone", kind: "tel" },
     { name: "jobTitle", label: "Job title", kind: "text" },
     {
@@ -92,11 +101,24 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
       kind: "url",
       placeholder: "https://www.linkedin.com/in/name",
     },
+    {
+      name: "status",
+      label: "Employment status",
+      kind: "select",
+      required: true,
+      options: ["active", "left_company"],
+    },
+    {
+      name: "ownerUserId",
+      label: "Owner",
+      kind: "reference",
+      reference: "members",
+    },
   ],
   opportunities: [
     {
       name: "companyId",
-      label: "Company",
+      label: "Account",
       kind: "reference",
       reference: "companies",
       fullWidth: true,
@@ -156,6 +178,12 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
       kind: "textarea",
       fullWidth: true,
     },
+    {
+      name: "ownerUserId",
+      label: "Owner",
+      kind: "reference",
+      reference: "members",
+    },
   ],
   tasks: [
     {
@@ -209,7 +237,7 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
 
 const createDefaults: Record<BusinessEntityName, Record<string, string>> = {
   companies: { status: "prospect" },
-  contacts: {},
+  contacts: { status: "active" },
   opportunities: {
     stage: "discovery",
     status: "open",
@@ -237,10 +265,14 @@ export function BusinessEntityForm({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [duplicateLink, setDuplicateLink] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string | null>(
     null,
+  );
+  const [readOnlyFields, setReadOnlyFields] = useState<ReadonlySet<string>>(
+    new Set(),
   );
 
   const loadForm = useCallback(
@@ -257,6 +289,22 @@ export function BusinessEntityForm({
       ];
       const optionEntries = await Promise.all(
         referenceNames.map(async (reference) => {
+          if (reference === "members") {
+            const members = await apiRequest<CRMMember[]>(
+              "/api/v1/crm/members",
+              {
+                signal,
+              },
+            );
+            return [
+              reference,
+              members.map((member) => ({
+                value: member.userId,
+                label: `${member.displayName}${member.active ? "" : " (inactive)"}`,
+                disabled: !member.active,
+              })),
+            ] as const;
+          }
           const page = await apiRequest<
             EntityPage<Company | Contact | Opportunity>
           >(`/api/v1/${reference}?pageSize=100`, { signal });
@@ -268,23 +316,34 @@ export function BusinessEntityForm({
       );
       let loadedValues = createDefaults[entity];
       let loadedUpdatedAt: string | null = null;
+      let loadedReadOnlyFields: ReadonlySet<string> = new Set();
       if (entityId) {
-        const record = await apiRequest<Record<string, unknown>>(
-          `/api/v1/${entity}/${entityId}`,
-          { signal },
-        );
+        const [record, crmRecord] = await Promise.all([
+          apiRequest<Record<string, unknown>>(`/api/v1/${entity}/${entityId}`, {
+            signal,
+          }),
+          entity === "tasks"
+            ? Promise.resolve(null)
+            : apiRequest<CRMRecord>(
+                `/api/v1/crm/records/${crmEntityType(entity)}/${entityId}`,
+                { signal },
+              ),
+        ]);
         loadedValues = valuesForForm(record, formFields);
-        if (
-          entity === "opportunities" &&
-          typeof record.updatedAt === "string"
-        ) {
+        if (entity !== "tasks" && typeof record.updatedAt === "string") {
           loadedUpdatedAt = record.updatedAt;
         }
+        loadedReadOnlyFields = new Set(
+          Object.entries(crmRecord?.fieldAuthority ?? {})
+            .filter(([, authority]) => authority === "crm_authoritative")
+            .map(([field]) => camelCaseField(field)),
+        );
       }
       return {
         options: Object.fromEntries(optionEntries) as ReferenceOptions,
         values: loadedValues,
         updatedAt: loadedUpdatedAt,
+        readOnlyFields: loadedReadOnlyFields,
       };
     },
     [entity, entityId, formFields],
@@ -297,6 +356,7 @@ export function BusinessEntityForm({
         setReferenceOptions(loaded.options);
         setValues(loaded.values);
         setExpectedUpdatedAt(loaded.updatedAt);
+        setReadOnlyFields(loaded.readOnlyFields);
       })
       .catch((requestError: unknown) => {
         if (
@@ -322,14 +382,14 @@ export function BusinessEntityForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError(null);
+    setDuplicateLink(null);
     setSubmitting(true);
     try {
       const payload = payloadFor(
-        formFields,
+        formFields.filter((field) => !readOnlyFields.has(field.name)),
         values,
-        isEditing && entity === "contacts" ? new Set(["email"]) : undefined,
       );
-      if (entity === "opportunities" && entityId && expectedUpdatedAt) {
+      if (entity !== "tasks" && entityId && expectedUpdatedAt) {
         payload.expectedUpdatedAt = expectedUpdatedAt;
       }
       const saved = await apiRequest<{ id?: string }>(
@@ -345,6 +405,17 @@ export function BusinessEntityForm({
           : `/${entity}`,
       );
     } catch (requestError: unknown) {
+      if (
+        requestError instanceof ApiClientError &&
+        requestError.details?.entityId
+      ) {
+        const duplicateEntity = requestError.details.entityType;
+        setDuplicateLink(
+          duplicateEntity === "account"
+            ? `/companies/${requestError.details.entityId}`
+            : `/contacts/${requestError.details.entityId}`,
+        );
+      }
       setSubmitError(
         requestError instanceof Error
           ? requestError.message
@@ -413,6 +484,11 @@ export function BusinessEntityForm({
               className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"
             >
               {submitError}
+              {duplicateLink ? (
+                <Link href={duplicateLink} className="ml-2 font-bold underline">
+                  Open existing record
+                </Link>
+              ) : null}
             </div>
           ) : null}
           <div className="grid gap-6 sm:grid-cols-2">
@@ -420,14 +496,8 @@ export function BusinessEntityForm({
               <FormField
                 key={field.name}
                 field={field}
-                required={
-                  field.required &&
-                  !(
-                    isEditing &&
-                    entity === "contacts" &&
-                    field.name === "email"
-                  )
-                }
+                required={field.required}
+                disabled={readOnlyFields.has(field.name)}
                 value={values[field.name] ?? ""}
                 options={
                   field.reference
@@ -472,12 +542,14 @@ export function BusinessEntityForm({
 function FormField({
   field,
   required,
+  disabled,
   value,
   options,
   onChange,
 }: {
   field: FieldConfig;
   required?: boolean;
+  disabled?: boolean;
   value: string;
   options: EntityOption[];
   onChange: (value: string) => void;
@@ -499,6 +571,7 @@ function FormField({
           name={field.name}
           value={value}
           required={isRequired}
+          disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           rows={5}
           className={`${className} py-3`}
@@ -509,6 +582,7 @@ function FormField({
           name={field.name}
           value={value}
           required={isRequired}
+          disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           className={className}
         >
@@ -520,9 +594,15 @@ function FormField({
                 value: option,
                 label: humanise(option),
               }))
-            : options
+            : options.filter(
+                (option) => !option.disabled || option.value === value,
+              )
           ).map((option) => (
-            <option key={option.value} value={option.value}>
+            <option
+              key={option.value}
+              value={option.value}
+              disabled={"disabled" in option && option.disabled === true}
+            >
               {option.label}
             </option>
           ))}
@@ -534,6 +614,7 @@ function FormField({
           type={field.kind}
           value={value}
           required={isRequired}
+          disabled={disabled}
           min={field.min}
           max={field.max}
           step={field.step}
@@ -542,12 +623,17 @@ function FormField({
           className={className}
         />
       )}
+      {disabled ? (
+        <p className="mt-2 text-xs font-semibold text-blue-700">
+          CRM controlled · read-only in RevenueOS
+        </p>
+      ) : null}
     </div>
   );
 }
 
 function optionFor(
-  reference: NonNullable<FieldConfig["reference"]>,
+  reference: Exclude<NonNullable<FieldConfig["reference"]>, "members">,
   record: Company | Contact | Opportunity,
 ): EntityOption {
   if (reference === "companies") {
@@ -606,5 +692,19 @@ function payloadFor(
       }
       return [field.name, value];
     }),
+  );
+}
+
+function crmEntityType(
+  entity: Exclude<BusinessEntityName, "tasks">,
+): "account" | "contact" | "opportunity" {
+  if (entity === "companies") return "account";
+  if (entity === "contacts") return "contact";
+  return "opportunity";
+}
+
+function camelCaseField(value: string): string {
+  return value.replace(/_([a-z])/g, (_, letter: string) =>
+    letter.toUpperCase(),
   );
 }

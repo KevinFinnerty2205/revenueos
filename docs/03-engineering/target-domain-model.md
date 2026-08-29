@@ -100,6 +100,13 @@ and public APIs remain future implementation decisions.
 
 ## Current identity and business entities
 
+WO-034 makes Company, Contact and Opportunity the current native CRM records without
+introducing a Lead or parallel CRM graph. Their existing owners are surfaced; Company
+adds location/archive, Contact adds `active`/`left_company` plus archive and
+Opportunity adds archive. `OrganisationCRMSetting`, `CRMCustomFieldDefinition`,
+`CRMCustomFieldValue` and `CRMRecordChange` are current bounded supporting entities.
+Pipeline definitions/stage history remain WO-035.
+
 | Entity                 | Purpose and key relationships                                                                                                                    | Tenant and source of truth                                                                          | Lifecycle and retention                                                                                | Current / expected sprint               |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------- |
 | Organisation           | Tenant and policy boundary; has memberships and all tenant data                                                                                  | Organisation-scoped root; verified Clerk organisation is authoritative in production                | Active → deletion-requested → deleted through reviewed maintenance                                     | **Current — Sprint 1, expanded WO-009** |

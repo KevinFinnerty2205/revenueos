@@ -2,6 +2,7 @@ import { BetaFeatureGate } from "@/components/beta-feature-gate";
 import { AccountPublicResearch } from "@/components/account-public-research";
 import { RevenueBrainTimeline } from "@/components/revenue-brain-timeline";
 import Link from "next/link";
+import { CRMRecordPanel } from "@/components/crm-record-panel";
 
 export default async function CompanyAccountPage({
   params,
@@ -10,7 +11,8 @@ export default async function CompanyAccountPage({
 }) {
   const { id } = await params;
   return (
-    <>
+    <div className="space-y-7">
+      <CRMRecordPanel entityType="account" entityId={id} />
       <section className="mb-7 flex flex-col gap-4 rounded-2xl border border-teal-200 bg-teal-50 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.15em] text-teal-700">
@@ -43,6 +45,6 @@ export default async function CompanyAccountPage({
       <BetaFeatureGate feature="revenueBrain">
         <RevenueBrainTimeline accountId={id} />
       </BetaFeatureGate>
-    </>
+    </div>
   );
 }

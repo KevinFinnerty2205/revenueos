@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -50,8 +51,11 @@ class BusinessRepository:
         industry: str | None,
         sort_by: str,
         sort_order: str,
+        include_archived: bool = False,
     ) -> PageResult[Company]:
         conditions: list[ColumnElement[bool]] = [Company.organisation_id == organisation_id]
+        if not include_archived:
+            conditions.append(Company.archived_at.is_(None))
         if search:
             conditions.append(Company.name.ilike(f"%{search}%"))
         if status:
@@ -86,6 +90,17 @@ class BusinessRepository:
         )
         return result.scalar_one_or_none()
 
+    async def company_by_domain(self, organisation_id: UUID, domain: str) -> Company | None:
+        return cast(
+            Company | None,
+            await self.session.scalar(
+                select(Company).where(
+                    Company.organisation_id == organisation_id,
+                    Company.normalized_domain == domain,
+                )
+            ),
+        )
+
     async def list_contacts(
         self,
         organisation_id: UUID,
@@ -96,8 +111,11 @@ class BusinessRepository:
         company_id: UUID | None,
         sort_by: str,
         sort_order: str,
+        include_archived: bool = False,
     ) -> PageResult[Contact]:
         conditions: list[ColumnElement[bool]] = [Contact.organisation_id == organisation_id]
+        if not include_archived:
+            conditions.append(Contact.archived_at.is_(None))
         if search:
             conditions.append(
                 or_(
@@ -142,6 +160,17 @@ class BusinessRepository:
         )
         return result.scalar_one_or_none()
 
+    async def contact_by_email(self, organisation_id: UUID, email: str) -> Contact | None:
+        return cast(
+            Contact | None,
+            await self.session.scalar(
+                select(Contact).where(
+                    Contact.organisation_id == organisation_id,
+                    func.lower(Contact.email) == email.casefold(),
+                )
+            ),
+        )
+
     async def list_opportunities(
         self,
         organisation_id: UUID,
@@ -153,8 +182,11 @@ class BusinessRepository:
         stage: str | None,
         sort_by: str,
         sort_order: str,
+        include_archived: bool = False,
     ) -> PageResult[Opportunity]:
         conditions: list[ColumnElement[bool]] = [Opportunity.organisation_id == organisation_id]
+        if not include_archived:
+            conditions.append(Opportunity.archived_at.is_(None))
         if search:
             conditions.append(Opportunity.name.ilike(f"%{search}%"))
         if company_id:

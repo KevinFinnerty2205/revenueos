@@ -65,6 +65,7 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
         engine = create_async_engine(TEST_DB_URL)
         start, end = _local_day_bounds()
         now = datetime.now(UTC)
+        start_utc = start.astimezone(UTC)
         remaining_today = end.astimezone(UTC) - now
         next_interaction_at = now + min(timedelta(hours=2), remaining_today / 3)
         prepared_interaction_at = now + min(timedelta(hours=5), remaining_today * 2 / 3)
@@ -248,7 +249,7 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     version=1,
                     title="Send security documentation",
                     description="Review the customer commitment.",
-                    proposed_due_at=now - timedelta(hours=3),
+                    proposed_due_at=max(now - timedelta(hours=3), start_utc),
                     payload_json={"kind": "create_task", "title": "Send security documentation"},
                     source_refs_json=[],
                     provenance_summary="Final validated customer evidence.",
@@ -829,6 +830,8 @@ def test_daily_maps_active_and_capture_needed_interactions_to_plain_ctas(client:
     async def set_state(state: str) -> None:
         engine = create_async_engine(TEST_DB_URL)
         now = datetime.now(UTC)
+        start, _ = _local_day_bounds()
+        actual_start_at = max(now - timedelta(minutes=30), start.astimezone(UTC))
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:
             await session.execute(
                 update(ActionProposal)
@@ -837,8 +840,8 @@ def test_daily_maps_active_and_capture_needed_interactions_to_plain_ctas(client:
             )
             values: dict[str, object] = {
                 "lifecycle_status": state,
-                "actual_start_at": now - timedelta(minutes=30),
-                "actual_end_at": now - timedelta(minutes=5) if state == "completed" else None,
+                "actual_start_at": actual_start_at,
+                "actual_end_at": max(now - timedelta(minutes=5), actual_start_at) if state == "completed" else None,
             }
             await session.execute(update(Interaction).where(Interaction.id == interaction_id).values(**values))
             await session.commit()

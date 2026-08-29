@@ -88,6 +88,9 @@ This is the canonical product and engineering documentation index. Documents dis
 82. [ADR 0051: Bounded deterministic Value Model engine](08-decisions/0051-bounded-deterministic-value-model-engine.md)
 83. [ADR 0052: Immutable approved Value Model versions](08-decisions/0052-immutable-approved-value-model-versions.md)
 84. [ADR 0053: Approved Business Case as a Create source](08-decisions/0053-approved-business-case-create-source.md)
+85. [Native CRM](01-product/native-crm.md) — current WO-034 canonical-record CRM boundary
+86. [Native CRM architecture](03-engineering/native-crm-architecture.md)
+87. [ADR 0054: Canonical records form the native CRM](08-decisions/0054-canonical-record-native-crm.md)
 
 ## 00 — Company
 
@@ -115,6 +118,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Prospect and Engage product readiness](01-product/prospect-engage-readiness.md)
 - [RevenueOS Create](01-product/revenueos-create.md)
 - [RevenueOS CRM](01-product/revenueos-crm.md)
+- [Native CRM implementation guide](01-product/native-crm.md)
 - [Standard sales methodologies](01-product/standard-sales-methodologies.md)
 - [Ask RevenueOS](01-product/ask-revenueos.md)
 - [Core go-to-Prospect readiness](01-product/core-go-to-prospect-readiness.md)
@@ -161,6 +165,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [RevenueOS Daily simplicity review](02-design/revenueos-daily-simplicity-review.md)
 - [Core post-WO-025C simplicity review](02-design/core-post-025c-simplicity-review.md)
 - [Opportunity and Account Workspace UX](02-design/opportunity-and-account-workspace-ux.md)
+- [Native CRM UX](02-design/native-crm-ux.md)
 - [Find and Prospect experience](02-design/find-and-prospect-experience.md)
 - [Engage, campaign and event experience](02-design/engage-campaign-event-experience.md)
 - [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
@@ -322,6 +327,14 @@ This is the canonical product and engineering documentation index. Documents dis
 - [CRM execution and reconciliation](03-engineering/crm-execution-reconciliation.md)
 - [CRM OAuth and credential security](03-engineering/crm-oauth-credential-security.md)
 - [CRM sync security review](03-engineering/crm-sync-security-review.md)
+- [Native CRM architecture](03-engineering/native-crm-architecture.md)
+- [CRM source of truth](03-engineering/crm-source-of-truth.md)
+- [Native CRM API](03-engineering/native-crm-api.md)
+- [Native CRM migration and portability](03-engineering/crm-data-migration-playbook.md)
+- [Native CRM security and privacy review](03-engineering/native-crm-security-privacy-review.md)
+- [Native CRM retention, export and deletion](03-engineering/native-crm-retention-export-deletion.md)
+- [Native CRM operations](03-engineering/native-crm-operations.md)
+- [Native CRM testing strategy](03-engineering/native-crm-testing.md)
 - [Prospect Account Research architecture](03-engineering/prospect-account-research-architecture.md)
 - [Prospect provider and fetch strategy](03-engineering/prospect-provider-fetch-strategy.md)
 - [Prospect source and citation architecture](03-engineering/prospect-source-citation-architecture.md)
@@ -483,6 +496,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Checkpoint 2: Prospect and Engage validation](07-sprints/checkpoint-2-prospect-engage-validation.md)
 - [WO-032: RevenueOS Create Sales Content Studio](07-sprints/wo-032-sales-content-studio.md)
 - [WO-033: ROI & Business Case Builder](07-sprints/wo-033-roi-business-case-builder.md)
+- [WO-034: Native CRM Foundation](07-sprints/wo-034-native-crm-foundation.md)
 
 ## 08 — Decision records
 
@@ -539,10 +553,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0051: Bounded deterministic Value Model engine](08-decisions/0051-bounded-deterministic-value-model-engine.md)
 - [ADR 0052: Immutable approved Value Model versions](08-decisions/0052-immutable-approved-value-model-versions.md)
 - [ADR 0053: Approved Business Case as a Create source](08-decisions/0053-approved-business-case-create-source.md)
+- [ADR 0054: Canonical records form the native CRM](08-decisions/0054-canonical-record-native-crm.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031/032/033 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031/032/033/034 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
 implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026/027/028 now
@@ -552,7 +567,8 @@ WO-030 adds bounded canonical-Contact Campaigns and sequences using the same Moc
 Email boundary; production mailbox sending and reply detection remain deferred.
 WO-031 adds manual authorised-list Event workflows. WO-032 adds the separately
 entitled, approved-template Create presentation slice. WO-033 adds bounded,
-deterministic Value Models and versioned Business Cases. WO-034–045 remain unauthorised.
+deterministic Value Models and versioned Business Cases. WO-034 adds the canonical-record
+Native CRM Foundation without native Action execution or operational CSV. WO-035–045 remain unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

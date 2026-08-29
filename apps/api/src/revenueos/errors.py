@@ -9,10 +9,18 @@ logger = logging.getLogger("revenueos.errors")
 
 
 class PublicAPIError(Exception):
-    def __init__(self, code: str, message: str, status_code: int = 400) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int = 400,
+        *,
+        details: dict[str, str] | None = None,
+    ) -> None:
         self.code = code
         self.message = message
         self.status_code = status_code
+        self.details = details
         super().__init__(message)
 
 
@@ -37,7 +45,13 @@ async def public_api_error_handler(request: Request, exc: Exception) -> JSONResp
         if isinstance(exc, PublicAPIError)
         else PublicAPIError("internal_error", "An unexpected error occurred.", 500)
     )
-    return error_response(request, public_error.code, public_error.message, public_error.status_code)
+    return error_response(
+        request,
+        public_error.code,
+        public_error.message,
+        public_error.status_code,
+        public_error.details,
+    )
 
 
 async def validation_error_handler(request: Request, exc: Exception) -> JSONResponse:

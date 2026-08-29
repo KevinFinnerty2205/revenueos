@@ -27,7 +27,7 @@ from .test_opportunity_workspace import _associate
 
 
 def _completed_intelligence_actions(client: TestClient) -> tuple[dict[str, object], dict[str, object]]:
-    company = create_company(client)
+    company = create_company(client, name="Action Layer account")
     opportunity = create_opportunity(client, str(company["id"]))
     meeting = create_meeting(
         client,

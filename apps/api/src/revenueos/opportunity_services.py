@@ -76,6 +76,7 @@ class OpportunityWorkspaceService:
         status: str | None,
         sort_by: str,
         sort_order: str,
+        include_archived: bool = False,
     ) -> PageResult[OpportunityListItemResponse]:
         result = await self.repository.list_opportunities(
             self.tenant.organisation_id,
@@ -87,6 +88,7 @@ class OpportunityWorkspaceService:
             status=status,
             sort_by=sort_by,
             sort_order=sort_order,
+            include_archived=include_archived,
         )
         latest_by_opportunity = await self.repository.latest_meetings(
             self.tenant.organisation_id,
@@ -119,6 +121,7 @@ class OpportunityWorkspaceService:
                     owner_user_id=opportunity.owner_user_id,
                     owner_name=record.owner_name,
                     description=opportunity.description,
+                    archived_at=opportunity.archived_at,
                     latest_meeting_id=latest.meeting.id if latest is not None else None,
                     latest_meeting_date=(latest.meeting.meeting_date if latest is not None else None),
                     latest_meeting_momentum=meeting_previews.get("momentum"),

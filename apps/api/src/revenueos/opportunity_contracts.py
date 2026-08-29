@@ -46,6 +46,7 @@ class OpportunityListItemResponse(APIModel):
     owner_user_id: UUID
     owner_name: str
     description: str | None
+    archived_at: datetime | None
     latest_meeting_id: UUID | None
     latest_meeting_date: datetime | None
     latest_meeting_momentum: str | None

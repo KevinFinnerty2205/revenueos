@@ -1,5 +1,15 @@
 # Security and privacy
 
+## Native CRM (WO-034)
+
+CRM mode/schema administration is admin-only; values and normal records use existing
+organisation visibility. All new rows are tenant-scoped with forced RLS, ownership
+accepts only active same-organisation members, custom fields are bounded/non-
+executable and external authority is rechecked by the API. Exact dedupe uses safe
+metadata responses and database uniqueness. Archive is not privacy deletion;
+organisation export/deletion includes the new data. Operational logs contain no CRM
+values. See [Native CRM security review](native-crm-security-privacy-review.md).
+
 ## Engage Events
 
 WO-031 accepts deliberately selected UTF-8 CSV only after a versioned authority
