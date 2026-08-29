@@ -17,18 +17,27 @@ export default async function CompanyAccountPage({
             RevenueOS Create
           </p>
           <h2 className="mt-1 text-lg font-semibold text-slate-950">
-            Build an Account presentation
+            Create Account content
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Start a reviewed PowerPoint from approved company content.
+            Build a transparent Business Case or a reviewed PowerPoint from
+            approved company content.
           </p>
         </div>
-        <Link
-          href={`/create/presentations/new?accountId=${id}`}
-          className="secondary-button shrink-0"
-        >
-          Plan presentation
-        </Link>
+        <div className="flex shrink-0 flex-wrap gap-3">
+          <Link
+            href={`/create/business-cases/new?accountId=${id}`}
+            className="secondary-button"
+          >
+            Create Business Case
+          </Link>
+          <Link
+            href={`/create/presentations/new?accountId=${id}`}
+            className="secondary-button"
+          >
+            Plan presentation
+          </Link>
+        </div>
       </section>
       <AccountPublicResearch companyId={id} />
       <BetaFeatureGate feature="revenueBrain">

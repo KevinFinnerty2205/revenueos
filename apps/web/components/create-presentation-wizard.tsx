@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  BusinessCaseList,
   Company,
   Contact,
   CreatePresentation,
@@ -56,7 +57,8 @@ const objectives: Array<{
   {
     value: "business_case",
     label: "Business case",
-    description: "Approved proof and process content without ROI generation.",
+    description:
+      "Use an approved deterministic Business Case; RevenueOS never invents ROI inputs or outputs.",
   },
   {
     value: "event_follow_up",
@@ -72,11 +74,17 @@ export function CreatePresentationWizard() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [templates, setTemplates] = useState<CreateTemplateList | null>(null);
+  const [businessCases, setBusinessCases] = useState<BusinessCaseList | null>(
+    null,
+  );
   const [accountId, setAccountId] = useState(
     searchParams.get("accountId") ?? "",
   );
   const [opportunityId, setOpportunityId] = useState(
     searchParams.get("opportunityId") ?? "",
+  );
+  const [businessCaseVersionId, setBusinessCaseVersionId] = useState(
+    searchParams.get("businessCaseVersionId") ?? "",
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,13 +105,26 @@ export function CreatePresentationWizard() {
       apiRequest<CreateTemplateList>("/api/v1/create/templates", {
         signal: controller.signal,
       }),
+      apiRequest<BusinessCaseList>(
+        "/api/v1/create/business-cases?approvedOnly=true",
+        { signal: controller.signal },
+      ),
     ])
-      .then(([companyPage, opportunityPage, contactPage, templateList]) => {
-        setCompanies(companyPage.items);
-        setOpportunities(opportunityPage.items);
-        setContacts(contactPage.items);
-        setTemplates(templateList);
-      })
+      .then(
+        ([
+          companyPage,
+          opportunityPage,
+          contactPage,
+          templateList,
+          caseList,
+        ]) => {
+          setCompanies(companyPage.items);
+          setOpportunities(opportunityPage.items);
+          setContacts(contactPage.items);
+          setTemplates(templateList);
+          setBusinessCases(caseList);
+        },
+      )
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError")
           return;
@@ -127,6 +148,14 @@ export function CreatePresentationWizard() {
   const approvedTemplates =
     templates?.items.filter(
       (item) => item.latestVersion.approvalState === "approved",
+    ) ?? [];
+  const approvedBusinessCases =
+    businessCases?.items.filter(
+      (item) =>
+        item.accountId === accountId &&
+        (item.opportunityId === null ||
+          item.opportunityId === (opportunityId || null)) &&
+        item.currentVersion?.reviewState === "approved",
     ) ?? [];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -155,6 +184,10 @@ export function CreatePresentationWizard() {
               },
             ],
             templateVersionId: data.get("templateVersionId"),
+            businessCaseVersionId: businessCaseVersionId || null,
+            businessCaseScenario: businessCaseVersionId
+              ? data.get("businessCaseScenario")
+              : null,
             focusInstruction:
               String(data.get("focusInstruction") ?? "").trim() || null,
             title: String(data.get("title") ?? "").trim() || null,
@@ -208,6 +241,7 @@ export function CreatePresentationWizard() {
                 onChange={(event) => {
                   setAccountId(event.target.value);
                   setOpportunityId("");
+                  setBusinessCaseVersionId("");
                 }}
                 className="field-input mt-2"
               >
@@ -224,7 +258,10 @@ export function CreatePresentationWizard() {
               <select
                 value={opportunityId}
                 disabled={!accountId}
-                onChange={(event) => setOpportunityId(event.target.value)}
+                onChange={(event) => {
+                  setOpportunityId(event.target.value);
+                  setBusinessCaseVersionId("");
+                }}
                 className="field-input mt-2"
               >
                 <option value="">Account-level presentation</option>
@@ -321,7 +358,60 @@ export function CreatePresentationWizard() {
 
         <fieldset className="form-card" disabled={saving}>
           <legend className="form-legend">
-            3. Approved template and focus
+            3. Approved Business Case (optional)
+          </legend>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Only the current approved immutable version can enter a customer
+            deck. Choose the base case, or show all explicitly labelled
+            scenarios. Material assumptions remain visible.
+          </p>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className="field-label">
+              Business Case
+              <select
+                value={businessCaseVersionId}
+                disabled={!accountId}
+                onChange={(event) =>
+                  setBusinessCaseVersionId(event.target.value)
+                }
+                className="field-input mt-2"
+              >
+                <option value="">Do not include a Business Case</option>
+                {approvedBusinessCases.map((item) => (
+                  <option
+                    key={item.currentVersion?.id}
+                    value={item.currentVersion?.id}
+                  >
+                    {item.title} · {item.currency} · version{" "}
+                    {item.currentVersion?.version}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field-label">
+              Scenario display
+              <select
+                name="businessCaseScenario"
+                disabled={!businessCaseVersionId}
+                defaultValue="base"
+                className="field-input mt-2"
+              >
+                <option value="base">Base case + key assumptions</option>
+                <option value="all">Conservative + base + upside</option>
+              </select>
+            </label>
+          </div>
+          {accountId && approvedBusinessCases.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">
+              No approved Business Case matches this Account and Opportunity.
+              You can still create a presentation from other approved sources.
+            </p>
+          ) : null}
+        </fieldset>
+
+        <fieldset className="form-card" disabled={saving}>
+          <legend className="form-legend">
+            4. Approved template and focus
           </legend>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <label className="field-label">

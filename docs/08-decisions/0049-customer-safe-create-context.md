@@ -29,3 +29,14 @@ manifest and revalidate its sources before human approval.
 Some decks use approved generic copy or show missing support instead of richer prose.
 That constraint is intentional: claims remain inspectable, removable and defensible,
 and a later AI provider cannot broaden the data boundary without another decision.
+
+## WO-033 amendment
+
+`approved_business_case` is now an additional typed source class, governed by
+[ADR 0053](0053-approved-business-case-create-source.md). It carries only an exact
+approved case/version/scenario selection, customer-facing deterministic outputs,
+material assumptions and the approved disclaimer. The claim manifest records the
+case-version identifier and revalidation blocks generation, presentation approval and
+download when the selected version is no longer current/approved or a linked source
+needs review. This does not broaden customer-safe context to raw formulas, hidden
+defaults, arbitrary financials, Revenue Brain or Methodology state.

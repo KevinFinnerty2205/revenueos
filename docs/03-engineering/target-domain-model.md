@@ -255,3 +255,14 @@ the accepted canonical person and account. Detailed boundaries are in
 - [Privacy, security and trust model](privacy-security-and-trust-model.md)
 - [Product roadmap to beta](../06-roadmap/product-roadmap-to-beta.md)
 - [End-to-End Sales Platform roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md)
+
+## WO-033 domain addition
+
+`CreateValueModel` owns organisation-visible administration state and immutable
+`CreateValueModelVersion` definitions. `CreateBusinessCase` belongs to one Account,
+optionally one of that Account's Opportunities, and pins an approved model version.
+Each calculation appends an immutable `CreateBusinessCaseVersion` containing currency,
+explicit inputs with provenance, scenario outputs, optional one-variable sensitivity,
+formula-engine/model fingerprints and lineage. A Create presentation may reference
+one exact approved case version and scenario; it never copies that output into a CRM,
+Methodology or Revenue Brain field.

@@ -125,3 +125,11 @@ WO-025 adds only source links into this existing workspace: Daily Action and dea
 cards open the Opportunity, methodology gaps remain controlled summaries, and an
 existing Next Best Action deep link opens its current workspace section. Daily does
 not duplicate Evidence, Methodology, Action review or Revenue Brain history.
+
+## WO-033 contextual Business Case action
+
+Opportunity and Account workspaces now expose a secondary **Create Business Case**
+action. The action carries the Account and, when present, Opportunity into the guided
+Create flow; the server revalidates that relationship. Account-only cases are valid.
+The workspace does not calculate values inline, promote an estimate into Methodology,
+or present a Business Case as customer-confirmed truth.

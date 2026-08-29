@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import cast
 from uuid import UUID
 
@@ -13,12 +14,15 @@ from revenueos.models import (
     Company,
     Contact,
     CreateApprovedContentItem,
+    CreateBusinessCase,
+    CreateBusinessCaseVersion,
     CreatePresentation,
     CreatePresentationVersion,
     CreateTemplate,
     CreateTemplateSlide,
     CreateTemplateVersion,
     CreateUsageCounter,
+    CreateValueModelVersion,
     Evidence,
     Opportunity,
     Organisation,
@@ -457,7 +461,149 @@ class CreateRepository:
                 ProspectResearchObservation.id.in_(source_ids),
                 ProspectResearchObservation.status == "current",
             )
+        elif source_type == "approved_business_case":
+            valid: set[UUID] = set()
+            for source_id in source_ids:
+                if await self.approved_business_case_version(organisation_id, source_id) is not None:
+                    valid.add(source_id)
+            return valid
         else:
             return set()
         values = await self.session.scalars(statement)
         return set(values.all())
+
+    async def approved_business_case_version(
+        self,
+        organisation_id: UUID,
+        version_id: UUID,
+    ) -> tuple[CreateBusinessCase, CreateBusinessCaseVersion] | None:
+        row = (
+            await self.session.execute(
+                select(CreateBusinessCase, CreateBusinessCaseVersion)
+                .join(
+                    CreateBusinessCaseVersion,
+                    (CreateBusinessCaseVersion.organisation_id == CreateBusinessCase.organisation_id)
+                    & (CreateBusinessCaseVersion.case_id == CreateBusinessCase.id),
+                )
+                .where(
+                    CreateBusinessCase.organisation_id == organisation_id,
+                    CreateBusinessCase.state == "approved",
+                    CreateBusinessCaseVersion.organisation_id == organisation_id,
+                    CreateBusinessCaseVersion.id == version_id,
+                    CreateBusinessCaseVersion.review_state == "approved",
+                )
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        business_case, version = row
+        latest_id = await self.session.scalar(
+            select(CreateBusinessCaseVersion.id)
+            .where(
+                CreateBusinessCaseVersion.organisation_id == organisation_id,
+                CreateBusinessCaseVersion.case_id == business_case.id,
+            )
+            .order_by(CreateBusinessCaseVersion.version.desc())
+            .limit(1)
+        )
+        if latest_id != version.id:
+            return None
+        linked_evidence_ids = {
+            UUID(str(item["sourceId"]))
+            for item in version.inputs_json
+            if isinstance(item, dict)
+            and item.get("sourceId") is not None
+            and item.get("origin") == "salesperson_reported"
+        }
+        if linked_evidence_ids:
+            available_ids = set(
+                (
+                    await self.session.scalars(
+                        select(Evidence.id).where(
+                            Evidence.organisation_id == organisation_id,
+                            Evidence.id.in_(linked_evidence_ids),
+                            Evidence.lifecycle_status == "available",
+                        )
+                    )
+                ).all()
+            )
+            if available_ids != linked_evidence_ids:
+                return None
+        company_inputs = [
+            item
+            for item in version.inputs_json
+            if isinstance(item, dict)
+            and item.get("sourceId") is not None
+            and item.get("origin") == "approved_company_data"
+        ]
+        if company_inputs:
+            account = await self.session.scalar(
+                select(Company).where(
+                    Company.organisation_id == organisation_id,
+                    Company.id == business_case.account_id,
+                )
+            )
+            if account is None:
+                return None
+            try:
+                if any(
+                    UUID(str(item["sourceId"])) != business_case.account_id
+                    or item.get("key") != "employee_count"
+                    or account.employee_count is None
+                    or Decimal(str(item.get("value"))) != Decimal(account.employee_count)
+                    for item in company_inputs
+                ):
+                    return None
+            except (InvalidOperation, TypeError, ValueError):
+                return None
+        model_version = await self.session.scalar(
+            select(CreateValueModelVersion).where(
+                CreateValueModelVersion.organisation_id == organisation_id,
+                CreateValueModelVersion.id == version.model_version_id,
+            )
+        )
+        if model_version is None:
+            return None
+        raw_definitions = model_version.definition_json.get("inputs")
+        if not isinstance(raw_definitions, list):
+            return None
+        definitions = {
+            str(item.get("key")): item
+            for item in raw_definitions
+            if isinstance(item, dict) and isinstance(item.get("key"), str)
+        }
+        now = datetime.now(UTC)
+        for raw_input in version.inputs_json:
+            if not isinstance(raw_input, dict) or raw_input.get("freshness") != "current":
+                return None
+            definition = definitions.get(str(raw_input.get("key")))
+            if definition is None:
+                return None
+            try:
+                observed_at = datetime.fromisoformat(str(raw_input.get("observedAt")).replace("Z", "+00:00"))
+                if observed_at.utcoffset() is None:
+                    return None
+                max_age = definition.get("maxSourceAgeDays")
+                if isinstance(max_age, int) and observed_at.astimezone(UTC) + timedelta(days=max_age) < now:
+                    return None
+                review_expires = definition.get("reviewExpiresOn")
+                if isinstance(review_expires, str) and date.fromisoformat(review_expires) < now.date():
+                    return None
+            except (TypeError, ValueError):
+                return None
+        return business_case, version
+
+    async def value_model_version(
+        self,
+        organisation_id: UUID,
+        version_id: UUID,
+    ) -> CreateValueModelVersion | None:
+        return cast(
+            CreateValueModelVersion | None,
+            await self.session.scalar(
+                select(CreateValueModelVersion).where(
+                    CreateValueModelVersion.organisation_id == organisation_id,
+                    CreateValueModelVersion.id == version_id,
+                )
+            ),
+        )

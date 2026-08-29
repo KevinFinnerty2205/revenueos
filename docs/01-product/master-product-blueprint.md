@@ -366,3 +366,18 @@ An integration appears in beta only after its real adapter, authorisation, idemp
 - [Privacy, security and trust model](../03-engineering/privacy-security-and-trust-model.md)
 - [MVP and beta scope](../06-roadmap/mvp-and-beta-scope.md)
 - [Product roadmap to beta](../06-roadmap/product-roadmap-to-beta.md)
+
+## WO-033 implemented extension
+
+The current Create boundary includes the transparent ROI & Business Case Builder.
+Organisation administrators approve bounded, versioned formulas and visible default
+assumptions. Sellers create an Account-linked, optionally Opportunity-linked case,
+enter or review every input with provenance, inspect deterministic formulas/results,
+compare explicit scenarios and one-variable sensitivity, and approve an exact version.
+Only an approved version may feed Create, with cautious language, material assumptions,
+the approved disclaimer and exact claim-source lineage.
+
+This is not forecasting, CPQ or an autonomous recommendation system. It cannot invent
+inputs or outputs, confirm customer truth, mutate Methodology/Revenue Brain, import or
+execute spreadsheets, convert currencies, calculate tax/GST or provide NPV, IRR or
+Monte Carlo analysis. See [ROI & Business Case Builder](roi-business-case-builder.md).

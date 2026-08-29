@@ -472,7 +472,8 @@ def _compose(
     dynamic = [
         item
         for item in context_items
-        if item.get("origin") in {"customer_direct", "salesperson_reported", "prospect_public"}
+        if item.get("origin")
+        in {"customer_direct", "salesperson_reported", "prospect_public", "approved_business_case"}
     ]
     generated: list[dict[str, object]] = []
     claims: list[dict[str, object]] = []
@@ -507,7 +508,8 @@ def _compose(
         else:
             selected = _context_for_category(str(slide.category), dynamic)
             if selected:
-                body_sources = selected[:4]
+                limit = 6 if any(item.get("origin") == "approved_business_case" for item in selected) else 4
+                body_sources = selected[:limit]
                 body = [str(item["statement"]) for item in body_sources]
             else:
                 body = [approved.approved_text]
@@ -573,10 +575,43 @@ def _context_for_category(category: str, items: list[dict[str, object]]) -> list
     elif category == "next_steps":
         allowed = {"decision", "action_item", "commitment", "open_question", "timeline"}
     elif category in {"agenda", "solution"}:
-        allowed = {"customer_request", "technical_requirement", "implementation", "strategic_initiative"}
+        allowed = {
+            "customer_request",
+            "technical_requirement",
+            "implementation",
+            "strategic_initiative",
+            "business_case_output",
+            "business_case_disclaimer",
+        }
+    elif category in {"proof_point", "pricing_placeholder", "appendix"}:
+        allowed = {"business_case_output", "business_case_assumption", "business_case_disclaimer"}
+    elif category == "process":
+        allowed = {"implementation", "business_case_assumption"}
     else:
         return []
-    return [item for item in items if item.get("category") in allowed]
+    matched = [item for item in items if item.get("category") in allowed]
+    scenario_heads: list[dict[str, object]] = []
+    scenario_head_ids: set[int] = set()
+    seen_scenarios: set[str] = set()
+    for item in matched:
+        scenario = item.get("scenario")
+        if (
+            item.get("category") == "business_case_output"
+            and isinstance(scenario, str)
+            and scenario not in seen_scenarios
+        ):
+            scenario_heads.append(item)
+            scenario_head_ids.add(id(item))
+            seen_scenarios.add(scenario)
+    disclaimers = [item for item in matched if item.get("category") == "business_case_disclaimer"]
+    assumptions = [item for item in matched if item.get("category") == "business_case_assumption"]
+    prioritised_ids = {id(item) for item in [*scenario_heads, *disclaimers, *assumptions[:1]]}
+    return [
+        *scenario_heads,
+        *disclaimers,
+        *assumptions[:1],
+        *(item for item in matched if id(item) not in prioritised_ids),
+    ]
 
 
 def _render_manifest(

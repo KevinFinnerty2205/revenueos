@@ -59,6 +59,7 @@ ContentOrigin = Literal[
     "prospect_public",
     "event_context",
     "approved_company_content",
+    "approved_business_case",
     "system_metadata",
     "user_edited",
 ]
@@ -238,11 +239,21 @@ class PresentationBriefRequest(APIModel):
     objective: PresentationObjective
     audience: list[PresentationAudienceInput] = Field(min_length=1, max_length=12)
     template_version_id: UUID
+    business_case_version_id: UUID | None = None
+    business_case_scenario: Literal["base", "all"] | None = None
     focus_instruction: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)] | None = (
         None
     )
     title: ShortTitle | None = None
     idempotency_key: IdempotencyKey
+
+    @model_validator(mode="after")
+    def coherent_business_case_selection(self) -> Self:
+        if self.business_case_version_id is None and self.business_case_scenario is not None:
+            raise ValueError("A Business Case scenario requires an approved Business Case version.")
+        if self.business_case_version_id is not None and self.business_case_scenario is None:
+            self.business_case_scenario = "base"
+        return self
 
 
 class PresentationPlanItemResponse(APIModel):
@@ -336,6 +347,9 @@ class PresentationResponse(APIModel):
     template_version_id: UUID
     template_name: str
     template_version: int
+    business_case_id: UUID | None
+    business_case_version_id: UUID | None
+    business_case_scenario: Literal["base", "all"] | None
     state: PresentationState
     review_state: ReviewState
     plan: list[PresentationPlanItemResponse]
