@@ -200,6 +200,9 @@ def test_pptx_processor_rejects_active_content_and_external_relationships() -> N
     assert exported.core_properties.author == "RevenueOS"
     assert exported.core_properties.last_modified_by == "RevenueOS"
     with zipfile.ZipFile(io.BytesIO(rendered)) as archive:
+        content_types = archive.read("[Content_Types].xml")
+        assert b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"' in content_types
+        assert b"ns0:Types" not in content_types
         slide_parts = [
             name for name in archive.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")
         ]
