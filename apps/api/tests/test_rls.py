@@ -2779,6 +2779,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'sales_pipelines',
                                     'sales_pipeline_stages',
                                     'opportunity_stage_events',
+                                    'sales_targets',
+                                    'sales_target_revisions',
                                     'action_proposals',
                                     'action_proposal_versions',
                                     'action_audit_events',
