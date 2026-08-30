@@ -1692,6 +1692,12 @@ class Opportunity(TimestampMixin, Base):
             "status",
         ),
         Index("ix_opportunities_org_stage_entered", "organisation_id", "stage_entered_at"),
+        Index(
+            "ix_opportunities_org_actual_close_status",
+            "organisation_id",
+            "actual_close_date",
+            "status",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1820,6 +1826,18 @@ class OpportunityStageEvent(Base):
             "ix_opportunity_stage_events_org_opportunity",
             "organisation_id",
             "opportunity_id",
+            "changed_at",
+        ),
+        Index(
+            "ix_opportunity_stage_events_org_to_pipeline_time",
+            "organisation_id",
+            "to_pipeline_id",
+            "changed_at",
+        ),
+        Index(
+            "ix_opportunity_stage_events_org_from_pipeline_time",
+            "organisation_id",
+            "from_pipeline_id",
             "changed_at",
         ),
     )
@@ -5117,6 +5135,13 @@ class Interaction(TimestampMixin, Base):
         Index("ix_interactions_organisation_contact", "organisation_id", "contact_id"),
         Index("ix_interactions_organisation_event", "organisation_id", "event_id"),
         Index("ix_interactions_organisation_deleted", "organisation_id", "deleted_at"),
+        Index(
+            "ix_interactions_org_completed_type",
+            "organisation_id",
+            "actual_end_at",
+            "interaction_type",
+            "lifecycle_status",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)

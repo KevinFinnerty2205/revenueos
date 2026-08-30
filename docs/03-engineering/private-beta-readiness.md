@@ -203,6 +203,7 @@ defaults:
 | `API_FEATURE_ENGAGE_EVENTS_ENABLED`                         | `true`  |
 | `API_FEATURE_NATIVE_CRM_ENABLED`                            | `true`  |
 | `API_FEATURE_NATIVE_PIPELINE_ENABLED`                       | `true`  |
+| `API_FEATURE_SALES_ANALYTICS_ENABLED`                       | `true`  |
 | `API_FEATURE_DATA_EXPORT_ENABLED`                            | `true`  |
 | `API_FEATURE_ORGANISATION_DELETION_ENABLED`                  | `false` |
 
@@ -210,6 +211,11 @@ OpenAI selection is invalid unless its flag is enabled. Disabled API routes
 fail closed with a product-safe `404`; browser feature gates do not render the
 disabled workspace. Unknown flags are never returned and are treated as off.
 There is deliberately no feature-flag administration UI.
+
+Sales Analytics is server-authoritative and has no separate entitlement in
+WO-036. When disabled, all Sales Insights routes return the same product-safe
+`404`, the capabilities response removes the desktop destination, and no
+per-tab or per-metric enablement is available.
 
 The table reflects local/private-beta defaults. A production environment must
 explicitly override `API_FEATURE_ENGAGE_EVENTS_ENABLED=false` until the WO-031

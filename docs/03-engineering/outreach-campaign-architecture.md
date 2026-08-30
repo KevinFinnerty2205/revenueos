@@ -120,6 +120,11 @@ research, prompts and credentials. Tests cover cross-tenant isolation, version
 invalidation, stop races, suppression propagation, idempotent retry and uncertain
 provider outcomes.
 
+WO-036 Sales Analytics counts outreach only from canonical execution receipts
+whose mode is `live`, status is `succeeded` and capability is `send_email`.
+Simulation, previews, drafts, queued work, failures, opens and clicks are not
+activity facts and are excluded.
+
 ## Explicitly out of scope
 
 WO-030 implements only the bounded Campaign subset documented in

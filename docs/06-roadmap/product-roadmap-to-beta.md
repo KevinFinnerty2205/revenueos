@@ -628,13 +628,23 @@ custom fields, authority cues, canonical activity and field history. Operational
 and native reviewed-Action execution are deliberately deferred with organisation
 export and no-autonomous-mutation boundaries documented. WO-035 is now implemented:
 configurable native Pipeline, server-authoritative board movement, closure/reopen and
-immutable stage history are current. WO-036 and later still require separate
-authorisation.
+immutable stage history are current. WO-036 is now implemented as deterministic Core
+Sales Analytics and bounded seller-reported Win/Loss aggregation. WO-037 and later
+still require separate authorisation.
 
 ## WO-035 current boundary
 
 Native Pipeline is current through migration `0044_native_pipeline`. It provides
 descriptive Board/List/Closed views, stable stage history and CRM-gated native
 configuration. It does not advance the roadmap into Sales Analytics, Win/Loss
-Intelligence, Targets, Forecasting or Manager Intelligence. External HubSpot mode is
+Targets, Forecasting or Manager Intelligence. External HubSpot mode is
 read-only for direct stage movement; no provider call or inbound sync was added.
+
+## WO-036 current boundary
+
+Sales Insights is current through index-only migration `0045_sales_analytics`. It
+provides versioned canonical metrics, explicit local-date/cohort definitions, actual
+stage funnel/duration, mature non-causal activity follow-on, and seller-reported
+aggregate Win/Loss with currency separation. It adds no AI qualitative outcome
+explanation, target, probability, weighted pipeline, forecast, manager ranking,
+surveillance telemetry or generic reporting/query surface.

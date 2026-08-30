@@ -1,11 +1,13 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/app-shell";
 import { resolveAuthState } from "@/lib/auth";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/opportunities/opportunity-1",
 }));
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("application shell", () => {
   it("renders required navigation and the development-auth warning", () => {
@@ -29,6 +31,7 @@ describe("application shell", () => {
       "Accounts",
       "People",
       "Pipeline",
+      "Insights",
       "Interactions",
       "Search",
       "Settings",
@@ -58,5 +61,45 @@ describe("application shell", () => {
       "href",
       "/sign-out",
     );
+  });
+
+  it("hides desktop Insights when the server explicitly disables it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL | Request) => {
+        const payload = String(input).includes("/beta/capabilities")
+          ? { featureFlags: { salesAnalytics: false } }
+          : { enabled: false };
+        return Promise.resolve(
+          new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }),
+    );
+    const authState = resolveAuthState({
+      NODE_ENV: "test",
+      AUTH_MODE: "mock",
+      MOCK_AUTH_ENABLED: "true",
+    });
+
+    render(
+      <AppShell authState={authState}>
+        <h1>Test content</h1>
+      </AppShell>,
+    );
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Main navigation",
+    });
+    await waitFor(() =>
+      expect(
+        within(navigation).queryByRole("link", { name: "Insights" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      within(navigation).getByRole("link", { name: "Pipeline" }),
+    ).toBeVisible();
   });
 });
