@@ -188,7 +188,7 @@ from a model-selected theme.
 
 ### Targets and forecasting
 
-WO-037 depends on metrics and team scope. WO-038 consumes explicit pipeline state,
+WO-037 now consumes canonical metrics without inventing team scope. WO-038 consumes explicit pipeline state,
 metric history, target context, methodology/Evidence factors and outcome history. The
 first implementation should be transparent deterministic/statistical policy with an
 unavailable state; a learned model requires sample sufficiency, temporal evaluation,

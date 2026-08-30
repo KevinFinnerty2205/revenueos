@@ -564,24 +564,19 @@ future and is not implied by the implemented aggregate view.
 
 ### WO-037 — Targets & KPI Engine
 
-- **Objective/value/package:** Compare supported individual/team outcomes with clear
-  monthly, quarterly and annual goals. **Core**.
-- **Dependencies/checkpoint:** WO-036 metric definitions and team permission model.
-- **Experience:** Concise Daily/Insights progress and gap explanation; Settings/admin
-  target configuration; activity remains supporting context.
-- **Domain/data:** Effective-dated TargetDefinition, assignment, supported KPI mapping
-  and progress projection with aggregation/credit policy.
-- **Backend/frontend/AI:** Typed validation and deterministic calculation; accessible
-  progress/drill-down; AI may phrase the gap and suggest evidence-backed next steps.
-- **Integrations:** Optional authoritative target import later; manual/admin entry first.
-- **Security/privacy/operations:** Manager scope, history/audit, currency/period policy,
-  double-count prevention and recalculation monitoring.
-- **Acceptance:** Individual/team totals reconcile; target changes preserve history;
-  the unit/window/credit rule is visible; unsupported formulas fail clearly.
-- **Out of scope:** Compensation, commission calculation, performance ranking and
-  surveillance.
-- **Validate:** Check goal clarity, behaviour effects and whether targets make Daily
-  more useful rather than anxiety-producing.
+Implemented 30 August 2026 as the narrower Core v1 boundary. Five higher-is-better
+WO-036 metrics support self-set personal, administrator-assigned personal and
+organisation monthly/quarterly/calendar-year targets. Explicit records bind metric
+version, timezone, optional pipeline and currency; append-only revisions preserve
+goal history. Actuals are read live through `SalesMetricService` and never persisted.
+
+Insights now has an Overview summary and responsive Targets tab. Daily deliberately
+does not change. Personal visibility is owner plus administrators, ordinary peers are
+denied, organisation progress exposes no contribution and administrator management
+is never attainment-sorted. There is no team/manager hierarchy, rate/custom formula,
+fiscal calendar, FX, recurrence, bulk import, pacing/on-track, forecast, AI, target-
+triggered Action, notification, leaderboard, gamification or compensation semantic.
+WO-038/039 retain their separate forecast and manager authority gates.
 
 ### WO-038 — Forecasting
 

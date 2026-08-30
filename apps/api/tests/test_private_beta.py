@@ -5,7 +5,8 @@ import base64
 import hashlib
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
@@ -82,6 +83,8 @@ from revenueos.models import (
     ProvisionalSignal,
     RecordingSession,
     RevenueBrainSourceSnapshot,
+    SalesTarget,
+    SalesTargetRevision,
     SourceCandidateEvidence,
     Transcript,
     TranscriptVersion,
@@ -212,7 +215,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0037_territory_icp"
+    assert EXPECTED_MIGRATION_HEAD == "0046_sales_targets"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -1295,6 +1298,8 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         capture_session_id = uuid.uuid4()
         evidence_id = uuid.uuid4()
         marker_id = uuid.uuid4()
+        sales_target_id = uuid.uuid4()
+        sales_target_revision_id = uuid.uuid4()
         async with factory() as session, session.begin():
             session.add(
                 CaptureSession(
@@ -1331,9 +1336,36 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
                     idempotency_key="export-marker-internal-key",
                 )
             )
+            session.add(
+                SalesTarget(
+                    id=sales_target_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    metric_id="won_value",
+                    metric_definition_version="1",
+                    scope="personal",
+                    origin="self_set",
+                    owner_user_id=PRIMARY_USER_ID,
+                    period_type="month",
+                    period_start=date(2026, 8, 1),
+                    period_end=date(2026, 8, 31),
+                    timezone="Australia/Sydney",
+                    currency="AUD",
+                    created_by_user_id=PRIMARY_USER_ID,
+                )
+            )
+            session.add(
+                SalesTargetRevision(
+                    id=sales_target_revision_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    target_id=sales_target_id,
+                    revision_number=1,
+                    goal_value=Decimal("20000.00"),
+                    created_by_user_id=PRIMARY_USER_ID,
+                )
+            )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 25
+        assert payload["exportVersion"] == 26
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1370,6 +1402,37 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert payload["createValueModelVersions"] == []
         assert payload["createBusinessCases"] == []
         assert payload["createBusinessCaseVersions"] == []
+        assert payload["salesTargets"] == [
+            {
+                "id": str(sales_target_id),
+                "metric_id": "won_value",
+                "metric_definition_version": "1",
+                "scope": "personal",
+                "origin": "self_set",
+                "owner_user_id": str(PRIMARY_USER_ID),
+                "pipeline_id": None,
+                "period_type": "month",
+                "period_start": "2026-08-01",
+                "period_end": "2026-08-31",
+                "timezone": "Australia/Sydney",
+                "currency": "AUD",
+                "created_by_user_id": str(PRIMARY_USER_ID),
+                "archived_at": None,
+                "created_at": payload["salesTargets"][0]["created_at"],
+                "updated_at": payload["salesTargets"][0]["updated_at"],
+            }
+        ]
+        assert payload["salesTargetRevisions"][0]["goal_value"] == "20000.00"
+        assert payload["salesTargetRevisions"][0]["target_id"] == str(sales_target_id)
+        assert (
+            "actual"
+            not in json.dumps(
+                {
+                    "targets": payload["salesTargets"],
+                    "revisions": payload["salesTargetRevisions"],
+                }
+            ).lower()
+        )
         assert payload["debriefSessions"] == []
         assert payload["debriefTurns"] == []
         assert payload["evidenceFragments"] == []
@@ -1408,7 +1471,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 25
+        assert download.json()["exportVersion"] == 26
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

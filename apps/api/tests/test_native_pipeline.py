@@ -178,7 +178,7 @@ def test_close_lost_and_reopen_preserve_seller_reported_history(app: FastAPI, cl
         return payload
 
     exported = asyncio.run(export_payload())
-    assert exported["exportVersion"] == EXPORT_VERSION == 25
+    assert exported["exportVersion"] == EXPORT_VERSION == 26
     assert len(exported["salesPipelines"]) == 1  # type: ignore[arg-type]
     assert len(exported["salesPipelineStages"]) == 9  # type: ignore[arg-type]
     events = exported["opportunityStageEvents"]

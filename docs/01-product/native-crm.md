@@ -54,7 +54,7 @@ and promotion creates a Company/Contact. There are no CRM-specific Tasks, Notes 
 Activities, custom objects, formulas, rollups, workflows, page builders, mass edits,
 destructive merge, service desk, marketing automation, CPQ, team ownership or territory
 routing. WO-035 now supplies bounded Pipeline/stage administration; WO-036 owns
-analytics, WO-037 targets, WO-038 forecasting and WO-039 manager intelligence.
+analytics, implemented WO-037 targets, WO-038 forecasting and WO-039 manager intelligence.
 
 ## WO-035 Pipeline boundary
 

@@ -139,6 +139,8 @@ from revenueos.models import (
     SalesEvent,
     SalesPipeline,
     SalesPipelineStage,
+    SalesTarget,
+    SalesTargetRevision,
     SourceCandidateEvidence,
     Task,
     Transcript,
@@ -155,7 +157,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 25
+EXPORT_VERSION = 26
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1092,6 +1094,8 @@ async def _delete_organisation_records(
             delete(ProspectUsageCounter).where(ProspectUsageCounter.organisation_id == organisation_id)
         )
         await session.execute(delete(Task).where(Task.organisation_id == organisation_id))
+        await session.execute(delete(SalesTargetRevision).where(SalesTargetRevision.organisation_id == organisation_id))
+        await session.execute(delete(SalesTarget).where(SalesTarget.organisation_id == organisation_id))
         await session.execute(
             delete(CreatePresentationVersion).where(CreatePresentationVersion.organisation_id == organisation_id)
         )
@@ -2815,6 +2819,16 @@ async def _export_payload(
         .where(OpportunityStageEvent.organisation_id == organisation_id)
         .order_by(OpportunityStageEvent.opportunity_id, OpportunityStageEvent.changed_at, OpportunityStageEvent.id)
     )
+    sales_targets = await rows(
+        select(SalesTarget)
+        .where(SalesTarget.organisation_id == organisation_id)
+        .order_by(SalesTarget.period_start, SalesTarget.created_at, SalesTarget.id)
+    )
+    sales_target_revisions = await rows(
+        select(SalesTargetRevision)
+        .where(SalesTargetRevision.organisation_id == organisation_id)
+        .order_by(SalesTargetRevision.target_id, SalesTargetRevision.revision_number)
+    )
     methodology_definitions = await rows(
         select(MethodologyDefinition)
         .where(MethodologyDefinition.organisation_id == organisation_id)
@@ -3274,7 +3288,12 @@ async def _export_payload(
     return {
         "exportVersion": EXPORT_VERSION,
         "generatedAt": datetime.now(UTC),
-        "organisation": {"id": organisation.id, "name": organisation.name, "slug": organisation.slug},
+        "organisation": {
+            "id": organisation.id,
+            "name": organisation.name,
+            "slug": organisation.slug,
+            "timezone": organisation.timezone,
+        },
         "members": [
             {
                 "userId": user.id,
@@ -4271,6 +4290,44 @@ async def _export_payload(
                 ),
             )
             for item in opportunity_stage_events
+        ],
+        "salesTargets": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "metric_id",
+                    "metric_definition_version",
+                    "scope",
+                    "origin",
+                    "owner_user_id",
+                    "pipeline_id",
+                    "period_type",
+                    "period_start",
+                    "period_end",
+                    "timezone",
+                    "currency",
+                    "created_by_user_id",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in sales_targets
+        ],
+        "salesTargetRevisions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "target_id",
+                    "revision_number",
+                    "goal_value",
+                    "created_by_user_id",
+                    "created_at",
+                ),
+            )
+            for item in sales_target_revisions
         ],
         "methodologyDefinitions": [
             _columns(

@@ -97,6 +97,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "sales_pipelines",
         "sales_pipeline_stages",
         "opportunity_stage_events",
+        "sales_targets",
+        "sales_target_revisions",
         "action_proposals",
         "action_proposal_versions",
         "action_audit_events",
@@ -406,6 +408,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "sales_pipeline_id": uuid.uuid4(),
                 "sales_pipeline_stage_id": uuid.uuid4(),
                 "opportunity_stage_event_id": uuid.uuid4(),
+                "sales_target_id": uuid.uuid4(),
+                "sales_target_revision_id": uuid.uuid4(),
             }
         )
 
@@ -893,6 +897,41 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             VALUES
                                 (:opportunity_audit_id, :organisation_id,
                                  :opportunity_id, :user_id, 'created', '[]'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO sales_targets
+                                (id, organisation_id, metric_id,
+                                 metric_definition_version, scope, origin,
+                                 owner_user_id, pipeline_id, period_type,
+                                 period_start, period_end, timezone, currency,
+                                 created_by_user_id)
+                            VALUES
+                                (:sales_target_id, :organisation_id,
+                                 'won_value', '1', 'personal', 'self_set',
+                                 :user_id, :sales_pipeline_id, 'month',
+                                 date_trunc('month', current_date)::date,
+                                 (date_trunc('month', current_date) +
+                                  interval '1 month - 1 day')::date,
+                                 'Australia/Sydney', 'AUD', :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO sales_target_revisions
+                                (id, organisation_id, target_id,
+                                 revision_number, goal_value,
+                                 created_by_user_id)
+                            VALUES
+                                (:sales_target_revision_id, :organisation_id,
+                                 :sales_target_id, 1, 20000.00, :user_id)
                             """
                         ),
                         identity_parameters,
@@ -2740,6 +2779,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'sales_pipelines',
                                     'sales_pipeline_stages',
                                     'opportunity_stage_events',
+                                    'sales_targets',
+                                    'sales_target_revisions',
                                     'action_proposals',
                                     'action_proposal_versions',
                                     'action_audit_events',
@@ -2903,6 +2944,30 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         {"id": tenant_a["opportunity_stage_event_id"]},
                     )
                 await immutable_event_savepoint.rollback()
+                immutable_target_savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE sales_target_revisions
+                            SET goal_value = 25000.00
+                            WHERE id = :id
+                            """
+                        ),
+                        {"id": tenant_a["sales_target_revision_id"]},
+                    )
+                await immutable_target_savepoint.rollback()
+                cross_tenant_target_update = await connection.execute(
+                    text(
+                        """
+                        UPDATE sales_targets
+                        SET archived_at = now()
+                        WHERE id = :id
+                        """
+                    ),
+                    {"id": tenant_b["sales_target_id"]},
+                )
+                assert cross_tenant_target_update.rowcount == 0
                 company_update = await connection.execute(
                     text("UPDATE companies SET name = 'Blocked' WHERE id = :id"),
                     {"id": tenant_b["company_id"]},
@@ -3363,6 +3428,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await transaction.rollback()
         finally:
             async with engine.begin() as connection:
+                await connection.execute(text("SELECT set_config('app.beta_maintenance', 'approved', true)"))
                 await connection.execute(
                     text("ALTER TABLE pre_interaction_briefs DISABLE TRIGGER pre_interaction_briefs_immutable")
                 )
@@ -3395,6 +3461,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "sales_target_revisions",
+                    "sales_targets",
                     "create_business_case_versions",
                     "create_business_cases",
                     "create_value_model_versions",

@@ -4507,3 +4507,92 @@ export interface SalesWinLoss {
   reasonProvenance: "seller_reported";
   notesAggregated: false;
 }
+
+export type SalesTargetCategory =
+  "outcome" | "pipeline_development" | "activity";
+export type SalesTargetScope = "personal" | "organisation";
+export type SalesTargetOrigin = "self_set" | "admin_assigned";
+export type SalesTargetPeriodType = "month" | "quarter" | "year";
+export type SalesTargetStatus = "upcoming" | "active" | "past" | "archived";
+
+export interface SalesTargetMetricPolicy {
+  metricId: string;
+  definitionVersion: string;
+  label: string;
+  description: string;
+  unit: SalesMetricUnit;
+  category: SalesTargetCategory;
+  allowedScopes: SalesTargetScope[];
+  requiresCurrency: boolean;
+  displayOrder: number;
+  dateSemantics: string;
+  exclusions: string[];
+}
+
+export interface SalesTargetMetadata {
+  currentUserId: string;
+  currentUserRole: "admin" | "member";
+  organisationTimezone: string;
+  metrics: SalesTargetMetricPolicy[];
+  owners: Array<{ userId: string; displayName: string }>;
+  pipelines: Array<{ id: string; name: string; active: boolean }>;
+  canAssignPersonalTargets: boolean;
+  canCreateOrganisationTargets: boolean;
+}
+
+export interface SalesTargetRevision {
+  id: string;
+  revisionNumber: number;
+  goalValue: string;
+  createdByUserId: string;
+  createdByDisplayName: string;
+  createdAt: string;
+}
+
+export interface SalesTargetProgress {
+  state: "available" | "upcoming" | "unavailable";
+  actualValue: string | null;
+  targetValue: string;
+  remainingValue: string | null;
+  aboveTargetValue: string | null;
+  percentageComplete: string | null;
+  targetReached: boolean | null;
+  calculatedThrough: string | null;
+  generatedAt: string;
+  disclosures: string[];
+}
+
+export interface SalesTarget {
+  id: string;
+  metric: SalesTargetMetricPolicy;
+  scope: SalesTargetScope;
+  origin: SalesTargetOrigin;
+  ownerUserId: string | null;
+  ownerDisplayName: string | null;
+  pipelineId: string | null;
+  pipelineName: string | null;
+  periodType: SalesTargetPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  timezone: string;
+  currency: string | null;
+  status: SalesTargetStatus;
+  latestRevision: SalesTargetRevision;
+  revisions: SalesTargetRevision[];
+  progress: SalesTargetProgress;
+  createdByUserId: string;
+  createdByDisplayName: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canRevise: boolean;
+  canArchive: boolean;
+}
+
+export interface SalesTargetList {
+  items: SalesTarget[];
+  canAssignPersonalTargets: boolean;
+  canCreateOrganisationTargets: boolean;
+  maximumVisibleTargets: 200;
+}

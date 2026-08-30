@@ -198,12 +198,13 @@ defaults:
 | `API_FEATURE_ONLINE_MEETING_AUTO_INGEST_ENABLED`             | `false` |
 | `API_FEATURE_LIVE_INTERACTION_INTELLIGENCE_ENABLED`          | `false` |
 | `API_FEATURE_LIVE_INTERACTION_EXTERNAL_AI_ENABLED`           | `false` |
-| `API_FEATURE_ENGAGE_ENABLED`                                | `true`  |
-| `API_FEATURE_ENGAGE_CAMPAIGNS_ENABLED`                      | `true`  |
-| `API_FEATURE_ENGAGE_EVENTS_ENABLED`                         | `true`  |
-| `API_FEATURE_NATIVE_CRM_ENABLED`                            | `true`  |
-| `API_FEATURE_NATIVE_PIPELINE_ENABLED`                       | `true`  |
-| `API_FEATURE_SALES_ANALYTICS_ENABLED`                       | `true`  |
+| `API_FEATURE_ENGAGE_ENABLED`                                 | `true`  |
+| `API_FEATURE_ENGAGE_CAMPAIGNS_ENABLED`                       | `true`  |
+| `API_FEATURE_ENGAGE_EVENTS_ENABLED`                          | `true`  |
+| `API_FEATURE_NATIVE_CRM_ENABLED`                             | `true`  |
+| `API_FEATURE_NATIVE_PIPELINE_ENABLED`                        | `true`  |
+| `API_FEATURE_SALES_ANALYTICS_ENABLED`                        | `true`  |
+| `API_FEATURE_SALES_TARGETS_ENABLED`                          | `true`  |
 | `API_FEATURE_DATA_EXPORT_ENABLED`                            | `true`  |
 | `API_FEATURE_ORGANISATION_DELETION_ENABLED`                  | `false` |
 
@@ -216,6 +217,12 @@ Sales Analytics is server-authoritative and has no separate entitlement in
 WO-036. When disabled, all Sales Insights routes return the same product-safe
 `404`, the capabilities response removes the desktop destination, and no
 per-tab or per-metric enablement is available.
+
+Sales Targets is also Core and has no separate entitlement. It requires Sales
+Analytics plus `API_FEATURE_SALES_TARGETS_ENABLED`; when either is disabled, all
+target routes fail with the same safe `404`. The capabilities response exposes only
+the safe `salesTargets` boolean. Target goal/actual values are excluded from logs and
+metadata-only events.
 
 The table reflects local/private-beta defaults. A production environment must
 explicitly override `API_FEATURE_ENGAGE_EVENTS_ENABLED=false` until the WO-031
@@ -461,6 +468,12 @@ credentials, credential references, OAuth state, access and refresh tokens,
 idempotency markers and execution-preview fingerprints. Organisation deletion
 attempts provider revocation before deleting the encrypted local credential and
 all CRM mappings; a provider failure cannot retain tenant data locally.
+
+WO-037 advances export schema to v26. It includes Sales Target identity/configuration
+and append-only goal revisions but excludes calculated actual/progress. Retention and
+organisation deletion remove revisions before targets; member deactivation archives
+current/upcoming targets and retains history. Metadata-only events never contain goal
+or actual values.
 
 ## WO-025B Ask controls
 

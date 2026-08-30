@@ -268,6 +268,105 @@ const winLoss = {
   notesAggregated: false,
 };
 
+const targetMetric = {
+  metricId: "won_value",
+  definitionVersion: "1",
+  label: "Won value",
+  description: "Sum of valued opportunities currently won in the period.",
+  unit: "currency",
+  category: "outcome",
+  allowedScopes: ["personal", "organisation"],
+  requiresCurrency: true,
+  displayOrder: 1,
+  dateSemantics: "Current close date falls in the inclusive local-date range.",
+  exclusions: ["Unvalued won opportunities"],
+};
+
+const targetMetadata = {
+  currentUserId: "user-1",
+  currentUserRole: "admin",
+  organisationTimezone: "Australia/Sydney",
+  metrics: [
+    targetMetric,
+    {
+      ...targetMetric,
+      metricId: "meetings_completed_count",
+      label: "Completed meetings",
+      unit: "count",
+      category: "activity",
+      requiresCurrency: false,
+      displayOrder: 4,
+    },
+  ],
+  owners: [
+    { userId: "user-1", displayName: "Alex Morgan" },
+    { userId: "user-2", displayName: "Taylor Seller" },
+  ],
+  pipelines: [
+    { id: pipelineId, name: "RevenueOS Sales Pipeline", active: true },
+  ],
+  canAssignPersonalTargets: true,
+  canCreateOrganisationTargets: true,
+};
+
+const salesTarget = {
+  id: "target-1",
+  metric: targetMetric,
+  scope: "personal",
+  origin: "self_set",
+  ownerUserId: "user-1",
+  ownerDisplayName: "Alex Morgan",
+  pipelineId: null,
+  pipelineName: null,
+  periodType: "month",
+  periodStart: "2026-08-01",
+  periodEnd: "2026-08-31",
+  periodLabel: "August 2026",
+  timezone: "Australia/Sydney",
+  currency: "AUD",
+  status: "active",
+  latestRevision: {
+    id: "target-revision-1",
+    revisionNumber: 1,
+    goalValue: "20000.00",
+    createdByUserId: "user-1",
+    createdByDisplayName: "Alex Morgan",
+    createdAt: "2026-08-01T00:00:00Z",
+  },
+  revisions: [
+    {
+      id: "target-revision-1",
+      revisionNumber: 1,
+      goalValue: "20000.00",
+      createdByUserId: "user-1",
+      createdByDisplayName: "Alex Morgan",
+      createdAt: "2026-08-01T00:00:00Z",
+    },
+  ],
+  progress: {
+    state: "available",
+    actualValue: "14500.00",
+    targetValue: "20000.00",
+    remainingValue: "5500.00",
+    aboveTargetValue: "0.00",
+    percentageComplete: "72.5",
+    targetReached: false,
+    calculatedThrough: "2026-08-30",
+    generatedAt: "2026-08-30T03:00:00Z",
+    disclosures: [
+      "Actuals use canonical records through 30 August 2026.",
+      "This is an operational goal, not a forecast or compensation measure.",
+    ],
+  },
+  createdByUserId: "user-1",
+  createdByDisplayName: "Alex Morgan",
+  archivedAt: null,
+  createdAt: "2026-08-01T00:00:00Z",
+  updatedAt: "2026-08-01T00:00:00Z",
+  canRevise: true,
+  canArchive: true,
+};
+
 async function routeInsights(page: Page) {
   await page.route("http://localhost:8000/api/v1/me", async (route) => {
     await route.fulfill({
@@ -310,8 +409,25 @@ async function routeInsights(page: Page) {
       return route.fulfill({ json: winLoss });
     },
   );
+  await page.route("http://localhost:8000/api/v1/targets**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/metadata"))
+      return route.fulfill({ json: targetMetadata });
+    if (url.pathname.endsWith(`/${salesTarget.id}`))
+      return route.fulfill({ json: salesTarget });
+    return route.fulfill({
+      json: {
+        items: [salesTarget],
+        canAssignPersonalTargets: true,
+        canCreateOrganisationTargets: true,
+        maximumVisibleTargets: 200,
+      },
+    });
+  });
   await page.route("http://localhost:8000/api/v1/beta/capabilities", (route) =>
-    route.fulfill({ json: { featureFlags: { salesAnalytics: true } } }),
+    route.fulfill({
+      json: { featureFlags: { salesAnalytics: true, salesTargets: true } },
+    }),
   );
   for (const path of [
     "prospect/availability",
@@ -423,6 +539,53 @@ test("Sales Insights remains usable at a 390-pixel viewport", async ({
       fullPage: true,
     });
   }
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("Targets show canonical progress, detail and history without ranking", async ({
+  page,
+}) => {
+  await routeInsights(page);
+  await page.goto("/insights");
+  await page.getByRole("tab", { name: "Targets" }).click();
+
+  await expect(page.getByRole("heading", { name: "My targets" })).toBeVisible();
+  await expect(page.getByText("72.5%", { exact: true })).toBeVisible();
+  await expect(page.getByText(/\$14,500\.00/)).toBeVisible();
+  await expect(page.getByText(/\$5,500\.00 remaining/)).toBeVisible();
+  await expect(page.getByText(/rank people/i)).toBeVisible();
+  await page.getByRole("button", { name: "View details" }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "not a forecast or compensation measure",
+  );
+  await expect(page.getByRole("dialog")).toContainText("revision 1");
+  await page.screenshot({
+    path: `${assets}/wo-037-targets-desktop.png`,
+    fullPage: true,
+  });
+  await page
+    .getByRole("link", { name: "View this metric in Insights" })
+    .click();
+  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page).toHaveURL(/metric=won_value.*ownerUserId=user-1/u);
+});
+
+test("Targets remain usable at a 390-pixel viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await routeInsights(page);
+  await page.goto("/insights");
+  await page.getByRole("tab", { name: "Targets" }).click();
+  await expect(page.getByText("72.5%", { exact: true })).toBeVisible();
+  await page.screenshot({
+    path: `${assets}/wo-037-targets-mobile.png`,
+    fullPage: true,
+  });
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );

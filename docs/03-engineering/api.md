@@ -882,3 +882,23 @@ accepts an organisation ID or arbitrary field, grouping, formula or SQL.
 Every analytical request uses inclusive `startDate`/`endDate`, an IANA `timezone`,
 and optional tenant-validated `pipelineId`/`ownerUserId`. The maximum range is five
 years; future/reversed ranges fail with safe typed errors.
+
+## Sales Targets API
+
+All paths are authenticated Core operations under `/api/v1/targets`. Organisation
+scope and timezone come from trusted server context; no request accepts an
+organisation ID, actual, progress, formula or arbitrary metric.
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| `GET` | `/metadata` | Five target policies, canonical timezone, active owners/pipelines and current permissions. |
+| `GET` | `?view={current,past,archived,all}` | Authorised personal/organisation records with read-time canonical progress. |
+| `POST` | `/` | Create a current/future explicit calendar-period target plus revision 1. |
+| `GET` | `/{targetId}` | Detail, calculation disclosures and complete append-only revision history. |
+| `POST` | `/{targetId}/revisions` | Append an optimistic revision to a current/future target. |
+| `POST` | `/{targetId}/archive` | Confirm archive while retaining history. |
+
+Personal reads enforce owner-or-admin policy in addition to tenant RLS. Assigned
+owners are read-only; administrators cannot mutate peer self-set goals. Future
+progress is null/upcoming, and past targets are locked. Pipeline binding is accepted
+only for Opportunity metrics.

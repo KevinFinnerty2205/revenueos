@@ -1,6 +1,6 @@
 # Sales analytics, targets and forecast architecture
 
-- **Status:** Proposed Core architecture; not implemented
+- **Status:** Descriptive analytics and explicit Targets implemented; Forecast and Manager Intelligence remain proposed
 - **Principle:** Explain what changed and what to do; do not create a wall of charts
 
 ## Intelligence boundaries
@@ -60,16 +60,16 @@ but they must not imply that every call caused a later outcome.
 
 ## Targets and KPIs
 
-`TargetDefinition` conceptually links a supported metric to an individual or team,
-monthly/quarterly/annual period, value, unit, owner, source and version. Supported
-starting metrics are revenue, qualified pipeline, Opportunities created, meetings,
-calls, proposals and well-defined conversions. User-defined KPIs must select a
-supported metric and filters; they cannot upload executable formulas.
+WO-037 implements a narrower `SalesTarget`: exactly five allow-listed higher-is-better
+metrics, personal or organisation scope, self-set or administrator-assigned origin,
+an explicit monthly/quarterly/calendar-year period, optional pipeline, one currency
+where required and an immutable metric/timezone binding. Append-only revisions own
+the goal; live actuals come only from `SalesMetricService`.
 
-Team roll-ups must avoid double counting and disclose their aggregation rule. Target
-changes are effective-dated and audited. Activity metrics are context, not the
-primary performance truth. Daily shows a small actionable summary; Insights provides
-drill-down.
+There is no team hierarchy, manager roll-up, qualified-pipeline/proposal/rate target,
+formula, FX, recurrence, persisted observation, pacing state or forecast. Activity
+metrics are visibly supporting context. Insights owns progress through Overview and
+Targets; Daily deliberately has no target integration in v1.
 
 ## Forecast MVP
 
@@ -135,9 +135,9 @@ events, corrections, ambiguous attribution, overrides and deterministic replay.
 
 ## Explicitly out of scope
 
-No analytics schema, target UI, forecast model or production computation is added in
-WO-023. Generic BI, employee monitoring, arbitrary formula execution, contractual
-forecast guarantees and unsupported causal coaching are not RevenueOS scope.
+Generic BI, employee monitoring, arbitrary formula execution, contractual forecast
+guarantees and unsupported causal coaching are not RevenueOS scope. WO-037 adds no
+forecast model, team/manager hierarchy, target-triggered Action or AI output.
 
 ## WO-035 canonical lifecycle handoff
 
@@ -159,3 +159,12 @@ Funnel, Activity and Win/Loss views. It adds no persisted metric facts, target
 state, probability, weighting or forecast model. Targets remain WO-037 and
 Forecast remains WO-038; both must consume this metric contract rather than
 redefining it.
+
+## WO-037 implemented boundary
+
+WO-037 implements Core target configuration/history and read-time progress. It binds
+the WO-036 metric ID/version, persists no actual and exposes no probability. Canonical
+corrections, reopen and current-owner reassignment therefore update Target and
+Insights consistently. WO-038 must introduce explicit assumptions, ranges and
+calibration separately; WO-039 must introduce authorised team/manager scope rather
+than treating the current admin role as a manager.

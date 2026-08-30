@@ -456,7 +456,7 @@ unexpected ports, Unicode/local/IP-literal hosts, non-global DNS results and uns
 redirect chains. Citation and trust validation occurs before persistence. Logs are
 metadata-only and exclude searches, company identity, URLs, excerpts and findings.
 
-Export schema v16, organisation/target deletion and retention cover the research
+Export schema v26, organisation/target deletion and retention cover the research
 graph while preserving any separately promoted Company. Production mock configuration
 fails closed. See the dedicated
 [security/privacy review](prospect-security-privacy-review.md) and

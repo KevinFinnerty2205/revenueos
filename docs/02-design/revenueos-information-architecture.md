@@ -1,7 +1,7 @@
 # RevenueOS information architecture
 
-- **Status:** WO-026 implements the entitlement-aware desktop Prospect/Find slice;
-  later Prospect and other entitled areas remain future
+- **Status:** Current shell includes Core Insights with Overview/Targets and the
+  entitlement-aware desktop Prospect/Find slice; other target areas remain staged
 - **Design rule:** Organise around seller goals, not entities or implementation boundaries
 
 ## Permanent desktop navigation
@@ -41,8 +41,12 @@ flowchart TB
     S --> AC["Actions"]
     F --> PR["Prospects and research"]
     F --> EN["Outreach and campaigns"]
-    I --> M["Manager view when authorised"]
+I --> M["Manager view when authorised"]
 ```
+
+WO-037 implements **Overview · Targets · Funnel · Activity · Win / loss** inside
+Insights. Forecast/manager/coaching remain future. Targets does not add a new top-level
+navigation item, and RevenueOS Daily/mobile bottom navigation remain unchanged.
 
 ## Why this model
 

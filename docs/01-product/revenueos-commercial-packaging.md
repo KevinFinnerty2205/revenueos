@@ -27,7 +27,8 @@ Core includes:
 - Revenue Brain and Opportunity Workspace;
 - standard and custom methodology projections;
 - personal and manager descriptive/diagnostic intelligence;
-- targets, evidence-based forecast and coaching when those capabilities mature;
+- implemented Targets/KPI progress plus evidence-based forecast and coaching when
+  those later capabilities mature;
 - Account/Opportunity Workspace evidence and bounded file organisation;
 - RevenueOS Daily; and
 - reviewable Action proposals.

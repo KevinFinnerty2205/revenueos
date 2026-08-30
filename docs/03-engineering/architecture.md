@@ -606,3 +606,16 @@ date/timezone/pipeline/owner/currency filters. There is no warehouse, analytics 
 generic query language, AI provider or mutation dependency. See the
 [architecture](sales-analytics-architecture.md), [metric catalogue](sales-analytics-metric-catalog.md)
 and [ADR 0056](../08-decisions/0056-deterministic-canonical-sales-analytics.md).
+
+## WO-037 Sales Targets
+
+Migration `0046_sales_targets` adds the canonical organisation timezone plus
+tenant-owned target identity/configuration and append-only revision tables. Both are
+forced-RLS with composite tenant relationships; PostgreSQL triggers protect identity
+and revision history. A small code-owned policy selects exactly five targetable
+WO-036 metrics. `SalesTargetService` owns permission/period/value policy and delegates
+every actual observation to `SalesMetricService`; no actual, counter, pacing state,
+job or formula is stored. Insights renders a bounded Overview summary and dedicated
+Targets tab. See the [architecture](sales-targets-architecture.md),
+[security review](sales-targets-security-privacy-review.md) and
+[ADR 0057](../08-decisions/0057-explicit-canonical-sales-targets.md).

@@ -100,6 +100,12 @@ This is the canonical product and engineering documentation index. Documents dis
 94. [Sales analytics metric catalogue](03-engineering/sales-analytics-metric-catalog.md)
 95. [Sales analytics security and privacy review](03-engineering/sales-analytics-security-privacy-review.md)
 96. [ADR 0056: Deterministic canonical Sales Analytics](08-decisions/0056-deterministic-canonical-sales-analytics.md)
+97. [Sales Targets and KPI progress](01-product/sales-targets.md) — current WO-037 Core boundary
+98. [Sales Targets experience](02-design/sales-targets-experience.md)
+99. [Sales Targets architecture](03-engineering/sales-targets-architecture.md)
+100. [Sales Targets security, privacy and lifecycle review](03-engineering/sales-targets-security-privacy-review.md)
+101. [WO-037: Targets & KPI Engine](07-sprints/wo-037-targets-kpi-engine.md)
+102. [ADR 0057: Explicit canonical Sales Targets](08-decisions/0057-explicit-canonical-sales-targets.md)
 
 ## 00 — Company
 
@@ -130,6 +136,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Native CRM implementation guide](01-product/native-crm.md)
 - [Native Pipeline implementation guide](01-product/native-pipeline.md)
 - [Sales Analytics and Win/Loss Intelligence](01-product/sales-analytics.md)
+- [Sales Targets and KPI progress](01-product/sales-targets.md)
 - [Pipeline and Sales Brain boundary](01-product/pipeline-sales-brain-boundary.md)
 - [Opportunity stage and closure guide](01-product/opportunity-stage-closure-guide.md)
 - [Pipeline packaging](01-product/pipeline-packaging.md)
@@ -182,6 +189,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Native CRM UX](02-design/native-crm-ux.md)
 - [Native Pipeline UX and simplicity review](02-design/native-pipeline-ux.md)
 - [Sales Insights experience and simplicity review](02-design/sales-insights-experience.md)
+- [Sales Targets experience and simplicity review](02-design/sales-targets-experience.md)
 - [Find and Prospect experience](02-design/find-and-prospect-experience.md)
 - [Engage, campaign and event experience](02-design/engage-campaign-event-experience.md)
 - [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
@@ -355,6 +363,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Native Pipeline security and privacy review](03-engineering/native-pipeline-security-privacy-review.md)
 - [Native Pipeline retention, export and deletion](03-engineering/native-pipeline-retention-export-deletion.md)
 - [Sales analytics architecture](03-engineering/sales-analytics-architecture.md)
+- [Sales Targets architecture](03-engineering/sales-targets-architecture.md)
+- [Sales Targets security, privacy and lifecycle review](03-engineering/sales-targets-security-privacy-review.md)
 - [Sales analytics metric catalogue](03-engineering/sales-analytics-metric-catalog.md)
 - [Sales analytics security and privacy review](03-engineering/sales-analytics-security-privacy-review.md)
 - [Prospect Account Research architecture](03-engineering/prospect-account-research-architecture.md)
@@ -521,6 +531,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-034: Native CRM Foundation](07-sprints/wo-034-native-crm-foundation.md)
 - [WO-035: Native Pipeline](07-sprints/wo-035-native-pipeline.md)
 - [WO-036: Sales Analytics and Win/Loss Intelligence](07-sprints/wo-036-sales-analytics-win-loss.md)
+- [WO-037: Targets & KPI Engine](07-sprints/wo-037-targets-kpi-engine.md)
 
 ## 08 — Decision records
 
@@ -563,6 +574,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0037: HubSpot-first Focused CRM Sync](08-decisions/0037-hubspot-first-focused-crm-sync.md)
 - [ADR 0055: Stable native Pipeline stages, immutable history and explicit authority](08-decisions/0055-native-pipeline-history-and-authority.md)
 - [ADR 0056: Deterministic canonical Sales Analytics](08-decisions/0056-deterministic-canonical-sales-analytics.md)
+- [ADR 0057: Explicit canonical Sales Targets](08-decisions/0057-explicit-canonical-sales-targets.md)
 - [ADR 0038: Separate unpromoted Prospect research domain](08-decisions/0038-separate-prospect-research-domain.md)
 - [ADR 0039: Separate Prospect Person research from canonical Contact](08-decisions/0039-separate-prospect-person-from-contact.md)
 - [ADR 0040: Preserve trust per promoted Contact field](08-decisions/0040-contact-field-provenance.md)
@@ -583,7 +595,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031/032/033/034/035/036 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
+Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031/032/033/034/035/036/037 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
 implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026/027/028 now
@@ -595,8 +607,9 @@ WO-031 adds manual authorised-list Event workflows. WO-032 adds the separately
 entitled, approved-template Create presentation slice. WO-033 adds bounded,
 deterministic Value Models and versioned Business Cases. WO-034 adds the canonical-record
 Native CRM Foundation without native Action execution or operational CSV. WO-035
-implements Native Pipeline and WO-036 implements deterministic Core Sales Insights;
-WO-037–045 remain unauthorised.
+implements Native Pipeline, WO-036 implements deterministic Core Sales Insights and
+WO-037 implements explicit canonical Targets/KPI progress; WO-038–045 remain
+unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
