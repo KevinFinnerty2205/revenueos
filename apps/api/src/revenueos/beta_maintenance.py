@@ -140,6 +140,8 @@ from revenueos.models import (
     SalesForecastJudgment,
     SalesForecastJudgmentRevision,
     SalesForecastPeriod,
+    SalesForecastReviewerJudgment,
+    SalesForecastReviewerRevision,
     SalesPipeline,
     SalesPipelineStage,
     SalesTarget,
@@ -160,7 +162,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 27
+EXPORT_VERSION = 28
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -2850,6 +2852,22 @@ async def _export_payload(
             SalesForecastJudgmentRevision.revision_number,
         )
     )
+    sales_forecast_reviewer_judgments = await rows(
+        select(SalesForecastReviewerJudgment)
+        .where(SalesForecastReviewerJudgment.organisation_id == organisation_id)
+        .order_by(
+            SalesForecastReviewerJudgment.period_id,
+            SalesForecastReviewerJudgment.opportunity_id,
+        )
+    )
+    sales_forecast_reviewer_revisions = await rows(
+        select(SalesForecastReviewerRevision)
+        .where(SalesForecastReviewerRevision.organisation_id == organisation_id)
+        .order_by(
+            SalesForecastReviewerRevision.reviewer_judgment_id,
+            SalesForecastReviewerRevision.revision_number,
+        )
+    )
     methodology_definitions = await rows(
         select(MethodologyDefinition)
         .where(MethodologyDefinition.organisation_id == organisation_id)
@@ -4406,6 +4424,48 @@ async def _export_payload(
                 ),
             )
             for item in sales_forecast_revisions
+        ],
+        "salesForecastReviewerJudgments": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "period_id",
+                    "opportunity_id",
+                    "created_at",
+                ),
+            )
+            for item in sales_forecast_reviewer_judgments
+        ],
+        "salesForecastReviewerRevisions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "reviewer_judgment_id",
+                    "revision_number",
+                    "category",
+                    "created_by_user_id",
+                    "owner_user_id_snapshot",
+                    "amount_snapshot",
+                    "currency_snapshot",
+                    "expected_close_date_snapshot",
+                    "pipeline_id_snapshot",
+                    "pipeline_name_snapshot",
+                    "stage_id_snapshot",
+                    "stage_name_snapshot",
+                    "opportunity_status_snapshot",
+                    "model_version",
+                    "model_status",
+                    "model_won_count",
+                    "model_lost_count",
+                    "model_minimum_sample",
+                    "model_lookback_start",
+                    "model_lookback_end",
+                    "created_at",
+                ),
+            )
+            for item in sales_forecast_reviewer_revisions
         ],
         "methodologyDefinitions": [
             _columns(

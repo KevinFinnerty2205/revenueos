@@ -111,7 +111,7 @@ def test_crm_configuration_custom_fields_history_activity_and_archive(app: FastA
         return payload
 
     exported = asyncio.run(export_payload())
-    assert exported["exportVersion"] == 27
+    assert exported["exportVersion"] == 28
     assert len(exported["crmCustomFieldDefinitions"]) == 1  # type: ignore[arg-type]
     assert len(exported["crmCustomFieldValues"]) == 1  # type: ignore[arg-type]
     assert exported["companies"][0]["archived_at"] is None  # type: ignore[index]

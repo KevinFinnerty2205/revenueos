@@ -13,6 +13,7 @@ import { apiRequest } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
 import { SalesForecast } from "@/components/sales-forecast";
 import { SalesTargets, SalesTargetsOverview } from "@/components/sales-targets";
+import { ManagerInsightsOverview } from "@/components/manager-insights-overview";
 
 type InsightTab =
   "overview" | "targets" | "forecast" | "funnel" | "activity" | "win-loss";
@@ -196,6 +197,7 @@ function OverviewPanel({
 }) {
   return (
     <div className="space-y-6">
+      <ManagerInsightsOverview />
       {targetsEnabled ? (
         <SalesTargetsOverview onViewAll={onViewTargets} />
       ) : null}

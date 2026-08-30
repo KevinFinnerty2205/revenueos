@@ -630,8 +630,10 @@ export and no-autonomous-mutation boundaries documented. WO-035 is now implement
 configurable native Pipeline, server-authoritative board movement, closure/reopen and
 immutable stage history are current. WO-036 is now implemented as deterministic Core
 Sales Analytics, bounded seller-reported Win/Loss aggregation, WO-037 explicit
-Targets/KPI progress and WO-038 Transparent Forecasting. WO-039 and later still
-require separate authorisation.
+Targets/KPI progress, WO-038 Transparent Forecasting and WO-039 deal-centric Manager
+Intelligence. WO-039 uses admin as an interim manager capability and adds no
+hierarchy, scoring, surveillance, AI coach or blended forecast. Checkpoint 3 remains
+undecided; WO-040 and later still require separate authorisation.
 
 ## WO-035 current boundary
 

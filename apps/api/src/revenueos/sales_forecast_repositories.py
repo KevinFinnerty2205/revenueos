@@ -19,6 +19,8 @@ from revenueos.models import (
     SalesForecastJudgment,
     SalesForecastJudgmentRevision,
     SalesForecastPeriod,
+    SalesForecastReviewerJudgment,
+    SalesForecastReviewerRevision,
     SalesPipeline,
     SalesPipelineStage,
     User,
@@ -169,6 +171,23 @@ class SalesForecastRepository:
             statement = statement.with_for_update()
         return cast(SalesForecastJudgment | None, await self.session.scalar(statement))
 
+    async def reviewer_judgment(
+        self,
+        organisation_id: UUID,
+        period_id: UUID,
+        opportunity_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> SalesForecastReviewerJudgment | None:
+        statement = select(SalesForecastReviewerJudgment).where(
+            SalesForecastReviewerJudgment.organisation_id == organisation_id,
+            SalesForecastReviewerJudgment.period_id == period_id,
+            SalesForecastReviewerJudgment.opportunity_id == opportunity_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return cast(SalesForecastReviewerJudgment | None, await self.session.scalar(statement))
+
     async def latest_revisions(
         self,
         organisation_id: UUID,
@@ -210,6 +229,51 @@ class SalesForecastRepository:
                         SalesForecastJudgmentRevision.judgment_id == judgment_id,
                     )
                     .order_by(SalesForecastJudgmentRevision.revision_number.desc())
+                )
+            ).all()
+        )
+
+    async def latest_reviewer_revisions(
+        self,
+        organisation_id: UUID,
+        judgment_ids: set[UUID],
+    ) -> dict[UUID, SalesForecastReviewerRevision]:
+        if not judgment_ids:
+            return {}
+        revisions = list(
+            (
+                await self.session.scalars(
+                    select(SalesForecastReviewerRevision)
+                    .where(
+                        SalesForecastReviewerRevision.organisation_id == organisation_id,
+                        SalesForecastReviewerRevision.reviewer_judgment_id.in_(judgment_ids),
+                    )
+                    .order_by(
+                        SalesForecastReviewerRevision.reviewer_judgment_id,
+                        SalesForecastReviewerRevision.revision_number.desc(),
+                    )
+                )
+            ).all()
+        )
+        result: dict[UUID, SalesForecastReviewerRevision] = {}
+        for revision in revisions:
+            result.setdefault(revision.reviewer_judgment_id, revision)
+        return result
+
+    async def reviewer_revisions(
+        self,
+        organisation_id: UUID,
+        judgment_id: UUID,
+    ) -> list[SalesForecastReviewerRevision]:
+        return list(
+            (
+                await self.session.scalars(
+                    select(SalesForecastReviewerRevision)
+                    .where(
+                        SalesForecastReviewerRevision.organisation_id == organisation_id,
+                        SalesForecastReviewerRevision.reviewer_judgment_id == judgment_id,
+                    )
+                    .order_by(SalesForecastReviewerRevision.revision_number.desc())
                 )
             ).all()
         )
@@ -384,6 +448,30 @@ class SalesForecastRepository:
             ).all()
         )
         latest = await self.latest_revisions(organisation_id, {judgment.id for judgment in judgments})
+        return {
+            judgment.opportunity_id: (judgment, latest[judgment.id]) for judgment in judgments if judgment.id in latest
+        }
+
+    async def reviewer_judgments_for_period(
+        self,
+        organisation_id: UUID,
+        period_id: UUID | None,
+        opportunity_ids: set[UUID],
+    ) -> dict[UUID, tuple[SalesForecastReviewerJudgment, SalesForecastReviewerRevision]]:
+        if period_id is None or not opportunity_ids:
+            return {}
+        judgments = list(
+            (
+                await self.session.scalars(
+                    select(SalesForecastReviewerJudgment).where(
+                        SalesForecastReviewerJudgment.organisation_id == organisation_id,
+                        SalesForecastReviewerJudgment.period_id == period_id,
+                        SalesForecastReviewerJudgment.opportunity_id.in_(opportunity_ids),
+                    )
+                )
+            ).all()
+        )
+        latest = await self.latest_reviewer_revisions(organisation_id, {judgment.id for judgment in judgments})
         return {
             judgment.opportunity_id: (judgment, latest[judgment.id]) for judgment in judgments if judgment.id in latest
         }

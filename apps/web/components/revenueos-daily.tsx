@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { ManagerHomeAttention } from "@/components/manager-home-attention";
 
 export function RevenueOSDaily() {
   const [daily, setDaily] = useState<DailyResponse | null>(null);
@@ -144,6 +145,8 @@ export function RevenueOSDaily() {
       ) : null}
 
       {!daily.hasOpportunities ? <NewUserWelcome /> : null}
+
+      <ManagerHomeAttention refreshKey={refreshKey} />
 
       {activeEvent ? (
         <Link

@@ -333,7 +333,7 @@ def test_target_market_tenant_predicates_and_identity_reuse(client: TestClient) 
                     database_url=TEST_DB_URL,
                 ),
             )
-            assert exported["exportVersion"] == EXPORT_VERSION == 27
+            assert exported["exportVersion"] == EXPORT_VERSION == 28
             assert len(exported["prospectTargetMarkets"]) == 1  # type: ignore[arg-type]
             assert len(exported["prospectTargetMarketVersions"]) == 1  # type: ignore[arg-type]
             assert len(exported["prospectDiscoveryRuns"]) == 2  # type: ignore[arg-type]

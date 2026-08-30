@@ -153,6 +153,7 @@ class PipelineBoardResponse(APIModel):
     stage_changes_allowed: bool
     managed_externally: bool
     authority_message: str | None
+    manager_intelligence_available: bool
     generated_at: datetime
 
 

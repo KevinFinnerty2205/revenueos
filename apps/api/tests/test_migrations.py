@@ -213,7 +213,7 @@ def test_personalized_outreach_migration_schema_guards_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -255,7 +255,7 @@ def test_native_crm_migration_downgrades_and_reupgrades(tmp_path: Path, monkeypa
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -402,7 +402,7 @@ def test_campaign_sequence_migration_schema_immutability_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -436,7 +436,7 @@ def test_event_intelligence_migration_schema_and_cycle(
         interaction_columns = {row[1] for row in connection.execute("PRAGMA table_info(interactions)")}
         assert "event_id" in interaction_columns
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
     command.downgrade(configuration, "0039_campaign_sequences")
@@ -458,7 +458,7 @@ def test_event_intelligence_migration_schema_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -535,7 +535,7 @@ def test_prospect_research_migration_schema_backfill_and_cycle(
             (company_id,),
         ).fetchone() == ("example.com",)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
         run_columns = {row[1] for row in connection.execute("PRAGMA table_info(prospect_research_runs)")}
@@ -572,7 +572,7 @@ def test_prospect_research_migration_schema_backfill_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
     command.downgrade(configuration, "0034_crm_sync")
@@ -585,7 +585,7 @@ def test_prospect_research_migration_schema_backfill_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -666,7 +666,7 @@ def test_integration_execution_migration_indexes_guards_and_cycle(
         }
         assert {"external_account_id", "external_account_name", "granted_scopes_json"}.issubset(connection_columns)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
     command.downgrade(configuration, "0033_sales_methodology")
@@ -702,7 +702,7 @@ def test_integration_execution_migration_indexes_guards_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -789,7 +789,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "methodology_reviews",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
@@ -1534,7 +1534,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
         connection.execute(
             """
@@ -1588,7 +1588,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
         connection.execute(
             """
@@ -1634,7 +1634,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
@@ -1650,7 +1650,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
     command.downgrade(configuration, "0003_meeting_domain")
@@ -1688,7 +1688,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
     command.downgrade(configuration, "0002_core_business_entities")
@@ -1755,7 +1755,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_insights",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
     command.downgrade(configuration, "0018_revenue_brain")
@@ -1775,7 +1775,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -1811,7 +1811,7 @@ def test_sales_analytics_index_migration_is_reversible(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -1923,7 +1923,7 @@ def test_sales_targets_migration_is_reversible_and_enforces_active_identity(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -2040,7 +2040,138 @@ def test_transparent_forecast_migration_is_reversible_and_enforces_period_identi
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
+        )
+
+
+def test_manager_intelligence_migration_is_additive_and_reversible(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    database_path = tmp_path / "manager-intelligence.db"
+    monkeypatch.setenv(  # type: ignore[attr-defined]
+        "DATABASE_URL",
+        f"sqlite+aiosqlite:///{database_path}",
+    )
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "0047_transparent_forecast")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "sales_forecast_reviewer_judgments" not in tables
+        assert "sales_forecast_reviewer_revisions" not in tables
+
+    command.upgrade(configuration, "head")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    pipeline_id = str(uuid.uuid4())
+    stage_id = str(uuid.uuid4())
+    opportunity_id = str(uuid.uuid4())
+    period_id = str(uuid.uuid4())
+    reviewer_judgment_id = str(uuid.uuid4())
+    with connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Manager migration', ?)",
+            (organisation_id, f"manager-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Manager')",
+            (user_id, f"user-{user_id}", f"{user_id}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO sales_pipelines (id, organisation_id, name) VALUES (?, ?, 'New Business')",
+            (pipeline_id, organisation_id),
+        )
+        connection.execute(
+            """INSERT INTO sales_pipeline_stages
+               (id, organisation_id, pipeline_id, stage_key, name, position, stage_type)
+               VALUES (?, ?, ?, 'commercial', 'Commercial', 0, 'open')""",
+            (stage_id, organisation_id, pipeline_id),
+        )
+        connection.execute(
+            """INSERT INTO opportunities
+               (id, organisation_id, name, stage, status, estimated_value, currency,
+                expected_close_date, owner_user_id, pipeline_id, pipeline_stage_id)
+               VALUES (?, ?, 'Northstar', 'negotiation', 'open', 180000, 'AUD',
+                       '2026-09-18', ?, ?, ?)""",
+            (opportunity_id, organisation_id, user_id, pipeline_id, stage_id),
+        )
+        connection.execute(
+            """INSERT INTO sales_forecast_periods
+               (id, organisation_id, period_type, period_start, period_end, timezone, created_by_user_id)
+               VALUES (?, ?, 'quarter', '2026-07-01', '2026-09-30', 'Australia/Sydney', ?)""",
+            (period_id, organisation_id, user_id),
+        )
+        connection.execute(
+            """INSERT INTO sales_forecast_reviewer_judgments
+               (id, organisation_id, period_id, opportunity_id)
+               VALUES (?, ?, ?, ?)""",
+            (reviewer_judgment_id, organisation_id, period_id, opportunity_id),
+        )
+        revision_values = (
+            str(uuid.uuid4()),
+            organisation_id,
+            reviewer_judgment_id,
+            user_id,
+            user_id,
+            pipeline_id,
+            stage_id,
+        )
+        connection.execute(
+            """INSERT INTO sales_forecast_reviewer_revisions
+               (id, organisation_id, reviewer_judgment_id, revision_number, category,
+                created_by_user_id, owner_user_id_snapshot, amount_snapshot,
+                currency_snapshot, expected_close_date_snapshot, pipeline_id_snapshot,
+                pipeline_name_snapshot, stage_id_snapshot, stage_name_snapshot,
+                opportunity_status_snapshot, model_version, model_status,
+                model_won_count, model_lost_count, model_minimum_sample,
+                model_lookback_start, model_lookback_end)
+               VALUES (?, ?, ?, 1, 'possible', ?, ?, 180000, 'AUD', '2026-09-18', ?,
+                       'New Business', ?, 'Commercial', 'open',
+                       'forecast_historical_stage_outcome_v1', 'available',
+                       8, 4, 10, '2024-08-30', '2026-08-30')""",
+            revision_values,
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                """INSERT INTO sales_forecast_reviewer_revisions
+                   (id, organisation_id, reviewer_judgment_id, revision_number, category,
+                    created_by_user_id, owner_user_id_snapshot, amount_snapshot,
+                    currency_snapshot, expected_close_date_snapshot, pipeline_id_snapshot,
+                    pipeline_name_snapshot, stage_id_snapshot, stage_name_snapshot,
+                    opportunity_status_snapshot, model_version, model_status,
+                    model_won_count, model_lost_count, model_minimum_sample,
+                    model_lookback_start, model_lookback_end)
+                   VALUES (?, ?, ?, 1, 'likely', ?, ?, 180000, 'AUD', '2026-09-18', ?,
+                           'New Business', ?, 'Commercial', 'open',
+                           'forecast_historical_stage_outcome_v1', 'available',
+                           8, 4, 10, '2024-08-30', '2026-08-30')""",
+                (
+                    str(uuid.uuid4()),
+                    organisation_id,
+                    reviewer_judgment_id,
+                    user_id,
+                    user_id,
+                    pipeline_id,
+                    stage_id,
+                ),
+            )
+
+    command.downgrade(configuration, "0047_transparent_forecast")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "sales_forecast_periods" in tables
+        assert "sales_forecast_judgments" in tables
+        assert "sales_forecast_reviewer_judgments" not in tables
+        assert "sales_forecast_reviewer_revisions" not in tables
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0048_manager_intelligence",
         )
 
 
@@ -2053,7 +2184,8 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
-    assert [revision.revision for revision in script.walk_revisions()][:18] == [
+    assert [revision.revision for revision in script.walk_revisions()][:19] == [
+        "0048_manager_intelligence",
         "0047_transparent_forecast",
         "0046_sales_targets",
         "0045_sales_analytics",
@@ -2073,7 +2205,7 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
         "0031_action_layer",
         "0030_live_interaction_intel",
     ]
-    assert script.get_heads() == ["0047_transparent_forecast"]
+    assert script.get_heads() == ["0048_manager_intelligence"]
     command.upgrade(configuration, "0020_private_beta_readiness")
 
     organisation_a = uuid.uuid4()
@@ -2183,7 +2315,7 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
         assert {row[0]: row[1] for row in connection.execute("SELECT id, interaction_id FROM meetings")} == expected
         assert connection.execute("SELECT count(*) FROM interactions").fetchone() == (3,)
@@ -2299,7 +2431,7 @@ def test_pre_interaction_brief_migration_is_immutable_and_reupgrades_cleanly(
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM pre_interaction_briefs").fetchone() == (0,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -2429,7 +2561,7 @@ def test_visual_evidence_migration_review_guard_and_downgrade_reupgrade(
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM visual_assets").fetchone() == (0,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -2497,7 +2629,7 @@ def test_recording_transcription_migration_backfills_history_and_reupgrades_clea
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
         assert connection.execute("SELECT transcript_id, version, raw_text FROM transcript_versions").fetchone() == (
             transcript_id,
@@ -2527,7 +2659,7 @@ def test_recording_transcription_migration_backfills_history_and_reupgrades_clea
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM transcript_versions").fetchone() == (1,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -2608,7 +2740,7 @@ def test_face_to_face_companion_marker_migration_is_immutable_and_reupgrades_cle
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM interaction_markers").fetchone() == (0,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -2762,7 +2894,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0047_transparent_forecast"
+                    assert version == "0048_manager_intelligence"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False
@@ -2805,7 +2937,7 @@ def test_create_studio_migration_downgrades_and_reupgrades(tmp_path: Path, monke
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert create_tables.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
         entitlement_sql = connection.execute(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'organisation_module_entitlements'"
@@ -2820,7 +2952,7 @@ def test_create_studio_migration_downgrades_and_reupgrades(tmp_path: Path, monke
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 
@@ -2846,7 +2978,7 @@ def test_roi_business_case_migration_downgrades_and_reupgrades(tmp_path: Path, m
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert roi_tables.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
         model_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(create_value_model_versions)").fetchall()
@@ -2867,7 +2999,7 @@ def test_roi_business_case_migration_downgrades_and_reupgrades(tmp_path: Path, m
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0047_transparent_forecast",
+            "0048_manager_intelligence",
         )
 
 

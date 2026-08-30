@@ -141,6 +141,7 @@ function board(overrides: Record<string, unknown> = {}) {
     stageChangesAllowed: true,
     managedExternally: false,
     authorityMessage: null,
+    managerIntelligenceAvailable: false,
     generatedAt: "2026-08-30T01:00:00Z",
     ...overrides,
   };
@@ -273,5 +274,90 @@ describe("OpportunityList", () => {
     expect(
       await screen.findByRole("heading", { name: "No open opportunities" }),
     ).toBeVisible();
+  });
+
+  it("offers an explainable deal-centric manager view only when authorised", async () => {
+    const attention = {
+      total: 1,
+      summaries: [
+        { code: "close_date_passed", label: "Close date passed", dealCount: 1 },
+      ],
+      items: [
+        {
+          opportunityId: "opportunity-1",
+          opportunityName: "Platform expansion",
+          companyName: "Acme Australia",
+          ownerUserId: "user-1",
+          ownerDisplayName: "Alex Morgan",
+          pipelineId: "pipeline-1",
+          pipelineName: "RevenueOS Sales Pipeline",
+          stageId: "stage-discovery",
+          stageName: "Discovery",
+          amount: "125000.50",
+          currency: "AUD",
+          expectedCloseDate: "2026-08-29",
+          sellerForecast: {
+            category: "commit",
+            revisionNumber: 1,
+            reviewedAt: "2026-08-20T00:00:00Z",
+            staleReasons: [],
+          },
+          managerForecast: {
+            category: "likely",
+            revisionNumber: 1,
+            reviewedAt: "2026-08-21T00:00:00Z",
+            staleReasons: [],
+          },
+          reasons: [
+            {
+              id: "close_date_passed:opportunity-1",
+              code: "close_date_passed",
+              label: "Close date passed",
+              explanation:
+                "The canonical expected close date is in the past while the Opportunity remains open.",
+              detectedAt: "2026-08-30T00:00:00Z",
+              sources: [
+                {
+                  sourceType: "opportunity",
+                  sourceId: "opportunity-1",
+                  label: "Current Opportunity state",
+                  href: "/opportunities/opportunity-1",
+                },
+              ],
+            },
+          ],
+          href: "/opportunities/opportunity-1",
+        },
+      ],
+      page: 1,
+      pageSize: 50,
+      generatedAt: "2026-08-30T01:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        Promise.resolve(
+          response(
+            String(input).includes("/api/v1/manager/deal-attention")
+              ? attention
+              : board({ managerIntelligenceAvailable: true }),
+          ),
+        ),
+      ),
+    );
+    render(<OpportunityList />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Manager view" }),
+    );
+    expect(
+      await screen.findByText("Manager view · deals needing attention"),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/there is no health score or people ranking/i),
+    ).toBeVisible();
+    expect(screen.getByText("Seller view")).toBeVisible();
+    expect(screen.getByText("Manager view", { selector: "dt" })).toBeVisible();
+    expect(screen.queryByText(/leaderboard/i)).not.toBeInTheDocument();
   });
 });

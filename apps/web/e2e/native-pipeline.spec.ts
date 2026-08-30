@@ -99,7 +99,11 @@ async function routeShell(page: Page) {
   );
 }
 
-async function routePipeline(page: Page, externallyManaged = false) {
+async function routePipeline(
+  page: Page,
+  externallyManaged = false,
+  managerAvailable = false,
+) {
   let currentStage = stages[0];
   let status: "open" | "lost" = "open";
   let actualCloseDate: string | null = null;
@@ -226,6 +230,7 @@ async function routePipeline(page: Page, externallyManaged = false) {
               : [{ currency: "AUD", amount: "125000.50", opportunityCount: 1 }],
         },
         cards,
+        managerIntelligenceAvailable: managerAvailable,
         ...authority,
         generatedAt: "2026-08-30T01:00:00Z",
       },
@@ -257,6 +262,76 @@ async function routePipeline(page: Page, externallyManaged = false) {
       });
     },
   );
+
+  if (managerAvailable) {
+    await page.route(
+      "http://localhost:8000/api/v1/manager/deal-attention**",
+      async (route) => {
+        await route.fulfill({
+          json: {
+            total: 1,
+            summaries: [
+              {
+                code: "close_date_passed",
+                label: "Close date passed",
+                dealCount: 1,
+              },
+            ],
+            items: [
+              {
+                opportunityId,
+                opportunityName: "Platform expansion",
+                companyName: "Acme Australia",
+                ownerUserId: "user-1",
+                ownerDisplayName: "Alex Morgan",
+                pipelineId: pipeline.id,
+                pipelineName: pipeline.name,
+                stageId: stages[0].id,
+                stageName: stages[0].name,
+                amount: "125000.50",
+                currency: "AUD",
+                expectedCloseDate: "2026-08-29",
+                sellerForecast: {
+                  category: "commit",
+                  revisionNumber: 2,
+                  reviewedAt: "2026-08-29T01:00:00Z",
+                  staleReasons: [],
+                },
+                managerForecast: {
+                  category: "likely",
+                  revisionNumber: 1,
+                  reviewedAt: "2026-08-29T02:00:00Z",
+                  staleReasons: [],
+                },
+                reasons: [
+                  {
+                    id: `close_date_passed:${opportunityId}`,
+                    code: "close_date_passed",
+                    label: "Close date passed",
+                    explanation:
+                      "The canonical expected close date is in the past while the Opportunity remains open.",
+                    detectedAt: "2026-08-30T01:00:00Z",
+                    sources: [
+                      {
+                        sourceType: "opportunity",
+                        sourceId: opportunityId,
+                        label: "Current Opportunity state",
+                        href: `/opportunities/${opportunityId}`,
+                      },
+                    ],
+                  },
+                ],
+                href: `/opportunities/${opportunityId}`,
+              },
+            ],
+            page: 1,
+            pageSize: 50,
+            generatedAt: "2026-08-30T01:00:00Z",
+          },
+        });
+      },
+    );
+  }
 
   const state = () => ({
     opportunityId,
@@ -434,4 +509,40 @@ test("external CRM mode is explicitly read-only for stage authority", async ({
 
   await expect(page.getByText("Managed in HubSpot.")).toBeVisible();
   await expect(page.getByLabel("Move stage")).toHaveCount(0);
+});
+
+test("admin Manager view keeps attention deal-centric and forecast perspectives separate", async ({
+  page,
+}) => {
+  await routeShell(page);
+  await routePipeline(page, false, true);
+  await page.goto("/opportunities?view=attention");
+
+  await expect(
+    page.getByRole("heading", {
+      name: "Manager view · deals needing attention",
+    }),
+  ).toBeVisible();
+  const deal = page
+    .getByRole("article")
+    .filter({ hasText: "Platform expansion" });
+  await expect(deal.getByText("Alex Morgan")).toBeVisible();
+  await expect(deal.getByText("Commit")).toBeVisible();
+  await expect(deal.getByText("Likely")).toBeVisible();
+  await expect(deal.getByText("Close date passed.")).toBeVisible();
+  await expect(
+    page.getByText(/leaderboard|rep score|health score/i),
+  ).toHaveCount(1);
+  await expect(
+    page.getByText(/productivity|talk ratio|sentiment/i),
+  ).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
+    ),
+  ).toBe(false);
 });

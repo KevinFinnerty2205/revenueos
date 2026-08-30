@@ -1,80 +1,91 @@
-# Manager Intelligence experience
+# Manager Intelligence experience and simplicity review
 
-- **Status:** Future Core experience; not implemented
-- **Question:** Where does my team need help?
+- **Status:** Current through WO-039
+- **Question:** Which deals need attention, why, and what should we discuss?
 
-## Experience model
+## Information architecture
 
-Managers use the same Home, Pipeline and Insights areas with authorised team scope.
-There is no separate manager product. The default is exception-led and evidence-
-backed, not a wall of charts or a rep leaderboard.
-
-## Manager Home
+There is no standalone Manager application or top-level navigation item. The existing
+workflow remains the map:
 
 ```text
-TEAM FOCUS
-2 high-value opportunities need help                         Review →
-
-TARGET          FORECAST RANGE      PIPELINE COVERAGE
-$1.2M / $1.5M   $1.28M–$1.46M       3.1×
-
-DEAL ATTENTION
-Qantas     Economic buyer unknown · security timing conflict
-Acme       No customer interaction in 31 days · next step overdue
-
-COACHING
-3 evidence-backed coaching opportunities                    View →
-
-UPCOMING
-Two high-value interactions this week                       Prepare with rep →
+Home / RevenueOS Daily
+  → compact Deals needing attention (maximum five)
+  → Pipeline?view=attention
+  → existing Opportunity
+  → Manager review + existing Sales Brain
+  → source / Action / Forecast as needed
 ```
 
-Each exception identifies the owner and why it is surfaced. Opening it goes to the
-same Opportunity evidence and controls the seller uses, subject to access policy.
+Insights Overview includes the organisation reference summary without adding a
+seventh tab. Forecast owns seller/manager review and factual differing-view filtering.
+Members keep the seller experience; manager-only organisation surfaces hide safely.
 
-## Insights drill-down
+## Home and Pipeline
 
-- target and forecast range with assumptions/overrides;
-- pipeline coverage and concentration;
-- stage movement and velocity;
-- methodology gaps by opportunity, not a rep completion score;
-- unresolved blockers, commitments and stakeholder gaps;
-- win/loss and conversion patterns with attribution caveats; and
-- coaching observations grounded in enough historical evidence.
+Admin Home adds one compact section after Daily. It lists deal, owner, up to two
+plain-language reasons and **Review deals**. Empty copy is “Nothing currently matches
+the selected deal-attention conditions,” never an unsupported claim that the team is
+healthy.
 
-Statements such as “Your opportunities where an economic buyer is identified early
-have historically converted more often” require a defined cohort, sample size,
-timeframe and non-causal wording. Unsupported causal claims are prohibited.
+Pipeline's Manager view reuses the existing filters and cards. Each card shows owner
+as deal responsibility, current stage/close/amount, seller and manager forecast views,
+and a bounded reason list. It does not sort or colour by person, amount, health,
+probability or score. The default deterministic order is reason priority, close date
+and deal name.
 
-## Coaching workflow
+## Opportunity Manager review
 
-1. RevenueOS surfaces a deal or pattern with evidence and uncertainty.
-2. Manager reviews the source boundary and optionally discusses it with the seller.
-3. Manager records a coaching note or proposes an Action.
-4. The accountable seller accepts the Action where policy requires.
-5. Outcome informs aggregate evaluation without turning the seller into a score.
+The existing Opportunity remains Sales Brain-centred. An admin-only Manager review
+section provides:
 
-## Privacy and access
+1. **What matters** — deal facts, seller view, manager view and reason labels;
+2. **Why this appears** — explanation and click-through source;
+3. **Questions to discuss** — at most five questions, each with why/source;
+4. **Actions and latest interaction** — safe metadata, not content surveillance;
+5. **What changed** — at most twenty safe changes from the last 90 days; and
+6. **Historical baseline** — the same exact-stage sample used by Forecast.
 
-Team scope is server-derived. A manager's summary access does not automatically grant
-raw transcript, private debrief or restricted file access. Counts, search snippets
-and alerts cannot leak restricted content.
+Manager forecast is an explicit control with the same four non-probabilistic
+categories. Seller judgment is visible beside it and cannot be edited through this
+control. If no manager review exists, it says so; it never copies the seller view.
 
-Never provide keystroke/click/mouse tracking, covert call monitoring, emotion or
-personality inference, simplistic rep scores, private-message surveillance or
-activity volume as the primary performance truth.
+No raw transcript, Evidence dump, hidden reasoning, manager comment thread, coaching
+checkbox or employee record appears. Derived questions are practical deal questions,
+not seller competency questions.
 
-## First-time, power-user and mobile
+## Insights and Forecast
 
-- First-time: three team exceptions and one forecast explanation.
-- Power user: filters by team, period, segment, stage and forecast category; saved
-  views remain bounded and permission-scoped.
-- Mobile: team focus, deal attention, upcoming interactions and approve/snooze.
-  Cohort analysis and wide pipeline tables are desktop-first.
+Insights Overview stacks five independently labelled references for the current
+quarter/currency: Actual, organisation Target, Seller Likely, Manager Likely and
+RevenueOS baseline. Missing Target/review/sample stays missing. Personal Targets are
+not included and no gap creates pressure on a customer or Action.
 
-## Empty and failure states
+Forecast continues to own the detailed range. Admins see separate seller and manager
+aggregate cards plus the system baseline. Per-deal review shows all perspectives and
+supports **Different seller and manager views**, which is a factual filter—not a
+judgment that either person is wrong. Members see a manager judgment on an
+Opportunity they own read-only, with no organisation manager aggregate.
 
-Insufficient history says so and offers record-quality or association steps. Stale
-CRM data is timestamped. A forecast is unavailable rather than guessed. No team
-exceptions means **No evidence-backed deals need attention right now**, not a fake
-success score.
+## Mobile and accessibility
+
+At 390 px, summary references and deal cards stack; reason/source buttons and forecast
+controls remain keyboard reachable; questions wrap without horizontal overflow. The
+existing mobile navigation is unchanged. Semantic headings/links/buttons, visible
+focus and existing reduced-motion behaviour are preserved. Dense cohort analysis
+stays in existing desktop-first Insights views.
+
+## Simplicity gate
+
+- Deals—not people—are the primary objects.
+- Every reason and question explains why and exposes its source.
+- Seller, manager and RevenueOS views are distinct; there is no final blend.
+- Home is a compact extension, Pipeline remains familiar and Opportunity remains the
+  source workspace.
+- There is no rep/deal score, grade, rank, leaderboard, activity-performance table,
+  personal-Target comparison, behavioural surveillance or coaching dossier.
+- Empty/sparse states are honest and tell the user what is unavailable.
+- The next click is always review deals, open Opportunity or inspect a source.
+
+Known access and product limits are in the
+[implementation guide](../01-product/manager-intelligence.md).

@@ -9026,6 +9026,174 @@ class SalesForecastJudgmentRevision(Base):
     )
 
 
+class SalesForecastReviewerJudgment(Base):
+    __tablename__ = "sales_forecast_reviewer_judgments"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organisation_id", "period_id"],
+            ["sales_forecast_periods.organisation_id", "sales_forecast_periods.id"],
+            name="fk_forecast_reviewer_judgments_period",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_forecast_reviewer_judgments_opportunity",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_forecast_reviewer_judgments_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "period_id",
+            "opportunity_id",
+            name="uq_forecast_reviewer_judgments_identity",
+        ),
+        Index(
+            "ix_forecast_reviewer_judgments_org_period",
+            "organisation_id",
+            "period_id",
+            "opportunity_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    period_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class SalesForecastReviewerRevision(Base):
+    __tablename__ = "sales_forecast_reviewer_revisions"
+    __table_args__ = (
+        CheckConstraint("revision_number >= 1", name="ck_forecast_reviewer_revisions_number"),
+        CheckConstraint(
+            "category IN ('commit', 'likely', 'possible', 'not_this_period')",
+            name="ck_forecast_reviewer_revisions_category",
+        ),
+        CheckConstraint(
+            "(amount_snapshot IS NULL AND currency_snapshot IS NULL) OR "
+            "(amount_snapshot IS NOT NULL AND amount_snapshot >= 0 AND currency_snapshot IS NOT NULL)",
+            name="ck_forecast_reviewer_revisions_value_currency",
+        ),
+        CheckConstraint(
+            "currency_snapshot IS NULL OR "
+            "(length(currency_snapshot) = 3 AND currency_snapshot = upper(currency_snapshot))",
+            name="ck_forecast_reviewer_revisions_currency",
+        ),
+        CheckConstraint(
+            "opportunity_status_snapshot IN ('open', 'on_hold')",
+            name="ck_forecast_reviewer_revisions_status",
+        ),
+        CheckConstraint(
+            "model_status IN ('available', 'insufficient_sample', 'unavailable_stage')",
+            name="ck_forecast_reviewer_revisions_model_status",
+        ),
+        CheckConstraint("model_won_count >= 0", name="ck_forecast_reviewer_revisions_won"),
+        CheckConstraint("model_lost_count >= 0", name="ck_forecast_reviewer_revisions_lost"),
+        CheckConstraint("model_minimum_sample >= 1", name="ck_forecast_reviewer_revisions_sample"),
+        CheckConstraint(
+            "model_lookback_end >= model_lookback_start",
+            name="ck_forecast_reviewer_revisions_lookback",
+        ),
+        CheckConstraint(
+            "length(trim(model_version)) BETWEEN 1 AND 80",
+            name="ck_forecast_reviewer_revisions_model_version",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "reviewer_judgment_id"],
+            ["sales_forecast_reviewer_judgments.organisation_id", "sales_forecast_reviewer_judgments.id"],
+            name="fk_forecast_reviewer_revisions_judgment",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_forecast_reviewer_revisions_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "owner_user_id_snapshot"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_forecast_reviewer_revisions_owner",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "pipeline_id_snapshot"],
+            ["sales_pipelines.organisation_id", "sales_pipelines.id"],
+            name="fk_forecast_reviewer_revisions_pipeline",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "pipeline_id_snapshot", "stage_id_snapshot"],
+            [
+                "sales_pipeline_stages.organisation_id",
+                "sales_pipeline_stages.pipeline_id",
+                "sales_pipeline_stages.id",
+            ],
+            name="fk_forecast_reviewer_revisions_stage",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_forecast_reviewer_revisions_org_id"),
+        UniqueConstraint(
+            "reviewer_judgment_id",
+            "revision_number",
+            name="uq_forecast_reviewer_revisions_number",
+        ),
+        Index(
+            "ix_forecast_reviewer_revisions_org_judgment",
+            "organisation_id",
+            "reviewer_judgment_id",
+            "revision_number",
+        ),
+        Index(
+            "ix_forecast_reviewer_revisions_org_created",
+            "organisation_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    reviewer_judgment_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    category: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    owner_user_id_snapshot: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    amount_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    currency_snapshot: Mapped[str | None] = mapped_column(String(3))
+    expected_close_date_snapshot: Mapped[date] = mapped_column(Date, nullable=False)
+    pipeline_id_snapshot: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    pipeline_name_snapshot: Mapped[str] = mapped_column(String(100), nullable=False)
+    stage_id_snapshot: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    stage_name_snapshot: Mapped[str] = mapped_column(String(100), nullable=False)
+    opportunity_status_snapshot: Mapped[str] = mapped_column(String(20), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    model_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    model_won_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_lost_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_minimum_sample: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_lookback_start: Mapped[date] = mapped_column(Date, nullable=False)
+    model_lookback_end: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
 class BetaFeedback(Base):
     __tablename__ = "beta_feedback"
     __table_args__ = (

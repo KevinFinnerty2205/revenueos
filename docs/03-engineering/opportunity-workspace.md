@@ -397,3 +397,8 @@ reliable timing, explicit open-stage movement, Won/Lost/reopen flows and a reada
 history disclosure. The panel does not create a second tab or duplicate Revenue Brain,
 Methodology, Evidence or Actions. Migration baselines explicitly say earlier history
 is unavailable.
+
+WO-039 adds a contextual admin-only Manager review beneath the canonical Pipeline
+panel. It composes current conditions, safe changes, source-backed questions and a
+separate manager Forecast control while leaving the Sales Brain workspace central.
+It contains no raw transcript, Evidence dump, employee profile or manager note.

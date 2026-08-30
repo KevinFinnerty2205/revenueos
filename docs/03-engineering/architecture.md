@@ -633,3 +633,21 @@ worker, probability field, fixed stage table, AI/ML, FX, manager override or mut
 of Opportunity/Evidence/Methodology/Revenue Brain. See the
 [domain architecture](sales-forecast-architecture.md) and
 [ADR 0058](../08-decisions/0058-separate-seller-forecast-and-system-baseline.md).
+
+## WO-039 Manager Intelligence & Coaching
+
+Migration `0048_manager_intelligence` adds a separate manager/reviewer Forecast
+identity and append-only revision stream without altering seller rows. Forced RLS,
+composite tenant relationships and immutable triggers match WO-038. The derived
+`ManagerIntelligenceService` composes open-deal conditions, source references, safe
+recent changes and discussion questions from canonical Pipeline, Action, Methodology,
+Revenue Brain and Forecast reads. Organisation summary delegates to the existing
+Forecast service and therefore reuses Sales Analytics Actual and Target services.
+
+Home, Pipeline, Opportunity, Forecast and Insights consume the same bounded manager
+contracts. V1 uses the existing admin capability; there is no hierarchy, people/deal
+score, ranking, surveillance telemetry, coaching dossier, AI/provider, blended final
+forecast, background worker or source-domain mutation. See the
+[architecture](manager-intelligence-architecture.md),
+[security review](manager-intelligence-security-privacy-review.md) and
+[ADR 0062](../08-decisions/0062-deal-centric-manager-intelligence.md).

@@ -78,6 +78,8 @@ from revenueos.models import (
     SalesForecastJudgment,
     SalesForecastJudgmentRevision,
     SalesForecastPeriod,
+    SalesForecastReviewerJudgment,
+    SalesForecastReviewerRevision,
     SalesPipeline,
     SalesPipelineStage,
     SalesTarget,
@@ -681,6 +683,12 @@ def demo_sales_forecast_ids(organisation_id: UUID) -> dict[str, UUID]:
             "possible-revision",
             "excluded-judgment",
             "excluded-revision",
+            "main-reviewer-judgment",
+            "main-reviewer-revision",
+            "likely-reviewer-judgment",
+            "likely-reviewer-revision",
+            "possible-reviewer-judgment",
+            "possible-reviewer-revision",
         )
     }
 
@@ -804,13 +812,13 @@ async def _seed_sales_forecast_demo(
     session.add(period)
     await session.flush()
     specifications = (
-        ("main", opportunity_id, "commit", 7, 5),
-        ("likely", analytics_opportunity_ids[14], "likely", 7, 5),
-        ("possible", analytics_opportunity_ids[16], "possible", 7, 0),
-        ("excluded", analytics_opportunity_ids[19], "not_this_period", 7, 5),
+        ("main", opportunity_id, "commit", "likely", 7, 5),
+        ("likely", analytics_opportunity_ids[14], "likely", "possible", 7, 5),
+        ("possible", analytics_opportunity_ids[16], "possible", "not_this_period", 7, 0),
+        ("excluded", analytics_opportunity_ids[19], "not_this_period", None, 7, 5),
     )
     judgment_ids: list[UUID] = []
-    for label, selected_opportunity_id, category, won_count, lost_count in specifications:
+    for label, selected_opportunity_id, category, reviewer_category, won_count, lost_count in specifications:
         opportunity = await session.get(Opportunity, selected_opportunity_id)
         if opportunity is None or opportunity.pipeline_stage_id is None or opportunity.expected_close_date is None:
             raise ValueError("The deterministic forecast demo requires canonical staged Opportunities.")
@@ -819,42 +827,86 @@ async def _seed_sales_forecast_demo(
             raise ValueError("The deterministic forecast demo requires a stable Pipeline stage.")
         judgment_id = ids[f"{label}-judgment"]
         judgment_ids.append(judgment_id)
-        session.add(
-            SalesForecastJudgment(
-                id=judgment_id,
-                organisation_id=organisation_id,
-                period_id=period.id,
-                opportunity_id=opportunity.id,
-                created_at=reviewed_at,
+        if await session.get(SalesForecastJudgment, judgment_id) is None:
+            session.add(
+                SalesForecastJudgment(
+                    id=judgment_id,
+                    organisation_id=organisation_id,
+                    period_id=period.id,
+                    opportunity_id=opportunity.id,
+                    created_at=reviewed_at,
+                )
             )
-        )
-        session.add(
-            SalesForecastJudgmentRevision(
-                id=ids[f"{label}-revision"],
-                organisation_id=organisation_id,
-                judgment_id=judgment_id,
-                revision_number=1,
-                category=category,
-                created_by_user_id=user_id,
-                owner_user_id_snapshot=opportunity.owner_user_id,
-                amount_snapshot=opportunity.estimated_value,
-                currency_snapshot=opportunity.currency,
-                expected_close_date_snapshot=opportunity.expected_close_date,
-                pipeline_id_snapshot=pipeline.id,
-                pipeline_name_snapshot=pipeline.name,
-                stage_id_snapshot=stage.id,
-                stage_name_snapshot=stage.name,
-                opportunity_status_snapshot=opportunity.status,
-                model_version="forecast_historical_stage_outcome_v1",
-                model_status="available" if won_count + lost_count >= 10 else "insufficient_sample",
-                model_won_count=won_count,
-                model_lost_count=lost_count,
-                model_minimum_sample=10,
-                model_lookback_start=date(2024, 8, 25),
-                model_lookback_end=reviewed_at.date(),
-                created_at=reviewed_at,
+        revision_id = ids[f"{label}-revision"]
+        if await session.get(SalesForecastJudgmentRevision, revision_id) is None:
+            session.add(
+                SalesForecastJudgmentRevision(
+                    id=revision_id,
+                    organisation_id=organisation_id,
+                    judgment_id=judgment_id,
+                    revision_number=1,
+                    category=category,
+                    created_by_user_id=user_id,
+                    owner_user_id_snapshot=opportunity.owner_user_id,
+                    amount_snapshot=opportunity.estimated_value,
+                    currency_snapshot=opportunity.currency,
+                    expected_close_date_snapshot=opportunity.expected_close_date,
+                    pipeline_id_snapshot=pipeline.id,
+                    pipeline_name_snapshot=pipeline.name,
+                    stage_id_snapshot=stage.id,
+                    stage_name_snapshot=stage.name,
+                    opportunity_status_snapshot=opportunity.status,
+                    model_version="forecast_historical_stage_outcome_v1",
+                    model_status="available" if won_count + lost_count >= 10 else "insufficient_sample",
+                    model_won_count=won_count,
+                    model_lost_count=lost_count,
+                    model_minimum_sample=10,
+                    model_lookback_start=date(2024, 8, 25),
+                    model_lookback_end=reviewed_at.date(),
+                    created_at=reviewed_at,
+                )
             )
-        )
+        if reviewer_category is not None:
+            reviewer_judgment_id = ids[f"{label}-reviewer-judgment"]
+            if await session.get(SalesForecastReviewerJudgment, reviewer_judgment_id) is None:
+                session.add(
+                    SalesForecastReviewerJudgment(
+                        id=reviewer_judgment_id,
+                        organisation_id=organisation_id,
+                        period_id=period.id,
+                        opportunity_id=opportunity.id,
+                        created_at=reviewed_at,
+                    )
+                )
+            reviewer_revision_id = ids[f"{label}-reviewer-revision"]
+            if await session.get(SalesForecastReviewerRevision, reviewer_revision_id) is None:
+                session.add(
+                    SalesForecastReviewerRevision(
+                        id=reviewer_revision_id,
+                        organisation_id=organisation_id,
+                        reviewer_judgment_id=reviewer_judgment_id,
+                        revision_number=1,
+                        category=reviewer_category,
+                        created_by_user_id=user_id,
+                        owner_user_id_snapshot=opportunity.owner_user_id,
+                        amount_snapshot=opportunity.estimated_value,
+                        currency_snapshot=opportunity.currency,
+                        expected_close_date_snapshot=opportunity.expected_close_date,
+                        pipeline_id_snapshot=pipeline.id,
+                        pipeline_name_snapshot=pipeline.name,
+                        stage_id_snapshot=stage.id,
+                        stage_name_snapshot=stage.name,
+                        opportunity_status_snapshot=opportunity.status,
+                        model_version="forecast_historical_stage_outcome_v1",
+                        model_status="available" if won_count + lost_count >= 10 else "insufficient_sample",
+                        model_won_count=won_count,
+                        model_lost_count=lost_count,
+                        model_minimum_sample=10,
+                        model_lookback_start=date(2024, 8, 25),
+                        model_lookback_end=reviewed_at.date(),
+                        created_at=reviewed_at,
+                    )
+                )
     return tuple(judgment_ids)
 
 
@@ -3119,6 +3171,30 @@ async def reset_demo_data(
             delete(ProspectTargetMarket).where(
                 ProspectTargetMarket.organisation_id == organisation_id,
                 ProspectTargetMarket.id.in_(demo_market_ids),
+            )
+        )
+        await session.execute(
+            delete(SalesForecastReviewerRevision).where(
+                SalesForecastReviewerRevision.organisation_id == organisation_id,
+                SalesForecastReviewerRevision.reviewer_judgment_id.in_(
+                    (
+                        sales_forecast_ids["main-reviewer-judgment"],
+                        sales_forecast_ids["likely-reviewer-judgment"],
+                        sales_forecast_ids["possible-reviewer-judgment"],
+                    )
+                ),
+            )
+        )
+        await session.execute(
+            delete(SalesForecastReviewerJudgment).where(
+                SalesForecastReviewerJudgment.organisation_id == organisation_id,
+                SalesForecastReviewerJudgment.id.in_(
+                    (
+                        sales_forecast_ids["main-reviewer-judgment"],
+                        sales_forecast_ids["likely-reviewer-judgment"],
+                        sales_forecast_ids["possible-reviewer-judgment"],
+                    )
+                ),
             )
         )
         await session.execute(

@@ -204,6 +204,7 @@ class Settings(BaseSettings):
     feature_sales_analytics_enabled: bool = True
     feature_sales_targets_enabled: bool = True
     feature_sales_forecasting_enabled: bool = True
+    feature_manager_intelligence_enabled: bool = True
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     feature_prospect_enabled: bool = True
@@ -537,6 +538,13 @@ class Settings(BaseSettings):
                 self.feature_sales_forecasting_enabled
                 and self.feature_sales_targets_enabled
                 and self.feature_sales_analytics_enabled
+            ),
+            "managerIntelligence": (
+                self.feature_manager_intelligence_enabled
+                and self.feature_sales_forecasting_enabled
+                and self.feature_sales_targets_enabled
+                and self.feature_sales_analytics_enabled
+                and self.feature_sales_methodology_enabled
             ),
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,

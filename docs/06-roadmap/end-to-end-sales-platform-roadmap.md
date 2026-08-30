@@ -595,29 +595,36 @@ WO-038/039 retain their separate forecast and manager authority gates.
 
 ### WO-039 — Manager Intelligence
 
+- **Status:** Implemented 30 August 2026 as the narrower deal-centric Core v1.
 - **Objective/value/package:** Answer “Where does my team need help?” with authorised,
   evidence-backed coaching and deal attention. **Core**.
 - **Dependencies/checkpoint:** WO-024, WO-035–038 and manager/team access policy;
   concludes at Checkpoint 3.
 - **Experience:** Role-aware Home/Pipeline/Insights, team target/forecast/coverage,
   critical deal gaps, upcoming interactions and coaching; no separate manager product.
-- **Domain/data:** Prefer projections over employee-profile entities; store recommendation
-  version, cited factors, review/dismissal and safe outcome association.
-- **Backend/frontend/AI:** Team-scoped aggregation/recommendation service; progressive
-  list-to-evidence UX; AI language constrained to observed association, not causation.
+- **Delivered boundary:** Derived categorical deal attention and source-backed
+  questions across Home, Pipeline and Opportunity; organisation summary in Insights;
+  and a separate immutable manager Forecast perspective. Only explicit reviewer
+  judgments persist. There is no recommendation record, employee profile, AI/LLM,
+  blended forecast or source mutation.
 - **Integrations:** No new integration; external sources must already be authorised and
   mapped into canonical state.
 - **Security/privacy/operations:** Least-privilege team visibility, no private-source or
   presence telemetry, safe audit, recommendation quality/correction monitoring.
-- **Acceptance:** Managers identify a high-value coaching action and explain its basis;
-  users never receive a rep score; permission boundaries and sparse-data states pass;
-  every suggestion is correctable/dismissible.
+- **Acceptance:** Managers can identify a useful deal conversation and explain its
+  basis; users never receive a rep/deal score; permission boundaries and sparse-data
+  states pass; source conditions resolve through their canonical workflows.
 - **Out of scope:** Workforce surveillance, HR performance management, compensation,
   causal claims and autonomous manager messaging.
 - **Validate:** Manager and seller trust study at Checkpoint 3; remove signals that do
   not create fair, useful coaching.
 
 ## Checkpoint 3 — Product/platform validation
+
+WO-039 implementation is complete; the checkpoint decision remains open. Use the
+[Checkpoint 3 handoff](checkpoint-3-handoff.md) to collect manager/seller trust,
+proposition, operational and willingness-to-pay evidence. Do not begin WO-040+ or
+claim broader beta readiness from implementation completion alone.
 
 Assess Core, Create and CRM as separate commercial propositions and as a connected
 system. Decide **keep, modify, defer or remove** using activation, Core retention,

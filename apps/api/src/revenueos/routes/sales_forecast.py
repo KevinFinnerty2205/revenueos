@@ -77,6 +77,35 @@ async def sales_forecast_history(
     )
 
 
+@router.post(
+    "/opportunities/{opportunity_id}/manager-judgments",
+    response_model=SalesForecastHistoryResponse,
+)
+async def review_manager_forecast_judgment(
+    opportunity_id: UUID,
+    request: SalesForecastJudgmentCreateRequest,
+    service: Service,
+) -> SalesForecastHistoryResponse:
+    return await service.review_manager_judgment(opportunity_id, request)
+
+
+@router.get(
+    "/opportunities/{opportunity_id}/manager-history",
+    response_model=SalesForecastHistoryResponse,
+)
+async def manager_forecast_history(
+    opportunity_id: UUID,
+    service: Service,
+    period_type: Annotated[ForecastPeriodType, Query(alias="periodType")],
+    period_anchor: Annotated[date, Query(alias="periodAnchor")],
+) -> SalesForecastHistoryResponse:
+    return await service.manager_history(
+        opportunity_id,
+        period_type=period_type,
+        period_anchor=period_anchor,
+    )
+
+
 @router.get("/calibration", response_model=SalesForecastCalibrationResponse)
 async def sales_forecast_calibration(
     service: Service,

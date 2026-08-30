@@ -145,3 +145,8 @@ desktop-first.
 WO-024 does not implement a generic rules platform, an opaque qualification score,
 a guaranteed sales process, stage blocking, employee surveillance, Daily, manager
 analytics or a substitute for human judgement.
+
+WO-039 reads the latest projection's existing state, priority and bounded suggested
+question. It shows at most two Methodology gaps on an attention card and links the
+projection/Evidence source. Manager Intelligence neither invents a second scoring
+model nor mutates Methodology state.

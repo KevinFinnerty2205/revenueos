@@ -9,6 +9,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.auth import AuthenticatedUser, get_current_user
@@ -21,6 +22,8 @@ from revenueos.models import (
     SalesForecastJudgment,
     SalesForecastJudgmentRevision,
     SalesForecastPeriod,
+    SalesForecastReviewerJudgment,
+    SalesForecastReviewerRevision,
     SalesTarget,
     SalesTargetRevision,
     User,
@@ -518,6 +521,16 @@ def test_closed_won_leaves_remaining_forecast_and_actual_reuses_sales_metric(
 ) -> None:
     seed(app)
     review(client, fixture_id("bluepeak"), "commit")
+    manager_review = client.post(
+        f"/api/v1/forecast/opportunities/{fixture_id('bluepeak')}/manager-judgments",
+        json={
+            "periodType": "quarter",
+            "periodAnchor": datetime.now(UTC).date().isoformat(),
+            "category": "commit",
+            "expectedRevisionNumber": 0,
+        },
+    )
+    assert manager_review.status_code == 200, manager_review.text
     before = client.get("/api/v1/forecast", params=current_quarter_params()).json()
     before_actual = Decimal(before["actual"]["amount"])
 
@@ -545,6 +558,9 @@ def test_closed_won_leaves_remaining_forecast_and_actual_reuses_sales_metric(
     asyncio.run(set_state("won"))
     after = client.get("/api/v1/forecast", params=current_quarter_params()).json()
     assert all(item["opportunityName"] != "BluePeak" for item in after["opportunities"])
+    assert Decimal(after["managerForecast"]["commit"]["amount"]) == Decimal(
+        before["managerForecast"]["commit"]["amount"]
+    ) - Decimal("100000.00")
     assert Decimal(after["actual"]["amount"]) == before_actual + Decimal("100000.00")
     metric = client.get(
         "/api/v1/insights/sales/metrics/won_value",
@@ -563,7 +579,11 @@ def test_closed_won_leaves_remaining_forecast_and_actual_reuses_sales_metric(
     )
     assert history.status_code == 200
     assert history.json()["revisions"]
+    closed_attention = client.get("/api/v1/manager/deal-attention", params={"pageSize": 50}).json()
+    assert all(item["opportunityName"] != "BluePeak" for item in closed_attention["items"])
     asyncio.run(set_state("open"))
+    reopened_attention = client.get("/api/v1/manager/deal-attention", params={"pageSize": 50}).json()
+    assert any(item["opportunityName"] == "BluePeak" for item in reopened_attention["items"])
 
 
 def test_past_period_is_locked_and_calibration_is_descriptive(client: TestClient, app: FastAPI) -> None:
@@ -580,6 +600,17 @@ def test_past_period_is_locked_and_calibration_is_descriptive(client: TestClient
     )
     assert blocked.status_code == 409
     assert blocked.json()["code"] == "past_forecast_locked"
+    manager_blocked = client.post(
+        f"/api/v1/forecast/opportunities/{fixture_id('northstar')}/manager-judgments",
+        json={
+            "periodType": "month",
+            "periodAnchor": past_anchor.isoformat(),
+            "category": "likely",
+            "expectedRevisionNumber": 0,
+        },
+    )
+    assert manager_blocked.status_code == 409
+    assert manager_blocked.json()["code"] == "past_forecast_locked"
     calibration = client.get("/api/v1/forecast/calibration", params={"periodType": "month"})
     assert calibration.status_code == 200, calibration.text
     body = calibration.json()
@@ -614,3 +645,201 @@ def test_cross_tenant_forecast_opportunity_is_not_disclosed(client: TestClient, 
     )
     assert response.status_code == 404
     assert response.json()["code"] == "opportunity_not_found"
+
+
+def test_manager_forecast_is_separate_immutable_and_visible_to_the_owner(
+    client: TestClient,
+    app: FastAPI,
+) -> None:
+    seed(app)
+    review(client, fixture_id("atlas"), "commit")
+    response = client.post(
+        f"/api/v1/forecast/opportunities/{fixture_id('atlas')}/manager-judgments",
+        json={
+            "periodType": "quarter",
+            "periodAnchor": datetime.now(UTC).date().isoformat(),
+            "category": "possible",
+            "expectedRevisionNumber": 0,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["revisions"][0]["category"] == "possible"
+    concurrent = client.post(
+        f"/api/v1/forecast/opportunities/{fixture_id('atlas')}/manager-judgments",
+        json={
+            "periodType": "quarter",
+            "periodAnchor": datetime.now(UTC).date().isoformat(),
+            "category": "likely",
+            "expectedRevisionNumber": 0,
+        },
+    )
+    assert concurrent.status_code == 409
+    assert concurrent.json()["code"] == "forecast_revision_conflict"
+    forged = client.post(
+        f"/api/v1/forecast/opportunities/{fixture_id('atlas')}/manager-judgments",
+        json={
+            "periodType": "quarter",
+            "periodAnchor": datetime.now(UTC).date().isoformat(),
+            "category": "likely",
+            "expectedRevisionNumber": 1,
+            "amount": "999999.00",
+            "probability": 80,
+        },
+    )
+    assert forged.status_code == 422
+    history = client.get(
+        f"/api/v1/forecast/opportunities/{fixture_id('atlas')}/manager-history",
+        params={"periodType": "quarter", "periodAnchor": datetime.now(UTC).date().isoformat()},
+    )
+    assert history.status_code == 200
+    assert history.json()["revisions"][0]["category"] == "possible"
+    forecast = client.get("/api/v1/forecast", params=current_quarter_params()).json()
+    atlas = next(item for item in forecast["opportunities"] if item["opportunityName"] == "Atlas")
+    assert atlas["judgment"]["category"] == "commit"
+    assert atlas["managerJudgment"]["category"] == "possible"
+    assert forecast["managerForecast"]["possible"]["amount"] == "80000.00"
+    assert "blend" in forecast["managerForecast"]["disclosure"].lower()
+
+    app.dependency_overrides[get_current_user] = lambda: peer_user()
+    try:
+        peer_history = client.get(
+            f"/api/v1/forecast/opportunities/{fixture_id('atlas')}/manager-history",
+            params={"periodType": "quarter", "periodAnchor": datetime.now(UTC).date().isoformat()},
+        )
+        assert peer_history.status_code == 403
+        assert peer_history.json()["code"] == "forbidden"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    async def assert_rows_and_assign_owner() -> None:
+        session_factory = app.state.session_factory
+        assert isinstance(session_factory, async_sessionmaker)
+        async with session_factory() as session, session.begin():
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            identities = list(
+                (
+                    await session.scalars(
+                        select(SalesForecastReviewerJudgment).where(
+                            SalesForecastReviewerJudgment.organisation_id == PRIMARY_ORGANISATION_ID,
+                            SalesForecastReviewerJudgment.opportunity_id == fixture_id("atlas"),
+                        )
+                    )
+                ).all()
+            )
+            assert len(identities) == 1
+            revisions = list(
+                (
+                    await session.scalars(
+                        select(SalesForecastReviewerRevision).where(
+                            SalesForecastReviewerRevision.organisation_id == PRIMARY_ORGANISATION_ID,
+                            SalesForecastReviewerRevision.reviewer_judgment_id == identities[0].id,
+                        )
+                    )
+                ).all()
+            )
+            assert len(revisions) == 1
+            opportunity = await session.get(Opportunity, fixture_id("atlas"))
+            assert opportunity is not None
+            opportunity.owner_user_id = PEER_USER_ID
+
+    asyncio.run(assert_rows_and_assign_owner())
+    app.dependency_overrides[get_current_user] = lambda: peer_user()
+    try:
+        own = client.get("/api/v1/forecast", params=current_quarter_params()).json()
+        atlas = next(item for item in own["opportunities"] if item["opportunityName"] == "Atlas")
+        assert atlas["managerJudgment"]["category"] == "possible"
+        assert atlas["managerJudgment"]["canReview"] is False
+        assert atlas["managerJudgment"]["staleReasons"] == ["owner_changed"]
+        assert own["managerForecast"] is None
+        own_history = client.get(
+            f"/api/v1/forecast/opportunities/{fixture_id('atlas')}/manager-history",
+            params={"periodType": "quarter", "periodAnchor": datetime.now(UTC).date().isoformat()},
+        )
+        assert own_history.status_code == 200
+        assert own_history.json()["revisions"][0]["category"] == "possible"
+        denied = client.post(
+            f"/api/v1/forecast/opportunities/{fixture_id('atlas')}/manager-judgments",
+            json={
+                "periodType": "quarter",
+                "periodAnchor": datetime.now(UTC).date().isoformat(),
+                "category": "likely",
+                "expectedRevisionNumber": 1,
+            },
+        )
+        assert denied.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    app.state.settings.feature_manager_intelligence_enabled = False
+    try:
+        assert client.get("/api/v1/beta/capabilities").json()["featureFlags"]["managerIntelligence"] is False
+        unavailable = client.get("/api/v1/manager/deal-attention")
+        assert unavailable.status_code == 404
+        assert unavailable.json()["code"] == "feature_unavailable"
+    finally:
+        app.state.settings.feature_manager_intelligence_enabled = True
+
+
+def test_manager_attention_and_review_are_deal_centric_explainable_and_admin_only(
+    client: TestClient,
+    app: FastAPI,
+) -> None:
+    seed(app)
+
+    async def make_close_date_passed() -> None:
+        session_factory = app.state.session_factory
+        assert isinstance(session_factory, async_sessionmaker)
+        async with session_factory() as session, session.begin():
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            opportunity = await session.get(Opportunity, fixture_id("bluepeak"))
+            assert opportunity is not None
+            opportunity.expected_close_date = datetime.now(UTC).date() - timedelta(days=1)
+
+    asyncio.run(make_close_date_passed())
+    attention = client.get("/api/v1/manager/deal-attention", params={"pageSize": 5})
+    assert attention.status_code == 200, attention.text
+    body = attention.json()
+    assert body["total"] >= 1
+    bluepeak = next(item for item in body["items"] if item["opportunityName"] == "BluePeak")
+    reason_codes = [reason["code"] for reason in bluepeak["reasons"]]
+    assert reason_codes[0] == "close_date_passed"
+    assert len(reason_codes) == len(set(reason_codes))
+    assert "forecast_not_reviewed" in reason_codes
+    assert "no_next_action" in reason_codes
+    assert all(reason["sources"] for reason in bluepeak["reasons"])
+    assert all(reason["detectedAt"].endswith("Z") for reason in bluepeak["reasons"])
+    assert all(key not in attention.text.lower() for key in ("leaderboard", "screen_time", "talk_ratio"))
+    assert '"score"' not in attention.text.lower()
+
+    detail = client.get(f"/api/v1/manager/opportunities/{fixture_id('bluepeak')}")
+    assert detail.status_code == 200, detail.text
+    review_body = detail.json()
+    assert 1 <= len(review_body["questions"]) <= 5
+    assert all(question["sourceReasonIds"] and question["sources"] for question in review_body["questions"])
+    assert "transcript" not in detail.text.lower()
+
+    summary = client.get(
+        "/api/v1/manager/summary",
+        params={"periodAnchor": datetime.now(UTC).date().isoformat(), "currency": "AUD"},
+    )
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["actual"]["metricId"] == "won_value"
+    assert all(target["scope"] == "organisation" for target in summary.json()["organisationTargets"])
+    assert summary.json()["sellerForecast"] != summary.json()["managerForecast"]
+
+    app.dependency_overrides[get_current_user] = lambda: peer_user()
+    try:
+        denied = client.get("/api/v1/manager/deal-attention")
+        assert denied.status_code == 403
+        assert (
+            client.get(
+                "/api/v1/manager/summary",
+                params={
+                    "periodAnchor": datetime.now(UTC).date().isoformat(),
+                    "currency": "AUD",
+                },
+            ).status_code
+            == 403
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

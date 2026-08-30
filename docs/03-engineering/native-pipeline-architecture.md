@@ -132,3 +132,10 @@ reopened using organisation/opportunity/stage identifiers only. Amounts, names,
 outcome reasons and notes are excluded. `API_FEATURE_NATIVE_PIPELINE_ENABLED` is
 server-authoritative and is exposed to clients only as the `nativePipeline` capability;
 it does not override CRM mode or entitlement.
+
+## WO-039 read-only Manager view
+
+Pipeline exposes its existing board and owner/Pipeline filters to an admin-only
+Manager view. Deal conditions come from `ManagerIntelligenceService`; Pipeline does
+not calculate, persist or score risk and does not change CRM authority. The board
+capability response declares whether this server-derived view is available.

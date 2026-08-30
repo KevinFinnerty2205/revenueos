@@ -215,7 +215,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0047_transparent_forecast"
+    assert EXPECTED_MIGRATION_HEAD == "0048_manager_intelligence"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -1173,6 +1173,9 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
                 "name": "Export methodology opportunity",
                 "stage": "evaluation",
                 "status": "open",
+                "estimatedValue": "48000.00",
+                "currency": "AUD",
+                "expectedCloseDate": datetime.now(UTC).date().isoformat(),
             },
         )
         assert opportunity.status_code == 201, opportunity.text
@@ -1288,6 +1291,16 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             },
         )
         assert reviewed_email.status_code == 200, reviewed_email.text
+        manager_judgment = client.post(
+            f"/api/v1/forecast/opportunities/{opportunity.json()['id']}/manager-judgments",
+            json={
+                "periodType": "quarter",
+                "periodAnchor": datetime.now(UTC).date().isoformat(),
+                "category": "possible",
+                "expectedRevisionNumber": 0,
+            },
+        )
+        assert manager_judgment.status_code == 200, manager_judgment.text
         request = client.post("/api/v1/beta/admin/exports")
         assert request.status_code == 202
         request_id = UUID(request.json()["id"])
@@ -1365,7 +1378,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 27
+        assert payload["exportVersion"] == 28
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1424,9 +1437,26 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         ]
         assert payload["salesTargetRevisions"][0]["goal_value"] == "20000.00"
         assert payload["salesTargetRevisions"][0]["target_id"] == str(sales_target_id)
-        assert payload["salesForecastPeriods"] == []
         assert payload["salesForecastJudgments"] == []
         assert payload["salesForecastJudgmentRevisions"] == []
+        reviewer_judgment = next(
+            item
+            for item in payload["salesForecastReviewerJudgments"]
+            if item["opportunity_id"] == opportunity.json()["id"]
+        )
+        reviewer_revision = next(
+            item
+            for item in payload["salesForecastReviewerRevisions"]
+            if item["reviewer_judgment_id"] == reviewer_judgment["id"]
+        )
+        forecast_period = next(
+            item for item in payload["salesForecastPeriods"] if item["id"] == reviewer_judgment["period_id"]
+        )
+        assert forecast_period["period_type"] == "quarter"
+        assert reviewer_revision["category"] == "possible"
+        assert reviewer_revision["amount_snapshot"] == "48000.00"
+        assert "organisation_id" not in reviewer_judgment
+        assert "organisation_id" not in reviewer_revision
         assert (
             "actual"
             not in json.dumps(
@@ -1474,7 +1504,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 27
+        assert download.json()["exportVersion"] == 28
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 
