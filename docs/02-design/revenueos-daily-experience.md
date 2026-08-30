@@ -105,3 +105,10 @@ placeholders that look authoritative.
 See [prioritisation](../03-engineering/revenueos-daily-prioritisation.md),
 [simplicity review](revenueos-daily-simplicity-review.md) and
 [security review](../03-engineering/revenueos-daily-security-privacy-review.md).
+
+## WO-039 manager extension
+
+Admin Home now adds one compact, derived **Deals needing attention** section after
+Daily, capped at five and linked to Pipeline Manager view. It reuses the manager
+attention service, does not change Daily ordering, and shows no people comparison,
+Target pressure, activity measure or score. Members retain the existing Daily view.

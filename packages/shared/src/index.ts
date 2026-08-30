@@ -443,6 +443,7 @@ export interface PipelineBoard {
   stageChangesAllowed: boolean;
   managedExternally: boolean;
   authorityMessage: string | null;
+  managerIntelligenceAvailable: boolean;
   generatedAt: string;
 }
 
@@ -4530,6 +4531,7 @@ export interface SalesForecastMetadata {
   owners: Array<{ userId: string; displayName: string; active: boolean }>;
   pipelines: Array<{ id: string; name: string; active: boolean }>;
   canViewOrganisationForecast: boolean;
+  canReviewManagerView: boolean;
   modelVersion: string;
   modelLookbackDays: number;
   modelMinimumSample: number;
@@ -4599,7 +4601,18 @@ export interface SalesForecastOpportunity {
   stageEnteredAt: string | null;
   status: "open" | "on_hold";
   judgment: SalesForecastJudgment | null;
+  managerJudgment: SalesForecastJudgment | null;
   historicalBaseline: SalesForecastBaseline;
+}
+
+export interface SalesForecastRange {
+  commit: SalesForecastCase;
+  likely: SalesForecastCase;
+  possible: SalesForecastCase;
+  unreviewedCount: number;
+  notThisPeriodCount: number;
+  needsReviewCount: number;
+  disclosure: string;
 }
 
 export interface SalesForecastResponse {
@@ -4622,15 +4635,8 @@ export interface SalesForecastResponse {
     origin: "self_set" | "admin_assigned";
     targetValue: string;
   }>;
-  sellerForecast: {
-    commit: SalesForecastCase;
-    likely: SalesForecastCase;
-    possible: SalesForecastCase;
-    unreviewedCount: number;
-    notThisPeriodCount: number;
-    needsReviewCount: number;
-    disclosure: string;
-  };
+  sellerForecast: SalesForecastRange;
+  managerForecast: SalesForecastRange | null;
   revenueosBaseline: {
     expectedContribution: string | null;
     coveredOpportunityCount: number;
@@ -4654,6 +4660,156 @@ export interface SalesForecastResponse {
   totalOpportunities: number;
   page: number;
   pageSize: number;
+  generatedAt: string;
+}
+
+export type ManagerAttentionCode =
+  | "close_date_passed"
+  | "overdue_high_priority_action"
+  | "evidence_conflict"
+  | "forecast_needs_review"
+  | "forecast_not_reviewed"
+  | "methodology_priority_gap"
+  | "no_next_action"
+  | "stale_evidence"
+  | "customer_blocker";
+
+export interface ManagerSource {
+  sourceType:
+    | "opportunity"
+    | "task"
+    | "methodology_projection"
+    | "evidence"
+    | "forecast_revision"
+    | "revenue_brain_insight"
+    | "interaction"
+    | "pipeline_stage_event"
+    | "crm_change";
+  sourceId: string;
+  label: string;
+  href: string | null;
+}
+
+export interface ManagerAttentionReason {
+  id: string;
+  code: ManagerAttentionCode;
+  label: string;
+  explanation: string;
+  detectedAt: string;
+  sources: ManagerSource[];
+}
+
+export interface ManagerForecastView {
+  category: SalesForecastCategory;
+  revisionNumber: number;
+  reviewedAt: string;
+  staleReasons: SalesForecastStaleReason[];
+}
+
+export interface ManagerDealAttention {
+  opportunityId: string;
+  opportunityName: string;
+  companyName: string | null;
+  ownerUserId: string;
+  ownerDisplayName: string;
+  pipelineId: string;
+  pipelineName: string;
+  stageId: string;
+  stageName: string;
+  amount: string | null;
+  currency: string | null;
+  expectedCloseDate: string | null;
+  sellerForecast: ManagerForecastView | null;
+  managerForecast: ManagerForecastView | null;
+  reasons: ManagerAttentionReason[];
+  href: string;
+}
+
+export interface ManagerAttentionSummary {
+  code: ManagerAttentionCode;
+  label: string;
+  dealCount: number;
+}
+
+export interface ManagerDealAttentionList {
+  total: number;
+  summaries: ManagerAttentionSummary[];
+  items: ManagerDealAttention[];
+  page: number;
+  pageSize: number;
+  generatedAt: string;
+}
+
+export interface ManagerMethodologyGap {
+  fieldKey: string;
+  displayName: string;
+  state: "partially_supported" | "unknown" | "conflicting" | "stale";
+  explanation: string;
+  suggestedQuestion: string | null;
+  sources: ManagerSource[];
+}
+
+export interface ManagerDealReview {
+  deal: ManagerDealAttention;
+  historicalBaseline: {
+    state: SalesForecastModelStatus;
+    expectedContribution: string | null;
+    wonCount: number;
+    lostCount: number;
+    explanation: string;
+  };
+  methodologyGaps: ManagerMethodologyGap[];
+  currentActions: Array<{
+    id: string;
+    title: string;
+    status: "open" | "in_progress";
+    priority: "low" | "medium" | "high" | "urgent";
+    dueAt: string | null;
+    href: string;
+  }>;
+  latestInteraction: {
+    id: string;
+    title: string;
+    interactionType: string;
+    occurredAt: string;
+    href: string;
+  } | null;
+  recentChanges: Array<{
+    id: string;
+    changeType:
+      | "stage_changed"
+      | "seller_forecast_changed"
+      | "manager_forecast_changed"
+      | "amount_changed"
+      | "expected_close_changed"
+      | "owner_changed"
+      | "customer_context_changed"
+      | "action_completed"
+      | "interaction_completed";
+    label: string;
+    changedAt: string;
+    source: ManagerSource;
+  }>;
+  questions: Array<{
+    id: string;
+    question: string;
+    whyShown: string;
+    sourceReasonIds: string[];
+    sources: ManagerSource[];
+  }>;
+  generatedAt: string;
+}
+
+export interface ManagerSummary {
+  periodLabel: string;
+  currency: string;
+  actual: SalesForecastResponse["actual"];
+  organisationTargets: SalesForecastResponse["targets"];
+  sellerForecast: SalesForecastRange;
+  managerForecast: SalesForecastRange;
+  revenueosBaseline: SalesForecastResponse["revenueosBaseline"];
+  dealsNeedingAttention: number;
+  topAttentionReasons: ManagerAttentionSummary[];
   generatedAt: string;
 }
 

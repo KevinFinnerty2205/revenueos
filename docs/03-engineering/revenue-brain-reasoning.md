@@ -290,3 +290,7 @@ findings remain staged until reviewed promotion. None may mutate historical snap
 infer resolution from silence or turn AI output into source Evidence. See the
 [End-to-End Sales Platform vision](../01-product/end-to-end-sales-platform-vision.md).
 WO-023 changes no version-1 reasoning behaviour.
+
+WO-039 consumes only the same controlled negative-change taxonomy already used by
+Daily, producing a safe customer-blocker label/source link. It does not read raw
+transcript content, create a new prompt, infer people traits or mutate Brain snapshots.

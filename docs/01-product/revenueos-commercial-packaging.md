@@ -136,4 +136,6 @@ bypassed. Sales Analytics (WO-036) and Forecasting (WO-038) remain Core.
 WO-036 implements Sales Analytics and bounded seller-reported aggregate Win/Loss as
 **Core**. WO-037 Targets and WO-038 Transparent Forecasting are also implemented Core
 capabilities with rollout flags, not separate entitlements or per-seat add-ons.
-Manager Intelligence remains a separate future Core work order.
+WO-039 Manager Intelligence is now an implemented **Core** capability with a rollout
+flag, not a separate manager product, entitlement or per-seat add-on. V1 authority is
+the existing organisation admin role; formal manager/team packaging remains future.

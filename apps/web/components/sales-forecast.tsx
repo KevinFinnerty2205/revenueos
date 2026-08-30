@@ -81,11 +81,17 @@ function SummaryCard({
   );
 }
 
-function ForecastHistory({ history }: { history: SalesForecastHistory }) {
+function ForecastHistory({
+  history,
+  perspective = "seller",
+}: {
+  history: SalesForecastHistory;
+  perspective?: "seller" | "manager";
+}) {
   if (!history.revisions.length) {
     return (
       <p className="mt-3 text-sm text-slate-500">
-        No seller judgment has been recorded for this period.
+        No {perspective} judgment has been recorded for this period.
       </p>
     );
   }
@@ -127,6 +133,7 @@ function OpportunityForecastCard({
   periodAnchor,
   periodLocked,
   canReview,
+  canReviewManager,
   onSaved,
 }: {
   opportunity: SalesForecastOpportunity;
@@ -135,6 +142,7 @@ function OpportunityForecastCard({
   periodAnchor: string;
   periodLocked: boolean;
   canReview: boolean;
+  canReviewManager: boolean;
   onSaved: () => void;
 }) {
   const [category, setCategory] = useState<SalesForecastCategory | "">(
@@ -144,6 +152,12 @@ function OpportunityForecastCard({
   const [message, setMessage] = useState<string | null>(null);
   const [history, setHistory] = useState<SalesForecastHistory | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [managerCategory, setManagerCategory] = useState<
+    SalesForecastCategory | ""
+  >(opportunity.managerJudgment?.category ?? "");
+  const [managerHistory, setManagerHistory] =
+    useState<SalesForecastHistory | null>(null);
+  const [managerHistoryLoading, setManagerHistoryLoading] = useState(false);
 
   async function saveJudgment() {
     if (!category) return;
@@ -201,6 +215,63 @@ function OpportunityForecastCard({
     }
   }
 
+  async function saveManagerJudgment() {
+    if (!managerCategory) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const saved = await apiRequest<SalesForecastHistory>(
+        `/api/v1/forecast/opportunities/${opportunity.opportunityId}/manager-judgments`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            periodType,
+            periodAnchor,
+            category: managerCategory,
+            expectedRevisionNumber:
+              opportunity.managerJudgment?.revisionNumber ?? 0,
+          }),
+        },
+      );
+      setManagerHistory(saved);
+      setMessage("Manager view saved as a separate revision.");
+      onSaved();
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error
+          ? caught.message
+          : "The manager view could not be saved.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function loadManagerHistory() {
+    if (managerHistory) {
+      setManagerHistory(null);
+      return;
+    }
+    setManagerHistoryLoading(true);
+    setMessage(null);
+    try {
+      const query = new URLSearchParams({ periodType, periodAnchor });
+      setManagerHistory(
+        await apiRequest<SalesForecastHistory>(
+          `/api/v1/forecast/opportunities/${opportunity.opportunityId}/manager-history?${query.toString()}`,
+        ),
+      );
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error
+          ? caught.message
+          : "Manager forecast history could not be loaded.",
+      );
+    } finally {
+      setManagerHistoryLoading(false);
+    }
+  }
+
   const baseline = opportunity.historicalBaseline;
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -232,6 +303,15 @@ function OpportunityForecastCard({
             <p className="mt-2 text-xs text-amber-800">
               Changed since review:{" "}
               {opportunity.judgment.staleReasons.map(staleLabel).join(", ")}.
+            </p>
+          ) : null}
+          {opportunity.managerJudgment ? (
+            <p className="mt-2 text-xs text-slate-600">
+              Manager view:{" "}
+              {categoryLabels[opportunity.managerJudgment.category]}
+              {opportunity.managerJudgment.staleReasons.length
+                ? " · review recommended"
+                : ""}
             </p>
           ) : null}
         </div>
@@ -274,6 +354,70 @@ function OpportunityForecastCard({
           )}
         </div>
       </div>
+      {canReviewManager || opportunity.managerJudgment ? (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <label className="text-sm font-semibold text-slate-700">
+              Manager category
+              <select
+                value={managerCategory}
+                onChange={(event) =>
+                  setManagerCategory(
+                    event.target.value as SalesForecastCategory,
+                  )
+                }
+                disabled={!canReviewManager || periodLocked}
+                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
+              >
+                {!managerCategory ? (
+                  <option value="">Not reviewed</option>
+                ) : null}
+                {Object.entries(categoryLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {canReviewManager ? (
+              <button
+                type="button"
+                onClick={() => void saveManagerJudgment()}
+                disabled={saving || periodLocked || !managerCategory}
+                className="primary-button"
+              >
+                {saving
+                  ? "Saving…"
+                  : opportunity.managerJudgment
+                    ? "Save manager revision"
+                    : "Save manager view"}
+              </button>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Visible read-only to the Opportunity owner.
+              </p>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-slate-600">
+            Independent from the seller view; neither perspective overwrites the
+            other.
+          </p>
+          <button
+            type="button"
+            onClick={() => void loadManagerHistory()}
+            className="mt-3 text-sm font-semibold text-teal-800 hover:underline"
+          >
+            {managerHistoryLoading
+              ? "Loading manager history…"
+              : managerHistory
+                ? "Hide manager history"
+                : "View manager history"}
+          </button>
+          {managerHistory ? (
+            <ForecastHistory history={managerHistory} perspective="manager" />
+          ) : null}
+        </div>
+      ) : null}
       <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <summary className="cursor-pointer text-sm font-semibold text-slate-800">
           Historical baseline details
@@ -335,6 +479,7 @@ export function SalesForecast() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [differentViewsOnly, setDifferentViewsOnly] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -416,6 +561,18 @@ export function SalesForecast() {
             .join(" · ")
         : "No matching won-value target",
     [forecast],
+  );
+  const visibleOpportunities = useMemo(
+    () =>
+      forecast?.opportunities.filter(
+        (opportunity) =>
+          !differentViewsOnly ||
+          (opportunity.judgment !== null &&
+            opportunity.managerJudgment !== null &&
+            opportunity.judgment.category !==
+              opportunity.managerJudgment.category),
+      ) ?? [],
+    [differentViewsOnly, forecast],
   );
 
   return (
@@ -557,7 +714,7 @@ export function SalesForecast() {
               Actual, target and forecast are separate. Currency is never
               converted.
             </p>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <SummaryCard
                 label="Actual won"
                 value={formatMoney(forecast.actual.amount, forecast.currency)}
@@ -589,6 +746,16 @@ export function SalesForecast() {
                 )}
                 detail={`${forecast.sellerForecast.commit.opportunityCount} seller-reviewed opportunities.`}
               />
+              {forecast.managerForecast ? (
+                <SummaryCard
+                  label="Manager Commit"
+                  value={formatMoney(
+                    forecast.managerForecast.commit.amount,
+                    forecast.currency,
+                  )}
+                  detail={`${forecast.managerForecast.commit.opportunityCount} manager-reviewed opportunities.`}
+                />
+              ) : null}
               <SummaryCard
                 label="RevenueOS baseline"
                 value={formatMoney(
@@ -599,6 +766,53 @@ export function SalesForecast() {
               />
             </div>
           </section>
+
+          {forecast.managerForecast ? (
+            <section
+              aria-labelledby="manager-range-title"
+              className="rounded-2xl border border-amber-200 bg-amber-50 p-5"
+            >
+              <h2
+                id="manager-range-title"
+                className="text-lg font-semibold text-amber-950"
+              >
+                Independent manager forecast range
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-amber-900">
+                {forecast.managerForecast.disclosure}
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <SummaryCard
+                  label="Manager Commit"
+                  value={formatMoney(
+                    forecast.managerForecast.commit.amount,
+                    forecast.currency,
+                  )}
+                  detail={`${forecast.managerForecast.commit.opportunityCount} opportunities`}
+                />
+                <SummaryCard
+                  label="Manager Likely"
+                  value={formatMoney(
+                    forecast.managerForecast.likely.amount,
+                    forecast.currency,
+                  )}
+                  detail={`Commit + Likely · ${forecast.managerForecast.likely.opportunityCount} opportunities`}
+                />
+                <SummaryCard
+                  label="Manager Possible"
+                  value={formatMoney(
+                    forecast.managerForecast.possible.amount,
+                    forecast.currency,
+                  )}
+                  detail={`Commit + Likely + Possible · ${forecast.managerForecast.possible.opportunityCount} opportunities`}
+                />
+              </div>
+              <p className="mt-4 text-sm text-amber-900">
+                {forecast.managerForecast.unreviewedCount} unreviewed ·{" "}
+                {forecast.managerForecast.needsReviewCount} review recommended.
+              </p>
+            </section>
+          ) : null}
 
           <section
             aria-labelledby="seller-range-title"
@@ -713,10 +927,22 @@ export function SalesForecast() {
               Each category is an explicit seller judgment. RevenueOS does not
               infer or attach a probability.
             </p>
+            {metadata?.canReviewManagerView ? (
+              <label className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={differentViewsOnly}
+                  onChange={(event) =>
+                    setDifferentViewsOnly(event.target.checked)
+                  }
+                />
+                Different seller and manager views
+              </label>
+            ) : null}
             <div className="mt-4 space-y-4">
-              {forecast.opportunities.map((opportunity) => (
+              {visibleOpportunities.map((opportunity) => (
                 <OpportunityForecastCard
-                  key={`${opportunity.opportunityId}-${opportunity.judgment?.revisionId ?? "unreviewed"}-${periodType}-${periodAnchor}`}
+                  key={`${opportunity.opportunityId}-${opportunity.judgment?.revisionId ?? "unreviewed"}-${opportunity.managerJudgment?.revisionId ?? "manager-unreviewed"}-${periodType}-${periodAnchor}`}
                   opportunity={opportunity}
                   currency={forecast.currency}
                   periodType={periodType}
@@ -725,13 +951,16 @@ export function SalesForecast() {
                   canReview={
                     opportunity.ownerUserId === metadata?.currentUserId
                   }
+                  canReviewManager={metadata?.canReviewManagerView === true}
                   onSaved={() => setRetryKey((value) => value + 1)}
                 />
               ))}
-              {!forecast.opportunities.length ? (
+              {!visibleOpportunities.length ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
                   <p className="font-semibold text-slate-900">
-                    No open opportunities close in this period
+                    {differentViewsOnly
+                      ? "No differing forecast views"
+                      : "No open opportunities close in this period"}
                   </p>
                   <p className="mt-2 text-sm text-slate-600">
                     Try another currency, pipeline, owner or period.

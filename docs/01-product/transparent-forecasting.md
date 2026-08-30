@@ -32,3 +32,11 @@ status changes mark the latest judgment for review.
 See the [seller guide](seller-forecast-guide.md), [baseline guide](revenueos-historical-baseline.md),
 [comparison guide](actual-target-forecast.md), [calibration guide](forecast-calibration.md)
 and [model specification](../03-engineering/forecast-model-v1-specification.md).
+
+## WO-039 manager perspective
+
+An administrator can now append an independent manager judgment using the same four
+categories and snapshot/staleness rules. It has separate immutable identity/history,
+never overwrites or defaults from the seller, and is visible read-only to the
+Opportunity owner. Seller, manager and historical baseline aggregates remain
+separate; there is no blended/final forecast or reviewer calibration.

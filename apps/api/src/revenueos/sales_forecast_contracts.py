@@ -44,6 +44,7 @@ class SalesForecastMetadataResponse(APIModel):
     owners: list[SalesForecastOwnerResponse]
     pipelines: list[SalesForecastPipelineResponse]
     can_view_organisation_forecast: bool
+    can_review_manager_view: bool
     model_version: str
     model_lookback_days: int
     model_minimum_sample: int
@@ -152,6 +153,7 @@ class SalesForecastOpportunityResponse(APIModel):
     stage_entered_at: datetime | None
     status: Literal["open", "on_hold"]
     judgment: SalesForecastJudgmentResponse | None
+    manager_judgment: SalesForecastJudgmentResponse | None
     historical_baseline: SalesForecastBaselineResponse
 
 
@@ -172,6 +174,7 @@ class SalesForecastResponse(APIModel):
     actual: SalesForecastActualResponse
     targets: list[SalesForecastTargetResponse]
     seller_forecast: SalesForecastSellerSummaryResponse
+    manager_forecast: SalesForecastSellerSummaryResponse | None
     revenueos_baseline: SalesForecastSystemSummaryResponse
     input_quality: SalesForecastInputQualityResponse
     opportunities: list[SalesForecastOpportunityResponse]

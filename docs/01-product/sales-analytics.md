@@ -86,3 +86,10 @@ Analytics reads but cannot mutate customer Evidence, Methodology or Revenue Brai
 Accuracy is limited by recorded canonical history: pre-WO-035 timing is incomplete,
 unrecorded external CRM changes cannot be analysed, and activity associations remain
 non-causal.
+
+## WO-039 manager boundary
+
+Manager summary reuses the existing Actual metric through Forecast composition; it
+does not add a second analytics formula, people breakdown, activity-performance table
+or benchmark. Manager attention can link controlled current deal conditions but does
+not treat calls, meetings or task volume as seller performance.

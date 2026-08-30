@@ -37,6 +37,7 @@ from revenueos.routes import (
     health,
     integrations,
     interactions,
+    manager,
     me,
     meetings,
     methodologies,
@@ -156,6 +157,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sales_targets.router)
     app.include_router(tasks.router)
     app.include_router(interactions.router)
+    app.include_router(manager.router)
     app.include_router(meetings.router)
     app.include_router(methodologies.router)
     app.include_router(accounts.router)

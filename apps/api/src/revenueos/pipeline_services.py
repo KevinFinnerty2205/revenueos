@@ -327,6 +327,9 @@ class PipelineService:
             stage_changes_allowed=allowed,
             managed_externally=external,
             authority_message=message,
+            manager_intelligence_available=(
+                self.settings.feature_manager_intelligence_enabled and self.tenant.can_manage()
+            ),
             generated_at=datetime.now(UTC),
         )
 

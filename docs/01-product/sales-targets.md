@@ -100,3 +100,10 @@ Forecast reads matching Won-value Target identities/revisions through the Target
 service for an exact calendar period, currency, optional Pipeline and scope. It does
 not duplicate target progress, persist Actual, blend Target into Forecast or trigger
 an Action. Other target metrics remain outside Forecast.
+
+## WO-039 manager boundary
+
+Manager Insights requests only organisation Targets through the existing Target
+service. It does not batch personal Target attainment, sort sellers, map Target gaps
+onto deals or create an Action. Existing owner/admin personal-Target access remains
+unchanged.

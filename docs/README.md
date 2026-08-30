@@ -113,6 +113,11 @@ This is the canonical product and engineering documentation index. Documents dis
 107. [Forecast security and privacy review](03-engineering/forecast-security-privacy-review.md)
 108. [WO-038: Transparent Forecasting](07-sprints/wo-038-transparent-forecasting.md)
 109. [ADR 0058: Separate seller forecast and system baseline](08-decisions/0058-separate-seller-forecast-and-system-baseline.md)
+110. [Manager Intelligence & Coaching](01-product/manager-intelligence.md) — current WO-039 Core boundary
+111. [Manager Intelligence experience](02-design/manager-intelligence-experience.md)
+112. [Manager Intelligence architecture](03-engineering/manager-intelligence-architecture.md)
+113. [Manager Intelligence security and privacy review](03-engineering/manager-intelligence-security-privacy-review.md)
+114. [Checkpoint 3 handoff](06-roadmap/checkpoint-3-handoff.md)
 
 ## 00 — Company
 
@@ -145,6 +150,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Sales Analytics and Win/Loss Intelligence](01-product/sales-analytics.md)
 - [Sales Targets and KPI progress](01-product/sales-targets.md)
 - [Transparent Forecasting](01-product/transparent-forecasting.md)
+- [Manager Intelligence & Coaching](01-product/manager-intelligence.md)
 - [Seller Forecast guide](01-product/seller-forecast-guide.md)
 - [RevenueOS Historical Baseline](01-product/revenueos-historical-baseline.md)
 - [Actual vs Target vs Forecast](01-product/actual-target-forecast.md)
@@ -264,6 +270,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Opportunity Workspace](03-engineering/opportunity-workspace.md)
 - [Revenue Brain foundation](03-engineering/revenue-brain-foundation.md)
 - [Revenue Brain longitudinal reasoning](03-engineering/revenue-brain-reasoning.md)
+- [Manager Intelligence architecture](03-engineering/manager-intelligence-architecture.md)
+- [Manager Intelligence security and privacy review](03-engineering/manager-intelligence-security-privacy-review.md)
 - [API reference](03-engineering/api.md)
 - [Value Model domain architecture](03-engineering/value-model-domain-architecture.md)
 - [Deterministic formula engine](03-engineering/deterministic-formula-engine.md)
@@ -495,6 +503,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Core roadmap adjustments after Checkpoint 1](06-roadmap/core-roadmap-adjustments-after-checkpoint-1.md)
 - [Checkpoint 1B Core readiness](06-roadmap/checkpoint-1b-core-readiness.md)
 - [Checkpoint 2 Prospect and Engage validation](06-roadmap/checkpoint-2-prospect-engage-validation.md)
+- [Checkpoint 3 product/platform validation handoff](06-roadmap/checkpoint-3-handoff.md)
 
 ## 07 — Sprint records
 
@@ -557,6 +566,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-036: Sales Analytics and Win/Loss Intelligence](07-sprints/wo-036-sales-analytics-win-loss.md)
 - [WO-037: Targets & KPI Engine](07-sprints/wo-037-targets-kpi-engine.md)
 - [WO-038: Transparent Forecasting](07-sprints/wo-038-transparent-forecasting.md)
+- [WO-039: Manager Intelligence & Coaching](07-sprints/wo-039-manager-intelligence.md)
 
 ## 08 — Decision records
 
@@ -604,6 +614,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0059: Empirical exact-stage baseline v1](08-decisions/0059-empirical-stage-outcome-forecast-baseline.md)
 - [ADR 0060: No fixed stage probability](08-decisions/0060-no-fixed-stage-probability.md)
 - [ADR 0061: Immutable Forecast revisions](08-decisions/0061-immutable-forecast-judgment-revisions.md)
+- [ADR 0062: Deal-centric Manager Intelligence](08-decisions/0062-deal-centric-manager-intelligence.md)
 - [ADR 0038: Separate unpromoted Prospect research domain](08-decisions/0038-separate-prospect-research-domain.md)
 - [ADR 0039: Separate Prospect Person research from canonical Contact](08-decisions/0039-separate-prospect-person-from-contact.md)
 - [ADR 0040: Preserve trust per promoted Contact field](08-decisions/0040-contact-field-provenance.md)

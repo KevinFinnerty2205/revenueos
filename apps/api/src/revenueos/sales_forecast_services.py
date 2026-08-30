@@ -3,6 +3,7 @@ from __future__ import annotations
 import calendar
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal, cast
@@ -20,6 +21,8 @@ from revenueos.models import (
     SalesForecastJudgment,
     SalesForecastJudgmentRevision,
     SalesForecastPeriod,
+    SalesForecastReviewerJudgment,
+    SalesForecastReviewerRevision,
 )
 from revenueos.sales_analytics_services import SalesAnalyticsService, SalesMetricService
 from revenueos.sales_forecast_contracts import (
@@ -75,6 +78,27 @@ def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
+@dataclass(frozen=True)
+class ForecastContextSnapshot:
+    owner_user_id: UUID
+    amount: Decimal | None
+    currency: str | None
+    expected_close_date: date
+    pipeline_id: UUID
+    pipeline_name: str
+    stage_id: UUID
+    stage_name: str
+    opportunity_status: str
+    model_status: ForecastModelStatus
+    model_won_count: int
+    model_lost_count: int
+    model_lookback_start: date
+    model_lookback_end: date
+
+
+ForecastRevision = SalesForecastJudgmentRevision | SalesForecastReviewerRevision
+
+
 class SalesForecastService:
     """Transparent seller ranges plus a separate empirical historical baseline."""
 
@@ -120,6 +144,7 @@ class SalesForecastService:
                 for pipeline in pipelines
             ],
             can_view_organisation_forecast=self.tenant.can_manage(),
+            can_review_manager_view=self.tenant.can_manage(),
             model_version=FORECAST_MODEL_VERSION,
             model_lookback_days=FORECAST_MODEL_LOOKBACK_DAYS,
             model_minimum_sample=FORECAST_MODEL_MINIMUM_SAMPLE,
@@ -177,6 +202,11 @@ class SalesForecastService:
             stored_period.id if stored_period is not None else None,
             opportunity_ids,
         )
+        reviewer_judgments = await self.repository.reviewer_judgments_for_period(
+            self.tenant.organisation_id,
+            stored_period.id if stored_period is not None else None,
+            opportunity_ids,
+        )
         lookback_start = generated_at.date() - timedelta(days=FORECAST_MODEL_LOOKBACK_DAYS)
         outcome_counts = await self.repository.historical_outcome_counts(
             self.tenant.organisation_id,
@@ -185,21 +215,30 @@ class SalesForecastService:
         )
         names = await self.repository.user_names(
             self.tenant.organisation_id,
-            {revision.created_by_user_id for _, revision in judgments.values()},
+            {
+                revision.created_by_user_id
+                for values in (judgments.values(), reviewer_judgments.values())
+                for _, revision in values
+            },
         )
         opportunity_responses = [
             self._opportunity_response(
                 record,
                 judgment=judgments.get(record.opportunity.id),
+                reviewer_judgment=reviewer_judgments.get(record.opportunity.id),
                 outcome_counts=outcome_counts,
                 lookback_start=lookback_start,
                 lookback_end=generated_at.date(),
                 actor_names=names,
                 current_user_id=self.tenant.user_id,
+                current_user_can_manage=self.tenant.can_manage(),
             )
             for record in opportunities
         ]
         seller_summary = self._seller_summary(opportunities, judgments)
+        manager_summary = (
+            self._reviewer_summary(opportunities, reviewer_judgments) if self.tenant.can_manage() else None
+        )
         system_summary = self._system_summary(opportunities, outcome_counts)
         missing_close_count = await self.repository.missing_expected_close_count(
             self.tenant.organisation_id,
@@ -236,6 +275,7 @@ class SalesForecastService:
             actual=actual,
             targets=targets,
             seller_forecast=seller_summary,
+            manager_forecast=manager_summary,
             revenueos_baseline=system_summary,
             input_quality=SalesForecastInputQualityResponse(
                 eligible_opportunity_count=len(opportunities),
@@ -396,12 +436,11 @@ class SalesForecastService:
             lookback_start=lookback_start,
             as_of=generated_at,
         )
-        count = outcome_counts.get((opportunity.pipeline_id, opportunity.pipeline_stage_id))
-        won_count = count.won_count if count is not None else 0
-        lost_count = count.lost_count if count is not None else 0
-        sample_size = won_count + lost_count
-        model_status: ForecastModelStatus = (
-            "available" if sample_size >= FORECAST_MODEL_MINIMUM_SAMPLE else "insufficient_sample"
+        snapshot = self._context_snapshot(
+            record,
+            outcome_counts,
+            lookback_start=lookback_start,
+            lookback_end=generated_at.date(),
         )
         revision = SalesForecastJudgmentRevision(
             id=uuid.uuid4(),
@@ -410,22 +449,22 @@ class SalesForecastService:
             revision_number=revision_number,
             category=request.category,
             created_by_user_id=self.tenant.user_id,
-            owner_user_id_snapshot=opportunity.owner_user_id,
-            amount_snapshot=opportunity.estimated_value,
-            currency_snapshot=opportunity.currency,
-            expected_close_date_snapshot=opportunity.expected_close_date,
-            pipeline_id_snapshot=opportunity.pipeline_id,
-            pipeline_name_snapshot=record.pipeline_name,
-            stage_id_snapshot=opportunity.pipeline_stage_id,
-            stage_name_snapshot=record.stage_name,
-            opportunity_status_snapshot=opportunity.status,
+            owner_user_id_snapshot=snapshot.owner_user_id,
+            amount_snapshot=snapshot.amount,
+            currency_snapshot=snapshot.currency,
+            expected_close_date_snapshot=snapshot.expected_close_date,
+            pipeline_id_snapshot=snapshot.pipeline_id,
+            pipeline_name_snapshot=snapshot.pipeline_name,
+            stage_id_snapshot=snapshot.stage_id,
+            stage_name_snapshot=snapshot.stage_name,
+            opportunity_status_snapshot=snapshot.opportunity_status,
             model_version=FORECAST_MODEL_VERSION,
-            model_status=model_status,
-            model_won_count=won_count,
-            model_lost_count=lost_count,
+            model_status=snapshot.model_status,
+            model_won_count=snapshot.model_won_count,
+            model_lost_count=snapshot.model_lost_count,
             model_minimum_sample=FORECAST_MODEL_MINIMUM_SAMPLE,
-            model_lookback_start=lookback_start,
-            model_lookback_end=generated_at.date(),
+            model_lookback_start=snapshot.model_lookback_start,
+            model_lookback_end=snapshot.model_lookback_end,
             created_at=generated_at,
         )
         self.repository.add(revision)
@@ -503,6 +542,285 @@ class SalesForecastService:
                 revisions=[],
             )
         revisions = await self.repository.revisions(self.tenant.organisation_id, judgment.id)
+        names = await self.repository.user_names(
+            self.tenant.organisation_id,
+            {revision.created_by_user_id for revision in revisions},
+        )
+        return SalesForecastHistoryResponse(
+            opportunity_id=opportunity_id,
+            opportunity_name=record.opportunity.name,
+            period=period_response,
+            latest_stale_reasons=self._stale_reasons(record.opportunity, revisions[0]) if revisions else [],
+            revisions=[self._revision_response(revision, names) for revision in revisions],
+        )
+
+    async def review_manager_judgment(
+        self,
+        opportunity_id: UUID,
+        request: SalesForecastJudgmentCreateRequest,
+        *,
+        now: datetime | None = None,
+    ) -> SalesForecastHistoryResponse:
+        self.require_enabled()
+        if not self.settings.feature_manager_intelligence_enabled:
+            raise PublicAPIError("feature_unavailable", "Manager Intelligence is not enabled.", 404)
+        if not self.tenant.can_manage():
+            raise PublicAPIError("forbidden", "Only organisation administrators can record a manager view.", 403)
+        generated_at = _utc(now or datetime.now(UTC))
+        timezone = await self._organisation_timezone()
+        period_start, period_end = self._period(request.period_type, request.period_anchor)
+        local_today = generated_at.astimezone(timezone).date()
+        if period_end < local_today:
+            raise PublicAPIError("past_forecast_locked", "Past forecast periods cannot be rewritten.", 409)
+        if period_start > local_today + timedelta(days=FORECAST_MAXIMUM_FUTURE_DAYS):
+            raise PublicAPIError("forecast_period_too_far", "Choose a period within the next five years.", 422)
+        record = await self.repository.opportunity(
+            self.tenant.organisation_id,
+            opportunity_id,
+            for_update=True,
+        )
+        if record is None:
+            raise PublicAPIError("opportunity_not_found", "The Opportunity was not found.", 404)
+        opportunity = record.opportunity
+        if opportunity.status not in {"open", "on_hold"}:
+            raise PublicAPIError(
+                "closed_opportunity", "A closed Opportunity cannot be added to remaining forecast.", 409
+            )
+        if opportunity.expected_close_date is None:
+            raise PublicAPIError(
+                "expected_close_required",
+                "Add a canonical expected close date before reviewing this forecast.",
+                422,
+            )
+        if not period_start <= opportunity.expected_close_date <= period_end:
+            raise PublicAPIError(
+                "forecast_period_mismatch",
+                "The Opportunity expected close date is outside the selected forecast period.",
+                409,
+            )
+        if opportunity.pipeline_id is None or opportunity.pipeline_stage_id is None:
+            raise PublicAPIError("pipeline_unavailable", "The Opportunity needs a current Pipeline stage.", 409)
+        period = await self.repository.period(
+            self.tenant.organisation_id,
+            period_type=request.period_type,
+            period_start=period_start,
+            period_end=period_end,
+            for_update=True,
+        )
+        if period is None:
+            candidate_period = SalesForecastPeriod(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                period_type=request.period_type,
+                period_start=period_start,
+                period_end=period_end,
+                timezone=timezone.key,
+                created_by_user_id=self.tenant.user_id,
+                created_at=generated_at,
+            )
+            try:
+                async with self.session.begin_nested():
+                    self.repository.add(candidate_period)
+                    await self.session.flush()
+                period = candidate_period
+            except IntegrityError:
+                period = await self.repository.period(
+                    self.tenant.organisation_id,
+                    period_type=request.period_type,
+                    period_start=period_start,
+                    period_end=period_end,
+                    for_update=True,
+                )
+                if period is None:
+                    raise PublicAPIError(
+                        "forecast_revision_conflict",
+                        "This manager forecast changed since you opened it.",
+                        409,
+                    ) from None
+        judgment = await self.repository.reviewer_judgment(
+            self.tenant.organisation_id,
+            period.id,
+            opportunity.id,
+            for_update=True,
+        )
+        if judgment is None:
+            if request.expected_revision_number != 0:
+                raise PublicAPIError(
+                    "forecast_revision_conflict", "This manager forecast changed since you opened it.", 409
+                )
+            candidate_judgment = SalesForecastReviewerJudgment(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                period_id=period.id,
+                opportunity_id=opportunity.id,
+                created_at=generated_at,
+            )
+            try:
+                async with self.session.begin_nested():
+                    self.repository.add(candidate_judgment)
+                    await self.session.flush()
+                judgment = candidate_judgment
+                revision_number = 1
+            except IntegrityError:
+                judgment = await self.repository.reviewer_judgment(
+                    self.tenant.organisation_id,
+                    period.id,
+                    opportunity.id,
+                    for_update=True,
+                )
+                if judgment is None:
+                    raise PublicAPIError(
+                        "forecast_revision_conflict",
+                        "This manager forecast changed since you opened it.",
+                        409,
+                    ) from None
+                latest = (
+                    await self.repository.latest_reviewer_revisions(
+                        self.tenant.organisation_id,
+                        {judgment.id},
+                    )
+                ).get(judgment.id)
+                if latest is None or request.expected_revision_number != latest.revision_number:
+                    raise PublicAPIError(
+                        "forecast_revision_conflict",
+                        "This manager forecast changed since you opened it.",
+                        409,
+                    ) from None
+                revision_number = latest.revision_number + 1
+        else:
+            latest = (
+                await self.repository.latest_reviewer_revisions(
+                    self.tenant.organisation_id,
+                    {judgment.id},
+                )
+            ).get(judgment.id)
+            if latest is None:
+                raise PublicAPIError("forecast_unavailable", "The manager forecast could not be loaded.", 409)
+            if request.expected_revision_number != latest.revision_number:
+                raise PublicAPIError(
+                    "forecast_revision_conflict", "This manager forecast changed since you opened it.", 409
+                )
+            revision_number = latest.revision_number + 1
+        lookback_start = generated_at.date() - timedelta(days=FORECAST_MODEL_LOOKBACK_DAYS)
+        outcome_counts = await self.repository.historical_outcome_counts(
+            self.tenant.organisation_id,
+            lookback_start=lookback_start,
+            as_of=generated_at,
+        )
+        snapshot = self._context_snapshot(
+            record,
+            outcome_counts,
+            lookback_start=lookback_start,
+            lookback_end=generated_at.date(),
+        )
+        revision = SalesForecastReviewerRevision(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            reviewer_judgment_id=judgment.id,
+            revision_number=revision_number,
+            category=request.category,
+            created_by_user_id=self.tenant.user_id,
+            owner_user_id_snapshot=snapshot.owner_user_id,
+            amount_snapshot=snapshot.amount,
+            currency_snapshot=snapshot.currency,
+            expected_close_date_snapshot=snapshot.expected_close_date,
+            pipeline_id_snapshot=snapshot.pipeline_id,
+            pipeline_name_snapshot=snapshot.pipeline_name,
+            stage_id_snapshot=snapshot.stage_id,
+            stage_name_snapshot=snapshot.stage_name,
+            opportunity_status_snapshot=snapshot.opportunity_status,
+            model_version=FORECAST_MODEL_VERSION,
+            model_status=snapshot.model_status,
+            model_won_count=snapshot.model_won_count,
+            model_lost_count=snapshot.model_lost_count,
+            model_minimum_sample=FORECAST_MODEL_MINIMUM_SAMPLE,
+            model_lookback_start=snapshot.model_lookback_start,
+            model_lookback_end=snapshot.model_lookback_end,
+            created_at=generated_at,
+        )
+        self.repository.add(revision)
+        self.repository.add(
+            BetaSystemEvent(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                actor_user_id=self.tenant.user_id,
+                event_type="manager_forecast_reviewed",
+                subject_id=opportunity.id,
+                metadata_json={
+                    "period_type": request.period_type,
+                    "revision_number": revision_number,
+                    "model_version": FORECAST_MODEL_VERSION,
+                },
+            )
+        )
+        await self._commit("The manager forecast could not be saved.")
+        return await self.manager_history(
+            opportunity.id,
+            period_type=request.period_type,
+            period_anchor=request.period_anchor,
+            now=generated_at,
+        )
+
+    async def manager_history(
+        self,
+        opportunity_id: UUID,
+        *,
+        period_type: ForecastPeriodType,
+        period_anchor: date,
+        now: datetime | None = None,
+    ) -> SalesForecastHistoryResponse:
+        self.require_enabled()
+        if not self.settings.feature_manager_intelligence_enabled:
+            raise PublicAPIError("feature_unavailable", "Manager Intelligence is not enabled.", 404)
+        generated_at = _utc(now or datetime.now(UTC))
+        timezone = await self._organisation_timezone()
+        period_start, period_end = self._period(period_type, period_anchor)
+        period = await self.repository.period(
+            self.tenant.organisation_id,
+            period_type=period_type,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        record = await self.repository.opportunity(self.tenant.organisation_id, opportunity_id)
+        if record is None:
+            raise PublicAPIError("opportunity_not_found", "The Opportunity was not found.", 404)
+        if not self.tenant.can_manage() and record.opportunity.owner_user_id != self.tenant.user_id:
+            raise PublicAPIError(
+                "forbidden",
+                "Only the current Opportunity owner or an organisation administrator can view manager history.",
+                403,
+            )
+        period_timezone = self._stored_period_timezone(period) if period is not None else timezone
+        period_response = self._period_response(
+            period,
+            period_type=period_type,
+            period_start=period_start,
+            period_end=period_end,
+            timezone=period_timezone,
+            local_today=generated_at.astimezone(period_timezone).date(),
+        )
+        if period is None:
+            return SalesForecastHistoryResponse(
+                opportunity_id=opportunity_id,
+                opportunity_name=record.opportunity.name,
+                period=period_response,
+                latest_stale_reasons=[],
+                revisions=[],
+            )
+        judgment = await self.repository.reviewer_judgment(
+            self.tenant.organisation_id,
+            period.id,
+            opportunity_id,
+        )
+        if judgment is None:
+            return SalesForecastHistoryResponse(
+                opportunity_id=opportunity_id,
+                opportunity_name=record.opportunity.name,
+                period=period_response,
+                latest_stale_reasons=[],
+                revisions=[],
+            )
+        revisions = await self.repository.reviewer_revisions(self.tenant.organisation_id, judgment.id)
         names = await self.repository.user_names(
             self.tenant.organisation_id,
             {revision.created_by_user_id for revision in revisions},
@@ -733,11 +1051,13 @@ class SalesForecastService:
         record: SalesForecastOpportunityRecord,
         *,
         judgment: tuple[SalesForecastJudgment, SalesForecastJudgmentRevision] | None,
+        reviewer_judgment: tuple[SalesForecastReviewerJudgment, SalesForecastReviewerRevision] | None,
         outcome_counts: dict[tuple[UUID, UUID], SalesForecastOutcomeCount],
         lookback_start: date,
         lookback_end: date,
         actor_names: dict[UUID, str],
         current_user_id: UUID,
+        current_user_can_manage: bool,
     ) -> SalesForecastOpportunityResponse:
         opportunity = record.opportunity
         assert opportunity.expected_close_date is not None
@@ -757,6 +1077,20 @@ class SalesForecastService:
                 stale_reasons=cls._stale_reasons(opportunity, revision),
                 can_review=opportunity.owner_user_id == current_user_id,
             )
+        manager_judgment_response = None
+        if reviewer_judgment is not None:
+            manager_identity, manager_revision = reviewer_judgment
+            manager_judgment_response = SalesForecastJudgmentResponse(
+                judgment_id=manager_identity.id,
+                revision_id=manager_revision.id,
+                revision_number=manager_revision.revision_number,
+                category=cast(ForecastCategory, manager_revision.category),
+                created_by_user_id=manager_revision.created_by_user_id,
+                created_by_display_name=actor_names.get(manager_revision.created_by_user_id, "Former member"),
+                created_at=_utc(manager_revision.created_at),
+                stale_reasons=cls._stale_reasons(opportunity, manager_revision),
+                can_review=current_user_can_manage,
+            )
         return SalesForecastOpportunityResponse(
             opportunity_id=opportunity.id,
             opportunity_name=opportunity.name,
@@ -773,6 +1107,7 @@ class SalesForecastService:
             stage_entered_at=_utc(opportunity.stage_entered_at) if opportunity.stage_entered_at is not None else None,
             status=cast(Literal["open", "on_hold"], opportunity.status),
             judgment=judgment_response,
+            manager_judgment=manager_judgment_response,
             historical_baseline=cls._baseline_response(
                 record,
                 outcome_counts,
@@ -785,7 +1120,7 @@ class SalesForecastService:
     def _stale_reasons(
         cls,
         opportunity: Opportunity,
-        revision: SalesForecastJudgmentRevision,
+        revision: ForecastRevision,
     ) -> list[ForecastStaleReason]:
         reasons: list[ForecastStaleReason] = []
         comparisons: tuple[tuple[bool, ForecastStaleReason], ...] = (
@@ -803,10 +1138,73 @@ class SalesForecastService:
         return reasons
 
     @classmethod
+    def _context_snapshot(
+        cls,
+        record: SalesForecastOpportunityRecord,
+        counts: dict[tuple[UUID, UUID], SalesForecastOutcomeCount],
+        *,
+        lookback_start: date,
+        lookback_end: date,
+    ) -> ForecastContextSnapshot:
+        opportunity = record.opportunity
+        assert opportunity.expected_close_date is not None
+        assert opportunity.pipeline_id is not None
+        assert opportunity.pipeline_stage_id is not None
+        outcome = counts.get((opportunity.pipeline_id, opportunity.pipeline_stage_id))
+        return ForecastContextSnapshot(
+            owner_user_id=opportunity.owner_user_id,
+            amount=opportunity.estimated_value,
+            currency=opportunity.currency,
+            expected_close_date=opportunity.expected_close_date,
+            pipeline_id=opportunity.pipeline_id,
+            pipeline_name=record.pipeline_name,
+            stage_id=opportunity.pipeline_stage_id,
+            stage_name=record.stage_name,
+            opportunity_status=opportunity.status,
+            model_status=cls._baseline_status(opportunity, counts),
+            model_won_count=outcome.won_count if outcome is not None else 0,
+            model_lost_count=outcome.lost_count if outcome is not None else 0,
+            model_lookback_start=lookback_start,
+            model_lookback_end=lookback_end,
+        )
+
+    @classmethod
     def _seller_summary(
         cls,
         opportunities: list[SalesForecastOpportunityRecord],
         judgments: dict[UUID, tuple[SalesForecastJudgment, SalesForecastJudgmentRevision]],
+    ) -> SalesForecastSellerSummaryResponse:
+        return cls._judgment_summary(
+            opportunities,
+            {opportunity_id: value[1] for opportunity_id, value in judgments.items()},
+            disclosure=(
+                "Commit is Commit only; Likely includes Commit + Likely; Possible includes Commit + Likely + "
+                "Possible. Categories are explicit seller judgment and have no fixed probability weights."
+            ),
+        )
+
+    @classmethod
+    def _reviewer_summary(
+        cls,
+        opportunities: list[SalesForecastOpportunityRecord],
+        judgments: dict[UUID, tuple[SalesForecastReviewerJudgment, SalesForecastReviewerRevision]],
+    ) -> SalesForecastSellerSummaryResponse:
+        return cls._judgment_summary(
+            opportunities,
+            {opportunity_id: value[1] for opportunity_id, value in judgments.items()},
+            disclosure=(
+                "This independent manager view uses the same categories as the seller view. It does not overwrite, "
+                "blend with or score the seller forecast."
+            ),
+        )
+
+    @classmethod
+    def _judgment_summary(
+        cls,
+        opportunities: list[SalesForecastOpportunityRecord],
+        revisions: dict[UUID, ForecastRevision],
+        *,
+        disclosure: str,
     ) -> SalesForecastSellerSummaryResponse:
         amounts: dict[str, Decimal] = defaultdict(Decimal)
         counts: dict[str, int] = defaultdict(int)
@@ -814,10 +1212,9 @@ class SalesForecastService:
         needs_review = 0
         for record in opportunities:
             opportunity = record.opportunity
-            judgment = judgments.get(opportunity.id)
-            if judgment is None:
+            revision = revisions.get(opportunity.id)
+            if revision is None:
                 continue
-            revision = judgment[1]
             category = revision.category
             counts[category] += 1
             if opportunity.estimated_value is None:
@@ -841,10 +1238,7 @@ class SalesForecastService:
             unreviewed_count=len(opportunities) - sum(counts.values()),
             not_this_period_count=counts["not_this_period"],
             needs_review_count=needs_review,
-            disclosure=(
-                "Commit is Commit only; Likely includes Commit + Likely; Possible includes Commit + Likely + "
-                "Possible. Categories are explicit seller judgment and have no fixed probability weights."
-            ),
+            disclosure=disclosure,
         )
 
     @classmethod
@@ -971,7 +1365,7 @@ class SalesForecastService:
 
     @staticmethod
     def _revision_response(
-        revision: SalesForecastJudgmentRevision,
+        revision: ForecastRevision,
         names: dict[UUID, str],
     ) -> SalesForecastJudgmentRevisionResponse:
         sample_size = revision.model_won_count + revision.model_lost_count

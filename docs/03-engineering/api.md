@@ -916,3 +916,10 @@ optimistic expected revision; the server snapshots commercial/model context. `GE
 /opportunities/{id}/history` returns immutable revisions and `GET /calibration`
 returns sample-gated final category realization. No request accepts organisation,
 amount, probability, stage weight, predicted date, coefficient or manager override.
+
+WO-039 adds admin-only `GET /manager/deal-attention`, `GET
+/manager/opportunities/{id}` and `GET /manager/summary`. Forecast adds `POST
+/forecast/opportunities/{id}/manager-judgments` and `GET
+/forecast/opportunities/{id}/manager-history`; owner-scoped reads are transparent and
+writes remain admin-only. No endpoint accepts organisation, commercial snapshot,
+score, weight or probability. `managerIntelligence` is the single safe feature flag.

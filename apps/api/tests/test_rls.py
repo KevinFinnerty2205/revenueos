@@ -102,6 +102,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "sales_forecast_periods",
         "sales_forecast_judgments",
         "sales_forecast_judgment_revisions",
+        "sales_forecast_reviewer_judgments",
+        "sales_forecast_reviewer_revisions",
         "action_proposals",
         "action_proposal_versions",
         "action_audit_events",
@@ -416,6 +418,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "sales_forecast_period_id": uuid.uuid4(),
                 "sales_forecast_judgment_id": uuid.uuid4(),
                 "sales_forecast_revision_id": uuid.uuid4(),
+                "sales_forecast_reviewer_judgment_id": uuid.uuid4(),
+                "sales_forecast_reviewer_revision_id": uuid.uuid4(),
             }
         )
 
@@ -991,6 +995,48 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  :user_id, :user_id, 1000.00, 'AUD', current_date,
                                  :sales_pipeline_id, 'RLS Sales Pipeline',
                                  :sales_pipeline_stage_id, 'Discovery', 'open',
+                                 'forecast_historical_stage_outcome_v1',
+                                 'insufficient_sample', 0, 0, 10,
+                                 current_date - 730, current_date)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO sales_forecast_reviewer_judgments
+                                (id, organisation_id, period_id, opportunity_id)
+                            VALUES
+                                (:sales_forecast_reviewer_judgment_id,
+                                 :organisation_id, :sales_forecast_period_id,
+                                 :opportunity_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO sales_forecast_reviewer_revisions
+                                (id, organisation_id, reviewer_judgment_id,
+                                 revision_number, category, created_by_user_id,
+                                 owner_user_id_snapshot, amount_snapshot,
+                                 currency_snapshot, expected_close_date_snapshot,
+                                 pipeline_id_snapshot, pipeline_name_snapshot,
+                                 stage_id_snapshot, stage_name_snapshot,
+                                 opportunity_status_snapshot, model_version,
+                                 model_status, model_won_count, model_lost_count,
+                                 model_minimum_sample, model_lookback_start,
+                                 model_lookback_end)
+                            VALUES
+                                (:sales_forecast_reviewer_revision_id,
+                                 :organisation_id,
+                                 :sales_forecast_reviewer_judgment_id, 1,
+                                 'possible', :user_id, :user_id, 1000.00,
+                                 'AUD', current_date, :sales_pipeline_id,
+                                 'RLS Sales Pipeline', :sales_pipeline_stage_id,
+                                 'Discovery', 'open',
                                  'forecast_historical_stage_outcome_v1',
                                  'insufficient_sample', 0, 0, 10,
                                  current_date - 730, current_date)
@@ -2846,6 +2892,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'sales_forecast_periods',
                                     'sales_forecast_judgments',
                                     'sales_forecast_judgment_revisions',
+                                    'sales_forecast_reviewer_judgments',
+                                    'sales_forecast_reviewer_revisions',
                                     'action_proposals',
                                     'action_proposal_versions',
                                     'action_audit_events',
@@ -3035,6 +3083,19 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         {"id": tenant_a["sales_forecast_revision_id"]},
                     )
                 await immutable_forecast_savepoint.rollback()
+                immutable_reviewer_forecast_savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE sales_forecast_reviewer_revisions
+                            SET category = 'commit'
+                            WHERE id = :id
+                            """
+                        ),
+                        {"id": tenant_a["sales_forecast_reviewer_revision_id"]},
+                    )
+                await immutable_reviewer_forecast_savepoint.rollback()
                 cross_tenant_target_update = await connection.execute(
                     text(
                         """
@@ -3539,6 +3600,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "sales_forecast_reviewer_revisions",
+                    "sales_forecast_reviewer_judgments",
                     "sales_forecast_judgment_revisions",
                     "sales_forecast_judgments",
                     "sales_forecast_periods",

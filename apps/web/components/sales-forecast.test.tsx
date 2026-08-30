@@ -13,6 +13,7 @@ const metadata = {
   owners: [{ userId: currentUserId, displayName: "Alex Seller", active: true }],
   pipelines: [{ id: pipelineId, name: "New business", active: true }],
   canViewOrganisationForecast: true,
+  canReviewManagerView: true,
   modelVersion: "forecast_historical_stage_outcome_v1",
   modelLookbackDays: 730,
   modelMinimumSample: 10,
@@ -108,6 +109,16 @@ const forecast = {
     disclosure:
       "Commit is Commit only; Likely adds Likely; Possible adds Possible. No probability is applied.",
   },
+  managerForecast: {
+    commit: { amount: "0.00", opportunityCount: 0, unvaluedCount: 0 },
+    likely: { amount: "180000.00", opportunityCount: 1, unvaluedCount: 0 },
+    possible: { amount: "180000.00", opportunityCount: 1, unvaluedCount: 0 },
+    unreviewedCount: 3,
+    notThisPeriodCount: 0,
+    needsReviewCount: 0,
+    disclosure:
+      "This independent manager view is not blended with the seller forecast.",
+  },
   revenueosBaseline: {
     expectedContribution: "273333.33",
     coveredOpportunityCount: 3,
@@ -153,6 +164,17 @@ const forecast = {
         createdByDisplayName: "Alex Seller",
         createdAt: "2026-08-20T03:00:00Z",
         staleReasons: ["amount_changed"],
+        canReview: true,
+      },
+      managerJudgment: {
+        judgmentId: "manager-judgment-1",
+        revisionId: "manager-revision-1",
+        revisionNumber: 1,
+        category: "likely",
+        createdByUserId: currentUserId,
+        createdByDisplayName: "Alex Manager",
+        createdAt: "2026-08-21T03:00:00Z",
+        staleReasons: [],
         canReview: true,
       },
       historicalBaseline: baseline,
@@ -207,6 +229,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("sales forecast", () => {
   it("keeps actual, target, seller range and historical baseline separate", async () => {
     const requests: RequestInit[] = [];
+    const requestUrls: string[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string | URL | Request, init?: RequestInit) => {
@@ -216,6 +239,7 @@ describe("sales forecast", () => {
         if (url.includes("/history")) return json(history);
         if (init?.method === "POST") {
           requests.push(init);
+          requestUrls.push(url);
           return json(history);
         }
         return json(forecast);
@@ -233,6 +257,12 @@ describe("sales forecast", () => {
       screen.getByText(/not a seller forecast and is not a range/i),
     ).toBeVisible();
     expect(screen.getByText(/no probability is applied/i)).toBeVisible();
+    expect(
+      screen.getByText("Independent manager forecast range"),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/not blended with the seller forecast/i),
+    ).toBeVisible();
     expect(screen.getByText(/missing expected close date/i)).toBeVisible();
     expect(screen.getByText("Needs review")).toBeVisible();
 
@@ -251,6 +281,19 @@ describe("sales forecast", () => {
       expectedRevisionNumber: 1,
       periodType: "quarter",
     });
+
+    fireEvent.change(screen.getByLabelText("Manager category"), {
+      target: { value: "possible" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save manager revision" }),
+    );
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(JSON.parse(String(requests[1]?.body))).toMatchObject({
+      category: "possible",
+      expectedRevisionNumber: 1,
+    });
+    expect(requestUrls[1]).toContain("manager-judgments");
   });
 
   it("shows a safe empty state", async () => {

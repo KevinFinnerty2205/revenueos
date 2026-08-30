@@ -504,3 +504,13 @@ free-text outcome notes/transcripts/Evidence are outside the read model. Telemet
 must exclude requested ranges and business values. No employee surveillance,
 open/click tracking, ranking, probability, forecast or analytics mutation path exists.
 See the [dedicated review](sales-analytics-security-privacy-review.md).
+
+## WO-039 Manager Intelligence
+
+Admin-only organisation manager reads and reviewer writes derive tenant/role on the
+server. Reviewer tables have composite tenant keys, forced RLS and immutable
+revisions. Opportunity owners can see manager judgment read-only; personal Targets
+are not bulk exposed. Derived attention/questions retain no employee profile and
+exclude transcripts/Evidence text. No score, ranking, behavioural surveillance,
+AI/provider or business-content telemetry was added. See the
+[dedicated review](manager-intelligence-security-privacy-review.md).

@@ -9,8 +9,9 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { ManagerPipelineView } from "@/components/manager-pipeline-view";
 
-type DisplayMode = "board" | "list";
+type DisplayMode = "board" | "list" | "manager";
 
 export function OpportunityList() {
   const [board, setBoard] = useState<PipelineBoard | null>(null);
@@ -25,6 +26,7 @@ export function OpportunityList() {
   const [display, setDisplay] = useState<DisplayMode>("board");
   const [refreshKey, setRefreshKey] = useState(0);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [managerAvailable, setManagerAvailable] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -40,6 +42,14 @@ export function OpportunityList() {
     })
       .then((response) => {
         setBoard(response);
+        setManagerAvailable(response.managerIntelligenceAvailable === true);
+        if (
+          response.managerIntelligenceAvailable === true &&
+          new URLSearchParams(window.location.search).get("view") ===
+            "attention"
+        ) {
+          setDisplay("manager");
+        }
         if (!pipelineId) setPipelineId(response.pipeline.id);
         setError(null);
       })
@@ -132,6 +142,18 @@ export function OpportunityList() {
         >
           Board
         </ViewButton>
+        {managerAvailable ? (
+          <ViewButton
+            active={!closed && display === "manager"}
+            onClick={() => {
+              setClosed(false);
+              setDisplay("manager");
+              setAttentionOnly(false);
+            }}
+          >
+            Manager view
+          </ViewButton>
+        ) : null}
         <ViewButton
           active={!closed && display === "list"}
           onClick={() => {
@@ -250,7 +272,9 @@ export function OpportunityList() {
           </button>
         </div>
       ) : null}
-      {!loading && board ? (
+      {!loading && board && display === "manager" && !closed ? (
+        <ManagerPipelineView pipelineId={pipelineId} ownerUserId={ownerId} />
+      ) : !loading && board ? (
         <>
           {board.authorityMessage ? (
             <div className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
