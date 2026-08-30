@@ -621,23 +621,31 @@ WO-038/039 retain their separate forecast and manager authority gates.
 
 ## Checkpoint 3 — Product/platform validation
 
-WO-039 implementation is complete; the checkpoint decision remains open. Use the
-[Checkpoint 3 handoff](checkpoint-3-handoff.md) to collect manager/seller trust,
-proposition, operational and willingness-to-pay evidence. Do not begin WO-040+ or
-claim broader beta readiness from implementation completion alone.
+**Decision recorded 30 August 2026:**
+[Option 3 — insert targeted pre-WO-040 work](checkpoint-3-end-to-end-beta-readiness.md).
+The implemented product is coherent enough for supervised synthetic product testing,
+but it is not ready for real customer data, external sending, an unsupervised beta or
+a commercial beta. Do not begin WO-040.
 
-Assess Core, Create and CRM as separate commercial propositions and as a connected
-system. Decide **keep, modify, defer or remove** using activation, Core retention,
-forecast calibration/trust, content quality, native-CRM replacement evidence,
-permission/support burden and willingness to pay. Revisit whether integration breadth,
-Deal Rooms or handover is the highest-leverage next investment. Do not call the result
-an end-to-end beta until operational and privacy gates pass.
+Complete these narrow gates first:
 
-## Stage D — Ecosystem, extended workspace and beta
+- **WO-039A:** flagship journey coherence and reliability;
+- **WO-039B:** Create review/download trust and file security; and
+- **WO-039C:** real-data design-partner operations plus safe native CRM onboarding.
 
-WO-040 and WO-041 are discovery competitors as well as roadmap items. Implement the
-first ecosystem demanded by validated customers; the other may follow only when its
-incremental reach justifies duplicate provider/security/operations work.
+After those gates, narrow and move the Gmail delivery portion of WO-041 before
+Microsoft WO-040. Defer WO-042 connector breadth, WO-043 Deal Rooms and WO-044
+handover until observed design-partner evidence. Treat WO-045 as a release gate rather
+than a feature bundle. The detailed scope, exit criteria and provider rationale are in
+the checkpoint report.
+
+## Stage D — Ecosystem, extended workspace and beta (conditional after WO-039A–C)
+
+WO-040 and WO-041 remain discovery competitors as well as roadmap items. Checkpoint 3
+selects the smallest Gmail delivery slice from WO-041 as the current first-provider
+recommendation, subject to validation of the actual design-partner stack. Microsoft
+WO-040 follows only if Microsoft-led demand justifies duplicate provider, security and
+operations work.
 
 Checkpoint 2 makes the first ecosystem's smallest safe Engage delivery slice a gate
 before external Engage design-partner sending, but not before WO-032. The slice must
@@ -648,6 +656,10 @@ when safe; do not add open/click tracking. The broader Daily, Interaction and ca
 scope remains conditional on customer evidence.
 
 ### WO-040 — Microsoft 365
+
+**Checkpoint 3 disposition:** **Defer/reorder.** Do not begin before WO-039A–C or
+before customer evidence makes Microsoft the first ecosystem. If selected later,
+narrow the initial scope rather than building broad mail and calendar parity.
 
 - **Objective/value/package:** Connect the first validated Microsoft ecosystem data and
   actions needed for Daily, Interactions and Engage. **Core integration foundation;
@@ -675,6 +687,11 @@ scope remains conditional on customer evidence.
 
 ### WO-041 — Google Workspace
 
+**Checkpoint 3 disposition:** **Narrow and reorder before WO-040.** The first slice is
+Gmail only: user-bound OAuth, exact sender identity, reviewed/idempotent send, receipt,
+unknown-state reconciliation, reply stop, unsubscribe/suppression intake, revoke and
+operational kill switch. Calendar, Drive and broad Workspace context remain deferred.
+
 - **Objective/value/package:** Connect the first validated Google calendar/mail data
   and actions needed for Daily, Interactions and Engage. **Core integration foundation;
   add-on execution capabilities follow their module**.
@@ -697,6 +714,10 @@ scope remains conditional on customer evidence.
   ecosystem if demand is weak.
 
 ### WO-042 — CRM Connectors
+
+**Checkpoint 3 disposition:** **Defer.** First prove the existing HubSpot boundary in
+a real sandbox/pilot. Add a second provider or inbound breadth only from customer
+authority/conflict evidence.
 
 - **Objective/value/package:** Expand the validated WO-025C external-CRM foundation to
   a second provider or broader bidirectional mappings only where customer evidence
@@ -723,6 +744,10 @@ scope remains conditional on customer evidence.
 
 ### WO-043 — Deal Rooms / Extended Workspace
 
+**Checkpoint 3 disposition:** **Defer.** Current Opportunity Workspace and Create
+assets are sufficient for product testing; validate repeated document findability and
+storage pain before adding document-management scope.
+
 - **Objective/value/package:** Organise the evidence and working assets needed to win a
   specific Opportunity. **Core Deal Room; unusually large storage/governance may be
   Enterprise**, without crippling ordinary use.
@@ -748,6 +773,9 @@ scope remains conditional on customer evidence.
 
 ### WO-044 — Closed-Won Handover
 
+**Checkpoint 3 disposition:** **Defer.** Real-data sharing operations and joint
+seller/Customer Success evidence are not ready.
+
 - **Objective/value/package:** Turn reviewed Sales Brain knowledge into a concise,
   authorised Customer Success handover package. **Core handover proposal; future
   Customer Success product remains separate**.
@@ -772,6 +800,10 @@ scope remains conditional on customer evidence.
   any destination automation.
 
 ### WO-045 — End-to-End Sales OS Beta
+
+**Checkpoint 3 disposition:** **Replace as a release gate, not a feature sprint.**
+Harden and launch only independently validated modules after WO-039A–C and the selected
+narrow provider; do not require every module or WO-040–044 capability.
 
 - **Objective/value/package:** Harden only the validated module set into a supportable,
   secure commercial beta; a customer need not purchase every module. **Release work

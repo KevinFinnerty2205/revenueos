@@ -6,7 +6,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
-from typing import Final
+from typing import Final, cast
 from xml.etree import ElementTree
 
 from pptx import Presentation
@@ -377,6 +377,14 @@ def _parse_safe_xml(content: bytes) -> ElementTree.Element:
         raise MalformedPptxError from exc
 
 
+def _serialise_open_xml(root: ElementTree.Element) -> bytes:
+    """Preserve the default root namespace required by strict OOXML readers."""
+    namespace = root.tag.partition("}")[0].removeprefix("{") if root.tag.startswith("{") else ""
+    if namespace:
+        ElementTree.register_namespace("", namespace)
+    return cast(bytes, ElementTree.tostring(root, encoding="utf-8", xml_declaration=True))
+
+
 def _validate_content_types(content: bytes) -> None:
     root = _parse_safe_xml(content)
     types = [item.attrib.get("ContentType", "").casefold() for item in root]
@@ -494,14 +502,14 @@ def _strip_internal_parts(content: bytes, *, selected_slide_count: int) -> bytes
                         )
                     ):
                         root.remove(relationship)
-                data = ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
+                data = _serialise_open_xml(root)
             elif name == "[Content_Types].xml":
                 root = _parse_safe_xml(data)
                 for item in list(root):
                     part_name = item.attrib.get("PartName", "").lstrip("/")
                     if any(part_name.startswith(prefix) for prefix in removed_prefixes):
                         root.remove(item)
-                data = ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
+                data = _serialise_open_xml(root)
             elif name == "docProps/app.xml":
                 root = _parse_safe_xml(data)
                 for item in list(root):
@@ -517,6 +525,6 @@ def _strip_internal_parts(content: bytes, *, selected_slide_count: int) -> bytes
                         root.remove(item)
                     elif local_name == "Slides":
                         item.text = str(selected_slide_count)
-                data = ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
+                data = _serialise_open_xml(root)
             output.writestr(name, data)
     return target.getvalue()

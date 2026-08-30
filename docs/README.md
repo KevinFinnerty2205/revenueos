@@ -118,6 +118,7 @@ This is the canonical product and engineering documentation index. Documents dis
 112. [Manager Intelligence architecture](03-engineering/manager-intelligence-architecture.md)
 113. [Manager Intelligence security and privacy review](03-engineering/manager-intelligence-security-privacy-review.md)
 114. [Checkpoint 3 handoff](06-roadmap/checkpoint-3-handoff.md)
+115. [Checkpoint 3 end-to-end product and beta readiness](06-roadmap/checkpoint-3-end-to-end-beta-readiness.md) — Option 3 decision and pre-WO-040 gates
 
 ## 00 — Company
 

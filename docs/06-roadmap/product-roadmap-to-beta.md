@@ -576,8 +576,8 @@ Not every listed integration is a prerequisite for the first pilot or private be
 
 ## Next sequencing decision
 
-WO-028 Territory & ICP Intelligence is the current implemented baseline, following
-WO-026 Account Research and WO-027 Prospect Person Intelligence.
+WO-039 Manager Intelligence is the current implemented baseline. WO-026–039 are
+implemented within their separately approved boundaries.
 WO-009 supplies the smallest verified
 identity, organisation-administration and operational controls needed for a
 controlled beta, so the older Sprint 4 description below is retained as target
@@ -632,8 +632,14 @@ immutable stage history are current. WO-036 is now implemented as deterministic 
 Sales Analytics, bounded seller-reported Win/Loss aggregation, WO-037 explicit
 Targets/KPI progress, WO-038 Transparent Forecasting and WO-039 deal-centric Manager
 Intelligence. WO-039 uses admin as an interim manager capability and adds no
-hierarchy, scoring, surveillance, AI coach or blended forecast. Checkpoint 3 remains
-undecided; WO-040 and later still require separate authorisation.
+hierarchy, scoring, surveillance, AI coach or blended forecast.
+[Checkpoint 3](checkpoint-3-end-to-end-beta-readiness.md) selected Option 3: complete
+WO-039A journey reliability, WO-039B Create trust/security and WO-039C real-data
+operations/native onboarding before WO-040. Production provider activation,
+customer-data use, external Engage sending, auto-send and design-partner launch remain
+unauthorised. The first conditional provider recommendation is a narrow Gmail delivery
+slice from WO-041; Microsoft WO-040 and WO-042–044 breadth are deferred pending
+observed customer evidence.
 
 ## WO-035 current boundary
 
