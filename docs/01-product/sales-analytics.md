@@ -9,8 +9,9 @@ Pipeline workflow; it is not a general reporting or business-intelligence produc
 
 ## Experience and packaging
 
-Authenticated Core users open **Insights** from desktop navigation. Overview, Funnel,
-Activity and Win/Loss share one inclusive local-date range, IANA timezone, current
+Authenticated Core users open **Insights** from desktop navigation. Overview,
+Targets, Funnel, Activity and Win/Loss form the current information architecture.
+The four analytical views share one inclusive local-date range, IANA timezone, current
 Opportunity-owner and pipeline scope. Funnel requires one pipeline because stage
 identities and positions cannot be combined honestly. Historical inactive pipelines
 remain available and visibly labelled. No separate Analytics entitlement or paid
@@ -69,9 +70,10 @@ separate without FX.
 
 The inspectable versioned catalogue is
 [Sales analytics metric catalogue](../03-engineering/sales-analytics-metric-catalog.md).
-It is the only contract WO-037 Targets may consume. WO-038 Forecasting may later use
-clean lifecycle history, but WO-036 has no probability, weighting, predicted close or
-forecast. It also has no arbitrary report builder, text-to-SQL, custom formula,
+It is also the implemented WO-037 Targets contract. Target progress calls the same
+metric service and persists no actual. WO-038 Forecasting may later use clean
+lifecycle history, but WO-036/037 have no probability, weighting, predicted close or
+forecast. They also have no arbitrary report builder, text-to-SQL, custom formula,
 benchmark, open/click tracking, employee leaderboard, rep score, productivity
 telemetry, qualitative AI synthesis or manager coaching.
 

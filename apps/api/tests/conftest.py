@@ -136,6 +136,8 @@ from revenueos.models import (
     SalesEvent,
     SalesPipeline,
     SalesPipelineStage,
+    SalesTarget,
+    SalesTargetRevision,
     SourceCandidateEvidence,
     Task,
     Transcript,
@@ -432,6 +434,8 @@ def clean_business_entities() -> Iterator[None]:
                 OnlineMeetingMetadata,
                 Interaction,
                 SalesEvent,
+                SalesTargetRevision,
+                SalesTarget,
                 Task,
                 Contact,
                 OpportunityStageEvent,
@@ -446,6 +450,7 @@ def clean_business_entities() -> Iterator[None]:
             )
             await session.execute(update(User).values(status="active"))
             await session.execute(update(OrganisationMembership).values(status="active"))
+            await session.execute(update(Organisation).values(timezone="UTC"))
             await session.execute(
                 update(OrganisationModuleEntitlement).values(
                     enabled=True,

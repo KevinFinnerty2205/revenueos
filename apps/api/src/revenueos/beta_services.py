@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
@@ -45,6 +46,7 @@ from revenueos.models import (
     Organisation,
     OrganisationBetaSettings,
     OrganisationMembership,
+    SalesTarget,
     User,
 )
 from revenueos.tenant import TenantContext
@@ -397,7 +399,32 @@ class BetaService:
         if user_id == self.tenant.user_id and status == "disabled":
             raise PublicAPIError("cannot_disable_self", "An administrator cannot disable their own membership.", 409)
         membership.status = status
+        archived_target_count = 0
+        if status == "disabled":
+            owned_targets = await self.session.scalars(
+                select(SalesTarget).where(
+                    SalesTarget.organisation_id == self.tenant.organisation_id,
+                    SalesTarget.owner_user_id == user_id,
+                    SalesTarget.archived_at.is_(None),
+                )
+            )
+            now = datetime.now(UTC)
+            for target in owned_targets.all():
+                try:
+                    local_today = now.astimezone(ZoneInfo(target.timezone)).date()
+                except ZoneInfoNotFoundError:
+                    local_today = now.date()
+                if target.period_end >= local_today:
+                    target.archived_at = now
+                    target.updated_at = now
+                    archived_target_count += 1
         self._add_event("member_status_changed", subject_id=user_id, metadata={"status": status})
+        if archived_target_count:
+            self._add_event(
+                "member_sales_targets_archived",
+                subject_id=user_id,
+                metadata={"target_count": archived_target_count},
+            )
         await self._commit("The member status could not be changed.")
         user = await self.session.get(User, user_id)
         assert user is not None

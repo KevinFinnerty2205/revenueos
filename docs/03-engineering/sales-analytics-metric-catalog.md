@@ -1,8 +1,8 @@
 # Sales analytics metric catalogue
 
-**Status:** WO-036 canonical definitions. These definitions are code-owned,
-versioned and deterministic. WO-037 Targets must consume the same registry rather
-than reimplement a formula.
+**Status:** WO-036 canonical definitions with the implemented WO-037 targetability
+policy. These definitions are code-owned, versioned and deterministic; Targets
+consumes the same registry rather than reimplementing a formula.
 
 ## Shared scope and time rules
 
@@ -28,19 +28,19 @@ than reimplement a formula.
 
 ## Registry version 1
 
-| Stable metric ID | Unit | Date semantics | Definition | Targetable |
-| --- | --- | --- | --- | --- |
-| `opportunities_created_count` | count | Opportunity `created_at` in range | Distinct non-archived Opportunities created in scope | Yes |
-| `opportunities_closed_won_count` | count | `actual_close_date` in range | Distinct Opportunities currently closed Won | Yes |
-| `opportunities_closed_lost_count` | count | `actual_close_date` in range | Distinct Opportunities currently closed Lost | No |
-| `closed_win_rate` | percent | `actual_close_date` in range | Won / (Won + Lost), with open and reopened-currently-open Opportunities excluded | Yes |
-| `median_sales_cycle_days` | days | final `actual_close_date` in range | Median local calendar days from Opportunity creation to current final close | No |
-| `won_value` | currency amount | `actual_close_date` in range | Sum of valued current Won Opportunities for one required currency | Yes |
-| `meetings_completed_count` | count | Interaction `actual_end_at` in range | Completed meeting/customer-session Interactions; phone and manual-only records excluded | Yes |
-| `phone_calls_completed_count` | count | Interaction `actual_end_at` in range | Completed `phone_call` Interactions | Yes, as supporting context only |
-| `calls_followed_by_meeting_rate_30d` | percent | call `actual_end_at` in range | Mature, associated calls followed by a later completed meeting on the same Account or Contact within 30 days | Yes, with the non-causal definition visible |
-| `meetings_followed_by_progression_rate_30d` | percent | meeting `actual_end_at` in range | Mature, Opportunity-linked meetings followed by a later forward stage transition or Won within 30 days | Yes, with the non-causal definition visible |
-| `live_outreach_sent_count` | count | live execution `completed_at` in range | Provider-succeeded live email executions only; simulation is excluded | No until a production mailbox path is approved |
+| Stable metric ID                            | Unit            | Date semantics                         | Definition                                                                                                   | Targetable                                     |
+| ------------------------------------------- | --------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| `opportunities_created_count`               | count           | Opportunity `created_at` in range      | Distinct non-archived Opportunities created in scope                                                         | Yes                                            |
+| `opportunities_closed_won_count`            | count           | `actual_close_date` in range           | Distinct Opportunities currently closed Won                                                                  | Yes                                            |
+| `opportunities_closed_lost_count`           | count           | `actual_close_date` in range           | Distinct Opportunities currently closed Lost                                                                 | No                                             |
+| `closed_win_rate`                           | percent         | `actual_close_date` in range           | Won / (Won + Lost), with open and reopened-currently-open Opportunities excluded                             | No; rate targets deferred                      |
+| `median_sales_cycle_days`                   | days            | final `actual_close_date` in range     | Median local calendar days from Opportunity creation to current final close                                  | No                                             |
+| `won_value`                                 | currency amount | `actual_close_date` in range           | Sum of valued current Won Opportunities for one required currency                                            | Yes                                            |
+| `meetings_completed_count`                  | count           | Interaction `actual_end_at` in range   | Completed meeting/customer-session Interactions; phone and manual-only records excluded                      | Yes                                            |
+| `phone_calls_completed_count`               | count           | Interaction `actual_end_at` in range   | Completed `phone_call` Interactions                                                                          | Yes, as supporting context only                |
+| `calls_followed_by_meeting_rate_30d`        | percent         | call `actual_end_at` in range          | Mature, associated calls followed by a later completed meeting on the same Account or Contact within 30 days | No; rate targets deferred                      |
+| `meetings_followed_by_progression_rate_30d` | percent         | meeting `actual_end_at` in range       | Mature, Opportunity-linked meetings followed by a later forward stage transition or Won within 30 days       | No; rate targets deferred                      |
+| `live_outreach_sent_count`                  | count           | live execution `completed_at` in range | Provider-succeeded live email executions only; simulation is excluded                                        | No until a production mailbox path is approved |
 
 Each registry item also exposes its description, numerator, denominator, exclusions,
 supported filters, source domain and definition version through the product API.

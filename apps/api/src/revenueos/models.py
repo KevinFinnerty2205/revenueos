@@ -109,6 +109,7 @@ class TimestampMixin:
 class Organisation(TimestampMixin, Base):
     __tablename__ = "organisations"
     __table_args__ = (
+        CheckConstraint("length(trim(timezone)) BETWEEN 1 AND 64", name="ck_organisations_timezone"),
         UniqueConstraint("slug", name="uq_organisations_slug"),
         UniqueConstraint("external_auth_id", name="uq_organisations_external_auth_id"),
     )
@@ -117,6 +118,7 @@ class Organisation(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False)
     external_auth_id: Mapped[str | None] = mapped_column(String(255))
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC", server_default="UTC")
 
     memberships: Mapped[list[OrganisationMembership]] = relationship(
         back_populates="organisation",
@@ -8667,6 +8669,139 @@ class RevenueBrainInsight(Base):
         JSON(none_as_null=True),
         nullable=False,
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class SalesTarget(TimestampMixin, Base):
+    __tablename__ = "sales_targets"
+    __table_args__ = (
+        CheckConstraint("scope IN ('personal', 'organisation')", name="ck_sales_targets_scope"),
+        CheckConstraint("origin IN ('self_set', 'admin_assigned')", name="ck_sales_targets_origin"),
+        CheckConstraint("period_type IN ('month', 'quarter', 'year')", name="ck_sales_targets_period_type"),
+        CheckConstraint("period_end >= period_start", name="ck_sales_targets_period_bounds"),
+        CheckConstraint("length(trim(metric_id)) BETWEEN 1 AND 80", name="ck_sales_targets_metric_id"),
+        CheckConstraint(
+            "length(trim(metric_definition_version)) BETWEEN 1 AND 20",
+            name="ck_sales_targets_metric_version",
+        ),
+        CheckConstraint("length(trim(timezone)) BETWEEN 1 AND 64", name="ck_sales_targets_timezone"),
+        CheckConstraint(
+            "currency IS NULL OR (length(currency) = 3 AND currency = upper(currency))",
+            name="ck_sales_targets_currency",
+        ),
+        CheckConstraint(
+            "(scope = 'personal' AND owner_user_id IS NOT NULL) OR "
+            "(scope = 'organisation' AND owner_user_id IS NULL AND origin = 'admin_assigned')",
+            name="ck_sales_targets_scope_owner",
+        ),
+        CheckConstraint(
+            "origin <> 'self_set' OR (scope = 'personal' AND owner_user_id = created_by_user_id)",
+            name="ck_sales_targets_self_origin",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "owner_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_sales_targets_owner_membership",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "pipeline_id"],
+            ["sales_pipelines.organisation_id", "sales_pipelines.id"],
+            name="fk_sales_targets_pipeline",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_sales_targets_creator_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_sales_targets_org_id"),
+        Index("ix_sales_targets_org_owner_period", "organisation_id", "owner_user_id", "period_end"),
+        Index("ix_sales_targets_org_scope_period", "organisation_id", "scope", "period_end"),
+        Index(
+            "uq_sales_targets_active_identity",
+            "organisation_id",
+            "metric_id",
+            "metric_definition_version",
+            "scope",
+            "origin",
+            text("COALESCE(owner_user_id, '00000000-0000-0000-0000-000000000000')"),
+            text("COALESCE(pipeline_id, '00000000-0000-0000-0000-000000000000')"),
+            "period_start",
+            "period_end",
+            text("COALESCE(currency, '')"),
+            unique=True,
+            postgresql_where=text("archived_at IS NULL"),
+            sqlite_where=text("archived_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    metric_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    metric_definition_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    origin: Mapped[str] = mapped_column(String(24), nullable=False)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    pipeline_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    period_type: Mapped[str] = mapped_column(String(12), nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    currency: Mapped[str | None] = mapped_column(String(3))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SalesTargetRevision(Base):
+    __tablename__ = "sales_target_revisions"
+    __table_args__ = (
+        CheckConstraint("revision_number >= 1", name="ck_sales_target_revisions_number"),
+        CheckConstraint(
+            "goal_value > 0 AND goal_value <= 1000000000000000",
+            name="ck_sales_target_revisions_goal",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "target_id"],
+            ["sales_targets.organisation_id", "sales_targets.id"],
+            name="fk_sales_target_revisions_target",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_sales_target_revisions_creator_membership",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_sales_target_revisions_org_id"),
+        UniqueConstraint("target_id", "revision_number", name="uq_sales_target_revisions_target_number"),
+        Index(
+            "ix_sales_target_revisions_org_target",
+            "organisation_id",
+            "target_id",
+            "revision_number",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    target_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    goal_value: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -1,5 +1,20 @@
 # Target domain model
 
+## Current Sales Target boundary
+
+WO-037 persists `SalesTarget` identity/configuration and append-only
+`SalesTargetRevision` goal history. A Sales Target belongs to one organisation and is
+personal (one member) or organisation-wide; it binds one allow-listed WO-036 metric
+ID/version, explicit calendar period, immutable timezone, optional pipeline and
+optional single currency. `self_set` and `admin_assigned` origins keep authority and
+uniqueness explicit.
+
+No actual, observation, counter, pace, probability or forecast is an entity.
+`SalesMetricService` derives actual on every authorised read. Current Opportunity
+ownership/Interaction creator remain the version-1 attribution source. Target
+revision history is append-only, past configuration is locked and normal archive
+preserves identity/history. See [Sales Targets architecture](sales-targets-architecture.md).
+
 ## Current Target Market and discovery boundary
 
 WO-028 persists one `ProspectTargetMarket` aggregate with immutable
@@ -45,8 +60,8 @@ after deletion. Each prepared step points to the existing exact `OutreachMessage
 and Action/Execution graph. Campaign outbound activity and seller-reported outcomes
 are not customer Interaction/Evidence or Opportunity truth.
 
-**Status:** Current entities through WO-011 plus conceptual model through the
-Interaction Platform private beta. Target rows do not authorise implementation.
+**Status:** Current entities through WO-037 plus conceptual model through the
+Interaction Platform private beta. Only named implemented boundaries authorise rows.
 
 The current persisted model includes organisations, users, memberships,
 companies, contacts, opportunities, tasks, meetings, meeting participants,
@@ -107,25 +122,25 @@ Opportunity adds archive. `OrganisationCRMSetting`, `CRMCustomFieldDefinition`,
 `CRMCustomFieldValue` and `CRMRecordChange` are current bounded supporting entities.
 Pipeline definitions/stage history remain WO-035.
 
-| Entity                 | Purpose and key relationships                                                                                                                    | Tenant and source of truth                                                                          | Lifecycle and retention                                                                                | Current / expected sprint               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------- |
-| Organisation           | Tenant and policy boundary; has memberships and all tenant data                                                                                  | Organisation-scoped root; verified Clerk organisation is authoritative in production                | Active → deletion-requested → deleted through reviewed maintenance                                     | **Current — Sprint 1, expanded WO-009** |
-| User                   | Local identity projection referenced by memberships/ownership                                                                                    | Global projection of verified Clerk user identity                                                   | Active/disabled; retained while another authorised membership exists                                   | **Current — Sprint 1, expanded WO-009** |
-| OrganisationMembership | Links user to organisation and `admin`/`member` role                                                                                             | Tenant-owned; verified Clerk membership plus application status must agree                          | Active/disabled; access ends on the next verified request                                              | **Current — Sprint 1, expanded WO-009** |
-| Company                | Relationship account; has contacts, opportunities, meetings, events and memory                                                                   | Tenant-owned; manual now, CRM may become authoritative for mapped fields                            | Active/inactive; delete or archive according to relationship/source dependencies                       | **Current — Sprint 2**                  |
-| OrganisationModuleEntitlement | Bounded organisation switch for the Prospect add-on; not a billing catalogue | Tenant-owned admin configuration plus server feature availability | Enabled/disabled; revocation fails closed without synchronously deleting retained research | **Current — WO-026 for Prospect only** |
-| ProspectResearchTarget | Staged company identity and promotion link before canonical Account creation | Tenant-owned provider candidate/domain; never customer Evidence | Unpromoted/promoted; retention deletion does not cascade to promoted Company | **Current — WO-026** |
-| ProspectResearchRun | Immutable execution/version for one Research Target with refresh lineage | Tenant-owned worker lifecycle; provider output is execution input only | Pending/fetching/synthesising → completed/partial/failed; bounded leases and attempts | **Current — WO-026** |
-| ProspectResearchSource | Bounded public/provider source metadata for one run | Tenant-owned canonical URL/fingerprint and authority metadata | Immutable with run; no full page or raw provider payload | **Current — WO-026** |
-| ProspectResearchObservation | Structured company finding with exact trust state and run-local citations | Tenant-owned validated provider result; never customer-direct truth | Immutable with run; refresh creates another version | **Current — WO-026** |
-| ProspectTargetMarket | Named ICP/territory aggregate pointing to a current immutable definition revision | Tenant-owned; administrator-defined | Draft/active → archived; no hard-delete API | **Current — WO-028** |
-| ProspectDiscoveryRun | Bounded provider execution pinned to one Target Market revision | Tenant-owned; RevenueOS owns lifecycle and explanation | Pending/running → completed/partial/failed; refresh appends | **Current — WO-028** |
-| ProspectDiscoveryCandidate/Reason | Point-in-time company context plus criterion-level explanations | Provider-supplied facts plus exact tenant relationship context | Immutable with run; no canonical truth mutation | **Current — WO-028** |
-| ProspectTargetFeedback | User-specific saved/excluded state for a staged company identity | Tenant/user-owned feedback | Saved/excluded or restored by deletion | **Current — WO-028** |
-| Contact                | Person linked to a company and meetings                                                                                                          | Tenant-owned; manual now, CRM/provider identity may be authoritative by field                       | Active/merged/deleted; personal data follows deletion and source policy                                | **Current — Sprint 2**                  |
-| Opportunity            | Commercial context with optional company, manual value/date, owner, tasks and associated meetings; its workspace derives the latest meeting view | Tenant-owned; manual now, supported CRM may later become authoritative for explicitly mapped fields | `open`, `won`, `lost` or `on_hold`; stage remains independently user-managed                           | **Current — Sprint 2, expanded WO-007** |
-| Task                   | Human-owned commitment linked to company/contact/opportunity and later source evidence                                                           | Tenant-owned; RevenueOS authoritative for native tasks, external task system if later mapped        | Open/in progress → completed/cancelled; configurable operational retention                             | **Current — Sprint 2**                  |
-| OpportunityAuditEvent  | Metadata-only opportunity create/update/delete and meeting-association activity                                                                  | Tenant-owned; RevenueOS service transaction is authoritative                                        | Append-only metadata; deliberately has no content payload or opportunity FK so delete audit can remain | **Current — WO-007**                    |
+| Entity                            | Purpose and key relationships                                                                                                                    | Tenant and source of truth                                                                          | Lifecycle and retention                                                                                | Current / expected sprint               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+| Organisation                      | Tenant and policy boundary; has memberships and all tenant data                                                                                  | Organisation-scoped root; verified Clerk organisation is authoritative in production                | Active → deletion-requested → deleted through reviewed maintenance                                     | **Current — Sprint 1, expanded WO-009** |
+| User                              | Local identity projection referenced by memberships/ownership                                                                                    | Global projection of verified Clerk user identity                                                   | Active/disabled; retained while another authorised membership exists                                   | **Current — Sprint 1, expanded WO-009** |
+| OrganisationMembership            | Links user to organisation and `admin`/`member` role                                                                                             | Tenant-owned; verified Clerk membership plus application status must agree                          | Active/disabled; access ends on the next verified request                                              | **Current — Sprint 1, expanded WO-009** |
+| Company                           | Relationship account; has contacts, opportunities, meetings, events and memory                                                                   | Tenant-owned; manual now, CRM may become authoritative for mapped fields                            | Active/inactive; delete or archive according to relationship/source dependencies                       | **Current — Sprint 2**                  |
+| OrganisationModuleEntitlement     | Bounded organisation switch for the Prospect add-on; not a billing catalogue                                                                     | Tenant-owned admin configuration plus server feature availability                                   | Enabled/disabled; revocation fails closed without synchronously deleting retained research             | **Current — WO-026 for Prospect only**  |
+| ProspectResearchTarget            | Staged company identity and promotion link before canonical Account creation                                                                     | Tenant-owned provider candidate/domain; never customer Evidence                                     | Unpromoted/promoted; retention deletion does not cascade to promoted Company                           | **Current — WO-026**                    |
+| ProspectResearchRun               | Immutable execution/version for one Research Target with refresh lineage                                                                         | Tenant-owned worker lifecycle; provider output is execution input only                              | Pending/fetching/synthesising → completed/partial/failed; bounded leases and attempts                  | **Current — WO-026**                    |
+| ProspectResearchSource            | Bounded public/provider source metadata for one run                                                                                              | Tenant-owned canonical URL/fingerprint and authority metadata                                       | Immutable with run; no full page or raw provider payload                                               | **Current — WO-026**                    |
+| ProspectResearchObservation       | Structured company finding with exact trust state and run-local citations                                                                        | Tenant-owned validated provider result; never customer-direct truth                                 | Immutable with run; refresh creates another version                                                    | **Current — WO-026**                    |
+| ProspectTargetMarket              | Named ICP/territory aggregate pointing to a current immutable definition revision                                                                | Tenant-owned; administrator-defined                                                                 | Draft/active → archived; no hard-delete API                                                            | **Current — WO-028**                    |
+| ProspectDiscoveryRun              | Bounded provider execution pinned to one Target Market revision                                                                                  | Tenant-owned; RevenueOS owns lifecycle and explanation                                              | Pending/running → completed/partial/failed; refresh appends                                            | **Current — WO-028**                    |
+| ProspectDiscoveryCandidate/Reason | Point-in-time company context plus criterion-level explanations                                                                                  | Provider-supplied facts plus exact tenant relationship context                                      | Immutable with run; no canonical truth mutation                                                        | **Current — WO-028**                    |
+| ProspectTargetFeedback            | User-specific saved/excluded state for a staged company identity                                                                                 | Tenant/user-owned feedback                                                                          | Saved/excluded or restored by deletion                                                                 | **Current — WO-028**                    |
+| Contact                           | Person linked to a company and meetings                                                                                                          | Tenant-owned; manual now, CRM/provider identity may be authoritative by field                       | Active/merged/deleted; personal data follows deletion and source policy                                | **Current — Sprint 2**                  |
+| Opportunity                       | Commercial context with optional company, manual value/date, owner, tasks and associated meetings; its workspace derives the latest meeting view | Tenant-owned; manual now, supported CRM may later become authoritative for explicitly mapped fields | `open`, `won`, `lost` or `on_hold`; stage remains independently user-managed                           | **Current — Sprint 2, expanded WO-007** |
+| Task                              | Human-owned commitment linked to company/contact/opportunity and later source evidence                                                           | Tenant-owned; RevenueOS authoritative for native tasks, external task system if later mapped        | Open/in progress → completed/cancelled; configurable operational retention                             | **Current — Sprint 2**                  |
+| OpportunityAuditEvent             | Metadata-only opportunity create/update/delete and meeting-association activity                                                                  | Tenant-owned; RevenueOS service transaction is authoritative                                        | Append-only metadata; deliberately has no content payload or opportunity FK so delete audit can remain | **Current — WO-007**                    |
 
 ## Current AI and Revenue Brain entities
 
@@ -283,9 +298,10 @@ closure metadata. Current pipeline/stage/timing/outcome fields remain on Opportu
 for efficient authorised reads. There is no Deal entity, forecast entity or duplicated
 customer-intelligence model.
 
-## WO-036 metric contract for WO-037
+## WO-036 metric contract and WO-037 Target domain
 
 WO-036 supplies a small read-only registry of stable metric identifiers and
-definition versions. WO-037 Targets must reference those identifiers and
-versions; it must not copy formulas, create a parallel metric catalogue or
-change historical observations when a later definition version is introduced.
+definition versions. WO-037 Targets now references those identifiers/versions
+without copying formulas or creating a parallel metric catalogue. Metric versions
+remain immutable bindings; actuals are live observations and therefore follow
+canonical correction/reopen/deletion rather than becoming target-owned history.

@@ -11,10 +11,12 @@ import type {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
+import { SalesTargets, SalesTargetsOverview } from "@/components/sales-targets";
 
-type InsightTab = "overview" | "funnel" | "activity" | "win-loss";
+type InsightTab = "overview" | "targets" | "funnel" | "activity" | "win-loss";
 type InsightPayload =
   SalesOverview | SalesFunnel | SalesActivity | SalesWinLoss;
+type Capabilities = { featureFlags: Record<string, boolean> };
 type DatePreset =
   | "this-month"
   | "last-month"
@@ -26,6 +28,7 @@ type DatePreset =
 
 const tabs: Array<{ id: InsightTab; label: string }> = [
   { id: "overview", label: "Overview" },
+  { id: "targets", label: "Targets" },
   { id: "funnel", label: "Funnel" },
   { id: "activity", label: "Activity" },
   { id: "win-loss", label: "Win / loss" },
@@ -179,9 +182,20 @@ function ExactTable({
   );
 }
 
-function OverviewPanel({ data }: { data: SalesOverview }) {
+function OverviewPanel({
+  data,
+  onViewTargets,
+  targetsEnabled,
+}: {
+  data: SalesOverview;
+  onViewTargets: () => void;
+  targetsEnabled: boolean;
+}) {
   return (
     <div className="space-y-6">
+      {targetsEnabled ? (
+        <SalesTargetsOverview onViewAll={onViewTargets} />
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Open opportunities"
@@ -555,13 +569,60 @@ export function SalesInsights() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
-  const timezone = useMemo(
+  const [targetsEnabled, setTargetsEnabled] = useState(false);
+  const [timezone, setTimezone] = useState(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    [],
   );
+  const [deepLinkApplied, setDeepLinkApplied] = useState(false);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const query = new URLSearchParams(window.location.search);
+      const requestedTab = query.get("tab");
+      if (
+        requestedTab &&
+        requestedTab !== "targets" &&
+        tabs.some((tab) => tab.id === requestedTab)
+      ) {
+        setActiveTab(requestedTab as InsightTab);
+      }
+      const requestedStart = query.get("startDate");
+      const requestedEnd = query.get("endDate");
+      if (
+        requestedStart?.match(/^\d{4}-\d{2}-\d{2}$/u) &&
+        requestedEnd?.match(/^\d{4}-\d{2}-\d{2}$/u)
+      ) {
+        setPreset("custom");
+        setStartDate(requestedStart);
+        setEndDate(requestedEnd);
+      }
+      setPipelineId(query.get("pipelineId") ?? "");
+      setOwnerUserId(query.get("ownerUserId") ?? "");
+      const requestedTimezone = query.get("timezone");
+      if (requestedTimezone) {
+        try {
+          new Intl.DateTimeFormat("en-AU", { timeZone: requestedTimezone });
+          setTimezone(requestedTimezone);
+        } catch {
+          // Ignore malformed deep-link timezones and retain the browser timezone.
+        }
+      }
+      setDeepLinkApplied(true);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
+    apiRequest<Capabilities>("/api/v1/beta/capabilities", {
+      signal: controller.signal,
+    })
+      .then((capabilities) =>
+        setTargetsEnabled(capabilities.featureFlags.salesTargets === true),
+      )
+      .catch(() => {
+        if (!controller.signal.aborted) setTargetsEnabled(false);
+      });
     apiRequest<SalesInsightsMetadata>("/api/v1/insights/sales/metadata", {
       signal: controller.signal,
     })
@@ -579,6 +640,14 @@ export function SalesInsights() {
 
   const loadData = useCallback(
     async (signal: AbortSignal) => {
+      if (!deepLinkApplied) return;
+      if (activeTab === "targets") {
+        setData(null);
+        setDataTab(null);
+        setLoading(false);
+        setError(null);
+        return;
+      }
       if (activeTab === "funnel" && !pipelineId) {
         setData(null);
         setDataTab(null);
@@ -609,7 +678,15 @@ export function SalesInsights() {
         if (!signal.aborted) setLoading(false);
       }
     },
-    [activeTab, endDate, ownerUserId, pipelineId, startDate, timezone],
+    [
+      activeTab,
+      deepLinkApplied,
+      endDate,
+      ownerUserId,
+      pipelineId,
+      startDate,
+      timezone,
+    ],
   );
 
   useEffect(() => {
@@ -643,114 +720,118 @@ export function SalesInsights() {
         title="Sales insights"
         description="A bounded, deterministic view of pipeline progression, activity patterns and seller-reported outcomes."
       />
-      <section
-        aria-label="Sales insight filters"
-        className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-      >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <label className="text-sm font-semibold text-slate-700">
-            Date range
-            <select
-              value={preset}
-              onChange={(event) =>
-                changePreset(event.target.value as DatePreset)
-              }
-              className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
-            >
-              {datePresets.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-semibold text-slate-700">
-            Pipeline
-            <select
-              value={pipelineId}
-              onChange={(event) => setPipelineId(event.target.value)}
-              className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
-            >
-              <option value="">All pipelines</option>
-              {metadata?.pipelines.map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                  {pipeline.active ? "" : " (inactive)"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-semibold text-slate-700">
-            Owner
-            <select
-              value={ownerUserId}
-              onChange={(event) => setOwnerUserId(event.target.value)}
-              className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
-            >
-              <option value="">All owners</option>
-              {metadata?.owners.map((owner) => (
-                <option key={owner.userId} value={owner.userId}>
-                  {owner.displayName}
-                  {owner.active ? "" : " (inactive)"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="rounded-xl bg-slate-50 px-3 py-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Timezone
-            </p>
-            <p
-              className="mt-2 truncate text-sm font-semibold text-slate-700"
-              title={timezone}
-            >
-              {timezone}
-            </p>
-          </div>
-        </div>
-        {preset === "custom" ? (
-          <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
+      {activeTab !== "targets" ? (
+        <section
+          aria-label="Sales insight filters"
+          className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+        >
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <label className="text-sm font-semibold text-slate-700">
-              Start date
-              <input
-                type="date"
-                value={startDate}
-                max={endDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
-              />
+              Date range
+              <select
+                value={preset}
+                onChange={(event) =>
+                  changePreset(event.target.value as DatePreset)
+                }
+                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+              >
+                {datePresets.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="text-sm font-semibold text-slate-700">
-              End date
-              <input
-                type="date"
-                value={endDate}
-                min={startDate}
-                max={localDate(new Date())}
-                onChange={(event) => setEndDate(event.target.value)}
-                className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
-              />
+              Pipeline
+              <select
+                value={pipelineId}
+                onChange={(event) => setPipelineId(event.target.value)}
+                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+              >
+                <option value="">All pipelines</option>
+                {metadata?.pipelines.map((pipeline) => (
+                  <option key={pipeline.id} value={pipeline.id}>
+                    {pipeline.name}
+                    {pipeline.active ? "" : " (inactive)"}
+                  </option>
+                ))}
+              </select>
             </label>
+            <label className="text-sm font-semibold text-slate-700">
+              Owner
+              <select
+                value={ownerUserId}
+                onChange={(event) => setOwnerUserId(event.target.value)}
+                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+              >
+                <option value="">All owners</option>
+                {metadata?.owners.map((owner) => (
+                  <option key={owner.userId} value={owner.userId}>
+                    {owner.displayName}
+                    {owner.active ? "" : " (inactive)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="rounded-xl bg-slate-50 px-3 py-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Timezone
+              </p>
+              <p
+                className="mt-2 truncate text-sm font-semibold text-slate-700"
+                title={timezone}
+              >
+                {timezone}
+              </p>
+            </div>
           </div>
-        ) : null}
-      </section>
+          {preset === "custom" ? (
+            <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
+              <label className="text-sm font-semibold text-slate-700">
+                Start date
+                <input
+                  type="date"
+                  value={startDate}
+                  max={endDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                />
+              </label>
+              <label className="text-sm font-semibold text-slate-700">
+                End date
+                <input
+                  type="date"
+                  value={endDate}
+                  min={startDate}
+                  max={localDate(new Date())}
+                  onChange={(event) => setEndDate(event.target.value)}
+                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                />
+              </label>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       <div
         role="tablist"
         aria-label="Sales insight sections"
-        className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1"
+        className="mb-6 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1"
       >
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`min-h-11 whitespace-nowrap rounded-lg px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-teal-600 ${activeTab === tab.id ? "bg-white text-teal-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {tabs
+          .filter((tab) => tab.id !== "targets" || targetsEnabled)
+          .map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`min-h-11 whitespace-nowrap rounded-lg px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-teal-600 ${activeTab === tab.id ? "bg-white text-teal-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              {tab.label}
+            </button>
+          ))}
       </div>
       {activeTab === "funnel" && !pipelineId ? (
         <section className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
@@ -763,6 +844,7 @@ export function SalesInsights() {
           </p>
         </section>
       ) : null}
+      {activeTab === "targets" ? <SalesTargets /> : null}
       {loading ? (
         <div
           role="status"
@@ -788,7 +870,11 @@ export function SalesInsights() {
         </div>
       ) : null}
       {!loading && !error && data && dataTab === "overview" ? (
-        <OverviewPanel data={data as SalesOverview} />
+        <OverviewPanel
+          data={data as SalesOverview}
+          onViewTargets={() => setActiveTab("targets")}
+          targetsEnabled={targetsEnabled}
+        />
       ) : null}
       {!loading && !error && data && dataTab === "funnel" ? (
         <FunnelPanel data={data as SalesFunnel} />
@@ -809,14 +895,16 @@ export function SalesInsights() {
           owner or pipeline filter.
         </p>
       ) : null}
-      <footer className="mt-8 text-xs leading-5 text-slate-500">
-        Inclusive local dates: {startDate} to {endDate}.{" "}
-        {selectedPipeline
-          ? `Pipeline: ${selectedPipeline.name}. `
-          : "All pipelines. "}
-        Definitions use canonical RevenueOS records and metric catalogue version
-        1.
-      </footer>
+      {activeTab !== "targets" ? (
+        <footer className="mt-8 text-xs leading-5 text-slate-500">
+          Inclusive local dates: {startDate} to {endDate}.{" "}
+          {selectedPipeline
+            ? `Pipeline: ${selectedPipeline.name}. `
+            : "All pipelines. "}
+          Definitions use canonical RevenueOS records and metric catalogue
+          version 1.
+        </footer>
+      ) : null}
     </div>
   );
 }

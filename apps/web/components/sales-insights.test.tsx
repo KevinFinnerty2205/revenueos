@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SalesInsights } from "@/components/sales-insights";
 
 const pipelineId = "11111111-1111-4111-8111-111111111111";
+const ownerId = "owner-1";
 
 const scope = {
   startDate: "2026-07-01",
@@ -45,11 +46,29 @@ const metadata = {
       ],
     },
   ],
-  owners: [{ userId: "owner-1", displayName: "Alex Seller", active: true }],
+  owners: [{ userId: ownerId, displayName: "Alex Seller", active: true }],
   metrics: [],
   outcomeWindowDays: 30,
   maximumRangeDays: 1827,
   generatedAt: "2026-08-30T03:00:00Z",
+};
+
+const targetMetadata = {
+  currentUserId: "22222222-2222-4222-8222-222222222222",
+  currentUserRole: "member",
+  organisationTimezone: "Australia/Sydney",
+  metrics: [],
+  owners: [],
+  pipelines: [],
+  canAssignPersonalTargets: false,
+  canCreateOrganisationTargets: false,
+};
+
+const emptyTargets = {
+  items: [],
+  canAssignPersonalTargets: false,
+  canCreateOrganisationTargets: false,
+  maximumVisibleTargets: 200,
 };
 
 const overview = {
@@ -192,12 +211,19 @@ function json(payload: object, status = 200) {
   );
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  window.history.replaceState({}, "", "/");
+});
 
 describe("sales insights", () => {
-  it("loads filters and presents the four deterministic insight views", async () => {
+  it("loads filters and presents the five deterministic insight views", async () => {
     const fetchMock = vi.fn((input: string | URL | Request) => {
       const url = String(input);
+      if (url.includes("/api/v1/beta/capabilities"))
+        return json({ featureFlags: { salesTargets: true } });
+      if (url.includes("/api/v1/targets/metadata")) return json(targetMetadata);
+      if (url.includes("/api/v1/targets")) return json(emptyTargets);
       if (url.includes("/metadata")) return json(metadata);
       if (url.includes("/funnel")) return json(funnel);
       if (url.includes("/activity")) return json(activity);
@@ -212,6 +238,8 @@ describe("sales insights", () => {
     expect(screen.getByText("$125,000")).toBeVisible();
     expect(screen.getByText(/USD\s*50,000/u)).toBeVisible();
     expect(screen.getByText(/currencies remain separate/i)).toBeVisible();
+    expect(await screen.findByText("Active targets")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Targets" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("tab", { name: "Funnel" }));
     expect(screen.getByText(/choose one pipeline/i)).toBeVisible();
@@ -240,6 +268,14 @@ describe("sales insights", () => {
       screen.getByText(/free-text win\/loss notes are intentionally excluded/i),
     ).toBeVisible();
 
+    fireEvent.click(screen.getByRole("tab", { name: "Targets" }));
+    expect(
+      await screen.findByRole("heading", { name: "Targets" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByLabelText("Sales insight filters"),
+    ).not.toBeInTheDocument();
+
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining("pipelineId="),
@@ -258,5 +294,64 @@ describe("sales insights", () => {
       "Sales insights are unavailable",
     );
     expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+
+  it("does not expose Targets when the server capability is off", async () => {
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/api/v1/beta/capabilities"))
+        return json({ featureFlags: { salesTargets: false } });
+      if (url.includes("/metadata")) return json(metadata);
+      return json(overview);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SalesInsights />);
+    expect(await screen.findByText("Open opportunities")).toBeVisible();
+    expect(
+      screen.queryByRole("tab", { name: "Targets" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Active targets")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/targets"),
+      expect.anything(),
+    );
+  });
+
+  it("applies the exact date, timezone, Pipeline and owner from a Target deep link", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      `/insights?tab=activity&metric=meetings_completed_count&startDate=2026-08-01&endDate=2026-08-30&timezone=Australia%2FSydney&pipelineId=${pipelineId}&ownerUserId=${ownerId}`,
+    );
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/api/v1/beta/capabilities"))
+        return json({ featureFlags: { salesTargets: true } });
+      if (url.includes("/metadata")) return json(metadata);
+      if (url.includes("/activity")) return json(activity);
+      return json(overview);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SalesInsights />);
+
+    expect(await screen.findByText("Completed phone calls")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByLabelText("Date range")).toHaveValue("custom");
+    expect(screen.getByLabelText("Start date")).toHaveValue("2026-08-01");
+    expect(screen.getByLabelText("End date")).toHaveValue("2026-08-30");
+    expect(screen.getByText("Australia/Sydney")).toBeVisible();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /\/activity\?.*startDate=2026-08-01.*endDate=2026-08-30.*timezone=Australia%2FSydney.*pipelineId=.*ownerUserId=/u,
+        ),
+        expect.anything(),
+      ),
+    );
   });
 });

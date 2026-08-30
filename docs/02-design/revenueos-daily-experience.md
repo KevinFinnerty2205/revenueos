@@ -97,7 +97,8 @@ Daily exposes the deterministic product-safe reason but not raw Evidence or Brai
 history. It contains no mutation, approval, execution or send control itself.
 Dismiss/snooze is deferred until an approved preference and outcome contract exists.
 
-Targets remain WO-037, forecasting remains WO-038 and team/manager Daily remains
+Targets are implemented in Insights by WO-037 without changing Daily; forecasting
+remains WO-038 and team/manager Daily remains
 WO-039. Without canonical target/forecast inputs Daily omits them instead of showing
 placeholders that look authoritative.
 

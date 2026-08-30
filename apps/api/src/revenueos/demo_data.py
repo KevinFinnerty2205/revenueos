@@ -6,7 +6,7 @@ import base64
 import hashlib
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -62,6 +62,7 @@ from revenueos.models import (
     Opportunity,
     OpportunityAuditEvent,
     OpportunityStageEvent,
+    Organisation,
     OrganisationMembership,
     OrganisationMethodologySetting,
     PreInteractionBrief,
@@ -76,6 +77,8 @@ from revenueos.models import (
     RevenueBrainSourceSnapshot,
     SalesPipeline,
     SalesPipelineStage,
+    SalesTarget,
+    SalesTargetRevision,
     SourceCandidateEvidence,
     Transcript,
     TranscriptSegment,
@@ -648,6 +651,77 @@ def demo_sales_analytics_ids(organisation_id: UUID) -> tuple[tuple[UUID, ...], t
     return opportunity_ids, interaction_ids
 
 
+def demo_sales_target_ids(organisation_id: UUID) -> dict[str, UUID]:
+    return {
+        label: uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:sales-target:{label}")
+        for label in (
+            "won-value",
+            "won-value-revision",
+            "meetings",
+            "meetings-revision",
+        )
+    }
+
+
+async def _seed_sales_targets_demo(
+    session: AsyncSession,
+    organisation_id: UUID,
+    user_id: UUID,
+) -> tuple[UUID, UUID]:
+    """Seed explicit 2026 targets whose actuals remain owned by Sales Analytics."""
+
+    ids = demo_sales_target_ids(organisation_id)
+    organisation = await session.get(Organisation, organisation_id)
+    timezone = organisation.timezone if organisation is not None else "UTC"
+    specifications = (
+        (
+            ids["won-value"],
+            ids["won-value-revision"],
+            "won_value",
+            Decimal("1000000.00"),
+            "AUD",
+        ),
+        (
+            ids["meetings"],
+            ids["meetings-revision"],
+            "meetings_completed_count",
+            Decimal("12.00"),
+            None,
+        ),
+    )
+    for target_id, revision_id, metric_id, goal_value, currency in specifications:
+        if await session.get(SalesTarget, target_id) is not None:
+            continue
+        session.add(
+            SalesTarget(
+                id=target_id,
+                organisation_id=organisation_id,
+                metric_id=metric_id,
+                metric_definition_version="1",
+                scope="personal",
+                origin="self_set",
+                owner_user_id=user_id,
+                period_type="year",
+                period_start=date(2026, 1, 1),
+                period_end=date(2026, 12, 31),
+                timezone=timezone,
+                currency=currency,
+                created_by_user_id=user_id,
+            )
+        )
+        session.add(
+            SalesTargetRevision(
+                id=revision_id,
+                organisation_id=organisation_id,
+                target_id=target_id,
+                revision_number=1,
+                goal_value=goal_value,
+                created_by_user_id=user_id,
+            )
+        )
+    return ids["won-value"], ids["meetings"]
+
+
 async def _seed_sales_analytics_demo(
     session: AsyncSession,
     organisation_id: UUID,
@@ -1154,6 +1228,7 @@ async def seed_demo_data(
             pipeline,
             pipeline_stages,
         )
+        sales_target_ids = await _seed_sales_targets_demo(session, organisation_id, user_id)
         await session.flush()
 
         linked_interaction_ids: list[UUID] = []
@@ -2482,11 +2557,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 16},
+                    metadata_json={"dataset_version": 17},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 16}
+            event.metadata_json = {"dataset_version": 17}
     methodology_versions = await _seed_methodology_views(
         session_factory,
         organisation_id,
@@ -2527,6 +2602,7 @@ async def seed_demo_data(
         "campaign_id": campaign_id,
         "sales_analytics_opportunity_ids": analytics_opportunity_ids,
         "sales_analytics_interaction_ids": analytics_interaction_ids,
+        "sales_target_ids": sales_target_ids,
         "provider_calls": 0,
     }
 
@@ -2822,6 +2898,7 @@ async def reset_demo_data(
     campaign_ids = demo_campaign_ids(organisation_id)
     phone_contact_id = demo_phone_contact_id(organisation_id)
     analytics_opportunity_ids, analytics_interaction_ids = demo_sales_analytics_ids(organisation_id)
+    sales_target_ids = demo_sales_target_ids(organisation_id)
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
     live_ids = demo_live_ids(organisation_id)
     google_meeting_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-google-meeting")
@@ -2896,6 +2973,18 @@ async def reset_demo_data(
             delete(ProspectTargetMarket).where(
                 ProspectTargetMarket.organisation_id == organisation_id,
                 ProspectTargetMarket.id.in_(demo_market_ids),
+            )
+        )
+        await session.execute(
+            delete(SalesTargetRevision).where(
+                SalesTargetRevision.organisation_id == organisation_id,
+                SalesTargetRevision.target_id.in_((sales_target_ids["won-value"], sales_target_ids["meetings"])),
+            )
+        )
+        await session.execute(
+            delete(SalesTarget).where(
+                SalesTarget.organisation_id == organisation_id,
+                SalesTarget.id.in_((sales_target_ids["won-value"], sales_target_ids["meetings"])),
             )
         )
         await session.execute(
