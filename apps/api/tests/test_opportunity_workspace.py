@@ -323,7 +323,7 @@ def test_opportunity_update_rejects_stale_metadata(client: TestClient) -> None:
     first = client.patch(
         f"/api/v1/opportunities/{opportunity['id']}",
         json={
-            "stage": "evaluation",
+            "description": "First current update",
             "expectedUpdatedAt": opportunity["updatedAt"],
         },
     )
@@ -331,7 +331,7 @@ def test_opportunity_update_rejects_stale_metadata(client: TestClient) -> None:
     stale = client.patch(
         f"/api/v1/opportunities/{opportunity['id']}",
         json={
-            "stage": "proposal",
+            "description": "Stale update",
             "expectedUpdatedAt": opportunity["updatedAt"],
         },
     )

@@ -626,6 +626,15 @@ Company/Contact/Opportunity records support explicit RevenueOS or external HubSp
 system-of-record mode, ownership, strong dedupe, archive/restore, bounded typed
 custom fields, authority cues, canonical activity and field history. Operational CSV
 and native reviewed-Action execution are deliberately deferred with organisation
-export and no-autonomous-mutation boundaries documented. WO-035 and later still
-require separate authorisation; in particular WO-035 owns configurable Pipeline,
-stages, board movement and stage history.
+export and no-autonomous-mutation boundaries documented. WO-035 is now implemented:
+configurable native Pipeline, server-authoritative board movement, closure/reopen and
+immutable stage history are current. WO-036 and later still require separate
+authorisation.
+
+## WO-035 current boundary
+
+Native Pipeline is current through migration `0044_native_pipeline`. It provides
+descriptive Board/List/Closed views, stable stage history and CRM-gated native
+configuration. It does not advance the roadmap into Sales Analytics, Win/Loss
+Intelligence, Targets, Forecasting or Manager Intelligence. External HubSpot mode is
+read-only for direct stage movement; no provider call or inbound sync was added.

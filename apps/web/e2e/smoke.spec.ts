@@ -534,7 +534,6 @@ test("interaction timeline supports deliberate creation and completion without i
       });
     },
   );
-
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/interactions");
   await expect(
@@ -2522,7 +2521,9 @@ test("mobile Companion recording path persists a consented transcript into exist
       await route.fulfill({
         json: path.endsWith("/workspace")
           ? opportunityWorkspace(true, true)
-          : opportunity(),
+          : path.endsWith("/pipeline")
+            ? opportunityPipeline()
+            : opportunity(),
       });
     },
   );
@@ -3195,6 +3196,10 @@ test("opportunity workspace persists an associated meeting and composes stored i
         });
         return;
       }
+      if (path.endsWith("/pipeline")) {
+        await route.fulfill({ json: opportunityPipeline() });
+        return;
+      }
       if (path.endsWith("/brain/reasoning") && request.method() === "POST") {
         reasoningGenerated = true;
         await route.fulfill({
@@ -3293,14 +3298,12 @@ test("opportunity workspace persists an associated meeting and composes stored i
     });
   });
 
-  await page.goto("/opportunities");
+  await page.goto("/opportunities/new");
   await expect(
-    page.getByRole("heading", { name: "Opportunities", exact: true }),
+    page.getByRole("heading", { name: "Create opportunity", exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Create opportunity" }).first().click();
   await page.getByLabel("Account").selectOption("company-1");
   await page.getByLabel("Opportunity name").fill("Platform expansion");
-  await page.getByLabel("Stage").selectOption("proposal");
   await page.getByLabel("Estimated value").fill("125000.50");
   await page.getByLabel("Currency").selectOption("AUD");
   await page.getByLabel("Expected close date").fill("2026-09-30");
@@ -3347,15 +3350,14 @@ test("opportunity workspace persists an associated meeting and composes stored i
   await expect(
     page.getByRole("heading", { name: "Latest Next Best Action" }),
   ).toBeVisible();
-  for (const prohibited of [
-    "probability",
-    "forecast",
-    "provider",
-    "prompt",
-    "worker",
-  ]) {
+  for (const prohibited of ["probability", "provider", "prompt", "worker"]) {
     await expect(page.getByText(new RegExp(prohibited, "i"))).toHaveCount(0);
   }
+  await expect(
+    page.getByText(
+      /do not confirm customer Evidence, Methodology or forecast likelihood/i,
+    ),
+  ).toBeVisible();
 
   await page
     .getByRole("link", { name: "Open latest meeting intelligence" })
@@ -3916,6 +3918,75 @@ function opportunity() {
     description: null,
     createdAt: "2026-07-20T00:00:00Z",
     updatedAt: "2026-07-24T00:00:00Z",
+  };
+}
+
+function opportunityPipeline() {
+  const stages = [
+    {
+      id: "stage-proposal",
+      pipelineId: "pipeline-1",
+      key: "proposal",
+      name: "Proposal",
+      position: 0,
+      stageType: "open",
+      guidance: null,
+      active: true,
+      archivedAt: null,
+      currentOpportunityCount: 1,
+    },
+    {
+      id: "stage-won",
+      pipelineId: "pipeline-1",
+      key: "closed_won",
+      name: "Closed Won",
+      position: 1,
+      stageType: "won",
+      guidance: null,
+      active: true,
+      archivedAt: null,
+      currentOpportunityCount: 0,
+    },
+    {
+      id: "stage-lost",
+      pipelineId: "pipeline-1",
+      key: "closed_lost",
+      name: "Closed Lost",
+      position: 2,
+      stageType: "lost",
+      guidance: null,
+      active: true,
+      archivedAt: null,
+      currentOpportunityCount: 0,
+    },
+  ];
+  const pipeline = {
+    id: "pipeline-1",
+    name: "RevenueOS Sales Pipeline",
+    isDefault: true,
+    active: true,
+    archivedAt: null,
+    stages,
+    createdAt: "2026-07-20T00:00:00Z",
+    updatedAt: "2026-07-20T00:00:00Z",
+  };
+  return {
+    opportunityId: "opportunity-1",
+    status: "open",
+    pipeline,
+    stage: stages[0],
+    stageEnteredAt: "2026-07-20T00:00:00Z",
+    stageTrackingStartedAt: "2026-07-20T00:00:00Z",
+    daysInStage: 4,
+    actualCloseDate: null,
+    outcomeReason: null,
+    outcomeNote: null,
+    outcomeProvenance: null,
+    availablePipelines: [pipeline],
+    history: [],
+    stageChangesAllowed: true,
+    managedExternally: false,
+    authorityMessage: null,
   };
 }
 

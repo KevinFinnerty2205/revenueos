@@ -2,10 +2,10 @@
 
 ## Enable a design-partner organisation
 
-1. Confirm deployment head is `0043_native_crm` and `API_FEATURE_NATIVE_CRM_ENABLED=true`.
+1. Confirm deployment head is `0044_native_pipeline`, `API_FEATURE_NATIVE_CRM_ENABLED=true` and `API_FEATURE_NATIVE_PIPELINE_ENABLED=true`.
 2. Through the authenticated admin setting, enable the organisation `crm` entitlement.
 3. In Settings → CRM, explicitly choose RevenueOS or connected HubSpot.
-4. Create one synthetic Account, Contact and Opportunity; confirm owner, record overview, history, archive/restore and strong duplicate handling.
+4. Create one synthetic Account, Contact and Opportunity; confirm owner, record overview, history, archive/restore, strong duplicate handling and a real default Pipeline assignment/event.
 5. For external mode, verify the connector is active and a mapped authoritative field is read-only. Do not make a live provider call during smoke testing.
 
 ## Safe failure states
@@ -15,6 +15,8 @@
 - `temporarily_unavailable`: global flag is disabled; preserve reads/Core.
 - `crm_mode_conflict`: resolve active mappings before selecting native.
 - `stale_write`: refresh and compare; never blindly retry with a new timestamp.
+- `stale_pipeline_state`: refresh the Opportunity stage; do not create a second move key for the stale transition.
+- `external_stage_authority`: use the reviewed mapped CRM path; never bypass with a generic Opportunity PATCH.
 - duplicate domain/email: open the returned existing record; do not bypass the unique index.
 
 ## Rollback and recovery

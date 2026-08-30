@@ -172,3 +172,11 @@ entitled values. Core Company/Contact/Opportunity CRUD never depends on this add
 Disabling CRM makes existing custom values read-only and preserves them in organisation
 export/deletion. This is a manual private-beta switch, not a billing or plan
 implementation.
+
+## WO-035 Pipeline entitlement split
+
+The `API_FEATURE_NATIVE_PIPELINE_ENABLED` flag protects the server transition and
+definition capability. Board/history are canonical Core consumers. Creating or
+changing native definitions additionally requires `API_FEATURE_NATIVE_CRM_ENABLED`, an
+enabled `crm` entitlement, native CRM mode and administrator role. External authority
+remains a safety rule regardless of package.

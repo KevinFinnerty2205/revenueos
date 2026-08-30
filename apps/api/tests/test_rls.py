@@ -94,6 +94,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "contacts",
         "opportunities",
         "opportunity_audit_events",
+        "sales_pipelines",
+        "sales_pipeline_stages",
+        "opportunity_stage_events",
         "action_proposals",
         "action_proposal_versions",
         "action_audit_events",
@@ -400,6 +403,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "create_value_model_version_id": uuid.uuid4(),
                 "create_business_case_id": uuid.uuid4(),
                 "create_business_case_version_id": uuid.uuid4(),
+                "sales_pipeline_id": uuid.uuid4(),
+                "sales_pipeline_stage_id": uuid.uuid4(),
+                "opportunity_stage_event_id": uuid.uuid4(),
             }
         )
 
@@ -813,18 +819,69 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await connection.execute(
                         text(
                             """
+                            INSERT INTO sales_pipelines
+                                (id, organisation_id, name, is_default, active)
+                            VALUES
+                                (:sales_pipeline_id, :organisation_id,
+                                 'RLS Sales Pipeline', true, true)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO sales_pipeline_stages
+                                (id, organisation_id, pipeline_id, stage_key,
+                                 name, position, stage_type, active)
+                            VALUES
+                                (:sales_pipeline_stage_id, :organisation_id,
+                                 :sales_pipeline_id, 'discovery', 'Discovery',
+                                 0, 'open', true)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
                             INSERT INTO opportunities
                                 (id, organisation_id, company_id, name, stage, status,
-                                 estimated_value, currency, owner_user_id)
+                                 estimated_value, currency, owner_user_id,
+                                 pipeline_id, pipeline_stage_id, stage_entered_at,
+                                 stage_tracking_started_at)
                             VALUES
                                 (:opportunity_id, :organisation_id, :company_id,
-                                 :opportunity_name, 'discovery', 'open', :value, 'AUD', :user_id)
+                                 :opportunity_name, 'discovery', 'open', :value,
+                                 'AUD', :user_id, :sales_pipeline_id,
+                                 :sales_pipeline_stage_id, now(), now())
                             """
                         ),
                         {
                             **identity_parameters,
                             "opportunity_name": f"RLS Opportunity {suffix}",
                             "value": Decimal("1000.00"),
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO opportunity_stage_events
+                                (id, organisation_id, opportunity_id,
+                                 to_pipeline_id, to_stage_id, to_stage_name,
+                                 to_stage_type, changed_by_user_id, source,
+                                 is_baseline, idempotency_key)
+                            VALUES
+                                (:opportunity_stage_event_id, :organisation_id,
+                                 :opportunity_id, :sales_pipeline_id,
+                                 :sales_pipeline_stage_id, 'Discovery', 'open',
+                                 :user_id, 'system_initial', false,
+                                 :stage_event_idempotency_key)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "stage_event_idempotency_key": f"rls-stage-initial-{suffix.lower()}",
                         },
                     )
                     await connection.execute(
@@ -2389,7 +2446,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                 (organisation_id, usage_date, uploaded_bytes,
                                  transcription_minutes,
                                  transcription_request_count)
-                            VALUES (:organisation_id, CURRENT_DATE, 4, 1, 1)
+                            VALUES (
+                                :organisation_id,
+                                (now() AT TIME ZONE 'UTC')::date,
+                                4, 1, 1
+                            )
                             """
                         ),
                         identity_parameters,
@@ -2540,7 +2601,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             INSERT INTO ai_usage_counters
                                 (organisation_id, usage_date, generation_count,
                                  provider_request_count)
-                            VALUES (:organisation_id, CURRENT_DATE, 1, 0)
+                            VALUES (
+                                :organisation_id,
+                                (now() AT TIME ZONE 'UTC')::date,
+                                1, 0
+                            )
                             """
                         ),
                         identity_parameters,
@@ -2672,6 +2737,9 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'contacts',
                                     'opportunities',
                                     'opportunity_audit_events',
+                                    'sales_pipelines',
+                                    'sales_pipeline_stages',
+                                    'opportunity_stage_events',
                                     'action_proposals',
                                     'action_proposal_versions',
                                     'action_audit_events',
@@ -2822,6 +2890,19 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     for table in tenant_tables
                 }
                 assert tenant_a_counts == expected_tenant_a_counts
+                immutable_event_savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE opportunity_stage_events
+                            SET to_stage_name = 'Tampered'
+                            WHERE id = :id
+                            """
+                        ),
+                        {"id": tenant_a["opportunity_stage_event_id"]},
+                    )
+                await immutable_event_savepoint.rollback()
                 company_update = await connection.execute(
                     text("UPDATE companies SET name = 'Blocked' WHERE id = :id"),
                     {"id": tenant_b["company_id"]},
@@ -3099,7 +3180,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             SELECT generation_count
                             FROM ai_usage_counters
                             WHERE organisation_id = :organisation_id
-                              AND usage_date = CURRENT_DATE
+                              AND usage_date = (now() AT TIME ZONE 'UTC')::date
                             """
                         ),
                         {"organisation_id": tenant_a["organisation_id"]},

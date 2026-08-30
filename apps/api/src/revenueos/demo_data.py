@@ -61,6 +61,7 @@ from revenueos.models import (
     OnlineMeetingTranscriptImport,
     Opportunity,
     OpportunityAuditEvent,
+    OpportunityStageEvent,
     OrganisationMembership,
     OrganisationMethodologySetting,
     PreInteractionBrief,
@@ -80,6 +81,7 @@ from revenueos.models import (
     VisualAsset,
     VisualCandidateEvidence,
 )
+from revenueos.pipeline_repositories import ensure_default_pipeline, initial_stage_for
 from revenueos.pre_interaction_contracts import (
     BriefInteractionType,
     BriefObjective,
@@ -871,6 +873,8 @@ async def seed_demo_data(
         membership = await session.get(OrganisationMembership, (organisation_id, user_id))
         if membership is None or membership.status != "active":
             raise ValueError("Demo data requires an active member of the selected organisation.")
+        pipeline, pipeline_stages = await ensure_default_pipeline(session, organisation_id)
+        demo_stage = initial_stage_for(pipeline_stages, "evaluation", "open")
         company = await session.get(Company, company_id)
         if company is None:
             session.add(
@@ -887,19 +891,37 @@ async def seed_demo_data(
             )
         opportunity = await session.get(Opportunity, opportunity_id)
         if opportunity is None:
+            opportunity = Opportunity(
+                id=opportunity_id,
+                organisation_id=organisation_id,
+                company_id=company_id,
+                name="[DEMO] Revenue workflow pilot",
+                stage="evaluation",
+                status="open",
+                estimated_value=Decimal("420000.00"),
+                currency="AUD",
+                expected_close_date=(seeded_at + timedelta(days=14)).date(),
+                owner_user_id=user_id,
+                description="Synthetic private-beta opportunity. No real customer or personal data.",
+                pipeline_id=pipeline.id,
+                pipeline_stage_id=demo_stage.id,
+                stage_entered_at=seeded_at,
+                stage_tracking_started_at=seeded_at,
+            )
+            session.add(opportunity)
+            await session.flush()
             session.add(
-                Opportunity(
-                    id=opportunity_id,
+                OpportunityStageEvent(
                     organisation_id=organisation_id,
-                    company_id=company_id,
-                    name="[DEMO] Revenue workflow pilot",
-                    stage="evaluation",
-                    status="open",
-                    estimated_value=Decimal("420000.00"),
-                    currency="AUD",
-                    expected_close_date=(seeded_at + timedelta(days=14)).date(),
-                    owner_user_id=user_id,
-                    description="Synthetic private-beta opportunity. No real customer or personal data.",
+                    opportunity_id=opportunity_id,
+                    to_pipeline_id=pipeline.id,
+                    to_stage_id=demo_stage.id,
+                    to_stage_name=demo_stage.name,
+                    to_stage_type=demo_stage.stage_type,
+                    changed_by_user_id=user_id,
+                    changed_at=seeded_at,
+                    source="system_initial",
+                    is_baseline=False,
                 )
             )
         else:

@@ -99,6 +99,7 @@ from revenueos.models import (
     OnlineMeetingTranscriptImport,
     Opportunity,
     OpportunityAuditEvent,
+    OpportunityStageEvent,
     Organisation,
     OrganisationBetaSettings,
     OrganisationCRMSetting,
@@ -136,6 +137,8 @@ from revenueos.models import (
     RevenueBrainSnapshot,
     RevenueBrainSourceSnapshot,
     SalesEvent,
+    SalesPipeline,
+    SalesPipelineStage,
     SourceCandidateEvidence,
     Task,
     Transcript,
@@ -152,7 +155,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 24
+EXPORT_VERSION = 25
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -2799,6 +2802,19 @@ async def _export_payload(
     opportunities = await rows(
         select(Opportunity).where(Opportunity.organisation_id == organisation_id).order_by(Opportunity.id)
     )
+    sales_pipelines = await rows(
+        select(SalesPipeline).where(SalesPipeline.organisation_id == organisation_id).order_by(SalesPipeline.id)
+    )
+    sales_pipeline_stages = await rows(
+        select(SalesPipelineStage)
+        .where(SalesPipelineStage.organisation_id == organisation_id)
+        .order_by(SalesPipelineStage.pipeline_id, SalesPipelineStage.position, SalesPipelineStage.id)
+    )
+    opportunity_stage_events = await rows(
+        select(OpportunityStageEvent)
+        .where(OpportunityStageEvent.organisation_id == organisation_id)
+        .order_by(OpportunityStageEvent.opportunity_id, OpportunityStageEvent.changed_at, OpportunityStageEvent.id)
+    )
     methodology_definitions = await rows(
         select(MethodologyDefinition)
         .where(MethodologyDefinition.organisation_id == organisation_id)
@@ -4185,12 +4201,76 @@ async def _export_payload(
                     "expected_close_date",
                     "owner_user_id",
                     "description",
+                    "pipeline_id",
+                    "pipeline_stage_id",
+                    "stage_entered_at",
+                    "stage_tracking_started_at",
+                    "actual_close_date",
+                    "outcome_reason",
+                    "outcome_note",
+                    "outcome_provenance",
                     "archived_at",
                     "created_at",
                     "updated_at",
                 ),
             )
             for item in opportunities
+        ],
+        "salesPipelines": [
+            _columns(
+                item,
+                ("id", "name", "is_default", "active", "archived_at", "created_at", "updated_at"),
+            )
+            for item in sales_pipelines
+        ],
+        "salesPipelineStages": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "pipeline_id",
+                    "stage_key",
+                    "name",
+                    "position",
+                    "stage_type",
+                    "guidance",
+                    "active",
+                    "archived_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in sales_pipeline_stages
+        ],
+        "opportunityStageEvents": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "opportunity_id",
+                    "from_pipeline_id",
+                    "to_pipeline_id",
+                    "from_stage_id",
+                    "to_stage_id",
+                    "from_stage_name",
+                    "to_stage_name",
+                    "from_stage_type",
+                    "to_stage_type",
+                    "changed_by_user_id",
+                    "changed_at",
+                    "source",
+                    "is_baseline",
+                    "previous_stage_entered_at",
+                    "outcome_reason",
+                    "outcome_note",
+                    "outcome_provenance",
+                    "actual_close_date",
+                    "final_amount",
+                    "final_currency",
+                    "idempotency_key",
+                ),
+            )
+            for item in opportunity_stage_events
         ],
         "methodologyDefinitions": [
             _columns(

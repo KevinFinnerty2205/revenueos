@@ -58,7 +58,11 @@ Company, Contact and Opportunity edit contracts accept `expectedUpdatedAt`; cust
 ## Deliberate deferrals
 
 - Native reviewed-Action execution is not wired in WO-034. The existing executor is provider/connection-oriented; adding a local path without a provider-neutral intent/revalidation contract would risk bypassing human review. AI cannot mutate CRM state.
-- Operational CRM CSV import/export is deferred. The existing organisation export is advanced to version 24 and includes settings, definitions, typed values and history, so data is not held hostage. A future operational CSV flow must add preview, attestation, duplicate review, formula escaping and no-outreach-permission semantics before release.
+- Operational CRM CSV import/export is deferred. The current organisation export is
+  version 25 and includes CRM settings, definitions, typed values and history plus the
+  WO-035 pipeline state/history, so data is not held hostage. A future operational CSV
+  flow must add preview, attestation, duplicate review, formula escaping and
+  no-outreach-permission semantics before release.
 - Tags are deferred because bounded single-select custom fields cover categorisation without adding another taxonomy.
 - Merge, bulk edit, custom objects/workflows, team ownership, round robin, territories and custom-field search/filtering are not implemented.
 
@@ -71,3 +75,11 @@ Company, Contact and Opportunity edit contracts accept `expectedUpdatedAt`; cust
 - [Native CRM security review](native-crm-security-privacy-review.md)
 - [Migration and portability playbook](crm-data-migration-playbook.md)
 - [ADR 0054](../08-decisions/0054-canonical-record-native-crm.md)
+
+## WO-035 extension
+
+Native Pipeline reuses the same `Opportunity`, CRM entitlement/mode, owner, field
+history and external authority model. Stable pipeline/stage IDs and append-only events
+augment rather than replace the legacy stage/status compatibility fields. Native
+definition administration is CRM-gated; the descriptive board/history remains a Core
+consumer. See [Native Pipeline architecture](native-pipeline-architecture.md).

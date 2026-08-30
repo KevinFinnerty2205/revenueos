@@ -20,8 +20,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
     text,
+    true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
@@ -1537,6 +1539,82 @@ class Contact(TimestampMixin, Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class SalesPipeline(TimestampMixin, Base):
+    __tablename__ = "sales_pipelines"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) BETWEEN 1 AND 100", name="ck_sales_pipelines_name"),
+        CheckConstraint(
+            "(active AND archived_at IS NULL) OR (NOT active AND archived_at IS NOT NULL)",
+            name="ck_sales_pipelines_archive",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_sales_pipelines_org_id"),
+        Index("ix_sales_pipelines_org_active", "organisation_id", "active", "created_at"),
+        Index(
+            "uq_sales_pipelines_org_default",
+            "organisation_id",
+            unique=True,
+            postgresql_where=text("is_default AND active"),
+            sqlite_where=text("is_default = 1 AND active = 1"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SalesPipelineStage(TimestampMixin, Base):
+    __tablename__ = "sales_pipeline_stages"
+    __table_args__ = (
+        CheckConstraint("length(trim(stage_key)) BETWEEN 1 AND 64", name="ck_pipeline_stages_key"),
+        CheckConstraint("length(trim(name)) BETWEEN 1 AND 100", name="ck_pipeline_stages_name"),
+        CheckConstraint("position BETWEEN 0 AND 11", name="ck_pipeline_stages_position"),
+        CheckConstraint("stage_type IN ('open', 'won', 'lost')", name="ck_pipeline_stages_type"),
+        CheckConstraint(
+            "guidance IS NULL OR length(guidance) BETWEEN 1 AND 300",
+            name="ck_pipeline_stages_guidance",
+        ),
+        CheckConstraint(
+            "(active AND archived_at IS NULL) OR (NOT active AND archived_at IS NOT NULL)",
+            name="ck_pipeline_stages_archive",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "pipeline_id"],
+            ["sales_pipelines.organisation_id", "sales_pipelines.id"],
+            name="fk_pipeline_stages_pipeline",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_pipeline_stages_org_id"),
+        UniqueConstraint("organisation_id", "pipeline_id", "id", name="uq_pipeline_stages_org_pipeline_id"),
+        UniqueConstraint("organisation_id", "pipeline_id", "stage_key", name="uq_pipeline_stages_org_pipeline_key"),
+        Index(
+            "ix_pipeline_stages_org_pipeline",
+            "organisation_id",
+            "pipeline_id",
+            "active",
+            "position",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    pipeline_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    stage_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    stage_type: Mapped[str] = mapped_column(String(12), nullable=False)
+    guidance: Mapped[str | None] = mapped_column(String(300))
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Opportunity(TimestampMixin, Base):
     __tablename__ = "opportunities"
     __table_args__ = (
@@ -1559,6 +1637,14 @@ class Opportunity(TimestampMixin, Base):
             "currency IS NULL OR (length(currency) = 3 AND currency = upper(currency))",
             name="ck_opportunities_currency",
         ),
+        CheckConstraint(
+            "outcome_provenance IS NULL OR outcome_provenance = 'seller_reported'",
+            name="ck_opportunities_outcome_provenance",
+        ),
+        CheckConstraint(
+            "outcome_note IS NULL OR length(outcome_note) BETWEEN 1 AND 500",
+            name="ck_opportunities_outcome_note",
+        ),
         ForeignKeyConstraint(
             ["organisation_id", "company_id"],
             ["companies.organisation_id", "companies.id"],
@@ -1574,6 +1660,22 @@ class Opportunity(TimestampMixin, Base):
             name="fk_opportunities_owner_membership",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["organisation_id", "pipeline_id"],
+            ["sales_pipelines.organisation_id", "sales_pipelines.id"],
+            name="fk_opportunities_pipeline",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "pipeline_id", "pipeline_stage_id"],
+            [
+                "sales_pipeline_stages.organisation_id",
+                "sales_pipeline_stages.pipeline_id",
+                "sales_pipeline_stages.id",
+            ],
+            name="fk_opportunities_pipeline_stage",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("organisation_id", "id", name="uq_opportunities_organisation_id_id"),
         Index("ix_opportunities_organisation_name", "organisation_id", "name"),
         Index("ix_opportunities_organisation_company", "organisation_id", "company_id"),
@@ -1582,6 +1684,14 @@ class Opportunity(TimestampMixin, Base):
         Index("ix_opportunities_organisation_close", "organisation_id", "expected_close_date"),
         Index("ix_opportunities_organisation_updated", "organisation_id", "updated_at"),
         Index("ix_opportunities_org_archived", "organisation_id", "archived_at", "updated_at"),
+        Index(
+            "ix_opportunities_org_pipeline_stage",
+            "organisation_id",
+            "pipeline_id",
+            "pipeline_stage_id",
+            "status",
+        ),
+        Index("ix_opportunities_org_stage_entered", "organisation_id", "stage_entered_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1613,13 +1723,140 @@ class Opportunity(TimestampMixin, Base):
     owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pipeline_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    pipeline_stage_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    stage_entered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stage_tracking_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    actual_close_date: Mapped[date | None] = mapped_column(Date)
+    outcome_reason: Mapped[str | None] = mapped_column(String(40))
+    outcome_note: Mapped[str | None] = mapped_column(String(500))
+    outcome_provenance: Mapped[str | None] = mapped_column(String(32))
+
+
+class OpportunityStageEvent(Base):
+    __tablename__ = "opportunity_stage_events"
+    __table_args__ = (
+        CheckConstraint(
+            "source IN ('system_initial', 'migration_baseline', 'manual', 'external_crm')",
+            name="ck_opportunity_stage_events_source",
+        ),
+        CheckConstraint(
+            "from_stage_type IS NULL OR from_stage_type IN ('open', 'won', 'lost')",
+            name="ck_opportunity_stage_events_from_type",
+        ),
+        CheckConstraint(
+            "to_stage_type IN ('open', 'won', 'lost')",
+            name="ck_opportunity_stage_events_to_type",
+        ),
+        CheckConstraint(
+            "outcome_provenance IS NULL OR outcome_provenance = 'seller_reported'",
+            name="ck_opportunity_stage_events_provenance",
+        ),
+        CheckConstraint(
+            "outcome_note IS NULL OR length(outcome_note) BETWEEN 1 AND 500",
+            name="ck_opportunity_stage_events_note",
+        ),
+        CheckConstraint(
+            "(final_amount IS NULL AND final_currency IS NULL) OR "
+            "(final_amount IS NOT NULL AND final_amount >= 0 AND final_currency IS NOT NULL)",
+            name="ck_opportunity_stage_events_value_currency",
+        ),
+        CheckConstraint(
+            "final_currency IS NULL OR (length(final_currency) = 3 AND final_currency = upper(final_currency))",
+            name="ck_opportunity_stage_events_currency",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_opportunity_stage_events_opportunity",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "from_pipeline_id"],
+            ["sales_pipelines.organisation_id", "sales_pipelines.id"],
+            name="fk_opportunity_stage_events_from_pipeline",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "to_pipeline_id"],
+            ["sales_pipelines.organisation_id", "sales_pipelines.id"],
+            name="fk_opportunity_stage_events_to_pipeline",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "from_pipeline_id", "from_stage_id"],
+            [
+                "sales_pipeline_stages.organisation_id",
+                "sales_pipeline_stages.pipeline_id",
+                "sales_pipeline_stages.id",
+            ],
+            name="fk_opportunity_stage_events_from_stage",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "to_pipeline_id", "to_stage_id"],
+            [
+                "sales_pipeline_stages.organisation_id",
+                "sales_pipeline_stages.pipeline_id",
+                "sales_pipeline_stages.id",
+            ],
+            name="fk_opportunity_stage_events_to_stage",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "changed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_opportunity_stage_events_actor",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_opportunity_stage_events_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "opportunity_id",
+            "idempotency_key",
+            name="uq_opportunity_stage_events_idempotency",
+        ),
+        Index(
+            "ix_opportunity_stage_events_org_opportunity",
+            "organisation_id",
+            "opportunity_id",
+            "changed_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    from_pipeline_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    to_pipeline_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    from_stage_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    to_stage_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    from_stage_name: Mapped[str | None] = mapped_column(String(100))
+    to_stage_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    from_stage_type: Mapped[str | None] = mapped_column(String(12))
+    to_stage_type: Mapped[str] = mapped_column(String(12), nullable=False)
+    changed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    source: Mapped[str] = mapped_column(String(24), nullable=False)
+    is_baseline: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    previous_stage_entered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outcome_reason: Mapped[str | None] = mapped_column(String(40))
+    outcome_note: Mapped[str | None] = mapped_column(String(500))
+    outcome_provenance: Mapped[str | None] = mapped_column(String(32))
+    actual_close_date: Mapped[date | None] = mapped_column(Date)
+    final_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    final_currency: Mapped[str | None] = mapped_column(String(3))
+    idempotency_key: Mapped[str | None] = mapped_column(String(100))
 
 
 class OpportunityAuditEvent(Base):
     __tablename__ = "opportunity_audit_events"
     __table_args__ = (
         CheckConstraint(
-            "action IN ('created', 'updated', 'deleted', 'meeting_associated', 'meeting_disassociated')",
+            "action IN ('created', 'updated', 'deleted', 'meeting_associated', 'meeting_disassociated', "
+            "'stage_changed', 'closed_won', 'closed_lost', 'reopened')",
             name="ck_opportunity_audit_events_action",
         ),
         ForeignKeyConstraint(

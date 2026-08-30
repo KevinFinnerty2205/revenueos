@@ -18,3 +18,7 @@ All routes require authenticated organisation membership. JSON uses camelCase al
 Canonical Company/Contact/Opportunity endpoints remain the CRUD source of truth. Their list endpoints accept `includeArchived`; Company/Contact updates accept `expectedUpdatedAt`; Opportunity keeps its existing optimistic edit contract. Duplicate conflicts use `duplicate_company_domain` or `duplicate_contact_email` plus safe `details.entityType/entityId`. External-authoritative core-field writes return `crm_authoritative_field`.
 
 Availability states are `available`, `not_in_plan`, `setup_required` and `temporarily_unavailable`. Core endpoints do not fail merely because CRM is not entitled.
+
+WO-035 Pipeline endpoints are documented in the central [API reference](api.md).
+Pipeline definition mutation follows the same admin/entitlement/native-mode boundary;
+direct stage/close/reopen mutation is denied in external mode.

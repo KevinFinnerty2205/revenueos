@@ -159,6 +159,10 @@ class OpportunityCreate(APIModel):
     def validate_value_currency(self) -> OpportunityCreate:
         if (self.estimated_value is None) != (self.currency is None):
             raise ValueError("estimatedValue and currency must be supplied together.")
+        if (self.stage == OpportunityStage.CLOSED_WON) != (self.status == OpportunityStatus.WON):
+            raise ValueError("Closed Won stage and Won status must be supplied together.")
+        if (self.stage == OpportunityStage.CLOSED_LOST) != (self.status == OpportunityStatus.LOST):
+            raise ValueError("Closed Lost stage and Lost status must be supplied together.")
         return self
 
 
@@ -214,6 +218,14 @@ class OpportunityResponse(APIModel):
     owner_user_id: UUID
     description: str | None
     archived_at: datetime | None
+    pipeline_id: UUID | None
+    pipeline_stage_id: UUID | None
+    stage_entered_at: datetime | None
+    stage_tracking_started_at: datetime | None
+    actual_close_date: date | None
+    outcome_reason: str | None
+    outcome_note: str | None
+    outcome_provenance: Literal["seller_reported"] | None
     created_at: datetime
     updated_at: datetime
 

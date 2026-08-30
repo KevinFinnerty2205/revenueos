@@ -481,6 +481,11 @@ purchasing Prospect or Engage.
 
 ### WO-035 — Pipeline & Deal Management
 
+**Current status:** Implemented by WO-035. Canonical Opportunity pipeline/stage state,
+immutable history, bounded native configuration, Board/List/Closed UX, explicit
+Won/Lost/reopen and external read-only authority are now current. Full Deal Room
+section expansion, external provider execution and analytics remain later work.
+
 - **Objective/value/package:** Make Pipeline and the Opportunity Deal Room the simple
   operating view for progressing revenue. **Core experience enriched by CRM**; canonical
   Brain/workspace/action views stay Core, native stage administration/editing is CRM.
@@ -490,9 +495,8 @@ purchasing Prospect or Engage.
   Actions, Files and Insights.
 - **Domain/data:** Stage history/read projections and Opportunity workspace associations;
   avoid new copies of Brain, Evidence or files.
-- **Backend/frontend/AI:** Authorised pipeline query/projection, optimistic updates and
-  URL-shareable filters; responsive list first on mobile; AI explains change/risk and
-  proposes reviewable updates.
+- **Backend/frontend/AI:** Implemented authorised projection and optimistic updates;
+  mobile uses grouped cards. No new AI explanation or mutation path was added.
 - **Integrations:** External CRM values remain read-only/unavailable until WO-042 or an
   explicit provider-specific precursor.
 - **Security/privacy/operations:** Field/team access, bulk action limits, concurrency,

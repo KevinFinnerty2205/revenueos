@@ -40,10 +40,12 @@ from revenueos.models import (
     MethodologyReview,
     Opportunity,
     OpportunityAuditEvent,
+    OpportunityStageEvent,
     OutreachMessage,
     ProspectPerson,
     Task,
 )
+from revenueos.pipeline_repositories import ensure_default_pipeline, initial_stage_for
 from revenueos.prospect_url_security import (
     PublicUrlSafetyError,
     normalise_company_website,
@@ -409,6 +411,12 @@ class BusinessService:
         )
         owner_user_id = request.owner_user_id or self.tenant.user_id
         await self._require_member(owner_user_id, "ownerUserId")
+        pipeline, pipeline_stages = await ensure_default_pipeline(
+            self.repository.session,
+            self.tenant.organisation_id,
+        )
+        pipeline_stage = initial_stage_for(pipeline_stages, request.stage.value, request.status.value)
+        now = datetime.now(UTC)
         opportunity = Opportunity(
             organisation_id=self.tenant.organisation_id,
             company_id=request.company_id,
@@ -420,10 +428,28 @@ class BusinessService:
             expected_close_date=request.expected_close_date,
             owner_user_id=owner_user_id,
             description=request.description,
+            pipeline_id=pipeline.id,
+            pipeline_stage_id=pipeline_stage.id,
+            stage_entered_at=now,
+            stage_tracking_started_at=now,
         )
         self.repository.add(opportunity)
         try:
             await self.repository.flush()
+            self.repository.add(
+                OpportunityStageEvent(
+                    organisation_id=self.tenant.organisation_id,
+                    opportunity_id=opportunity.id,
+                    to_pipeline_id=pipeline.id,
+                    to_stage_id=pipeline_stage.id,
+                    to_stage_name=pipeline_stage.name,
+                    to_stage_type=pipeline_stage.stage_type,
+                    changed_by_user_id=self.tenant.user_id,
+                    changed_at=now,
+                    source="system_initial",
+                    is_baseline=False,
+                )
+            )
             for change in self._creation_changes(
                 opportunity,
                 (
@@ -500,6 +526,13 @@ class BusinessService:
         if "owner_user_id" in values:
             await self._require_member(values["owner_user_id"], "ownerUserId")
         await self._guard_authoritative_fields("opportunity", set(values))
+        final_status_change = values.get("status") in {"won", "lost"}
+        if opportunity.pipeline_stage_id is not None and ("stage" in values or final_status_change):
+            raise PublicAPIError(
+                "pipeline_transition_required",
+                "Use the pipeline stage or closure controls to change stage and status.",
+                409,
+            )
         changes = self._changed_values(opportunity, values)
         self._apply_values(opportunity, values)
         opportunity.updated_at = datetime.now(UTC)

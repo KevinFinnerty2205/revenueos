@@ -388,3 +388,12 @@ Revenue Brain and Actions consumers remain unchanged. Core edit uses optimistic
 concurrency and respects active HubSpot field authority; admin archive/restore is
 CRM-entitled. Migration `0043_native_crm` adds only `archived_at` to Opportunity,
 leaving Pipeline definitions and stage history to WO-035.
+
+## WO-035 workflow panel
+
+The Opportunity now includes a compact workflow panel between its canonical CRM
+record header and deeper Sales Brain workspace. It shows current pipeline/stage,
+reliable timing, explicit open-stage movement, Won/Lost/reopen flows and a readable
+history disclosure. The panel does not create a second tab or duplicate Revenue Brain,
+Methodology, Evidence or Actions. Migration baselines explicitly say earlier history
+is unavailable.

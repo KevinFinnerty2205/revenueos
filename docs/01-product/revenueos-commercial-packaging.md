@@ -122,5 +122,12 @@ enforced by normal membership policy. There is no price, subscription, trial or 
 implementation attached to the manual entitlement.
 
 External HubSpot field authority remains a Core integration safety boundary rather
-than being weakened to manufacture an add-on. WO-035 will decide which configurable
-Pipeline capabilities join the CRM package.
+than being weakened to manufacture an add-on. WO-035 applies the split below.
+
+## WO-035 Pipeline boundary
+
+The current Pipeline Board/List/Closed view, canonical Opportunity workflow/history
+and later Core Intelligence consumers remain Core. The CRM entitlement unlocks native
+definition administration: up to five pipelines, bounded stages, default selection and
+safe archive. External HubSpot authority remains read-only and is never paywalled or
+bypassed. Sales Analytics (WO-036) and Forecasting (WO-038) remain Core.

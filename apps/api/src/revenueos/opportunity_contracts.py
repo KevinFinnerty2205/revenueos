@@ -47,6 +47,13 @@ class OpportunityListItemResponse(APIModel):
     owner_name: str
     description: str | None
     archived_at: datetime | None
+    pipeline_id: UUID | None
+    pipeline_stage_id: UUID | None
+    stage_entered_at: datetime | None
+    stage_tracking_started_at: datetime | None
+    actual_close_date: date | None
+    outcome_reason: str | None
+    outcome_provenance: Literal["seller_reported"] | None
     latest_meeting_id: UUID | None
     latest_meeting_date: datetime | None
     latest_meeting_momentum: str | None
@@ -68,6 +75,13 @@ class OpportunityWorkspaceOpportunityResponse(APIModel):
     owner_user_id: UUID
     owner_name: str
     description: str | None
+    pipeline_id: UUID | None
+    pipeline_stage_id: UUID | None
+    stage_entered_at: datetime | None
+    stage_tracking_started_at: datetime | None
+    actual_close_date: date | None
+    outcome_reason: str | None
+    outcome_provenance: Literal["seller_reported"] | None
     created_at: datetime
     updated_at: datetime
 

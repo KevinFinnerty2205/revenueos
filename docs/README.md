@@ -91,6 +91,9 @@ This is the canonical product and engineering documentation index. Documents dis
 85. [Native CRM](01-product/native-crm.md) — current WO-034 canonical-record CRM boundary
 86. [Native CRM architecture](03-engineering/native-crm-architecture.md)
 87. [ADR 0054: Canonical records form the native CRM](08-decisions/0054-canonical-record-native-crm.md)
+88. [Native Pipeline](01-product/native-pipeline.md) — current WO-035 canonical workflow boundary
+89. [Native Pipeline architecture](03-engineering/native-pipeline-architecture.md)
+90. [ADR 0055: Stable Pipeline history and authority](08-decisions/0055-native-pipeline-history-and-authority.md)
 
 ## 00 — Company
 
@@ -119,6 +122,10 @@ This is the canonical product and engineering documentation index. Documents dis
 - [RevenueOS Create](01-product/revenueos-create.md)
 - [RevenueOS CRM](01-product/revenueos-crm.md)
 - [Native CRM implementation guide](01-product/native-crm.md)
+- [Native Pipeline implementation guide](01-product/native-pipeline.md)
+- [Pipeline and Sales Brain boundary](01-product/pipeline-sales-brain-boundary.md)
+- [Opportunity stage and closure guide](01-product/opportunity-stage-closure-guide.md)
+- [Pipeline packaging](01-product/pipeline-packaging.md)
 - [Standard sales methodologies](01-product/standard-sales-methodologies.md)
 - [Ask RevenueOS](01-product/ask-revenueos.md)
 - [Core go-to-Prospect readiness](01-product/core-go-to-prospect-readiness.md)
@@ -166,6 +173,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Core post-WO-025C simplicity review](02-design/core-post-025c-simplicity-review.md)
 - [Opportunity and Account Workspace UX](02-design/opportunity-and-account-workspace-ux.md)
 - [Native CRM UX](02-design/native-crm-ux.md)
+- [Native Pipeline UX and simplicity review](02-design/native-pipeline-ux.md)
 - [Find and Prospect experience](02-design/find-and-prospect-experience.md)
 - [Engage, campaign and event experience](02-design/engage-campaign-event-experience.md)
 - [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
@@ -335,6 +343,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Native CRM retention, export and deletion](03-engineering/native-crm-retention-export-deletion.md)
 - [Native CRM operations](03-engineering/native-crm-operations.md)
 - [Native CRM testing strategy](03-engineering/native-crm-testing.md)
+- [Native Pipeline architecture](03-engineering/native-pipeline-architecture.md)
+- [Native Pipeline security and privacy review](03-engineering/native-pipeline-security-privacy-review.md)
+- [Native Pipeline retention, export and deletion](03-engineering/native-pipeline-retention-export-deletion.md)
 - [Prospect Account Research architecture](03-engineering/prospect-account-research-architecture.md)
 - [Prospect provider and fetch strategy](03-engineering/prospect-provider-fetch-strategy.md)
 - [Prospect source and citation architecture](03-engineering/prospect-source-citation-architecture.md)
@@ -497,6 +508,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-032: RevenueOS Create Sales Content Studio](07-sprints/wo-032-sales-content-studio.md)
 - [WO-033: ROI & Business Case Builder](07-sprints/wo-033-roi-business-case-builder.md)
 - [WO-034: Native CRM Foundation](07-sprints/wo-034-native-crm-foundation.md)
+- [WO-035: Native Pipeline](07-sprints/wo-035-native-pipeline.md)
 
 ## 08 — Decision records
 
@@ -537,6 +549,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0035: Evidence-centred end-to-end Sales OS architecture](08-decisions/0035-end-to-end-sales-os-architecture.md)
 - [ADR 0036: Ephemeral deterministic Ask RevenueOS v1](08-decisions/0036-ephemeral-deterministic-ask-revenueos.md)
 - [ADR 0037: HubSpot-first Focused CRM Sync](08-decisions/0037-hubspot-first-focused-crm-sync.md)
+- [ADR 0055: Stable native Pipeline stages, immutable history and explicit authority](08-decisions/0055-native-pipeline-history-and-authority.md)
 - [ADR 0038: Separate unpromoted Prospect research domain](08-decisions/0038-separate-prospect-research-domain.md)
 - [ADR 0039: Separate Prospect Person research from canonical Contact](08-decisions/0039-separate-prospect-person-from-contact.md)
 - [ADR 0040: Preserve trust per promoted Contact field](08-decisions/0040-contact-field-provenance.md)

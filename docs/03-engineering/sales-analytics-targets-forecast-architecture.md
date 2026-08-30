@@ -138,3 +138,15 @@ events, corrections, ambiguous attribution, overrides and deterministic replay.
 No analytics schema, target UI, forecast model or production computation is added in
 WO-023. Generic BI, employee monitoring, arbitrary formula execution, contractual
 forecast guarantees and unsupported causal coaching are not RevenueOS scope.
+
+## WO-035 canonical lifecycle handoff
+
+WO-035 now supplies the first implemented stage-history foundation: stable pipeline and
+stage identity, exact entry transitions, prior reliable entry timestamp, explicit
+migration baseline quality, current owner/amount/currency/expected close, actual close,
+seller-reported outcome and reopen events. WO-036 must define cohorts, re-entry,
+conversion, duration, currency and attribution policy before calculating metrics.
+
+WO-035 deliberately supplies no probability, weighted amount, forecast category,
+predicted close date, model run or deal score. WO-038 must not reinterpret a stage as a
+likelihood; it remains dependent on transparent policy and sufficient clean outcomes.

@@ -484,3 +484,12 @@ closed AST—there is no `eval`, arbitrary function, property access, string, fi
 network or provider capability. Numeric input/output content and formulas are excluded
 from logs and audits; telemetry records identifiers, counts, states and elapsed time.
 See the [dedicated review](business-case-security-privacy-review.md).
+
+## WO-035 Native Pipeline controls
+
+Pipeline definitions and events use forced RLS, composite tenant foreign keys and
+tenant-scoped repositories. Server-authoritative transitions protect against forged
+stage IDs, archived stages, stale races and external-authority bypass. Seller outcome
+notes are bounded canonical data, excluded from logs/audit metadata and included only
+in authorised organisation export. See the
+[dedicated review](native-pipeline-security-privacy-review.md).

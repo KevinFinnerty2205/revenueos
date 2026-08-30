@@ -131,30 +131,6 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
       fullWidth: true,
     },
     {
-      name: "stage",
-      label: "Stage",
-      kind: "select",
-      required: true,
-      options: [
-        "qualification",
-        "discovery",
-        "evaluation",
-        "proposal",
-        "negotiation",
-        "procurement",
-        "closed_won",
-        "closed_lost",
-        "other",
-      ],
-    },
-    {
-      name: "status",
-      label: "Status",
-      kind: "select",
-      required: true,
-      options: ["open", "won", "lost", "on_hold"],
-    },
-    {
       name: "estimatedValue",
       label: "Estimated value",
       kind: "number",
@@ -238,10 +214,7 @@ const fields: Record<BusinessEntityName, FieldConfig[]> = {
 const createDefaults: Record<BusinessEntityName, Record<string, string>> = {
   companies: { status: "prospect" },
   contacts: { status: "active" },
-  opportunities: {
-    stage: "discovery",
-    status: "open",
-  },
+  opportunities: {},
   tasks: { status: "open", priority: "medium" },
 };
 
