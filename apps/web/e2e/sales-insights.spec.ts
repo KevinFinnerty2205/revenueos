@@ -367,6 +367,195 @@ const salesTarget = {
   canArchive: true,
 };
 
+const forecastBaseline = {
+  status: "available",
+  modelVersion: "forecast_historical_stage_outcome_v1",
+  pipelineId,
+  pipelineName: "RevenueOS Sales Pipeline",
+  stageId: "stage-evaluation",
+  stageName: "Evaluation",
+  wonCount: 7,
+  lostCount: 5,
+  sampleSize: 12,
+  observedWinRate: "58.3",
+  expectedContribution: "245000.00",
+  lookbackStart: "2024-08-31",
+  lookbackEnd: "2026-08-30",
+  minimumSample: 10,
+  explanation:
+    "7 of 12 reliably tracked Opportunities that entered this exact Pipeline stage finished Won.",
+};
+
+const forecastPeriod = {
+  id: "forecast-period-1",
+  periodType: "quarter",
+  periodStart: "2026-07-01",
+  periodEnd: "2026-09-30",
+  periodLabel: "Q3 2026",
+  timezone: "Australia/Sydney",
+  status: "active",
+};
+
+const forecastHistory = {
+  opportunityId: "forecast-opportunity-1",
+  opportunityName: "[DEMO] Revenue workflow pilot",
+  period: forecastPeriod,
+  latestStaleReasons: [],
+  revisions: [
+    {
+      id: "forecast-revision-1",
+      revisionNumber: 1,
+      category: "commit",
+      createdByUserId: "user-1",
+      createdByDisplayName: "Alex Morgan",
+      ownerUserIdSnapshot: "user-1",
+      amountSnapshot: "420000.00",
+      currencySnapshot: "AUD",
+      expectedCloseDateSnapshot: "2026-09-13",
+      pipelineIdSnapshot: pipelineId,
+      pipelineNameSnapshot: "RevenueOS Sales Pipeline",
+      stageIdSnapshot: "stage-evaluation",
+      stageNameSnapshot: "Evaluation",
+      opportunityStatusSnapshot: "open",
+      historicalBaseline: forecastBaseline,
+      createdAt: "2026-08-24T02:00:00Z",
+    },
+  ],
+};
+
+const salesForecast = {
+  period: forecastPeriod,
+  currency: "AUD",
+  pipelineId: null,
+  ownerUserId: null,
+  organisationScope: true,
+  actual: {
+    state: "available",
+    amount: "712500.00",
+    calculatedThrough: "2026-08-30",
+    metricId: "won_value",
+    metricDefinitionVersion: "1",
+  },
+  targets: [
+    {
+      id: "forecast-target-1",
+      label: "Organisation target",
+      scope: "organisation",
+      origin: "admin_assigned",
+      targetValue: "750000.00",
+    },
+  ],
+  sellerForecast: {
+    commit: { amount: "420000.00", opportunityCount: 1, unvaluedCount: 0 },
+    likely: { amount: "650000.00", opportunityCount: 2, unvaluedCount: 0 },
+    possible: { amount: "905000.00", opportunityCount: 3, unvaluedCount: 0 },
+    unreviewedCount: 1,
+    notThisPeriodCount: 1,
+    needsReviewCount: 0,
+    disclosure:
+      "Commit is Commit only; Likely is Commit plus Likely; Possible is Commit plus Likely plus Possible. No probability is applied.",
+  },
+  revenueosBaseline: {
+    expectedContribution: "527916.67",
+    coveredOpportunityCount: 3,
+    uncoveredOpportunityCount: 1,
+    coveredAmount: "905000.00",
+    uncoveredAmount: "255000.00",
+    unvaluedOpportunityCount: 0,
+    modelVersion: "forecast_historical_stage_outcome_v1",
+    lookbackDays: 730,
+    minimumSample: 10,
+    disclosure:
+      "This separate historical baseline is not a seller forecast and is not a range. Uncovered Opportunities receive no fallback rate.",
+  },
+  inputQuality: {
+    eligibleOpportunityCount: 5,
+    valuedOpportunityCount: 5,
+    unvaluedOpportunityCount: 0,
+    missingExpectedCloseCount: 0,
+    insufficientHistoryCount: 1,
+  },
+  opportunities: [
+    {
+      opportunityId: "forecast-opportunity-1",
+      opportunityName: "[DEMO] Revenue workflow pilot",
+      companyName: "[DEMO] Southern Cross Operations",
+      ownerUserId: "user-1",
+      ownerDisplayName: "Alex Morgan",
+      amount: "420000.00",
+      currency: "AUD",
+      expectedCloseDate: "2026-09-13",
+      pipelineId,
+      pipelineName: "RevenueOS Sales Pipeline",
+      stageId: "stage-evaluation",
+      stageName: "Evaluation",
+      stageEnteredAt: "2026-08-01T02:00:00Z",
+      status: "open",
+      judgment: {
+        judgmentId: "forecast-judgment-1",
+        revisionId: "forecast-revision-1",
+        revisionNumber: 1,
+        category: "commit",
+        createdByUserId: "user-1",
+        createdByDisplayName: "Alex Morgan",
+        createdAt: "2026-08-24T02:00:00Z",
+        staleReasons: [],
+        canReview: true,
+      },
+      historicalBaseline: forecastBaseline,
+    },
+  ],
+  totalOpportunities: 1,
+  page: 1,
+  pageSize: 100,
+  generatedAt: "2026-08-30T03:00:00Z",
+};
+
+const forecastMetadata = {
+  currentUserId: "user-1",
+  currentUserRole: "admin",
+  organisationTimezone: "Australia/Sydney",
+  owners: metadata.owners,
+  pipelines: [
+    { id: pipelineId, name: "RevenueOS Sales Pipeline", active: true },
+  ],
+  canViewOrganisationForecast: true,
+  modelVersion: "forecast_historical_stage_outcome_v1",
+  modelLookbackDays: 730,
+  modelMinimumSample: 10,
+  supportedPeriodTypes: ["month", "quarter"],
+  categories: ["commit", "likely", "possible", "not_this_period"],
+};
+
+const forecastCalibration = {
+  periodType: "quarter",
+  periodsIncluded: 2,
+  categories: [
+    {
+      category: "commit",
+      assessedCount: 8,
+      realisedWonCount: 6,
+      realisationRate: "75.0",
+    },
+    {
+      category: "likely",
+      assessedCount: 3,
+      realisedWonCount: 1,
+      realisationRate: null,
+    },
+    {
+      category: "possible",
+      assessedCount: 1,
+      realisedWonCount: 0,
+      realisationRate: null,
+    },
+  ],
+  minimumRateSample: 5,
+  disclosure:
+    "Final realization uses each Opportunity's last seller category. It is not a rep score or lead-time accuracy measure.",
+  generatedAt: "2026-08-30T03:00:00Z",
+};
+
 async function routeInsights(page: Page) {
   await page.route("http://localhost:8000/api/v1/me", async (route) => {
     await route.fulfill({
@@ -424,9 +613,28 @@ async function routeInsights(page: Page) {
       },
     });
   });
+  await page.route("http://localhost:8000/api/v1/forecast**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/metadata"))
+      return route.fulfill({ json: forecastMetadata });
+    if (url.pathname.endsWith("/calibration"))
+      return route.fulfill({ json: forecastCalibration });
+    if (
+      url.pathname.endsWith("/history") ||
+      route.request().method() === "POST"
+    )
+      return route.fulfill({ json: forecastHistory });
+    return route.fulfill({ json: salesForecast });
+  });
   await page.route("http://localhost:8000/api/v1/beta/capabilities", (route) =>
     route.fulfill({
-      json: { featureFlags: { salesAnalytics: true, salesTargets: true } },
+      json: {
+        featureFlags: {
+          salesAnalytics: true,
+          salesTargets: true,
+          salesForecasting: true,
+        },
+      },
     }),
   );
   for (const path of [
@@ -590,4 +798,42 @@ test("Targets remain usable at a 390-pixel viewport", async ({ page }) => {
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("Forecast keeps seller ranges and the historical baseline transparent", async ({
+  page,
+}) => {
+  await routeInsights(page);
+  await page.goto("/insights?tab=forecast");
+
+  await expect(page.getByRole("tab", { name: "Forecast" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByText("Actual won")).toBeVisible();
+  await expect(page.getByText("Seller forecast range")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Separate historical baseline" }),
+  ).toBeVisible();
+  await expect(page.getByText(/No probability is applied/i)).toBeVisible();
+  await expect(page.getByText(/no fallback rate/i)).toBeVisible();
+  await page.getByText("Historical baseline details").click();
+  await expect(page.getByText(/7 of 12 reliably tracked/i)).toBeVisible();
+  await page.getByRole("button", { name: "View review history" }).click();
+  await expect(page.getByText("Revision 1: Commit")).toBeVisible();
+  await page.screenshot({
+    path: `${assets}/wo-038-forecast-desktop.png`,
+    fullPage: true,
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByText("Possible case")).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+  await page.screenshot({
+    path: `${assets}/wo-038-forecast-mobile.png`,
+    fullPage: true,
+  });
 });

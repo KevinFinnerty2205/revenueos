@@ -11,9 +11,11 @@ import type {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { PageHeader } from "@/components/page-header";
+import { SalesForecast } from "@/components/sales-forecast";
 import { SalesTargets, SalesTargetsOverview } from "@/components/sales-targets";
 
-type InsightTab = "overview" | "targets" | "funnel" | "activity" | "win-loss";
+type InsightTab =
+  "overview" | "targets" | "forecast" | "funnel" | "activity" | "win-loss";
 type InsightPayload =
   SalesOverview | SalesFunnel | SalesActivity | SalesWinLoss;
 type Capabilities = { featureFlags: Record<string, boolean> };
@@ -29,6 +31,7 @@ type DatePreset =
 const tabs: Array<{ id: InsightTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "targets", label: "Targets" },
+  { id: "forecast", label: "Forecast" },
   { id: "funnel", label: "Funnel" },
   { id: "activity", label: "Activity" },
   { id: "win-loss", label: "Win / loss" },
@@ -570,6 +573,7 @@ export function SalesInsights() {
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [targetsEnabled, setTargetsEnabled] = useState(false);
+  const [forecastEnabled, setForecastEnabled] = useState(false);
   const [timezone, setTimezone] = useState(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   );
@@ -617,11 +621,15 @@ export function SalesInsights() {
     apiRequest<Capabilities>("/api/v1/beta/capabilities", {
       signal: controller.signal,
     })
-      .then((capabilities) =>
-        setTargetsEnabled(capabilities.featureFlags.salesTargets === true),
-      )
+      .then((capabilities) => {
+        setTargetsEnabled(capabilities.featureFlags.salesTargets === true);
+        setForecastEnabled(capabilities.featureFlags.salesForecasting === true);
+      })
       .catch(() => {
-        if (!controller.signal.aborted) setTargetsEnabled(false);
+        if (!controller.signal.aborted) {
+          setTargetsEnabled(false);
+          setForecastEnabled(false);
+        }
       });
     apiRequest<SalesInsightsMetadata>("/api/v1/insights/sales/metadata", {
       signal: controller.signal,
@@ -641,7 +649,7 @@ export function SalesInsights() {
   const loadData = useCallback(
     async (signal: AbortSignal) => {
       if (!deepLinkApplied) return;
-      if (activeTab === "targets") {
+      if (activeTab === "targets" || activeTab === "forecast") {
         setData(null);
         setDataTab(null);
         setLoading(false);
@@ -720,7 +728,7 @@ export function SalesInsights() {
         title="Sales insights"
         description="A bounded, deterministic view of pipeline progression, activity patterns and seller-reported outcomes."
       />
-      {activeTab !== "targets" ? (
+      {activeTab !== "targets" && activeTab !== "forecast" ? (
         <section
           aria-label="Sales insight filters"
           className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
@@ -819,7 +827,11 @@ export function SalesInsights() {
         className="mb-6 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1"
       >
         {tabs
-          .filter((tab) => tab.id !== "targets" || targetsEnabled)
+          .filter(
+            (tab) =>
+              (tab.id !== "targets" || targetsEnabled) &&
+              (tab.id !== "forecast" || forecastEnabled),
+          )
           .map((tab) => (
             <button
               key={tab.id}
@@ -845,7 +857,8 @@ export function SalesInsights() {
         </section>
       ) : null}
       {activeTab === "targets" ? <SalesTargets /> : null}
-      {loading ? (
+      {activeTab === "forecast" ? <SalesForecast /> : null}
+      {loading && activeTab !== "forecast" ? (
         <div
           role="status"
           className="rounded-2xl border border-slate-200 bg-white px-6 py-14 text-center text-sm font-semibold text-slate-600"
@@ -853,7 +866,7 @@ export function SalesInsights() {
           Loading sales insights…
         </div>
       ) : null}
-      {error ? (
+      {error && activeTab !== "forecast" ? (
         <div
           role="alert"
           className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-950"
@@ -895,7 +908,7 @@ export function SalesInsights() {
           owner or pipeline filter.
         </p>
       ) : null}
-      {activeTab !== "targets" ? (
+      {activeTab !== "targets" && activeTab !== "forecast" ? (
         <footer className="mt-8 text-xs leading-5 text-slate-500">
           Inclusive local dates: {startDate} to {endDate}.{" "}
           {selectedPipeline

@@ -580,27 +580,18 @@ WO-038/039 retain their separate forecast and manager authority gates.
 
 ### WO-038 — Forecasting
 
-- **Objective/value/package:** Produce an evidence-based estimate and range with clear
-  drivers, missing data and calibration. **Core**.
-- **Dependencies/checkpoint:** WO-024, WO-035–037 including WO-036B, sufficient clean
-  historical outcomes and agreed deterministic/statistical MVP policy.
-- **Experience:** Daily headline, Pipeline deal factors and Insights scenario drill-down;
-  distinguish model, seller and manager views and show changes over time.
-- **Domain/data:** Versioned forecast run/snapshot, scenario/range, assumptions,
-  deal contributions, calibration and override history.
-- **Backend/frontend/AI:** Reproducible deterministic/statistical engine and scheduled/
-  on-change computation; uncertainty-first UI; AI explains cited factors only.
-- **Integrations:** Internal canonical data first; external CRM histories only after
-  authority/mapping quality is proven.
-- **Security/privacy/operations:** Access and override audit, sparse-cohort/bias review,
-  backtesting, drift/freshness alerts and safe unavailable fallback.
-- **Acceptance:** Every result has range, versions, assumptions and factor explanation;
-  overrides preserve both views; backtests/calibration meet a predeclared baseline;
-  sparse data never yields false precision.
-- **Out of scope:** Unexplained probability scores, premature learned model, contractual
-  guarantee and auto-changing Opportunity truth.
-- **Validate:** Compare usefulness, calibration and override reasons across real cycles
-  before using forecast in manager recommendations.
+- **Status:** Implemented 30 August 2026 as Transparent Forecasting Core v1.
+- **Delivered:** Insights seller Commit/Likely/Possible range, separate 730-day
+  exact-stage historical baseline with 10-outcome minimum/no fallback, canonical
+  Actual and Target comparison, immutable period-specific seller revisions, stale
+  review, count-gated final category realization, currency separation and admin
+  organisation inspection.
+- **Deliberate boundary:** no Daily integration, manager judgment, hierarchy, fixed
+  stage probability, Opportunity probability, predicted date, AI/ML, Methodology or
+  Revenue Brain numeric weighting, FX, external CRM forecast sync or autonomous
+  mutation. WO-039 owns independent manager scope and coaching.
+- **Validate:** Observe seller usefulness and category realization across real cycles
+  before changing the versioned empirical baseline.
 
 ### WO-039 — Manager Intelligence
 

@@ -203,6 +203,7 @@ class Settings(BaseSettings):
     feature_native_pipeline_enabled: bool = True
     feature_sales_analytics_enabled: bool = True
     feature_sales_targets_enabled: bool = True
+    feature_sales_forecasting_enabled: bool = True
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     feature_prospect_enabled: bool = True
@@ -532,6 +533,11 @@ class Settings(BaseSettings):
             "nativePipeline": self.feature_native_pipeline_enabled,
             "salesAnalytics": self.feature_sales_analytics_enabled,
             "salesTargets": self.feature_sales_targets_enabled and self.feature_sales_analytics_enabled,
+            "salesForecasting": (
+                self.feature_sales_forecasting_enabled
+                and self.feature_sales_targets_enabled
+                and self.feature_sales_analytics_enabled
+            ),
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
             "prospect": self.feature_prospect_enabled,

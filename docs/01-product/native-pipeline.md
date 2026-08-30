@@ -2,6 +2,10 @@
 
 **Status:** current WO-035 implementation.
 
+> **WO-038 consumer:** Forecast reads stable Pipeline/stage identity, reliable
+> non-baseline stage-entry events, expected/actual close dates and final Won/Lost
+> status. It adds no stage probability and never changes Pipeline or Opportunity truth.
+
 Native Pipeline is the simple operating view for canonical Opportunities. It answers
 where open deals are, what changed, how long the current tracked stage has lasted,
 what requires explainable attention, what closed and what seller-reported outcome was

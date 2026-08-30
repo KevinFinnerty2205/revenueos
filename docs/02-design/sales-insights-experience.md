@@ -7,8 +7,9 @@
 Insights is a desktop Core destination beside Pipeline. It is not a fifth persistent
 mobile navigation item: small-screen users reach it through the existing responsive
 application route without displacing Today, Interactions, Actions or Search. One page
-contains four tabs—Overview, Funnel, Activity and Win/Loss—and one shared filter bar.
-Only the active view loads its read model.
+contains six capability-aware tabs—Overview, Targets, Forecast, Funnel, Activity and
+Win/Loss. The four WO-036 views share a filter bar; Targets and Forecast own their
+period-specific controls. Only the active read model loads.
 
 ## Interaction design
 
@@ -49,5 +50,5 @@ bounds. No hover-only action or drag interaction exists.
 
 The implementation adds no charting dependency, saved report, query builder, custom
 segment, drill-down entity browser, configurable widget, leaderboard or manager
-surface. Four views and five filters are the minimum coherent slice. Qualitative AI,
-targets, forecasting and coaching remain separate work orders.
+surface. WO-038 adds a card-based Forecast review without a probability field or wide
+table. Qualitative AI and coaching remain separate work orders.

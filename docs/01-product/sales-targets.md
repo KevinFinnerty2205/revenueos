@@ -93,3 +93,10 @@ Forecasting must consume canonical facts independently and must not reinterpret
 target attainment as probability. See the
 [Targets/Forecast boundary](../03-engineering/sales-analytics-targets-forecast-architecture.md)
 and [ADR 0057](../08-decisions/0057-explicit-canonical-sales-targets.md).
+
+## WO-038 comparison boundary
+
+Forecast reads matching Won-value Target identities/revisions through the Target
+service for an exact calendar period, currency, optional Pipeline and scope. It does
+not duplicate target progress, persist Actual, blend Target into Forecast or trigger
+an Action. Other target metrics remain outside Forecast.

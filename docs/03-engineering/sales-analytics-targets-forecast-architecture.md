@@ -1,6 +1,6 @@
 # Sales analytics, targets and forecast architecture
 
-- **Status:** Descriptive analytics and explicit Targets implemented; Forecast and Manager Intelligence remain proposed
+- **Status:** Analytics, explicit Targets and Transparent Forecasting implemented; Manager Intelligence remains proposed
 - **Principle:** Explain what changed and what to do; do not create a wall of charts
 
 ## Intelligence boundaries
@@ -71,35 +71,19 @@ formula, FX, recurrence, persisted observation, pacing state or forecast. Activi
 metrics are visibly supporting context. Insights owns progress through Overview and
 Targets; Daily deliberately has no target integration in v1.
 
-## Forecast MVP
+## Implemented Forecast MVP
 
-The first forecast should use transparent deterministic/statistical policy rather
-than premature machine learning. Candidate components are:
+WO-038 chooses a deliberately narrow transparent model. The primary range is the
+seller's inclusive Commit/Likely/Possible cases. A separate reference applies the
+observed final win rate from reliable same-tenant, same-Pipeline, exact-stage outcomes
+over 730 days to current amount, only from a 10-outcome sample. Sparse data is
+unavailable with no fallback.
 
-1. explicit open-pipeline amount, stage and close period;
-2. historically observed stage conversion and cycle-duration distributions where
-   the authorised cohort has enough comparable outcomes;
-3. declared adjustments for close-date risk, inactivity, methodology gaps,
-   stakeholder coverage, commitments, objections and procurement/legal/security;
-4. scenario aggregation into a central estimate and a defensible range.
-
-When history is insufficient, show a rules-based scenario or `unavailable`; never
-manufacture precision. Categories such as commit, expected and upside may summarise
-scenarios if their rules are visible. Avoid an unexplained “AI says 78%”.
-
-Every result includes:
-
-- forecast period, currency and scope;
-- central estimate and range;
-- important assumptions and Evidence-linked deal factors;
-- data freshness and missing associations;
-- engine, policy, cohort and input-snapshot versions;
-- historical calibration where sample size is sufficient;
-- seller and manager overrides, reason, actor and time;
-- prior versions and eventual outcome.
-
-Overrides do not erase the system result. A manager roll-up distinguishes model,
-seller and manager views and maintains a metadata audit.
+Each seller edit appends a period-specific revision with current Opportunity/model
+snapshot. Current live aggregates use current amount and disclose stale changes;
+past periods are locked. Actual comes from `SalesMetricService`; matching Target goals
+come through `SalesTargetService`. Category realization is count/rate calibration,
+not ranking. See the [model specification](forecast-model-v1-specification.md).
 
 ## Future learned models
 
@@ -125,8 +109,8 @@ follow least privilege; sensitive coaching views need access and audit policy.
 
 Keep this inside the API modular monolith. Domain repositories expose authorised
 facts; a metrics module owns definitions/observations; target and forecast services
-consume typed snapshots. Background recomputation, if later needed, extends the
-existing job lifecycle rather than introducing a broker or microservice by default.
+consume typed snapshots. WO-038 calculates synchronously with bounded set queries and
+adds no background computation, broker or microservice.
 
 Jobs must be idempotent, versioned and safe to retry. Observability records safe
 counts, versions, durations, freshness and error codes without customer content.
@@ -156,15 +140,20 @@ likelihood; it remains dependent on transparent policy and sufficient clean outc
 WO-036 implements the descriptive Core Insights slice: versioned canonical
 metric definitions, tenant-scoped point-in-time calculation and the Overview,
 Funnel, Activity and Win/Loss views. It adds no persisted metric facts, target
-state, probability, weighting or forecast model. Targets remain WO-037 and
-Forecast remains WO-038; both must consume this metric contract rather than
-redefining it.
+state, probability, weighting or forecast model. WO-037/038 consume this metric
+contract rather than redefining it.
 
 ## WO-037 implemented boundary
 
 WO-037 implements Core target configuration/history and read-time progress. It binds
 the WO-036 metric ID/version, persists no actual and exposes no probability. Canonical
 corrections, reopen and current-owner reassignment therefore update Target and
-Insights consistently. WO-038 must introduce explicit assumptions, ranges and
-calibration separately; WO-039 must introduce authorised team/manager scope rather
-than treating the current admin role as a manager.
+Insights consistently.
+
+## WO-038 implemented boundary
+
+WO-038 implements explicit seller cases, immutable period revisions, a separate
+empirical exact-stage baseline and category realization. It adds no fixed probability,
+manager view, AI/ML, FX or Evidence/Methodology/Revenue Brain numeric input. WO-039
+must introduce authorised team/manager scope rather than treating the admin role as a
+manager.

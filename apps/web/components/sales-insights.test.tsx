@@ -217,11 +217,13 @@ afterEach(() => {
 });
 
 describe("sales insights", () => {
-  it("loads filters and presents the five deterministic insight views", async () => {
+  it("loads filters and presents the deterministic insight views", async () => {
     const fetchMock = vi.fn((input: string | URL | Request) => {
       const url = String(input);
       if (url.includes("/api/v1/beta/capabilities"))
-        return json({ featureFlags: { salesTargets: true } });
+        return json({
+          featureFlags: { salesTargets: true, salesForecasting: true },
+        });
       if (url.includes("/api/v1/targets/metadata")) return json(targetMetadata);
       if (url.includes("/api/v1/targets")) return json(emptyTargets);
       if (url.includes("/metadata")) return json(metadata);
@@ -240,6 +242,7 @@ describe("sales insights", () => {
     expect(screen.getByText(/currencies remain separate/i)).toBeVisible();
     expect(await screen.findByText("Active targets")).toBeVisible();
     expect(screen.getByRole("tab", { name: "Targets" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Forecast" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("tab", { name: "Funnel" }));
     expect(screen.getByText(/choose one pipeline/i)).toBeVisible();

@@ -619,3 +619,17 @@ job or formula is stored. Insights renders a bounded Overview summary and dedica
 Targets tab. See the [architecture](sales-targets-architecture.md),
 [security review](sales-targets-security-privacy-review.md) and
 [ADR 0057](../08-decisions/0057-explicit-canonical-sales-targets.md).
+
+## WO-038 Transparent Forecasting
+
+Migration `0047_transparent_forecast` adds tenant calendar-period identities,
+Opportunity judgment identities and immutable context-rich revisions. A bounded
+tenant repository and `SalesForecastService` compose canonical current Opportunities,
+WO-035 reliable exact-stage final outcomes, WO-036 `SalesMetricService` Actual and
+WO-037 Target records. The primary range is explicit seller Commit/Likely/Possible;
+the 730-day, 10-sample historical baseline remains separate and uses no fallback.
+Insights adds Forecast and Opportunity Workspace links to it. There is no provider,
+worker, probability field, fixed stage table, AI/ML, FX, manager override or mutation
+of Opportunity/Evidence/Methodology/Revenue Brain. See the
+[domain architecture](sales-forecast-architecture.md) and
+[ADR 0058](../08-decisions/0058-separate-seller-forecast-and-system-baseline.md).

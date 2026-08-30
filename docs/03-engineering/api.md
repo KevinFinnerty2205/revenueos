@@ -902,3 +902,17 @@ Personal reads enforce owner-or-admin policy in addition to tenant RLS. Assigned
 owners are read-only; administrators cannot mutate peer self-set goals. Future
 progress is null/upcoming, and past targets are locked. Pipeline binding is accepted
 only for Opportunity metrics.
+
+## Sales Forecast API
+
+All paths are authenticated Core operations under `/api/v1/forecast`. `GET
+/metadata` declares actor scope, period types, seller categories and model policy.
+`GET /` requires a month/quarter anchor and one currency, with optional Pipeline,
+owner and bounded pagination; it returns separate Actual, Target, seller cases,
+historical coverage/input quality and deal contributions.
+
+`POST /opportunities/{id}/judgments` accepts only period, explicit category and
+optimistic expected revision; the server snapshots commercial/model context. `GET
+/opportunities/{id}/history` returns immutable revisions and `GET /calibration`
+returns sample-gated final category realization. No request accepts organisation,
+amount, probability, stage weight, predicted date, coefficient or manager override.

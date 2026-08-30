@@ -2,6 +2,11 @@
 
 **Status:** implemented by WO-036 as a RevenueOS Core capability.
 
+> **WO-038 handoff:** Transparent Forecasting reuses `won_value` definition version 1
+> through `SalesMetricService` for Actual. Closing, reopening or correcting canonical
+> Opportunities therefore reconciles Insights, Targets and Forecast without copied
+> Won formulas. Historical expected contribution remains a separate model.
+
 Sales Insights answers five bounded questions from canonical RevenueOS history: what
 entered the pipeline, what progressed, how long completed stages took, what later
 followed recorded calls and meetings, and what was finally won or lost. It complements
