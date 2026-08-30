@@ -282,3 +282,10 @@ append-only lifecycle fact; it snapshots labels/types and optional seller-report
 closure metadata. Current pipeline/stage/timing/outcome fields remain on Opportunity
 for efficient authorised reads. There is no Deal entity, forecast entity or duplicated
 customer-intelligence model.
+
+## WO-036 metric contract for WO-037
+
+WO-036 supplies a small read-only registry of stable metric identifiers and
+definition versions. WO-037 Targets must reference those identifiers and
+versions; it must not copy formulas, create a parallel metric catalogue or
+change historical observations when a later definition version is introduced.

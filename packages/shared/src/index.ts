@@ -4329,3 +4329,181 @@ export interface CreateDownloadGrant {
   expiresAt: string;
   fileName: string;
 }
+
+export type SalesMetricUnit = "count" | "percent" | "days" | "currency";
+export type SalesMetricFilter =
+  "date_range" | "timezone" | "pipeline" | "owner" | "currency";
+
+export interface SalesMetricDefinition {
+  id: string;
+  definitionVersion: string;
+  label: string;
+  description: string;
+  unit: SalesMetricUnit;
+  targetable: boolean;
+  supportedFilters: SalesMetricFilter[];
+  dateSemantics: string;
+  numerator: string | null;
+  denominator: string | null;
+  exclusions: string[];
+  sourceDomain: string;
+}
+
+export interface SalesInsightsOwner {
+  userId: string;
+  displayName: string;
+  active: boolean;
+}
+
+export interface SalesInsightsStage {
+  id: string;
+  name: string;
+  position: number;
+  stageType: "open" | "won" | "lost";
+  active: boolean;
+}
+
+export interface SalesInsightsPipeline {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  active: boolean;
+  stages: SalesInsightsStage[];
+}
+
+export interface SalesInsightsMetadata {
+  currentUserId: string;
+  pipelines: SalesInsightsPipeline[];
+  owners: SalesInsightsOwner[];
+  metrics: SalesMetricDefinition[];
+  outcomeWindowDays: 30;
+  maximumRangeDays: number;
+  generatedAt: string;
+}
+
+export interface SalesInsightsScope {
+  startDate: string;
+  endDate: string;
+  timezone: string;
+  pipelineId: string | null;
+  ownerUserId: string | null;
+  generatedAt: string;
+}
+
+export interface SalesCurrencyAmount {
+  currency: string;
+  amount: string;
+  opportunityCount: number;
+}
+
+export interface SalesOverview {
+  scope: SalesInsightsScope;
+  openOpportunityCount: number;
+  opportunitiesCreatedCount: number;
+  wonCount: number;
+  lostCount: number;
+  closedCount: number;
+  winRate: string | null;
+  medianSalesCycleDays: string | null;
+  wonValues: SalesCurrencyAmount[];
+  unvaluedWonCount: number;
+  hasOpportunities: boolean;
+}
+
+export interface SalesFunnelStage {
+  stageId: string;
+  stageName: string;
+  position: number;
+  enteredCount: number;
+  advancedCount: number;
+  stillOpenCount: number;
+  closedLostCount: number;
+  otherNotAdvancedCount: number;
+  advanceRate: string | null;
+}
+
+export interface SalesStageDuration {
+  stageId: string;
+  stageName: string;
+  medianCompletedDays: string | null;
+  completedIntervalCount: number;
+}
+
+export interface SalesFunnel {
+  scope: SalesInsightsScope;
+  pipelineId: string;
+  pipelineName: string;
+  cohortDefinition: string;
+  cohortCount: number;
+  currentOpenCount: number;
+  currentWonCount: number;
+  currentLostCount: number;
+  stages: SalesFunnelStage[];
+  stageDurations: SalesStageDuration[];
+  coverage: {
+    reliableOpportunityCount: number;
+    baselineOnlyOpportunityCount: number;
+    earliestReliableEventAt: string | null;
+    disclosure: string;
+  };
+}
+
+export interface SalesFollowOnRate {
+  cohortCount: number;
+  eligibleMatureCount: number;
+  followedByOutcomeCount: number;
+  rate: string | null;
+  immatureCount: number;
+  excludedUnassociatedCount: number;
+  excludedUntrackedCount: number;
+  windowDays: 30;
+}
+
+export interface SalesActivity {
+  scope: SalesInsightsScope;
+  phoneCallsCompletedCount: number;
+  meetingsCompletedCount: number;
+  callsFollowedByMeeting: SalesFollowOnRate;
+  meetingsFollowedByProgression: SalesFollowOnRate;
+  outreachAvailable: boolean;
+  liveOutreachSentCount: number;
+  outreachFollowedByMeeting: SalesFollowOnRate | null;
+  associationDisclosure: string;
+}
+
+export interface SalesOutcomeReason {
+  reason: string;
+  label: string;
+  count: number;
+  percentage: string | null;
+}
+
+export interface SalesWinLoss {
+  scope: SalesInsightsScope;
+  wonCount: number;
+  lostCount: number;
+  winRate: string | null;
+  wonReasons: SalesOutcomeReason[];
+  lostReasons: SalesOutcomeReason[];
+  lossStages: Array<{
+    stageId: string | null;
+    stageName: string;
+    count: number;
+  }>;
+  salesCycles: Array<{
+    outcome: "won" | "lost";
+    medianDays: string | null;
+    sampleSize: number;
+  }>;
+  values: Array<{
+    outcome: "won" | "lost";
+    currency: string;
+    amount: string;
+    medianAmount: string;
+    opportunityCount: number;
+  }>;
+  unvaluedWonCount: number;
+  unvaluedLostCount: number;
+  reasonProvenance: "seller_reported";
+  notesAggregated: false;
+}

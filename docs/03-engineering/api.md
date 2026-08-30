@@ -863,3 +863,22 @@ clients to override calculated results.
 
 No request accepts an organisation ID, probability, forecast category, customer
 Evidence assertion or Methodology override.
+
+## Sales Insights API
+
+All paths are authenticated Core reads under `/api/v1/insights/sales`. No request
+accepts an organisation ID or arbitrary field, grouping, formula or SQL.
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| `GET` | `/metadata` | Tenant pipelines/owners, fixed outcome window and full inspectable metric definitions. |
+| `GET` | `/metrics` | Versioned canonical metric catalogue. |
+| `GET` | `/metrics/{metricId}` | One reusable scalar observation; Won value additionally requires currency. |
+| `GET` | `/overview` | Current open snapshot plus created/final outcome/cycle/value results. |
+| `GET` | `/funnel` | Actual-entry cohort, stage progression, reliable completed duration and coverage for one pipeline. |
+| `GET` | `/activity` | Canonical activity counts and mature 30-day follow-on associations. |
+| `GET` | `/win-loss` | Current-final counts, seller-reported reasons, loss stage, cycle and currency-separated value. |
+
+Every analytical request uses inclusive `startDate`/`endDate`, an IANA `timezone`,
+and optional tenant-validated `pipelineId`/`ownerUserId`. The maximum range is five
+years; future/reversed ranges fail with safe typed errors.

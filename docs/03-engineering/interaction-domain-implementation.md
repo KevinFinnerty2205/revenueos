@@ -80,6 +80,11 @@ status and timezone-aware date range.
 has no content field. Structured logs use safe event names and IDs/type/status only;
 titles, relationship content, transcript text and evidence are excluded.
 
+WO-036 Sales Analytics reads only canonical completed `phone_call`,
+`online_meeting` and `face_to_face_meeting` Interaction facts. It does not infer
+activity from transcripts, AI artefacts, passive capture or audit events, and it
+does not change Interaction ownership or lifecycle behaviour.
+
 ## Explicitly not implemented
 
 There is no Capture Session execution, evidence body/API, recording, microphone,

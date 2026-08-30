@@ -115,6 +115,12 @@ date, current stage, exact transition time, prior reliable entry time, actual cl
 outcome/reason and reopen events. Baselines are explicitly incomplete. Definitions for
 conversion, stage re-entry, cohorts, currency and cycle time remain WO-036 work.
 
+WO-036 now consumes those facts without changing their ownership. Funnel stage
+entries use only actual non-baseline events in one selected pipeline; duration
+requires an exact prior entry; closed cohorts use current final closure state;
+and current owner attribution is explicit. Sales Analytics does not write back
+to Pipeline or Opportunity lifecycle state.
+
 WO-038 receives no probability, weighted amount, category, predicted close date,
 commit/best-case value or deal score from this module. Forecasting must later use
 versioned transparent assumptions and sufficient canonical outcomes.

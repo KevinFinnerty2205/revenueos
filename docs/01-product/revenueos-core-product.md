@@ -75,7 +75,8 @@ forecast explanation. They do not become a simplistic completion or rep score.
 
 ## RevenueOS Intelligence
 
-Core eventually includes:
+Core includes descriptive and diagnostic Sales Insights now; Targets, Forecasting and
+Manager Intelligence remain later work. The complete Core direction includes:
 
 - descriptive analytics: what happened;
 - diagnostic analytics: what changed and where the funnel is weak;

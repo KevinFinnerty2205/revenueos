@@ -493,3 +493,14 @@ stage IDs, archived stages, stale races and external-authority bypass. Seller ou
 notes are bounded canonical data, excluded from logs/audit metadata and included only
 in authorised organisation export. See the
 [dedicated review](native-pipeline-security-privacy-review.md).
+
+## WO-036 Sales Analytics controls
+
+Insights derives tenant only from verified context, validates owner and pipeline
+filters inside that tenant and retains explicit organisation predicates plus forced
+RLS. The five-year typed-query ceiling prevents unbounded report input. Baseline
+history is excluded/disclosed, simulation cannot qualify as live Outreach, and
+free-text outcome notes/transcripts/Evidence are outside the read model. Telemetry
+must exclude requested ranges and business values. No employee surveillance,
+open/click tracking, ranking, probability, forecast or analytics mutation path exists.
+See the [dedicated review](sales-analytics-security-privacy-review.md).

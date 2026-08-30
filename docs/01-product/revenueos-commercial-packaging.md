@@ -131,3 +131,8 @@ and later Core Intelligence consumers remain Core. The CRM entitlement unlocks n
 definition administration: up to five pipelines, bounded stages, default selection and
 safe archive. External HubSpot authority remains read-only and is never paywalled or
 bypassed. Sales Analytics (WO-036) and Forecasting (WO-038) remain Core.
+
+WO-036 now implements Sales Analytics and bounded seller-reported aggregate Win/Loss
+as **Core**. It has one rollout flag and no separate entitlement, per-seat analytics
+add-on or tab-level gate. Targets, Forecasting and Manager Intelligence remain
+separate future Core work orders.

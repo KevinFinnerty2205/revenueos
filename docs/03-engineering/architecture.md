@@ -593,3 +593,16 @@ web route. Forced RLS and composite tenant foreign keys apply. No service, broke
 datastore, provider or AI capability was added. See the
 [architecture](native-pipeline-architecture.md) and
 [ADR 0055](../08-decisions/0055-native-pipeline-history-and-authority.md).
+
+## WO-036 Sales Analytics read model
+
+Migration `0045_sales_analytics` adds four tenant/date query indexes without copying
+facts. A code-owned versioned metric registry, tenant-scoped repository and
+`SalesAnalyticsService` compute Overview, one-pipeline Funnel, Activity and Win/Loss
+from canonical Opportunity, immutable stage-event, completed Interaction, Meeting
+participant and confirmed-live Action-execution records. `SalesMetricService` is the
+strict WO-037 handoff. Requests are bounded to five local years and accept only typed
+date/timezone/pipeline/owner/currency filters. There is no warehouse, analytics job,
+generic query language, AI provider or mutation dependency. See the
+[architecture](sales-analytics-architecture.md), [metric catalogue](sales-analytics-metric-catalog.md)
+and [ADR 0056](../08-decisions/0056-deterministic-canonical-sales-analytics.md).

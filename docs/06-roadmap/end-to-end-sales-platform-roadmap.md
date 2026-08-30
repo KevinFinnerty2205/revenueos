@@ -519,8 +519,9 @@ section expansion, external provider execution and analytics remain later work.
   secondary drill-down with scope, cohort, freshness and definition visible.
 - **Domain/data:** Versioned business event, MetricDefinition and MetricObservation;
   corrections, ambiguity and late events are first-class.
-- **Backend/frontend/AI:** Deterministic metrics/read models; accessible charts/tables;
-  AI summarises computed observations and cannot invent or imply causality.
+- **Backend/frontend/AI:** Deterministic metrics/read models and accessible
+  charts/tables are implemented. No AI summary was added; later synthesis requires a
+  separate reviewed work order and cannot invent or imply causality.
 - **Integrations:** Internal canonical state first; connector data is accepted only
   through mapped authoritative events.
 - **Security/privacy/operations:** Individual/team scope, no surveillance telemetry,
@@ -532,6 +533,10 @@ section expansion, external provider execution and analytics remain later work.
   training before adding targets.
 
 ### WO-036B — Win/Loss Intelligence
+
+WO-036 now includes bounded aggregate seller-reported reasons, loss-stage, cycle and
+currency analysis. The qualitative cited deal explanation described below remains
+future and is not implied by the implemented aggregate view.
 
 - **Objective/value/package:** Explain why an Opportunity was won or lost and identify
   responsible themes across sufficiently defined cohorts. **Core**.

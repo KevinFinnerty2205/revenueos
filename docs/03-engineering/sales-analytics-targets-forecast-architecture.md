@@ -150,3 +150,12 @@ conversion, duration, currency and attribution policy before calculating metrics
 WO-035 deliberately supplies no probability, weighted amount, forecast category,
 predicted close date, model run or deal score. WO-038 must not reinterpret a stage as a
 likelihood; it remains dependent on transparent policy and sufficient clean outcomes.
+
+## WO-036 implemented boundary
+
+WO-036 implements the descriptive Core Insights slice: versioned canonical
+metric definitions, tenant-scoped point-in-time calculation and the Overview,
+Funnel, Activity and Win/Loss views. It adds no persisted metric facts, target
+state, probability, weighting or forecast model. Targets remain WO-037 and
+Forecast remains WO-038; both must consume this metric contract rather than
+redefining it.

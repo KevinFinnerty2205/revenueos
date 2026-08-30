@@ -25,7 +25,10 @@ const desktopGroups = [
   },
   {
     label: null,
-    items: [{ href: "/opportunities", label: "Pipeline" }],
+    items: [
+      { href: "/opportunities", label: "Pipeline" },
+      { href: "/insights", label: "Insights" },
+    ],
   },
 ] as const;
 
@@ -56,6 +59,7 @@ export function CoreNavigation() {
   const [engageEnabled, setEngageEnabled] = useState(false);
   const [eventsEnabled, setEventsEnabled] = useState(false);
   const [createEnabled, setCreateEnabled] = useState(false);
+  const [salesAnalyticsEnabled, setSalesAnalyticsEnabled] = useState(true);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -72,10 +76,16 @@ export function CoreNavigation() {
     apiRequest<BetaCapabilities>("/api/v1/beta/capabilities", {
       signal: controller.signal,
     })
-      .then((capabilities) =>
-        setEventsEnabled(capabilities.featureFlags.engageEvents === true),
-      )
-      .catch(() => setEventsEnabled(false));
+      .then((capabilities) => {
+        setEventsEnabled(capabilities.featureFlags.engageEvents === true);
+        setSalesAnalyticsEnabled(
+          capabilities.featureFlags.salesAnalytics !== false,
+        );
+      })
+      .catch(() => {
+        setEventsEnabled(false);
+        setSalesAnalyticsEnabled(true);
+      });
     apiRequest<CreateAvailability>("/api/v1/create/availability", {
       signal: controller.signal,
     })
@@ -94,7 +104,13 @@ export function CoreNavigation() {
         ]
       : desktopGroups[1].items,
   };
-  const baseGroups = [desktopGroups[0], sellGroup, desktopGroups[2]];
+  const pipelineGroup = {
+    ...desktopGroups[2],
+    items: salesAnalyticsEnabled
+      ? desktopGroups[2].items
+      : desktopGroups[2].items.filter((item) => item.href !== "/insights"),
+  };
+  const baseGroups = [desktopGroups[0], sellGroup, pipelineGroup];
   const moduleGroups = prospectEnabled
     ? [
         baseGroups[0],

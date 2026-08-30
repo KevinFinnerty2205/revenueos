@@ -74,6 +74,8 @@ from revenueos.models import (
     RecordingSession,
     RevenueBrainInteractionSnapshot,
     RevenueBrainSourceSnapshot,
+    SalesPipeline,
+    SalesPipelineStage,
     SourceCandidateEvidence,
     Transcript,
     TranscriptSegment,
@@ -635,6 +637,202 @@ def demo_phone_contact_id(organisation_id: UUID) -> UUID:
     return uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:phone-contact")
 
 
+def demo_sales_analytics_ids(organisation_id: UUID) -> tuple[tuple[UUID, ...], tuple[UUID, ...]]:
+    prefix = str(organisation_id)
+    opportunity_ids = tuple(
+        uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:sales-analytics-opportunity-{index:02d}") for index in range(20)
+    )
+    interaction_ids = tuple(
+        uuid.uuid5(DEMO_NAMESPACE, f"{prefix}:sales-analytics-interaction-{index:02d}") for index in range(8)
+    )
+    return opportunity_ids, interaction_ids
+
+
+async def _seed_sales_analytics_demo(
+    session: AsyncSession,
+    organisation_id: UUID,
+    user_id: UUID,
+    company_id: UUID,
+    contact_id: UUID,
+    pipeline: SalesPipeline,
+    stages: list[SalesPipelineStage],
+) -> tuple[tuple[UUID, ...], tuple[UUID, ...]]:
+    """Seed fixed, synthetic canonical history for the WO-036 Insights experience."""
+
+    opportunity_ids, interaction_ids = demo_sales_analytics_ids(organisation_id)
+    stage_by_key = {stage.stage_key: stage for stage in stages}
+    required_stage_keys = {
+        "discovery",
+        "qualification",
+        "evaluation",
+        "proposal",
+        "negotiation",
+        "procurement",
+        "closed_won",
+        "closed_lost",
+    }
+    if not required_stage_keys.issubset(stage_by_key):
+        raise ValueError("The deterministic analytics demo requires the canonical default pipeline stages.")
+    base_at = datetime(2026, 7, 1, 1, 0, tzinfo=UTC)
+    win_reasons = ("solution_fit", "commercial", "relationship", "implementation")
+    loss_reasons = ("budget", "competitor", "timing", "requirements_fit", "procurement")
+
+    for index, opportunity_id in enumerate(opportunity_ids):
+        if await session.get(Opportunity, opportunity_id) is not None:
+            continue
+        started_at = base_at + timedelta(days=index)
+        if index < 7:
+            status = "won"
+            path = ["discovery", "qualification", "evaluation", "proposal", "negotiation", "closed_won"]
+            outcome_reason = win_reasons[index % len(win_reasons)]
+        elif index < 12:
+            status = "lost"
+            path = ["discovery", "evaluation", "proposal", "closed_lost"]
+            outcome_reason = loss_reasons[(index - 7) % len(loss_reasons)]
+        elif index == 19:
+            status = "open"
+            path = ["discovery", "evaluation", "proposal", "closed_won", "evaluation"]
+            outcome_reason = None
+        else:
+            status = "open"
+            open_paths = (
+                ["discovery"],
+                ["discovery", "qualification"],
+                ["discovery", "evaluation"],
+                ["discovery", "evaluation", "proposal"],
+                ["discovery", "evaluation", "negotiation"],
+                ["discovery", "evaluation", "proposal", "procurement"],
+                ["evaluation"],
+            )
+            path = open_paths[index - 12]
+            outcome_reason = None
+        baseline_only = index == 18
+        if baseline_only:
+            started_at = datetime(2026, 6, 15, 1, 0, tzinfo=UTC)
+            path = ["evaluation"]
+        current_stage = stage_by_key[path[-1]]
+        valued = index not in {10, 17}
+        currency = ("AUD" if index % 3 else "USD") if valued else None
+        estimated_value = Decimal(55_000 + index * 12_500) if valued else None
+        final_close_event_at = started_at + timedelta(days=5 * (len(path) - 1))
+        actual_close_date = final_close_event_at.date() if status in {"won", "lost"} else None
+        opportunity = Opportunity(
+            id=opportunity_id,
+            organisation_id=organisation_id,
+            company_id=company_id,
+            name=f"[DEMO] Analytics opportunity {index + 1:02d}",
+            stage=current_stage.stage_key,
+            status=status,
+            estimated_value=estimated_value,
+            currency=currency,
+            expected_close_date=(started_at + timedelta(days=60)).date(),
+            owner_user_id=user_id,
+            description="Synthetic analytics history. No real customer or personal data.",
+            pipeline_id=pipeline.id,
+            pipeline_stage_id=current_stage.id,
+            stage_entered_at=final_close_event_at,
+            stage_tracking_started_at=started_at,
+            actual_close_date=actual_close_date,
+            outcome_reason=outcome_reason,
+            outcome_note=(
+                "Synthetic seller-only outcome note; deliberately excluded from analytics."
+                if outcome_reason is not None
+                else None
+            ),
+            outcome_provenance="seller_reported" if outcome_reason is not None else None,
+            created_at=started_at,
+            updated_at=final_close_event_at,
+        )
+        session.add(opportunity)
+        await session.flush()
+        previous_stage: SalesPipelineStage | None = None
+        previous_entry_at: datetime | None = None
+        for step_index, stage_key in enumerate(path):
+            stage = stage_by_key[stage_key]
+            changed_at = started_at + timedelta(days=5 * step_index)
+            closes = stage.stage_type in {"won", "lost"}
+            session.add(
+                OpportunityStageEvent(
+                    id=uuid.uuid5(
+                        DEMO_NAMESPACE,
+                        f"{organisation_id}:sales-analytics-stage-{index:02d}-{step_index:02d}",
+                    ),
+                    organisation_id=organisation_id,
+                    opportunity_id=opportunity_id,
+                    from_pipeline_id=pipeline.id if previous_stage is not None else None,
+                    to_pipeline_id=pipeline.id,
+                    from_stage_id=previous_stage.id if previous_stage is not None else None,
+                    to_stage_id=stage.id,
+                    from_stage_name=previous_stage.name if previous_stage is not None else None,
+                    to_stage_name=stage.name,
+                    from_stage_type=previous_stage.stage_type if previous_stage is not None else None,
+                    to_stage_type=stage.stage_type,
+                    changed_by_user_id=user_id,
+                    changed_at=changed_at,
+                    source="migration_baseline" if baseline_only else "system_initial" if step_index == 0 else "manual",
+                    is_baseline=baseline_only,
+                    previous_stage_entered_at=previous_entry_at,
+                    outcome_reason=(
+                        win_reasons[index % len(win_reasons)]
+                        if index == 19 and stage.stage_type == "won"
+                        else outcome_reason
+                        if closes
+                        else None
+                    ),
+                    outcome_note=(
+                        "Synthetic seller-only outcome note; deliberately excluded from analytics." if closes else None
+                    ),
+                    outcome_provenance="seller_reported" if closes else None,
+                    actual_close_date=changed_at.date() if closes else None,
+                    final_amount=estimated_value if closes else None,
+                    final_currency=currency if closes else None,
+                    idempotency_key=f"demo-sales-analytics-{index:02d}-{step_index:02d}",
+                )
+            )
+            previous_stage = stage
+            previous_entry_at = changed_at
+
+    interaction_specs = (
+        ("phone_call", datetime(2026, 7, 5, 2, 0, tzinfo=UTC), 0),
+        ("online_meeting", datetime(2026, 7, 12, 2, 0, tzinfo=UTC), 0),
+        ("phone_call", datetime(2026, 7, 8, 2, 0, tzinfo=UTC), 1),
+        ("face_to_face_meeting", datetime(2026, 7, 20, 2, 0, tzinfo=UTC), 1),
+        ("phone_call", datetime(2026, 7, 15, 2, 0, tzinfo=UTC), 2),
+        ("presentation", datetime(2026, 7, 25, 2, 0, tzinfo=UTC), 2),
+        ("phone_call", datetime(2026, 8, 15, 2, 0, tzinfo=UTC), 3),
+        ("online_meeting", datetime(2026, 8, 18, 2, 0, tzinfo=UTC), 3),
+    )
+    for index, (interaction_type, ended_at, opportunity_index) in enumerate(interaction_specs):
+        interaction_id = interaction_ids[index]
+        if await session.get(Interaction, interaction_id) is not None:
+            continue
+        is_call = interaction_type == "phone_call"
+        session.add(
+            Interaction(
+                id=interaction_id,
+                organisation_id=organisation_id,
+                company_id=company_id,
+                opportunity_id=opportunity_ids[opportunity_index],
+                contact_id=contact_id if is_call else None,
+                interaction_type=interaction_type,
+                lifecycle_status="completed",
+                title=f"[DEMO] Analytics {'call' if is_call else 'meeting'} {index + 1}",
+                scheduled_start_at=ended_at - timedelta(minutes=30),
+                scheduled_end_at=ended_at,
+                actual_start_at=ended_at - timedelta(minutes=30),
+                actual_end_at=ended_at,
+                timezone="Australia/Sydney",
+                creation_origin="manual",
+                call_direction="outbound" if is_call else None,
+                call_outcome="connected" if is_call else None,
+                created_by_user_id=user_id,
+                created_at=ended_at,
+                updated_at=ended_at,
+            )
+        )
+    return opportunity_ids, interaction_ids
+
+
 def demo_companion_ids(
     organisation_id: UUID,
 ) -> tuple[tuple[UUID, UUID, UUID], tuple[UUID, UUID, UUID], tuple[UUID, UUID, UUID], tuple[UUID, UUID, UUID]]:
@@ -946,6 +1144,17 @@ async def seed_demo_data(
                 )
             )
             await session.flush()
+
+        analytics_opportunity_ids, analytics_interaction_ids = await _seed_sales_analytics_demo(
+            session,
+            organisation_id,
+            user_id,
+            company_id,
+            phone_contact_id,
+            pipeline,
+            pipeline_stages,
+        )
+        await session.flush()
 
         linked_interaction_ids: list[UUID] = []
         for index, meeting_id in enumerate(meeting_ids):
@@ -2273,11 +2482,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 15},
+                    metadata_json={"dataset_version": 16},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 15}
+            event.metadata_json = {"dataset_version": 16}
     methodology_versions = await _seed_methodology_views(
         session_factory,
         organisation_id,
@@ -2316,6 +2525,8 @@ async def seed_demo_data(
         "target_market_candidate_count": target_market["candidate_count"],
         "saved_prospect_target_id": target_market["saved_prospect_target_id"],
         "campaign_id": campaign_id,
+        "sales_analytics_opportunity_ids": analytics_opportunity_ids,
+        "sales_analytics_interaction_ids": analytics_interaction_ids,
         "provider_calls": 0,
     }
 
@@ -2610,6 +2821,7 @@ async def reset_demo_data(
     company_id, opportunity_id, meeting_ids, _ = demo_ids(organisation_id)
     campaign_ids = demo_campaign_ids(organisation_id)
     phone_contact_id = demo_phone_contact_id(organisation_id)
+    analytics_opportunity_ids, analytics_interaction_ids = demo_sales_analytics_ids(organisation_id)
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
     live_ids = demo_live_ids(organisation_id)
     google_meeting_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-google-meeting")
@@ -2636,6 +2848,7 @@ async def reset_demo_data(
         )
         await _delete_visual_objects(session, active_settings, organisation_id, debrief_interaction_ids)
         await _delete_interaction_batch(session, organisation_id, debrief_interaction_ids)
+        await _delete_interaction_batch(session, organisation_id, list(analytics_interaction_ids))
         await _delete_document_objects(session, active_settings, organisation_id, document_ids)
         await _delete_source_database_rows(session, organisation_id, document_ids, email_ids)
         await session.execute(
@@ -2683,6 +2896,12 @@ async def reset_demo_data(
             delete(ProspectTargetMarket).where(
                 ProspectTargetMarket.organisation_id == organisation_id,
                 ProspectTargetMarket.id.in_(demo_market_ids),
+            )
+        )
+        await session.execute(
+            delete(Opportunity).where(
+                Opportunity.organisation_id == organisation_id,
+                Opportunity.id.in_(analytics_opportunity_ids),
             )
         )
         await session.execute(
