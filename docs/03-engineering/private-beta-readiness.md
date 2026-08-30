@@ -514,3 +514,10 @@ it never deletes a HubSpot record. Organisation deletion attempts revocation bef
 removing local credential/mapping/execution rows. External updates already applied
 are not undone. Ordinary Action/Interaction retention continues to own reviewed
 content; CRM audit/log records remain metadata-only.
+
+## WO-038 feature and logging boundary
+
+Safe capabilities add `salesForecasting`, true only when Forecast, Sales Analytics
+and Sales Targets server flags are enabled. Disabling any fails Forecast routes
+closed. Forecast amounts, categories, observed rates and customer/deal payloads are
+excluded from health, telemetry and metadata-only audits.

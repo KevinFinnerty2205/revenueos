@@ -1,5 +1,9 @@
 # Sales Methodology Engine architecture
 
+> **WO-038 numeric boundary:** Forecast model v1 does not read or weight Methodology
+> items, gaps, freshness, conflict or completion. Methodology may remain qualitative
+> context, but it cannot alter seller cases or historical expected contribution.
+
 ## Prospect Person boundary
 
 WO-027 buying-role hypotheses and public statements are excluded from Methodology

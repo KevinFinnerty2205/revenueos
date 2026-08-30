@@ -75,9 +75,9 @@ forecast explanation. They do not become a simplistic completion or rep score.
 
 ## RevenueOS Intelligence
 
-Core includes descriptive and diagnostic Sales Insights plus explicit Targets/KPI
-progress now; Forecasting and Manager Intelligence remain later work. The complete
-Core direction includes:
+Core includes descriptive and diagnostic Sales Insights, explicit Targets/KPI
+progress and Transparent Forecasting now; Manager Intelligence remains later work.
+The complete Core direction includes:
 
 - descriptive analytics: what happened;
 - diagnostic analytics: what changed and where the funnel is weak;
@@ -111,9 +111,9 @@ management is outside Core.
 Daily is the implemented default habit surface and answers **What matters today?**
 It combines local-day Interactions, current Actions/commitments, explainable deal
 attention, descriptive currency-safe pipeline and existing Next Best Action into a
-bounded personal priority view. Targets and forecasting are not implemented because
-Targets now use their canonical engine in WO-037; forecast remains WO-038. Daily is
-not an analytics dashboard or
+bounded personal priority view. Targets and Forecast have their canonical Insights
+engines but are deliberately not folded into Daily by WO-037/038. Daily is not an
+analytics dashboard or
 notification dump.
 
 ## Core maturity definition
@@ -164,8 +164,8 @@ WO-025A completes the Core experience-readiness pass and WO-025B implements Ask
 RevenueOS as bounded evidence-backed Opportunity, Account and user-owned workspace
 Q&A. Ask reuses existing intelligence, preserves provenance/conflict and returns
 unknown rather than widening to public research. Analytics, aggregate Win/Loss and
-Targets are now implemented. Forecasting, qualitative Win/Loss synthesis, coaching,
-manager views, broader provider execution and observed
+Targets and Transparent Forecasting are now implemented. Qualitative Win/Loss
+synthesis, coaching, manager views, broader provider execution and observed
 Checkpoint 1B remain future work. WO-025C implements the selected HubSpot path only:
 explicit object linking, typed field/stage authority, exact preview, confirmation,
 verified execution and reconciliation. It does not authorise Prospect, Salesforce,

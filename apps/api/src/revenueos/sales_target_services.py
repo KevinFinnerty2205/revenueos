@@ -133,6 +133,47 @@ class SalesTargetService:
             can_create_organisation_targets=self.tenant.can_manage(),
         )
 
+    async def matching_forecast_targets(
+        self,
+        *,
+        period_start: date,
+        period_end: date,
+        currency: str,
+        pipeline_id: UUID | None,
+        owner_user_id: UUID | None,
+        organisation_scope: bool,
+    ) -> list[tuple[SalesTarget, SalesTargetRevision]]:
+        """Return matching won-value goals without recalculating unrelated target actuals."""
+
+        self.require_enabled()
+        targets = await self.repository.visible_targets(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            is_admin=self.tenant.can_manage(),
+            limit=MAXIMUM_VISIBLE_TARGETS,
+        )
+        matched = [
+            target
+            for target in targets
+            if target.archived_at is None
+            and target.metric_id == "won_value"
+            and target.metric_definition_version == "1"
+            and target.period_start == period_start
+            and target.period_end == period_end
+            and target.currency == currency
+            and target.pipeline_id == pipeline_id
+            and (
+                target.scope == "organisation"
+                if organisation_scope
+                else target.scope == "personal" and target.owner_user_id == owner_user_id
+            )
+        ]
+        latest = await self.repository.latest_revisions(
+            self.tenant.organisation_id,
+            {target.id for target in matched},
+        )
+        return [(target, latest[target.id]) for target in matched if target.id in latest]
+
     async def get_target(self, target_id: UUID, *, now: datetime | None = None) -> SalesTargetResponse:
         self.require_enabled()
         generated_at = _utc(now or datetime.now(UTC))

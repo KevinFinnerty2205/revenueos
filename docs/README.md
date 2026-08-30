@@ -106,6 +106,13 @@ This is the canonical product and engineering documentation index. Documents dis
 100. [Sales Targets security, privacy and lifecycle review](03-engineering/sales-targets-security-privacy-review.md)
 101. [WO-037: Targets & KPI Engine](07-sprints/wo-037-targets-kpi-engine.md)
 102. [ADR 0057: Explicit canonical Sales Targets](08-decisions/0057-explicit-canonical-sales-targets.md)
+103. [Transparent Forecasting](01-product/transparent-forecasting.md) — current WO-038 Core boundary
+104. [Forecast experience](02-design/forecast-experience.md)
+105. [Sales Forecast architecture](03-engineering/sales-forecast-architecture.md)
+106. [Forecast model v1 specification](03-engineering/forecast-model-v1-specification.md)
+107. [Forecast security and privacy review](03-engineering/forecast-security-privacy-review.md)
+108. [WO-038: Transparent Forecasting](07-sprints/wo-038-transparent-forecasting.md)
+109. [ADR 0058: Separate seller forecast and system baseline](08-decisions/0058-separate-seller-forecast-and-system-baseline.md)
 
 ## 00 — Company
 
@@ -137,6 +144,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Native Pipeline implementation guide](01-product/native-pipeline.md)
 - [Sales Analytics and Win/Loss Intelligence](01-product/sales-analytics.md)
 - [Sales Targets and KPI progress](01-product/sales-targets.md)
+- [Transparent Forecasting](01-product/transparent-forecasting.md)
+- [Seller Forecast guide](01-product/seller-forecast-guide.md)
+- [RevenueOS Historical Baseline](01-product/revenueos-historical-baseline.md)
+- [Actual vs Target vs Forecast](01-product/actual-target-forecast.md)
+- [Forecast calibration guide](01-product/forecast-calibration.md)
 - [Pipeline and Sales Brain boundary](01-product/pipeline-sales-brain-boundary.md)
 - [Opportunity stage and closure guide](01-product/opportunity-stage-closure-guide.md)
 - [Pipeline packaging](01-product/pipeline-packaging.md)
@@ -190,6 +202,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Native Pipeline UX and simplicity review](02-design/native-pipeline-ux.md)
 - [Sales Insights experience and simplicity review](02-design/sales-insights-experience.md)
 - [Sales Targets experience and simplicity review](02-design/sales-targets-experience.md)
+- [Forecast experience](02-design/forecast-experience.md)
+- [Forecast deal-review UX](02-design/forecast-deal-review-ux.md)
+- [Forecast-history UX](02-design/forecast-history-ux.md)
+- [Forecast calibration UX](02-design/forecast-calibration-ux.md)
+- [Forecast mobile and simplicity review](02-design/forecast-mobile-simplicity-review.md)
 - [Find and Prospect experience](02-design/find-and-prospect-experience.md)
 - [Engage, campaign and event experience](02-design/engage-campaign-event-experience.md)
 - [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
@@ -365,6 +382,13 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Sales analytics architecture](03-engineering/sales-analytics-architecture.md)
 - [Sales Targets architecture](03-engineering/sales-targets-architecture.md)
 - [Sales Targets security, privacy and lifecycle review](03-engineering/sales-targets-security-privacy-review.md)
+- [Sales Forecast architecture](03-engineering/sales-forecast-architecture.md)
+- [Forecast model v1 specification](03-engineering/forecast-model-v1-specification.md)
+- [Historical forecast baseline methodology](03-engineering/historical-forecast-baseline.md)
+- [Forecast revision and snapshot model](03-engineering/forecast-revision-snapshot-model.md)
+- [Forecast security and privacy review](03-engineering/forecast-security-privacy-review.md)
+- [Forecast retention, export and deletion](03-engineering/forecast-retention-export-deletion.md)
+- [Forecast to WO-039 handoff](03-engineering/forecast-manager-intelligence-handoff.md)
 - [Sales analytics metric catalogue](03-engineering/sales-analytics-metric-catalog.md)
 - [Sales analytics security and privacy review](03-engineering/sales-analytics-security-privacy-review.md)
 - [Prospect Account Research architecture](03-engineering/prospect-account-research-architecture.md)
@@ -532,6 +556,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-035: Native Pipeline](07-sprints/wo-035-native-pipeline.md)
 - [WO-036: Sales Analytics and Win/Loss Intelligence](07-sprints/wo-036-sales-analytics-win-loss.md)
 - [WO-037: Targets & KPI Engine](07-sprints/wo-037-targets-kpi-engine.md)
+- [WO-038: Transparent Forecasting](07-sprints/wo-038-transparent-forecasting.md)
 
 ## 08 — Decision records
 
@@ -575,6 +600,10 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0055: Stable native Pipeline stages, immutable history and explicit authority](08-decisions/0055-native-pipeline-history-and-authority.md)
 - [ADR 0056: Deterministic canonical Sales Analytics](08-decisions/0056-deterministic-canonical-sales-analytics.md)
 - [ADR 0057: Explicit canonical Sales Targets](08-decisions/0057-explicit-canonical-sales-targets.md)
+- [ADR 0058: Separate seller forecast and system baseline](08-decisions/0058-separate-seller-forecast-and-system-baseline.md)
+- [ADR 0059: Empirical exact-stage baseline v1](08-decisions/0059-empirical-stage-outcome-forecast-baseline.md)
+- [ADR 0060: No fixed stage probability](08-decisions/0060-no-fixed-stage-probability.md)
+- [ADR 0061: Immutable Forecast revisions](08-decisions/0061-immutable-forecast-judgment-revisions.md)
 - [ADR 0038: Separate unpromoted Prospect research domain](08-decisions/0038-separate-prospect-research-domain.md)
 - [ADR 0039: Separate Prospect Person research from canonical Contact](08-decisions/0039-separate-prospect-person-from-contact.md)
 - [ADR 0040: Preserve trust per promoted Contact field](08-decisions/0040-contact-field-provenance.md)
@@ -608,7 +637,8 @@ entitled, approved-template Create presentation slice. WO-033 adds bounded,
 deterministic Value Models and versioned Business Cases. WO-034 adds the canonical-record
 Native CRM Foundation without native Action execution or operational CSV. WO-035
 implements Native Pipeline, WO-036 implements deterministic Core Sales Insights and
-WO-037 implements explicit canonical Targets/KPI progress; WO-038–045 remain
+WO-037 implements explicit canonical Targets/KPI progress and WO-038 implements
+transparent seller ranges plus a separate historical baseline; WO-039–045 remain
 unauthorised.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &

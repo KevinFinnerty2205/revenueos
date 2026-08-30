@@ -4508,6 +4508,196 @@ export interface SalesWinLoss {
   notesAggregated: false;
 }
 
+export type SalesForecastPeriodType = "month" | "quarter";
+export type SalesForecastPeriodStatus = "upcoming" | "active" | "past";
+export type SalesForecastCategory =
+  "commit" | "likely" | "possible" | "not_this_period";
+export type SalesForecastModelStatus =
+  "available" | "insufficient_sample" | "unavailable_stage";
+export type SalesForecastStaleReason =
+  | "owner_changed"
+  | "amount_changed"
+  | "currency_changed"
+  | "expected_close_changed"
+  | "pipeline_changed"
+  | "stage_changed"
+  | "status_changed";
+
+export interface SalesForecastMetadata {
+  currentUserId: string;
+  currentUserRole: "admin" | "member";
+  organisationTimezone: string;
+  owners: Array<{ userId: string; displayName: string; active: boolean }>;
+  pipelines: Array<{ id: string; name: string; active: boolean }>;
+  canViewOrganisationForecast: boolean;
+  modelVersion: string;
+  modelLookbackDays: number;
+  modelMinimumSample: number;
+  supportedPeriodTypes: SalesForecastPeriodType[];
+  categories: SalesForecastCategory[];
+}
+
+export interface SalesForecastPeriod {
+  id: string | null;
+  periodType: SalesForecastPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  timezone: string;
+  status: SalesForecastPeriodStatus;
+}
+
+export interface SalesForecastCase {
+  amount: string;
+  opportunityCount: number;
+  unvaluedCount: number;
+}
+
+export interface SalesForecastBaseline {
+  status: SalesForecastModelStatus;
+  modelVersion: string;
+  pipelineId: string | null;
+  pipelineName: string | null;
+  stageId: string | null;
+  stageName: string | null;
+  wonCount: number;
+  lostCount: number;
+  sampleSize: number;
+  observedWinRate: string | null;
+  expectedContribution: string | null;
+  lookbackStart: string;
+  lookbackEnd: string;
+  minimumSample: number;
+  explanation: string;
+}
+
+export interface SalesForecastJudgment {
+  judgmentId: string;
+  revisionId: string;
+  revisionNumber: number;
+  category: SalesForecastCategory;
+  createdByUserId: string;
+  createdByDisplayName: string;
+  createdAt: string;
+  staleReasons: SalesForecastStaleReason[];
+  canReview: boolean;
+}
+
+export interface SalesForecastOpportunity {
+  opportunityId: string;
+  opportunityName: string;
+  companyName: string | null;
+  ownerUserId: string;
+  ownerDisplayName: string;
+  amount: string | null;
+  currency: string | null;
+  expectedCloseDate: string;
+  pipelineId: string;
+  pipelineName: string;
+  stageId: string;
+  stageName: string;
+  stageEnteredAt: string | null;
+  status: "open" | "on_hold";
+  judgment: SalesForecastJudgment | null;
+  historicalBaseline: SalesForecastBaseline;
+}
+
+export interface SalesForecastResponse {
+  period: SalesForecastPeriod;
+  currency: string;
+  pipelineId: string | null;
+  ownerUserId: string | null;
+  organisationScope: boolean;
+  actual: {
+    state: "available" | "upcoming" | "unavailable";
+    amount: string | null;
+    calculatedThrough: string | null;
+    metricId: "won_value";
+    metricDefinitionVersion: "1";
+  };
+  targets: Array<{
+    id: string;
+    label: string;
+    scope: "personal" | "organisation";
+    origin: "self_set" | "admin_assigned";
+    targetValue: string;
+  }>;
+  sellerForecast: {
+    commit: SalesForecastCase;
+    likely: SalesForecastCase;
+    possible: SalesForecastCase;
+    unreviewedCount: number;
+    notThisPeriodCount: number;
+    needsReviewCount: number;
+    disclosure: string;
+  };
+  revenueosBaseline: {
+    expectedContribution: string | null;
+    coveredOpportunityCount: number;
+    uncoveredOpportunityCount: number;
+    coveredAmount: string;
+    uncoveredAmount: string;
+    unvaluedOpportunityCount: number;
+    modelVersion: string;
+    lookbackDays: number;
+    minimumSample: number;
+    disclosure: string;
+  };
+  inputQuality: {
+    eligibleOpportunityCount: number;
+    valuedOpportunityCount: number;
+    unvaluedOpportunityCount: number;
+    missingExpectedCloseCount: number;
+    insufficientHistoryCount: number;
+  };
+  opportunities: SalesForecastOpportunity[];
+  totalOpportunities: number;
+  page: number;
+  pageSize: number;
+  generatedAt: string;
+}
+
+export interface SalesForecastRevision {
+  id: string;
+  revisionNumber: number;
+  category: SalesForecastCategory;
+  createdByUserId: string;
+  createdByDisplayName: string;
+  ownerUserIdSnapshot: string;
+  amountSnapshot: string | null;
+  currencySnapshot: string | null;
+  expectedCloseDateSnapshot: string;
+  pipelineIdSnapshot: string;
+  pipelineNameSnapshot: string;
+  stageIdSnapshot: string;
+  stageNameSnapshot: string;
+  opportunityStatusSnapshot: "open" | "on_hold";
+  historicalBaseline: SalesForecastBaseline;
+  createdAt: string;
+}
+
+export interface SalesForecastHistory {
+  opportunityId: string;
+  opportunityName: string;
+  period: SalesForecastPeriod;
+  latestStaleReasons: SalesForecastStaleReason[];
+  revisions: SalesForecastRevision[];
+}
+
+export interface SalesForecastCalibration {
+  periodType: SalesForecastPeriodType;
+  periodsIncluded: number;
+  categories: Array<{
+    category: "commit" | "likely" | "possible";
+    assessedCount: number;
+    realisedWonCount: number;
+    realisationRate: string | null;
+  }>;
+  minimumRateSample: number;
+  disclosure: string;
+  generatedAt: string;
+}
+
 export type SalesTargetCategory =
   "outcome" | "pipeline_development" | "activity";
 export type SalesTargetScope = "personal" | "organisation";

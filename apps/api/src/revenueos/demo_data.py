@@ -75,6 +75,9 @@ from revenueos.models import (
     RecordingSession,
     RevenueBrainInteractionSnapshot,
     RevenueBrainSourceSnapshot,
+    SalesForecastJudgment,
+    SalesForecastJudgmentRevision,
+    SalesForecastPeriod,
     SalesPipeline,
     SalesPipelineStage,
     SalesTarget,
@@ -659,6 +662,25 @@ def demo_sales_target_ids(organisation_id: UUID) -> dict[str, UUID]:
             "won-value-revision",
             "meetings",
             "meetings-revision",
+            "quarter-won-value",
+            "quarter-won-value-revision",
+        )
+    }
+
+
+def demo_sales_forecast_ids(organisation_id: UUID) -> dict[str, UUID]:
+    return {
+        label: uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:sales-forecast:{label}")
+        for label in (
+            "period",
+            "main-judgment",
+            "main-revision",
+            "likely-judgment",
+            "likely-revision",
+            "possible-judgment",
+            "possible-revision",
+            "excluded-judgment",
+            "excluded-revision",
         )
     }
 
@@ -667,7 +689,7 @@ async def _seed_sales_targets_demo(
     session: AsyncSession,
     organisation_id: UUID,
     user_id: UUID,
-) -> tuple[UUID, UUID]:
+) -> tuple[UUID, UUID, UUID]:
     """Seed explicit 2026 targets whose actuals remain owned by Sales Analytics."""
 
     ids = demo_sales_target_ids(organisation_id)
@@ -680,6 +702,9 @@ async def _seed_sales_targets_demo(
             "won_value",
             Decimal("1000000.00"),
             "AUD",
+            "year",
+            date(2026, 1, 1),
+            date(2026, 12, 31),
         ),
         (
             ids["meetings"],
@@ -687,23 +712,46 @@ async def _seed_sales_targets_demo(
             "meetings_completed_count",
             Decimal("12.00"),
             None,
+            "year",
+            date(2026, 1, 1),
+            date(2026, 12, 31),
+        ),
+        (
+            ids["quarter-won-value"],
+            ids["quarter-won-value-revision"],
+            "won_value",
+            Decimal("750000.00"),
+            "AUD",
+            "quarter",
+            date(2026, 7, 1),
+            date(2026, 9, 30),
         ),
     )
-    for target_id, revision_id, metric_id, goal_value, currency in specifications:
+    for (
+        target_id,
+        revision_id,
+        metric_id,
+        goal_value,
+        currency,
+        period_type,
+        period_start,
+        period_end,
+    ) in specifications:
         if await session.get(SalesTarget, target_id) is not None:
             continue
+        is_organisation_target = target_id == ids["quarter-won-value"]
         session.add(
             SalesTarget(
                 id=target_id,
                 organisation_id=organisation_id,
                 metric_id=metric_id,
                 metric_definition_version="1",
-                scope="personal",
-                origin="self_set",
-                owner_user_id=user_id,
-                period_type="year",
-                period_start=date(2026, 1, 1),
-                period_end=date(2026, 12, 31),
+                scope="organisation" if is_organisation_target else "personal",
+                origin="admin_assigned" if is_organisation_target else "self_set",
+                owner_user_id=None if is_organisation_target else user_id,
+                period_type=period_type,
+                period_start=period_start,
+                period_end=period_end,
                 timezone=timezone,
                 currency=currency,
                 created_by_user_id=user_id,
@@ -719,7 +767,95 @@ async def _seed_sales_targets_demo(
                 created_by_user_id=user_id,
             )
         )
-    return ids["won-value"], ids["meetings"]
+    return ids["won-value"], ids["meetings"], ids["quarter-won-value"]
+
+
+async def _seed_sales_forecast_demo(
+    session: AsyncSession,
+    organisation_id: UUID,
+    user_id: UUID,
+    opportunity_id: UUID,
+    analytics_opportunity_ids: tuple[UUID, ...],
+    pipeline: SalesPipeline,
+) -> tuple[UUID, ...]:
+    """Seed explicit Q3 seller judgments over the synthetic analytics history."""
+
+    ids = demo_sales_forecast_ids(organisation_id)
+    if await session.get(SalesForecastPeriod, ids["period"]) is not None:
+        return (
+            ids["main-judgment"],
+            ids["likely-judgment"],
+            ids["possible-judgment"],
+            ids["excluded-judgment"],
+        )
+    organisation = await session.get(Organisation, organisation_id)
+    timezone = organisation.timezone if organisation is not None else "UTC"
+    reviewed_at = datetime(2026, 8, 24, 2, 0, tzinfo=UTC)
+    period = SalesForecastPeriod(
+        id=ids["period"],
+        organisation_id=organisation_id,
+        period_type="quarter",
+        period_start=date(2026, 7, 1),
+        period_end=date(2026, 9, 30),
+        timezone=timezone,
+        created_by_user_id=user_id,
+        created_at=reviewed_at,
+    )
+    session.add(period)
+    await session.flush()
+    specifications = (
+        ("main", opportunity_id, "commit", 7, 5),
+        ("likely", analytics_opportunity_ids[14], "likely", 7, 5),
+        ("possible", analytics_opportunity_ids[16], "possible", 7, 0),
+        ("excluded", analytics_opportunity_ids[19], "not_this_period", 7, 5),
+    )
+    judgment_ids: list[UUID] = []
+    for label, selected_opportunity_id, category, won_count, lost_count in specifications:
+        opportunity = await session.get(Opportunity, selected_opportunity_id)
+        if opportunity is None or opportunity.pipeline_stage_id is None or opportunity.expected_close_date is None:
+            raise ValueError("The deterministic forecast demo requires canonical staged Opportunities.")
+        stage = await session.get(SalesPipelineStage, opportunity.pipeline_stage_id)
+        if stage is None:
+            raise ValueError("The deterministic forecast demo requires a stable Pipeline stage.")
+        judgment_id = ids[f"{label}-judgment"]
+        judgment_ids.append(judgment_id)
+        session.add(
+            SalesForecastJudgment(
+                id=judgment_id,
+                organisation_id=organisation_id,
+                period_id=period.id,
+                opportunity_id=opportunity.id,
+                created_at=reviewed_at,
+            )
+        )
+        session.add(
+            SalesForecastJudgmentRevision(
+                id=ids[f"{label}-revision"],
+                organisation_id=organisation_id,
+                judgment_id=judgment_id,
+                revision_number=1,
+                category=category,
+                created_by_user_id=user_id,
+                owner_user_id_snapshot=opportunity.owner_user_id,
+                amount_snapshot=opportunity.estimated_value,
+                currency_snapshot=opportunity.currency,
+                expected_close_date_snapshot=opportunity.expected_close_date,
+                pipeline_id_snapshot=pipeline.id,
+                pipeline_name_snapshot=pipeline.name,
+                stage_id_snapshot=stage.id,
+                stage_name_snapshot=stage.name,
+                opportunity_status_snapshot=opportunity.status,
+                model_version="forecast_historical_stage_outcome_v1",
+                model_status="available" if won_count + lost_count >= 10 else "insufficient_sample",
+                model_won_count=won_count,
+                model_lost_count=lost_count,
+                model_minimum_sample=10,
+                model_lookback_start=date(2024, 8, 25),
+                model_lookback_end=reviewed_at.date(),
+                created_at=reviewed_at,
+            )
+        )
+    return tuple(judgment_ids)
 
 
 async def _seed_sales_analytics_demo(
@@ -1227,6 +1363,14 @@ async def seed_demo_data(
             phone_contact_id,
             pipeline,
             pipeline_stages,
+        )
+        sales_forecast_judgment_ids = await _seed_sales_forecast_demo(
+            session,
+            organisation_id,
+            user_id,
+            opportunity_id,
+            analytics_opportunity_ids,
+            pipeline,
         )
         sales_target_ids = await _seed_sales_targets_demo(session, organisation_id, user_id)
         await session.flush()
@@ -2557,11 +2701,11 @@ async def seed_demo_data(
                     actor_user_id=user_id,
                     event_type="demo_data_seeded",
                     subject_id=opportunity_id,
-                    metadata_json={"dataset_version": 17},
+                    metadata_json={"dataset_version": 18},
                 )
             )
         else:
-            event.metadata_json = {"dataset_version": 17}
+            event.metadata_json = {"dataset_version": 18}
     methodology_versions = await _seed_methodology_views(
         session_factory,
         organisation_id,
@@ -2603,6 +2747,7 @@ async def seed_demo_data(
         "sales_analytics_opportunity_ids": analytics_opportunity_ids,
         "sales_analytics_interaction_ids": analytics_interaction_ids,
         "sales_target_ids": sales_target_ids,
+        "sales_forecast_judgment_ids": sales_forecast_judgment_ids,
         "provider_calls": 0,
     }
 
@@ -2899,6 +3044,7 @@ async def reset_demo_data(
     phone_contact_id = demo_phone_contact_id(organisation_id)
     analytics_opportunity_ids, analytics_interaction_ids = demo_sales_analytics_ids(organisation_id)
     sales_target_ids = demo_sales_target_ids(organisation_id)
+    sales_forecast_ids = demo_sales_forecast_ids(organisation_id)
     _, companion_meeting_ids, _, _ = demo_companion_ids(organisation_id)
     live_ids = demo_live_ids(organisation_id)
     google_meeting_id = uuid.uuid5(DEMO_NAMESPACE, f"{organisation_id}:online-google-meeting")
@@ -2976,15 +3122,59 @@ async def reset_demo_data(
             )
         )
         await session.execute(
+            delete(SalesForecastJudgmentRevision).where(
+                SalesForecastJudgmentRevision.organisation_id == organisation_id,
+                SalesForecastJudgmentRevision.judgment_id.in_(
+                    (
+                        sales_forecast_ids["main-judgment"],
+                        sales_forecast_ids["likely-judgment"],
+                        sales_forecast_ids["possible-judgment"],
+                        sales_forecast_ids["excluded-judgment"],
+                    )
+                ),
+            )
+        )
+        await session.execute(
+            delete(SalesForecastJudgment).where(
+                SalesForecastJudgment.organisation_id == organisation_id,
+                SalesForecastJudgment.id.in_(
+                    (
+                        sales_forecast_ids["main-judgment"],
+                        sales_forecast_ids["likely-judgment"],
+                        sales_forecast_ids["possible-judgment"],
+                        sales_forecast_ids["excluded-judgment"],
+                    )
+                ),
+            )
+        )
+        await session.execute(
+            delete(SalesForecastPeriod).where(
+                SalesForecastPeriod.organisation_id == organisation_id,
+                SalesForecastPeriod.id == sales_forecast_ids["period"],
+            )
+        )
+        await session.execute(
             delete(SalesTargetRevision).where(
                 SalesTargetRevision.organisation_id == organisation_id,
-                SalesTargetRevision.target_id.in_((sales_target_ids["won-value"], sales_target_ids["meetings"])),
+                SalesTargetRevision.target_id.in_(
+                    (
+                        sales_target_ids["won-value"],
+                        sales_target_ids["meetings"],
+                        sales_target_ids["quarter-won-value"],
+                    )
+                ),
             )
         )
         await session.execute(
             delete(SalesTarget).where(
                 SalesTarget.organisation_id == organisation_id,
-                SalesTarget.id.in_((sales_target_ids["won-value"], sales_target_ids["meetings"])),
+                SalesTarget.id.in_(
+                    (
+                        sales_target_ids["won-value"],
+                        sales_target_ids["meetings"],
+                        sales_target_ids["quarter-won-value"],
+                    )
+                ),
             )
         )
         await session.execute(

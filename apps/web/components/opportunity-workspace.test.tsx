@@ -422,10 +422,12 @@ describe("OpportunityWorkspace", () => {
       }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText(
-        /probability|forecast|health score|provider|prompt|worker/i,
-      ),
+      screen.queryByText(/probability|health score|provider|prompt|worker/i),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Forecast" })).toHaveAttribute(
+      "href",
+      "/insights?tab=forecast",
+    );
   });
 
   it("keeps metadata useful with no associated meetings", async () => {

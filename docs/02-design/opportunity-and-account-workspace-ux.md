@@ -1,5 +1,9 @@
 # Opportunity and Account Workspace UX
 
+> **WO-038 update:** Opportunity Workspace contains a concise Transparent Forecasting
+> section linking to Insights → Forecast. Deal category review and immutable history
+> stay in that dedicated surface; Workspace adds no probability field or system score.
+
 - **Status:** WO-025A implements the Opportunity summary → why → evidence hierarchy;
   the broader Account target remains future
 - **Principle:** Keep the relationship and deal in one coherent working area

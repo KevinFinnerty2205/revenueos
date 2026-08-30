@@ -1,5 +1,9 @@
 # Revenue Brain longitudinal reasoning
 
+> **WO-038 numeric boundary:** Revenue Brain snapshots, change confidence and
+> recommendations are neither inputs to nor mutated by Transparent Forecasting.
+> Forecast adds no Revenue Brain score, hidden coefficient or generated explanation.
+
 ## Current product boundary
 
 WO-008B adds the first longitudinal Revenue Brain capability. It compares

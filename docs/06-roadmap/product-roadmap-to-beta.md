@@ -629,9 +629,9 @@ and native reviewed-Action execution are deliberately deferred with organisation
 export and no-autonomous-mutation boundaries documented. WO-035 is now implemented:
 configurable native Pipeline, server-authoritative board movement, closure/reopen and
 immutable stage history are current. WO-036 is now implemented as deterministic Core
-Sales Analytics, bounded seller-reported Win/Loss aggregation and WO-037 explicit
-Targets/KPI progress. WO-038 and later
-still require separate authorisation.
+Sales Analytics, bounded seller-reported Win/Loss aggregation, WO-037 explicit
+Targets/KPI progress and WO-038 Transparent Forecasting. WO-039 and later still
+require separate authorisation.
 
 ## WO-035 current boundary
 

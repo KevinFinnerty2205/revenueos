@@ -359,6 +359,43 @@ export function OpportunityWorkspace({
       <CRMRecordLink opportunityId={opportunity.id} />
 
       <section
+        id="forecast"
+        aria-labelledby="opportunity-forecast-title"
+        className="rounded-2xl border border-sky-200 bg-sky-50 p-5 shadow-sm"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
+              Transparent forecasting
+            </p>
+            <h2
+              id="opportunity-forecast-title"
+              className="mt-2 text-xl font-semibold text-sky-950"
+            >
+              Review this deal in Forecast
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-sky-900">
+              Set an explicit Commit, Likely, Possible or Not this period
+              judgment and inspect its immutable history. The seller judgment
+              remains separate from RevenueOS&apos;s historical stage baseline.
+            </p>
+            {!opportunity.expectedCloseDate ? (
+              <p className="mt-2 text-sm font-semibold text-amber-900">
+                Add an expected close date before this deal can enter a forecast
+                period.
+              </p>
+            ) : null}
+          </div>
+          <Link
+            href="/insights?tab=forecast"
+            className="secondary-button inline-flex min-h-11 shrink-0 items-center justify-center"
+          >
+            Open Forecast
+          </Link>
+        </div>
+      </section>
+
+      <section
         aria-labelledby="deal-focus-title"
         className="rounded-3xl border border-teal-200 bg-teal-950 p-6 text-white shadow-sm sm:p-8"
       >
