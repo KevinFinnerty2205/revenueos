@@ -200,6 +200,7 @@ class Settings(BaseSettings):
     feature_mock_connectors_enabled: bool = False
     feature_hubspot_crm_enabled: bool = False
     feature_native_crm_enabled: bool = True
+    feature_native_pipeline_enabled: bool = True
     feature_data_export_enabled: bool = True
     feature_organisation_deletion_enabled: bool = False
     feature_prospect_enabled: bool = True
@@ -526,6 +527,7 @@ class Settings(BaseSettings):
             "actionExecution": self.feature_action_execution_enabled,
             "mockConnectors": self.feature_mock_connectors_enabled,
             "hubspotCrm": self.feature_hubspot_crm_enabled,
+            "nativePipeline": self.feature_native_pipeline_enabled,
             "dataExport": self.feature_data_export_enabled,
             "organisationDeletion": self.feature_organisation_deletion_enabled,
             "prospect": self.feature_prospect_enabled,

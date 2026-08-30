@@ -582,3 +582,14 @@ A bounded parser produces a canonical AST; evaluation uses Decimal arithmetic an
 never invokes Python evaluation, JavaScript, a spreadsheet runtime or an AI provider.
 See the [domain architecture](value-model-domain-architecture.md) and
 [engine decision](../08-decisions/0051-bounded-deterministic-value-model-engine.md).
+
+## WO-035 Native Pipeline module
+
+Migration `0044_native_pipeline` adds stable tenant-owned pipeline/stage definitions,
+canonical Opportunity assignment/outcome fields and immutable stage events within the
+existing API/PostgreSQL modular monolith. `PipelineService` owns optimistic,
+idempotent movement/closure/reopen; a bounded set-based read model powers the existing
+web route. Forced RLS and composite tenant foreign keys apply. No service, broker,
+datastore, provider or AI capability was added. See the
+[architecture](native-pipeline-architecture.md) and
+[ADR 0055](../08-decisions/0055-native-pipeline-history-and-authority.md).

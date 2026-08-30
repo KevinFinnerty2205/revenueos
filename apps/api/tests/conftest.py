@@ -96,6 +96,7 @@ from revenueos.models import (
     OnlineMeetingTranscriptImport,
     Opportunity,
     OpportunityAuditEvent,
+    OpportunityStageEvent,
     Organisation,
     OrganisationBetaSettings,
     OrganisationCRMSetting,
@@ -133,6 +134,8 @@ from revenueos.models import (
     RevenueBrainSnapshot,
     RevenueBrainSourceSnapshot,
     SalesEvent,
+    SalesPipeline,
+    SalesPipelineStage,
     SourceCandidateEvidence,
     Task,
     Transcript,
@@ -431,7 +434,10 @@ def clean_business_entities() -> Iterator[None]:
                 SalesEvent,
                 Task,
                 Contact,
+                OpportunityStageEvent,
                 Opportunity,
+                SalesPipelineStage,
+                SalesPipeline,
                 Company,
             ):
                 await session.execute(delete(model))

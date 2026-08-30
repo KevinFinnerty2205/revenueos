@@ -1,6 +1,6 @@
 # RevenueOS Native CRM
 
-- **Status:** WO-034 implemented foundation
+- **Status:** WO-034 foundation and WO-035 Native Pipeline implemented
 - **Promise:** Small teams can run their sales CRM and Sales Brain in one place; larger teams can keep HubSpot and use the same RevenueOS intelligence layer.
 
 ## What customers get
@@ -40,8 +40,26 @@ The intended long-term loop is Interaction → Evidence → Sales Brain → revi
 
 ## Data portability
 
-Organisation export version 24 includes CRM settings, custom definitions, typed values and record history alongside canonical records. Operational CRM CSV import/export is deliberately deferred until a secure preview/mapping experience can enforce attestation, exact duplicate handling, spreadsheet-formula escaping and the rule that importing a Contact never grants Engage permission.
+Organisation export version 25 includes CRM settings, custom definitions, typed values,
+record history, Pipeline definitions/current assignment/stage history and closure
+metadata alongside canonical records. Operational CRM CSV import/export is deliberately
+deferred until a secure preview/mapping experience can enforce attestation, exact
+duplicate handling, spreadsheet-formula escaping and the rule that importing a Contact
+never grants Engage permission.
 
 ## Opinionated limits
 
-There is no Lead object or conversion ceremony; pre-sales discovery remains Prospect and promotion creates a Company/Contact. There are no CRM-specific Tasks, Notes or Activities, custom objects, formulas, rollups, workflows, page builders, mass edits, destructive merge, service desk, marketing automation, CPQ, team ownership or territory routing. WO-035 owns Pipeline/stages, WO-036 analytics, WO-037 targets, WO-038 forecasting and WO-039 manager intelligence.
+There is no Lead object or conversion ceremony; pre-sales discovery remains Prospect
+and promotion creates a Company/Contact. There are no CRM-specific Tasks, Notes or
+Activities, custom objects, formulas, rollups, workflows, page builders, mass edits,
+destructive merge, service desk, marketing automation, CPQ, team ownership or territory
+routing. WO-035 now supplies bounded Pipeline/stage administration; WO-036 owns
+analytics, WO-037 targets, WO-038 forecasting and WO-039 manager intelligence.
+
+## WO-035 Pipeline boundary
+
+Core retains the descriptive Board/List/Closed experience and canonical stage history.
+The CRM add-on unlocks native multiple-pipeline/stage administration. Native mode makes
+RevenueOS authoritative; external mode shows `Managed in HubSpot` and denies direct
+native movement. See the [implementation guide](native-pipeline.md) and
+[packaging decision](pipeline-packaging.md).

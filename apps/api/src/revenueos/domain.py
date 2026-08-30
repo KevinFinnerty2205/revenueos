@@ -308,6 +308,10 @@ class OpportunityAuditAction(StrEnum):
     DELETED = "deleted"
     MEETING_ASSOCIATED = "meeting_associated"
     MEETING_DISASSOCIATED = "meeting_disassociated"
+    STAGE_CHANGED = "stage_changed"
+    CLOSED_WON = "closed_won"
+    CLOSED_LOST = "closed_lost"
+    REOPENED = "reopened"
 
 
 class ActionType(StrEnum):

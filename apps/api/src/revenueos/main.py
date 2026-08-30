@@ -42,6 +42,7 @@ from revenueos.routes import (
     methodologies,
     opportunities,
     outreach,
+    pipelines,
     prospect,
     tasks,
 )
@@ -145,6 +146,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(daily.router)
     app.include_router(evidence.router)
     app.include_router(opportunities.router)
+    app.include_router(pipelines.router)
     app.include_router(prospect.router)
     app.include_router(tasks.router)
     app.include_router(interactions.router)

@@ -85,3 +85,10 @@ normalisation, arbitrary expression, stage gate, completeness percentage,
 qualification score, close probability, manager dashboard, rep ranking or employee
 surveillance. RevenueOS may be wrong; every conclusion remains inspectable and
 reviewable.
+
+## WO-035 Pipeline boundary
+
+Pipeline stage movement does not call the Methodology service, update a projection or
+create a review. Incomplete or conflicting Methodology can be surfaced in its existing
+Opportunity context but never gates an open-stage transition. Stage history is
+workflow metadata and is not Methodology Evidence.

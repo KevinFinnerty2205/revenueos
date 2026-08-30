@@ -72,3 +72,12 @@ projects existing field authority into the canonical record experience and block
 direct writes to CRM-authoritative fields. Native mode requires active mappings to be
 resolved first. Standard CRM tests seed connection/mapping records locally and make
 no provider request.
+
+## WO-035 Pipeline authority
+
+The Pipeline board does not turn native definitions into a second HubSpot stage
+registry. When organisation CRM mode is external it may display canonical mirrored
+state, labels the source `Managed in HubSpot` and rejects direct stage, close and reopen
+requests. WO-035 does not call HubSpot or add inbound sync. A future reviewed/mapped
+provider change must enter the canonical Pipeline service with `external_crm` source,
+expected-current-stage protection and one immutable event.

@@ -203,3 +203,10 @@ or persist Business Case outputs as deal truth. An approved case may be linked f
 Account/Opportunity and used as a typed Create source, but it remains a separate,
 versioned deterministic artefact. Brain and Ask may only describe such a case in a
 future explicitly authorised read path; WO-033 adds no such reasoning path.
+
+## WO-035 Pipeline boundary
+
+Pipeline movement and closure do not create or revise Revenue Brain snapshots,
+insights, source references or customer facts. Revenue Brain may later describe
+canonical stage metadata as system context, but the stage cannot prove a commitment,
+buying signal or likelihood. WO-035 adds no Brain provider call or prompt.

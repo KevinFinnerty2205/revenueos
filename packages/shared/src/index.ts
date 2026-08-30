@@ -358,6 +358,135 @@ export interface Opportunity extends TenantEntity {
   ownerUserId: string;
   description: string | null;
   archivedAt: string | null;
+  pipelineId?: string | null;
+  pipelineStageId?: string | null;
+  stageEnteredAt?: string | null;
+  stageTrackingStartedAt?: string | null;
+  actualCloseDate?: string | null;
+  outcomeReason?: string | null;
+  outcomeNote?: string | null;
+  outcomeProvenance?: "seller_reported" | null;
+}
+
+export type PipelineStageType = "open" | "won" | "lost";
+
+export interface PipelineStage {
+  id: string;
+  pipelineId: string;
+  key: string;
+  name: string;
+  position: number;
+  stageType: PipelineStageType;
+  guidance: string | null;
+  active: boolean;
+  archivedAt: string | null;
+  currentOpportunityCount: number;
+}
+
+export interface SalesPipeline {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  active: boolean;
+  archivedAt: string | null;
+  stages: PipelineStage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PipelineValueSummary {
+  currency: string;
+  amount: string;
+  opportunityCount: number;
+}
+
+export interface PipelineSummary {
+  openOpportunityCount: number;
+  needsAttentionCount: number;
+  closeDatesThisMonthCount: number;
+  unvaluedOpportunityCount: number;
+  values: PipelineValueSummary[];
+}
+
+export interface PipelineCard {
+  opportunityId: string;
+  opportunityName: string;
+  companyId: string | null;
+  companyName: string | null;
+  pipelineId: string;
+  pipelineName: string;
+  stageId: string;
+  stageName: string;
+  stageType: PipelineStageType;
+  status: OpportunityStatus;
+  estimatedValue: string | null;
+  currency: string | null;
+  expectedCloseDate: string | null;
+  actualCloseDate: string | null;
+  ownerUserId: string;
+  ownerName: string;
+  stageEnteredAt: string | null;
+  stageTrackingStartedAt: string | null;
+  daysInStage: number | null;
+  nextAction: string | null;
+  attentionReasons: string[];
+  outcomeReason: string | null;
+  outcomeProvenance: "seller_reported" | null;
+}
+
+export interface PipelineBoard {
+  pipeline: SalesPipeline;
+  pipelines: SalesPipeline[];
+  view: "open" | "closed";
+  summary: PipelineSummary;
+  cards: PipelineCard[];
+  stageChangesAllowed: boolean;
+  managedExternally: boolean;
+  authorityMessage: string | null;
+  generatedAt: string;
+}
+
+export interface OpportunityStageEvent {
+  id: string;
+  fromPipelineId: string | null;
+  toPipelineId: string;
+  fromStageId: string | null;
+  toStageId: string;
+  fromStageName: string | null;
+  toStageName: string;
+  fromStageType: PipelineStageType | null;
+  toStageType: PipelineStageType;
+  changedByUserId: string | null;
+  changedByName: string | null;
+  changedAt: string;
+  source: "system_initial" | "migration_baseline" | "manual" | "external_crm";
+  isBaseline: boolean;
+  previousStageEnteredAt: string | null;
+  outcomeReason: string | null;
+  outcomeNote: string | null;
+  outcomeProvenance: "seller_reported" | null;
+  actualCloseDate: string | null;
+  finalAmount: string | null;
+  finalCurrency: string | null;
+}
+
+export interface OpportunityPipeline {
+  opportunityId: string;
+  status: OpportunityStatus;
+  pipeline: SalesPipeline;
+  stage: PipelineStage;
+  stageEnteredAt: string | null;
+  stageTrackingStartedAt: string | null;
+  daysInStage: number | null;
+  actualCloseDate: string | null;
+  outcomeReason: string | null;
+  outcomeNote: string | null;
+  outcomeProvenance: "seller_reported" | null;
+  availablePipelines: SalesPipeline[];
+  history: OpportunityStageEvent[];
+  stageChangesAllowed: boolean;
+  managedExternally: boolean;
+  authorityMessage: string | null;
 }
 
 export type CRMEntityType = "account" | "contact" | "opportunity";

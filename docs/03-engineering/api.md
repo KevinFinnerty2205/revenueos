@@ -843,3 +843,23 @@ The server rejects output fields, organisation IDs, unknown inputs, invalid unit
 unsupported currencies, out-of-bound values, formula cycles and unapproved Create
 sources. Responses expose formulas and input lineage for inspection but never allow
 clients to override calculated results.
+
+## Native Pipeline API
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| `GET` | `/api/v1/pipeline` | Read bounded Board/List/Closed projection with tenant-safe filters and currency-grouped summary. |
+| `GET/POST` | `/api/v1/pipelines` | List definitions or create an admin/native-CRM definition. |
+| `PATCH` | `/api/v1/pipelines/{pipelineId}` | Rename or select the default without moving existing Opportunities. |
+| `POST` | `/api/v1/pipelines/{pipelineId}/archive` | Archive only when non-default and without open Opportunities. |
+| `POST` | `/api/v1/pipelines/{pipelineId}/stages` | Add one bounded open stage. |
+| `PATCH` | `/api/v1/pipelines/{pipelineId}/stages/{stageId}` | Rename, guide or reorder without changing semantic type. |
+| `POST` | `/api/v1/pipelines/{pipelineId}/stages/{stageId}/archive` | Archive only an unused open stage. |
+| `GET` | `/api/v1/opportunities/{opportunityId}/pipeline` | Read current assignment, reliable timing, authority and immutable history. |
+| `POST` | `/api/v1/opportunities/{opportunityId}/stage` | Optimistic/idempotent open-stage transition. |
+| `POST` | `/api/v1/opportunities/{opportunityId}/close-won` | Explicit Won closure. |
+| `POST` | `/api/v1/opportunities/{opportunityId}/close-lost` | Explicit Lost closure with controlled seller-reported reason. |
+| `POST` | `/api/v1/opportunities/{opportunityId}/reopen` | Reopen into an explicit active open stage while preserving history. |
+
+No request accepts an organisation ID, probability, forecast category, customer
+Evidence assertion or Methodology override.

@@ -154,15 +154,23 @@ def test_opportunity_crud(client: TestClient) -> None:
     assert opportunity["status"] == "open"
     assert "probability" not in opportunity
 
-    response = client.patch(
-        f"/api/v1/opportunities/{opportunity_id}",
+    pipeline = client.get(f"/api/v1/opportunities/{opportunity_id}/pipeline").json()
+    negotiation = next(stage for stage in pipeline["pipeline"]["stages"] if stage["key"] == "negotiation")
+    moved = client.post(
+        f"/api/v1/opportunities/{opportunity_id}/stage",
         json={
-            "stage": "negotiation",
-            "status": "on_hold",
-            "expectedUpdatedAt": opportunity["updatedAt"],
+            "targetStageId": negotiation["id"],
+            "expectedCurrentStageId": pipeline["stage"]["id"],
+            "idempotencyKey": "business-crud-move",
         },
     )
-    assert response.status_code == 200
+    assert moved.status_code == 200, moved.text
+    current = client.get(f"/api/v1/opportunities/{opportunity_id}").json()
+    response = client.patch(
+        f"/api/v1/opportunities/{opportunity_id}",
+        json={"status": "on_hold", "expectedUpdatedAt": current["updatedAt"]},
+    )
+    assert response.status_code == 200, response.text
     assert response.json()["stage"] == "negotiation"
     assert response.json()["status"] == "on_hold"
 

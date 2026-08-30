@@ -201,6 +201,8 @@ defaults:
 | `API_FEATURE_ENGAGE_ENABLED`                                | `true`  |
 | `API_FEATURE_ENGAGE_CAMPAIGNS_ENABLED`                      | `true`  |
 | `API_FEATURE_ENGAGE_EVENTS_ENABLED`                         | `true`  |
+| `API_FEATURE_NATIVE_CRM_ENABLED`                            | `true`  |
+| `API_FEATURE_NATIVE_PIPELINE_ENABLED`                       | `true`  |
 | `API_FEATURE_DATA_EXPORT_ENABLED`                            | `true`  |
 | `API_FEATURE_ORGANISATION_DELETION_ENABLED`                  | `false` |
 

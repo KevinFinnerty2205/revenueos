@@ -5,7 +5,9 @@
 1. Back up the database using the normal private-beta procedure.
 2. Before deployment, query organisation-scoped duplicate `companies.normalized_domain` and case-normalised non-null `contacts.email` groups. The migration repeats this check without logging values and stops if any exist.
 3. Reconcile duplicates manually with authorised customer context. Do not invent an automated merge: related Evidence, Interactions, Opportunities, Outreach, Prospect, Campaign and Event lineage makes destructive re-parenting unsafe.
-4. Run `alembic upgrade head`; verify head `0043_native_crm`, new indexes/tables and forced RLS.
+4. For a WO-034-only release, run `alembic upgrade 0043_native_crm`; in the current
+   baseline run `alembic upgrade head` and verify `0044_native_pipeline`, new
+   indexes/tables and forced RLS.
 5. Smoke-test Core record reads before enabling the global flag or any CRM entitlement.
 6. Enable `API_FEATURE_NATIVE_CRM_ENABLED`, grant `crm` to the chosen synthetic/design-partner organisation, then have an admin explicitly choose its mode.
 
@@ -17,7 +19,11 @@ WO-034 is not an external-CRM migration tool. Selecting external requires active
 
 ## Current portability
 
-Organisation data export version 24 includes canonical Company/Contact/Opportunity fields plus `crmSettings`, `crmCustomFieldDefinitions`, `crmCustomFieldValues` and `crmRecordChanges`. It excludes secrets/provider tokens and follows the existing authorised maintenance boundary.
+Organisation data export version 25 includes canonical Company/Contact/Opportunity
+fields, `crmSettings`, `crmCustomFieldDefinitions`, `crmCustomFieldValues`,
+`crmRecordChanges`, native pipeline definitions and immutable Opportunity stage events.
+It excludes secrets/provider tokens and follows the existing authorised maintenance
+boundary.
 
 ## Deferred operational CSV
 

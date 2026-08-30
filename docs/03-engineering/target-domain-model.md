@@ -273,3 +273,12 @@ explicit inputs with provenance, scenario outputs, optional one-variable sensiti
 formula-engine/model fingerprints and lineage. A Create presentation may reference
 one exact approved case version and scenario; it never copies that output into a CRM,
 Methodology or Revenue Brain field.
+
+## WO-035 Pipeline domain addition
+
+`SalesPipeline` and `SalesPipelineStage` provide stable organisation-owned workflow
+identities around the existing canonical `Opportunity`. `OpportunityStageEvent` is the
+append-only lifecycle fact; it snapshots labels/types and optional seller-reported
+closure metadata. Current pipeline/stage/timing/outcome fields remain on Opportunity
+for efficient authorised reads. There is no Deal entity, forecast entity or duplicated
+customer-intelligence model.

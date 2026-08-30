@@ -8,6 +8,7 @@ import { CreateModuleSettings } from "@/components/create-module-settings";
 import { CRMSettings } from "@/components/crm-settings";
 import { EngageSettings } from "@/components/engage-settings";
 import { PageHeader } from "@/components/page-header";
+import { PipelineSettings } from "@/components/pipeline-settings";
 import { ProspectModuleSettings } from "@/components/prospect-module-settings";
 import { SalesMethodologySettings } from "@/components/sales-methodology-settings";
 import { apiRequest } from "@/lib/api";
@@ -101,6 +102,7 @@ export function SettingsExperience() {
           <EngageSettings />
           <CreateModuleSettings />
           <CRMSettings />
+          <PipelineSettings />
           <SalesMethodologySettings />
           <BetaAdmin />
         </>
