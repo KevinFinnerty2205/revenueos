@@ -2568,7 +2568,9 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
   });
   await test.step("33 Confirm Analytics", async () => {
     await expect(page.getByText(/Open opportunities/i).first()).toBeVisible();
-    await expect(page.getByText("Active targets")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Active targets" }),
+    ).toBeVisible();
   });
   await test.step("34 Confirm Target", async () => {
     await page.getByRole("tab", { name: "Targets" }).click();
