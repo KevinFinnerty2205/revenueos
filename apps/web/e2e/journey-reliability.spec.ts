@@ -2546,7 +2546,7 @@ test("flagship seller journey keeps one canonical Northstar loop through Won", a
     ).toBeEnabled();
     await page.getByRole("button", { name: "Approve presentation" }).click();
     await expect(
-      page.getByRole("button", { name: "Download editable PPTX" }),
+      page.getByRole("button", { name: "Download PowerPoint" }),
     ).toBeVisible();
     expect(state.presentationState).toBe("ready");
     await captureFlagship(page, "create");

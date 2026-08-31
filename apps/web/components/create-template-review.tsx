@@ -103,6 +103,10 @@ export function CreateTemplateReview({ templateId }: { templateId: string }) {
   const pendingCount = version.slides.filter(
     (slide) => slide.reuseState === "pending",
   ).length;
+  const compatibilityMessage = compatibilityCopy(
+    version.compatibilityState,
+    version.compatibilityDetails,
+  );
 
   return (
     <div className="space-y-8">
@@ -121,6 +125,23 @@ export function CreateTemplateReview({ templateId }: { templateId: string }) {
         <span aria-hidden="true">/</span> Template review
       </nav>
 
+      <section
+        aria-labelledby="compatibility-title"
+        className={`rounded-2xl border p-5 ${version.compatibilityState === "compatible" ? "border-teal-200 bg-teal-50" : version.compatibilityState === "unsupported" ? "border-rose-200 bg-rose-50" : "border-amber-200 bg-amber-50"}`}
+      >
+        <p className="text-xs font-bold uppercase tracking-[0.16em]">
+          PowerPoint compatibility
+        </p>
+        <h2 id="compatibility-title" className="mt-1 text-xl font-semibold">
+          {version.compatibilityState === "compatible"
+            ? "Template ready"
+            : version.compatibilityState === "unsupported"
+              ? "Template unsupported"
+              : "Template needs attention"}
+        </h2>
+        <p className="mt-2 text-sm leading-6">{compatibilityMessage}</p>
+      </section>
+
       {version.processingState === "processing" ? (
         <section className="form-card">
           <h2 className="form-legend">Secure processing is running</h2>
@@ -135,8 +156,7 @@ export function CreateTemplateReview({ templateId }: { templateId: string }) {
             Template processing failed
           </h2>
           <p className="mt-2 text-sm text-rose-900">
-            Safe failure code:{" "}
-            {version.safeFailureCode ?? "pptx_processing_failed"}
+            {templateFailureMessage(version.safeFailureCode)}
           </p>
         </section>
       ) : (
@@ -244,6 +264,22 @@ function SlideReview({
   const [exact, setExact] = useState(slide.exactTextRequired);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const editableRoles = new Set(
+    slide.textBlocks.map((block) => block.mappedRole).filter(Boolean),
+  );
+  const hasUnmappedText = slide.textBlocks.some(
+    (block) => block.text.trim().length > 0 && !block.mappedRole,
+  );
+  const supportsEditableText =
+    !hasUnmappedText &&
+    (category === "title"
+      ? editableRoles.has("presentation_title") && editableRoles.has("audience")
+      : [
+          "customer_context",
+          "approved_content",
+          "next_steps",
+          "open_questions",
+        ].some((role) => editableRoles.has(role)));
 
   async function save() {
     setSaving(true);
@@ -360,14 +396,26 @@ function SlideReview({
               }
               className="field-input mt-2"
             >
-              <option value="text_placeholders_only">
+              <option
+                value="text_placeholders_only"
+                disabled={!supportsEditableText}
+              >
                 Text placeholders only
               </option>
-              <option value="editable_text">Bounded text edit</option>
+              <option value="editable_text" disabled={!supportsEditableText}>
+                Bounded text edit
+              </option>
               <option value="reuse_as_is">Reuse as is</option>
               <option value="locked">Locked</option>
             </select>
           </label>
+          {!supportsEditableText && reuseState === "approved" ? (
+            <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 sm:col-span-2 lg:col-span-3">
+              This slide has no supported editable placeholder. Choose Reuse as
+              is or Locked, or update the source file to use standard PowerPoint
+              title, subtitle or content placeholders.
+            </p>
+          ) : null}
           <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">
             <input
               type="checkbox"
@@ -416,5 +464,38 @@ function SlideReview({
         </div>
       ) : null}
     </article>
+  );
+}
+
+function compatibilityCopy(state: string, details: string[]): string {
+  if (state === "compatible") {
+    return "RevenueOS can safely generate from the reviewed placeholders in this template.";
+  }
+  if (state === "unsupported") {
+    return templateFailureMessage(details[0] ?? null);
+  }
+  if (details.includes("pptx_title_placeholders_required")) {
+    return "Add a standard PowerPoint title and subtitle placeholder to the customer-facing title slide, then upload a new version.";
+  }
+  if (details.includes("pptx_unmapped_text_requires_lock")) {
+    return "Move every customer-facing text box into a standard PowerPoint placeholder, or mark the slide Reuse as is or Locked.";
+  }
+  return "Review every slide and use standard PowerPoint placeholders for content RevenueOS may change.";
+}
+
+function templateFailureMessage(code: string | null): string {
+  const messages: Record<string, string> = {
+    unsafe_pptx:
+      "We couldn't use this template because it contains unsafe or linked content.",
+    unsupported_pptx:
+      "We couldn't use this template because it contains an unsupported PowerPoint feature.",
+    malformed_pptx:
+      "We couldn't use this template because it is not a valid standard PowerPoint file.",
+    pptx_limit_exceeded:
+      "We couldn't use this template because the file is too large or complex.",
+  };
+  return (
+    messages[code ?? ""] ??
+    "We couldn't safely process this PowerPoint template. Upload a standard PPTX without embedded or linked content."
   );
 }

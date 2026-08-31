@@ -122,6 +122,12 @@ This is the canonical product and engineering documentation index. Documents dis
 116. [End-to-end RevenueOS seller journey](01-product/end-to-end-revenueos-seller-journey.md) — current canonical cross-module loop
 117. [Journey reliability contract](01-product/journey-reliability-contract.md) — navigation, mutation, recovery and accessibility rules
 118. [WO-039A: Journey Reliability & UX Coherence](07-sprints/wo-039a-end-to-end-journey-reliability.md) — implementation and browser evidence
+119. [Create PowerPoint trust guide](01-product/create-powerpoint-trust-guide.md) — supported profile, compatibility and honest output/download promise
+120. [Create trust experience](02-design/create-trust-experience.md) — compatibility, preview, approval, recovery and mobile UX
+121. [Create PPTX trust architecture](03-engineering/create-pptx-trust-architecture.md) — package limits, output proof and one-time downloads
+122. [Create dependency remediation](03-engineering/create-dependency-remediation.md) — `pypdf` and production audit decision
+123. [WO-039B: Create Trust, Security & Output Integrity](07-sprints/wo-039b-create-trust-security.md) — implementation, file evidence and validation
+124. [ADR 0063: Versioned PPTX validation and download grants](08-decisions/0063-create-versioned-pptx-validation-and-download-grants.md)
 
 ## 00 — Company
 

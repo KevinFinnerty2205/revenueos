@@ -4,10 +4,12 @@ import asyncio
 import base64
 import hashlib
 import io
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
@@ -17,7 +19,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from revenueos.auth import get_current_user
 from revenueos.config import Settings
-from revenueos.document_parsing import BoundedDocumentParser, PasswordProtectedDocumentError
+from revenueos.document_parsing import BoundedDocumentParser, DocumentParsingError, PasswordProtectedDocumentError
 from revenueos.main import create_app
 from revenueos.models import BetaSystemEvent
 
@@ -745,3 +747,26 @@ def test_password_protected_pdf_is_rejected_before_storage() -> None:
     except PasswordProtectedDocumentError:
         return
     raise AssertionError("Password-protected PDFs must be rejected.")
+
+
+@pytest.mark.parametrize(
+    "stream_data",
+    [
+        b"q BI /W 1 /H 1 /CS /RGB /BPC 8 /F /A85 ID zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+        b"q BI /W 999999999 /H 999999999 /CS /RGB /BPC 8 ID 0 EI Q",
+    ],
+)
+def test_malformed_pdf_resources_fail_within_bounded_time(stream_data: bytes) -> None:
+    output = io.BytesIO()
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=100, height=100)
+    stream = DecodedStreamObject()
+    stream.set_data(stream_data)
+    page[NameObject("/Contents")] = writer._add_object(stream)  # noqa: SLF001
+    writer.write(output)
+    parser = BoundedDocumentParser(max_pages=10, max_characters=10_000)
+
+    started = time.monotonic()
+    with pytest.raises(DocumentParsingError):
+        parser.parse(output.getvalue(), "application/pdf")
+    assert time.monotonic() - started < 2

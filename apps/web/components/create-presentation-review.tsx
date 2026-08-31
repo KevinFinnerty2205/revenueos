@@ -188,7 +188,11 @@ export function CreatePresentationReview({
         `/api/v1/create/presentations/${presentationId}/download-grant`,
         { method: "POST" },
       );
-      const blob = await apiBlob(grant.downloadUrl);
+      const blob = await apiBlob(grant.downloadUrl, {
+        method: "POST",
+        body: JSON.stringify({ grantToken: grant.grantToken }),
+        headers: { "Content-Type": "application/json" },
+      });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -302,9 +306,10 @@ export function CreatePresentationReview({
                 Review the generated slides
               </h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                Create preserves the approved layout. You can edit text only
-                where the template permits it. Every edit invalidates approval
-                and becomes a user-responsible claim.
+                Review the structure and customer-facing content below. The
+                downloaded PowerPoint is the final file. Fonts, spacing and
+                layout may vary slightly by device and PowerPoint version. You
+                can edit text only where the template permits it.
               </p>
             </div>
             <div className="space-y-4">
@@ -404,7 +409,7 @@ export function CreatePresentationReview({
                 >
                   {busy === "download"
                     ? "Preparing download…"
-                    : "Download editable PPTX"}
+                    : "Download PowerPoint"}
                 </button>
               ) : (
                 <button

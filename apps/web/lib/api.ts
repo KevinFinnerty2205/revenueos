@@ -190,6 +190,9 @@ export async function apiUpload(
   });
 }
 
-export async function apiBlob(pathOrUrl: string): Promise<Blob> {
-  return (await apiBinaryFetch(pathOrUrl, { method: "GET" })).blob();
+export async function apiBlob(
+  pathOrUrl: string,
+  init: RequestInit = { method: "GET" },
+): Promise<Blob> {
+  return (await apiBinaryFetch(pathOrUrl, init)).blob();
 }

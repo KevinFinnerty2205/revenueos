@@ -1,5 +1,17 @@
 # Application architecture
 
+## Create trust boundary (WO-039B)
+
+The modular monolith now treats every uploaded PPTX as an untrusted ZIP/XML package
+and every generated PPTX as untrusted until a second bounded parse proves the render
+expectations. Migration `0049_create_trust` stores versioned compatibility/output-
+validation state and forced-RLS, one-time download grants. The API remains the only
+download boundary: it rechecks membership, approval and checksum, then reads private
+storage server-side. No Office process, new service, datastore, provider or direct
+browser storage access was added. See the
+[Create trust architecture](create-pptx-trust-architecture.md) and
+[ADR 0063](../08-decisions/0063-create-versioned-pptx-validation-and-download-grants.md).
+
 ## Native CRM Foundation (WO-034)
 
 The modular monolith now treats existing Company, Contact and Opportunity as the

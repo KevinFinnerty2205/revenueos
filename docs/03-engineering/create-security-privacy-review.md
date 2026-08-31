@@ -1,6 +1,6 @@
 # Create security, privacy and abuse review
 
-- **Status:** implemented WO-032 controls; target-environment launch approval remains separate
+- **Status:** WO-032/033 controls plus WO-039B file/output/download hardening; target-environment launch approval remains separate
 - **Data class:** confidential organisation templates, customer-safe presentation context and generated PPTX
 
 ## Trust boundary
@@ -19,13 +19,15 @@ not-found responses.
 
 ## Hostile-file controls
 
-The bounded processor rejects malformed ZIPs, unsafe or duplicate paths, encrypted
-entries, unsupported compression, entry/expanded/XML/media/character exhaustion,
-external relationships, DTD/entities, macros, ActiveX, OLE/embedded packages,
-embedded fonts, custom XML, SVG and unknown media signatures. It never invokes Office,
-LibreOffice, scripts, URLs or embedded objects. Hidden slides cannot be approved;
-notes/comments are warned and stripped; internal-only and pricing-placeholder content
-cannot enter the approved library.
+The bounded processor rejects malformed/trailing/ZIP64 packages, unsafe or duplicate
+canonical paths, encryption, unsupported compression, per-entry/aggregate ratio and
+entry/expanded/XML/media/character exhaustion. It bounds XML depth/elements and
+relationship count, resolves every local target, rejects DTD/entities/XInclude and
+all external relationships, and rejects macros, ActiveX, OLE/embedded packages,
+embedded fonts, custom XML, SVG and extension/signature-mismatched media. It never
+invokes Office, LibreOffice, scripts, URLs or embedded objects. Hidden slides cannot
+be approved; notes/comments are warned and stripped; internal-only and
+pricing-placeholder content cannot enter the approved library.
 
 The implementation is a strict parser and renderer, not an antivirus claim. A future
 target deployment may insert an approved malware scanner before storage. That does
@@ -52,18 +54,31 @@ Each material block has an exact claim manifest with origin, support, source IDs
 labels, freshness, customer-safety classification, paraphrase/exact-text policy and
 review state. Seller-edited and inferred claims require keep/remove review. Approval
 revalidates referenced sources and fails if a content item was withdrawn or Evidence/
-public research is no longer available. Any edit creates a new unapproved version.
+public research is no longer available. Any pre-approval edit clears validation and
+approval and requires a fresh render; an approved version is immutable.
+
+Before review, the worker proves manifest/structured-slide equality, writes only
+controlled placeholder text, reparses the actual saved package and checks every
+replacement, slide count, required/exact content, unsafe parts and prohibited internal
+identifiers. Approval and download require current profile validation.
 
 Source and output objects use opaque tenant-prefixed private-storage keys. Downloads
-require a short-lived signed grant, current membership, current approved version and
-private/no-store response headers. Keys, grants, binaries, customer text, template
-text and full manifests stay out of logs and audit events; events contain safe IDs,
-states, counts, versions and failure codes only.
+use a random high-entropy secret returned separately from a credential-free URL and
+stored only as SHA-256 in tenant-owned forced-RLS state. The authenticated POST body
+never puts it in query/history/Referer logs. Actual download rechecks membership,
+entitlement, tenant/user/version, current compatible template/source/approval,
+expiry/replay and stored SHA-256 before server-side private storage delivery. Atomic
+consume permits at most one success. Keys, tokens, binaries, filenames, customer
+text, Business Case values and full manifests stay out of logs and audit events;
+events contain safe IDs/states/result codes only.
 
 ## Residual risks and launch gates
 
 - Structured review is not a pixel-perfect Office renderer; source-template layout
   quality and accessibility remain administrator responsibilities.
+- Font references are retained, not font files; substitutions and wrapping remain a
+  required final-human-review concern. Conservative overflow checks are not exact
+  PowerPoint metrics.
 - The repository local-storage adapter is development/test only. Production requires
   private S3-compatible storage, deployment-managed secrets and verified backup,
   restore, monitoring and incident procedures.
@@ -76,6 +91,8 @@ states, counts, versions and failure codes only.
 
 Coverage includes unsafe paths, decompression/resource ceilings, external links,
 entities, macros/ActiveX/OLE/fonts/SVG, hidden slides and notes, selected-slide-only
-output, metadata sanitisation, internal-content edits, exact claim review, immutable
-approval, entitlement, member/admin permissions, cross-tenant access, private
-download, object deletion and forced-RLS migration checks.
+output, metadata sanitisation, internal-content edits, exact claim/Business Case byte
+proof, immutable approval, entitlement, member/admin permissions, cross-tenant access,
+grant expiry/replay/concurrency/membership/approval binding, missing/corrupt objects,
+private download, object deletion and forced-RLS migration checks. See the
+[trust architecture](create-pptx-trust-architecture.md).

@@ -2,8 +2,10 @@
 
 > **Pre-beta sequence:** WO-039A journey reliability is implemented and documented
 > in the [WO-039A record](../07-sprints/wo-039a-end-to-end-journey-reliability.md).
-> WO-039B Create trust/security and WO-039C real-data operations remain required
-> before beta entry. This guide does not authorise production customer data.
+> WO-039B Create trust/security is implemented and documented in the
+> [WO-039B record](../07-sprints/wo-039b-create-trust-security.md). WO-039C real-data
+> operations remains required before beta entry. This guide does not authorise
+> production customer data.
 
 WO-018 adds a 512 KiB online transcript-import ceiling and server-authoritative
 `ONLINE_MEETING_CAPTURE`, `ONLINE_MEETING_IMPORT`,

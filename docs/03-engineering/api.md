@@ -30,12 +30,13 @@ entitlement are required. Administrator-only operations are marked below.
 | `PATCH` | `/presentations/{presentationId}/slides/{planItemId}` | Apply bounded text edit and queue a new unapproved render |
 | `POST` | `/presentations/{presentationId}/review` | Keep/remove pending seller/inferred claims |
 | `POST` | `/presentations/{presentationId}/approve` | Revalidate sources and approve the current exact version |
-| `POST` | `/presentations/{presentationId}/download-grant` | Issue a short-lived private grant for an approved version |
-| `GET` | `/presentations/{presentationId}/download?token=…` | Return editable PPTX with `private, no-store` |
+| `POST` | `/presentations/{presentationId}/download-grant` | Issue a short-lived user/tenant/version/approval-bound one-time secret separately from a credential-free path |
+| `POST` | `/presentations/{presentationId}/download` | Accept the one-time secret in a JSON body, recheck current authority/integrity and return editable PPTX with `private, no-store` |
 
 Creation/generation use bounded idempotency keys. Errors contain safe codes such as
-`create_not_entitled`, `unsafe_pptx`, `required_slide`, `claim_review_required` and
-`claim_source_changed`; they never echo uploaded/customer content.
+`create_not_entitled`, `unsafe_pptx`, `required_slide`, `claim_review_required`,
+`claim_source_changed`, `generated_validation_failed`, `invalid_download_grant` and
+`presentation_file_integrity_failed`; they never echo uploaded/customer content.
 
 ## RevenueOS Daily
 

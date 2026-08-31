@@ -23,6 +23,10 @@ the approved release record. Repository completion is not production approval.
 - [ ] Usage and transcript limits are tested at the boundary.
 - [ ] Visual count/byte/analysis limits, private signed access and image sanitisation are tested.
 - [ ] Visual export byte inclusion remains disabled unless separately approved.
+- [ ] Create templates show a current Compatible result before use; representative
+      source/generated PPTX files pass structural validation and visual review.
+- [ ] Create download URLs contain no credential; expiry, replay, membership change,
+      concurrent consume, missing object and checksum failure are exercised.
 - [ ] Recording consent, limits, resumability, raw retention, object-first deletion
       and tenant-scoped reconciliation are exercised with synthetic audio.
 - [ ] Companion markers are verified as type/timestamp metadata only; tenant
@@ -38,7 +42,10 @@ the approved release record. Repository completion is not production approval.
 - [ ] TLS and explicit CORS origins are configured.
 - [ ] Encrypted database backup completed.
 - [ ] Non-production restore drill completed, including RLS verification.
-- [ ] Migration `0026_face_to_face_companion` applied exactly once; its marker
+- [ ] Migration `0049_create_trust` is the single head and its compatibility/output-
+      validation metadata plus forced-RLS download grants are verified, alongside the
+      prior migration guards. Migration `0026_face_to_face_companion` remains applied
+      exactly once; its marker
       constraints, immutable-content/soft-delete guard and forced RLS are verified,
       alongside prior recording, visual/debrief review and snapshot guards.
 - [ ] API liveness/readiness are green.

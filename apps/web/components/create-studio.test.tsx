@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CreatePresentationReview } from "@/components/create-presentation-review";
 import { CreateStudio } from "@/components/create-studio";
+import { CreateTemplateReview } from "@/components/create-template-review";
 import { CoreNavigation } from "@/components/core-navigation";
 
 vi.mock("next/navigation", () => ({
@@ -55,6 +56,10 @@ const template = {
     heightEmu: 6858000,
     warningCodes: [],
     safeFailureCode: null,
+    compatibilityState: "compatible",
+    compatibilityDetails: [],
+    validationProfileVersion: 1,
+    validatedAt: "2026-08-27T00:01:00Z",
     authorityAttestationVersion: 1,
     authorityAttestedAt: "2026-08-27T00:00:00Z",
     processedAt: "2026-08-27T00:01:00Z",
@@ -156,6 +161,8 @@ function presentation(
             ],
             warningCodes: ["review_required"],
             safeFailureCode: null,
+            validationProfileVersion: 1,
+            validatedAt: "2026-08-27T00:03:00Z",
             generatedAt: "2026-08-27T00:03:00Z",
             approvedAt: null,
             downloadAvailable: false,
@@ -227,6 +234,60 @@ describe("RevenueOS Create", () => {
       "accept",
       expect.stringContaining(".pptx"),
     );
+  });
+
+  it("explains templates that need attention without parser jargon", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        jsonResponse({
+          ...template,
+          latestVersion: {
+            ...template.latestVersion,
+            approvalState: "pending",
+            compatibilityState: "needs_attention",
+            compatibilityDetails: ["pptx_unmapped_text_requires_lock"],
+          },
+        }),
+      ),
+    );
+    render(<CreateTemplateReview templateId="template-1" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Template needs attention" }),
+    ).toBeVisible();
+    expect(screen.getByText(/every customer-facing text box/i)).toBeVisible();
+    expect(
+      screen.queryByText("pptx_unmapped_text_requires_lock"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("gives a safe recovery for unsupported templates without exposing codes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        jsonResponse({
+          ...template,
+          latestVersion: {
+            ...template.latestVersion,
+            processingState: "failed",
+            approvalState: "pending",
+            compatibilityState: "unsupported",
+            compatibilityDetails: ["unsafe_pptx"],
+            safeFailureCode: "unsafe_pptx",
+          },
+        }),
+      ),
+    );
+    render(<CreateTemplateReview templateId="template-1" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Template unsupported" }),
+    ).toBeVisible();
+    expect(screen.getAllByText(/unsafe or linked content/i)).not.toHaveLength(
+      0,
+    );
+    expect(screen.queryByText("unsafe_pptx")).not.toBeInTheDocument();
   });
 
   it("adds Create to desktop navigation without adding a fifth mobile item", async () => {
