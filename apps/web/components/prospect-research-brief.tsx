@@ -75,7 +75,13 @@ export function ProspectTrustLabel({ state }: { state: ProspectTrustState }) {
   );
 }
 
-export function ProspectResearchBriefView({ targetId }: { targetId: string }) {
+export function ProspectResearchBriefView({
+  targetId,
+  returnToPersonId = null,
+}: {
+  targetId: string;
+  returnToPersonId?: string | null;
+}) {
   const [brief, setBrief] = useState<ProspectResearchBrief | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -325,7 +331,9 @@ export function ProspectResearchBriefView({ targetId }: { targetId: string }) {
               >
                 Open account
               </Link>
-            ) : !isProcessing && brief.status !== "failed" ? (
+            ) : !isProcessing &&
+              brief.status !== "failed" &&
+              brief.status !== "not_started" ? (
               <button
                 ref={promotionTrigger}
                 type="button"
@@ -342,7 +350,11 @@ export function ProspectResearchBriefView({ targetId }: { targetId: string }) {
                 onClick={() => void refresh()}
                 disabled={refreshing}
               >
-                {refreshing ? "Refreshing…" : "Refresh research"}
+                {refreshing
+                  ? "Starting…"
+                  : brief.status === "not_started"
+                    ? "Research company"
+                    : "Refresh research"}
               </button>
             ) : null}
           </div>
@@ -356,12 +368,28 @@ export function ProspectResearchBriefView({ targetId }: { targetId: string }) {
           </p>
         ) : null}
         {promotion ? (
-          <p
+          <div
             role="status"
             className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-950"
           >
-            Added to Sales. {promotion.message}
-          </p>
+            <p>Added to Sales. {promotion.message}</p>
+            {returnToPersonId ? (
+              <Link
+                href={`/find/${targetId}/people/${returnToPersonId}`}
+                className="primary-button mt-3"
+              >
+                Continue adding Contact
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
+        {!promotion && promotedCompanyId && returnToPersonId ? (
+          <Link
+            href={`/find/${targetId}/people/${returnToPersonId}`}
+            className="primary-button mt-4"
+          >
+            Continue adding Contact
+          </Link>
         ) : null}
         {error ? (
           <p role="alert" className="mt-4 text-sm font-medium text-rose-700">
@@ -382,6 +410,24 @@ export function ProspectResearchBriefView({ targetId }: { targetId: string }) {
             RevenueOS is checking permitted public business sources. You can
             leave this page and come back.
           </p>
+        </section>
+      ) : brief.status === "not_started" ? (
+        <section className="rounded-3xl border border-teal-200 bg-teal-50 p-7">
+          <h2 className="text-xl font-semibold text-teal-950">
+            Ready to research
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-teal-900">
+            No research job has been started. Begin a bounded review of
+            permitted public business sources when you are ready.
+          </p>
+          <button
+            type="button"
+            className="primary-button mt-5"
+            disabled={refreshing}
+            onClick={() => void refresh()}
+          >
+            {refreshing ? "Starting research…" : "Research company"}
+          </button>
         </section>
       ) : brief.status === "failed" ? (
         <section className="rounded-3xl border border-rose-200 bg-rose-50 p-7">
@@ -589,6 +635,7 @@ export function ProspectResearchBriefView({ targetId }: { targetId: string }) {
 
 function ResearchStatus({ brief }: { brief: ProspectResearchBrief }) {
   const content = {
+    not_started: ["Ready to research", "bg-slate-100 text-slate-800"],
     pending: ["Researching company…", "bg-teal-50 text-teal-950"],
     researching: ["Researching company…", "bg-teal-50 text-teal-950"],
     ready: ["Research ready", "bg-emerald-50 text-emerald-950"],

@@ -641,6 +641,13 @@ unauthorised. The first conditional provider recommendation is a narrow Gmail de
 slice from WO-041; Microsoft WO-040 and WO-042–044 breadth are deferred pending
 observed customer evidence.
 
+WO-039A is implemented as the existing-product reliability gate: the canonical
+seller journey, direct-route/recovery behaviour, cross-module revalidation, 390 px
+navigation/tab containment and deterministic synthetic fixture coherence are covered
+by a single flagship browser journey plus module regressions. It added no migration
+or new capability. WO-039B and WO-039C remain mandatory separate pre-beta gates; this
+status does not authorise WO-040 or production customer data.
+
 ## WO-035 current boundary
 
 Native Pipeline is current through migration `0044_native_pipeline`. It provides

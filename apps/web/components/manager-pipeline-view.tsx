@@ -25,6 +25,7 @@ export function ManagerPipelineView({
   const [data, setData] = useState<ManagerDealAttentionList | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -60,7 +61,7 @@ export function ManagerPipelineView({
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [ownerUserId, pipelineId]);
+  }, [ownerUserId, pipelineId, retryKey]);
 
   if (loading)
     return (
@@ -70,11 +71,15 @@ export function ManagerPipelineView({
     );
   if (error)
     return (
-      <div
-        role="alert"
-        className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-950"
-      >
-        {error}
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-950">
+        <p role="alert">{error}</p>
+        <button
+          type="button"
+          className="secondary-button mt-4"
+          onClick={() => setRetryKey((value) => value + 1)}
+        >
+          Try again
+        </button>
       </div>
     );
   if (data === null) return null;

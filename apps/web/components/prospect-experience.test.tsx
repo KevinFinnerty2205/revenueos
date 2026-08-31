@@ -606,7 +606,7 @@ describe("RevenueOS Prospect experience", () => {
     );
     expect(
       await screen.findByRole("link", { name: "Open Contact" }),
-    ).toHaveAttribute("href", "/contacts/contact-1/edit");
+    ).toHaveAttribute("href", "/contacts/contact-1");
     const promotionBody = JSON.parse(
       String(fetchMock.mock.calls.at(-1)?.[1]?.body),
     );

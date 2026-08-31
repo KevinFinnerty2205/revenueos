@@ -209,7 +209,7 @@ test("RevenueOS Daily keeps the complete review journey one click away", async (
   ).toBeVisible();
   await expect(page.getByText("Approved — not complete")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Deals needing attention" }),
+    page.getByRole("heading", { name: "Manager review" }),
   ).toBeVisible();
   const dealsSection = page
     .getByRole("heading", { name: "Deals needing attention" })

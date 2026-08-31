@@ -75,6 +75,29 @@ def test_recording_gap_fill_suppresses_supported_questions_and_prioritises_marke
     )
 
 
+def test_candidate_review_deduplicates_repeated_compound_statements_into_unique_claims() -> None:
+    reasoning = DeterministicDebriefReasoning()
+    first_fragment = UUID("11111111-1111-4111-8111-111111111111")
+    second_fragment = UUID("22222222-2222-4222-8222-222222222222")
+
+    extraction = reasoning.extract_candidates(
+        (
+            (
+                first_fragment,
+                "The budget was approved and the customer agreed to move forward.",
+            ),
+            (
+                second_fragment,
+                "The budget was approved and the customer agreed to move forward.",
+            ),
+        )
+    )
+
+    assert len(extraction.items) == 2
+    assert len({item.statement for item in extraction.items}) == 2
+    assert extraction.items[0].evidence_category == "budget"
+
+
 def _completed_interaction(
     client: TestClient,
     *,

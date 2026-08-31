@@ -1,36 +1,33 @@
 "use client";
 
-interface ProtectedErrorProps {
-  reset: () => void;
-}
+import Link from "next/link";
 
-export default function ProtectedError({ reset }: ProtectedErrorProps) {
+export default function ProtectedWorkspaceError({
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
   return (
-    <section
-      role="alert"
-      className="rounded-3xl border border-red-200 bg-white p-8 shadow-sm"
-      aria-labelledby="workspace-error-title"
-    >
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-700">
-        Workspace error
+    <section className="form-card" aria-labelledby="workspace-error-title">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-rose-700">
+        RevenueOS workspace
       </p>
-      <h1
-        id="workspace-error-title"
-        className="mt-3 text-3xl font-semibold text-slate-950"
-      >
-        This page could not be loaded.
+      <h1 id="workspace-error-title" className="mt-2 text-2xl font-semibold">
+        This page could not be loaded
       </h1>
-      <p className="mt-3 max-w-xl text-sm leading-7 text-slate-600">
-        Try again. If the problem continues, check the local web and API logs
-        using the request identifier where available.
+      <p role="alert" className="mt-3 max-w-2xl text-sm text-slate-700">
+        Your work has not been changed. Try loading this page again, or return
+        Home and continue from there.
       </p>
-      <button
-        type="button"
-        onClick={reset}
-        className="mt-6 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
-      >
-        Try again
-      </button>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <button type="button" className="primary-button" onClick={reset}>
+          Try again
+        </button>
+        <Link href="/dashboard" className="secondary-button">
+          Return Home
+        </Link>
+      </div>
     </section>
   );
 }

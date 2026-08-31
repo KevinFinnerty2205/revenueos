@@ -113,12 +113,12 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
   if (error) {
     return (
       <section aria-labelledby="revenue-brain-title">
-        <h1
+        <h2
           id="revenue-brain-title"
-          className="text-4xl font-semibold tracking-tight text-slate-950"
+          className="text-3xl font-semibold tracking-tight text-slate-950"
         >
-          Revenue Brain
-        </h1>
+          Account intelligence
+        </h2>
         <div
           role="alert"
           className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-6"
@@ -189,9 +189,9 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
           Account
         </p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-          {company.name}
-        </h1>
+        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
+          Account intelligence
+        </h2>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
             href={`/assistant?mode=ask&scope=account&scopeId=${company.id}`}

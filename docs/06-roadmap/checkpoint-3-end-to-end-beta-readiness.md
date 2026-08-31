@@ -601,6 +601,13 @@ Scope:
   four-item fixed bar; and
 - measure/guard Pipeline rendering at the reviewed 1,000-deal envelope.
 
+**Remediation update — 31 August 2026:** WO-039A resolved all nine assigned finding
+groups and all carried journey gates without a schema change. The reported mobile
+Insights clipping was not reproducible at 390 px; the required secondary destination
+path and Event-tab containment were still implemented and verified. See the
+[completed remediation table](../07-sprints/wo-039a-remediation-checklist.md) and
+[verification record](../07-sprints/wo-039a-end-to-end-journey-reliability.md).
+
 Exit: the exact flagship journey completes twice from a fresh browser session without
 generic fetch failure, contradictory state, provenance collapse or unexplained dead end.
 

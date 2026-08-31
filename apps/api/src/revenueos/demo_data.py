@@ -9,6 +9,7 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -20,6 +21,7 @@ from revenueos.beta_maintenance import (
     _delete_source_database_rows,
     _delete_visual_objects,
 )
+from revenueos.campaign_services import CampaignService
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
 from revenueos.methodology_contracts import MethodologySelectionUpdate
@@ -2771,7 +2773,12 @@ async def seed_demo_data(
         user_id,
         active_settings,
     )
-    campaign_id = await _seed_demo_campaign(session_factory, organisation_id, user_id)
+    campaign_id = await _seed_demo_campaign(
+        session_factory,
+        organisation_id,
+        user_id,
+        active_settings,
+    )
     return {
         "status": "ready",
         "company_id": company_id,
@@ -2808,6 +2815,7 @@ async def _seed_demo_campaign(
     session_factory: async_sessionmaker[AsyncSession],
     organisation_id: UUID,
     user_id: UUID,
+    settings: Settings,
 ) -> UUID:
     """Seed a paused, synthetic campaign without any external execution."""
 
@@ -2816,6 +2824,36 @@ async def _seed_demo_campaign(
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
         if await session.get(EngageCampaign, ids["campaign"]) is not None:
+            version = await session.get(EngageCampaignVersion, ids["version"])
+            step = await session.get(EngageEnrollmentStep, ids["enrollment-step-jane"])
+            enrollment = await session.get(EngageCampaignEnrollment, ids["enrollment-jane"])
+            if version is not None and step is not None:
+                scheduled_at = (
+                    step.scheduled_at.replace(tzinfo=UTC)
+                    if step.scheduled_at.utcoffset() is None
+                    else step.scheduled_at.astimezone(UTC)
+                )
+                local = scheduled_at.astimezone(ZoneInfo(version.sender_timezone))
+                minutes = local.hour * 60 + local.minute
+                valid = (
+                    local.isoweekday() in version.send_days_json
+                    and version.send_window_start_minutes <= minutes <= version.send_window_end_minutes
+                )
+                if not valid:
+                    scheduled = CampaignService(
+                        session,
+                        TenantContext(organisation_id=organisation_id, user_id=user_id, role="admin"),
+                        settings,
+                    )._next_send_time(now + timedelta(days=1), version)
+                    step.scheduled_at = scheduled
+                    step.prepare_at = max(
+                        now,
+                        scheduled - timedelta(hours=settings.campaign_draft_preparation_hours),
+                    )
+                    step.updated_at = now
+                    if enrollment is not None:
+                        enrollment.next_scheduled_at = scheduled
+                        enrollment.updated_at = now
             return ids["campaign"]
         session.add(
             Company(
@@ -2894,6 +2932,11 @@ async def _seed_demo_campaign(
         )
         session.add_all((campaign, version))
         await session.flush()
+        scheduled = CampaignService(
+            session,
+            TenantContext(organisation_id=organisation_id, user_id=user_id, role="admin"),
+            settings,
+        )._next_send_time(now + timedelta(days=1), version)
         sequence_definitions = (
             (1, 0, "introduction", "source_backed_value"),
             (2, 4, "follow_up", "truthful_follow_up"),
@@ -2960,7 +3003,7 @@ async def _seed_demo_campaign(
             job_title_snapshot="Chief Information Officer",
             state="paused",
             current_step_order=1,
-            next_scheduled_at=now + timedelta(days=1),
+            next_scheduled_at=scheduled,
             used_source_ids_json=[],
             created_by_user_id=user_id,
             created_at=now - timedelta(days=1),
@@ -2974,8 +3017,11 @@ async def _seed_demo_campaign(
                 organisation_id=organisation_id,
                 enrollment_id=ids["enrollment-jane"],
                 sequence_step_id=ids["sequence-1"],
-                scheduled_at=now + timedelta(days=1),
-                prepare_at=now + timedelta(hours=12),
+                scheduled_at=scheduled,
+                prepare_at=max(
+                    now,
+                    scheduled - timedelta(hours=settings.campaign_draft_preparation_hours),
+                ),
                 state="pending",
                 attempt_count=0,
                 created_at=now - timedelta(days=1),

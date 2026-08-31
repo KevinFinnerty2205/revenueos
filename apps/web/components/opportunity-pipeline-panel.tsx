@@ -4,6 +4,7 @@ import type { OpportunityPipeline, PipelineStage } from "@revenueos/shared";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { notifyOpportunityChanged } from "@/lib/opportunity-events";
 
 type CloseMode = "won" | "lost" | null;
 
@@ -22,32 +23,40 @@ export function OpportunityPipelinePanel({
   const [actualCloseDate, setActualCloseDate] = useState(todayInput());
   const [outcomeReason, setOutcomeReason] = useState("");
   const [outcomeNote, setOutcomeNote] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    apiRequest<OpportunityPipeline>(
-      `/api/v1/opportunities/${opportunityId}/pipeline`,
-      { signal: controller.signal },
-    )
-      .then((response) => {
-        setPipeline(response);
-        setTargetStageId(firstOpenStage(response)?.id ?? "");
-        setError(null);
-      })
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError")
-          return;
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Pipeline state could not be loaded.",
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [opportunityId]);
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      void apiRequest<OpportunityPipeline>(
+        `/api/v1/opportunities/${opportunityId}/pipeline`,
+        { signal: controller.signal },
+      )
+        .then((response) => {
+          setPipeline(response);
+          setTargetStageId(firstOpenStage(response)?.id ?? "");
+          setError(null);
+        })
+        .catch((reason: unknown) => {
+          if (reason instanceof DOMException && reason.name === "AbortError")
+            return;
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Pipeline state could not be loaded.",
+          );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [opportunityId, retryKey]);
 
   const openStages = useMemo(
     () =>
@@ -113,6 +122,7 @@ export function OpportunityPipelinePanel({
       });
       setPipeline(response);
       setTargetStageId(firstOpenStage(response)?.id ?? "");
+      notifyOpportunityChanged(opportunityId);
       return true;
     } catch (reason: unknown) {
       setError(
@@ -141,6 +151,13 @@ export function OpportunityPipelinePanel({
         <p role="alert" className="text-sm text-rose-800">
           {error ?? "Pipeline state is unavailable."}
         </p>
+        <button
+          type="button"
+          className="secondary-button mt-4"
+          onClick={() => setRetryKey((value) => value + 1)}
+        >
+          Try again
+        </button>
       </section>
     );
   }

@@ -76,7 +76,7 @@ describe("manager intelligence", () => {
     );
     render(<ManagerHomeAttention />);
     expect(
-      await screen.findByRole("heading", { name: "Deals needing attention" }),
+      await screen.findByRole("heading", { name: "Manager review" }),
     ).toBeVisible();
     expect(screen.getByText("Northstar renewal")).toBeVisible();
     expect(screen.getByText(/close date passed/i)).toBeVisible();

@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/page-header";
 import { apiRequest } from "@/lib/api";
 
 const statusLabels: Record<ProspectResearchStatus, string> = {
+  not_started: "Ready to research",
   pending: "Research queued",
   researching: "Researching company…",
   ready: "Research ready",
@@ -40,6 +41,7 @@ export function ProspectFind() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -71,7 +73,7 @@ export function ProspectFind() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [retryKey]);
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -130,6 +132,35 @@ export function ProspectFind() {
       <p role="status" className="text-sm text-slate-600">
         Loading Find…
       </p>
+    );
+  }
+
+  if (!availability && error) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="RevenueOS Prospect"
+          title="Find"
+          description="Research a company you know or discover accounts in a target market."
+        />
+        <section role="alert" className="form-card border-rose-200 bg-rose-50">
+          <h2 className="form-legend text-rose-950">
+            Find could not be loaded
+          </h2>
+          <p className="mt-2 text-sm text-rose-900">{error}</p>
+          <button
+            type="button"
+            className="primary-button mt-4"
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              setRetryKey((value) => value + 1);
+            }}
+          >
+            Try again
+          </button>
+        </section>
+      </div>
     );
   }
 

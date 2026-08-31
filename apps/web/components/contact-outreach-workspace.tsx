@@ -315,9 +315,9 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
   if (!workspace) {
     return (
       <section className="rounded-2xl border border-rose-200 bg-rose-50 p-6">
-        <h1 className="text-xl font-semibold text-rose-950">
+        <h2 className="text-xl font-semibold text-rose-950">
           Contact unavailable
-        </h1>
+        </h2>
         <p role="alert" className="mt-2 text-sm text-rose-900">
           {error ?? "The Contact workspace could not be loaded."}
         </p>
@@ -343,9 +343,9 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
             Contact
           </p>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-            {workspace.contactName}
-          </h1>
+          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+            Contact and outreach
+          </h2>
           <p className="mt-3 text-base text-slate-600">
             {workspace.jobTitle ? `${workspace.jobTitle} · ` : ""}
             <Link

@@ -8,6 +8,7 @@ import type {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiRequest, ApiClientError } from "@/lib/api";
+import { onOpportunityChanged } from "@/lib/opportunity-events";
 
 const categoryLabels: Record<SalesForecastCategory, string> = {
   commit: "Commit",
@@ -71,6 +72,14 @@ export function ManagerDealReviewPanel({
       controller.abort();
     };
   }, [load, retryKey]);
+
+  useEffect(
+    () =>
+      onOpportunityChanged(opportunityId, () => {
+        setRetryKey((value) => value + 1);
+      }),
+    [opportunityId],
+  );
 
   async function saveManagerView() {
     if (!data?.deal.expectedCloseDate || !category) return;

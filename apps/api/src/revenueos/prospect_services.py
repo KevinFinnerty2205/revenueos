@@ -63,7 +63,7 @@ logger = logging.getLogger("revenueos.prospect")
 RESEARCH_SCHEMA_VERSION = 1
 RECENT_RESEARCH_LIMIT = 20
 HISTORY_LIMIT = 10
-CustomerResearchStatus = Literal["pending", "researching", "ready", "partial", "failed"]
+CustomerResearchStatus = Literal["not_started", "pending", "researching", "ready", "partial", "failed"]
 
 
 class ProspectService:
@@ -765,7 +765,7 @@ class ProspectService:
         current: ProspectResearchRun | None,
     ) -> tuple[CustomerResearchStatus, str]:
         if latest is None:
-            return "pending", "Research has not started yet."
+            return "not_started", "Ready to research. No research job has been started."
         if latest.status in ACTIVE_RUN_STATUSES:
             return (
                 "pending" if latest.status == "pending" else "researching",

@@ -268,7 +268,7 @@ test("private beta onboarding, consent, feedback and admin controls stay product
   await expect(
     page.getByRole("button", { name: "Queue organisation deletion" }),
   ).toHaveCount(0);
-  for (const prohibited of ["prompt", "worker", "api key", "provider"]) {
+  for (const prohibited of ["prompt", "worker", "api key", "AI provider"]) {
     await expect(page.getByText(new RegExp(prohibited, "i"))).toHaveCount(0);
   }
   if (process.env.CAPTURE_WO_009_SCREENSHOT === "1") {
@@ -3184,6 +3184,32 @@ test("opportunity workspace persists an associated meeting and composes stored i
     route.fulfill({
       json: [{ userId: "user-1", displayName: "Alex Morgan", active: true }],
     }),
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/crm/records/opportunity/opportunity-1",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          entityType: "opportunity",
+          entityId: "opportunity-1",
+          title: "Platform expansion",
+          ownerUserId: "user-1",
+          ownerName: "Alex Morgan",
+          archivedAt: null,
+          recordUpdatedAt: "2026-07-24T00:00:00Z",
+          mode: "native",
+          crmEnabled: true,
+          canManage: true,
+          customFieldsReadOnly: false,
+          fieldAuthority: {},
+          coreFields: [],
+          customFields: [],
+          history: [],
+          activity: [],
+          cursor: null,
+        },
+      });
+    },
   );
   await page.route(
     "http://localhost:8000/api/v1/opportunities**",

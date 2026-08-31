@@ -367,7 +367,7 @@ describe("OpportunityWorkspace", () => {
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
     expect(
-      await screen.findByRole("heading", { name: "Platform expansion" }),
+      await screen.findByRole("heading", { name: "Deal workspace" }),
     ).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Ask about this deal" }),
@@ -453,7 +453,7 @@ describe("OpportunityWorkspace", () => {
     render(<OpportunityWorkspace opportunityId="opportunity-1" />);
 
     expect(
-      await screen.findByRole("heading", { name: "Platform expansion" }),
+      await screen.findByRole("heading", { name: "Deal workspace" }),
     ).toBeVisible();
     fireEvent.click(screen.getByText("Latest meeting intelligence"));
     expect(

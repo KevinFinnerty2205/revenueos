@@ -101,6 +101,9 @@ describe("BusinessEntityForm", () => {
     expect(screen.getByLabelText(/account/i)).toHaveValue("company-1");
     expect(screen.getByLabelText(/account/i)).not.toBeRequired();
     expect(screen.getByLabelText(/estimated value/i)).toHaveValue(50000);
+    expect(screen.getByLabelText("Expected close date")).toHaveValue(
+      "2026-10-01",
+    );
     expect(screen.queryByLabelText(/probability/i)).not.toBeInTheDocument();
   });
 
@@ -190,6 +193,43 @@ describe("BusinessEntityForm", () => {
       email: null,
       jobTitle: "Chief Technology Officer",
     });
+  });
+
+  it("preserves a provider-supplied business email when editing a promoted Contact", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/v1/companies?pageSize=100"))
+        return Promise.resolve(
+          jsonResponse({
+            items: [{ id: "company-1", name: "Northstar Facilities" }],
+            page: 1,
+            pageSize: 100,
+            total: 1,
+            pages: 1,
+          }),
+        );
+      if (url.includes("/api/v1/crm/members"))
+        return Promise.resolve(jsonResponse([]));
+      if (url.includes("/api/v1/crm/records/contact/contact-1"))
+        return Promise.resolve(jsonResponse({ fieldAuthority: {} }));
+      return Promise.resolve(
+        jsonResponse({
+          id: "contact-1",
+          companyId: "company-1",
+          firstName: "Jane",
+          lastName: "Smith",
+          email: "jane.smith@northstar-facilities.example",
+          status: "active",
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BusinessEntityForm entity="contacts" entityId="contact-1" />);
+
+    expect(await screen.findByLabelText("Business email")).toHaveValue(
+      "jane.smith@northstar-facilities.example",
+    );
   });
 
   it("renders external-CRM authoritative fields as read-only and omits them from updates", async () => {

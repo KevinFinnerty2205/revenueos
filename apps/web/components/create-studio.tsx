@@ -48,6 +48,7 @@ export function CreateStudio() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const nextAvailability = await apiRequest<CreateAvailability>(
@@ -78,6 +79,7 @@ export function CreateStudio() {
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
+      setError(null);
       void load(controller.signal).catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError")
           return;
@@ -92,7 +94,7 @@ export function CreateStudio() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [load]);
+  }, [load, retryKey]);
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -150,7 +152,12 @@ export function CreateStudio() {
   }
 
   if (error) {
-    return <CreateError message={error} />;
+    return (
+      <CreateError
+        message={error}
+        onRetry={() => setRetryKey((value) => value + 1)}
+      />
+    );
   }
   if (!availability) {
     return <p role="status">Loading Create…</p>;
@@ -490,7 +497,13 @@ function StateBadge({ state }: { state: string }) {
   );
 }
 
-function CreateError({ message }: { message: string }) {
+function CreateError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
   return (
     <section className="form-card" aria-labelledby="create-error-title">
       <h1 id="create-error-title" className="form-legend">
@@ -499,9 +512,14 @@ function CreateError({ message }: { message: string }) {
       <p role="alert" className="mt-2 text-sm text-slate-700">
         {message}
       </p>
-      <Link href="/dashboard" className="secondary-button mt-5">
-        Return Home
-      </Link>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <button type="button" className="secondary-button" onClick={onRetry}>
+          Try again
+        </button>
+        <Link href="/dashboard" className="secondary-button">
+          Return Home
+        </Link>
+      </div>
     </section>
   );
 }

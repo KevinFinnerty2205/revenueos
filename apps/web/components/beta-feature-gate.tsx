@@ -30,21 +30,29 @@ export function BetaFeatureGate({
 }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const titleId = useId();
 
   useEffect(() => {
     const controller = new AbortController();
-    apiRequest<Capabilities>("/api/v1/beta/capabilities", {
-      signal: controller.signal,
-    })
-      .then((capabilities) =>
-        setEnabled(capabilities.featureFlags[feature] === true),
-      )
-      .catch(() => {
-        if (!controller.signal.aborted) setError(true);
-      });
-    return () => controller.abort();
-  }, [feature]);
+    const timer = window.setTimeout(() => {
+      setEnabled(null);
+      setError(false);
+      void apiRequest<Capabilities>("/api/v1/beta/capabilities", {
+        signal: controller.signal,
+      })
+        .then((capabilities) =>
+          setEnabled(capabilities.featureFlags[feature] === true),
+        )
+        .catch(() => {
+          if (!controller.signal.aborted) setError(true);
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [feature, retryKey]);
 
   if (error || enabled === false) {
     return (
@@ -62,9 +70,20 @@ export function BetaFeatureGate({
             ? "Try loading the page again. Your other workspace information is still available."
             : "Ask your organisation administrator if this private-beta capability should be available."}
         </p>
-        <Link href="/dashboard" className="secondary-button mt-4">
-          Return Home
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-3">
+          {error ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setRetryKey((value) => value + 1)}
+            >
+              Try again
+            </button>
+          ) : null}
+          <Link href="/dashboard" className="secondary-button">
+            Return Home
+          </Link>
+        </div>
       </section>
     );
   }

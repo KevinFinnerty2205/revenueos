@@ -242,6 +242,8 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
   const [promotion, setPromotion] = useState<ProspectPersonPromotion | null>(
     null,
   );
+  const [companyPromotionRequired, setCompanyPromotionRequired] =
+    useState(false);
   const dialogHeading = useRef<HTMLHeadingElement>(null);
 
   const load = useCallback(
@@ -307,6 +309,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
   async function queueResearch(refresh: boolean) {
     setWorking(true);
     setError(null);
+    setCompanyPromotionRequired(false);
     try {
       setBrief(
         await apiRequest<ProspectPersonResearchBrief>(
@@ -320,6 +323,10 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
         ),
       );
     } catch (reason) {
+      const needsCompany =
+        reason instanceof ApiClientError &&
+        reason.code === "company_not_in_sales";
+      setCompanyPromotionRequired(needsCompany);
       setError(
         reason instanceof Error
           ? reason.message
@@ -366,6 +373,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
   ) {
     setWorking(true);
     setError(null);
+    setCompanyPromotionRequired(false);
     try {
       const result = await apiRequest<ProspectPersonPromotion>(
         `/api/v1/prospect/people/${personId}/promote`,
@@ -393,6 +401,10 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
       );
       setPromotionOpen(false);
     } catch (reason) {
+      const needsCompany =
+        reason instanceof ApiClientError &&
+        reason.code === "company_not_in_sales";
+      setCompanyPromotionRequired(needsCompany);
       setError(
         reason instanceof Error
           ? reason.message
@@ -521,10 +533,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
               </button>
             ) : null}
             {contactId ? (
-              <Link
-                href={`/contacts/${contactId}/edit`}
-                className="primary-button"
-              >
+              <Link href={`/contacts/${contactId}`} className="primary-button">
                 Open Contact
               </Link>
             ) : null}
@@ -565,6 +574,19 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
           <p role="alert" className="mt-4 text-sm font-medium text-rose-700">
             {error}
           </p>
+        ) : null}
+        {companyPromotionRequired ? (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-semibold">
+              Save the Account first, then continue with this Contact.
+            </p>
+            <Link
+              className="primary-button mt-3"
+              href={`/find/${brief.person.companyTargetId}?returnToPerson=${personId}`}
+            >
+              Save Company first
+            </Link>
+          </div>
         ) : null}
       </header>
 

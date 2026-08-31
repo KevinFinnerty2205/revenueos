@@ -54,6 +54,28 @@ function workspace(
   };
 }
 
+function contactRecord() {
+  return {
+    entityType: "contact",
+    entityId: contactId,
+    title: "Jane Smith",
+    ownerUserId: "user-1",
+    ownerName: "Alex Morgan",
+    archivedAt: null,
+    recordUpdatedAt: "2026-08-26T01:00:00Z",
+    mode: "native",
+    crmEnabled: true,
+    canManage: true,
+    customFieldsReadOnly: false,
+    fieldAuthority: {},
+    coreFields: [],
+    customFields: [],
+    history: [],
+    activity: [],
+    cursor: null,
+  };
+}
+
 function outreach(
   overrides: Record<string, unknown> = {},
   versionOverrides: Record<string, unknown> = {},
@@ -180,6 +202,10 @@ test("creates, explains, edits, approves and simulates flagship outreach", async
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === `/api/v1/crm/records/contact/${contactId}`) {
+      await route.fulfill({ json: contactRecord() });
+      return;
+    }
     if (path === `/api/v1/engage/contacts/${contactId}`) {
       await route.fulfill({
         json: workspace(
@@ -437,6 +463,10 @@ test("uses transparent value-based copy when no reliable hook exists", async ({
   );
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === `/api/v1/crm/records/contact/${contactId}`) {
+      await route.fulfill({ json: contactRecord() });
+      return;
+    }
     if (path === `/api/v1/engage/contacts/${contactId}`) {
       await route.fulfill({ json: workspace() });
       return;
@@ -471,6 +501,10 @@ test("suppression blocks approval and the mobile workflow remains usable", async
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === `/api/v1/crm/records/contact/${contactId}`) {
+      await route.fulfill({ json: contactRecord() });
+      return;
+    }
     if (path === `/api/v1/engage/contacts/${contactId}`) {
       await route.fulfill({
         json: workspace(
@@ -559,6 +593,10 @@ test("shows no-email and existing-relationship safeguards", async ({
   let scenario: "no_email" | "relationship" = "no_email";
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === `/api/v1/crm/records/contact/${contactId}`) {
+      await route.fulfill({ json: contactRecord() });
+      return;
+    }
     if (path === `/api/v1/engage/contacts/${contactId}`) {
       await route.fulfill({
         json:

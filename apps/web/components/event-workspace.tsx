@@ -591,9 +591,21 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
     );
   if (!event)
     return (
-      <p role="alert" className="rounded-2xl bg-red-50 p-4 text-red-900">
-        {error ?? "The Event was not found."}
-      </p>
+      <section className="rounded-2xl bg-red-50 p-4 text-red-900">
+        <p role="alert">{error ?? "The Event was not found."}</p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void load()}
+          >
+            Try again
+          </button>
+          <Link href="/events" className="secondary-button">
+            Return to Events
+          </Link>
+        </div>
+      </section>
     );
   const campaignContacts = selectedContacts;
   const visibleAttendees = attendees.filter((item) => {
@@ -655,7 +667,7 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
       </header>
 
       <div
-        className="mt-6 flex gap-2 overflow-x-auto pb-2"
+        className="mt-6 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1 sm:flex sm:gap-2 sm:bg-transparent sm:p-0 sm:pb-2"
         role="tablist"
         aria-label="Event workspace"
       >
@@ -667,7 +679,7 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
               aria-selected={tab === value}
               type="button"
               onClick={() => setTab(value)}
-              className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 ${tab === value ? "bg-teal-700 text-white" : "bg-white text-slate-700"}`}
+              className={`min-h-11 min-w-0 rounded-xl px-1 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 sm:px-4 sm:text-sm ${tab === value ? "bg-teal-700 text-white" : "bg-white text-slate-700"}`}
             >
               {humanise(value)}
             </button>
@@ -675,12 +687,16 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
         )}
       </div>
       {error ? (
-        <p
-          role="alert"
-          className="mt-4 rounded-2xl bg-red-50 p-4 text-sm text-red-900"
-        >
-          {error}
-        </p>
+        <div className="mt-4 rounded-2xl bg-red-50 p-4 text-sm text-red-900">
+          <p role="alert">{error}</p>
+          <button
+            type="button"
+            className="secondary-button mt-4"
+            onClick={() => void load()}
+          >
+            Try again
+          </button>
+        </div>
       ) : null}
       {notice ? (
         <p

@@ -503,7 +503,7 @@ def test_metric_observation_requires_currency_and_filters_fail_closed(app: FastA
     assert wrong_tenant_pipeline.status_code == 404
     future = client.get(
         "/api/v1/insights/sales/overview",
-        params={**params(), "endDate": "2026-08-31"},
+        params={**params(), "endDate": "2099-12-31"},
     )
     assert future.status_code == 422
 

@@ -203,7 +203,7 @@ describe("ContactOutreachWorkspace", () => {
 
     render(<ContactOutreachWorkspace contactId="contact-1" />);
     expect(
-      await screen.findByRole("heading", { name: "Jane Smith" }),
+      await screen.findByRole("heading", { name: "Contact and outreach" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Provider Supplied")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Purpose"), {

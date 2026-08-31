@@ -123,7 +123,7 @@ class ExistingCompanyMatchResponse(APIModel):
 
 class ResearchBriefResponse(APIModel):
     target: ResearchTargetResponse
-    status: Literal["pending", "researching", "ready", "partial", "failed"]
+    status: Literal["not_started", "pending", "researching", "ready", "partial", "failed"]
     status_message: str
     current_run: ResearchRunSummary | None
     latest_run: ResearchRunSummary | None
@@ -136,7 +136,7 @@ class ResearchBriefResponse(APIModel):
 
 class RecentResearchItem(APIModel):
     target: ResearchTargetResponse
-    status: Literal["pending", "researching", "ready", "partial", "failed"]
+    status: Literal["not_started", "pending", "researching", "ready", "partial", "failed"]
     updated_at: datetime
 
 

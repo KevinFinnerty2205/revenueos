@@ -17,31 +17,36 @@ const steps = [
     title: "Move your first customer conversation forward",
     body: "RevenueOS helps you prepare, capture what happened, review the evidence and keep the next step clear.",
     href: null,
+    linkLabel: null,
     action: "Show me how",
   },
   {
     title: "Use authorised information",
     body: "Review this private-beta notice before you add customer information. You stay in control of what enters the workspace.",
     href: null,
+    linkLabel: null,
     action: "Notice reviewed",
   },
   {
-    title: "Start with a deal",
-    body: "Create your first opportunity, or open the seeded example if your beta operator has prepared one. Add only the context needed to make the next conversation useful.",
-    href: "/opportunities/new",
-    action: "I have a deal to work on",
+    title: "Create the customer context",
+    body: "Start with an Account, add the people as Contacts, then create the Opportunity you want to progress. These records keep the customer journey connected.",
+    href: "/companies/new",
+    linkLabel: "Create an Account",
+    action: "I have customer context",
   },
   {
     title: "Plan the next interaction",
     body: "Add the next meeting, call or in-person interaction from the deal. RevenueOS will keep preparation and capture in the same customer journey.",
     href: "/interactions/new",
+    linkLabel: "Add an Interaction",
     action: "I know the next interaction",
   },
   {
-    title: "Use one simple loop",
-    body: "Prepare before the interaction, use Companion when it starts, capture the outcome afterwards, then review the next action on the deal. Home brings the work that needs attention back to you.",
-    href: "/dashboard",
-    action: "Go to Home",
+    title: "Turn conversations into trusted action",
+    body: "Prepare for the Interaction, use Companion when it starts, and capture the outcome as Evidence. Then open the Opportunity and Sales Brain to review what changed and choose the next action.",
+    href: "/opportunities",
+    linkLabel: "Open Opportunities",
+    action: "Finish getting started",
   },
 ] as const;
 
@@ -143,11 +148,7 @@ export function BetaOnboarding() {
         <p className="mt-3 text-sm leading-7 text-slate-600">{step.body}</p>
         {step.href ? (
           <Link className="secondary-button mt-5" href={step.href}>
-            {index === 2
-              ? "Add an opportunity"
-              : index === 3
-                ? "Add an interaction"
-                : "Open Home"}
+            {step.linkLabel}
           </Link>
         ) : null}
       </section>

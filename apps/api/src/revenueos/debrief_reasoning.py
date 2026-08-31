@@ -266,20 +266,26 @@ class DeterministicDebriefReasoning:
         fragments: tuple[tuple[UUID, str], ...],
     ) -> CandidateEvidenceExtraction:
         items: list[CandidateEvidenceExtractionItem] = []
-        seen: set[tuple[str, str]] = set()
+        seen: set[str] = set()
         for fragment_id, answer in fragments:
             sentences = [self._statement(value) for value in re.split(r"[.!?\n]+", answer) if value.strip()]
             for sentence in sentences:
-                categories = self._categories(sentence)
-                for category in categories:
-                    identity = (category, self._normalise(sentence))
+                clauses = [
+                    self._statement(value)
+                    for value in re.split(r"\s+(?:and|but)\s+", sentence, flags=re.IGNORECASE)
+                    if value.strip()
+                ]
+                statements = clauses if len(clauses) > 1 else [sentence]
+                for statement in statements:
+                    identity = self._normalise(statement)
                     if identity in seen:
                         continue
                     seen.add(identity)
+                    primary_category = self._categories(statement)[0]
                     items.append(
                         CandidateEvidenceExtractionItem(
-                            evidence_category=cast(CandidateEvidenceCategory, category),
-                            statement=sentence,
+                            evidence_category=cast(CandidateEvidenceCategory, primary_category),
+                            statement=statement,
                             source_fragment_id=fragment_id,
                         )
                     )
