@@ -908,7 +908,7 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
   expect(promoted).toBe(true);
   expect(unexpectedMutations).toEqual([]);
   await page.getByRole("link", { name: "Open Contact" }).click();
-  await expect(page).toHaveURL("/contacts/contact-jane/edit");
+  await expect(page).toHaveURL("/contacts/contact-jane");
   await expect(
     page.getByRole("heading", { name: "Public professional research" }),
   ).toBeVisible();

@@ -8,10 +8,12 @@ import type {
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { notifyOpportunityChanged } from "@/lib/opportunity-events";
 import { humanise } from "@/lib/business-entities";
 import { ManagerPipelineView } from "@/components/manager-pipeline-view";
 
 type DisplayMode = "board" | "list" | "manager";
+const PIPELINE_RENDER_BATCH = 100;
 
 export function OpportunityList() {
   const [board, setBoard] = useState<PipelineBoard | null>(null);
@@ -27,6 +29,9 @@ export function OpportunityList() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [managerAvailable, setManagerAvailable] = useState(false);
+  const [visibleCardCount, setVisibleCardCount] = useState(
+    PIPELINE_RENDER_BATCH,
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -51,6 +56,7 @@ export function OpportunityList() {
           setDisplay("manager");
         }
         if (!pipelineId) setPipelineId(response.pipeline.id);
+        setVisibleCardCount(PIPELINE_RENDER_BATCH);
         setError(null);
       })
       .catch((reason: unknown) => {
@@ -95,6 +101,7 @@ export function OpportunityList() {
           idempotencyKey: requestKey("move"),
         }),
       });
+      notifyOpportunityChanged(card.opportunityId);
       setRefreshKey((key) => key + 1);
     } catch (reason: unknown) {
       setError(
@@ -299,10 +306,49 @@ export function OpportunityList() {
               ) : null}
             </div>
           ) : closed || display === "list" ? (
-            <PipelineList board={board} movingId={movingId} move={move} />
+            <PipelineList
+              board={board}
+              cards={board.cards.slice(0, visibleCardCount)}
+              movingId={movingId}
+              move={move}
+            />
           ) : (
-            <PipelineBoardView board={board} movingId={movingId} move={move} />
+            <PipelineBoardView
+              board={board}
+              cards={board.cards.slice(0, visibleCardCount)}
+              movingId={movingId}
+              move={move}
+            />
           )}
+          {board.cards.length > PIPELINE_RENDER_BATCH ? (
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm text-slate-600" aria-live="polite">
+                Showing {Math.min(visibleCardCount, board.cards.length)} of{" "}
+                {board.cards.length} opportunities. Filters still apply to the
+                complete pipeline.
+              </p>
+              {visibleCardCount < board.cards.length ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() =>
+                    setVisibleCardCount((value) =>
+                      Math.min(
+                        value + PIPELINE_RENDER_BATCH,
+                        board.cards.length,
+                      ),
+                    )
+                  }
+                >
+                  Show next{" "}
+                  {Math.min(
+                    PIPELINE_RENDER_BATCH,
+                    board.cards.length - visibleCardCount,
+                  )}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </>
       ) : null}
     </section>
@@ -380,10 +426,12 @@ function Summary({
 
 function PipelineBoardView({
   board,
+  cards,
   movingId,
   move,
 }: {
   board: PipelineBoard;
+  cards: PipelineCard[];
   movingId: string | null;
   move: (card: PipelineCard, stageId: string) => Promise<void>;
 }) {
@@ -397,7 +445,10 @@ function PipelineBoardView({
           <StageGroup
             key={stage.id}
             stage={stage}
-            cards={board.cards.filter((card) => card.stageId === stage.id)}
+            cards={cards.filter((card) => card.stageId === stage.id)}
+            totalCount={
+              board.cards.filter((card) => card.stageId === stage.id).length
+            }
             board={board}
             movingId={movingId}
             move={move}
@@ -418,7 +469,10 @@ function PipelineBoardView({
             <StageGroup
               key={stage.id}
               stage={stage}
-              cards={board.cards.filter((card) => card.stageId === stage.id)}
+              cards={cards.filter((card) => card.stageId === stage.id)}
+              totalCount={
+                board.cards.filter((card) => card.stageId === stage.id).length
+              }
               board={board}
               movingId={movingId}
               move={move}
@@ -433,12 +487,14 @@ function PipelineBoardView({
 function StageGroup({
   stage,
   cards,
+  totalCount,
   board,
   movingId,
   move,
 }: {
   stage: PipelineStage;
   cards: PipelineCard[];
+  totalCount: number;
   board: PipelineBoard;
   movingId: string | null;
   move: (card: PipelineCard, stageId: string) => Promise<void>;
@@ -460,7 +516,7 @@ function StageGroup({
           ) : null}
         </div>
         <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-600">
-          {cards.length}
+          {totalCount}
         </span>
       </header>
       <div className="grid gap-3">
@@ -557,17 +613,19 @@ function OpportunityCard({
 
 function PipelineList({
   board,
+  cards,
   movingId,
   move,
 }: {
   board: PipelineBoard;
+  cards: PipelineCard[];
   movingId: string | null;
   move: (card: PipelineCard, stageId: string) => Promise<void>;
 }) {
   return (
     <>
       <div className="grid gap-3 md:hidden">
-        {board.cards.map((card) => (
+        {cards.map((card) => (
           <OpportunityCard
             key={card.opportunityId}
             card={card}
@@ -591,7 +649,7 @@ function PipelineList({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {board.cards.map((card) => (
+            {cards.map((card) => (
               <tr key={card.opportunityId}>
                 <td className="px-4 py-4">
                   <Link

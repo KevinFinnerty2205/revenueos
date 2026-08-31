@@ -85,7 +85,14 @@ class AskIntentClassifier:
         if PUBLIC_WEB_PATTERN.search(value):
             return "unsupported_public_web"
         if scope_type == "workspace" and (
-            "today" in value or "need to do" in value or "need my attention" in value or "should i focus" in value
+            "today" in value
+            or "need to do" in value
+            or "need my attention" in value
+            or "should i focus" in value
+            or "what should i do next" in value
+            or "best next action" in value
+            or "follow up now" in value
+            or "follow up next" in value
         ):
             return "daily_focus"
         if scope_type == "workspace" and any(

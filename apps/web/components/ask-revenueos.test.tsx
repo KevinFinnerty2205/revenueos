@@ -78,6 +78,30 @@ function answer(overrides: Partial<AskAnswer> = {}): AskAnswer {
 describe("AskRevenueOS", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it("shows representative bounded workspace question phrasings", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          ...capabilities,
+          scope: { type: "workspace", id: null, label: "Your sales work" },
+        }),
+      ),
+    );
+
+    render(<AskRevenueOS scopeType="workspace" />);
+
+    expect(
+      await screen.findByRole("button", { name: "What should I do next?" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "What are the biggest deal risks?" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Which commitments are overdue?" }),
+    ).toBeVisible();
+  });
+
   it("renders a scoped, cited answer with progressive source disclosure and follow-ups", async () => {
     const fetchMock = vi
       .fn()

@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { onOpportunityChanged } from "@/lib/opportunity-events";
 
 export function CRMRecordPanel({
   entityType,
@@ -21,6 +22,7 @@ export function CRMRecordPanel({
   const [drafts, setDrafts] = useState<Record<string, string | boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   const load = useCallback(async () => {
     const next = await apiRequest<CRMRecord>(
@@ -48,7 +50,20 @@ export function CRMRecordPanel({
       );
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [load, retryKey]);
+
+  useEffect(() => {
+    if (entityType !== "opportunity") return;
+    return onOpportunityChanged(entityId, () => {
+      void load().catch((reason: unknown) =>
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "The opportunity record could not be refreshed.",
+        ),
+      );
+    });
+  }, [entityId, entityType, load]);
 
   async function saveField(field: CRMCustomFieldValue) {
     if (!record) return;
@@ -114,8 +129,15 @@ export function CRMRecordPanel({
 
   if (error && !record)
     return (
-      <section role="alert" className="form-card text-rose-900">
-        {error}
+      <section className="form-card text-rose-900">
+        <p role="alert">{error}</p>
+        <button
+          type="button"
+          className="secondary-button mt-4"
+          onClick={() => setRetryKey((value) => value + 1)}
+        >
+          Try again
+        </button>
       </section>
     );
   if (!record)
@@ -150,7 +172,7 @@ export function CRMRecordPanel({
               {record.title}
             </h1>
             <p className="mt-2 text-sm text-slate-600">
-              Owned by {record.ownerName} · {humanise(record.mode)} CRM mode
+              Owned by {record.ownerName} · {recordModeLabel(record.mode)}
             </p>
             {record.archivedAt ? (
               <p className="mt-3 inline-flex rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-900">
@@ -488,4 +510,10 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function recordModeLabel(mode: CRMRecord["mode"]): string {
+  if (mode === "external") return "Core fields managed by the connected CRM";
+  if (mode === "native") return "Managed in RevenueOS";
+  return "RevenueOS record";
 }

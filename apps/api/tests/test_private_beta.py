@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import jwt
 import pytest
@@ -39,6 +40,7 @@ from revenueos.beta_maintenance import (
 from revenueos.beta_services import BetaService
 from revenueos.config import Settings
 from revenueos.demo_data import (
+    demo_campaign_ids,
     demo_companion_ids,
     demo_debrief_ids,
     demo_ids,
@@ -63,6 +65,8 @@ from revenueos.models import (
     DebriefSession,
     DocumentSource,
     EmailSource,
+    EngageCampaignVersion,
+    EngageEnrollmentStep,
     Evidence,
     IntegrationAuditEvent,
     IntegrationConnection,
@@ -589,6 +593,30 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             assert demo_opportunity.pipeline_id is not None
             assert demo_opportunity.pipeline_stage_id is not None
             assert demo_opportunity.stage_entered_at is not None
+            campaign_ids = demo_campaign_ids(PRIMARY_ORGANISATION_ID)
+            campaign_version = await session.get(
+                EngageCampaignVersion,
+                campaign_ids["version"],
+            )
+            campaign_step = await session.get(
+                EngageEnrollmentStep,
+                campaign_ids["enrollment-step-jane"],
+            )
+            assert campaign_version is not None
+            assert campaign_step is not None
+            scheduled_utc = (
+                campaign_step.scheduled_at.replace(tzinfo=UTC)
+                if campaign_step.scheduled_at.utcoffset() is None
+                else campaign_step.scheduled_at.astimezone(UTC)
+            )
+            scheduled_local = scheduled_utc.astimezone(ZoneInfo(campaign_version.sender_timezone))
+            scheduled_minutes = scheduled_local.hour * 60 + scheduled_local.minute
+            assert scheduled_local.isoweekday() in campaign_version.send_days_json
+            assert (
+                campaign_version.send_window_start_minutes
+                <= scheduled_minutes
+                <= campaign_version.send_window_end_minutes
+            )
             demo_actions = list(
                 (
                     await session.scalars(

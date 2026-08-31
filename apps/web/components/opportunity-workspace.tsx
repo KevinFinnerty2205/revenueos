@@ -32,6 +32,7 @@ import { CustomerEvidencePanel } from "@/components/customer-evidence-panel";
 import { RecommendedActions } from "@/components/recommended-actions";
 import { OpportunityMethodology } from "@/components/opportunity-methodology";
 import { CRMRecordLink } from "@/components/crm-record-link";
+import { onOpportunityChanged } from "@/lib/opportunity-events";
 
 export function OpportunityWorkspace({
   opportunityId,
@@ -126,6 +127,15 @@ export function OpportunityWorkspace({
     return () => controller.abort();
   }, [loadWorkspace, refreshKey]);
 
+  useEffect(
+    () =>
+      onOpportunityChanged(opportunityId, () => {
+        setLoading(true);
+        setRefreshKey((value) => value + 1);
+      }),
+    [opportunityId],
+  );
+
   const availableMeetings = useMemo(
     () =>
       meetings.filter(
@@ -219,9 +229,9 @@ export function OpportunityWorkspace({
   if (error || !workspace) {
     return (
       <div role="alert" className="form-card border-rose-200 bg-rose-50">
-        <h1 className="text-xl font-bold text-rose-950">
+        <h2 className="text-xl font-bold text-rose-950">
           Opportunity workspace could not be loaded
-        </h1>
+        </h2>
         <p className="mt-2 text-sm text-rose-800">
           {error ?? "The opportunity was not found."}
         </p>
@@ -278,12 +288,12 @@ export function OpportunityWorkspace({
                 {humanise(opportunity.status)}
               </span>
             </div>
-            <h1
+            <h2
               id="opportunity-title"
-              className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl"
+              className="mt-4 text-3xl font-semibold tracking-tight text-slate-950"
             >
-              {opportunity.name}
-            </h1>
+              Deal workspace
+            </h2>
             <p className="mt-3 text-base text-slate-600">
               {opportunity.companyName ?? "No company"}
             </p>

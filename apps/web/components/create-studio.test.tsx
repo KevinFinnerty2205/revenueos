@@ -257,6 +257,22 @@ describe("RevenueOS Create", () => {
       within(mobile).queryByRole("link", { name: "Studio" }),
     ).not.toBeInTheDocument();
     expect(within(mobile).getAllByRole("link")).toHaveLength(4);
+    const more = screen.getByRole("navigation", {
+      name: "More mobile destinations",
+    });
+    expect(
+      within(more).getByRole("link", { name: "Accounts" }),
+    ).toHaveAttribute("href", "/companies");
+    expect(
+      within(more).getByRole("link", { name: "Pipeline" }),
+    ).toHaveAttribute("href", "/opportunities");
+    expect(
+      within(more).getByRole("link", { name: "Insights" }),
+    ).toHaveAttribute("href", "/insights");
+    expect(within(more).getByRole("link", { name: "Create" })).toHaveAttribute(
+      "href",
+      "/create",
+    );
   });
 
   it("presents the plan before generation and keeps required slides fixed", async () => {

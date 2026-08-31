@@ -3012,7 +3012,12 @@ export type ProspectAvailabilityState =
 export type ProspectTrustState =
   "verified" | "provider_supplied" | "inferred" | "unknown";
 export type ProspectResearchStatus =
-  "pending" | "researching" | "ready" | "partial" | "failed";
+  | "not_started"
+  | "pending"
+  | "researching"
+  | "ready"
+  | "partial"
+  | "failed";
 export type ProspectRunStatus =
   "pending" | "fetching" | "synthesizing" | "completed" | "partial" | "failed";
 

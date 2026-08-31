@@ -7,8 +7,9 @@ import type {
   PreInteractionBriefRequestResponse,
   PreInteractionBriefResponse,
 } from "@revenueos/shared";
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, ApiClientError } from "@/lib/api";
 import { formatInteractionDate } from "@/lib/interactions";
 
 const priorityStyle: Record<BriefPriority, string> = {
@@ -336,6 +337,7 @@ export function PreInteractionBrief({
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noticeRequired, setNoticeRequired] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -354,6 +356,10 @@ export function PreInteractionBrief({
               ? requestError.message
               : "The preparation brief could not be loaded.",
           );
+          setNoticeRequired(
+            requestError instanceof ApiClientError &&
+              requestError.code === "data_notice_acknowledgement_required",
+          );
         }
       })
       .finally(() => {
@@ -365,6 +371,7 @@ export function PreInteractionBrief({
   async function generate() {
     setWorking(true);
     setError(null);
+    setNoticeRequired(false);
     try {
       setResponse(
         await apiRequest<PreInteractionBriefRequestResponse>(
@@ -377,6 +384,10 @@ export function PreInteractionBrief({
         requestError instanceof Error
           ? requestError.message
           : "The preparation brief could not be created.",
+      );
+      setNoticeRequired(
+        requestError instanceof ApiClientError &&
+          requestError.code === "data_notice_acknowledgement_required",
       );
     } finally {
       setWorking(false);
@@ -439,12 +450,14 @@ export function PreInteractionBrief({
           </p>
         ) : null}
         {error ? (
-          <p
-            role="alert"
-            className="rounded-xl bg-red-50 p-4 text-sm text-red-900"
-          >
-            {error}
-          </p>
+          <div className="rounded-xl bg-red-50 p-4 text-sm text-red-900">
+            <p role="alert">{error}</p>
+            {noticeRequired ? (
+              <Link href="/onboarding" className="secondary-button mt-4">
+                Review data notice
+              </Link>
+            ) : null}
+          </div>
         ) : null}
         {!loading && response?.state === "unavailable" ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5">

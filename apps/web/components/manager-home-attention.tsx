@@ -60,7 +60,7 @@ export function ManagerHomeAttention({
             id="manager-home-attention-title"
             className="mt-2 text-xl font-semibold text-slate-950"
           >
-            Deals needing attention
+            Manager review
           </h2>
           <p className="mt-1 text-sm text-slate-600">
             {data.total === 0

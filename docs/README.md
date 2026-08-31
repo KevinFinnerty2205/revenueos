@@ -119,6 +119,9 @@ This is the canonical product and engineering documentation index. Documents dis
 113. [Manager Intelligence security and privacy review](03-engineering/manager-intelligence-security-privacy-review.md)
 114. [Checkpoint 3 handoff](06-roadmap/checkpoint-3-handoff.md)
 115. [Checkpoint 3 end-to-end product and beta readiness](06-roadmap/checkpoint-3-end-to-end-beta-readiness.md) — Option 3 decision and pre-WO-040 gates
+116. [End-to-end RevenueOS seller journey](01-product/end-to-end-revenueos-seller-journey.md) — current canonical cross-module loop
+117. [Journey reliability contract](01-product/journey-reliability-contract.md) — navigation, mutation, recovery and accessibility rules
+118. [WO-039A: Journey Reliability & UX Coherence](07-sprints/wo-039a-end-to-end-journey-reliability.md) — implementation and browser evidence
 
 ## 00 — Company
 
@@ -178,6 +181,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Business Case assumptions and provenance](01-product/business-case-assumptions-provenance.md)
 - [Business Case scenarios and sensitivity](01-product/business-case-scenarios-sensitivity.md)
 - [Business Case and Create integration](01-product/business-case-create-integration.md)
+- [End-to-end RevenueOS seller journey](01-product/end-to-end-revenueos-seller-journey.md)
+- [Journey reliability contract](01-product/journey-reliability-contract.md)
+- [Customer-facing terminology](01-product/customer-facing-terminology.md)
 
 ## 02 — Design
 
@@ -233,6 +239,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Core empty, loading and error states](02-design/core-ui-state-guide.md)
 - [Core mobile usability review](02-design/core-mobile-usability-review.md)
 - [Core accessibility review](02-design/core-accessibility-review.md)
+- [End-to-end journey simplicity review](02-design/end-to-end-journey-simplicity-review.md)
 - [Ask RevenueOS simplicity review](02-design/ask-revenueos-simplicity-review.md)
 - [Find and Account Research UX implementation](02-design/find-account-research-implementation.md)
 - [Prospect trust-state UX](02-design/prospect-trust-state-ux.md)
@@ -435,6 +442,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Create security, privacy and abuse review](03-engineering/create-security-privacy-review.md)
 - [Create retention, export, deletion and reconciliation](03-engineering/create-retention-export-deletion.md)
 - [Create operator runbook](03-engineering/create-operator-runbook.md)
+- [Journey reliability architecture](03-engineering/journey-reliability-architecture.md)
+- [WO-039A security and privacy review](03-engineering/wo-039a-security-privacy-review.md)
 
 ### Target through beta
 
@@ -516,6 +525,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-004B1: AI Worker and Durable Job Queue](07-sprints/wo-004b1-ai-worker-queue.md)
 - [WO-004B2: AI Provider Abstraction and Deterministic Mock Provider](07-sprints/wo-004b2-ai-provider-abstraction.md)
 - [WO-004B3: Prompt Registry and Structured Output Validation](07-sprints/wo-004b3-prompt-registry.md)
+- [WO-039A: End-to-End Journey Reliability & UX Coherence](07-sprints/wo-039a-end-to-end-journey-reliability.md)
+- [WO-039A remediation tracker](07-sprints/wo-039a-remediation-checklist.md)
 - [WO-004C1: Executive Summary Intelligence Capability](07-sprints/wo-004c1-executive-summary.md)
 - [WO-004C1A: Production OpenAI Provider Integration](07-sprints/wo-004c1a-openai-provider.md)
 - [WO-004C2: Meeting Decisions Intelligence](07-sprints/wo-004c2-meeting-decisions.md)

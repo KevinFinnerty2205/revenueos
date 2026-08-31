@@ -30,9 +30,79 @@ export class ApiClientError extends Error {
     readonly requestId?: string,
     readonly details?: Record<string, string>,
   ) {
-    super(message);
+    super(requestId ? `${message} Request ID: ${requestId}.` : message);
     this.name = "ApiClientError";
   }
+}
+
+function requestIdFor(headers: Headers): string {
+  const existing = headers.get("X-Request-ID")?.trim();
+  if (existing) return existing;
+  return globalThis.crypto?.randomUUID?.() ?? `web-${Date.now()}`;
+}
+
+function abortError(): DOMException {
+  return new DOMException("The request was cancelled.", "AbortError");
+}
+
+async function readRetryDelay(
+  attempt: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) throw abortError();
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      globalThis.clearTimeout(timer);
+      reject(abortError());
+    };
+    const timer = globalThis.setTimeout(
+      () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      },
+      50 * (attempt + 1),
+    );
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function reliableFetch(
+  pathOrUrl: string,
+  init: RequestInit,
+): Promise<{ response: Response; requestId: string }> {
+  const headers = new Headers(init.headers);
+  const requestId = requestIdFor(headers);
+  headers.set("X-Request-ID", requestId);
+  const request = { ...init, headers };
+  const method = (init.method ?? "GET").toUpperCase();
+  const attempts = method === "GET" ? 3 : 1;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return {
+        response: await fetch(resolveApiUrl(pathOrUrl), request),
+        requestId,
+      };
+    } catch (reason: unknown) {
+      if (init.signal?.aborted) throw abortError();
+      const retryable = reason instanceof TypeError && attempt + 1 < attempts;
+      if (!retryable) {
+        throw new ApiClientError(
+          "RevenueOS could not reach the service. Check your connection and try again.",
+          0,
+          "network_error",
+          requestId,
+        );
+      }
+      await readRetryDelay(attempt, init.signal ?? undefined);
+    }
+  }
+  throw new ApiClientError(
+    "RevenueOS could not reach the service. Check your connection and try again.",
+    0,
+    "network_error",
+    requestId,
+  );
 }
 
 export async function apiRequest<T>(
@@ -41,14 +111,19 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const localApiPath = !/^https?:\/\//u.test(path);
   const token = localApiPath && tokenProvider ? await tokenProvider() : null;
-  const response = await fetch(resolveApiUrl(path), {
+  const headers = new Headers(init.headers);
+  if (
+    init.body !== undefined &&
+    init.body !== null &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const { response, requestId } = await reliableFetch(path, {
     ...init,
     cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -62,7 +137,7 @@ export async function apiRequest<T>(
       error?.message ?? "The request could not be completed.",
       response.status,
       error?.code ?? "request_failed",
-      error?.requestId,
+      error?.requestId ?? response.headers.get("X-Request-ID") ?? requestId,
       error?.details,
     );
   }
@@ -79,13 +154,12 @@ async function apiBinaryFetch(
 ): Promise<Response> {
   const localApiPath = !/^https?:\/\//u.test(pathOrUrl);
   const token = localApiPath && tokenProvider ? await tokenProvider() : null;
-  const response = await fetch(resolveApiUrl(pathOrUrl), {
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const { response, requestId } = await reliableFetch(pathOrUrl, {
     ...init,
     cache: "no-store",
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
+    headers,
   });
   if (!response.ok) {
     let error: ApiError | null = null;
@@ -98,7 +172,7 @@ async function apiBinaryFetch(
       error?.message ?? "The file request could not be completed.",
       response.status,
       error?.code ?? "file_request_failed",
-      error?.requestId,
+      error?.requestId ?? response.headers.get("X-Request-ID") ?? requestId,
     );
   }
   return response;

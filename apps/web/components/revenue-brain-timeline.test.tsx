@@ -137,7 +137,7 @@ describe("RevenueBrainTimeline", () => {
       "Loading Revenue Brain",
     );
     expect(
-      await screen.findByRole("heading", { name: "Acme Australia" }),
+      await screen.findByRole("heading", { name: "Account intelligence" }),
     ).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Revenue Brain" }),

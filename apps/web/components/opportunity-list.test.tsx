@@ -276,6 +276,40 @@ describe("OpportunityList", () => {
     ).toBeVisible();
   });
 
+  it("bounds initial DOM rendering for the reviewed 1,000-deal envelope", async () => {
+    const baseCard = board().cards[0];
+    const cards = Array.from({ length: 1_000 }, (_, index) => ({
+      ...baseCard,
+      opportunityId: `scale-opportunity-${index}`,
+      opportunityName: `Scale deal ${index}`,
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        response(
+          board({
+            cards,
+            summary: {
+              ...board().summary,
+              openOpportunityCount: cards.length,
+            },
+          }),
+        ),
+      ),
+    );
+
+    render(<OpportunityList />);
+
+    expect(await screen.findAllByText("Scale deal 0")).not.toHaveLength(0);
+    expect(screen.queryByText("Scale deal 100")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Showing 100 of 1000 opportunities/u),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Show next 100" }));
+    expect(screen.getAllByText("Scale deal 100")).not.toHaveLength(0);
+    expect(screen.queryByText("Scale deal 200")).not.toBeInTheDocument();
+  });
+
   it("offers an explainable deal-centric manager view only when authorised", async () => {
     const attention = {
       total: 1,

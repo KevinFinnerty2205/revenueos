@@ -24,31 +24,39 @@ export function InteractionDetail({
   const [error, setError] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`, {
-      signal: controller.signal,
-    })
-      .then(setInteraction)
-      .catch((requestError: unknown) => {
-        if (
-          requestError instanceof DOMException &&
-          requestError.name === "AbortError"
-        ) {
-          return;
-        }
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "The interaction could not be loaded.",
-        );
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      void apiRequest<Interaction>(`/api/v1/interactions/${interactionId}`, {
+        signal: controller.signal,
       })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [interactionId]);
+        .then(setInteraction)
+        .catch((requestError: unknown) => {
+          if (
+            requestError instanceof DOMException &&
+            requestError.name === "AbortError"
+          ) {
+            return;
+          }
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "The interaction could not be loaded.",
+          );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [interactionId, retryKey]);
 
   async function start() {
     setStarting(true);
@@ -100,11 +108,20 @@ export function InteractionDetail({
   }
   if (!interaction) {
     return (
-      <div
-        role="alert"
-        className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900"
-      >
-        {error ?? "The interaction was not found."}
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
+        <p role="alert">{error ?? "The interaction was not found."}</p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setRetryKey((value) => value + 1)}
+          >
+            Try again
+          </button>
+          <Link href="/interactions" className="secondary-button">
+            Return to Interactions
+          </Link>
+        </div>
       </div>
     );
   }

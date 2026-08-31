@@ -32,7 +32,10 @@ const suggestedQuestions: Record<AskScopeType, string[]> = {
   workspace: [
     "Which deals need my attention?",
     "What do I need to do today?",
+    "What should I do next?",
+    "What are the biggest deal risks?",
     "Which deals don’t have an economic buyer?",
+    "Which commitments are overdue?",
   ],
 };
 

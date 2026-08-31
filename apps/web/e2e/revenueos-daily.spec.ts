@@ -183,6 +183,63 @@ function dailyResponse(overrides: Record<string, unknown> = {}) {
 
 async function routeDaily(page: Page, response = dailyResponse()) {
   let requests = 0;
+  await page.route(
+    "http://localhost:8000/api/v1/manager/deal-attention**",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          total: 1,
+          summaries: [
+            {
+              code: "methodology_gap",
+              label: "Methodology gap",
+              dealCount: 1,
+            },
+          ],
+          items: [
+            {
+              opportunityId,
+              opportunityName: "Network modernisation",
+              companyName: "Qantas",
+              ownerUserId: "user-1",
+              ownerDisplayName: "Alex Morgan",
+              pipelineId: "pipeline-daily",
+              pipelineName: "RevenueOS Sales Pipeline",
+              stageId: "stage-discovery",
+              stageName: "Discovery",
+              amount: "420000.00",
+              currency: "AUD",
+              expectedCloseDate: "2026-08-25",
+              sellerForecast: null,
+              managerForecast: null,
+              reasons: [
+                {
+                  id: `methodology_gap:${opportunityId}`,
+                  code: "methodology_gap",
+                  label: "Economic Buyer is still unknown.",
+                  explanation:
+                    "The current methodology projection does not identify an economic buyer.",
+                  detectedAt: "2026-08-17T00:00:00Z",
+                  sources: [
+                    {
+                      sourceType: "methodology_projection",
+                      sourceId: opportunityId,
+                      label: "Current methodology projection",
+                      href: `/opportunities/${opportunityId}#methodology`,
+                    },
+                  ],
+                },
+              ],
+              href: `/opportunities/${opportunityId}`,
+            },
+          ],
+          page: 1,
+          pageSize: 5,
+          generatedAt: "2026-08-17T00:00:00Z",
+        },
+      });
+    },
+  );
   await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
     requests += 1;
     await route.fulfill({ json: response });
@@ -209,7 +266,7 @@ test("RevenueOS Daily keeps the complete review journey one click away", async (
   ).toBeVisible();
   await expect(page.getByText("Approved — not complete")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Deals needing attention" }),
+    page.getByRole("heading", { name: "Manager review" }),
   ).toBeVisible();
   const dealsSection = page
     .getByRole("heading", { name: "Deals needing attention" })

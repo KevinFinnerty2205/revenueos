@@ -46,4 +46,25 @@ describe("BetaOnboarding", () => {
       await screen.findByRole("link", { name: "Go to Home" }),
     ).toHaveAttribute("href", "/dashboard");
   });
+
+  it("teaches the connected customer journey in the existing five steps", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => response({ currentStep: 2, completed: false })),
+    );
+    render(<BetaOnboarding />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Create the customer context",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Account, add the people as Contacts/i),
+    ).toBeVisible();
+    expect(screen.getByText(/create the Opportunity/i)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Create an Account" }),
+    ).toHaveAttribute("href", "/companies/new");
+  });
 });

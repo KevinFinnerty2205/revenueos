@@ -2,7 +2,7 @@
 
 import type { MeResponse } from "@revenueos/shared";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BetaAdmin } from "@/components/beta-admin";
 import { CreateModuleSettings } from "@/components/create-module-settings";
 import { CRMSettings } from "@/components/crm-settings";
@@ -16,18 +16,32 @@ import { apiRequest } from "@/lib/api";
 export function SettingsExperience() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+
+  const load = useCallback(async (signal: AbortSignal) => {
+    setError(null);
+    const next = await apiRequest<MeResponse>("/api/v1/me", { signal });
+    setMe(next);
+  }, []);
 
   useEffect(() => {
-    apiRequest<MeResponse>("/api/v1/me")
-      .then(setMe)
-      .catch((reason: unknown) =>
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Workspace settings could not be loaded.",
-        ),
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void load(controller.signal).catch((reason: unknown) =>
+        !controller.signal.aborted
+          ? setError(
+              reason instanceof Error
+                ? reason.message
+                : "Workspace settings could not be loaded.",
+            )
+          : undefined,
       );
-  }, []);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [load, retryKey]);
 
   if (error) {
     return (
@@ -44,9 +58,18 @@ export function SettingsExperience() {
           <p role="alert" className="mt-2 text-sm text-rose-900">
             {error}
           </p>
-          <Link href="/dashboard" className="secondary-button mt-4">
-            Return Home
-          </Link>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setRetryKey((value) => value + 1)}
+            >
+              Try again
+            </button>
+            <Link href="/dashboard" className="secondary-button">
+              Return Home
+            </Link>
+          </div>
         </div>
       </div>
     );

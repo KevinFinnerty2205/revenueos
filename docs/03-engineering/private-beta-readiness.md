@@ -1,5 +1,10 @@
 # Private beta readiness guide
 
+> **Pre-beta sequence:** WO-039A journey reliability is implemented and documented
+> in the [WO-039A record](../07-sprints/wo-039a-end-to-end-journey-reliability.md).
+> WO-039B Create trust/security and WO-039C real-data operations remain required
+> before beta entry. This guide does not authorise production customer data.
+
 WO-018 adds a 512 KiB online transcript-import ceiling and server-authoritative
 `ONLINE_MEETING_CAPTURE`, `ONLINE_MEETING_IMPORT`,
 `ONLINE_MEETING_NATIVE_INTEGRATION` and `ONLINE_MEETING_AUTO_INGEST` flags. Capture
@@ -44,11 +49,10 @@ preserve the active organisation claims. No Clerk secret or token may use a
 
 ## Onboarding
 
-The skippable `/onboarding` journey persists one state per user and
-organisation. It introduces the product, requires the data notice, then points
-to company, opportunity, meeting, transcript, Meeting Intelligence,
-Opportunity Workspace and Revenue Brain steps. It does not seed production
-organisations or imply unavailable features.
+The skippable `/onboarding` journey persists one state per user and organisation. It
+introduces the product, requires the data notice, then explains the current Account →
+Contact → Interaction → Evidence → Opportunity/Sales Brain path. It does not seed
+production organisations or imply unavailable features.
 
 Recommended operator onboarding:
 

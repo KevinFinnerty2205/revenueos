@@ -55,10 +55,10 @@ function isActive(pathname: string | null, href: string) {
 
 export function CoreNavigation() {
   const pathname = usePathname();
-  const [prospectEnabled, setProspectEnabled] = useState(false);
-  const [engageEnabled, setEngageEnabled] = useState(false);
-  const [eventsEnabled, setEventsEnabled] = useState(false);
-  const [createEnabled, setCreateEnabled] = useState(false);
+  const [prospectEnabled, setProspectEnabled] = useState(true);
+  const [engageEnabled, setEngageEnabled] = useState(true);
+  const [eventsEnabled, setEventsEnabled] = useState(true);
+  const [createEnabled, setCreateEnabled] = useState(true);
   const [salesAnalyticsEnabled, setSalesAnalyticsEnabled] = useState(true);
 
   useEffect(() => {
@@ -67,12 +67,12 @@ export function CoreNavigation() {
       signal: controller.signal,
     })
       .then((availability) => setProspectEnabled(availability.enabled))
-      .catch(() => setProspectEnabled(false));
+      .catch(() => setProspectEnabled(true));
     apiRequest<EngageAvailability>("/api/v1/engage/availability", {
       signal: controller.signal,
     })
       .then((availability) => setEngageEnabled(availability.enabled))
-      .catch(() => setEngageEnabled(false));
+      .catch(() => setEngageEnabled(true));
     apiRequest<BetaCapabilities>("/api/v1/beta/capabilities", {
       signal: controller.signal,
     })
@@ -83,14 +83,14 @@ export function CoreNavigation() {
         );
       })
       .catch(() => {
-        setEventsEnabled(false);
+        setEventsEnabled(true);
         setSalesAnalyticsEnabled(true);
       });
     apiRequest<CreateAvailability>("/api/v1/create/availability", {
       signal: controller.signal,
     })
       .then((availability) => setCreateEnabled(availability.enabled))
-      .catch(() => setCreateEnabled(false));
+      .catch(() => setCreateEnabled(true));
     return () => controller.abort();
   }, []);
 
@@ -124,9 +124,49 @@ export function CoreNavigation() {
         { label: "Create", items: [{ href: "/create", label: "Studio" }] },
       ]
     : moduleGroups;
+  const mobileMoreItems = [
+    { href: "/companies", label: "Accounts" },
+    { href: "/contacts", label: "People" },
+    { href: "/opportunities", label: "Pipeline" },
+    ...(salesAnalyticsEnabled
+      ? [{ href: "/insights", label: "Insights" }]
+      : []),
+    ...(prospectEnabled ? [{ href: "/find", label: "Find" }] : []),
+    ...(createEnabled ? [{ href: "/create", label: "Create" }] : []),
+    ...(engageEnabled ? [{ href: "/campaigns", label: "Campaigns" }] : []),
+    ...(eventsEnabled ? [{ href: "/events", label: "Events" }] : []),
+    { href: "/settings", label: "Settings" },
+  ];
 
   return (
     <>
+      <details className="relative mt-3 lg:hidden">
+        <summary className="ml-auto flex min-h-11 w-fit cursor-pointer list-none items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          More destinations
+        </summary>
+        <nav
+          aria-label="More mobile destinations"
+          className="absolute right-0 z-50 mt-2 grid w-64 grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl"
+        >
+          {mobileMoreItems.map((item) => {
+            const active = isActive(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-teal-600 ${
+                  active
+                    ? "bg-teal-50 text-teal-900"
+                    : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </details>
       <nav aria-label="Main navigation" className="mt-10 hidden lg:block">
         <div className="space-y-7">
           {navigationGroups.map((group, index) => (
