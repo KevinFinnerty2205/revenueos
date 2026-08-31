@@ -43,6 +43,7 @@ from revenueos.models import (
     CreateApprovedContentItem,
     CreateBusinessCase,
     CreateBusinessCaseVersion,
+    CreateDownloadGrant,
     CreatePresentation,
     CreatePresentationVersion,
     CreateTemplate,
@@ -227,11 +228,35 @@ async def run_retention(
                 )
             ).all()
         )
+        expired_download_grant_ids = list(
+            (
+                await session.scalars(
+                    select(CreateDownloadGrant.id)
+                    .where(
+                        CreateDownloadGrant.organisation_id == organisation_id,
+                        CreateDownloadGrant.expires_at <= now,
+                    )
+                    .order_by(CreateDownloadGrant.expires_at, CreateDownloadGrant.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
         if retention_days is None:
-            counts = {"expired_prospect_contact_points": len(expired_contact_point_ids)}
-            if dry_run or not expired_contact_point_ids:
+            counts = {
+                "expired_prospect_contact_points": len(expired_contact_point_ids),
+                "expired_create_download_grants": len(expired_download_grant_ids),
+            }
+            if dry_run or (not expired_contact_point_ids and not expired_download_grant_ids):
                 return RetentionResult(organisation_id, dry_run, None, 0, 0, counts)
             removed = await _expire_prospect_contact_points(session, organisation_id, expired_contact_point_ids)
+            if expired_download_grant_ids:
+                await session.execute(
+                    delete(CreateDownloadGrant).where(
+                        CreateDownloadGrant.organisation_id == organisation_id,
+                        CreateDownloadGrant.id.in_(expired_download_grant_ids),
+                    )
+                )
+                removed["expired_create_download_grants"] = len(expired_download_grant_ids)
             session.add(
                 BetaSystemEvent(
                     organisation_id=organisation_id,
@@ -239,6 +264,7 @@ async def run_retention(
                     event_type="retention_batch_completed",
                     metadata_json={
                         "expired_prospect_contact_point_count": len(expired_contact_point_ids),
+                        "expired_create_download_grant_count": len(expired_download_grant_ids),
                         "retention_days": None,
                     },
                 )
@@ -481,6 +507,7 @@ async def run_retention(
             or 0
         )
         counts["expired_live_sessions"] = expired_live_count
+        counts["expired_create_download_grants"] = len(expired_download_grant_ids)
         if dry_run or (
             not meeting_ids
             and not interaction_ids
@@ -493,6 +520,7 @@ async def run_retention(
             and not outreach_action_ids
             and not expired_live_count
             and not expired_contact_point_ids
+            and not expired_download_grant_ids
         ):
             return RetentionResult(
                 organisation_id,
@@ -503,6 +531,14 @@ async def run_retention(
                 counts,
             )
         removed = await _expire_prospect_contact_points(session, organisation_id, expired_contact_point_ids)
+        if expired_download_grant_ids:
+            await session.execute(
+                delete(CreateDownloadGrant).where(
+                    CreateDownloadGrant.organisation_id == organisation_id,
+                    CreateDownloadGrant.id.in_(expired_download_grant_ids),
+                )
+            )
+            removed["expired_create_download_grants"] = len(expired_download_grant_ids)
         if expired_event_ids:
             await session.execute(
                 update(Interaction)
@@ -619,6 +655,7 @@ async def run_retention(
                     "campaign_count": len(terminal_campaign_ids),
                     "event_count": len(expired_event_ids),
                     "expired_prospect_contact_point_count": len(expired_contact_point_ids),
+                    "expired_create_download_grant_count": len(expired_download_grant_ids),
                     "retention_days": retention_days,
                 },
             )

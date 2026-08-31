@@ -32,6 +32,10 @@ const template = {
     heightEmu: 6_858_000,
     warningCodes: [],
     safeFailureCode: null,
+    compatibilityState: "compatible",
+    compatibilityDetails: [],
+    validationProfileVersion: 1,
+    validatedAt: "2026-08-27T00:01:00Z",
     authorityAttestationVersion: 1,
     authorityAttestedAt: "2026-08-27T00:00:00Z",
     processedAt: "2026-08-27T00:01:00Z",
@@ -150,6 +154,8 @@ function presentation(
             ],
             warningCodes: ["review_required"],
             safeFailureCode: null,
+            validationProfileVersion: 1,
+            validatedAt: "2026-08-27T00:03:00Z",
             generatedAt: "2026-08-27T00:03:00Z",
             approvedAt: state === "ready" ? "2026-08-27T00:05:00Z" : null,
             downloadAvailable: state === "ready",
@@ -185,6 +191,42 @@ async function mockCreateApi(page: Page) {
     if (path === "/api/v1/create/templates") {
       await route.fulfill({
         json: { items: [template], canUpload: true, maxActiveTemplates: 20 },
+      });
+      return;
+    }
+    if (path === "/api/v1/create/templates/template-1") {
+      await route.fulfill({ json: template });
+      return;
+    }
+    if (path === "/api/v1/create/templates/template-needs-attention") {
+      await route.fulfill({
+        json: {
+          ...template,
+          id: "template-needs-attention",
+          latestVersion: {
+            ...template.latestVersion,
+            approvalState: "pending",
+            compatibilityState: "needs_attention",
+            compatibilityDetails: ["pptx_unmapped_text_requires_lock"],
+          },
+        },
+      });
+      return;
+    }
+    if (path === "/api/v1/create/templates/template-unsupported") {
+      await route.fulfill({
+        json: {
+          ...template,
+          id: "template-unsupported",
+          latestVersion: {
+            ...template.latestVersion,
+            processingState: "failed",
+            approvalState: "pending",
+            compatibilityState: "unsupported",
+            compatibilityDetails: ["unsafe_pptx"],
+            safeFailureCode: "unsafe_pptx",
+          },
+        },
       });
       return;
     }
@@ -303,6 +345,9 @@ test("Create shows the studio, deterministic plan and claim approval gate", asyn
     page.getByRole("heading", { name: "Claim and source manifest" }),
   ).toBeVisible();
   await expect(
+    page.getByText(/downloaded PowerPoint is the final file/i),
+  ).toBeVisible();
+  await expect(
     page.getByRole("button", { name: "Approve presentation" }),
   ).toBeDisabled();
   await page.getByRole("button", { name: "Keep with review" }).click();
@@ -317,7 +362,7 @@ test("Create shows the studio, deterministic plan and claim approval gate", asyn
   }
   await page.getByRole("button", { name: "Approve presentation" }).click();
   await expect(
-    page.getByRole("button", { name: "Download editable PPTX" }),
+    page.getByRole("button", { name: "Download PowerPoint" }),
   ).toBeVisible();
 });
 
@@ -327,4 +372,49 @@ test("Create does not add a fifth mobile navigation item", async ({ page }) => {
   const mobile = page.getByRole("navigation", { name: "Mobile navigation" });
   await expect(mobile.getByRole("link")).toHaveCount(4);
   await expect(mobile.getByRole("link", { name: "Studio" })).toHaveCount(0);
+});
+
+test("Create compatibility and preview trust states remain readable at 390px", async ({
+  page,
+}) => {
+  await page.goto("/create/templates/template-1");
+  await expect(
+    page.getByRole("heading", { name: "Template ready" }),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_039B_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-039b/ui-template-ready-desktop.png",
+      fullPage: true,
+    });
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/create/templates/template-1");
+  await expect(
+    page.getByRole("heading", { name: "Template ready" }),
+  ).toBeVisible();
+  await page.goto("/create/templates/template-needs-attention");
+  await expect(
+    page.getByRole("heading", { name: "Template needs attention" }),
+  ).toBeVisible();
+  await expect(page.getByText(/every customer-facing text box/i)).toBeVisible();
+  await page.goto("/create/templates/template-unsupported");
+  await expect(
+    page.getByRole("heading", { name: "Template unsupported" }),
+  ).toBeVisible();
+  await expect(page.getByText("unsafe_pptx")).toHaveCount(0);
+  await page.goto("/create/presentations/presentation-review");
+  await expect(
+    page.getByText(/Fonts, spacing and layout may vary slightly/i),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_039B_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-039b/ui-presentation-review-mobile.png",
+      fullPage: true,
+    });
+  }
+  await expect(page.locator("body")).toHaveJSProperty(
+    "scrollWidth",
+    await page.locator("body").evaluate((body) => body.clientWidth),
+  );
 });

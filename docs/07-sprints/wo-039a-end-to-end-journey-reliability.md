@@ -67,8 +67,9 @@ No production change falls outside these categories.
 
 ## Boundaries and remaining work
 
-- WO-039B: Create template/output compatibility, preview/PPTX equivalence, download
-  bearer design, hostile-file limits and `pypdf` remediation.
+- WO-039B is complete: Create template/output compatibility, preview/PPTX equivalence,
+  one-time download grants, hostile-file limits and `pypdf` remediation are recorded
+  in the [WO-039B verification record](wo-039b-create-trust-security.md).
 - WO-039C: production identity/RLS/backup/restore/retention/deletion operations,
   real-tenant onboarding and native CRM import/deduplication/merge.
 - Formal human assistive-technology and design-partner usability sessions remain

@@ -24,6 +24,7 @@ from revenueos.create_contracts import (
     PresentationApprovalRequest,
     PresentationBriefRequest,
     PresentationDownloadGrantResponse,
+    PresentationDownloadRequest,
     PresentationGenerateRequest,
     PresentationListResponse,
     PresentationPlanUpdateRequest,
@@ -272,24 +273,29 @@ async def approve_presentation(
 )
 async def download_grant(
     presentation_id: UUID,
+    response: Response,
     service: Service,
 ) -> PresentationDownloadGrantResponse:
-    return await service.download_grant(presentation_id)
+    grant = await service.download_grant(presentation_id)
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return grant
 
 
-@router.get("/presentations/{presentation_id}/download")
+@router.post("/presentations/{presentation_id}/download")
 async def download(
     presentation_id: UUID,
-    token: Annotated[str, Query(min_length=10, max_length=500)],
+    request: PresentationDownloadRequest,
     service: Service,
 ) -> Response:
-    content, file_name = await service.download(presentation_id, token)
+    content, file_name = await service.download(presentation_id, request.grant_token)
     return Response(
         content=content,
         media_type=PPTX_MIME_TYPE,
         headers={
             "Content-Disposition": f'attachment; filename="{file_name}"',
             "Cache-Control": "private, no-store",
+            "Referrer-Policy": "no-referrer",
             "X-Content-Type-Options": "nosniff",
         },
     )

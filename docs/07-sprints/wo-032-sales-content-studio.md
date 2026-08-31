@@ -66,3 +66,14 @@ Disable `API_FEATURE_CREATE_ENABLED` for environment-wide containment or the ten
 `create` entitlement for organisation-specific containment; both preserve retained
 records. Downgrade below `0041_create_studio` only after an approved export and object
 retention/deletion decision because it removes the Create schema.
+
+## WO-039B trust hardening
+
+WO-039B supersedes the original template/output/download trust assumptions without
+expanding Create's product scope. Migration `0049_create_trust` adds versioned
+compatibility/output-validation metadata and tenant-owned one-time download grants.
+Editable slides now require usable mapped placeholders; generated decks are reparsed
+against exact render expectations; and authenticated download is server-mediated,
+single-use and approval/checksum bound. See the
+[WO-039B record](wo-039b-create-trust-security.md) and
+[supported profile](../01-product/create-powerpoint-trust-guide.md).

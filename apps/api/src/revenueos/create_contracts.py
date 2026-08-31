@@ -11,6 +11,7 @@ from revenueos.contracts import APIModel
 CreateAvailabilityState = Literal["available", "temporarily_unavailable", "not_in_plan"]
 TemplateProcessingState = Literal["processing", "ready", "partial", "failed", "archived"]
 TemplateApprovalState = Literal["pending", "approved", "revoked"]
+TemplateCompatibilityState = Literal["compatible", "needs_attention", "unsupported"]
 SlideReuseState = Literal["pending", "approved", "excluded"]
 SlideCategory = Literal[
     "title",
@@ -165,6 +166,10 @@ class TemplateVersionResponse(APIModel):
     height_emu: int | None
     warning_codes: list[str]
     safe_failure_code: str | None
+    compatibility_state: TemplateCompatibilityState
+    compatibility_details: list[str]
+    validation_profile_version: Literal[1]
+    validated_at: datetime | None
     authority_attestation_version: Literal[1]
     authority_attested_at: datetime
     processed_at: datetime | None
@@ -328,6 +333,8 @@ class PresentationVersionResponse(APIModel):
     claims: list[PresentationClaimResponse]
     warning_codes: list[str]
     safe_failure_code: str | None
+    validation_profile_version: Literal[1] | None
+    validated_at: datetime | None
     generated_at: datetime | None
     approved_at: datetime | None
     download_available: bool
@@ -401,5 +408,10 @@ class PresentationApprovalRequest(APIModel):
 
 class PresentationDownloadGrantResponse(APIModel):
     download_url: str
+    grant_token: Annotated[str, StringConstraints(min_length=43, max_length=200)]
     expires_at: datetime
     file_name: str
+
+
+class PresentationDownloadRequest(APIModel):
+    grant_token: Annotated[str, StringConstraints(min_length=43, max_length=200)]

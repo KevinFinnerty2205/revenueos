@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import re
+import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal, cast
@@ -46,6 +47,7 @@ from revenueos.create_contracts import (
     TemplateVersionResponse,
 )
 from revenueos.create_pptx import (
+    CREATE_PPTX_PROFILE_VERSION,
     PPTX_MIME_TYPE,
     BoundedPptxProcessor,
     PptxProcessingError,
@@ -57,6 +59,7 @@ from revenueos.models import (
     CreateApprovedContentItem,
     CreateBusinessCase,
     CreateBusinessCaseVersion,
+    CreateDownloadGrant,
     CreatePresentation,
     CreatePresentationVersion,
     CreateTemplate,
@@ -66,7 +69,7 @@ from revenueos.models import (
     OrganisationModuleEntitlement,
 )
 from revenueos.tenant import TenantContext
-from revenueos.visual_storage import VisualGrantSigner, VisualStorage, VisualStorageError
+from revenueos.visual_storage import VisualObjectMissingError, VisualStorage, VisualStorageError
 
 logger = logging.getLogger("revenueos.create")
 
@@ -147,7 +150,6 @@ class CreateService:
         self.storage = storage
         self.processor = processor
         self.repository = CreateRepository(session)
-        self.grants = VisualGrantSigner(settings.visual_storage_signing_secret.get_secret_value())
 
     async def availability(self) -> CreateAvailabilityResponse:
         entitlement = await self.repository.entitlement(self.tenant.organisation_id)
@@ -278,6 +280,9 @@ class CreateService:
             slide_count=0,
             warning_codes_json=[],
             manifest_json={"preflightSlideCount": len(parsed.slides)},
+            compatibility_state="needs_attention",
+            compatibility_details_json=["slide_review_required"],
+            validation_profile_version=CREATE_PPTX_PROFILE_VERSION,
             authority_attestation_version=request.attestation_version,
             authority_attested_by_user_id=self.tenant.user_id,
             authority_attested_at=now,
@@ -342,6 +347,13 @@ class CreateService:
                 "Pricing slides cannot be approved for Create in this work order.",
                 422,
             )
+        compatibility_issue = _slide_compatibility_issue(slide, request)
+        if request.reuse_state == "approved" and compatibility_issue is not None:
+            raise PublicAPIError(
+                compatibility_issue,
+                "This slide needs standard editable PowerPoint placeholders or must be reused without changes.",
+                422,
+            )
         slide.category = request.category
         slide.reuse_state = request.reuse_state
         slide.modification_policy = request.modification_policy
@@ -352,6 +364,9 @@ class CreateService:
         slide.placeholder_mappings_json = dict(request.placeholder_mappings)
         slide.reviewed_by_user_id = self.tenant.user_id
         slide.reviewed_at = datetime.now(UTC)
+        version.compatibility_state = "needs_attention"
+        version.compatibility_details_json = ["template_approval_required"]
+        version.validated_at = None
         await self._commit("The template slide review could not be saved.")
         self._audit("create_template_slide_reviewed", slide_id=str(slide.id), reuse_state=slide.reuse_state)
         return await self.get_template(slide.template_id)
@@ -383,13 +398,29 @@ class CreateService:
             raise PublicAPIError("template_has_no_approved_slides", "Approve at least one customer-safe slide.", 409)
         if any(not slide.customer_safe for slide in approved):
             raise PublicAPIError("template_contains_unsafe_slide", "Only customer-safe slides can be approved.", 409)
+        compatibility_issues = [issue for slide in approved if (issue := _stored_slide_compatibility_issue(slide))]
+        title_slides = [slide for slide in approved if slide.category == "title"]
+        if not title_slides:
+            compatibility_issues.append("pptx_title_slide_required")
+        elif not any(
+            slide.modification_policy not in {"locked", "reuse_as_is"}
+            and _stored_slide_compatibility_issue(slide) is None
+            for slide in title_slides
+        ):
+            compatibility_issues.append("pptx_title_placeholders_required")
+        if compatibility_issues:
+            version.compatibility_state = "needs_attention"
+            version.compatibility_details_json = cast(list[object], sorted(set(compatibility_issues)))
+            version.validated_at = None
+            await self._commit("The template compatibility result could not be saved.")
+            raise PublicAPIError(
+                "template_needs_attention",
+                "This template needs standard title, audience and content placeholders before it can be approved.",
+                409,
+            )
         now = datetime.now(UTC)
         for slide in approved:
-            text = "\n".join(
-                str(item.get("text", "")).strip()
-                for item in slide.text_blocks_json
-                if isinstance(item, dict) and str(item.get("text", "")).strip()
-            )[:12_000]
+            text = _approved_slide_text(slide)[:12_000]
             if not text:
                 text = slide.title
             item = await self.repository.content_item_for_slide(self.tenant.organisation_id, slide.id)
@@ -422,6 +453,10 @@ class CreateService:
                 item.approved_at = now
                 item.revoked_at = None
         version.approval_state = "approved"
+        version.compatibility_state = "compatible"
+        version.compatibility_details_json = []
+        version.validation_profile_version = CREATE_PPTX_PROFILE_VERSION
+        version.validated_at = now
         version.approved_by_user_id = self.tenant.user_id
         version.approved_at = now
         await self._commit("The template could not be approved.")
@@ -460,6 +495,12 @@ class CreateService:
         )
         if template_version is None or template_version.approval_state != "approved":
             raise PublicAPIError("template_not_approved", "Choose an approved template version.", 422)
+        if not _template_version_is_current(template_version):
+            raise PublicAPIError(
+                "template_revalidation_required",
+                "This template needs review against the current PowerPoint compatibility profile.",
+                409,
+            )
         template = await self.repository.template(self.tenant.organisation_id, template_version.template_id)
         if template is None or template.state != "active":
             raise PublicAPIError("template_not_approved", "Choose an active approved template.", 422)
@@ -614,6 +655,16 @@ class CreateService:
         included = [item for item in presentation.plan_json if isinstance(item, dict) and item.get("included")]
         if not included:
             raise PublicAPIError("empty_plan", "Include at least one slide before generating.", 422)
+        template_version = await self.repository.template_version(
+            self.tenant.organisation_id,
+            presentation.template_version_id,
+        )
+        if template_version is None or not _template_version_is_current(template_version):
+            raise PublicAPIError(
+                "template_revalidation_required",
+                "The source template must be reviewed against the current PowerPoint compatibility profile.",
+                409,
+            )
         company = await self.repository.company(self.tenant.organisation_id, presentation.account_id)
         opportunity = (
             await self.repository.opportunity(self.tenant.organisation_id, presentation.opportunity_id)
@@ -691,6 +742,13 @@ class CreateService:
             raise PublicAPIError("source_slide_not_found", "The approved source slide is no longer available.", 409)
         if slide.get("modificationPolicy") in {"locked", "reuse_as_is"}:
             raise PublicAPIError("slide_locked", "This approved slide must remain unchanged.", 409)
+        roles = _effective_placeholder_roles(source_slide)
+        if request.body_blocks and not roles.intersection(_CONTENT_PLACEHOLDER_ROLES):
+            raise PublicAPIError(
+                "slide_body_not_editable",
+                "This slide does not have an editable content placeholder.",
+                409,
+            )
         combined = "\n".join((request.title, *request.body_blocks))
         if _INTERNAL_COPY.search(combined):
             raise PublicAPIError(
@@ -831,6 +889,12 @@ class CreateService:
         presentation, version = await self._reviewable_version(presentation_id)
         if version.state != "needs_review" or version.storage_status != "available":
             raise PublicAPIError("presentation_not_ready", "Wait for the presentation to finish rendering.", 409)
+        if version.validation_profile_version != CREATE_PPTX_PROFILE_VERSION or version.validated_at is None:
+            raise PublicAPIError(
+                "generated_validation_failed",
+                "The presentation could not be safely finalised. Generate a new version.",
+                409,
+            )
         claims = [item for item in version.claim_manifest_json if isinstance(item, dict)]
         if any(item.get("reviewState") == "pending" for item in claims):
             raise PublicAPIError(
@@ -842,7 +906,7 @@ class CreateService:
             self.tenant.organisation_id,
             presentation.template_version_id,
         )
-        if template_version is None or template_version.approval_state != "approved":
+        if template_version is None or not _template_version_is_current(template_version):
             raise PublicAPIError("template_approval_changed", "The source template is no longer approved.", 409)
         source_slides = {
             slide.id: slide
@@ -876,65 +940,117 @@ class CreateService:
         if presentation is None:
             raise PublicAPIError("presentation_not_found", "The presentation was not found.", 404)
         version = await self.repository.latest_presentation_version(self.tenant.organisation_id, presentation.id)
+        template_version = await self.repository.template_version(
+            self.tenant.organisation_id,
+            presentation.template_version_id,
+        )
         if (
             version is None
+            or template_version is None
+            or not _template_version_is_current(template_version)
             or version.state != "ready"
             or version.review_state != "approved"
             or version.storage_status != "available"
             or version.pptx_storage_key is None
+            or version.validation_profile_version != CREATE_PPTX_PROFILE_VERSION
+            or version.validated_at is None
         ):
             raise PublicAPIError("presentation_not_approved", "Approve the current version before download.", 409)
         await self._revalidate_claim_sources(version)
         expires_at = datetime.now(UTC) + timedelta(seconds=self.settings.visual_signed_url_ttl_seconds)
-        direct_url = self.storage.download_url(version.pptx_storage_key, expires_at)
-        if direct_url is None:
-            token = self.grants.issue(
-                self.tenant.organisation_id,
-                self.tenant.user_id,
-                version.id,
-                "download",
-                expires_at,
+        token = secrets.token_urlsafe(32)
+        self.repository.add(
+            CreateDownloadGrant(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                presentation_version_id=version.id,
+                user_id=self.tenant.user_id,
+                token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest(),
+                approval_fingerprint=_approval_fingerprint(version),
+                expires_at=expires_at,
             )
-            direct_url = f"/api/v1/create/presentations/{presentation.id}/download?token={token}"
+        )
+        await self._commit("The PowerPoint download could not be prepared.")
         return PresentationDownloadGrantResponse(
-            download_url=direct_url,
+            download_url=f"/api/v1/create/presentations/{presentation.id}/download",
+            grant_token=token,
             expires_at=expires_at,
             file_name=f"{_safe_file_name(presentation.title)}.pptx",
         )
 
     async def download(self, presentation_id: UUID, token: str) -> tuple[bytes, str]:
         await self._require_entitled()
+        now = datetime.now(UTC)
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        grant = await self.repository.download_grant_by_hash(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            token_hash,
+        )
         presentation = await self.repository.presentation(self.tenant.organisation_id, presentation_id)
         if presentation is None:
             raise PublicAPIError("presentation_not_found", "The presentation was not found.", 404)
         version = await self.repository.latest_presentation_version(self.tenant.organisation_id, presentation.id)
+        template_version = await self.repository.template_version(
+            self.tenant.organisation_id,
+            presentation.template_version_id,
+        )
         if (
-            version is None
+            grant is None
+            or version is None
+            or template_version is None
+            or not _template_version_is_current(template_version)
+            or grant.presentation_version_id != version.id
             or version.state != "ready"
             or version.review_state != "approved"
             or version.storage_status != "available"
             or version.pptx_storage_key is None
-            or not self.grants.verify(
-                token,
-                self.tenant.organisation_id,
-                self.tenant.user_id,
-                version.id,
-                "download",
-            )
+            or version.validation_profile_version != CREATE_PPTX_PROFILE_VERSION
+            or version.validated_at is None
+            or _as_utc(grant.expires_at) <= now
+            or grant.consumed_at is not None
+            or grant.revoked_at is not None
+            or grant.approval_fingerprint != _approval_fingerprint(version)
         ):
             raise PublicAPIError("invalid_download_grant", "The download link is invalid or has expired.", 403)
         await self._revalidate_claim_sources(version)
         try:
             content = await self.storage.read(version.pptx_storage_key)
+        except VisualObjectMissingError as exc:
+            raise PublicAPIError(
+                "presentation_file_unavailable",
+                "This presentation file is unavailable. Generate a new version or contact support.",
+                409,
+            ) from exc
         except VisualStorageError as exc:
             raise PublicAPIError(
                 "create_storage_unavailable", "The presentation is temporarily unavailable.", 503
             ) from exc
+        if version.checksum_sha256 is None or not secrets.compare_digest(
+            hashlib.sha256(content).hexdigest(),
+            version.checksum_sha256,
+        ):
+            raise PublicAPIError(
+                "presentation_file_integrity_failed",
+                "This presentation file is unavailable. Generate a new version or contact support.",
+                409,
+            )
+        consumed = await self.repository.consume_download_grant(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            grant.id,
+            version.id,
+            now,
+        )
+        if not consumed:
+            await self.session.rollback()
+            raise PublicAPIError("invalid_download_grant", "The download link is invalid or has expired.", 403)
+        await self.session.commit()
         self._audit(
             "create_presentation_downloaded",
             presentation_id=str(presentation.id),
             version_id=str(version.id),
-            byte_size=len(content),
+            result="success",
         )
         return content, f"{_safe_file_name(presentation.title)}.pptx"
 
@@ -1351,6 +1467,8 @@ class CreateService:
         version.approved_by_user_id = None
         version.approved_at = None
         version.storage_status = "pending"
+        version.validation_profile_version = None
+        version.validated_at = None
         version.processing_attempts = 0
         version.worker_id = None
         version.lease_expires_at = None
@@ -1414,12 +1532,16 @@ class CreateService:
                 "claims": version.claim_manifest_json,
                 "warningCodes": version.warning_codes_json,
                 "safeFailureCode": version.safe_failure_code,
+                "validationProfileVersion": version.validation_profile_version,
+                "validatedAt": version.validated_at,
                 "generatedAt": version.generated_at,
                 "approvedAt": version.approved_at,
                 "downloadAvailable": (
                     version.state == "ready"
                     and version.review_state == "approved"
                     and version.storage_status == "available"
+                    and version.validation_profile_version == CREATE_PPTX_PROFILE_VERSION
+                    and version.validated_at is not None
                 ),
                 "createdAt": version.created_at,
             }
@@ -1460,6 +1582,10 @@ class CreateService:
                 "heightEmu": version.height_emu,
                 "warningCodes": version.warning_codes_json,
                 "safeFailureCode": version.safe_failure_code,
+                "compatibilityState": version.compatibility_state,
+                "compatibilityDetails": [str(item) for item in version.compatibility_details_json],
+                "validationProfileVersion": version.validation_profile_version,
+                "validatedAt": version.validated_at,
                 "authorityAttestationVersion": version.authority_attestation_version,
                 "authorityAttestedAt": version.authority_attested_at,
                 "processedAt": version.processed_at,
@@ -1582,6 +1708,119 @@ class CreateService:
                 **metadata,
             },
         )
+
+
+_CONTENT_PLACEHOLDER_ROLES = frozenset({"customer_context", "approved_content", "next_steps", "open_questions"})
+
+
+def _effective_placeholder_roles(
+    slide: CreateTemplateSlide,
+    explicit_mappings: dict[str, str] | None = None,
+) -> set[str]:
+    mappings = {str(key): str(value) for key, value in slide.placeholder_mappings_json.items()}
+    if explicit_mappings is not None:
+        mappings = {str(key): str(value) for key, value in explicit_mappings.items()}
+    roles = set(mappings.values())
+    for item in slide.text_blocks_json:
+        if not isinstance(item, dict):
+            continue
+        shape_id = item.get("shapeId")
+        role = mappings.get(str(shape_id)) if isinstance(shape_id, int) else None
+        if role is None and isinstance(item.get("mappedRole"), str):
+            role = str(item["mappedRole"])
+        if role:
+            roles.add(role)
+    return roles
+
+
+def _has_unmapped_text_block(
+    slide: CreateTemplateSlide,
+    explicit_mappings: dict[str, str] | None = None,
+) -> bool:
+    mappings = {str(key): str(value) for key, value in slide.placeholder_mappings_json.items()}
+    if explicit_mappings is not None:
+        mappings = explicit_mappings
+    for item in slide.text_blocks_json:
+        if not isinstance(item, dict) or not str(item.get("text", "")).strip():
+            continue
+        shape_id = item.get("shapeId")
+        role = mappings.get(str(shape_id)) if isinstance(shape_id, int) else None
+        if role is None and isinstance(item.get("mappedRole"), str):
+            role = str(item["mappedRole"])
+        if role is None:
+            return True
+    return False
+
+
+def _slide_compatibility_issue(slide: CreateTemplateSlide, request: TemplateSlideUpdate) -> str | None:
+    if request.modification_policy in {"locked", "reuse_as_is"}:
+        return None
+    roles = _effective_placeholder_roles(
+        slide, {str(key): value for key, value in request.placeholder_mappings.items()}
+    )
+    if request.category == "title":
+        if not {"presentation_title", "audience"}.issubset(roles):
+            return "pptx_title_placeholders_required"
+    elif not roles.intersection(_CONTENT_PLACEHOLDER_ROLES):
+        return "pptx_content_placeholder_required"
+    if _has_unmapped_text_block(
+        slide,
+        {str(key): value for key, value in request.placeholder_mappings.items()},
+    ):
+        return "pptx_unmapped_text_requires_lock"
+    return None
+
+
+def _stored_slide_compatibility_issue(slide: CreateTemplateSlide) -> str | None:
+    if slide.modification_policy in {"locked", "reuse_as_is"}:
+        return None
+    roles = _effective_placeholder_roles(slide)
+    if slide.category == "title":
+        if not {"presentation_title", "audience"}.issubset(roles):
+            return "pptx_title_placeholders_required"
+    elif not roles.intersection(_CONTENT_PLACEHOLDER_ROLES):
+        return "pptx_content_placeholder_required"
+    if _has_unmapped_text_block(slide):
+        return "pptx_unmapped_text_requires_lock"
+    return None
+
+
+def _approved_slide_text(slide: CreateTemplateSlide) -> str:
+    blocks = [item for item in slide.text_blocks_json if isinstance(item, dict)]
+    if slide.modification_policy in {"locked", "reuse_as_is"}:
+        selected = blocks
+    else:
+        mappings = {str(key): str(value) for key, value in slide.placeholder_mappings_json.items()}
+        selected = [
+            item
+            for item in blocks
+            if (
+                mappings.get(str(item.get("shapeId")))
+                or (str(item.get("mappedRole")) if item.get("mappedRole") is not None else None)
+            )
+            in _CONTENT_PLACEHOLDER_ROLES
+        ]
+    return "\n".join(str(item.get("text", "")).strip() for item in selected if str(item.get("text", "")).strip())
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _approval_fingerprint(version: CreatePresentationVersion) -> str:
+    if version.approved_at is None or version.checksum_sha256 is None:
+        return ""
+    approved_at = _as_utc(version.approved_at).isoformat()
+    return hashlib.sha256(f"v1:{version.id}:{approved_at}:{version.checksum_sha256}".encode()).hexdigest()
+
+
+def _template_version_is_current(version: CreateTemplateVersion) -> bool:
+    return (
+        version.approval_state == "approved"
+        and version.compatibility_state == "compatible"
+        and version.validation_profile_version == CREATE_PPTX_PROFILE_VERSION
+        and version.validated_at is not None
+    )
 
 
 def _json_fingerprint(value: object) -> str:

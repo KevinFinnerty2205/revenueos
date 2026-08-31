@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,7 @@ from revenueos.models import (
     CreateApprovedContentItem,
     CreateBusinessCase,
     CreateBusinessCaseVersion,
+    CreateDownloadGrant,
     CreatePresentation,
     CreatePresentationVersion,
     CreateTemplate,
@@ -354,6 +355,48 @@ class CreateRepository:
                 )
             ),
         )
+
+    async def download_grant_by_hash(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        token_hash: str,
+    ) -> CreateDownloadGrant | None:
+        return cast(
+            CreateDownloadGrant | None,
+            await self.session.scalar(
+                select(CreateDownloadGrant).where(
+                    CreateDownloadGrant.organisation_id == organisation_id,
+                    CreateDownloadGrant.user_id == user_id,
+                    CreateDownloadGrant.token_hash == token_hash,
+                )
+            ),
+        )
+
+    async def consume_download_grant(
+        self,
+        organisation_id: UUID,
+        user_id: UUID,
+        grant_id: UUID,
+        presentation_version_id: UUID,
+        consumed_at: datetime,
+    ) -> bool:
+        consumed = await self.session.scalar(
+            update(CreateDownloadGrant)
+            .where(
+                CreateDownloadGrant.organisation_id == organisation_id,
+                CreateDownloadGrant.user_id == user_id,
+                CreateDownloadGrant.id == grant_id,
+                CreateDownloadGrant.presentation_version_id == presentation_version_id,
+                CreateDownloadGrant.expires_at > consumed_at,
+                CreateDownloadGrant.consumed_at.is_(None),
+                CreateDownloadGrant.revoked_at.is_(None),
+            )
+            .values(consumed_at=consumed_at)
+            .returning(CreateDownloadGrant.id)
+            .execution_options(synchronize_session=False)
+        )
+        return consumed is not None
 
     async def revenue_brain_snapshots(
         self,

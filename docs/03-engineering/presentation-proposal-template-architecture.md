@@ -1,6 +1,6 @@
 # Presentation, proposal and template architecture
 
-- **Status:** WO-032 PPTX slice implemented; DOCX/proposal/ROI remain future
+- **Status:** WO-032/033 PPTX and Business Case slice; WO-039B profile/output/download hardening implemented; DOCX/proposal remain future
 - **Output direction:** Approved-template-constrained editable PPTX
 
 ## Architecture principle
@@ -12,33 +12,37 @@ inputs.
 
 ```mermaid
 flowchart LR
-    T["Approved PPTX or DOCX template"] --> P["Secure parse and layout model"]
+    T["Approved PPTX template"] --> P["Secure parse and compatibility model"]
     L["Approved content library"] --> G["Generation plan"]
     B["Revenue Brain evidence"] --> G
     U["User purpose, audience and selections"] --> G
     P --> G
     G --> R["Deterministic render"]
-    R --> V["Schema, visual and fact validation"]
+    R --> V["Claim/structured/PPTX round-trip validation"]
     V --> H["Human review"]
     H --> A["Approved output and provenance manifest"]
 ```
 
 ## Conceptual model
 
-| Concept                             | Responsibility                                                                    |
-| ----------------------------------- | --------------------------------------------------------------------------------- |
-| `CreateTemplate` / `CreateTemplateVersion` | Tenant template and immutable uploaded/approved version                     |
-| `CreateTemplateSlide`                     | Structural manifest, policy, safety and administrator review per source slide |
-| `CreateApprovedContentItem`                | Approved reusable text materialised from an approved source slide            |
+| Concept                                    | Responsibility                                                                |
+| ------------------------------------------ | ----------------------------------------------------------------------------- |
+| `CreateTemplate` / `CreateTemplateVersion` | Tenant template and immutable uploaded/approved version                       |
+| `CreateTemplateSlide`                      | Structural manifest, policy, safety and administrator review per source slide |
+| `CreateApprovedContentItem`                | Approved reusable text materialised from an approved source slide             |
 | `CreatePresentation`                       | Account-bound brief, deterministic plan and current lifecycle                 |
-| `CreatePresentationVersion`                | Immutable source context, claim manifest, render state and private PPTX key    |
-| `CreateUsageCounter`                       | Atomic UTC-day generation reservations for organisation and user scopes        |
+| `CreatePresentationVersion`                | Immutable source context, claim manifest, render state and private PPTX key   |
+| `CreateDownloadGrant`                      | Hashed one-time user/tenant/version/approval-bound download authority         |
+| `CreateUsageCounter`                       | Atomic UTC-day generation reservations for organisation and user scopes       |
 
 Migration `0041_create_studio` owns these tables. Every row, unique key, relationship
 and storage path includes organisation scope. Explicit repository predicates and
 forced PostgreSQL RLS apply defence in depth; the worker sets trusted transaction-local
 tenant context and claims bounded work through a `SECURITY DEFINER` eligibility
 function that returns opaque organisation IDs only.
+Migration `0049_create_trust` adds current-profile validation metadata and the
+tenant-owned forced-RLS download-grant table without changing this modular-monolith
+boundary.
 
 ## Template ingestion
 
@@ -92,13 +96,17 @@ financials, probability/forecast, methodology scores, internal risks/coaching,
 contactability or suppression. Current public Prospect observations remain labelled
 `prospect_public`; customer Evidence remains source-labelled and lifecycle checked.
 
-The deterministic `deterministic_pptx_v1` renderer selects approved source slides,
+The deterministic `deterministic_pptx_v1` renderer selects current-profile-compatible
+approved source slides,
 keeps source masters/layouts/media, replaces only explicitly editable text shapes,
 and writes a new PPTX. It removes every unselected slide relationship plus notes,
 comments, custom properties, thumbnails and source-derived application-property title
 lists; it resets customer-visible core properties. It does not run LibreOffice or
-Microsoft Office in production. Structural review is the product preview; local deck
-rendering is a development-only visual QA step.
+Microsoft Office in production. Structural review is the product preview; it
+explicitly does not claim pixel identity. The actual saved file is reparsed through
+profile v1 and checked for every replacement, required/exact text, manifest equality,
+unsafe relationship/metadata absence and internal identifiers. Local deck rendering
+is a development-only visual QA step.
 
 The claim manifest records exact claim text, content type, origin, support state,
 customer-safe classification, source IDs/labels, freshness, paraphrase permission,
@@ -119,8 +127,9 @@ identify a missing input; it cannot invent the numbers or conceal assumptions.
 
 ## Security, privacy and operation
 
-- Validate tenancy at metadata lookup and object access; signed URLs are short-lived
-  and never logged.
+- Validate tenancy at metadata lookup and object access; Create uses authenticated
+  one-time application downloads with a separately returned secret hashed at rest,
+  never a query secret or direct presigned object URL.
 - Treat all uploaded/generated content as confidential customer information.
 - Prevent template instructions or embedded text from overriding system policy.
 - Include source and derived binaries plus metadata in export v22; organisation
@@ -140,7 +149,9 @@ work, uses bounded leases and records safe failure codes; retries are capped at 
 `API_FEATURE_CREATE_ENABLED` and the tenant `create` entitlement are both required.
 
 See [operator runbook](create-operator-runbook.md), [security review](create-security-privacy-review.md)
-and [retention/export/deletion](create-retention-export-deletion.md).
+and [retention/export/deletion](create-retention-export-deletion.md). The complete
+profile, hostile limits, output contract and evidence are in the
+[WO-039B trust architecture](create-pptx-trust-architecture.md).
 
 ## Explicitly out of scope
 

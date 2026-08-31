@@ -628,6 +628,15 @@ Scope:
 Exit: an administrator-supplied representative deck cannot be approved in an
 incompatible state, and every approved claim is present in the visually inspected file.
 
+**Remediation update — 31 August 2026:** WO-039B resolved all eight tracked finding
+groups through versioned compatibility, bounded package validation, generated-output
+round-trip proof and authenticated one-time download grants. Representative synthetic
+source/generated files were structurally reparsed and rendered for inspection. The
+browser remains an honest structural review, not a pixel-equivalence claim. See the
+[completed remediation table](../07-sprints/wo-039b-remediation-checklist.md),
+[verification record](../07-sprints/wo-039b-create-trust-security.md) and
+[trust architecture](../03-engineering/create-pptx-trust-architecture.md).
+
 ### WO-039C — Real-data design-partner operations and native onboarding
 
 **Purpose:** satisfy the minimum real-data launch boundary; no broad integration.

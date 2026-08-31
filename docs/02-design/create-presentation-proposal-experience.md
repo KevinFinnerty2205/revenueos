@@ -1,6 +1,6 @@
 # Create presentation and proposal experience
 
-- **Status:** WO-032 presentation experience implemented; proposal/ROI paths remain future
+- **Status:** WO-032/033 presentation and Business Case experience, with WO-039B trust hardening; proposal path remains future
 - **Question:** What should RevenueOS create for me?
 
 ## Create landing
@@ -28,11 +28,14 @@ classes, required state and exact-text treatment. The seller can reorder or excl
 optional slides and add another approved slide. Generation cannot proceed with an
 unapproved template, a removed required slide or more than 30 included slides.
 
-The review is structured rather than a pixel-perfect in-app Office preview. It shows
+The review is structured rather than a pixel-perfect in-app Office preview. Visible
+copy states that the downloaded PowerPoint is the final file and that fonts, spacing
+and layout may vary by device and PowerPoint version. The review shows
 slide order, bounded editable text, source class, support/freshness, exact-text state,
 and seller/inferred claim review. Users keep or remove claims, then explicitly approve
 the complete version. Editing creates a new rendering cycle and invalidates approval.
-Only the approved current version can be downloaded.
+Only the approved current structurally validated version can be downloaded through a
+fresh one-time authorised request.
 
 ## Proposal flow — future
 
@@ -54,7 +57,9 @@ Administrators upload an authorised `.pptx`, wait for durable structural process
 then review every slide. They choose category, reuse state, customer-safety status,
 modification policy, required state and exact-text state. Hidden or pricing-placeholder
 slides cannot be approved; internal-only content fails approval. Published versions
-are immutable. Template administration is desktop-only.
+are immutable. The page reports Template ready/needs attention/unsupported and
+disables editable policies when standard writable placeholders are absent. Template
+administration is desktop-only. See the [trust UX contract](create-trust-experience.md).
 
 ## First-time, power-user, mobile and unavailable states
 

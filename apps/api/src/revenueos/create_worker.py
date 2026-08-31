@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import cast
@@ -14,8 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.config import Settings
 from revenueos.create_pptx import (
+    CREATE_PPTX_PROFILE_VERSION,
     PPTX_MIME_TYPE,
     BoundedPptxProcessor,
+    GeneratedOutputValidationError,
+    OutputSlideExpectation,
     PptxProcessingError,
     RenderSlide,
 )
@@ -242,9 +246,14 @@ class CreateWorkerService:
             version.warning_codes_json = list(parsed.warning_codes)
             version.manifest_json = {
                 "schemaVersion": 1,
+                "validationProfileVersion": CREATE_PPTX_PROFILE_VERSION,
                 "slideCount": len(parsed.slides),
                 "warningCodes": list(parsed.warning_codes),
             }
+            version.compatibility_state = "needs_attention"
+            version.compatibility_details_json = ["slide_review_required", *parsed.warning_codes]
+            version.validation_profile_version = CREATE_PPTX_PROFILE_VERSION
+            version.validated_at = datetime.now(UTC)
             version.processing_state = "partial" if parsed.warning_codes else "ready"
             version.worker_id = None
             version.lease_expires_at = None
@@ -283,6 +292,9 @@ class CreateWorkerService:
                     CreateTemplateVersion.organisation_id == claim.organisation_id,
                     CreateTemplateVersion.id == version.template_version_id,
                     CreateTemplateVersion.approval_state == "approved",
+                    CreateTemplateVersion.compatibility_state == "compatible",
+                    CreateTemplateVersion.validation_profile_version == CREATE_PPTX_PROFILE_VERSION,
+                    CreateTemplateVersion.validated_at.is_not(None),
                 )
             )
             organisation = await session.scalar(select(Organisation).where(Organisation.id == claim.organisation_id))
@@ -339,6 +351,7 @@ class CreateWorkerService:
                     slide_map,
                     content_map,
                 )
+            _validate_claim_manifest(generated, claims)
             render_slides = _render_manifest(
                 generated,
                 slide_map,
@@ -355,6 +368,14 @@ class CreateWorkerService:
             )
             if len(output) > self._settings.private_beta_max_pptx_bytes:
                 raise PptxProcessingError
+            try:
+                validation = self._processor.validate_output(
+                    output,
+                    _output_expectations(generated, slide_map, render_slides),
+                    forbidden_values=_forbidden_output_values(claim, presentation, version, claims),
+                )
+            except PptxProcessingError as exc:
+                raise GeneratedOutputValidationError from exc
             storage_key = f"{claim.organisation_id}/create/presentations/{presentation.id}/{version.id}.pptx"
             await self._storage.write(storage_key, output, PPTX_MIME_TYPE)
             version.generated_content_json = cast(list[object], generated)
@@ -362,11 +383,14 @@ class CreateWorkerService:
             warnings = {"review_required"}
             if any(item.get("reviewState") == "pending" for item in claims):
                 warnings.add("reported_or_inferred_claims_present")
+            warnings.update(validation.warning_codes)
             version.warning_codes_json = cast(list[object], sorted(warnings))
             version.pptx_storage_key = storage_key
             version.storage_status = "available"
             version.byte_size = len(output)
             version.checksum_sha256 = hashlib.sha256(output).hexdigest()
+            version.validation_profile_version = CREATE_PPTX_PROFILE_VERSION
+            version.validated_at = datetime.now(UTC)
             version.state = "needs_review"
             version.review_state = "pending"
             version.generated_at = datetime.now(UTC)
@@ -375,7 +399,21 @@ class CreateWorkerService:
             version.safe_failure_code = None
             presentation.state = "needs_review"
             presentation.review_state = "pending"
-            await session.commit()
+            try:
+                await session.commit()
+            except SQLAlchemyError:
+                try:
+                    await self._storage.delete(storage_key)
+                except VisualStorageError:
+                    logger.warning(
+                        "create_orphan_cleanup_failed",
+                        extra={
+                            "organisation_id": str(claim.organisation_id),
+                            "presentation_version_id": str(version.id),
+                            "error_code": "create_storage_failure",
+                        },
+                    )
+                raise
         logger.info(
             "create_presentation_rendered",
             extra={
@@ -406,6 +444,9 @@ class CreateWorkerService:
                 item.lease_expires_at = None
                 if item.processing_attempts >= self._settings.private_beta_create_processing_retries:
                     item.processing_state = "failed"
+                    item.compatibility_state = "unsupported"
+                    item.compatibility_details_json = [code[:100]]
+                    item.validated_at = None
             else:
                 version = await session.scalar(
                     select(CreatePresentationVersion).where(
@@ -421,6 +462,8 @@ class CreateWorkerService:
                 version.lease_expires_at = None
                 if version.processing_attempts >= self._settings.private_beta_create_processing_retries:
                     version.state = "failed"
+                    version.validation_profile_version = None
+                    version.validated_at = None
                     presentation = await session.scalar(
                         select(CreatePresentation).where(
                             CreatePresentation.organisation_id == claim.organisation_id,
@@ -490,7 +533,10 @@ def _compose(
         exact = slide.exact_text_required or slide.modification_policy in {"locked", "reuse_as_is"}
         body: list[str]
         body_sources: list[dict[str, object]]
-        if exact:
+        if slide.category == "title" and not exact:
+            body = []
+            body_sources = []
+        elif exact:
             body = [approved.approved_text]
             body_sources = [
                 {
@@ -557,7 +603,7 @@ def _compose(
                 "planItemId": str(plan_id),
                 "templateSlideId": str(slide.id),
                 "order": int(plan["order"]),
-                "title": presentation.title if slide.category == "title" else slide.title,
+                "title": presentation.title if slide.category == "title" and not exact else slide.title,
                 "bodyBlocks": body,
                 "required": slide.required,
                 "modificationPolicy": slide.modification_policy,
@@ -653,3 +699,79 @@ def _render_manifest(
                     replacements[shape_id] = values[role]
         result.append(RenderSlide(slide.slide_number, replacements))
     return result
+
+
+def _output_expectations(
+    generated: list[dict[str, object]],
+    slides: dict[UUID, CreateTemplateSlide],
+    rendered: list[RenderSlide],
+) -> tuple[OutputSlideExpectation, ...]:
+    expectations: list[OutputSlideExpectation] = []
+    for generated_slide, rendered_slide in zip(generated, rendered, strict=True):
+        slide = slides[UUID(str(generated_slide["templateSlideId"]))]
+        exact_blocks: tuple[str, ...] = ()
+        if slide.exact_text_required or slide.modification_policy in {"locked", "reuse_as_is"}:
+            exact_blocks = tuple(
+                str(item.get("text", "")).strip()
+                for item in slide.text_blocks_json
+                if isinstance(item, dict) and str(item.get("text", "")).strip()
+            )
+        expectations.append(
+            OutputSlideExpectation(
+                title=str(generated_slide["title"]),
+                body_blocks=tuple(str(item) for item in cast(list[object], generated_slide.get("bodyBlocks", []))),
+                exact_text_blocks=exact_blocks,
+                required=slide.required,
+                replacement_texts=tuple(rendered_slide.replacements.values()),
+                replacement_shape_texts=tuple(sorted(rendered_slide.replacements.items())),
+            )
+        )
+    return tuple(expectations)
+
+
+def _validate_claim_manifest(
+    generated: list[dict[str, object]],
+    claims: list[dict[str, object]],
+) -> None:
+    slides = {str(item.get("planItemId")): item for item in generated}
+    body_claims: dict[str, list[str]] = {plan_item_id: [] for plan_item_id in slides}
+    for claim in claims:
+        plan_item_id = str(claim.get("planItemId", ""))
+        slide = slides.get(plan_item_id)
+        if slide is None:
+            raise GeneratedOutputValidationError
+        if claim.get("reviewState") == "removed":
+            continue
+        claim_text = str(claim.get("claim", ""))
+        if not claim_text:
+            raise GeneratedOutputValidationError
+        if claim.get("contentType") == "user_edit_title":
+            if claim_text != str(slide.get("title", "")):
+                raise GeneratedOutputValidationError
+        else:
+            body_claims[plan_item_id].append(claim_text)
+    for plan_item_id, slide in slides.items():
+        body_blocks = [str(item) for item in cast(list[object], slide.get("bodyBlocks", []))]
+        if Counter(body_claims[plan_item_id]) != Counter(body_blocks):
+            raise GeneratedOutputValidationError
+
+
+def _forbidden_output_values(
+    claim: ClaimedCreateWork,
+    presentation: CreatePresentation,
+    version: CreatePresentationVersion,
+    claims: list[dict[str, object]],
+) -> tuple[str, ...]:
+    source_ids = {str(source_id) for item in claims for source_id in cast(list[object], item.get("sourceIds", []))}
+    return tuple(
+        sorted(
+            {
+                str(claim.organisation_id),
+                str(presentation.id),
+                str(version.id),
+                str(version.template_id),
+                str(version.template_version_id),
+                *source_ids,
+            }
+        )
+    )

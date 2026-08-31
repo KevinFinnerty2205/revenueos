@@ -216,6 +216,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "create_approved_content_items",
         "create_presentations",
         "create_presentation_versions",
+        "create_download_grants",
         "create_value_models",
         "create_value_model_versions",
         "create_business_cases",
@@ -406,6 +407,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "create_content_item_id": uuid.uuid4(),
                 "create_presentation_id": uuid.uuid4(),
                 "create_presentation_version_id": uuid.uuid4(),
+                "create_download_grant_id": uuid.uuid4(),
                 "create_value_model_id": uuid.uuid4(),
                 "create_value_model_version_id": uuid.uuid4(),
                 "create_business_case_id": uuid.uuid4(),
@@ -1206,6 +1208,26 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             **identity_parameters,
                             "source_fingerprint": suffix.lower() * 64,
                             "version_idempotency_key": f"rls-create-version-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO create_download_grants
+                                (id, organisation_id,
+                                 presentation_version_id, user_id,
+                                 token_hash, approval_fingerprint, expires_at)
+                            VALUES
+                                (:create_download_grant_id, :organisation_id,
+                                 :create_presentation_version_id, :user_id,
+                                 :token_hash, :approval_fingerprint,
+                                 now() + interval '5 minutes')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "token_hash": suffix.lower() * 64,
+                            "approval_fingerprint": suffix.lower() * 64,
                         },
                     )
                     await connection.execute(
@@ -3006,6 +3028,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'create_approved_content_items',
                                     'create_presentations',
                                     'create_presentation_versions',
+                                    'create_download_grants',
                                     'create_value_models',
                                     'create_value_model_versions',
                                     'create_business_cases',
@@ -3611,6 +3634,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "create_business_cases",
                     "create_value_model_versions",
                     "create_value_models",
+                    "create_download_grants",
                     "create_presentation_versions",
                     "create_presentations",
                     "create_approved_content_items",

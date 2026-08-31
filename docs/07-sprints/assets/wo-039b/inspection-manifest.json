@@ -1,0 +1,237 @@
+{
+  "fixtures": [
+    {
+      "classification": "PASS",
+      "fixture": "simple-corporate",
+      "generated": {
+        "byteSize": 27316,
+        "editableTextShapeCount": 4,
+        "hasComments": false,
+        "hasExternalRelationship": false,
+        "hasInternalEvidenceMarker": false,
+        "hasNotes": false,
+        "sha256": "05b67a6697bb3ac38e0c13b5fefd09f14ab4f6e0cd82cc976a45a0c363e2f9f8",
+        "slideCount": 2,
+        "slideText": [
+          [
+            "Harbour Health \u2014 Executive review",
+            "Jordan Lee, COO"
+          ],
+          [
+            "Customer priorities",
+            "Reduce manual access reviews\nKeep implementation customer-owned"
+          ]
+        ]
+      },
+      "outputValidation": {
+        "slide_count": 2,
+        "warning_codes": []
+      },
+      "profileVersion": 1,
+      "source": {
+        "byteSize": 29129,
+        "editableTextShapeCount": 4,
+        "hasComments": false,
+        "hasExternalRelationship": false,
+        "hasInternalEvidenceMarker": false,
+        "hasNotes": false,
+        "sha256": "58bf8bd77a202ed8186b3b163d0c8d6546aec900fb29acaee0edab0452933ac7",
+        "slideCount": 2,
+        "slideText": [
+          [
+            "Northstar corporate story",
+            "Approved source audience"
+          ],
+          [
+            "Customer priorities",
+            "Approved source statement"
+          ]
+        ]
+      },
+      "sourceWarningCodes": [],
+      "structuralGuarantee": "Generated PPTX reparsed and matched expected replacement/exact text.",
+      "visualLimitation": "Fonts, wrapping and layout remain renderer- and installed-font-dependent."
+    },
+    {
+      "classification": "PASS",
+      "fixture": "brand-heavy",
+      "generated": {
+        "byteSize": 28126,
+        "editableTextShapeCount": 5,
+        "hasComments": false,
+        "hasExternalRelationship": false,
+        "hasInternalEvidenceMarker": false,
+        "hasNotes": false,
+        "sha256": "5926461d8179300cbd77e76906316e565851281fa2520c872f3e15730d1f6be5",
+        "slideCount": 2,
+        "slideText": [
+          [
+            "Atlas Operations \u2014 Solution overview",
+            "Executive team"
+          ],
+          [
+            "Approved capability",
+            "Centralised access administration\nPolicy-based customer controls"
+          ]
+        ]
+      },
+      "outputValidation": {
+        "slide_count": 2,
+        "warning_codes": []
+      },
+      "profileVersion": 1,
+      "source": {
+        "byteSize": 29938,
+        "editableTextShapeCount": 5,
+        "hasComments": false,
+        "hasExternalRelationship": false,
+        "hasInternalEvidenceMarker": false,
+        "hasNotes": false,
+        "sha256": "a3eb2586a327f329f082ca7debd2463ad3b6e0d355b92e8fb16de87098932d57",
+        "slideCount": 2,
+        "slideText": [
+          [
+            "Summit brand",
+            "Approved source audience"
+          ],
+          [
+            "Approved capability",
+            "Approved source content"
+          ]
+        ]
+      },
+      "sourceWarningCodes": [],
+      "structuralGuarantee": "Generated PPTX reparsed and matched expected replacement/exact text.",
+      "visualLimitation": "Fonts, wrapping and layout remain renderer- and installed-font-dependent."
+    },
+    {
+      "classification": "PASS",
+      "fixture": "multi-layout",
+      "generated": {
+        "byteSize": 28153,
+        "editableTextShapeCount": 6,
+        "hasComments": false,
+        "hasExternalRelationship": false,
+        "hasInternalEvidenceMarker": false,
+        "hasNotes": false,
+        "sha256": "b16ac52d354786c2ccc5439055189bc6288d969d3e3f8a6ae60c1c7f221628a8",
+        "slideCount": 3,
+        "slideText": [
+          [
+            "BluePeak \u2014 Technical workshop",
+            "Platform leadership"
+          ],
+          [
+            "Delivery approach",
+            "Align\nValidate\nExpand"
+          ],
+          [
+            "Next steps",
+            "Confirm the customer-owned implementation workshop"
+          ]
+        ]
+      },
+      "outputValidation": {
+        "slide_count": 3,
+        "warning_codes": []
+      },
+      "profileVersion": 1,
+      "source": {
+        "byteSize": 29968,
+        "editableTextShapeCount": 6,
+        "hasComments": false,
+        "hasExternalRelationship": false,
+        "hasInternalEvidenceMarker": false,
+        "hasNotes": false,
+        "sha256": "3be45409692a180184c96c86b5a589a5b6276f39d4a0365bee02be381fec6fe6",
+        "slideCount": 3,
+        "slideText": [
+          [
+            "Multi-layout source",
+            "Approved audience"
+          ],
+          [
+            "Delivery approach",
+            "Approved section introduction"
+          ],
+          [
+            "Next steps",
+            "Approved next step"
+          ]
+        ]
+      },
+      "sourceWarningCodes": [],
+      "structuralGuarantee": "Generated PPTX reparsed and matched expected replacement/exact text.",
+      "visualLimitation": "Fonts, wrapping and layout remain renderer- and installed-font-dependent."
+    },
+    {
+      "classification": "PASS",
+      "fixture": "exact-legal",
+      "generated": {
+        "byteSize": 28997,
+        "editableTextShapeCount": 4,
+        "hasComments": false,
+        "hasExternalRelationship": false,
+        "hasInternalEvidenceMarker": false,
+        "hasNotes": false,
+        "sha256": "14527615056b54fc8e666395cc4778983f4f742be965cd52472db5a23f6e44e2",
+        "slideCount": 2,
+        "slideText": [
+          [
+            "Cedar Labs \u2014 Proposal",
+            "Commercial leadership"
+          ],
+          [
+            "Customer-safe legal notice",
+            "Illustrative synthetic content only. Final scope is subject to an executed agreement."
+          ]
+        ]
+      },
+      "outputValidation": {
+        "slide_count": 2,
+        "warning_codes": []
+      },
+      "profileVersion": 1,
+      "source": {
+        "byteSize": 33832,
+        "editableTextShapeCount": 4,
+        "hasComments": false,
+        "hasExternalRelationship": false,
+        "hasInternalEvidenceMarker": true,
+        "hasNotes": true,
+        "sha256": "e6152a8cef706aff1d4b39e91ce27264fcc44945cb334b1a7a1caa71e4ea54e8",
+        "slideCount": 2,
+        "slideText": [
+          [
+            "Legal source",
+            "Approved audience"
+          ],
+          [
+            "Customer-safe legal notice",
+            "Illustrative synthetic content only. Final scope is subject to an executed agreement."
+          ]
+        ]
+      },
+      "sourceWarningCodes": [
+        "speaker_notes_excluded"
+      ],
+      "structuralGuarantee": "Generated PPTX reparsed and matched expected replacement/exact text.",
+      "visualLimitation": "Fonts, wrapping and layout remain renderer- and installed-font-dependent."
+    },
+    {
+      "classification": "UNSUPPORTED",
+      "fixture": "unsupported-external-content",
+      "profileVersion": 1,
+      "safeFailureCode": "unsafe_pptx",
+      "source": {
+        "byteSize": 29177,
+        "sha256": "60efe2bedce9e4f1b9f56a0a039a16534ce4bc3997a803258f7f296f63c8d4f4"
+      },
+      "structuralGuarantee": "External relationships are rejected before python-pptx processing.",
+      "visualLimitation": "Rejected fixtures are deliberately not rendered."
+    }
+  ],
+  "profileVersion": 1,
+  "schemaVersion": 1,
+  "syntheticDataOnly": true
+}

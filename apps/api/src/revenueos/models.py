@@ -2767,6 +2767,11 @@ class CreateTemplateVersion(Base):
         CheckConstraint("authority_attestation_version = 1", name="ck_create_template_versions_attestation"),
         CheckConstraint("processing_attempts BETWEEN 0 AND 3", name="ck_create_template_versions_attempts"),
         CheckConstraint(
+            "compatibility_state IN ('compatible', 'needs_attention', 'unsupported')",
+            name="ck_create_template_versions_compatibility",
+        ),
+        CheckConstraint("validation_profile_version = 1", name="ck_create_template_versions_profile"),
+        CheckConstraint(
             "storage_status IN ('available', 'deletion_pending', 'delete_failed', 'deleted')",
             name="ck_create_template_versions_storage",
         ),
@@ -2842,6 +2847,14 @@ class CreateTemplateVersion(Base):
     manifest_json: Mapped[dict[str, object]] = mapped_column(
         JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
     )
+    compatibility_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="needs_attention", server_default="needs_attention"
+    )
+    compatibility_details_json: Mapped[list[object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=list, server_default="[]"
+    )
+    validation_profile_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     safe_failure_code: Mapped[str | None] = mapped_column(String(100))
     authority_attestation_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     authority_attested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
@@ -3099,6 +3112,10 @@ class CreatePresentationVersion(Base):
         CheckConstraint("review_state IN ('pending', 'approved')", name="ck_create_presentation_versions_review"),
         CheckConstraint("renderer_version = 'deterministic_pptx_v1'", name="ck_create_presentation_versions_renderer"),
         CheckConstraint("generation_schema_version = 1", name="ck_create_presentation_versions_schema"),
+        CheckConstraint(
+            "validation_profile_version IS NULL OR validation_profile_version = 1",
+            name="ck_create_presentation_versions_profile",
+        ),
         CheckConstraint("processing_attempts BETWEEN 0 AND 3", name="ck_create_presentation_versions_attempts"),
         CheckConstraint(
             "storage_status IN ('pending', 'available', 'deletion_pending', 'delete_failed', 'deleted')",
@@ -3188,10 +3205,67 @@ class CreatePresentationVersion(Base):
     storage_status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", server_default="pending")
     byte_size: Mapped[int | None] = mapped_column(BigInteger)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64))
+    validation_profile_version: Mapped[int | None] = mapped_column(Integer)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     safe_failure_code: Mapped[str | None] = mapped_column(String(100))
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CreateDownloadGrant(Base):
+    __tablename__ = "create_download_grants"
+    __table_args__ = (
+        CheckConstraint(
+            "length(token_hash) = 64 AND token_hash = lower(token_hash)",
+            name="ck_create_download_grants_token_hash",
+        ),
+        CheckConstraint(
+            "length(approval_fingerprint) = 64 AND approval_fingerprint = lower(approval_fingerprint)",
+            name="ck_create_download_grants_approval_fingerprint",
+        ),
+        CheckConstraint("consumed_at IS NULL OR consumed_at >= created_at", name="ck_create_download_grants_consumed"),
+        CheckConstraint("revoked_at IS NULL OR revoked_at >= created_at", name="ck_create_download_grants_revoked"),
+        CheckConstraint("expires_at > created_at", name="ck_create_download_grants_expiry"),
+        ForeignKeyConstraint(
+            ["organisation_id", "presentation_version_id"],
+            ["create_presentation_versions.organisation_id", "create_presentation_versions.id"],
+            name="fk_create_download_grants_version",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_create_download_grants_user",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_create_download_grants_org_id"),
+        UniqueConstraint("token_hash", name="uq_create_download_grants_token_hash"),
+        Index(
+            "ix_create_download_grants_org_expiry",
+            "organisation_id",
+            "expires_at",
+        ),
+        Index(
+            "ix_create_download_grants_org_version",
+            "organisation_id",
+            "presentation_version_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    presentation_version_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    approval_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

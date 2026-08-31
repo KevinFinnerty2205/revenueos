@@ -1,6 +1,6 @@
 # RevenueOS Create
 
-- **Status:** WO-032 presentation slice implemented behind the `create` organisation entitlement
+- **Status:** WO-032/033 presentation and Business Case slice, hardened by WO-039B, behind the `create` organisation entitlement
 - **Purpose:** Create customer-specific, reviewable PPTX material from approved company content and customer-safe context
 
 ## Current WO-032 boundary
@@ -16,18 +16,20 @@ objective and approved template version are required; an Opportunity and a bound
 focus instruction are optional. RevenueOS shows a deterministic, reorderable slide
 plan before generation. Required and exact-text slides cannot be removed. Generated
 text and every material claim stay reviewable until the seller explicitly approves
-the exact version, after which a short-lived private download grant is available.
+the exact structurally validated version, after which a short-lived, single-use,
+authenticated private download is available.
 
 The current composer is deterministic and makes no AI-provider call. It preserves
-the approved source slide design, replaces only administrator-authorised text
-placeholders and strips notes, comments, hidden/unselected slides and source
-metadata from the customer file. There is no blank-canvas editor.
+supported approved source-slide structures, replaces only administrator-authorised
+text placeholders and strips notes, comments, hidden/unselected slides and source
+metadata from the customer file. The saved PPTX is reparsed and checked against the
+review/claim contract before approval. There is no blank-canvas editor.
 
 ## Product outcome
 
-Create currently produces reviewable presentations within an organisation's approved
-PPTX structure and claims. Proposals, DOCX/PDF, deterministic ROI models and broader
-business-case outputs remain future work. Create is not a generic prompt-to-slide
+Create currently produces reviewable presentations and deterministic approved
+Business Cases within an organisation's approved PPTX structure and claims.
+Proposals and DOCX/PDF remain future work. Create is not a generic prompt-to-slide
 tool.
 
 ## Guided creation
@@ -46,7 +48,7 @@ flowchart LR
     O["User objective and audience"] --> G
     G --> V["Validate claims, layouts and assumptions"]
     V --> R["Human review"]
-    R --> X["PPTX, DOCX or PDF output"]
+    R --> X["Validated editable PPTX output"]
 ```
 
 ## Presentation generator — current
@@ -64,7 +66,9 @@ public Prospect observations. It excludes transcripts, raw notes, recordings,
 financials, probability/forecast, internal risk/coaching, contactability and
 suppression state. Approved company copy is the safe fallback; missing support is
 shown rather than invented. The output never invents a case study, certification,
-result or customer statement.
+result or customer statement. Template review reports **Template ready**, **Template
+needs attention** or **Template unsupported**. Editable policies require supported
+standard placeholders; there is no security-validation bypass.
 
 ## Proposal generator — future
 
@@ -82,7 +86,7 @@ legal/disclaimer text and approved claims. Each item has status, owner, jurisdic
 effective dates and permitted output types. Expired or unapproved content cannot be
 selected for new output.
 
-## ROI and business case — future WO-033+
+## ROI and Business Case — current WO-033 boundary
 
 ROI is a deterministic value model. The organisation defines formulas and value
 drivers such as labour/time savings, downtime reduction, revenue uplift, software
@@ -110,7 +114,8 @@ Not purchased: existing Core workflows remain available and the Create API retur
 calm `not_in_plan` state. Create excludes generated images, logo scraping, pricing,
 ROI calculations, unrestricted brand scraping, general document management,
 fabricated claims, speaker-note generation, external sending and execution of Office
-or embedded content. See [Create experience](../02-design/create-presentation-proposal-experience.md),
+or embedded content. See the [PowerPoint trust and compatibility guide](create-powerpoint-trust-guide.md),
+[Create experience](../02-design/create-presentation-proposal-experience.md),
 [template architecture](../03-engineering/presentation-proposal-template-architecture.md)
 and [security review](../03-engineering/create-security-privacy-review.md).
 

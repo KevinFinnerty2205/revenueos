@@ -3012,12 +3012,7 @@ export type ProspectAvailabilityState =
 export type ProspectTrustState =
   "verified" | "provider_supplied" | "inferred" | "unknown";
 export type ProspectResearchStatus =
-  | "not_started"
-  | "pending"
-  | "researching"
-  | "ready"
-  | "partial"
-  | "failed";
+  "not_started" | "pending" | "researching" | "ready" | "partial" | "failed";
 export type ProspectRunStatus =
   "pending" | "fetching" | "synthesizing" | "completed" | "partial" | "failed";
 
@@ -4202,6 +4197,10 @@ export interface CreateTemplateVersion {
   heightEmu: number | null;
   warningCodes: string[];
   safeFailureCode: string | null;
+  compatibilityState: "compatible" | "needs_attention" | "unsupported";
+  compatibilityDetails: string[];
+  validationProfileVersion: 1;
+  validatedAt: string | null;
   authorityAttestationVersion: 1;
   authorityAttestedAt: string;
   processedAt: string | null;
@@ -4286,6 +4285,8 @@ export interface CreatePresentationVersion {
   claims: CreatePresentationClaim[];
   warningCodes: string[];
   safeFailureCode: string | null;
+  validationProfileVersion: 1 | null;
+  validatedAt: string | null;
   generatedAt: string | null;
   approvedAt: string | null;
   downloadAvailable: boolean;
@@ -4332,6 +4333,7 @@ export interface CreatePresentationList {
 
 export interface CreateDownloadGrant {
   downloadUrl: string;
+  grantToken: string;
   expiresAt: string;
   fileName: string;
 }
