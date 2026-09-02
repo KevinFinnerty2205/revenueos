@@ -30,6 +30,22 @@ WO-040: **not authorised**
 
 Checkpoint 3 remediation across WO-039A, WO-039B and WO-039C is **complete at repository level**. It does not transform absent legal or target-environment evidence into approval. Any named partner is **NO-GO** until its evidence pack is signed and production preflight/restore drill pass.
 
+## First-partner launch-gate update
+
+The 2 September 2026
+[first-design-partner launch package](first-design-partner/first-design-partner-launch-gate.md)
+is the controlling reusable operational record. Its current highest-level state is
+**WAITING FOR TARGET ENVIRONMENT PROOF**. A named partner has not been selected;
+target Clerk/session, RLS, runtime-role, backup/restore/Create, monitoring and
+offboarding drills have not run; and legal/privacy/AI/feature-profile approvals have
+not been provided. These are expected launch-time dependencies, not evidence that
+WO-039C repository remediation is incomplete.
+
+It is appropriate to seek/select a design partner for discovery and agreement now,
+but no partner data may be requested, received, previewed or entered until the exact
+target/partner profile passes the package and is signed. WO-040, Gmail and Apollo
+remain unauthorised.
+
 ## Residual restrictions and rollback
 
 Tenants are manually provisioned and support is supervised. Live Prospect and mailbox delivery are unavailable. HubSpot and external AI are separately disabled unless explicitly approved. No enterprise SSO/SCIM, legal hold, contractual SLA or high-availability claim exists. Local storage is never the production binary profile.
