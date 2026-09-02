@@ -138,6 +138,26 @@ This is the canonical product and engineering documentation index. Documents dis
 132. [ADR 0065: Runtime RLS and encrypted backup](08-decisions/0065-runtime-rls-and-encrypted-backup.md)
 133. [ADR 0066: Bounded Native CRM CSV import](08-decisions/0066-bounded-native-crm-csv-import.md)
 134. [ADR 0067: Human-reviewed CRM merge](08-decisions/0067-human-reviewed-crm-merge.md)
+135. [First supervised real-data design-partner launch gate](06-roadmap/first-design-partner/first-design-partner-launch-gate.md) — controlling named-partner release gate
+
+## First design-partner launch package
+
+- [Launch gate and concise operator runbook](06-roadmap/first-design-partner/first-design-partner-launch-gate.md)
+- [Target-environment preflight checklist](06-roadmap/first-design-partner/target-environment-preflight-checklist.md)
+- [Clerk/session proof procedure](06-roadmap/first-design-partner/Clerk-session-proof-procedure.md)
+- [Target RLS proof procedure](06-roadmap/first-design-partner/target-RLS-proof-procedure.md)
+- [Named-target backup/restore drill](06-roadmap/first-design-partner/named-target-backup-restore-drill.md)
+- [Legal/owner approval checklist](06-roadmap/first-design-partner/legal-owner-approval-checklist.md)
+- [Real-data feature profile](06-roadmap/first-design-partner/real-data-feature-profile.md)
+- [AI real-data processing gate](06-roadmap/first-design-partner/AI-real-data-processing-gate.md)
+- [Native CRM first-partner onboarding](06-roadmap/first-design-partner/Native-CRM-first-partner-onboarding.md)
+- [Partner data boundary](06-roadmap/first-design-partner/partner-data-boundary.md)
+- [Partner-facing getting started](06-roadmap/first-design-partner/partner-facing-getting-started.md)
+- [Support/monitoring launch checklist](06-roadmap/first-design-partner/support-monitoring-launch-checklist.md)
+- [Offboarding proof checklist](06-roadmap/first-design-partner/offboarding-proof-checklist.md)
+- [First-partner feedback plan](06-roadmap/first-design-partner/first-partner-feedback-plan.md)
+- [Launch pause criteria](06-roadmap/first-design-partner/launch-pause-criteria.md)
+- [Post-partner roadmap decision](06-roadmap/first-design-partner/post-partner-roadmap-decision.md)
 
 ## 00 — Company
 

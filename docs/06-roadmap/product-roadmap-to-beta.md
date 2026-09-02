@@ -576,6 +576,21 @@ Not every listed integration is a prerequisite for the first pilot or private be
 
 ## Next sequencing decision
 
+The immediate post-WO-039C activity is the
+[first supervised real-data design-partner launch gate](first-design-partner/first-design-partner-launch-gate.md),
+not WO-040 or another feature work order. The reusable package is complete when its
+repository evidence and exact target/owner/partner procedures are documented; real
+data remains blocked until those procedures pass for one named partner. Partner
+selection/discovery may begin now without receiving customer data.
+
+After meaningful supervised use, select exactly one evidence-led path from the
+[post-partner decision record](first-design-partner/post-partner-roadmap-decision.md):
+(A) narrow Gmail if Core is valuable and reviewed mailbox delivery is the dominant
+need; (B) Apollo qualification if Core is valuable and Prospect is the stronger
+missing need; (C) fix usability/trust before providers; or (D) reconsider the
+roadmap if the product is not delivering enough value. Gmail is not automatically
+next. Every implementation still requires a separately approved work order.
+
 WO-039 Manager Intelligence is the current implemented baseline. WO-026–039 are
 implemented within their separately approved boundaries.
 WO-009 supplies the smallest verified

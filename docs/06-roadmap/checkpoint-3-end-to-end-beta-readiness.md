@@ -681,12 +681,23 @@ cohort evidence.
 
 ## Beta entry criteria
 
+**Launch-gate update — 2 September 2026:** WO-039A, WO-039B and WO-039C are
+complete at repository level through single migration head
+`0050_real_data_operations`. The reusable
+[first supervised real-data design-partner launch package](first-design-partner/first-design-partner-launch-gate.md)
+now owns the executable named-partner gate. The current launch state is
+**WAITING FOR TARGET ENVIRONMENT PROOF**: no target deployment, named-partner
+Clerk/session evidence, target RLS drill, Create-inclusive target restore,
+monitoring/offboarding proof or owner/legal/AI/partner approval has been supplied.
+Repository completion does not satisfy those items.
+
 ### Real-data supervised design partner
 
 All must be true:
 
 - target-environment verified auth/membership and mock-production prohibition;
-- forced-RLS/runtime-role cross-tenant suite on migration head `0048` or later;
+- forced-RLS/runtime-role cross-tenant suite on migration head
+  `0050_real_data_operations` in the exact target PostgreSQL environment;
 - no open Critical/High tenant, provenance, export-equivalence or signed-secret log risk;
 - production `cryptography` and `pypdf` advisories resolved or formally mitigated with
   tested non-exposure and owner/date;
