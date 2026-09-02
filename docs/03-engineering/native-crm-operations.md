@@ -2,7 +2,7 @@
 
 ## Enable a design-partner organisation
 
-1. Confirm deployment head is `0044_native_pipeline`, `API_FEATURE_NATIVE_CRM_ENABLED=true` and `API_FEATURE_NATIVE_PIPELINE_ENABLED=true`.
+1. Confirm deployment head is `0050_real_data_operations`, `API_FEATURE_NATIVE_CRM_ENABLED=true` and `API_FEATURE_NATIVE_PIPELINE_ENABLED=true`.
 2. Through the authenticated admin setting, enable the organisation `crm` entitlement.
 3. In Settings → CRM, explicitly choose RevenueOS or connected HubSpot.
 4. Create one synthetic Account, Contact and Opportunity; confirm owner, record overview, history, archive/restore, strong duplicate handling and a real default Pipeline assignment/event.
@@ -24,3 +24,18 @@
 First disable the global feature or the organisation entitlement; this is non-destructive. Restore an accidentally archived record through its record page/API. Database restore uses the standard private-beta backup process. A schema downgrade deletes CRM metadata and must only occur after export/backup and explicit approval; see the migration playbook.
 
 Monitor safe counts of CRM availability states, response codes, conflict/stale-write rates and endpoint latency. Never add record names, email/domain values, custom-field values or history diffs to metrics/logs.
+
+## Supervised import and merge
+
+Use Settings → CRM → Data import in the order Accounts, Contacts, open
+Opportunities. Start with the approved subset, explicitly map or ignore every header,
+map owners/stages without fuzzy matching, preview, review duplicate/invalid row numbers
+and confirm only `new` rows. Retry the same batch rather than creating another when the
+result is uncertain. A stale duplicate snapshot requires a fresh preview. Do not retain
+the source CSV or create a failed-row data file.
+
+Merge one Account/Contact pair from the record's **Merge duplicate** panel. Review the
+survivor, relationship counts and every field conflict, then use the explicit
+irreversible confirmation. External mapping/provenance blockers require containment,
+not database surgery. Verify the source tombstone, survivor relationships, suppression
+and export history after completion.

@@ -460,7 +460,12 @@ export interface OpportunityStageEvent {
   changedByUserId: string | null;
   changedByName: string | null;
   changedAt: string;
-  source: "system_initial" | "migration_baseline" | "manual" | "external_crm";
+  source:
+    | "system_initial"
+    | "migration_baseline"
+    | "import_baseline"
+    | "manual"
+    | "external_crm";
   isBaseline: boolean;
   previousStageEnteredAt: string | null;
   outcomeReason: string | null;
@@ -587,6 +592,61 @@ export interface CRMRecord {
   customFields: CRMCustomFieldValue[];
   history: CRMRecordChange[];
   activity: CRMActivityItem[];
+  mergedIntoEntityId: string | null;
+  mergeId: string | null;
+}
+
+export type CRMImportDisposition =
+  | "new"
+  | "matches_existing"
+  | "possible_duplicate"
+  | "invalid"
+  | "imported"
+  | "skipped";
+
+export interface CRMImportRow {
+  sourceRow: number;
+  disposition: CRMImportDisposition;
+  issueCode: string | null;
+  canonicalEntityId: string | null;
+}
+
+export interface CRMImportPreview {
+  batchId: string;
+  entityType: CRMEntityType;
+  state: "previewed" | "confirmed" | "expired" | "failed";
+  expiresAt: string;
+  rowCount: number;
+  actionableRowCount: number;
+  importedRowCount: number;
+  rows: CRMImportRow[];
+  permissionToContactInferred: false;
+  rawFileRetained: false;
+}
+
+export interface CRMMergeFieldConflict {
+  fieldKey: string;
+  sourceValue: unknown;
+  survivorValue: unknown;
+  selected: "source" | "survivor";
+}
+
+export interface CRMMergePreview {
+  entityType: "account" | "contact";
+  sourceEntityId: string;
+  survivorEntityId: string;
+  previewFingerprint: string;
+  conflicts: CRMMergeFieldConflict[];
+  blockedReasons: string[];
+}
+
+export interface CRMMergeResult {
+  mergeId: string;
+  entityType: "account" | "contact";
+  sourceEntityId: string;
+  survivorEntityId: string;
+  mergedAt: string;
+  alreadyApplied: boolean;
 }
 
 export interface OpportunityListItem extends Opportunity {

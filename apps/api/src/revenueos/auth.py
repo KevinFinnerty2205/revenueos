@@ -28,6 +28,14 @@ AuthMode = Literal["mock", "clerk"]
 IDENTITY_NAMESPACE = UUID("fd2573b7-09a4-4c4a-a2f0-767b4c0ca901")
 
 
+def identity_organisation_id(external_organisation_id: str) -> UUID:
+    return uuid.uuid5(IDENTITY_NAMESPACE, f"organisation:{external_organisation_id}")
+
+
+def identity_user_id(external_user_id: str) -> UUID:
+    return uuid.uuid5(IDENTITY_NAMESPACE, f"user:{external_user_id}")
+
+
 class AuthenticationError(Exception):
     """Raised when a request has no valid authentication."""
 
@@ -215,7 +223,11 @@ async def get_current_user(
         )
     async with session_factory() as session:
         try:
-            user = await _resolve_identity(session, identity)
+            user = await _resolve_identity(
+                session,
+                identity,
+                allow_provisioning=request.app.state.settings.identity_jit_provisioning_enabled,
+            )
         except AuthenticationError as exc:
             await session.rollback()
             raise PublicAPIError(
@@ -241,8 +253,13 @@ async def get_current_user(
     return user
 
 
-async def _resolve_identity(session: AsyncSession, identity: VerifiedIdentity) -> AuthenticatedUser:
-    organisation_id = uuid.uuid5(IDENTITY_NAMESPACE, f"organisation:{identity.external_organisation_id}")
+async def _resolve_identity(
+    session: AsyncSession,
+    identity: VerifiedIdentity,
+    *,
+    allow_provisioning: bool = True,
+) -> AuthenticatedUser:
+    organisation_id = identity_organisation_id(identity.external_organisation_id)
     await set_tenant_database_context(session, organisation_id)
     organisation = await session.scalar(
         select(Organisation).where(
@@ -251,6 +268,8 @@ async def _resolve_identity(session: AsyncSession, identity: VerifiedIdentity) -
         )
     )
     user = await session.scalar(select(User).where(User.external_auth_id == identity.external_auth_id))
+    if not allow_provisioning and (organisation is None or user is None):
+        raise AuthenticationError("The authenticated organisation or user has not been provisioned.")
     if organisation is None:
         organisation = Organisation(
             id=organisation_id,
@@ -261,7 +280,7 @@ async def _resolve_identity(session: AsyncSession, identity: VerifiedIdentity) -
         session.add(organisation)
     if user is None:
         user = User(
-            id=uuid.uuid5(IDENTITY_NAMESPACE, f"user:{identity.external_auth_id}"),
+            id=identity_user_id(identity.external_auth_id),
             external_auth_id=identity.external_auth_id,
             email=identity.email,
             display_name=identity.display_name,
@@ -285,6 +304,8 @@ async def _resolve_identity(session: AsyncSession, identity: VerifiedIdentity) -
         raise AuthenticationError("The authenticated user is inactive or unavailable.")
     membership = await session.get(OrganisationMembership, (organisation.id, user.id))
     if membership is None:
+        if not allow_provisioning:
+            raise AuthenticationError("The authenticated membership has not been provisioned.")
         membership = OrganisationMembership(
             organisation_id=organisation.id,
             user_id=user.id,
@@ -294,13 +315,14 @@ async def _resolve_identity(session: AsyncSession, identity: VerifiedIdentity) -
         session.add(membership)
     elif membership.status != "active":
         raise AuthenticationError("The authenticated membership is disabled.")
-    elif membership.role != identity.role and identity.auth_mode == "clerk":
+    elif allow_provisioning and membership.role != identity.role and identity.auth_mode == "clerk":
         membership.role = identity.role
 
     if identity.auth_mode == "clerk":
         user.email = identity.email
         user.display_name = identity.display_name
-        organisation.name = identity.organisation_name
+        if allow_provisioning:
+            organisation.name = identity.organisation_name
     await session.commit()
     return AuthenticatedUser(
         user_id=user.id,

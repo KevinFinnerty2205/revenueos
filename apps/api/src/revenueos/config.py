@@ -1,5 +1,9 @@
+import base64
+import binascii
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,11 +32,13 @@ class Settings(BaseSettings):
     environment: Environment = "development"
     auth_mode: AuthMode = "mock"
     mock_auth_enabled: bool = True
+    identity_jit_provisioning_enabled: bool = True
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     cors_origins: str = Field(
         default="http://localhost:3000",
         validation_alias=AliasChoices("API_CORS_ORIGINS", "CORS_ORIGINS"),
     )
+    allowed_hosts: str = "localhost,127.0.0.1,testserver"
     database_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("API_DATABASE_URL", "DATABASE_URL"),
@@ -43,6 +49,11 @@ class Settings(BaseSettings):
     clerk_jwks_timeout_seconds: float = Field(default=5.0, gt=0, le=15)
     clerk_jwt_leeway_seconds: int = Field(default=30, ge=0, le=120)
     private_beta_data_notice_version: int = Field(default=1, ge=1)
+    private_beta_real_data_enabled: bool = False
+    private_beta_external_ai_approved: bool = False
+    private_beta_legal_approval_reference: str | None = Field(default=None, min_length=3, max_length=200)
+    private_beta_support_email: str | None = Field(default=None, min_length=3, max_length=320)
+    private_beta_backup_encryption_key: SecretStr | None = None
     private_beta_default_retention_days: int = Field(default=90)
     private_beta_max_generations_per_day: int = Field(default=100, ge=1, le=10_000)
     private_beta_max_openai_requests_per_day: int = Field(default=150, ge=1, le=10_000)
@@ -329,6 +340,9 @@ class Settings(BaseSettings):
         "clerk_jwks_url",
         "clerk_issuer",
         "clerk_audience",
+        "private_beta_legal_approval_reference",
+        "private_beta_support_email",
+        "private_beta_backup_encryption_key",
         "openai_api_key",
         "openai_model",
         "visual_s3_endpoint",
@@ -355,10 +369,14 @@ class Settings(BaseSettings):
                 raise ValueError("Production requires Clerk mode with mock authentication disabled.")
             if not self.clerk_configuration_complete:
                 raise ValueError("Production requires complete Clerk verification configuration.")
-            if "*" in self.cors_origin_list:
-                raise ValueError("Production CORS origins must be explicit.")
             if self.database_url is None or not self.database_url.startswith(("postgresql", "postgres")):
                 raise ValueError("Production requires PostgreSQL persistence.")
+            if "*" in self.cors_origin_list:
+                raise ValueError("Production CORS origins must be explicit.")
+            if not self.cors_origin_list or any(
+                not self._is_public_https_origin(value) for value in self.cors_origin_list
+            ):
+                raise ValueError("Production CORS origins must use explicit public HTTPS origins.")
             if self.feature_mock_connectors_enabled:
                 raise ValueError("Mock connectors are prohibited in production.")
             if (
@@ -367,6 +385,52 @@ class Settings(BaseSettings):
                 == "local-development-outreach-suppression-key"
             ):
                 raise ValueError("Production Engage requires a deployment-managed suppression HMAC key.")
+            if self.log_level == "DEBUG":
+                raise ValueError("Production log level must not be DEBUG.")
+            if self.identity_jit_provisioning_enabled:
+                raise ValueError("Production identity must use deliberate operator provisioning.")
+            if (
+                not self.allowed_host_list
+                or "*" in self.allowed_host_list
+                or any(
+                    host in {"localhost", "127.0.0.1", "::1"} or host.endswith(".localhost")
+                    for host in self.allowed_host_list
+                )
+            ):
+                raise ValueError("Production allowed hosts must be explicit.")
+        if self.private_beta_real_data_enabled:
+            if self.environment != "production":
+                raise ValueError("Real-data private beta mode is permitted only in production.")
+            if self.private_beta_legal_approval_reference is None or self.private_beta_support_email is None:
+                raise ValueError("Real-data private beta mode requires legal approval and support references.")
+            if self.private_beta_backup_encryption_key is None:
+                raise ValueError("Real-data private beta mode requires a backup encryption key.")
+            try:
+                backup_key = base64.b64decode(self.private_beta_backup_encryption_key.get_secret_value(), validate=True)
+            except (binascii.Error, ValueError) as exc:
+                raise ValueError("Backup encryption key must be valid base64.") from exc
+            if len(backup_key) != 32:
+                raise ValueError("Backup encryption key must decode to exactly 32 bytes.")
+            if self.feature_data_export_enabled:
+                export_path = Path(self.private_beta_export_directory).expanduser()
+                if not export_path.is_absolute() or export_path == Path("/tmp") or Path("/tmp") in export_path.parents:
+                    raise ValueError("Real-data exports require an explicit durable private directory outside /tmp.")
+            external_ai_selected = any(
+                provider == "openai"
+                for provider in (
+                    self.ai_provider_name,
+                    self.transcription_provider_name,
+                    self.visual_provider_name,
+                    self.evidence_extraction_provider_name,
+                )
+            )
+            if external_ai_selected and not self.private_beta_external_ai_approved:
+                raise ValueError("External AI processing requires an explicit real-data approval.")
+            if not external_ai_selected and self._mock_customer_content_features_enabled:
+                raise ValueError(
+                    "Real-data mode cannot expose mock intelligence over customer content; disable the listed "
+                    "content-processing features or configure an approved external provider."
+                )
         if self.worker_heartbeat_interval_seconds >= self.worker_lease_duration_seconds:
             raise ValueError("Worker heartbeat interval must be shorter than the lease duration.")
         if self.worker_base_retry_delay_seconds > self.worker_max_retry_delay_seconds:
@@ -411,6 +475,7 @@ class Settings(BaseSettings):
         if self.environment == "production" and (
             self.feature_visual_evidence_enabled
             or self.feature_recording_capture_enabled
+            or self.feature_online_meeting_capture_enabled
             or self.feature_document_evidence_enabled
             or self.feature_create_enabled
         ):
@@ -473,6 +538,48 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     @property
+    def allowed_host_list(self) -> list[str]:
+        return [host.strip().lower() for host in self.allowed_hosts.split(",") if host.strip()]
+
+    @staticmethod
+    def _is_public_https_origin(value: str) -> bool:
+        parsed = urlsplit(value)
+        hostname = (parsed.hostname or "").casefold()
+        return (
+            parsed.scheme == "https"
+            and bool(hostname)
+            and parsed.path in {"", "/"}
+            and not parsed.query
+            and not parsed.fragment
+            and hostname not in {"localhost", "127.0.0.1", "::1"}
+            and not hostname.endswith(".localhost")
+        )
+
+    @property
+    def _mock_customer_content_features_enabled(self) -> bool:
+        return any(
+            (
+                self.feature_revenue_brain_enabled,
+                self.feature_ai_companion_enabled,
+                self.feature_ai_debrief_enabled,
+                self.feature_voice_journal_enabled,
+                self.feature_visual_evidence_enabled,
+                self.feature_recording_capture_enabled,
+                self.feature_transcription_enabled,
+                self.feature_online_meeting_capture_enabled,
+                self.feature_document_evidence_enabled,
+                self.feature_email_evidence_enabled,
+                self.feature_ask_revenueos_enabled,
+                self.feature_live_interaction_intelligence_enabled,
+                self.feature_prospect_enabled,
+                self.feature_engage_enabled,
+                self.feature_engage_campaigns_enabled,
+                self.feature_engage_events_enabled,
+                self.feature_create_enabled,
+            )
+        )
+
+    @property
     def clerk_configuration_complete(self) -> bool:
         return all((self.clerk_jwks_url, self.clerk_issuer, self.clerk_audience))
 
@@ -531,6 +638,7 @@ class Settings(BaseSettings):
             "actionExecution": self.feature_action_execution_enabled,
             "mockConnectors": self.feature_mock_connectors_enabled,
             "hubspotCrm": self.feature_hubspot_crm_enabled,
+            "nativeCrm": self.feature_native_crm_enabled,
             "nativePipeline": self.feature_native_pipeline_enabled,
             "salesAnalytics": self.feature_sales_analytics_enabled,
             "salesTargets": self.feature_sales_targets_enabled and self.feature_sales_analytics_enabled,

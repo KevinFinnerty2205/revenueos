@@ -7,6 +7,7 @@ import type {
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { CRMMergePanel } from "@/components/crm-merge-panel";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 import { onOpportunityChanged } from "@/lib/opportunity-events";
@@ -153,6 +154,11 @@ export function CRMRecordPanel({
       : entityType === "contact"
         ? `/contacts/${entityId}/edit`
         : `/opportunities/${entityId}/edit`;
+  const mergedHref = record.mergedIntoEntityId
+    ? entityType === "account"
+      ? `/companies/${record.mergedIntoEntityId}`
+      : `/contacts/${record.mergedIntoEntityId}`
+    : null;
 
   return (
     <div className="space-y-6">
@@ -179,14 +185,26 @@ export function CRMRecordPanel({
                 Archived {formatDate(record.archivedAt)}
               </p>
             ) : null}
+            {mergedHref ? (
+              <p className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950">
+                This duplicate was merged and is retained as a read-only
+                tombstone. Continue with the{" "}
+                <Link className="font-bold underline" href={mergedHref}>
+                  surviving record
+                </Link>
+                .
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-3">
-            {!record.archivedAt ? (
+            {!record.archivedAt && !record.mergedIntoEntityId ? (
               <Link className="secondary-button" href={editHref}>
                 Edit core fields
               </Link>
             ) : null}
-            {record.crmEnabled && record.canManage ? (
+            {record.crmEnabled &&
+            record.canManage &&
+            !record.mergedIntoEntityId ? (
               <button
                 type="button"
                 className="secondary-button"
@@ -241,6 +259,8 @@ export function CRMRecordPanel({
           ))}
         </dl>
       </section>
+
+      <CRMMergePanel record={record} onMerged={load} />
 
       <details className="form-card group">
         <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2">

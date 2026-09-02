@@ -61,6 +61,9 @@ from revenueos.models import (
     BetaDataRequest,
     CaptureSession,
     Company,
+    CRMImportBatch,
+    CRMImportRow,
+    CRMRecordMerge,
     DataNoticeAcknowledgement,
     DebriefSession,
     DocumentSource,
@@ -79,6 +82,7 @@ from revenueos.models import (
     MethodologyProjection,
     OnlineMeetingMetadata,
     OnlineMeetingTranscriptImport,
+    OperatorProvisioningEvent,
     Opportunity,
     Organisation,
     OrganisationMembership,
@@ -219,7 +223,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0049_create_trust"
+    assert EXPECTED_MIGRATION_HEAD == "0050_real_data_operations"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -1006,6 +1010,10 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
     target_company_id = uuid.uuid4()
     target_connection_id = uuid.uuid4()
     target_integration_audit_id = uuid.uuid4()
+    target_provisioning_event_id = uuid.uuid4()
+    target_import_batch_id = uuid.uuid4()
+    target_import_row_id = uuid.uuid4()
+    target_merge_id = uuid.uuid4()
     request_id = uuid.uuid4()
     export_request_id = uuid.uuid4()
     export_path = tmp_path / f"revenueos-export-{export_request_id}.json"
@@ -1067,6 +1075,60 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
                 )
             )
             session.add(
+                OperatorProvisioningEvent(
+                    id=target_provisioning_event_id,
+                    organisation_id=target_organisation_id,
+                    action="organisation_provisioned",
+                    idempotency_key_hash="a" * 64,
+                    subject_user_id=PRIMARY_USER_ID,
+                    operator_reference="deletion-test",
+                    metadata_json={"safe": True},
+                    created_at=now,
+                )
+            )
+            session.add(
+                CRMImportBatch(
+                    id=target_import_batch_id,
+                    organisation_id=target_organisation_id,
+                    entity_type="account",
+                    requested_by_user_id=PRIMARY_USER_ID,
+                    state="confirmed",
+                    file_fingerprint="b" * 64,
+                    mapping_fingerprint="c" * 64,
+                    file_size_bytes=20,
+                    row_count=1,
+                    actionable_row_count=1,
+                    imported_row_count=1,
+                    expires_at=now,
+                    confirmed_at=now,
+                )
+            )
+            session.add(
+                CRMImportRow(
+                    id=target_import_row_id,
+                    organisation_id=target_organisation_id,
+                    batch_id=target_import_batch_id,
+                    source_row=2,
+                    disposition="imported",
+                    canonical_entity_id=target_company_id,
+                    created_at=now,
+                )
+            )
+            session.add(
+                CRMRecordMerge(
+                    id=target_merge_id,
+                    organisation_id=target_organisation_id,
+                    entity_type="account",
+                    source_entity_id=uuid.uuid4(),
+                    survivor_entity_id=target_company_id,
+                    preview_fingerprint="d" * 64,
+                    idempotency_key_hash="e" * 64,
+                    field_selection_json={},
+                    merged_by_user_id=PRIMARY_USER_ID,
+                    merged_at=now,
+                )
+            )
+            session.add(
                 BetaDataRequest(
                     id=request_id,
                     organisation_id=target_organisation_id,
@@ -1100,6 +1162,10 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
             assert await session.get(Company, target_company_id) is None
             assert await session.get(IntegrationConnection, target_connection_id) is None
             assert await session.get(IntegrationAuditEvent, target_integration_audit_id) is None
+            assert await session.get(OperatorProvisioningEvent, target_provisioning_event_id) is None
+            assert await session.get(CRMImportBatch, target_import_batch_id) is None
+            assert await session.get(CRMImportRow, target_import_row_id) is None
+            assert await session.get(CRMRecordMerge, target_merge_id) is None
             assert await session.get(User, PRIMARY_USER_ID) is not None
             assert await session.get(Organisation, PRIMARY_ORGANISATION_ID) is not None
             assert await session.get(Organisation, SECONDARY_ORGANISATION_ID) is not None
@@ -1406,7 +1472,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 28
+        assert payload["exportVersion"] == 29
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1532,7 +1598,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 28
+        assert download.json()["exportVersion"] == 29
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

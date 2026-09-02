@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
 from revenueos.config import Settings, get_settings
@@ -102,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
     )
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=app_settings.allowed_host_list)
 
     app.add_exception_handler(PublicAPIError, public_api_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
@@ -121,6 +123,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             response = await call_next(request)
             response.headers["X-Request-ID"] = request_id
+            response.headers.setdefault("Cache-Control", "no-store")
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+            )
+            response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            if app_settings.environment == "production":
+                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
             return response
         finally:
             duration_ms = round((time.perf_counter() - started) * 1000, 2)

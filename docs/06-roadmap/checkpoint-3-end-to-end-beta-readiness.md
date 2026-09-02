@@ -655,6 +655,14 @@ Scope:
 Exit: one empty target tenant can be provisioned, safely loaded with representative
 synthetic CRM data, backed up/restored/exported/deleted and offboarded with evidence.
 
+**Remediation update — 1 September 2026:** WO-039C is implemented through migration
+`0050_real_data_operations`. The repository controls and synthetic evidence are
+recorded in the [work-order report](../07-sprints/wo-039c-real-data-operations.md) and
+[completed remediation checklist](../07-sprints/wo-039c-remediation-checklist.md).
+The [post-WO-039C decision](checkpoint-3-post-039c-readiness.md) is **GO WITH
+RESTRICTIONS** for a supervised Native CRM partner after all named target/legal gates;
+unsupervised and commercial beta remain **NO-GO**. WO-040 remains unauthorised.
+
 ## Revised WO-040–045 roadmap
 
 | Work order                          | Decision                                            | Revised role                                                                                                                                                                           |

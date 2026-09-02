@@ -144,7 +144,7 @@ class LocalVisualStorage:
             current = current.parent
 
     async def list_keys(self, prefix: str) -> list[str]:
-        prefix_path = self._path(prefix.rstrip("/") + "/placeholder").parent
+        prefix_path = self.root if not prefix else self._path(prefix.rstrip("/") + "/placeholder").parent
         if not prefix_path.exists():
             return []
 
