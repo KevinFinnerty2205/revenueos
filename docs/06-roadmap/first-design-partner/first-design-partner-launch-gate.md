@@ -1,13 +1,20 @@
 # First supervised real-data design-partner launch gate
 
 - **Gate date:** 2 September 2026 (Australia/Sydney)
-- **Branch:** `docs/pre-beta-first-design-partner-launch-gate`
-- **Reviewed baseline:** `93c386e0ffde58e8c2b1d6a80545f60c4215ff11`
+- **Branch:** `docs/pre-beta-owner-production-decisions`
+- **Reviewed baseline:** `9e48548`
 - **Repository baseline:** WO-039A, WO-039B and WO-039C are on `main`; the single Alembic head is `0050_real_data_operations`
 - **Current launch decision:** **WAITING FOR TARGET ENVIRONMENT PROOF**
 - **Scope:** one named, supervised, Native CRM design partner; no Gmail, Apollo, live Prospect provider, live email or autonomous external execution
 
 This is the controlling launch record. It turns the repository-level **GO WITH RESTRICTIONS** decision into a reusable, partner-specific release gate. It does not approve a deployment, legal position, provider or customer-data use.
+
+The 2 September 2026 owner/target preparation reduces the remaining business input
+to the [authoritative eight-decision register](owner-decision-register.md), recommends
+one [primary target and one alternative](private-beta-target-environment-options.md),
+and provides one [owner approval block](owner-approval-block.md). This preparation
+does not change the current launch decision: no owner response, target selection,
+spend, provider or real-data use has been approved.
 
 ## Named launch identity
 
@@ -55,6 +62,16 @@ Every row is currently **WAITING FOR TARGET**. The operator must complete the [t
 
 Every item in the [legal and owner checklist](legal-owner-approval-checklist.md) is blocking and currently **OWNER APPROVAL REQUIRED**. The repository contains technical guidance, not approved Privacy Terms, Terms of Use, a DPA, a subprocessor schedule or legal certification. The owner must also approve the AI processing profile, hosting/data locations, support route, retention/backup periods and exact feature profile.
 
+Use the [owner decision register](owner-decision-register.md) as the single question
+surface and the [owner approval block](owner-approval-block.md) as the response. The
+detailed [target options](private-beta-target-environment-options.md),
+[cost model](target-environment-cost-model.md),
+[OpenAI decision](first-partner-openai-decision.md),
+[subprocessor register](first-partner-subprocessor-register.md),
+[retention recommendation](first-partner-retention-decisions.md) and
+[contact requirements](first-partner-support-contact-requirements.md) support those
+eight choices; they are not independent approvals.
+
 ### Design-partner approval required
 
 Before upload, the named partner must:
@@ -73,12 +90,14 @@ All are currently **WAITING FOR PARTNER**.
 
 ### Before
 
-1. Name the partner, target, release, CRM mode, feature profile, storage and AI configuration in this record.
-2. Obtain every owner/legal and partner approval; link the evidence without copying secrets or customer content.
-3. Run the target preflight, Clerk/session matrix and target RLS drill with synthetic tenants.
-4. Run the encrypted database/object backup and isolated restore drill, including a generated synthetic Create presentation.
-5. Prove support, monitoring and complete synthetic offboarding. Resolve every `FAIL`; no risk acceptance is implied by supervision.
-6. Hold a go/no-go review. Only the owner, security/operations lead and partner administrator may authorise real-data entry.
+1. Obtain a completed owner approval block. If target setup is `NO`, stop. Do not
+   convert recommendations into owner facts.
+2. Name the partner, target, release, CRM mode, feature profile, storage and AI configuration in this record.
+3. Obtain every owner/legal and partner approval; link the evidence without copying secrets or customer content.
+4. Run the target preflight, Clerk/session matrix and target RLS drill with synthetic tenants.
+5. Run the encrypted database/object backup and isolated restore drill, including a generated synthetic Create presentation.
+6. Prove support, monitoring and complete synthetic offboarding. Resolve every `FAIL`; no risk acceptance is implied by supervision.
+7. Hold a go/no-go review. Only the owner, security/operations lead and partner administrator may authorise real-data entry.
 
 ### Onboard
 
@@ -110,10 +129,25 @@ All are currently **WAITING FOR PARTNER**.
 
 Stop immediately on any technical `FAIL`. If technical proof passes but owner/legal approval is absent, the state is **WAITING FOR OWNER/LEGAL APPROVAL**. If both pass but partner approval is absent, the state remains **WAITING FOR PARTNER** and no data may enter. `API_PRIVATE_BETA_REAL_DATA_ENABLED=true` is never approval by itself.
 
-The present highest-level state is **WAITING FOR TARGET ENVIRONMENT PROOF** because no target deployment or named-target drill evidence exists. It is appropriate to seek and select the first design partner now for discovery, agreement and target-profile definition, but not to accept, copy or preview their real data until this record is fully signed.
+The present highest-level state is **WAITING FOR TARGET ENVIRONMENT PROOF** because
+the owner approval block is blank and no target deployment or named-target drill
+evidence exists. It is appropriate to seek and select the first design partner now
+against the [approved target profile](first-design-partner-profile.md) for discovery,
+agreement and fit only, but not to accept, copy or preview their real data until this
+record is fully signed.
 
 ## Package
 
+- [Owner decision register](owner-decision-register.md)
+- [Private-beta target-environment options](private-beta-target-environment-options.md)
+- [Target-environment cost model](target-environment-cost-model.md)
+- [First-partner OpenAI decision](first-partner-openai-decision.md)
+- [First-partner subprocessor register](first-partner-subprocessor-register.md)
+- [First-partner retention decisions](first-partner-retention-decisions.md)
+- [First-partner support/contact requirements](first-partner-support-contact-requirements.md)
+- [Ideal first design-partner profile](first-design-partner-profile.md)
+- [First design-partner commercial model](first-design-partner-commercial-model.md)
+- [Owner approval block](owner-approval-block.md)
 - [Target-environment preflight](target-environment-preflight-checklist.md)
 - [Clerk/session proof](Clerk-session-proof-procedure.md)
 - [Target RLS proof](target-RLS-proof-procedure.md)

@@ -143,6 +143,16 @@ This is the canonical product and engineering documentation index. Documents dis
 ## First design-partner launch package
 
 - [Launch gate and concise operator runbook](06-roadmap/first-design-partner/first-design-partner-launch-gate.md)
+- [Owner decision register](06-roadmap/first-design-partner/owner-decision-register.md) — authoritative eight-question owner surface
+- [Private-beta target-environment options](06-roadmap/first-design-partner/private-beta-target-environment-options.md) — primary AWS Sydney recommendation and one alternative
+- [Target-environment cost model](06-roadmap/first-design-partner/target-environment-cost-model.md)
+- [First-partner OpenAI decision](06-roadmap/first-design-partner/first-partner-openai-decision.md)
+- [First-partner subprocessor register](06-roadmap/first-design-partner/first-partner-subprocessor-register.md)
+- [First-partner retention decisions](06-roadmap/first-design-partner/first-partner-retention-decisions.md)
+- [First-partner support/contact requirements](06-roadmap/first-design-partner/first-partner-support-contact-requirements.md)
+- [Ideal first design-partner profile](06-roadmap/first-design-partner/first-design-partner-profile.md)
+- [First design-partner commercial model](06-roadmap/first-design-partner/first-design-partner-commercial-model.md)
+- [Owner approval block](06-roadmap/first-design-partner/owner-approval-block.md) — single fill-in response; no approval is prefilled
 - [Target-environment preflight checklist](06-roadmap/first-design-partner/target-environment-preflight-checklist.md)
 - [Clerk/session proof procedure](06-roadmap/first-design-partner/Clerk-session-proof-procedure.md)
 - [Target RLS proof procedure](06-roadmap/first-design-partner/target-RLS-proof-procedure.md)

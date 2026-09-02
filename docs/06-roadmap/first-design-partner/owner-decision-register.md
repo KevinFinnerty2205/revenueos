@@ -1,0 +1,58 @@
+# First design-partner owner decision register
+
+- **Decision date:** 2 September 2026 (Australia/Sydney)
+- **Owner:** Kevin / RevenueOS owner
+- **Status:** **OWNER INPUT REQUIRED — NOTHING APPROVED BY THIS DOCUMENT**
+- **Applies to:** the first 1–5 supervised Native CRM design partners only
+
+This is the authoritative short list of unresolved owner decisions. The detailed
+launch package remains the operational proof; this register is the business decision
+surface. A recommendation is not an approval. Complete the
+[owner approval block](owner-approval-block.md), then link the dated approval evidence
+here without copying secrets or customer content.
+
+## Eight decisions only
+
+| ID | Decision | Why required | Available options | Recommended option | Cost implication | Security/privacy implication | Can Codex implement after approval? | Current status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| OD-01 | Confirm the contracting/publishing identity and approve the legal launch pack | A real party must publish the service and contract with the partner. The repository has no approved legal entity, ABN, RevenueOS business-name status, Privacy Notice, Terms, DPA, beta agreement or subprocessor schedule. | Supply exact legal/publisher name; ABN as 11 digits or `NONE`; RevenueOS status as `REGISTERED BUSINESS NAME`, `PRODUCT BRAND ONLY` or `UNSURE`; registered address/jurisdiction; and owner/counsel approval reference for the launch pack. | Use the actual contracting person/entity and describe RevenueOS truthfully; obtain Australian legal review before real data. | Legal review/registration cost is unknown and must be separately approved. | Incorrect identity or unapproved terms undermine consent, disclosure, contracting and data-subject handling. | **Partly.** Codex can insert approved facts and references; it cannot invent identity, register a name or approve binding legal language. | **OWNER INPUT REQUIRED** |
+| OD-02 | Confirm the public contact route and accountable people | Support, privacy requests and security incidents need monitored routes and human owners before launch. | One shared monitored mailbox with three aliases, or three separately monitored mailboxes; name a primary and backup person and agreed operating hours. | One mailbox may serve all three functions for this tiny beta, with `support@`, `privacy@` and `security@` aliases if already available. Name one primary and one backup human. | Existing mailbox may be $0 incremental; a new domain/mail service is not approved. | Requests must not be lost; access should use MFA, least privilege and no customer content in ordinary tickets. | **Partly.** Codex can configure approved addresses and run synthetic routing proof; it will not create or purchase mail services without separate authority. | **OWNER INPUT REQUIRED** |
+| OD-03 | Select the target architecture, Sydney region, subprocessors and maximum monthly platform spend | The exact target is required for Clerk/session, RLS, backup/restore, monitoring and offboarding proof. | `AWS-SYD-PRIVATE-BETA-V1`, `FLY-SUPABASE-SYD-V1`, or `NOT APPROVED`. | `AWS-SYD-PRIVATE-BETA-V1`: one 4 GB Lightsail app host plus encrypted Lightsail PostgreSQL and private S3 in Sydney, with AWS-native backup/monitoring. Approve an all-in platform cap only after reviewing the [cost model](target-environment-cost-model.md). | Expected AWS infrastructure USD 78–83/month; recommended Clerk Pro adds USD 20/month when billed annually. Taxes, exchange rates and usage can vary. | Main application data can be kept in Sydney, but AWS control-plane/support metadata and Clerk identity processing are not an Australian-residency claim. A single app host has no high-availability promise. | **Yes, after OD-08.** Codex can prepare and prove the approved target using synthetic data within the cap. | **OWNER INPUT REQUIRED** |
+| OD-04 | Approve or decline OpenAI for supervised real-data use, including model, cross-border processing and monthly stop amount | The preferred Sales Brain profile depends on a real provider and sends selected customer content outside RevenueOS. | `APPROVED` for the bounded profile, or `NOT APPROVED`; if approved, accept exact data flow, `gpt-5.6-terra`, standard OpenAI retention unless separately eligible for approved controls, partner disclosure and a monthly stop amount. | Approve only after privacy/legal and partner acceptance. Use `gpt-5.6-terra`, no data-sharing opt-in, `store=false`, a restricted production project key, 50 generations/75 attempts per organisation/day and an initial **AUD 50/month alert-and-stop amount**. | Typical tiny-beta estimate is roughly AUD 5–40/month; the request counters are not a monetary cap. | API data is not used for training by default, but standard abuse-monitoring data may be retained up to 30 days. Australian regional storage requires approval controls and does not provide Australian processing. | **Yes, after OD-08.** Codex can configure and run an owner-authorised synthetic smoke test; it cannot create billing or approve the data transfer. | **OWNER INPUT REQUIRED** |
+| OD-05 | Approve the retention profile | The application setting, backup lifecycle and operational logs must agree before real data. | Application retention `30`, `90`, `180` days or `MANUAL`; backup retention up to 14 days; operational logs owner-selected. | Application `90 days`; encrypted daily backups `14 days`; content-minimised operational logs `14 days`. Keep existing shorter domain rules. | Small storage/log usage is included in the estimates; higher log volume or longer retention is variable. | Short, enforced retention reduces exposure. Immutable backups age out rather than being represented as immediately erased. | **Yes.** Codex can configure lifecycle settings and prove expiry/deletion with synthetic data. | **OWNER INPUT REQUIRED** |
+| OD-06 | Select the first-partner feature profile | The exact flag set controls whether customer content can reach OpenAI and prevents accidental provider, recording, Prospect or Engage activation. | `NATIVE-AI-REVIEW-V1` or `NATIVE-NO-EXTERNAL-AI-V1`. | `NATIVE-AI-REVIEW-V1` only if OD-04 and the AI gate pass; otherwise use the no-external-AI profile temporarily. Never use mock intelligence with real data. | AI profile adds usage-based OpenAI cost. The fallback has no OpenAI usage cost. | Both profiles keep recording, transcription, live intelligence, Prospect, Engage, Gmail, Apollo, HubSpot and external execution off. | **Yes.** Codex can apply and byte-compare the approved safe flag set in the target proof. | **OWNER INPUT REQUIRED** |
+| OD-07 | Approve the partner selection boundary and first-partner commercial treatment | A named partner must fit the product/operational limits and accept early-product risk without creating premature commercial promises. | Select only against the [partner profile](first-design-partner-profile.md); commercial treatment `FREE DESIGN PARTNER`, `DISCOUNTED PILOT` or `PAID PILOT`. | A time-boxed **FREE DESIGN PARTNER** arrangement for 6–8 weeks, with weekly feedback and no SLA, billing or integration promise. | No RevenueOS fee; RevenueOS bears supervised-support and provider costs within owner caps. | Exclude regulated/highly sensitive use cases and organisations needing SSO/SCIM, complex integrations or unsupervised operation. | **Partly.** Codex can prepare approved onboarding records; the owner must select the company, negotiate and sign the agreement. | **OWNER INPUT REQUIRED** |
+| OD-08 | Authorise target-environment setup and synthetic proof | The earlier decisions do not themselves authorise accounts, spend, deployment or provider calls. | `YES` or `NO`, with exact option, region, caps, operator and additional restrictions. | `YES` only after OD-01–OD-07 are complete enough for synthetic target proof and the spending boundary is explicit. Real customer data remains separately gated. | Authorises only the approved setup costs; no over-cap purchase or plan change. | Proof uses synthetic tenants/content. Real data remains blocked until all target, owner/legal and named-partner gates pass. | **Yes.** This is the explicit execution authority for the next work item. | **OWNER INPUT REQUIRED** |
+
+## Repository-approved facts already resolved
+
+Do not ask the owner to redesign these controls:
+
+- production auth is Clerk, invitation-only, with JIT identity provisioning disabled;
+- runtime PostgreSQL uses a non-bypass role with forced RLS; migrations use separate
+  credentials;
+- HTTPS, explicit hosts/origins, private S3-compatible storage, secret management,
+  a durable independently supervised worker and target restore proof are mandatory;
+- ordinary private-beta application retention supports 30, 90 or 180 days or an
+  explicit manual choice; 90 days is the repository default;
+- export grants expire after 24 hours; provisional live data defaults to 30 days;
+  recording-session/raw-audio rules are 24 hours/seven days but recording is off in
+  both first-partner profiles;
+- the starting backup objectives are daily backup, at most 14 days retained, RPO 24
+  hours and RTO one business day; these are internal objectives, not an SLA;
+- Gmail, Apollo, WO-040, live Prospect, live email, external action execution,
+  recording/transcription and mock intelligence over real data remain out of scope.
+
+## Missing business facts found in the repository
+
+No approved value was found for the legal/publisher name, ABN, RevenueOS
+business-name status, registered address/jurisdiction, support email, privacy email,
+security/incident email or accountable support people. Each remains **OWNER INPUT
+REQUIRED**. No inferred or placeholder value may be published as fact.
+
+## Decision rule
+
+An unanswered decision stays `OWNER INPUT REQUIRED`; a conditional recommendation
+does not become `PASS`. If OpenAI is not approved, OD-06 resolves to
+`NATIVE-NO-EXTERNAL-AI-V1`. If target setup is not approved, the launch state remains
+**WAITING FOR TARGET ENVIRONMENT PROOF**. No item here authorises real customer data.

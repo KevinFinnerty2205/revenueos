@@ -691,10 +691,23 @@ Clerk/session evidence, target RLS drill, Create-inclusive target restore,
 monitoring/offboarding proof or owner/legal/AI/partner approval has been supplied.
 Repository completion does not satisfy those items.
 
+**Owner/target preparation update — 2 September 2026:** the remaining owner input is
+now consolidated into the
+[eight-decision register](first-design-partner/owner-decision-register.md) and one
+[fillable approval block](first-design-partner/owner-approval-block.md). The primary
+recommendation is a small AWS Sydney target; Fly.io Sydney plus Supabase Sydney is
+the only alternative. These are researched recommendations, not a target selection
+or spend/provider approval. The launch state remains **WAITING FOR TARGET ENVIRONMENT
+PROOF**.
+
 ### Real-data supervised design partner
 
 All must be true:
 
+- the completed owner approval block names the legal/publishing identity, public
+  contacts and human owners, selected target/regions/spend cap, approved
+  subprocessors, retention, feature profile, commercial boundary and explicit setup
+  authority;
 - target-environment verified auth/membership and mock-production prohibition;
 - forced-RLS/runtime-role cross-tenant suite on migration head
   `0050_real_data_operations` in the exact target PostgreSQL environment;

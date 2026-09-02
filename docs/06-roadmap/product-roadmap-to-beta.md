@@ -583,6 +583,14 @@ repository evidence and exact target/owner/partner procedures are documented; re
 data remains blocked until those procedures pass for one named partner. Partner
 selection/discovery may begin now without receiving customer data.
 
+The 2 September 2026 owner/production-decision preparation is documentation-only and
+does not advance the roadmap. It consolidates owner input into an
+[eight-decision register](first-design-partner/owner-decision-register.md), recommends
+one [Sydney-first target and one alternative](first-design-partner/private-beta-target-environment-options.md),
+and supplies a single [approval block](first-design-partner/owner-approval-block.md).
+No target, spend, provider, subprocessor, partner, legal position or real-data use is
+approved until the owner responds and the existing launch procedures pass.
+
 After meaningful supervised use, select exactly one evidence-led path from the
 [post-partner decision record](first-design-partner/post-partner-roadmap-decision.md):
 (A) narrow Gmail if Core is valuable and reviewed mailbox delivery is the dominant
