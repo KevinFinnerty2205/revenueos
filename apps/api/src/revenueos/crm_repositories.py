@@ -15,6 +15,7 @@ from revenueos.models import (
     CRMCustomFieldValue,
     CRMFieldMapping,
     CRMRecordChange,
+    CRMRecordMerge,
     EventAttendee,
     EventEncounter,
     IntegrationConnection,
@@ -392,6 +393,18 @@ class CRMRepository:
 
     async def owner_name(self, user_id: UUID) -> str:
         return str(await self.session.scalar(select(User.display_name).where(User.id == user_id)) or "Unknown member")
+
+    async def merge_for_source(self, organisation_id: UUID, entity_type: str, entity_id: UUID) -> CRMRecordMerge | None:
+        return cast(
+            CRMRecordMerge | None,
+            await self.session.scalar(
+                select(CRMRecordMerge).where(
+                    CRMRecordMerge.organisation_id == organisation_id,
+                    CRMRecordMerge.entity_type == entity_type,
+                    CRMRecordMerge.source_entity_id == entity_id,
+                )
+            ),
+        )
 
     def add(self, record: Base) -> None:
         self.session.add(record)

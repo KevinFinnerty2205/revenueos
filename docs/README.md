@@ -128,6 +128,16 @@ This is the canonical product and engineering documentation index. Documents dis
 122. [Create dependency remediation](03-engineering/create-dependency-remediation.md) — `pypdf` and production audit decision
 123. [WO-039B: Create Trust, Security & Output Integrity](07-sprints/wo-039b-create-trust-security.md) — implementation, file evidence and validation
 124. [ADR 0063: Versioned PPTX validation and download grants](08-decisions/0063-create-versioned-pptx-validation-and-download-grants.md)
+125. [Supervised real-data private beta](01-product/real-data-private-beta.md) — operating model, capability matrix and onboarding/offboarding boundary
+126. [Native CRM onboarding/import/merge UX](02-design/native-crm-onboarding-import-merge-ux.md)
+127. [Real-data production operations](03-engineering/real-data-operations.md) — identity, preflight, RLS, backup/restore, lifecycle, support and incident contract
+128. [Native CRM import and merge architecture](03-engineering/native-crm-import-and-merge.md)
+129. [WO-039C: Real-Data Operations & Native Onboarding](07-sprints/wo-039c-real-data-operations.md)
+130. [Checkpoint 3 post-WO-039C readiness](06-roadmap/checkpoint-3-post-039c-readiness.md)
+131. [ADR 0064: Supervised real-data private beta](08-decisions/0064-supervised-real-data-private-beta.md)
+132. [ADR 0065: Runtime RLS and encrypted backup](08-decisions/0065-runtime-rls-and-encrypted-backup.md)
+133. [ADR 0066: Bounded Native CRM CSV import](08-decisions/0066-bounded-native-crm-csv-import.md)
+134. [ADR 0067: Human-reviewed CRM merge](08-decisions/0067-human-reviewed-crm-merge.md)
 
 ## 00 — Company
 

@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import Response
 
 from revenueos.crm_contracts import (
     CRMArchiveResponse,
@@ -13,15 +14,27 @@ from revenueos.crm_contracts import (
     CRMCustomFieldValueUpdate,
     CRMEntitlementUpdate,
     CRMEntityType,
+    CRMImportConfirmRequest,
+    CRMImportConfirmResponse,
+    CRMImportPreviewRequest,
+    CRMImportPreviewResponse,
     CRMMemberResponse,
+    CRMMergeConfirmRequest,
+    CRMMergePreviewRequest,
+    CRMMergePreviewResponse,
+    CRMMergeResponse,
     CRMRecordResponse,
     CRMSettingsUpdate,
 )
-from revenueos.crm_dependencies import get_crm_service
+from revenueos.crm_dependencies import get_crm_merge_service, get_crm_onboarding_service, get_crm_service
+from revenueos.crm_merge_services import CRMMergeService
+from revenueos.crm_onboarding_services import CRMOnboardingService
 from revenueos.crm_services import CRMService
 
 router = APIRouter(prefix="/api/v1/crm", tags=["crm"])
 Service = Annotated[CRMService, Depends(get_crm_service)]
+OnboardingService = Annotated[CRMOnboardingService, Depends(get_crm_onboarding_service)]
+MergeService = Annotated[CRMMergeService, Depends(get_crm_merge_service)]
 
 
 @router.get("/availability", response_model=CRMAvailabilityResponse)
@@ -104,3 +117,49 @@ async def archive_crm_record(entity_type: CRMEntityType, entity_id: UUID, servic
 @router.post("/records/{entity_type}/{entity_id}/restore", response_model=CRMArchiveResponse)
 async def restore_crm_record(entity_type: CRMEntityType, entity_id: UUID, service: Service) -> CRMArchiveResponse:
     return await service.archive_record(entity_type, entity_id, restore=True)
+
+
+@router.get("/imports/template")
+async def crm_import_template(
+    entity_type: Annotated[CRMEntityType, Query(alias="entityType")],
+) -> Response:
+    templates = {
+        "account": "Name,Website,Industry,Location,Employee Count,Status,Owner\r\n",
+        "contact": (
+            "First Name,Last Name,Business Email,Phone,Job Title,LinkedIn URL,Account Domain,"
+            "Status,Owner,Do Not Contact\r\n"
+        ),
+        "opportunity": ("Name,Account Domain,Stage,Estimated Value,Currency,Expected Close Date,Description,Owner\r\n"),
+    }
+    filename = f"revenueos-{entity_type}-import-template.csv"
+    return Response(
+        content=templates[entity_type],
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/imports/preview", response_model=CRMImportPreviewResponse)
+async def preview_crm_import(
+    request: CRMImportPreviewRequest,
+    service: OnboardingService,
+) -> CRMImportPreviewResponse:
+    return await service.preview(request)
+
+
+@router.post("/imports/confirm", response_model=CRMImportConfirmResponse)
+async def confirm_crm_import(
+    request: CRMImportConfirmRequest,
+    service: OnboardingService,
+) -> CRMImportConfirmResponse:
+    return await service.confirm(request)
+
+
+@router.post("/merges/preview", response_model=CRMMergePreviewResponse)
+async def preview_crm_merge(request: CRMMergePreviewRequest, service: MergeService) -> CRMMergePreviewResponse:
+    return await service.preview(request)
+
+
+@router.post("/merges/confirm", response_model=CRMMergeResponse)
+async def confirm_crm_merge(request: CRMMergeConfirmRequest, service: MergeService) -> CRMMergeResponse:
+    return await service.confirm(request)

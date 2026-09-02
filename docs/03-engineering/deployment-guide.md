@@ -7,11 +7,11 @@ not deploy automatically. WO-009 defines one supported private-beta topology
 and operating boundary for the current web, API, worker and PostgreSQL
 components; it is not production-data approval.
 
-Do not use production customer data unless separately approved. Technical Clerk
-verification, versioned notice, beta retention/export/deletion, bounded health,
-usage and runbooks now exist. Target-environment Clerk governance, provider
-privacy approval, secret/log/backup infrastructure, restore evidence and every
-unchecked launch item remain gates.
+WO-039C adds a conditional supervised real-data path through current Alembic head
+`0050_real_data_operations`; it is not blanket approval. Before any named partner,
+run the [real-data production preflight and lifecycle runbook](real-data-operations.md)
+and satisfy its Clerk, runtime-role/RLS, encrypted backup/restore, support, legal,
+provider and feature-profile gates. Unsupervised and commercial beta remain blocked.
 
 ## Process topology
 

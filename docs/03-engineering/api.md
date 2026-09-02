@@ -4,6 +4,11 @@
 
 WO-034 adds `/api/v1/crm` availability, admin entitlement/mode, organisation-member,
 custom-definition, record read-model, typed custom-value and archive/restore routes.
+WO-039C adds admin-only `GET /imports/template`, `POST /imports/preview`,
+`POST /imports/confirm`, `POST /merges/preview` and `POST /merges/confirm` routes.
+Import accepts only the bounded strict request contract and persists no raw CSV;
+merge is Account/Contact only, explicit and stale-safe. Source record reads return
+optional `mergedIntoEntityId`/`mergeId` tombstone metadata.
 The canonical Company/Contact/Opportunity endpoints remain the CRUD source of truth,
 accept archive filtering and return safe exact-duplicate metadata. See the complete
 [Native CRM API contract](native-crm-api.md). FastAPI/Pydantic/OpenAPI remains

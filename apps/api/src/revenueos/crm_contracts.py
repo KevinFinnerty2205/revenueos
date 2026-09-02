@@ -20,7 +20,16 @@ CRMChangeSource = Literal[
     "event_promotion",
     "external_crm",
     "reviewed_action",
+    "record_merge",
     "system",
+]
+CRMImportDisposition = Literal[
+    "new",
+    "matches_existing",
+    "possible_duplicate",
+    "invalid",
+    "imported",
+    "skipped",
 ]
 FieldKey = Annotated[
     str,
@@ -187,12 +196,96 @@ class CRMRecordResponse(APIModel):
     custom_fields: list[CRMCustomFieldValueResponse]
     history: list[CRMRecordChangeResponse]
     activity: list[CRMActivityItemResponse]
+    merged_into_entity_id: UUID | None = None
+    merge_id: UUID | None = None
 
 
 class CRMArchiveResponse(APIModel):
     entity_type: CRMEntityType
     entity_id: UUID
     archived_at: datetime | None
+
+
+class CRMImportPreviewRequest(APIModel):
+    entity_type: CRMEntityType
+    file_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+    content_base64: Annotated[str, StringConstraints(min_length=1, max_length=7_100_000)]
+    column_mapping: dict[str, str | None] = Field(min_length=1, max_length=100)
+    default_owner_user_id: UUID
+    owner_value_mapping: dict[str, UUID] = Field(default_factory=dict, max_length=500)
+    pipeline_id: UUID | None = None
+    stage_value_mapping: dict[str, UUID] = Field(default_factory=dict, max_length=100)
+
+
+class CRMImportConfirmRequest(CRMImportPreviewRequest):
+    batch_id: UUID
+
+
+class CRMImportRowResponse(APIModel):
+    source_row: int
+    disposition: CRMImportDisposition
+    issue_code: str | None
+    canonical_entity_id: UUID | None
+
+
+class CRMImportPreviewResponse(APIModel):
+    batch_id: UUID
+    entity_type: CRMEntityType
+    state: Literal["previewed", "confirmed", "expired", "failed"]
+    expires_at: datetime
+    row_count: int
+    actionable_row_count: int
+    imported_row_count: int
+    rows: list[CRMImportRowResponse]
+    permission_to_contact_inferred: Literal[False] = False
+    raw_file_retained: Literal[False] = False
+
+
+class CRMImportConfirmResponse(CRMImportPreviewResponse):
+    state: Literal["confirmed"] = "confirmed"
+
+
+class CRMMergePreviewRequest(APIModel):
+    entity_type: Literal["account", "contact"]
+    source_entity_id: UUID
+    survivor_entity_id: UUID
+
+    @model_validator(mode="after")
+    def records_are_distinct(self) -> CRMMergePreviewRequest:
+        if self.source_entity_id == self.survivor_entity_id:
+            raise ValueError("Source and survivor records must be different.")
+        return self
+
+
+class CRMMergeFieldConflict(APIModel):
+    field_key: str
+    source_value: object | None
+    survivor_value: object | None
+    selected: Literal["source", "survivor"]
+
+
+class CRMMergePreviewResponse(APIModel):
+    entity_type: Literal["account", "contact"]
+    source_entity_id: UUID
+    survivor_entity_id: UUID
+    preview_fingerprint: str
+    conflicts: list[CRMMergeFieldConflict]
+    blocked_reasons: list[str]
+
+
+class CRMMergeConfirmRequest(CRMMergePreviewRequest):
+    preview_fingerprint: Annotated[str, StringConstraints(min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")]
+    field_selection: dict[str, Literal["source", "survivor"]] = Field(default_factory=dict, max_length=20)
+    idempotency_key: Annotated[str, StringConstraints(strip_whitespace=True, min_length=8, max_length=200)]
+
+
+class CRMMergeResponse(APIModel):
+    merge_id: UUID
+    entity_type: Literal["account", "contact"]
+    source_entity_id: UUID
+    survivor_entity_id: UUID
+    merged_at: datetime
+    already_applied: bool
 
 
 def validate_custom_url(value: str) -> str:

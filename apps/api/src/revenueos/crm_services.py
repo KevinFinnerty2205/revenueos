@@ -262,6 +262,7 @@ class CRMService:
 
     async def record(self, entity_type: CRMEntityType, entity_id: UUID) -> CRMRecordResponse:
         record = await self._record_or_404(entity_type, entity_id)
+        merge = await self.repository.merge_for_source(self.tenant.organisation_id, entity_type, entity_id)
         availability = await self.availability()
         definitions = await self.repository.definitions(self.tenant.organisation_id, entity_type=entity_type)
         values = await self.repository.values_for_record(self.tenant.organisation_id, entity_type, entity_id)
@@ -304,6 +305,8 @@ class CRMService:
             custom_fields=custom_fields,
             history=history,
             activity=await self._activity(entity_type, entity_id),
+            merged_into_entity_id=merge.survivor_entity_id if merge is not None else None,
+            merge_id=merge.id if merge is not None else None,
         )
 
     async def set_custom_value(
@@ -364,6 +367,8 @@ class CRMService:
         self._require_admin()
         await self._require_crm_enabled()
         record = await self._record_or_404(entity_type, entity_id, for_update=True)
+        if restore and await self.repository.merge_for_source(self.tenant.organisation_id, entity_type, entity_id):
+            raise PublicAPIError("record_merged", "Merged source records cannot be restored.", 409)
         before = record.archived_at
         record.archived_at = None if restore else datetime.now(UTC)
         if before != record.archived_at:

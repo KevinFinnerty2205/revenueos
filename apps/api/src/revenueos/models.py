@@ -1745,7 +1745,7 @@ class OpportunityStageEvent(Base):
     __tablename__ = "opportunity_stage_events"
     __table_args__ = (
         CheckConstraint(
-            "source IN ('system_initial', 'migration_baseline', 'manual', 'external_crm')",
+            "source IN ('system_initial', 'migration_baseline', 'import_baseline', 'manual', 'external_crm')",
             name="ck_opportunity_stage_events_source",
         ),
         CheckConstraint(
@@ -4652,7 +4652,7 @@ class CRMCustomFieldValue(TimestampMixin, Base):
         ),
         CheckConstraint(
             "source IN ('manual_user_entry', 'crm_import', 'prospect_promotion', "
-            "'event_promotion', 'external_crm', 'reviewed_action', 'system')",
+            "'event_promotion', 'external_crm', 'reviewed_action', 'record_merge', 'system')",
             name="ck_crm_custom_values_source",
         ),
         CheckConstraint(
@@ -4709,7 +4709,7 @@ class CRMRecordChange(Base):
         ),
         CheckConstraint(
             "source IN ('manual_user_entry', 'crm_import', 'prospect_promotion', "
-            "'event_promotion', 'external_crm', 'reviewed_action', 'system')",
+            "'event_promotion', 'external_crm', 'reviewed_action', 'record_merge', 'system')",
             name="ck_crm_record_changes_source",
         ),
         CheckConstraint("length(trim(field_key)) BETWEEN 1 AND 80", name="ck_crm_record_changes_field"),
@@ -4741,6 +4741,192 @@ class CRMRecordChange(Base):
     source: Mapped[str] = mapped_column(String(32), nullable=False)
     changed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class OperatorProvisioningEvent(Base):
+    __tablename__ = "operator_provisioning_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('organisation_provisioned', 'member_provisioned')",
+            name="ck_operator_provisioning_events_action",
+        ),
+        CheckConstraint(
+            "length(idempotency_key_hash) = 64 AND idempotency_key_hash = lower(idempotency_key_hash)",
+            name="ck_operator_provisioning_events_key",
+        ),
+        CheckConstraint(
+            "length(trim(operator_reference)) BETWEEN 1 AND 200",
+            name="ck_operator_provisioning_events_operator",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_operator_provisioning_events_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "action",
+            "idempotency_key_hash",
+            name="uq_operator_provisioning_events_key",
+        ),
+        Index("ix_operator_provisioning_events_org_time", "organisation_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    idempotency_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    subject_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    operator_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CRMImportBatch(TimestampMixin, Base):
+    __tablename__ = "crm_import_batches"
+    __table_args__ = (
+        CheckConstraint(
+            "entity_type IN ('account', 'contact', 'opportunity')",
+            name="ck_crm_import_batches_entity_type",
+        ),
+        CheckConstraint(
+            "state IN ('previewed', 'confirmed', 'expired', 'failed')",
+            name="ck_crm_import_batches_state",
+        ),
+        CheckConstraint(
+            "length(file_fingerprint) = 64 AND file_fingerprint = lower(file_fingerprint)",
+            name="ck_crm_import_batches_file_hash",
+        ),
+        CheckConstraint(
+            "length(mapping_fingerprint) = 64 AND mapping_fingerprint = lower(mapping_fingerprint)",
+            name="ck_crm_import_batches_mapping_hash",
+        ),
+        CheckConstraint(
+            "row_count BETWEEN 0 AND 5000 AND actionable_row_count BETWEEN 0 AND row_count "
+            "AND imported_row_count BETWEEN 0 AND actionable_row_count",
+            name="ck_crm_import_batches_counts",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "requested_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_import_batches_requester",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_import_batches_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "entity_type",
+            "file_fingerprint",
+            "mapping_fingerprint",
+            name="uq_crm_import_batches_fingerprint",
+        ),
+        Index("ix_crm_import_batches_org_state", "organisation_id", "state", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="previewed", server_default="previewed")
+    file_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    mapping_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    actionable_row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    imported_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CRMImportRow(Base):
+    __tablename__ = "crm_import_rows"
+    __table_args__ = (
+        CheckConstraint("source_row BETWEEN 2 AND 5001", name="ck_crm_import_rows_source_row"),
+        CheckConstraint(
+            "disposition IN ('new', 'matches_existing', 'possible_duplicate', 'invalid', 'imported', 'skipped')",
+            name="ck_crm_import_rows_disposition",
+        ),
+        CheckConstraint(
+            "issue_code IS NULL OR length(trim(issue_code)) BETWEEN 1 AND 80",
+            name="ck_crm_import_rows_issue",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "batch_id"],
+            ["crm_import_batches.organisation_id", "crm_import_batches.id"],
+            name="fk_crm_import_rows_batch",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_import_rows_org_id"),
+        UniqueConstraint("organisation_id", "batch_id", "source_row", name="uq_crm_import_rows_source"),
+        Index("ix_crm_import_rows_org_batch", "organisation_id", "batch_id", "source_row"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    batch_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_row: Mapped[int] = mapped_column(Integer, nullable=False)
+    disposition: Mapped[str] = mapped_column(String(24), nullable=False)
+    issue_code: Mapped[str | None] = mapped_column(String(80))
+    canonical_entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CRMRecordMerge(Base):
+    __tablename__ = "crm_record_merges"
+    __table_args__ = (
+        CheckConstraint("entity_type IN ('account', 'contact')", name="ck_crm_record_merges_entity_type"),
+        CheckConstraint("source_entity_id <> survivor_entity_id", name="ck_crm_record_merges_distinct"),
+        CheckConstraint(
+            "length(preview_fingerprint) = 64 AND preview_fingerprint = lower(preview_fingerprint)",
+            name="ck_crm_record_merges_preview_hash",
+        ),
+        CheckConstraint(
+            "length(idempotency_key_hash) = 64 AND idempotency_key_hash = lower(idempotency_key_hash)",
+            name="ck_crm_record_merges_key_hash",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "merged_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_record_merges_actor",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_record_merges_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "entity_type",
+            "source_entity_id",
+            name="uq_crm_record_merges_source",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "entity_type",
+            "idempotency_key_hash",
+            name="uq_crm_record_merges_key",
+        ),
+        Index(
+            "ix_crm_record_merges_org_survivor",
+            "organisation_id",
+            "entity_type",
+            "survivor_entity_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    survivor_entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    preview_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    field_selection_json: Mapped[dict[str, str]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
+    merged_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    merged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class ExecutionPreview(Base):

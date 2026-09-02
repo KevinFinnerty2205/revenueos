@@ -1,0 +1,39 @@
+{
+  "workOrder": "WO-039C",
+  "evidenceType": "synthetic-isolated-backup-restore-and-preflight",
+  "startedAt": "2026-08-31T22:22:11Z",
+  "completedAt": "2026-08-31T22:23:56Z",
+  "customerContentIncluded": false,
+  "externalProviderCalls": 0,
+  "migrationHead": "0050_real_data_operations",
+  "backup": {
+    "backupId": "20260831T222211Z-d86f759a94ee",
+    "formatVersion": 1,
+    "encryption": "AES-256-GCM",
+    "databaseArchiveSha256": "cbc684c500f5fc985fd6c08048a283e1886ae8cecd4037b4f40b84761134fa59",
+    "storageArchiveSha256": "8b86dfc23e5e0a3c5bb476061bebef8dfc3b586495431b5cfa3b3f5197c79856",
+    "objectCount": 3
+  },
+  "sourceAndRestoreCounts": {
+    "companies": 2,
+    "contacts": 3,
+    "opportunities": 21,
+    "interactions": 20,
+    "evidenceItems": 17,
+    "targets": 3,
+    "forecastJudgements": 4,
+    "createPresentations": 0
+  },
+  "proof": {
+    "databaseCountsMatch": true,
+    "objectHashesMatch": true,
+    "forcedRlsTenantTableCount": 137,
+    "allTenantRlsChecksPassed": true,
+    "productionProfilePreflightPassed": true,
+    "runtimeRoleSuperuser": false,
+    "runtimeRoleBypassRls": false,
+    "tenantContextResetPassed": true,
+    "privateStorageWriteReadDeletePassed": true,
+    "temporaryResourcesRemovedAfterVerification": true
+  }
+}

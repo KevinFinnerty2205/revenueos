@@ -1,6 +1,6 @@
 # RevenueOS Native CRM
 
-- **Status:** WO-034 foundation and WO-035 Native Pipeline implemented
+- **Status:** WO-034 foundation, WO-035 Native Pipeline and WO-039C supervised import/merge implemented
 - **Promise:** Small teams can run their sales CRM and Sales Brain in one place; larger teams can keep HubSpot and use the same RevenueOS intelligence layer.
 
 ## What customers get
@@ -40,19 +40,22 @@ The intended long-term loop is Interaction → Evidence → Sales Brain → revi
 
 ## Data portability
 
-Organisation export version 25 includes CRM settings, custom definitions, typed values,
-record history, Pipeline definitions/current assignment/stage history and closure
-metadata alongside canonical records. Operational CRM CSV import/export is deliberately
-deferred until a secure preview/mapping experience can enforce attestation, exact
-duplicate handling, spreadsheet-formula escaping and the rule that importing a Contact
-never grants Engage permission.
+Organisation export version 29 includes CRM settings, custom definitions, typed values,
+record history, Pipeline definitions/current assignment/stage history, closure metadata
+and content-free import/merge history alongside canonical records. WO-039C adds
+admin-only explicit-map CSV preview/confirm for Accounts, Contacts and open
+Opportunities. Raw CSV is not retained, formula-leading text is never executed,
+duplicates are conservative and importing a Contact never grants Engage permission.
+It also adds one-at-a-time reviewed Account/Contact merge with immutable tombstones,
+provenance protection and most-restrictive suppression. See the
+[import and merge architecture](../03-engineering/native-crm-import-and-merge.md).
 
 ## Opinionated limits
 
 There is no Lead object or conversion ceremony; pre-sales discovery remains Prospect
 and promotion creates a Company/Contact. There are no CRM-specific Tasks, Notes or
 Activities, custom objects, formulas, rollups, workflows, page builders, mass edits,
-destructive merge, service desk, marketing automation, CPQ, team ownership or territory
+automatic/fuzzy/batch merge, Opportunity merge, service desk, marketing automation, CPQ, team ownership or territory
 routing. WO-035 now supplies bounded Pipeline/stage administration; WO-036 owns
 analytics, implemented WO-037 targets, WO-038 forecasting and WO-039 manager intelligence.
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { BetaAdmin } from "@/components/beta-admin";
 import { CreateModuleSettings } from "@/components/create-module-settings";
+import { CRMImportOnboarding } from "@/components/crm-import-onboarding";
 import { CRMSettings } from "@/components/crm-settings";
 import { EngageSettings } from "@/components/engage-settings";
 import { PageHeader } from "@/components/page-header";
@@ -125,6 +126,7 @@ export function SettingsExperience() {
           <EngageSettings />
           <CreateModuleSettings />
           <CRMSettings />
+          <CRMImportOnboarding />
           <PipelineSettings />
           <SalesMethodologySettings />
           <BetaAdmin />

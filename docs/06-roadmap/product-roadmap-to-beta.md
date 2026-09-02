@@ -647,8 +647,14 @@ navigation/tab containment and deterministic synthetic fixture coherence are cov
 by a single flagship browser journey plus module regressions. It added no migration
 or new capability. WO-039B is implemented through `0049_create_trust`: Create now has
 a versioned supported PPTX profile, output round-trip validation and authenticated
-one-time downloads. WO-039C remains the mandatory separate real-data operations gate;
-this status does not authorise WO-040 or production customer data.
+one-time downloads. WO-039C is implemented through `0050_real_data_operations`:
+production identity and configuration now fail closed for real-data mode; encrypted
+database/object backup, tenant provisioning/support reports, v29 lifecycle coverage
+and bounded Native CRM import/merge exist. The
+[post-WO-039C decision](checkpoint-3-post-039c-readiness.md) is **GO WITH
+RESTRICTIONS** for a manually approved, supervised Native CRM design partner only
+after target identity/RLS/restore and owner legal/provider gates pass. This does not
+authorise WO-040, an unsupervised/commercial beta or blanket customer-data use.
 
 ## WO-035 current boundary
 

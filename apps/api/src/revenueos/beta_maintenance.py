@@ -56,7 +56,10 @@ from revenueos.models import (
     CRMCustomFieldValue,
     CRMEntityMapping,
     CRMFieldMapping,
+    CRMImportBatch,
+    CRMImportRow,
     CRMRecordChange,
+    CRMRecordMerge,
     CRMStageMapping,
     DataNoticeAcknowledgement,
     DebriefSession,
@@ -98,6 +101,7 @@ from revenueos.models import (
     OnboardingProgress,
     OnlineMeetingMetadata,
     OnlineMeetingTranscriptImport,
+    OperatorProvisioningEvent,
     Opportunity,
     OpportunityAuditEvent,
     OpportunityStageEvent,
@@ -163,7 +167,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 28
+EXPORT_VERSION = 29
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -241,12 +245,29 @@ async def run_retention(
                 )
             ).all()
         )
+        expired_crm_import_batch_ids = list(
+            (
+                await session.scalars(
+                    select(CRMImportBatch.id)
+                    .where(
+                        CRMImportBatch.organisation_id == organisation_id,
+                        CRMImportBatch.state == "previewed",
+                        CRMImportBatch.expires_at <= now,
+                    )
+                    .order_by(CRMImportBatch.expires_at, CRMImportBatch.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
         if retention_days is None:
             counts = {
                 "expired_prospect_contact_points": len(expired_contact_point_ids),
                 "expired_create_download_grants": len(expired_download_grant_ids),
+                "expired_crm_import_batches": len(expired_crm_import_batch_ids),
             }
-            if dry_run or (not expired_contact_point_ids and not expired_download_grant_ids):
+            if dry_run or (
+                not expired_contact_point_ids and not expired_download_grant_ids and not expired_crm_import_batch_ids
+            ):
                 return RetentionResult(organisation_id, dry_run, None, 0, 0, counts)
             removed = await _expire_prospect_contact_points(session, organisation_id, expired_contact_point_ids)
             if expired_download_grant_ids:
@@ -257,6 +278,17 @@ async def run_retention(
                     )
                 )
                 removed["expired_create_download_grants"] = len(expired_download_grant_ids)
+            if expired_crm_import_batch_ids:
+                await session.execute(
+                    update(CRMImportBatch)
+                    .where(
+                        CRMImportBatch.organisation_id == organisation_id,
+                        CRMImportBatch.id.in_(expired_crm_import_batch_ids),
+                        CRMImportBatch.state == "previewed",
+                    )
+                    .values(state="expired", updated_at=now)
+                )
+                removed["expired_crm_import_batches"] = len(expired_crm_import_batch_ids)
             session.add(
                 BetaSystemEvent(
                     organisation_id=organisation_id,
@@ -265,6 +297,7 @@ async def run_retention(
                     metadata_json={
                         "expired_prospect_contact_point_count": len(expired_contact_point_ids),
                         "expired_create_download_grant_count": len(expired_download_grant_ids),
+                        "expired_crm_import_batch_count": len(expired_crm_import_batch_ids),
                         "retention_days": None,
                     },
                 )
@@ -508,6 +541,7 @@ async def run_retention(
         )
         counts["expired_live_sessions"] = expired_live_count
         counts["expired_create_download_grants"] = len(expired_download_grant_ids)
+        counts["expired_crm_import_batches"] = len(expired_crm_import_batch_ids)
         if dry_run or (
             not meeting_ids
             and not interaction_ids
@@ -521,6 +555,7 @@ async def run_retention(
             and not expired_live_count
             and not expired_contact_point_ids
             and not expired_download_grant_ids
+            and not expired_crm_import_batch_ids
         ):
             return RetentionResult(
                 organisation_id,
@@ -539,6 +574,17 @@ async def run_retention(
                 )
             )
             removed["expired_create_download_grants"] = len(expired_download_grant_ids)
+        if expired_crm_import_batch_ids:
+            await session.execute(
+                update(CRMImportBatch)
+                .where(
+                    CRMImportBatch.organisation_id == organisation_id,
+                    CRMImportBatch.id.in_(expired_crm_import_batch_ids),
+                    CRMImportBatch.state == "previewed",
+                )
+                .values(state="expired", updated_at=now)
+            )
+            removed["expired_crm_import_batches"] = len(expired_crm_import_batch_ids)
         if expired_event_ids:
             await session.execute(
                 update(Interaction)
@@ -656,6 +702,7 @@ async def run_retention(
                     "event_count": len(expired_event_ids),
                     "expired_prospect_contact_point_count": len(expired_contact_point_ids),
                     "expired_create_download_grant_count": len(expired_download_grant_ids),
+                    "expired_crm_import_batch_count": len(expired_crm_import_batch_ids),
                     "retention_days": retention_days,
                 },
             )
@@ -1159,6 +1206,9 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(CreateTemplate).where(CreateTemplate.organisation_id == organisation_id))
         await session.execute(delete(CreateUsageCounter).where(CreateUsageCounter.organisation_id == organisation_id))
+        await session.execute(delete(CRMRecordMerge).where(CRMRecordMerge.organisation_id == organisation_id))
+        await session.execute(delete(CRMImportRow).where(CRMImportRow.organisation_id == organisation_id))
+        await session.execute(delete(CRMImportBatch).where(CRMImportBatch.organisation_id == organisation_id))
         await session.execute(delete(CRMRecordChange).where(CRMRecordChange.organisation_id == organisation_id))
         await session.execute(delete(CRMCustomFieldValue).where(CRMCustomFieldValue.organisation_id == organisation_id))
         await session.execute(
@@ -1176,6 +1226,9 @@ async def _delete_organisation_records(
         await session.execute(delete(OnboardingProgress).where(OnboardingProgress.organisation_id == organisation_id))
         await session.execute(delete(AIUsageCounter).where(AIUsageCounter.organisation_id == organisation_id))
         await session.execute(delete(BetaSystemEvent).where(BetaSystemEvent.organisation_id == organisation_id))
+        await session.execute(
+            delete(OperatorProvisioningEvent).where(OperatorProvisioningEvent.organisation_id == organisation_id)
+        )
         await session.execute(
             delete(OrganisationBetaSettings).where(OrganisationBetaSettings.organisation_id == organisation_id)
         )
@@ -2990,6 +3043,26 @@ async def _export_payload(
         .where(CRMRecordChange.organisation_id == organisation_id)
         .order_by(CRMRecordChange.entity_type, CRMRecordChange.entity_id, CRMRecordChange.changed_at)
     )
+    crm_import_batches = await rows(
+        select(CRMImportBatch)
+        .where(CRMImportBatch.organisation_id == organisation_id)
+        .order_by(CRMImportBatch.created_at, CRMImportBatch.id)
+    )
+    crm_import_rows = await rows(
+        select(CRMImportRow)
+        .where(CRMImportRow.organisation_id == organisation_id)
+        .order_by(CRMImportRow.batch_id, CRMImportRow.source_row)
+    )
+    crm_record_merges = await rows(
+        select(CRMRecordMerge)
+        .where(CRMRecordMerge.organisation_id == organisation_id)
+        .order_by(CRMRecordMerge.merged_at, CRMRecordMerge.id)
+    )
+    operator_provisioning_events = await rows(
+        select(OperatorProvisioningEvent)
+        .where(OperatorProvisioningEvent.organisation_id == organisation_id)
+        .order_by(OperatorProvisioningEvent.created_at, OperatorProvisioningEvent.id)
+    )
     action_executions = await rows(
         select(ActionExecution)
         .where(ActionExecution.organisation_id == organisation_id)
@@ -4797,6 +4870,73 @@ async def _export_payload(
                 ),
             )
             for item in crm_record_changes
+        ],
+        "crmImportBatches": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "entity_type",
+                    "requested_by_user_id",
+                    "state",
+                    "file_fingerprint",
+                    "mapping_fingerprint",
+                    "file_size_bytes",
+                    "row_count",
+                    "actionable_row_count",
+                    "imported_row_count",
+                    "expires_at",
+                    "confirmed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_import_batches
+        ],
+        "crmImportRows": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "batch_id",
+                    "source_row",
+                    "disposition",
+                    "issue_code",
+                    "canonical_entity_id",
+                    "created_at",
+                ),
+            )
+            for item in crm_import_rows
+        ],
+        "crmRecordMerges": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "entity_type",
+                    "source_entity_id",
+                    "survivor_entity_id",
+                    "preview_fingerprint",
+                    "field_selection_json",
+                    "merged_by_user_id",
+                    "merged_at",
+                ),
+            )
+            for item in crm_record_merges
+        ],
+        "operatorProvisioningEvents": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "action",
+                    "subject_user_id",
+                    "operator_reference",
+                    "metadata_json",
+                    "created_at",
+                ),
+            )
+            for item in operator_provisioning_events
         ],
         "actionExecutions": [
             _columns(
