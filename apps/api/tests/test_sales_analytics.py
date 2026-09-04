@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from decimal import Decimal
 from uuid import UUID, uuid5
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from revenueos import sales_analytics_services
 from revenueos.database import set_tenant_database_context
 from revenueos.models import (
     Company,
@@ -27,6 +29,15 @@ from revenueos.tenant import TenantContext
 from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, SECONDARY_USER_ID
 
 NAMESPACE = UUID("0870261c-0458-4d70-ae23-bbd36546bbbe")
+FROZEN_SALES_ANALYTICS_NOW = datetime(2026, 8, 31, tzinfo=UTC)
+
+
+class FrozenSalesAnalyticsDateTime(datetime):
+    @classmethod
+    def now(cls, tz: tzinfo | None = None) -> datetime:
+        if tz is None:
+            return FROZEN_SALES_ANALYTICS_NOW.replace(tzinfo=None)
+        return FROZEN_SALES_ANALYTICS_NOW.astimezone(tz)
 
 
 def fixture_id(label: str) -> UUID:
@@ -396,7 +407,12 @@ def test_date_range_uses_local_dst_boundaries(app: FastAPI) -> None:
     assert asyncio.run(boundaries()) == timedelta(hours=23)
 
 
-def test_overview_funnel_activity_and_win_loss_reconcile_exactly(app: FastAPI, client: TestClient) -> None:
+def test_overview_funnel_activity_and_win_loss_reconcile_exactly(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sales_analytics_services, "datetime", FrozenSalesAnalyticsDateTime)
     pipeline_id = seed(app)
 
     overview_response = client.get("/api/v1/insights/sales/overview", params=params())
