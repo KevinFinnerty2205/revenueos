@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from revenueos.ai_worker_services import calculate_retry_delay_seconds
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.models import (
@@ -249,7 +250,8 @@ class ProspectWorkerService:
             if (
                 not self._settings.feature_prospect_enabled
                 or provider_unavailable
-                or not await repository.prospect_is_entitled(claim.organisation_id)
+                or await CommercialService(session, self._settings).module_access(claim.organisation_id, "prospect")
+                != "write"
             ):
                 raise ProspectProviderError(
                     "prospect_not_entitled",

@@ -13,16 +13,22 @@ RevenueOS remains Sales Brain with an optional CRM, not a generic CRM with an AI
 
 | Mode         | System of record            | Editing behaviour                                                                                                |
 | ------------ | --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| RevenueOS    | RevenueOS canonical records | Normal fields editable under role/tenant policy; custom fields available with entitlement                        |
+| RevenueOS    | RevenueOS canonical records | Normal and bounded custom fields editable under Core role/tenant policy                                           |
 | External CRM | HubSpot in v1               | Mapped authority is shown; HubSpot-authoritative fields are read-only; review-before-sync behaviour is preserved |
 
 An administrator makes and confirms the choice in Settings → CRM. HubSpot must be connected before selecting external mode. Active field mappings must be resolved before switching to native mode; WO-034 does not pretend to be a migration wizard.
 
 ## Packaging
 
-Core continues to include the Accounts, People and Opportunity records needed by Sales Brain, including basic manual CRUD and readable canonical activity/history. The RevenueOS CRM add-on unlocks system-of-record configuration, bounded custom-field mutation/administration and admin archive/restore, and becomes the foundation for configurable Pipeline in WO-035. Removing entitlement preserves Core access and shows existing custom values read-only.
+Core includes the Accounts, People and Opportunity records needed by Sales Brain,
+Native CRM system-of-record configuration, bounded custom fields, archive/restore,
+canonical activity/history and configurable Pipeline. Under WO-047 the CRM commercial
+module means supported external CRM connectors. Removing that connector entitlement
+preserves external history but blocks new connection/sync actions; it does not remove
+Native CRM from Core.
 
-There is no billing or price implementation in WO-034. `crm` is the same explicit, manually administered private-beta entitlement pattern as the other optional modules.
+WO-047 adds plan and trial authority but no billing or payment implementation. Plan
+and connector access is support-operator managed, not an organisation-admin switch.
 
 ## Record experience
 

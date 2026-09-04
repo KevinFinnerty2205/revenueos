@@ -44,6 +44,7 @@ from revenueos.business_case_contracts import (
     ValueModelVersionResponse,
 )
 from revenueos.business_case_repositories import BusinessCaseRepository
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
@@ -92,7 +93,7 @@ class BusinessCaseService:
         self.repository = BusinessCaseRepository(session)
 
     async def list_value_models(self) -> ValueModelListResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         models = await self.repository.value_models(self.tenant.organisation_id, self.tenant.can_manage())
         items: list[ValueModelResponse] = []
         for model in models:
@@ -156,7 +157,7 @@ class BusinessCaseService:
         return self._model_response(model, version)
 
     async def get_value_model(self, model_id: UUID) -> ValueModelResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         model = await self.repository.value_model(self.tenant.organisation_id, model_id)
         if model is None or model.state == "archived" and not self.tenant.can_manage():
             raise PublicAPIError("value_model_not_found", "The value model was not found.", 404)
@@ -269,7 +270,7 @@ class BusinessCaseService:
         opportunity_id: UUID | None = None,
         approved_only: bool = False,
     ) -> BusinessCaseListResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         cases = await self.repository.business_cases(
             self.tenant.organisation_id,
             account_id=account_id,
@@ -332,7 +333,7 @@ class BusinessCaseService:
         return await self._case_response(business_case)
 
     async def get_business_case(self, case_id: UUID) -> BusinessCaseResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         business_case = await self._case(case_id)
         return await self._case_response(business_case, revalidate_sources=True)
 
@@ -1040,12 +1041,18 @@ class BusinessCaseService:
             "materialInputKeys": [item.key for item in definition.inputs if item.material],
         }
 
-    async def _require_entitled(self) -> None:
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
+    async def _require_entitled(self, *, write: bool = True) -> None:
         if not self.settings.feature_create_enabled:
             raise PublicAPIError("create_unavailable", "RevenueOS Create is temporarily unavailable.", 503)
-        if entitlement is None or not entitlement.enabled:
-            raise PublicAPIError("create_not_in_plan", "RevenueOS Create is not enabled for this organisation.", 403)
+        commercial = CommercialService(self.session, self.settings)
+        if write:
+            await commercial.require_module_write(self.tenant.organisation_id, "create")
+            return
+        access = await commercial.module_access(self.tenant.organisation_id, "create")
+        if access == "none" or (write and access != "write"):
+            raise PublicAPIError(
+                "create_not_in_plan", "Create isn't included in your organisation's current plan.", 403
+            )
 
     def _require_admin(self) -> None:
         if not self.tenant.can_manage():

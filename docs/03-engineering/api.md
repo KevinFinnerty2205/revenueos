@@ -1,8 +1,18 @@
 # API reference
 
+## Commercial authority
+
+`GET /api/v1/commercial` returns the active organisation's plan/status, interval,
+trial/grace dates, active-user count and limit, module commercial/access/provider
+states, effective time and optimistic state version. It requires an active
+organisation administrator and derives the organisation only from verified auth
+context. There is no public commercial mutation endpoint; support changes use the
+reviewed operator commands. Prices, plan contents and trial dates are never request
+inputs. See [Commercial authority](commercial-authority.md).
+
 ## Native CRM
 
-WO-034 adds `/api/v1/crm` availability, admin entitlement/mode, organisation-member,
+WO-034 adds `/api/v1/crm` availability, mode, organisation-member,
 custom-definition, record read-model, typed custom-value and archive/restore routes.
 WO-039C adds admin-only `GET /imports/template`, `POST /imports/preview`,
 `POST /imports/confirm`, `POST /merges/preview` and `POST /merges/confirm` routes.
@@ -23,7 +33,7 @@ entitlement are required. Administrator-only operations are marked below.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/availability` | Return available, temporarily unavailable or not-in-plan plus role capabilities |
-| `PATCH` | `/admin/entitlement` | Enable/disable the tenant Create entitlement (administrator) |
+| `PATCH` | `/admin/entitlement` | Legacy route; rejects because commercial plan authority owns access |
 | `GET/POST` | `/templates` | List approved/processing templates; upload attested PPTX (POST administrator) |
 | `GET` | `/templates/{templateId}` | Read one tenant template and structural slide manifest |
 | `PATCH` | `/template-slides/{slideId}` | Classify/policy one unapproved slide (administrator) |
@@ -216,7 +226,7 @@ established” rather than guessing.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/engage/availability` | Read current organisation Engage availability |
-| `PATCH` | `/api/v1/engage/admin/entitlement` | Admin-only private-beta Engage grant/change |
+| `PATCH` | `/api/v1/engage/admin/entitlement` | Legacy route; rejects because commercial plan authority owns access |
 | `GET/PUT` | `/api/v1/engage/policy` | Read or admin-configure outreach policy/seller context |
 | `GET` | `/api/v1/engage/contacts/{contactId}` | Read Contact trust, contactability and outreach history |
 | `POST` | `/api/v1/engage/contacts/{contactId}/outreach` | Create one source-backed draft for an explicit purpose |
@@ -813,7 +823,7 @@ available only for live `unknown_external_state` and performs no write. See the
 | Method | Path | Behaviour |
 | --- | --- | --- |
 | `GET` | `/api/v1/prospect/availability` | Resolve server feature, tenant entitlement and production provider capability. |
-| `PATCH` | `/api/v1/prospect/admin/entitlement` | Admin-only organisation Prospect switch. |
+| `PATCH` | `/api/v1/prospect/admin/entitlement` | Legacy route; rejects because commercial plan authority owns access. |
 | `GET` | `/api/v1/prospect/companies/search?q=…` | Bounded entitled company name/domain candidates. |
 | `GET` | `/api/v1/prospect/research` | Recent tenant Research Targets. |
 | `POST` | `/api/v1/prospect/research` | Idempotently enqueue selected-candidate research. |

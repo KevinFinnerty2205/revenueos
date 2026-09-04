@@ -60,7 +60,9 @@ jq -e '.status == "complete"' restore.json
 
 For an S3-compatible production topology, copy the verified restored object tree into an empty, private isolated validation bucket using the selected provider's checksum-preserving CLI, then configure the isolated API/worker to that bucket. Record the exact provider command in the launch evidence. Public access must remain blocked; do not reuse the source bucket.
 
-Deploy the same API/worker/web release to the isolated target. Apply only compatible migration `0050_real_data_operations` with the restore migration role, then run migration drift and production preflight with the restore runtime role.
+Deploy the same API/worker/web release to the isolated target. Apply only compatible
+migration `0052_commercial_plans_trial` with the restore migration role, then run
+migration drift and production preflight with the restore runtime role.
 
 ### 4. Reconcile and authorise
 

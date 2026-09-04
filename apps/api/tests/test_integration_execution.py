@@ -35,7 +35,7 @@ from revenueos.models import (
     OrganisationMembership,
 )
 
-from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL
+from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL, set_test_commercial_plan
 from .test_business_api import create_company, create_contact, create_opportunity
 from .test_meeting_api import cast_auth_dependency, secondary_user
 
@@ -429,6 +429,61 @@ def test_email_preview_confirmation_and_worker_are_explicit_and_idempotent(
     assert "idempotency_key" not in str(executions)
     assert "preview_fingerprint" not in str(executions)
     assert "mockConnectorObjects" not in exported
+
+
+def test_worker_fails_closed_when_engage_is_removed_after_confirmation(
+    app: FastAPI,
+    client: TestClient,
+) -> None:
+    _enable_execution(app)
+    company = create_company(client)
+    contact = create_contact(client, str(company["id"]))
+    opportunity = create_opportunity(client, str(company["id"]))
+    action_id = _seed_approved_action(
+        opportunity_id=str(opportunity["id"]),
+        action_type="follow_up_email",
+        risk_class="external_customer_facing",
+        target_entity_type="contact",
+        target_entity_id=str(contact["id"]),
+        payload={
+            "kind": "follow_up_email",
+            "draftArtifactId": str(uuid.uuid4()),
+            "recipientContactId": str(contact["id"]),
+            "recipientEmail": contact["email"],
+            "recipientConfirmed": True,
+            "subject": "Do not execute after downgrade",
+            "body": "This synthetic message must remain unsent.",
+        },
+        title="Confirm before downgrade",
+    )
+    connection = client.post(
+        "/api/v1/integrations/connections",
+        json={"connectorKey": "mock_email"},
+    ).json()
+    preview = client.post(
+        f"/api/v1/actions/{action_id}/execution-preview",
+        json={"connectionId": connection["id"]},
+    ).json()
+    queued = client.post(
+        f"/api/v1/actions/{action_id}/execute",
+        json={
+            "previewId": preview["id"],
+            "connectionId": connection["id"],
+            "confirmed": True,
+        },
+    )
+    assert queued.status_code == 202, queued.text
+
+    set_test_commercial_plan("core")
+    try:
+        _run_execution_worker(app)
+        result = client.get(f"/api/v1/executions/{queued.json()['id']}")
+        assert result.status_code == 200, result.text
+        assert result.json()["executionStatus"] == "failed_permanent"
+        assert result.json()["safeFailureCode"] == "engage_not_in_plan"
+        assert result.json()["externalResultId"] is None
+    finally:
+        set_test_commercial_plan("complete")
 
 
 def test_revocation_invalidates_preview_and_crm_stale_state_fails_without_mutation(

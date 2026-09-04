@@ -4,13 +4,12 @@ import type { MeResponse } from "@revenueos/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { BetaAdmin } from "@/components/beta-admin";
-import { CreateModuleSettings } from "@/components/create-module-settings";
+import { CommercialPlanSettings } from "@/components/commercial-plan-settings";
 import { CRMImportOnboarding } from "@/components/crm-import-onboarding";
 import { CRMSettings } from "@/components/crm-settings";
 import { EngageSettings } from "@/components/engage-settings";
 import { PageHeader } from "@/components/page-header";
 import { PipelineSettings } from "@/components/pipeline-settings";
-import { ProspectModuleSettings } from "@/components/prospect-module-settings";
 import { SalesMethodologySettings } from "@/components/sales-methodology-settings";
 import { SellingProfileSettings } from "@/components/selling-profile-settings";
 import { apiRequest } from "@/lib/api";
@@ -124,9 +123,8 @@ export function SettingsExperience() {
       {isAdmin ? (
         <>
           <SellingProfileSettings />
-          <ProspectModuleSettings />
+          <CommercialPlanSettings />
           <EngageSettings />
-          <CreateModuleSettings />
           <CRMSettings />
           <CRMImportOnboarding />
           <PipelineSettings />

@@ -61,32 +61,6 @@ export function CRMSettings() {
     };
   }, [load]);
 
-  async function updateEntitlement(enabled: boolean) {
-    setSaving(true);
-    setMessage(null);
-    try {
-      setAvailability(
-        await apiRequest<CRMAvailability>("/api/v1/crm/admin/entitlement", {
-          method: "PATCH",
-          body: JSON.stringify({ enabled }),
-        }),
-      );
-      setMessage(
-        enabled
-          ? "CRM administration is enabled. Core records were already available."
-          : "CRM administration is disabled. Existing records and CRM data remain readable.",
-      );
-    } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "CRM access could not be changed.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function selectMode(mode: "native" | "external") {
     if (!confirmed) return;
     setSaving(true);
@@ -194,19 +168,14 @@ export function CRMSettings() {
             {availability?.message ?? "Loading CRM settings…"}
           </p>
         </div>
-        {availability?.canManage ? (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={availability.enabled}
-            disabled={
-              saving || availability.state === "temporarily_unavailable"
-            }
-            onClick={() => void updateEntitlement(!availability.enabled)}
-            className={`inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 ${availability.enabled ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-700"}`}
-          >
-            {saving ? "Saving…" : availability.enabled ? "Enabled" : "Disabled"}
-          </button>
+        {availability ? (
+          <span className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700">
+            {availability.enabled
+              ? "Included in plan"
+              : availability.state === "read_only"
+                ? "View only"
+                : "Not included"}
+          </span>
         ) : null}
       </div>
 

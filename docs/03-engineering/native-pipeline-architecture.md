@@ -73,7 +73,7 @@ stage-entry time. New Opportunities receive `system_initial` with a real entry t
 ## Authority and external CRM
 
 Board reads are Core. Native definition administration additionally requires admin,
-CRM entitlement, native CRM mode and both server feature flags. If CRM mode is
+Core commercial access, native CRM mode and both server feature flags. If CRM mode is
 external, board/current state is shown with `Managed in HubSpot`; all direct stage,
 close and reopen mutations return `external_stage_authority`. Native definitions are
 not presented as imported HubSpot pipelines.
@@ -131,7 +131,7 @@ Safe category logs cover pipeline created/archived, stage changed, closed Won/Lo
 reopened using organisation/opportunity/stage identifiers only. Amounts, names,
 outcome reasons and notes are excluded. `API_FEATURE_NATIVE_PIPELINE_ENABLED` is
 server-authoritative and is exposed to clients only as the `nativePipeline` capability;
-it does not override CRM mode or entitlement.
+it does not override CRM mode or commercial access.
 
 ## WO-039 read-only Manager view
 

@@ -9,8 +9,8 @@
 3. Run Alembic through `0049_create_trust` and verify the runtime database role does
    not bypass RLS.
 4. Start the existing API and durable worker. Create has no separate service.
-5. An organisation administrator enables the server-side `create` entitlement in
-   Settings, then uploads and reviews an authorised synthetic/template PPTX.
+5. An approved support operator assigns a plan or add-on containing `create`; the
+   organisation administrator then uploads and reviews an authorised synthetic/template PPTX.
 
 The readiness surface reports the environment feature flag. `/api/v1/create/availability`
 reports the tenant entitlement and role capabilities. A feature flag alone is not a

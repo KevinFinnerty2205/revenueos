@@ -25,7 +25,7 @@ from revenueos.models import (
     ProspectResearchObservation,
 )
 
-from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL
+from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL, set_test_commercial_plan
 from .test_integration_execution import _enable_execution
 from .test_meeting_api import cast_auth_dependency, secondary_user
 from .test_prospect_people import _discover_and_research_jane, _prepare_company
@@ -589,17 +589,15 @@ def test_provider_supplied_policy_and_engage_entitlement_fail_closed(
         "/api/v1/engage/admin/entitlement",
         json={"enabled": False},
     )
-    assert disabled.status_code == 200, disabled.text
+    assert disabled.status_code == 403, disabled.text
+    assert disabled.json()["code"] == "commercial_plan_managed"
+    set_test_commercial_plan("core")
     try:
         blocked = client.post(
             f"/api/v1/engage/contacts/{contact_id}/outreach",
             json={"purpose": "introduction"},
         )
         assert blocked.status_code == 403, blocked.text
-        assert blocked.json()["code"] == "engage_unavailable"
+        assert blocked.json()["code"] == "engage_not_in_plan"
     finally:
-        restored = client.patch(
-            "/api/v1/engage/admin/entitlement",
-            json={"enabled": True},
-        )
-        assert restored.status_code == 200, restored.text
+        set_test_commercial_plan("complete")

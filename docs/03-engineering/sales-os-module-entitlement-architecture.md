@@ -1,182 +1,124 @@
 # Sales OS module entitlement architecture
 
-- **Status:** Prospect, Engage and Create use bounded organisation switches; the wider commercial model remains proposed
-- **Principle:** Core remains coherent; module discovery is contextual and restrained
+- **Status:** Implemented commercial authority through WO-047
+- **Migration:** `0052_commercial_plans_trial`
+- **Principle:** Core stays coherent; commercial inclusion, runtime availability,
+  organisation policy and user permission remain separate facts
 
-## Package model
+## Plans and modules
 
-The commercial catalogue contains RevenueOS Core, Prospect, Engage, Create and CRM;
-RevenueOS Complete bundles them. Enterprise is a governance/support tier rather than
-a feature-dumping ground. Actual prices and billing-provider implementation remain
-future decisions.
+| Plan       | Included users | Included modules                            |
+| ---------- | -------------: | ------------------------------------------- |
+| Core       | 5              | Core                                        |
+| Growth     | 10             | Core, Prospect, Engage                      |
+| Complete   | 15             | Core, Prospect, Engage, Create, CRM         |
+| Enterprise | Manual         | Core, Prospect, Engage, Create, CRM         |
 
-## Effective availability
+The immutable internal V1 prices are documented in
+[Commercial authority](commercial-authority.md). A plan is a commercial package; a
+module is a capability boundary. `CRM` means supported external CRM connectors.
+Native CRM, Native Pipeline and canonical sales records are Core. Prospect, Engage,
+Create or CRM may also be operator-assigned add-ons; add-on prices do not exist.
 
-Current availability is intentionally smaller than the target equation below. The
-server combines the relevant global feature flag, active tenant/membership and
-organisation `prospect`, `engage`, `create` or `crm` entitlement. Engage additionally requires
-configured policy and sender capability for mutations; Campaign execution is
-non-production Mock Email only. Only admins can change organisation switches. There
-is no billing, plan catalogue, trial or grace-period model yet.
-
-The server produces one product-safe availability projection:
+## Authoritative evaluation
 
 ```text
 effective availability
-  = commercial entitlement
-  ∩ organisation policy
+  = commercial state and module access
   ∩ system/provider capability
-  ∩ user permission
+  ∩ organisation configuration/policy
+  ∩ active membership and user permission
 ```
 
-The intersection is conceptual: the response distinguishes reasons rather than
-reducing them to one boolean. A feature may be `available`, `setup_required`,
-`permission_required`, `usage_limited`, `temporarily_unavailable` or `not_in_plan`.
-Only authorised billing administrators receive commercial detail.
+`organisation_commercial_states` selects an immutable
+`commercial_plan_versions` row and optional add-ons. Plan assignment translates
+that selection into the existing `organisation_module_entitlements` rows. Each row
+has `none`, `read` or `write` access and plan/trial/add-on provenance. The client
+cannot grant access by changing route, local state or request data.
 
-## Conceptual model
+The admin projection deliberately returns three distinct values per module:
 
-| Concept                          | Responsibility                                                |
-| -------------------------------- | ------------------------------------------------------------- |
-| `ProductModule`                  | Stable code, user-facing name and dependency on Core          |
-| `PlanDefinition` / `PlanVersion` | Versioned package-to-capability mapping                       |
-| `OrganisationSubscription`       | Effective plan, dates and commercial state                    |
-| `EntitlementGrant`               | Capability, limit dimensions, source and effective period     |
-| `OrganisationFeaturePolicy`      | Admin enable/disable and configuration prerequisite           |
-| `CapabilityStatus`               | Runtime/provider availability independent of plan             |
-| `UsageCounter`                   | Idempotent, period-scoped metered consumption where justified |
-| `AvailabilityProjection`         | Safe response for a user/context with reason and next step    |
+- `commerciallyIncluded`: in the selected base plan or current add-ons;
+- `accessLevel`: effective `none`, `read` or `write`, including grace/downgrade; and
+- `operationalStatus`: `available`, `mock_only` or `unavailable` from deployment and
+  provider configuration.
 
-Except for bounded `organisation_module_entitlements` Prospect/Engage/Create rows and usage
-counters added by current work, these are future concepts. Plan mappings are versioned and
-centralised; page code must never contain price or package rules. Tenant-owned state,
-counts and keys include organisation scope.
+An entitlement therefore does not claim that a paid provider is live. Prospect may
+remain mock-only, Engage simulation-only and CRM connectors unavailable even on a
+Complete plan. Core product capabilities do not depend on those providers.
 
-Disabling Engage immediately halts active Campaigns and cancels queued retryable
-email simulations; it does not delete history. Re-enabling does not silently approve
-or resume halted work.
+## Current enforcement
 
-WO-031 Events uses the same `engage` entitlement plus the server-authoritative
-`engageEvents` feature. Loss of availability preserves retained Event history as
-read-only/exportable but blocks create, import, plan, encounter, promotion and
-outreach. Prospect entitlement only controls the optional explicit research link; an
-Engage-only seller can still import, plan and capture Event context.
+Every business API first requires effective Core access. Grace permits reads/export
+but blocks mutations. Expired, inactive and suspended organisations fail closed.
+Module services and workers then enforce their own entitlement:
 
-WO-032 Create requires both `API_FEATURE_CREATE_ENABLED` and the tenant `create`
-entitlement at every template, presentation, review, approval and download boundary.
-Only administrators may change the entitlement or manage/approve templates; ordinary
-members may use approved versions. A downgrade immediately blocks Create reads and
-mutations while retained objects remain covered by export and organisation deletion.
-The current source is manual private-beta administration; there is no billing, trial,
-price or grace-period implementation.
+- Prospect: target-market, account/person discovery, research, review and promotion;
+- Engage: outreach, Campaigns/Sequences and Events;
+- Create: templates, presentations, approvals/downloads and Business Cases; and
+- CRM: external HubSpot connection, mapping, preview, confirmation, worker execution
+  and reconciliation.
 
-## Server and client contract
+Native CRM settings, custom fields, archive/restore, imports, merges and Native
+Pipeline administration require Core write access, the existing native feature
+flags, appropriate admin authority and Native CRM mode. External mode additionally
+requires CRM connector write access.
 
-API policy remains authoritative. Route/service authorisation checks the concrete
-capability after verified tenant and membership resolution; hiding a button is not
-security. The web app consumes a typed availability projection and renders consistent
-states. It does not infer access from plan names or cache entitlements across
-organisations.
+Legacy module-toggle endpoints are retained only as explicit denials with
+`commercial_plan_managed`; an organisation administrator is not a commercial
+operator. `GET /api/v1/commercial` is admin-only and read-only. Operator mutation is
+outside the browser and requires exact confirmation, actor/reason and optimistic
+state version.
 
-Core APIs do not depend on an add-on. Add-on output may enrich a Core page through an
-optional typed projection; its absence returns a valid Core response. Cross-module
-links use stable canonical IDs rather than duplicate records.
+## Trial and downgrade
+
+An explicit trial grants the Complete module profile for 14 days. At its exact end,
+all previously accessible modules become read-only for 30 days; at grace end access
+becomes `none`. There is one trial per organisation, no card and no automatic charge.
+
+When a paid/admin-approved plan removes a module, an existing entitlement becomes
+`read` instead of being erased. New module work is blocked immediately, historical
+data stays in normal authorised reads/export and no customer data is purged.
+Re-upgrade restores write access without reconstructing records. Engage downgrade
+halts active work and cancels safe queued/retryable execution. Already executing
+irreversible provider work follows its established reconciliation contract.
+
+## User limit
+
+Only an active organisation membership joined to an active user consumes a seat.
+Pending identities/invitations, disabled members and removed memberships do not.
+The organisation and commercial state are row-locked while admission is evaluated,
+so concurrent final-seat attempts serialise. Downgrading below the active count
+marks `requires_resolution`, preserves every person and blocks additional admission.
+
+## Storage, RLS and history
+
+Plan versions are global immutable catalogue rows. Commercial state, module
+entitlements and commercial events are tenant scoped. Repository operations include
+organisation predicates; PostgreSQL forced RLS uses the trusted transaction-local
+tenant setting. Commercial events are immutable snapshots containing the plan
+version, entitled/readable module sets, status, dates, seats, actor, reason and state
+version. Stale operator writes fail with no last-writer-wins overwrite.
+
+Export schema v31 includes current commercial state with its immutable plan snapshot,
+commercial history and module entitlements. Approved organisation deletion removes
+them. Expiry and downgrade never do.
 
 ## UX rules
 
-- Purchased and configured: show the useful action in its natural place.
-- Purchased but not configured: explain the required setup to an authorised user;
-  other users get a simple unavailable state.
-- No permission: explain who can help, without revealing restricted details.
-- Temporarily unavailable: preserve readable Core state and offer retry/status.
-- Not purchased: show a short contextual explanation only when the capability would
-  directly answer the current question; do not add dead navigation or pop-ups.
-- Usage limited: disclose unit, period and remaining availability before an action;
-  never surprise the user after producing work.
+Ordinary sellers receive short product language such as “Prospect isn't included in
+your organisation's current plan”; they do not see internal entitlement codes or
+prices. Admin Settings shows plan, status, interval, trial/grace dates, users and
+module/provider distinction. It has no purchase, card, invoice or trial-date control.
+Navigation represents user goals, not a pricing grid.
 
-Navigation represents user goals, not purchases. Find and Create may be hidden or
-shown as a restrained discoverable destination depending on product policy, while
-Sell/Pipeline/Home never become broken shells. Unavailable-module copy contains no
-exact price unless it comes from an authorised commercial source.
+## Explicit boundary
 
-## Changes, downgrade and failure
+WO-047 adds no Stripe, checkout, webhook, subscription-provider mapping, card,
+invoice, GST, proration, refund, payment failure, extra-user price or automatic
+renewal. It adds no Credits ledger or allowance and activates no provider. Those are
+separate future decisions and must reuse this authority rather than create another
+entitlement system.
 
-Entitlement changes are effective-dated, audited and idempotently applied. Upgrades
-can reveal features after server confirmation. A downgrade stops new add-on actions
-at the effective time but preserves authorised read/export access for a defined grace
-and retention policy. It never deletes data synchronously or makes Core data
-unreachable. In-flight jobs resolve under an explicit snapshot/cancellation policy.
-
-Billing/provider outages do not silently grant new access or disable paid access on a
-single transient failure. The service uses last-known confirmed commercial state for
-a bounded period, alerts administrators and reconciles later. Manual grants require
-reason, approver, expiry and audit.
-
-## Usage dimensions to evaluate
-
-Commercial discovery may evaluate per-user/team seats, research/contact credits, AI
-usage, storage and execution volume. A dimension is adopted only when customers can
-understand and predict it, it reflects real cost/value, and it does not discourage
-safe Core use. Essential Sales Brain analysis and correction should not be metered
-into dysfunction.
-
-Counters use stable idempotency keys and adjustment history. Estimated tokens or
-provider-specific internal units must not be exposed as if they were stable customer
-value without a deliberate pricing decision.
-
-## Security, privacy and operation
-
-Entitlement administration requires least privilege and metadata audit. Commercial
-state contains no payment credentials. Future Stripe integration belongs behind an
-adapter and webhook verification boundary; Stripe is not required to implement the
-entitlement domain. Responses reveal only the current organisation/user's safe state.
-
-Cache keys include organisation, membership/role and entitlement version. Invalidate
-on plan, policy, permission or capability changes. Metrics cover projection latency,
-denials by safe reason, stale state and reconciliation—not user content.
-
-WO-027 person discovery/research uses the same server-authoritative `prospect`
-entitlement at list, discovery, research, review, promotion, delete and Contact-link
-boundaries. A separate client flag was intentionally not added. Disabling Prospect
-blocks person capability according to the same read/write policy; Core Accounts and
-Contacts remain usable.
-
-WO-029 introduces a distinct `engage` entitlement. Prospect entitlement or Contact
-ownership alone cannot grant outreach. The API checks Engage at availability,
-workspace, draft, edit, approval, preview, confirmation and worker execution. A
-downgrade blocks new consequential operations immediately while retained outreach
-content remains subject to export/retention policy. The current entitlement source is
-manual private-beta administration; no billing integration or price is implied.
-
-## Explicitly out of scope
-
-WO-026/027 add no billing or plan table. Exact prices,
-contracts, tax, invoicing, proration, trials and payment flows require later commercial
-and legal decisions.
-
-## WO-033 Create entitlement reuse
-
-Value Model administration, Business Case creation/calculation and Business Case use
-in presentations all reuse the existing organisation-level Create entitlement. There
-is no separate SKU, billing state or browser-trusted switch. Missing or disabled
-entitlement fails closed. Administrator role is additionally required to create,
-version, approve or archive Value Models; case workflows remain available to entitled
-members.
-
-## WO-034 CRM entitlement
-
-`API_FEATURE_NATIVE_CRM_ENABLED` and the organisation `crm` row jointly gate CRM
-system-of-record configuration, custom-field mutation and administrator-only record
-archive/restore. Admins manage entitlement, mode and definitions; members may use
-entitled values. Core Company/Contact/Opportunity CRUD never depends on this add-on.
-Disabling CRM makes existing custom values read-only and preserves them in organisation
-export/deletion. This is a manual private-beta switch, not a billing or plan
-implementation.
-
-## WO-035 Pipeline entitlement split
-
-The `API_FEATURE_NATIVE_PIPELINE_ENABLED` flag protects the server transition and
-definition capability. Board/history are canonical Core consumers. Creating or
-changing native definitions additionally requires `API_FEATURE_NATIVE_CRM_ENABLED`, an
-enabled `crm` entitlement, native CRM mode and administrator role. External authority
-remains a safety rule regardless of package.
+See [Commercial authority](commercial-authority.md) and
+[ADR 0069](../08-decisions/0069-versioned-commercial-authority.md).

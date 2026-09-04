@@ -19,11 +19,19 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from revenueos.auth import identity_organisation_id, identity_user_id
+from revenueos.commercial_services import (
+    PLAN_CATALOGUE,
+    CommercialService,
+    ensure_plan_catalogue,
+    require_seat_available,
+)
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
+from revenueos.errors import PublicAPIError
 from revenueos.models import (
     ActionExecution,
     AIJob,
+    CommercialStateEvent,
     CreatePresentationVersion,
     CreateTemplateVersion,
     CRMImportBatch,
@@ -33,6 +41,7 @@ from revenueos.models import (
     OperatorProvisioningEvent,
     Organisation,
     OrganisationBetaSettings,
+    OrganisationCommercialState,
     OrganisationCRMSetting,
     OrganisationMembership,
     OrganisationModuleEntitlement,
@@ -44,7 +53,7 @@ from revenueos.routes.health import EXPECTED_MIGRATION_HEAD
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
 CheckStatus = Literal["pass", "fail"]
-AddOnModule = Literal["prospect", "engage", "create"]
+AddOnModule = Literal["prospect", "engage", "create", "crm"]
 
 
 @dataclass(frozen=True)
@@ -262,8 +271,8 @@ async def provision_organisation(
     operator = _validate_operator_reference(operator_reference)
     key_hash = _hash_key(idempotency_key)
     add_ons = tuple(sorted(set(selected_add_ons)))
-    if any(item not in {"prospect", "engage", "create"} for item in add_ons):
-        raise ValueError("Selected add-ons must be Prospect, Engage or Create.")
+    if any(item not in {"prospect", "engage", "create", "crm"} for item in add_ons):
+        raise ValueError("Selected add-ons must be Prospect, Engage, Create or CRM.")
     if retention_days not in {30, 90, 180, None}:
         raise ValueError("Retention days must be 30, 90, 180 or manual.")
     organisation_id = identity_organisation_id(external_organisation_id)
@@ -342,30 +351,64 @@ async def provision_organisation(
         elif membership.role != "admin" or membership.status != "active":
             raise ValueError("Existing administrator membership is not active with the required role.")
         await session.flush()
-
         now = datetime.now(UTC)
-        requested_modules = {
-            "crm": native_crm,
-            **{module: module in add_ons for module in ("prospect", "engage", "create")},
-        }
-        for module, enabled in requested_modules.items():
-            entitlement = await session.get(OrganisationModuleEntitlement, (organisation_id, module))
-            if entitlement is None:
+        await ensure_plan_catalogue(session)
+        commercial_state = await session.get(OrganisationCommercialState, organisation_id)
+        if commercial_state is None:
+            core_plan = next(plan for plan in PLAN_CATALOGUE if plan.code == "core")
+            commercial_add_ons = add_ons
+            entitled_modules = ["core", *commercial_add_ons]
+            session.add(
+                OrganisationCommercialState(
+                    organisation_id=organisation_id,
+                    plan_version_id=core_plan.id,
+                    status="active",
+                    billing_interval=None,
+                    add_on_modules_json=list(commercial_add_ons),
+                    seat_limit_status="within_limit",
+                    effective_at=now,
+                    source="manual_support",
+                    actor_reference=operator,
+                    reason="Operator-authorised private-beta provisioning.",
+                )
+            )
+            for module in ("core", "prospect", "engage", "create", "crm"):
+                enabled = module in entitled_modules
                 session.add(
                     OrganisationModuleEntitlement(
                         organisation_id=organisation_id,
                         module_key=module,
                         enabled=enabled,
-                        source="manual_private_beta",
-                        configured_by_user_id=user_id,
+                        access_level="write" if enabled else "none",
+                        source="add_on" if module in commercial_add_ons else "commercial_plan",
+                        configured_by_user_id=None,
+                        configured_by_actor=operator,
                         enabled_at=now if enabled else None,
                         disabled_at=None if enabled else now,
                     )
                 )
-            elif entitlement.enabled != enabled:
-                raise ValueError(
-                    f"Existing {module} entitlement differs; use the reviewed admin workflow to change it."
+            session.add(
+                CommercialStateEvent(
+                    id=uuid.uuid4(),
+                    organisation_id=organisation_id,
+                    plan_version_id=core_plan.id,
+                    event_type="plan_assigned",
+                    effective_status="active",
+                    billing_interval=None,
+                    entitled_modules_json=entitled_modules,
+                    readable_modules_json=entitled_modules,
+                    included_user_limit=5,
+                    active_user_count=1,
+                    seat_limit_status="within_limit",
+                    effective_at=now,
+                    source="manual_support",
+                    actor_reference=operator,
+                    reason="Operator-authorised private-beta provisioning.",
+                    state_version=1,
                 )
+            )
+        elif commercial_state.status != "inactive":
+            raise ValueError("The existing organisation already has commercial access.")
         crm_setting = await session.get(OrganisationCRMSetting, organisation_id)
         if native_crm:
             if crm_setting is None:
@@ -480,6 +523,11 @@ async def provision_member(
             raise ValueError("Member input conflicts with the existing identity user.")
         await session.flush()
         membership = await session.get(OrganisationMembership, (organisation_id, user_id))
+        if membership is None or membership.status != "active":
+            try:
+                await require_seat_available(session, organisation_id, now=datetime.now(UTC))
+            except PublicAPIError as exc:
+                raise ValueError(exc.message) from exc
         if membership is None:
             session.add(
                 OrganisationMembership(
@@ -540,7 +588,6 @@ async def tenant_preflight(
                 OrganisationMembership.status == "active",
             )
         )
-        crm_entitlement = await session.get(OrganisationModuleEntitlement, (organisation_id, "crm"))
         crm_setting = await session.get(OrganisationCRMSetting, organisation_id)
         import_batches = await session.scalar(
             select(func.count()).select_from(CRMImportBatch).where(CRMImportBatch.organisation_id == organisation_id)
@@ -559,9 +606,7 @@ async def tenant_preflight(
     checks = {
         "exists": True,
         "activeAdminPresent": bool(active_admins),
-        "nativeCrmEnabled": bool(
-            crm_entitlement and crm_entitlement.enabled and crm_setting and crm_setting.mode == "native"
-        ),
+        "nativeCrmEnabled": bool(crm_setting and crm_setting.mode == "native"),
         "activePipelinePresentOrCreatedOnFirstOpportunity": bool(pipelines) or not import_batches,
     }
     return {
@@ -671,7 +716,7 @@ def _parser() -> argparse.ArgumentParser:
     provision.add_argument(
         "--enable-addon",
         action="append",
-        choices=("prospect", "engage", "create"),
+        choices=("prospect", "engage", "create", "crm"),
         default=[],
     )
     provision.add_argument("--retention-days", type=int, choices=(30, 90, 180), default=90)
@@ -687,6 +732,35 @@ def _parser() -> argparse.ArgumentParser:
     member.add_argument("--idempotency-key", required=True)
     member.add_argument("--operator-reference", required=True)
     member.add_argument("--confirm", required=True)
+
+    inspect_commercial = subparsers.add_parser("commercial-inspect")
+    inspect_commercial.add_argument("--organisation-id", required=True, type=uuid.UUID)
+
+    start_trial = subparsers.add_parser("commercial-start-trial")
+    start_trial.add_argument("--organisation-id", required=True, type=uuid.UUID)
+    start_trial.add_argument("--expected-lock-version", required=True, type=int)
+    start_trial.add_argument("--operator-reference", required=True)
+    start_trial.add_argument("--reason", required=True)
+    start_trial.add_argument("--confirm", required=True)
+
+    assign_plan = subparsers.add_parser("commercial-assign-plan")
+    assign_plan.add_argument("--organisation-id", required=True, type=uuid.UUID)
+    assign_plan.add_argument("--plan", required=True, choices=("core", "growth", "complete", "enterprise"))
+    assign_plan.add_argument("--interval", required=True, choices=("monthly", "annual"))
+    assign_plan.add_argument("--expected-lock-version", required=True, type=int)
+    assign_plan.add_argument("--add-on", action="append", choices=("prospect", "engage", "create", "crm"), default=[])
+    assign_plan.add_argument("--custom-user-limit", type=int)
+    assign_plan.add_argument("--operator-reference", required=True)
+    assign_plan.add_argument("--reason", required=True)
+    assign_plan.add_argument("--confirm", required=True)
+
+    change_commercial = subparsers.add_parser("commercial-change-state")
+    change_commercial.add_argument("--organisation-id", required=True, type=uuid.UUID)
+    change_commercial.add_argument("--state", required=True, choices=("inactive", "suspended"))
+    change_commercial.add_argument("--expected-lock-version", required=True, type=int)
+    change_commercial.add_argument("--operator-reference", required=True)
+    change_commercial.add_argument("--reason", required=True)
+    change_commercial.add_argument("--confirm", required=True)
 
     tenant = subparsers.add_parser("tenant-preflight")
     tenant.add_argument("--organisation-id", required=True, type=uuid.UUID)
@@ -741,6 +815,55 @@ async def _run(arguments: argparse.Namespace, settings: Settings) -> tuple[int, 
                 operator_reference=arguments.operator_reference,
             )
             return 0, {"status": "complete", **asdict(member_result)}
+        if arguments.command == "commercial-inspect":
+            async with session_factory() as session:
+                await set_tenant_database_context(session, arguments.organisation_id)
+                projection = await CommercialService(session, settings).projection(arguments.organisation_id)
+                return 0, {"status": "complete", "commercial": projection.model_dump(mode="json", by_alias=True)}
+        if arguments.command == "commercial-start-trial":
+            expected_confirmation = f"START TRIAL {arguments.organisation_id}"
+            if arguments.confirm != expected_confirmation:
+                return 2, {"status": "blocked", "code": "confirmation_mismatch"}
+            async with session_factory() as session:
+                await set_tenant_database_context(session, arguments.organisation_id)
+                projection = await CommercialService(session, settings).start_trial(
+                    arguments.organisation_id,
+                    actor_reference=_validate_operator_reference(arguments.operator_reference),
+                    reason=arguments.reason,
+                    expected_lock_version=arguments.expected_lock_version,
+                )
+                return 0, {"status": "complete", "commercial": projection.model_dump(mode="json", by_alias=True)}
+        if arguments.command == "commercial-assign-plan":
+            expected_confirmation = f"ASSIGN {arguments.plan.upper()} TO {arguments.organisation_id}"
+            if arguments.confirm != expected_confirmation:
+                return 2, {"status": "blocked", "code": "confirmation_mismatch"}
+            async with session_factory() as session:
+                await set_tenant_database_context(session, arguments.organisation_id)
+                projection = await CommercialService(session, settings).assign_plan(
+                    arguments.organisation_id,
+                    plan_code=arguments.plan,
+                    billing_interval=arguments.interval,
+                    actor_reference=_validate_operator_reference(arguments.operator_reference),
+                    reason=arguments.reason,
+                    expected_lock_version=arguments.expected_lock_version,
+                    add_ons=tuple(arguments.add_on),
+                    custom_user_limit=arguments.custom_user_limit,
+                )
+                return 0, {"status": "complete", "commercial": projection.model_dump(mode="json", by_alias=True)}
+        if arguments.command == "commercial-change-state":
+            expected_confirmation = f"SET {arguments.organisation_id} {arguments.state.upper()}"
+            if arguments.confirm != expected_confirmation:
+                return 2, {"status": "blocked", "code": "confirmation_mismatch"}
+            async with session_factory() as session:
+                await set_tenant_database_context(session, arguments.organisation_id)
+                projection = await CommercialService(session, settings).change_state(
+                    arguments.organisation_id,
+                    status=arguments.state,
+                    actor_reference=_validate_operator_reference(arguments.operator_reference),
+                    reason=arguments.reason,
+                    expected_lock_version=arguments.expected_lock_version,
+                )
+                return 0, {"status": "complete", "commercial": projection.model_dump(mode="json", by_alias=True)}
         if arguments.command == "tenant-preflight":
             tenant_result = await tenant_preflight(session_factory, arguments.organisation_id)
             return (0 if tenant_result["status"] == "ready" else 1), tenant_result
@@ -759,6 +882,8 @@ def main() -> None:
     try:
         settings = get_settings()
         exit_code, result = asyncio.run(_run(arguments, settings))
+    except PublicAPIError as exc:
+        exit_code, result = 1, {"status": "blocked", "code": exc.code, "message": exc.message}
     except (ValueError, SQLAlchemyError):
         exit_code, result = 1, {"status": "blocked", "code": "operation_failed"}
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))

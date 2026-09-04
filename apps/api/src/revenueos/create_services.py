@@ -21,6 +21,7 @@ from revenueos.business_case_contracts import (
     CalculationOutputResponse,
     ScenarioCalculationResponse,
 )
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.create_contracts import (
     ApprovedContentItemResponse,
@@ -66,7 +67,6 @@ from revenueos.models import (
     CreateTemplateSlide,
     CreateTemplateVersion,
     Opportunity,
-    OrganisationModuleEntitlement,
 )
 from revenueos.tenant import TenantContext
 from revenueos.visual_storage import VisualObjectMissingError, VisualStorage, VisualStorageError
@@ -152,14 +152,21 @@ class CreateService:
         self.repository = CreateRepository(session)
 
     async def availability(self) -> CreateAvailabilityResponse:
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
-        enabled = bool(self.settings.feature_create_enabled and entitlement and entitlement.enabled)
+        access = await CommercialService(self.session, self.settings).module_access(
+            self.tenant.organisation_id, "create"
+        )
+        enabled = self.settings.feature_create_enabled and access == "write"
         if not self.settings.feature_create_enabled:
-            state: Literal["available", "temporarily_unavailable", "not_in_plan"] = "temporarily_unavailable"
+            state: Literal["available", "read_only", "temporarily_unavailable", "not_in_plan"] = (
+                "temporarily_unavailable"
+            )
             message = "Create is temporarily unavailable in this environment."
-        elif entitlement is None or not entitlement.enabled:
+        elif access == "none":
             state = "not_in_plan"
-            message = "Create is not enabled for this organisation."
+            message = "Create isn't included in your organisation's current plan."
+        elif access == "read":
+            state = "read_only"
+            message = "Historical Create artefacts remain available to view and export. New creation is blocked."
         else:
             state = "available"
             message = "Create is ready for approved PowerPoint templates."
@@ -174,34 +181,13 @@ class CreateService:
         )
 
     async def update_entitlement(self, request: CreateEntitlementUpdate) -> CreateAvailabilityResponse:
+        del request
         self._require_admin()
-        if request.enabled and not self.settings.feature_create_enabled:
-            raise PublicAPIError(
-                "create_unavailable",
-                "RevenueOS Create cannot be enabled in this environment.",
-                503,
-            )
-        now = datetime.now(UTC)
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
-        if entitlement is None:
-            entitlement = OrganisationModuleEntitlement(
-                organisation_id=self.tenant.organisation_id,
-                module_key="create",
-                enabled=request.enabled,
-                source="manual_private_beta",
-                configured_by_user_id=self.tenant.user_id,
-                enabled_at=now if request.enabled else None,
-                disabled_at=now if not request.enabled else None,
-            )
-            self.repository.add(entitlement)
-        else:
-            entitlement.enabled = request.enabled
-            entitlement.configured_by_user_id = self.tenant.user_id
-            entitlement.enabled_at = now if request.enabled else entitlement.enabled_at
-            entitlement.disabled_at = None if request.enabled else now
-        await self._commit("The Create entitlement could not be saved.")
-        self._audit("create_entitlement_changed", enabled=request.enabled)
-        return await self.availability()
+        raise PublicAPIError(
+            "commercial_plan_managed",
+            "Module access is managed by your organisation's commercial plan. Contact support to change it.",
+            403,
+        )
 
     async def upload_template(self, request: TemplateUploadRequest) -> TemplateSummaryResponse:
         await self._require_entitled()
@@ -304,7 +290,7 @@ class CreateService:
         return await self.get_template(template.id)
 
     async def list_templates(self) -> TemplateListResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         items = [
             await self._template_response(item) for item in await self.repository.templates(self.tenant.organisation_id)
         ]
@@ -315,7 +301,7 @@ class CreateService:
         )
 
     async def get_template(self, template_id: UUID) -> TemplateSummaryResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         template = await self.repository.template(self.tenant.organisation_id, template_id)
         if template is None:
             raise PublicAPIError("template_not_found", "The template was not found.", 404)
@@ -565,7 +551,7 @@ class CreateService:
         return await self._presentation_response(presentation)
 
     async def list_presentations(self) -> PresentationListResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         items = [
             await self._presentation_response(item)
             for item in await self.repository.presentations(self.tenant.organisation_id)
@@ -580,7 +566,7 @@ class CreateService:
         )
 
     async def get_presentation(self, presentation_id: UUID) -> PresentationResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         presentation = await self.repository.presentation(self.tenant.organisation_id, presentation_id)
         if presentation is None:
             raise PublicAPIError("presentation_not_found", "The presentation was not found.", 404)
@@ -979,7 +965,7 @@ class CreateService:
         )
 
     async def download(self, presentation_id: UUID, token: str) -> tuple[bytes, str]:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         now = datetime.now(UTC)
         token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
         grant = await self.repository.download_grant_by_hash(
@@ -1681,12 +1667,18 @@ class CreateService:
             )
         return selected
 
-    async def _require_entitled(self) -> None:
+    async def _require_entitled(self, *, write: bool = True) -> None:
         if not self.settings.feature_create_enabled:
             raise PublicAPIError("create_unavailable", "RevenueOS Create is temporarily unavailable.", 503)
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
-        if entitlement is None or not entitlement.enabled:
-            raise PublicAPIError("create_not_entitled", "Create is not enabled for this organisation.", 403)
+        commercial = CommercialService(self.session, self.settings)
+        if write:
+            await commercial.require_module_write(self.tenant.organisation_id, "create")
+            return
+        access = await commercial.module_access(self.tenant.organisation_id, "create")
+        if access == "none" or (write and access != "write"):
+            raise PublicAPIError(
+                "create_not_in_plan", "Create isn't included in your organisation's current plan.", 403
+            )
 
     def _require_admin(self) -> None:
         if not self.tenant.can_manage():

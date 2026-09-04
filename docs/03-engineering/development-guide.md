@@ -143,7 +143,7 @@ WO-031 Event development additionally uses
 500 attendees per Event and five confirmed imports per Event/day. Use synthetic UTF-8
 CSV through the browser or preview API; raw bytes are not retained and standard tests
 make no Event-platform, Prospect-provider or email-provider request. The current
-single Alembic head is `0040_event_intelligence`.
+single Alembic head is `0052_commercial_plans_trial`.
 
 ## Database workflow
 

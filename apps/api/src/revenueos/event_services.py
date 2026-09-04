@@ -12,6 +12,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.crm_history import crm_creation_changes
 from revenueos.domain import (
@@ -112,8 +113,10 @@ class EventService:
             self.tenant.organisation_id, event_ids, self.tenant.user_id
         )
         campaigns = await self.repository.event_campaigns_for_events(self.tenant.organisation_id, event_ids)
-        prospect = await self.repository.entitlement(self.tenant.organisation_id, "prospect")
-        prospect_available = bool(prospect is not None and prospect.enabled and self.settings.feature_prospect_enabled)
+        prospect_access = await CommercialService(self.session, self.settings).module_access(
+            self.tenant.organisation_id, "prospect"
+        )
+        prospect_available = prospect_access == "write" and self.settings.feature_prospect_enabled
         return EventListResponse(
             items=[
                 await self._event_response(
@@ -873,10 +876,10 @@ class EventService:
         if campaigns is None:
             campaigns = await self.repository.event_campaigns(self.tenant.organisation_id, event.id)
         if prospect_available is None:
-            prospect = await self.repository.entitlement(self.tenant.organisation_id, "prospect")
-            prospect_available = bool(
-                prospect is not None and prospect.enabled and self.settings.feature_prospect_enabled
+            prospect_access = await CommercialService(self.session, self.settings).module_access(
+                self.tenant.organisation_id, "prospect"
             )
+            prospect_available = prospect_access == "write" and self.settings.feature_prospect_enabled
         summary = EventSummaryResponse(**summary_values)
         return EventResponse(
             id=event.id,
@@ -926,8 +929,10 @@ class EventService:
             }:
                 teammate_counts[teammate_state.attendee_id] = teammate_counts.get(teammate_state.attendee_id, 0) + 1
         own_encounters = {item.attendee_id: item for item in encounters if item.user_id == self.tenant.user_id}
-        prospect = await self.repository.entitlement(self.tenant.organisation_id, "prospect")
-        can_research = bool(prospect is not None and prospect.enabled and self.settings.feature_prospect_enabled)
+        prospect_access = await CommercialService(self.session, self.settings).module_access(
+            self.tenant.organisation_id, "prospect"
+        )
+        can_research = prospect_access == "write" and self.settings.feature_prospect_enabled
         responses: list[EventAttendeeResponse] = []
         for attendee in attendees:
             state = own_states.get(attendee.id)
@@ -1122,10 +1127,12 @@ class EventService:
     async def _require_read_access(self) -> bool:
         if not self.settings.feature_engage_events_enabled:
             raise PublicAPIError("events_unavailable", "Events are unavailable in this environment.", 503)
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id, "engage")
-        if entitlement is None:
+        access = await CommercialService(self.session, self.settings).module_access(
+            self.tenant.organisation_id, "engage"
+        )
+        if access == "none":
             raise PublicAPIError("events_not_in_plan", "RevenueOS Events requires Engage.", 403)
-        return not entitlement.enabled
+        return access != "write"
 
     async def _require_write_access(self) -> None:
         read_only = await self._require_read_access()
@@ -1135,6 +1142,7 @@ class EventService:
                 "Historical Event data is read-only because Engage is not currently enabled.",
                 403,
             )
+        await CommercialService(self.session, self.settings).require_module_write(self.tenant.organisation_id, "engage")
 
     def _require_event_manager(self, event: SalesEvent) -> None:
         if event.owner_user_id != self.tenant.user_id and not self.tenant.can_manage():

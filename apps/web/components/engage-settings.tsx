@@ -52,35 +52,6 @@ export function EngageSettings() {
       .catch(() => setMessage("Engage settings could not be loaded."));
   }, []);
 
-  async function toggleEntitlement() {
-    if (!availability) return;
-    setBusy("entitlement");
-    setMessage(null);
-    try {
-      const next = await apiRequest<EngageAvailability>(
-        "/api/v1/engage/admin/entitlement",
-        {
-          method: "PATCH",
-          body: JSON.stringify({ enabled: !availability.enabled }),
-        },
-      );
-      setAvailability(next);
-      setMessage(
-        next.enabled
-          ? "Engage is enabled for this organisation."
-          : "Engage is disabled. Existing outreach history remains available to authorised maintenance workflows.",
-      );
-    } catch (reason: unknown) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "The Engage entitlement could not be saved.",
-      );
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function savePolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft) return;
@@ -122,26 +93,13 @@ export function EngageSettings() {
           </p>
         </div>
         {availability ? (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={availability.enabled}
-            disabled={
-              busy !== null || availability.state === "temporarily_unavailable"
-            }
-            onClick={() => void toggleEntitlement()}
-            className={`inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 ${
-              availability.enabled
-                ? "border-teal-700 bg-teal-700 text-white"
-                : "border-slate-300 bg-white text-slate-700"
-            }`}
-          >
-            {busy === "entitlement"
-              ? "Saving…"
-              : availability.enabled
-                ? "Enabled"
-                : "Disabled"}
-          </button>
+          <span className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700">
+            {availability.enabled
+              ? "Included in plan"
+              : availability.state === "read_only"
+                ? "View only"
+                : "Not included"}
+          </span>
         ) : (
           <span className="text-sm text-slate-500">Loading…</span>
         )}

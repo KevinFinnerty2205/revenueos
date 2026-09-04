@@ -1,60 +1,55 @@
-# Oryntela 14-day free-trial hypothesis
+# Oryntela 14-day trial
 
-- **Status:** **OWNER-APPROVED HYPOTHESIS FOR VALIDATION**
+- **Status:** Commercial authority implemented by WO-047; public self-service not approved
 - **Consolidated:** 4 September 2026
-- **Implementation:** No trial state, enforcement, billing or public signup is built
+- **Billing:** Not implemented
 
-## Proposed experience
+## Implemented authority
 
-- 14 days;
-- no credit card initially;
-- simple signup when self-service readiness exists;
-- broad enough product access to understand Oryntela's value rather than an
-  artificially weakened Core;
-- small complimentary allowance for explicitly metered external services;
-- no automatic charge or surprise billing; and
-- explicit selection and purchase of a paid plan after the trial.
+A support operator may explicitly start one trial per organisation, including from
+the unused Core provisioning baseline. The trial:
 
-The leading hypothesis is a bounded **Complete experience for 14 days**, but the
-exact feature matrix and provider exposure are undecided. An internal supervised
-design partnership is not the same thing as this future public trial.
+- runs for exactly 14 days from its recorded UTC start;
+- grants the Complete V1 module profile;
+- requires no credit card;
+- never charges automatically;
+- records start, end, grace end, actor, reason and immutable history; and
+- uses an injected clock in boundary tests.
 
-## Trial end
+There is no public signup or browser control for trial dates. An organisation cannot
+restart its trial after `trial_used_at` is set. A support operator may assign an
+approved active plan during trial or grace.
 
-At expiry, paid capabilities pause. The workspace and data should remain securely
-retained for a reasonable conversion period, the customer chooses a plan, and access
-reactivates only after explicit purchase. Do not delete everything on day 15, hold
-data hostage or represent read-only behaviour as decided before the retention and
-offboarding policies are approved.
+## Trial end and grace
 
-The conversion-window length, read-only surface and deletion schedule remain open.
+At the exact 14-day end instant the trial becomes a 30-day grace period. Existing
+data remains visible and exportable, but new Core/module mutations and new external
+actions are blocked. At the exact grace-end instant commercial access expires and
+business routes fail closed. Data remains governed by normal retention, export and
+approved erasure; neither transition purges it.
 
-## Cost and abuse boundary
+The admin Settings projection shows the status, dates and plain-language next step.
+It does not suggest that payment, checkout or automatic conversion exists.
 
-The trial must never create unlimited paid Prospect, enrichment, verification, SMS,
-voice, research or generation cost. Complimentary Credits are small, visible and
-non-negative. When they are exhausted, the metered operation stops while the rest of
-the trial continues. There is no automatic top-up.
+## Provider and cost boundary
 
-Controls must include organisation/person/device/payment-risk signals proportionate
-to privacy, verified identity, quotas, rate limits, per-operation confirmation,
-provider kill switches and explicit maximum exposure. Do not solve abuse by covert
-tracking or by collecting unnecessary personal data.
+Complete commercial inclusion does not activate a provider. Current deployment flags,
+configuration and mocks remain authoritative for operational availability. Prospect
+may be mock-only, Engage simulation-only and external CRM unavailable during a trial.
+No complimentary Credits, paid provider allowance or automatic top-up is implemented.
 
-## Public-trial prerequisites
+## Public-trial prerequisites still open
 
-| Prerequisite                                                | Current state                                         |
-| ----------------------------------------------------------- | ----------------------------------------------------- |
-| Self-service identity, organisation creation and onboarding | Not approved for public trial                         |
-| Plan/module/trial entitlements                              | Architecture exists; commercial trial state not built |
-| Billing and explicit purchase                               | Not built                                             |
-| Trial expiry, retention, export and deletion                | Policy/implementation not final                       |
-| Complimentary Credits and provider-cost caps                | Not built; quantities undecided                       |
-| Abuse/fraud/rate-limit operations                           | Not proved for public access                          |
-| Terms, privacy, tax and consumer/B2B legal review           | Required                                              |
-| Production providers and support                            | Required for any advertised provider-backed use       |
-| Observed supervised customer value                          | Required first                                        |
+| Prerequisite                                      | Current state                                      |
+| ------------------------------------------------- | -------------------------------------------------- |
+| Plan/module/trial access authority                | Implemented                                        |
+| Trial expiry and 30-day read/export grace         | Implemented                                        |
+| Self-service signup and abuse/fraud operations    | Not approved or implemented                        |
+| Billing and explicit purchase                     | Not implemented                                    |
+| Credits/provider-cost caps                        | Not implemented; quantities undecided              |
+| Terms, privacy, tax and consumer/B2B legal review | Required                                           |
+| Production provider and support readiness         | Required for any advertised provider-backed value |
+| Supervised customer value evidence                | Required                                           |
 
-Do not publish or implement the trial before design-partner evidence validates time to
-value, the broad-product hypothesis and the economic exposure. See
-[pricing validation](oryntela-pricing-validation-plan.md).
+Do not publish or open a self-service trial without a separate owner work order and
+the applicable launch, legal, privacy, support and cost controls.

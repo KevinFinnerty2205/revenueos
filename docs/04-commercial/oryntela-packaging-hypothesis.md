@@ -1,8 +1,8 @@
 # Oryntela packaging hypothesis
 
-- **Status:** Modules are established; plan composition is partly undecided
+- **Status:** V1 plan composition implemented as internal commercial authority
 - **Consolidated:** 4 September 2026
-- **Implementation:** Manual entitlements exist; subscription/billing packaging does not
+- **Implementation:** Versioned plan/trial/entitlement authority exists; billing does not
 
 ## Plans and modules are different
 
@@ -22,25 +22,25 @@ avoid this manageable context distinction.
 
 | Plan       | Direction                                                                                                                                                                      | Composition status                                                   |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| Core       | Sales Brain, Interactions, Evidence, Revenue Brain, Methodology, Home, Actions, Accounts/People/Opportunities, Pipeline, Analytics, Targets, Forecast and Manager Intelligence | Direction established; final public feature list not approved        |
-| Growth     | Core plus a coherent selection of expansion capability                                                                                                                         | **UNDECIDED — validate**                                             |
-| Complete   | Core plus the validated end-to-end expansion bundle                                                                                                                            | Intended to include all relevant modules; final matrix **UNDECIDED** |
-| Enterprise | Larger-team, contractual and approved governance/integration needs                                                                                                             | Custom; do not claim SSO/SCIM or features not built                  |
+| Core       | Sales Brain, Interactions, Evidence, Revenue Brain, Methodology, Home, Actions, Accounts/People/Opportunities, Native CRM/Pipeline, Analytics, Targets, Forecast, Manager Intelligence, Ask, simple Deal Room and reviewed Closed-Won handover | Implemented internal package; public feature copy not approved |
+| Growth     | Core plus Prospect and Engage | Implemented internal package |
+| Complete   | Growth plus Create and supported external CRM connectors | Implemented internal package |
+| Enterprise | Complete plus only individually approved scale/support/governance requirements | Custom user limit; do not claim SSO/SCIM or unbuilt features |
 
-Customers should be able to buy contextual add-ons such as Core + Create, Core +
-Prospect or Core + CRM where validated. They should not be forced into Complete for
-one required workflow. Add-on prices are undecided.
+The authority supports contextual add-ons such as Core + Create, Core + Prospect or
+Core + CRM. Here `CRM` means supported external CRM connectors; Native CRM remains
+Core. Add-ons are operator-assigned and have no public price.
 
 ## Entitlement boundary
 
-The existing server-authoritative feature flags/manual entitlements prove availability
-architecture, not commercial subscription enforcement. Future availability should be
-derived from product capability, plan/module entitlement, organisation policy, user
-permission, provider health and Credits where applicable. A client route or price
-label never grants access.
+The server now derives availability from the immutable plan version, current tenant
+commercial state, module entitlement, organisation policy, user permission and
+provider/runtime state. A client route or price label never grants access. Feature
+flags and provider state remain operational controls, not proof of purchase.
 
-Downgrade/payment failure should preserve readable customer data under retention and
-export policy. Trust, provenance, correction, accessibility, security and data
+Downgrade preserves existing removed-module data as read-only/exportable and blocks
+new work. It does not delete users or content. Payment-failure automation does not
+exist. Trust, provenance, correction, accessibility, security and data
 export/deletion are not premium features.
 
 ## Contextual discovery
@@ -63,10 +63,8 @@ unlock a module. This separation protects customer clarity and Oryntela economic
 
 ## Decisions still required
 
-- exact Growth bundle and upgrade reason;
-- exact Complete module matrix;
 - individual add-on eligibility and prices;
-- included-user/extra-user bands;
-- trial entitlement matrix;
-- module/plan treatment after downgrade; and
-- billing and entitlement implementation.
+- extra-user bands/prices;
+- public packaging and publication copy;
+- payment/billing provider, tax and legal treatment; and
+- Credits economics and implementation.

@@ -3,7 +3,7 @@
 - **Gate date:** 2 September 2026; commercial consolidation reviewed 4 September 2026 (Australia/Sydney)
 - **Current documentation branch:** `docs/oryntela-product-commercial-consolidation`
 - **Reviewed repository baseline:** `daedbbc`
-- **Repository baseline:** WO-039A, WO-039B and WO-039C are on `main`; the single Alembic head is `0050_real_data_operations`
+- **Repository candidate:** WO-039A through WO-046 are on `main`; WO-047 is the current review candidate with Alembic head `0052_commercial_plans_trial`
 - **Current launch decision:** **WAITING FOR TARGET ENVIRONMENT PROOF**
 - **Scope:** one named, supervised, Native CRM design partner; no Gmail, Apollo, live Prospect provider, live email or autonomous external execution
 
@@ -46,7 +46,7 @@ Use only these evidence states: `PASS`, `FAIL`, `OWNER APPROVAL REQUIRED`, `PART
 | ----------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Requested branch started clean from `main`            | **PASS**                     | Git inspection at gate start; no branch was created or changed                                                                                                     |
 | WO-039A, WO-039B and WO-039C are on `main`            | **PASS**                     | Merge commits `558795c`, `5f0a61c` and `93c386e`                                                                                                                   |
-| One Alembic head: `0050_real_data_operations`         | **PASS**                     | Migration chain and WO-039C migration tests                                                                                                                        |
+| One Alembic head: `0052_commercial_plans_trial`       | **PASS**                     | Migration chain plus commercial migration/RLS tests                                                                                                                |
 | Production build and complete repository gate         | **PASS AT WO-039C BASELINE** | [WO-039C validation record](../../07-sprints/wo-039c-real-data-operations.md#frozen-validation-gate); this documentation branch must also pass its required checks |
 | Production preflight command                          | **PASS**                     | `revenueos-operations production-preflight` exists and fails closed                                                                                                |
 | Forced RLS and runtime-role requirements              | **PASS — REPOSITORY ONLY**   | All-table PostgreSQL proof and non-bypass preflight exist; target repetition is separate                                                                           |

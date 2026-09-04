@@ -132,7 +132,8 @@ deletion preserves minimal history/suppression as described above.
 ## API surface
 
 - `GET /api/v1/engage/availability`
-- `PATCH /api/v1/engage/admin/entitlement`
+- `PATCH /api/v1/engage/admin/entitlement` is retained only as a legacy rejection;
+  commercial plan authority owns Engage access
 - `GET|PUT /api/v1/engage/policy`
 - `GET /api/v1/engage/contacts/{contactId}`
 - `POST /api/v1/engage/contacts/{contactId}/outreach`

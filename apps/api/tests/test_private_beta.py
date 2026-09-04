@@ -38,6 +38,7 @@ from revenueos.beta_maintenance import (
     run_retention,
 )
 from revenueos.beta_services import BetaService
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.demo_data import (
     demo_campaign_ids,
@@ -60,6 +61,7 @@ from revenueos.models import (
     AIUsageCounter,
     BetaDataRequest,
     CaptureSession,
+    CommercialStateEvent,
     Company,
     CRMImportBatch,
     CRMImportRow,
@@ -85,7 +87,9 @@ from revenueos.models import (
     OperatorProvisioningEvent,
     Opportunity,
     Organisation,
+    OrganisationCommercialState,
     OrganisationMembership,
+    OrganisationModuleEntitlement,
     PreInteractionBrief,
     ProspectTargetMarket,
     ProvisionalSignal,
@@ -223,7 +227,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0050_real_data_operations"
+    assert EXPECTED_MIGRATION_HEAD == "0052_commercial_plans_trial"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -1041,6 +1045,14 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
                 )
             )
             await session.flush()
+            await CommercialService(session, settings).assign_plan(
+                target_organisation_id,
+                plan_code="core",
+                billing_interval="monthly",
+                actor_reference="deletion-test",
+                reason="Synthetic commercial deletion fixture.",
+                expected_lock_version=0,
+            )
             session.add(
                 Company(
                     id=target_company_id,
@@ -1166,6 +1178,21 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
             assert await session.get(CRMImportBatch, target_import_batch_id) is None
             assert await session.get(CRMImportRow, target_import_row_id) is None
             assert await session.get(CRMRecordMerge, target_merge_id) is None
+            assert await session.get(OrganisationCommercialState, target_organisation_id) is None
+            assert (
+                await session.scalar(
+                    select(CommercialStateEvent).where(CommercialStateEvent.organisation_id == target_organisation_id)
+                )
+                is None
+            )
+            assert (
+                await session.scalar(
+                    select(OrganisationModuleEntitlement).where(
+                        OrganisationModuleEntitlement.organisation_id == target_organisation_id
+                    )
+                )
+                is None
+            )
             assert await session.get(User, PRIMARY_USER_ID) is not None
             assert await session.get(Organisation, PRIMARY_ORGANISATION_ID) is not None
             assert await session.get(Organisation, SECONDARY_ORGANISATION_ID) is not None
@@ -1472,7 +1499,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 30
+        assert payload["exportVersion"] == 31
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1598,7 +1625,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 30
+        assert download.json()["exportVersion"] == 31
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

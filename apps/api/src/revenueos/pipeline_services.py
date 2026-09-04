@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
@@ -20,7 +21,6 @@ from revenueos.models import (
     OpportunityAuditEvent,
     OpportunityStageEvent,
     OrganisationCRMSetting,
-    OrganisationModuleEntitlement,
     SalesPipeline,
     SalesPipelineStage,
     Task,
@@ -846,15 +846,9 @@ class PipelineService:
             raise PublicAPIError("admin_required", "An organisation administrator must manage pipelines.", 403)
         if not self.settings.feature_native_pipeline_enabled or not self.settings.feature_native_crm_enabled:
             raise PublicAPIError("native_pipeline_unavailable", "Native pipeline administration is unavailable.", 503)
-        entitlement = await self.repository.session.scalar(
-            select(OrganisationModuleEntitlement).where(
-                OrganisationModuleEntitlement.organisation_id == self.tenant.organisation_id,
-                OrganisationModuleEntitlement.module_key == "crm",
-                OrganisationModuleEntitlement.enabled.is_(True),
-            )
+        await CommercialService(self.repository.session, self.settings).require_module_write(
+            self.tenant.organisation_id, "core"
         )
-        if entitlement is None:
-            raise PublicAPIError("crm_not_entitled", "Native pipeline administration requires RevenueOS CRM.", 403)
         setting = await self.repository.session.scalar(
             select(OrganisationCRMSetting).where(OrganisationCRMSetting.organisation_id == self.tenant.organisation_id)
         )

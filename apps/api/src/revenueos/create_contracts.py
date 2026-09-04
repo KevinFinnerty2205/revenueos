@@ -8,7 +8,7 @@ from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from revenueos.contracts import APIModel
 
-CreateAvailabilityState = Literal["available", "temporarily_unavailable", "not_in_plan"]
+CreateAvailabilityState = Literal["available", "read_only", "temporarily_unavailable", "not_in_plan"]
 TemplateProcessingState = Literal["processing", "ready", "partial", "failed", "archived"]
 TemplateApprovalState = Literal["pending", "approved", "revoked"]
 TemplateCompatibilityState = Literal["compatible", "needs_attention", "unsupported"]

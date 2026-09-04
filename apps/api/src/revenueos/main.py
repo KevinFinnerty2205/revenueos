@@ -4,13 +4,14 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
+from revenueos.commercial_dependencies import require_commercial_workspace_access
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory
 from revenueos.development import ensure_development_identity
@@ -28,6 +29,7 @@ from revenueos.routes import (
     ask,
     beta,
     campaigns,
+    commercial,
     companies,
     contacts,
     create,
@@ -158,31 +160,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(me.router)
     app.include_router(beta.router)
-    app.include_router(companies.router)
-    app.include_router(contacts.router)
-    app.include_router(crm.router)
-    app.include_router(daily.router)
-    app.include_router(evidence.router)
-    app.include_router(opportunities.router)
-    app.include_router(pipelines.router)
-    app.include_router(prospect.router)
-    app.include_router(sales_insights.router)
-    app.include_router(sales_forecast.router)
-    app.include_router(sales_targets.router)
-    app.include_router(selling_profile.router)
-    app.include_router(tasks.router)
-    app.include_router(interactions.router)
-    app.include_router(manager.router)
-    app.include_router(meetings.router)
-    app.include_router(methodologies.router)
-    app.include_router(accounts.router)
-    app.include_router(actions.router)
-    app.include_router(ask.router)
-    app.include_router(integrations.router)
-    app.include_router(outreach.router)
-    app.include_router(campaigns.router)
-    app.include_router(events.router)
-    app.include_router(create.router)
+    app.include_router(commercial.router)
+    commercial_access = [Depends(require_commercial_workspace_access)]
+    app.include_router(companies.router, dependencies=commercial_access)
+    app.include_router(contacts.router, dependencies=commercial_access)
+    app.include_router(crm.router, dependencies=commercial_access)
+    app.include_router(daily.router, dependencies=commercial_access)
+    app.include_router(evidence.router, dependencies=commercial_access)
+    app.include_router(opportunities.router, dependencies=commercial_access)
+    app.include_router(pipelines.router, dependencies=commercial_access)
+    app.include_router(prospect.router, dependencies=commercial_access)
+    app.include_router(sales_insights.router, dependencies=commercial_access)
+    app.include_router(sales_forecast.router, dependencies=commercial_access)
+    app.include_router(sales_targets.router, dependencies=commercial_access)
+    app.include_router(selling_profile.router, dependencies=commercial_access)
+    app.include_router(tasks.router, dependencies=commercial_access)
+    app.include_router(interactions.router, dependencies=commercial_access)
+    app.include_router(manager.router, dependencies=commercial_access)
+    app.include_router(meetings.router, dependencies=commercial_access)
+    app.include_router(methodologies.router, dependencies=commercial_access)
+    app.include_router(accounts.router, dependencies=commercial_access)
+    app.include_router(actions.router, dependencies=commercial_access)
+    app.include_router(ask.router, dependencies=commercial_access)
+    app.include_router(integrations.router, dependencies=commercial_access)
+    app.include_router(outreach.router, dependencies=commercial_access)
+    app.include_router(campaigns.router, dependencies=commercial_access)
+    app.include_router(events.router, dependencies=commercial_access)
+    app.include_router(create.router, dependencies=commercial_access)
     return app
 
 

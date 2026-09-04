@@ -22,7 +22,7 @@ IdempotencyKey = Annotated[
 
 class ProspectAvailabilityResponse(APIModel):
     module_key: Literal["prospect"] = "prospect"
-    state: Literal["available", "temporarily_unavailable", "not_in_plan"]
+    state: Literal["available", "read_only", "temporarily_unavailable", "not_in_plan"]
     enabled: bool
     can_manage: bool
     message: str

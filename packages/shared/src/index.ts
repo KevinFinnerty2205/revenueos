@@ -23,6 +23,60 @@ export interface MeResponse {
   requestId: string;
 }
 
+export type CommercialPlanCode =
+  | "core"
+  | "growth"
+  | "complete"
+  | "enterprise";
+export type CommercialStatus =
+  | "trial_active"
+  | "active"
+  | "grace"
+  | "expired"
+  | "inactive"
+  | "suspended";
+export type CommercialModuleCode =
+  | "core"
+  | "prospect"
+  | "engage"
+  | "create"
+  | "crm";
+
+export interface CommercialProjection {
+  plan: {
+    code: CommercialPlanCode;
+    displayName: string;
+    version: number;
+  };
+  status: CommercialStatus;
+  billingInterval: "monthly" | "annual" | null;
+  trial: {
+    lengthDays: 14;
+    startedAt: string | null;
+    endsAt: string | null;
+    graceEndsAt: string | null;
+    daysRemaining: number;
+    automaticCharge: false;
+    paymentMethodRequired: false;
+  };
+  includedUserLimit: number | null;
+  activeUserCount: number;
+  seatsAvailable: number | null;
+  seatLimitStatus: "within_limit" | "requires_resolution";
+  modules: Array<{
+    code: CommercialModuleCode;
+    displayName: string;
+    accessLevel: "none" | "read" | "write";
+    commerciallyIncluded: boolean;
+    operationalStatus: "available" | "mock_only" | "unavailable";
+  }>;
+  effectiveAt: string;
+  stateVersion: number;
+  canCreateNewWork: boolean;
+  readAccessEndsAt: string | null;
+  message: string;
+}
+
 export interface DependencyCheck {
   status: "ready" | "unavailable" | "misconfigured";
   detail: string;
@@ -503,7 +557,11 @@ export type CRMCustomFieldType =
 export interface CRMAvailability {
   moduleKey: "crm";
   state:
-    "available" | "not_in_plan" | "setup_required" | "temporarily_unavailable";
+    | "available"
+    | "read_only"
+    | "not_in_plan"
+    | "setup_required"
+    | "temporarily_unavailable";
   enabled: boolean;
   canManage: boolean;
   mode: CRMMode;
@@ -3071,7 +3129,7 @@ export interface AskCapabilities {
 }
 
 export type ProspectAvailabilityState =
-  "available" | "temporarily_unavailable" | "not_in_plan";
+  "available" | "read_only" | "temporarily_unavailable" | "not_in_plan";
 export type ProspectTrustState =
   "verified" | "provider_supplied" | "inferred" | "unknown";
 export type ProspectResearchStatus =
@@ -3959,7 +4017,7 @@ export interface EventAttendeeList {
 }
 
 export type CreateAvailabilityState =
-  "available" | "temporarily_unavailable" | "not_in_plan";
+  "available" | "read_only" | "temporarily_unavailable" | "not_in_plan";
 export type CreateTemplateProcessingState =
   "processing" | "ready" | "partial" | "failed" | "archived";
 export type CreateSlideCategory =

@@ -16,6 +16,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.crm_contracts import (
     CRMEntityType,
@@ -44,7 +45,6 @@ from revenueos.models import (
     OpportunityStageEvent,
     OrganisationCRMSetting,
     OrganisationMembership,
-    OrganisationModuleEntitlement,
     SalesPipeline,
     SalesPipelineStage,
 )
@@ -736,20 +736,14 @@ class CRMOnboardingService:
             raise PublicAPIError("forbidden", "Administrator access is required for CRM import.", 403)
         if not self.settings.feature_native_crm_enabled:
             raise PublicAPIError("crm_temporarily_unavailable", "CRM administration is temporarily unavailable.", 503)
-        entitlement = await self.session.scalar(
-            select(OrganisationModuleEntitlement).where(
-                OrganisationModuleEntitlement.organisation_id == self.tenant.organisation_id,
-                OrganisationModuleEntitlement.module_key == "crm",
-                OrganisationModuleEntitlement.enabled.is_(True),
-            )
-        )
+        await CommercialService(self.session, self.settings).require_module_write(self.tenant.organisation_id, "core")
         setting = await self.session.scalar(
             select(OrganisationCRMSetting).where(
                 OrganisationCRMSetting.organisation_id == self.tenant.organisation_id,
                 OrganisationCRMSetting.mode == "native",
             )
         )
-        if entitlement is None or setting is None:
+        if setting is None:
             raise PublicAPIError("native_crm_required", "Choose and enable Native CRM before importing data.", 409)
 
     @staticmethod

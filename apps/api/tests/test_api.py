@@ -139,6 +139,7 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/health/ready",
         "/ready",
         "/api/v1/me",
+        "/api/v1/commercial",
         "/api/v1/beta/capabilities",
         "/api/v1/beta/data-notice",
         "/api/v1/beta/data-notice/acknowledgements",

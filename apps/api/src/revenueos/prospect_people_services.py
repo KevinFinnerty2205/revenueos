@@ -15,6 +15,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.crm_history import crm_creation_changes
 from revenueos.database import set_tenant_database_context
@@ -112,7 +113,7 @@ class ProspectPeopleService:
         self.provider = provider or create_prospect_provider(settings.prospect_research_provider_name)
 
     async def list_people(self, target_id: UUID) -> PersonDiscoveryResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         target = await self._ready_company_target(target_id)
         people = await self.repository.people_for_target(self.tenant.organisation_id, target.id)
         return await self._discovery_response(target, people, discovered=False)
@@ -233,7 +234,7 @@ class ProspectPeopleService:
         return await self.get_person_research(person.id)
 
     async def get_person_research(self, person_id: UUID) -> PersonResearchBriefResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         person = await self._ready_person(person_id)
         runs = await self.repository.runs_for_person(self.tenant.organisation_id, person.id)
         latest = runs[0] if runs else None
@@ -522,7 +523,7 @@ class ProspectPeopleService:
         return contact_preserved
 
     async def contact_research_link(self, contact_id: UUID) -> ContactProspectResearchLinkResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         contact = await self.repository.get_contact(self.tenant.organisation_id, contact_id)
         if contact is None:
             raise PublicAPIError("contact_not_found", "The requested Contact was not found.", 404)
@@ -963,16 +964,20 @@ class ProspectPeopleService:
             return "partial", "Research is useful but incomplete; missing contact or activity data is not a failure."
         return "ready", "Professional research ready. Buying roles remain hypotheses, not customer-confirmed."
 
-    async def _require_entitled(self) -> None:
+    async def _require_entitled(self, *, write: bool = True) -> None:
         if not self.settings.feature_prospect_enabled or (
             self.settings.environment == "production" and self.settings.prospect_research_provider_name == "mock"
         ):
             raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
-        if entitlement is None or not entitlement.enabled:
+        commercial = CommercialService(self.session, self.settings)
+        if write:
+            await commercial.require_module_write(self.tenant.organisation_id, "prospect")
+            return
+        access = await commercial.module_access(self.tenant.organisation_id, "prospect")
+        if access == "none" or (write and access != "write"):
             raise PublicAPIError(
-                "prospect_not_entitled",
-                "RevenueOS Prospect is not enabled for this organisation.",
+                "prospect_not_in_plan",
+                "Prospect isn't included in your organisation's current plan.",
                 403,
             )
 
