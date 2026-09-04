@@ -8,6 +8,8 @@
   attorney
 - **Status:** research only; no filing, clearance opinion or authority to launch or
   rebrand
+- **Owner decision:** **PROFESSIONAL TRADE MARK REVIEW DEFERRED; TRADE MARK
+  FILING DEFERRED**
 
 > **Important:** this document is not legal advice, a clearance opinion,
 > registrability advice or freedom-to-use advice. It does not say that ORYNTELA is
@@ -330,11 +332,10 @@ No unchecked item is approved by this document.
 - [ ] Keep RevenueOS as the technical implementation name unless a separate
       technical change is expressly authorised.
 
-The recommended next owner decision is whether to obtain qualified advice on the
-two priority records and the Australian common-law position before further
-irreversible brand spend or public launch. This is a commercial preparation
-recommendation, not a legal conclusion, and **requires qualified trade-mark
-advice**.
+The owner deferred professional trade mark review and filing on 4 September 2026. Keep this research for future reference and do not contact an adviser or
+file unless the owner later makes a new explicit decision. Professional review
+may be revisited after initial local commercial validation or if it becomes a
+genuine blocker before broader public or international brand investment.
 
 ## 8. Official source list
 
@@ -363,4 +364,5 @@ provider, use customer data or start WO-040. It does not modify the scope or sta
 of PR #67 or PR #68.
 
 Preliminary trade-mark preparation is complete. This does not constitute legal
-clearance or registrability advice.
+clearance or registrability advice. Professional review and filing are deferred
+by owner decision.

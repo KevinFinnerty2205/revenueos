@@ -1,10 +1,10 @@
 # Oryntela trade mark adviser shortlist
 
 - **Prepared:** 4 September 2026 (Australia/Sydney)
-- **Decision:** request a fixed-scope quote from YIP Legal, subject to owner
-  approval; do not engage or file yet
-- **Status:** **RESEARCH ONLY — NO PROFESSIONAL ENGAGEMENT YET — NOT LEGAL
-  ADVICE**
+- **Decision:** **PROFESSIONAL TRADE MARK REVIEW DEFERRED BY OWNER; TRADE MARK
+  FILING DEFERRED BY OWNER**
+- **Status:** **PARKED FOR FUTURE REFERENCE — DO NOT CONTACT, ENGAGE OR FILE —
+  NOT LEGAL ADVICE**
 - **Spend to date:** AUD $0
 
 This shortlist narrows the next professional-clearance step for the proposed
@@ -12,6 +12,18 @@ This shortlist narrows the next professional-clearance step for the proposed
 [preliminary trade-mark preparation](oryntela-trademark-preparation.md); it does
 not replace qualified legal advice or establish that the mark is available,
 registrable, protected or safe to use.
+
+## 0. Owner deferral
+
+On 4 September 2026, the owner deferred professional trade mark review and trade
+mark filing. The immediate priority is proving the product with initial local
+Australian customers before spending further time or money on formal IP work.
+
+This document retains the completed research for possible future use. It does
+not authorise contact with YIP Legal or any other adviser, a quote request,
+professional engagement, expenditure or filing. Revisit professional review only
+after initial local commercial validation or if trade mark risk becomes a genuine
+blocker before broader public or international brand investment.
 
 ## 1. Recommended professional adviser
 
@@ -231,14 +243,16 @@ and
 | Mark My Words — Jacqueline Pryor | Yes                                     | AUD $550 word search, stated inclusive for stage shown                        | General software/SaaS classification knowledge | Yes                                  | Yes                      | Strong cost-transparent specialist alternative; confirm current fees             |
 | Baxter IP — Chloe Cort           | Yes                                     | `PRICE NOT PUBLICLY STATED`                                                   | Strong technology and startup focus            | Not precisely enough for this scope  | Yes                      | Strong deeper-technology alternative; price and search scope unknown             |
 
-**Recommendation:** seek one conflict-checked, fixed-scope quote from **Andrew
+**Deferred future recommendation:** if the owner later reactivates professional
+review, consider seeking one conflict-checked, fixed-scope quote from **Andrew
 Selim Petale at YIP Legal**. The combination of registered-attorney status,
 Australian legal qualification, express SaaS/software experience, published
-common-law clearance scope and a public fixed-price baseline is the most
-proportionate fit for the current Australian-first decision.
+common-law clearance scope and a public fixed-price baseline was the most
+proportionate fit identified by the research.
 
-This is a commercial recommendation about whom to ask for a quote, not a legal
-opinion or authorisation to contact, engage, pay or file.
+This is retained research about whom to consider in future, not a current
+recommendation to proceed, a legal opinion or authorisation to contact, engage,
+pay or file.
 
 ## 4. Proposed first engagement
 
@@ -351,31 +365,29 @@ quote
 > Kind regards,<br>
 > Kevin Finnerty
 
-**Dispatch status:** **NOT SENT. CONTACT NOT YET AUTHORISED.**
+**Dispatch status:** **NOT SENT. CONTACT DEFERRED BY OWNER. DO NOT SEND.**
 
-## 7. Owner approval required
+## 7. Owner decision — deferred
 
 ### ORYNTELA TRADE MARK PROFESSIONAL REVIEW
 
 - **Recommended adviser:** Andrew Selim Petale
 - **Firm:** YIP Legal; the official register currently lists Y Intellectual
   Property, to be confirmed
-- **Recommended first engagement:** the fixed-scope written ORYNTELA Australian
-  clearance and risk advice defined in section 4, with no filing
+- **Potential future first engagement:** the fixed-scope written ORYNTELA
+  Australian clearance and risk advice defined in section 4, with no filing
 - **Expected professional fee:** published base clearance fee AUD $450; tailored
   scope and GST treatment require a written quote
 - **Expected government fee:** **NOT YET APPLICABLE**
-- **Maximum proposed owner approval:** **OWNER QUOTE REQUIRED**
-- **Contact:** **NOT YET AUTHORISED**
-- **Engagement:** **NOT YET AUTHORISED**
-- **Filing:** **NOT AUTHORISED**
+- **Current owner approval:** **NONE — WORK DEFERRED**
+- **Contact:** **DEFERRED BY OWNER — DO NOT CONTACT**
+- **Engagement:** **DEFERRED BY OWNER — DO NOT ENGAGE**
+- **Filing:** **DEFERRED BY OWNER — DO NOT FILE**
 - **Spend to date:** **AUD $0**
 
-**Recommended owner action:** expressly authorise sending the single quote and
-scope email in section 6 to `info@yiplegal.com.au`. The response should seek a
-conflict check, fixed fee including GST, inclusions, exclusions and turnaround
-only. Any engagement, professional spend or filing must return for a separate
-owner decision.
+**Current owner action:** none. Keep this research parked while Oryntela is built,
+rebranded and demonstrated locally using synthetic data. Any future adviser
+contact, professional spend or filing requires a new explicit owner decision.
 
 ## 8. Research limits and change control
 
