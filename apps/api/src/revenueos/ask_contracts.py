@@ -29,6 +29,7 @@ AskQuestionClass = Literal[
     "evidence_lookup",
     "opportunity_filter",
     "daily_focus",
+    "selling_context",
     "unsupported_public_web",
     "general_sales_question",
 ]
@@ -41,6 +42,7 @@ AskSourceType = Literal[
     "action",
     "daily",
     "opportunity",
+    "selling_profile",
 ]
 AskProvenance = Literal[
     "customer_direct",
@@ -49,6 +51,7 @@ AskProvenance = Literal[
     "imported_external",
     "validated_intelligence",
     "system_metadata",
+    "organisation_approved",
 ]
 
 BoundedQuestion = Annotated[

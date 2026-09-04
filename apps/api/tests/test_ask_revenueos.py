@@ -67,6 +67,7 @@ def _settings(**overrides: object) -> Settings:
         ("What changed recently?", "account", "recent_change"),
         ("What opportunities are active?", "account", "deal_summary"),
         ("Which deals need my attention?", "workspace", "daily_focus"),
+        ("What do we sell?", "workspace", "selling_context"),
         ("What should I follow up now?", "workspace", "daily_focus"),
         ("What is my best next action?", "workspace", "daily_focus"),
         ("What should I do next?", "workspace", "daily_focus"),

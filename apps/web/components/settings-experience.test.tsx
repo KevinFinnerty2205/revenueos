@@ -8,6 +8,11 @@ vi.mock("@/components/beta-admin", () => ({
 vi.mock("@/components/sales-methodology-settings", () => ({
   SalesMethodologySettings: () => <section>Methodology controls</section>,
 }));
+vi.mock("@/components/selling-profile-settings", () => ({
+  SellingProfileSettings: () => (
+    <section>Company and selling profile controls</section>
+  ),
+}));
 vi.mock("@/components/prospect-module-settings", () => ({
   ProspectModuleSettings: () => <section>Prospect controls</section>,
 }));
@@ -80,6 +85,9 @@ describe("SettingsExperience", () => {
     );
     render(<SettingsExperience />);
     expect(await screen.findByText("Methodology controls")).toBeVisible();
+    expect(
+      screen.getByText("Company and selling profile controls"),
+    ).toBeVisible();
     expect(screen.getByText("Prospect controls")).toBeVisible();
     expect(screen.getByText("Create controls")).toBeVisible();
     expect(screen.getByText("CRM controls")).toBeVisible();

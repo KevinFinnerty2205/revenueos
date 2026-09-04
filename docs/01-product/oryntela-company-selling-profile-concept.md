@@ -1,17 +1,17 @@
 # Oryntela Company & Selling Profile concept
 
-- **Status:** **VALIDATE WITH DESIGN PARTNER — NOT BUILT**
-- **Priority:** High-leverage post-partner candidate
-- **Authority:** Concept only; no schema, prompt, provider or UI implementation
+- **Status:** **IMPLEMENTED IN WO-046**
+- **Priority:** Phase 1 of the owner-approved pre-launch roadmap
+- **Authority:** Organisation-supplied/company-approved context; never customer Evidence
 
 ## Problem
 
 Sales Brain understands the buyer and deal from authorised Evidence, but its reuse of
 approved context about **what the Oryntela customer sells** is fragmented. Prospect,
 Engage, Create, Business Case, Methodology and Ask already carry pieces of offering,
-target-market, proof-point and approved-content context. A new capability is justified
-only if first-partner use shows that this fragmentation reduces output relevance or
-creates repeated entry.
+target-market, proof-point and approved-content context. WO-046 provides the smallest
+approved profile and revision-pinned server projection without collapsing those
+existing authority domains.
 
 ## Existing overlap to reuse
 
@@ -23,23 +23,25 @@ creates repeated entry.
 - Prospect research objectives and exclusions; and
 - bounded custom Methodology definitions.
 
-The profile must compose or reference these primitives. It must not copy them into a
-second source of truth.
+Those domains remain separate sources of authority. WO-046 does not copy, compose or
+reference them; future consumer work must reconcile overlap explicitly rather than
+silently treating the profile as their source of truth.
 
-## Smallest coherent future concept
+## Implemented bounded model
 
-An organisation-owned, administrator-controlled and versioned profile can explain:
+The organisation-owned, administrator-controlled and versioned profile contains:
 
-- company description and approved market language;
-- products/services and multiple distinct offerings;
-- ideal customer profiles, industries, company sizes, personas and territories;
-- problems solved, customer outcomes and differentiators;
-- approved proof points, case studies, objections and competitor context;
-- value propositions and customer-safe claims; and
-- pricing/packaging context only where separately authorised.
+- a concise company description;
+- one to eight offerings with a name and concise description; and
+- optional bounded lists for who normally buys, problems solved, intended outcomes,
+  differentiators, competitors/alternatives, approved proof and approved claims.
 
-Each item should have status, source/owner, approval, version and optional expiry. An
-offering-specific projection should give a workflow only the context it needs.
+It does not add pricing, packaging, industries, territories, a second ICP, case-study
+records, objection handling or a product catalogue.
+
+One stable profile has immutable revision snapshots. A draft can be edited with
+optimistic concurrency, approved as current, superseded by a later approval or
+retired. The single approved-context projection identifies the exact revision.
 
 ## Context and authority layers
 
@@ -67,9 +69,9 @@ injection. It never becomes customer Evidence automatically.
 | Ask                       | Answer organisation-context questions separately from customer Evidence        |
 | Methodology / Actions     | Suggest relevant questions and work without marking fields complete            |
 
-## First-partner manual experiment
+## First-partner validation
 
-Before building, collect a short, approved onboarding brief outside customer Evidence:
+Collect a short, approved onboarding brief outside customer Evidence:
 
 1. What do you sell?
 2. Who normally buys it?
@@ -81,11 +83,9 @@ Aim for a useful first version in under ten minutes, review it with the partner,
 reuse existing fields/documents manually where possible. Record repeated missing
 context and correction—not sensitive customer content—in the feedback process.
 
-## Entry criteria
-
-Promote this concept into a work order only when partner evidence shows repeated
-output irrelevance or duplicate entry across at least two existing workflows, a
-manual approved brief improves the result, and the smallest owning model is clear.
+Implementation does not prove product value. Partner validation must establish setup
+time, correction frequency and whether reuse improves at least two workflows before
+the profile is expanded or connected more broadly.
 
 ## Non-goals
 

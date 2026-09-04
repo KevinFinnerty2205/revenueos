@@ -2995,6 +2995,7 @@ export type AskQuestionClass =
   | "evidence_lookup"
   | "opportunity_filter"
   | "daily_focus"
+  | "selling_context"
   | "unsupported_public_web"
   | "general_sales_question";
 export type AskAnswerStatus =
@@ -3015,7 +3016,8 @@ export interface AskSource {
     | "revenue_brain"
     | "action"
     | "daily"
-    | "opportunity";
+    | "opportunity"
+    | "selling_profile";
   label: string;
   occurredAt: string | null;
   excerpt: string | null;
@@ -3025,7 +3027,8 @@ export interface AskSource {
     | "seller_prepared"
     | "imported_external"
     | "validated_intelligence"
-    | "system_metadata";
+    | "system_metadata"
+    | "organisation_approved";
   href: string;
 }
 
@@ -5008,4 +5011,67 @@ export interface SalesTargetList {
   canAssignPersonalTargets: boolean;
   canCreateOrganisationTargets: boolean;
   maximumVisibleTargets: 200;
+}
+
+export type SellingProfileRevisionState =
+  | "draft"
+  | "approved"
+  | "superseded"
+  | "retired";
+
+export interface SellingOffering {
+  name: string;
+  description: string;
+  whoNormallyBuys: string[];
+  problemsSolved: string[];
+  intendedOutcomes: string[];
+  differentiators: string[];
+  competitorsAlternatives: string[];
+  approvedProof: string[];
+  approvedClaims: string[];
+}
+
+export interface SellingProfileContent {
+  companyDescription: string;
+  offerings: SellingOffering[];
+}
+
+export interface SellingProfileRevision {
+  id: string;
+  profileId: string;
+  revisionNumber: number;
+  state: SellingProfileRevisionState;
+  lockVersion: number;
+  content: SellingProfileContent;
+  contentFingerprint: string;
+  createdByUserId: string;
+  approvedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  approvedAt: string | null;
+  supersededAt: string | null;
+  retiredAt: string | null;
+}
+
+export interface SellingProfileManagement {
+  status: "empty" | "draft" | "current" | "retired";
+  canManage: boolean;
+  draft: SellingProfileRevision | null;
+  current: SellingProfileRevision | null;
+  history: SellingProfileRevision[];
+  authority: "organisation_approved";
+  authorityNote: string;
+}
+
+export interface SellingProfileContext {
+  schemaVersion: 1;
+  available: boolean;
+  authority: "organisation_approved";
+  customerEvidence: false;
+  profileId: string | null;
+  revisionId: string | null;
+  revisionNumber: number | null;
+  content: SellingProfileContent | null;
+  approvedAt: string | null;
+  message: string;
 }

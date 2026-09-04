@@ -17,7 +17,7 @@
 | Monthly, quarterly and annual target visibility    | PARTIALLY BUILT                       | Sales targets and Insights                                                                                       | Target periods and target views exist in the implemented analytics surface                                              | Confirmation that each time period is correctly supported and useful on Daily             | Show only supported periods with explicit missing states                                        | C — FIRST DESIGN PARTNER VALIDATION    |
 | Core, Growth, Complete and Enterprise pricing      | FUTURE / VALIDATE FIRST               | Commercial consolidation                                                                                         | Internal hypothesis: AUD 200, 350 and 500 monthly plan anchors plus Enterprise custom                                   | Customer interviews, willingness-to-pay evidence, unit economics, GST and terms decisions | Do not publish until owner approves the evidence pack                                           | C — FIRST DESIGN PARTNER VALIDATION    |
 | Branded PPTX presentations                         | PARTIALLY BUILT                       | Create and Studio foundations                                                                                    | Presentation creation and artifact-oriented product concepts exist in the repository                                    | Production provider path, PowerPoint fidelity, brand controls, cost and export validation | Validate the output job before provider spend or promises                                       | C — FIRST DESIGN PARTNER VALIDATION    |
-| Company Selling Profile                            | FUTURE / VALIDATE FIRST               | Organisation, ICP, Methodology, Engage, Create and Value Model foundations                                       | Most source concepts already exist in separate domains                                                                  | A concise approved profile, versioning, provenance and measured downstream benefit        | Begin as an editable brief; do not create a parallel company database                           | D — HIGH-VALUE POST-PARTNER CANDIDATES |
+| Company Selling Profile                            | BUILT                                 | WO-046 plus Organisation and bounded Ask reuse                                                                    | Concise approved profile, immutable revisions, tenant-safe projection, admin UX and bounded Ask reuse                    | Design-partner evidence of setup effort and downstream benefit                             | Validate before broader consumer integration; do not create a parallel company database        | OWNER-APPROVED PRE-LAUNCH PHASE 1      |
 | “What Changed?” intelligence                       | FUTURE / VALIDATE FIRST               | Evidence, history, Methodology, Actions and forecast-staleness foundations                                       | Existing canonical history can support a bounded summary without a new truth engine                                     | Minimal last-reviewed state, evidence-led summary design and partner value proof          | Validate a concise “since you last looked” view without seller surveillance                     | D — HIGH-VALUE POST-PARTNER CANDIDATES |
 | Automated company research                         | PARTIALLY BUILT                       | Prospect mock and account foundations                                                                            | Deterministic mock prospect discovery demonstrates boundaries                                                           | Live provider, source licensing, provenance quality, cost and freshness controls          | Provider-neutral evaluation only after the Selling Profile proves useful                        | E — PROVIDER ACTIVATION CANDIDATES     |
 | Automated lead generation                          | PARTIALLY BUILT                       | Prospect mock and qualification concepts                                                                         | Mock discovery and shortlisting paths exist                                                                             | Live data, provider approval, source rights, economics and safe failure                   | Prove targeted discovery before any autonomous list building                                    | E — PROVIDER ACTIVATION CANDIDATES     |
@@ -49,9 +49,9 @@
 
 | Status                                |  Count |
 | ------------------------------------- | -----: |
-| BUILT                                 |      7 |
+| BUILT                                 |      8 |
 | PARTIALLY BUILT                       |     12 |
-| FUTURE / VALIDATE FIRST               |      9 |
+| FUTURE / VALIDATE FIRST               |      8 |
 | INTENTIONALLY NOT BUILDING / NARROWED |      2 |
 | SUPERSEDED                            |      4 |
 | **Total**                             | **34** |
@@ -64,7 +64,7 @@ commitments.
 
 - The product is materially broader than an early CRM, but live-provider and production claims remain constrained.
 - The strongest near-term learning comes from the core Evidence → Sales Brain → Methodology → Action → Pipeline/Forecast loop, not from adding channels.
-- Company Selling Profile is the most coherent unbuilt concept because it can reuse existing foundations and improve multiple downstream jobs; it still needs validation before implementation.
+- Company Selling Profile is built by WO-046; it still needs partner validation before broader downstream integration.
 - SMS, broad files, autonomous SDR, AI voice and native recording have substantial safety or complexity gates and are not near-term commitments.
 - monday CRM is a real overlapping competitor. Oryntela should differentiate through an opinionated, evidence-led operating loop, not feature parity.
 

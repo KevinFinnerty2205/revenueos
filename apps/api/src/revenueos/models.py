@@ -246,6 +246,122 @@ class OrganisationModuleEntitlement(TimestampMixin, Base):
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class SellingProfile(TimestampMixin, Base):
+    __tablename__ = "selling_profiles"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_selling_profiles_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", name="uq_selling_profiles_organisation"),
+        UniqueConstraint("organisation_id", "id", name="uq_selling_profiles_org_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class SellingProfileRevision(TimestampMixin, Base):
+    __tablename__ = "selling_profile_revisions"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('draft', 'approved', 'superseded', 'retired')",
+            name="ck_selling_profile_revisions_state",
+        ),
+        CheckConstraint("revision_number > 0", name="ck_selling_profile_revisions_number"),
+        CheckConstraint("schema_version = 1", name="ck_selling_profile_revisions_schema"),
+        CheckConstraint("lock_version > 0", name="ck_selling_profile_revisions_lock"),
+        CheckConstraint("length(content_fingerprint) = 64", name="ck_selling_profile_revisions_fingerprint"),
+        CheckConstraint(
+            "(state = 'draft' AND approved_by_user_id IS NULL AND approved_at IS NULL "
+            "AND superseded_at IS NULL AND retired_at IS NULL) OR "
+            "(state = 'approved' AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL "
+            "AND superseded_at IS NULL AND retired_at IS NULL) OR "
+            "(state = 'superseded' AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL "
+            "AND superseded_at IS NOT NULL AND retired_at IS NULL) OR "
+            "(state = 'retired' AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL "
+            "AND superseded_at IS NULL AND retired_at IS NOT NULL)",
+            name="ck_selling_profile_revisions_lifecycle",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "profile_id"],
+            ["selling_profiles.organisation_id", "selling_profiles.id"],
+            name="fk_selling_profile_revisions_profile",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_selling_profile_revisions_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_selling_profile_revisions_approver",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_selling_profile_revisions_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "profile_id",
+            "revision_number",
+            name="uq_selling_profile_revisions_number",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "created_by_user_id",
+            "idempotency_key",
+            name="uq_selling_profile_revisions_idempotency",
+        ),
+        Index(
+            "uq_selling_profile_revisions_draft",
+            "organisation_id",
+            "profile_id",
+            unique=True,
+            postgresql_where=text("state = 'draft'"),
+            sqlite_where=text("state = 'draft'"),
+        ),
+        Index(
+            "uq_selling_profile_revisions_approved",
+            "organisation_id",
+            "profile_id",
+            unique=True,
+            postgresql_where=text("state = 'approved'"),
+            sqlite_where=text("state = 'approved'"),
+        ),
+        Index(
+            "ix_selling_profile_revisions_org_history",
+            "organisation_id",
+            "profile_id",
+            "revision_number",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    profile_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", server_default="draft")
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    content_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ProspectUsageCounter(Base):
     __tablename__ = "prospect_usage_counters"
     __table_args__ = (

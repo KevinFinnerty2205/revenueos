@@ -49,6 +49,7 @@ from revenueos.models import (
     RevenueBrainSourceSnapshot,
 )
 from revenueos.revenue_brain_reasoning_contracts import RevenueBrainInsightContent
+from revenueos.selling_profile_services import SellingProfileService
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.ask")
@@ -84,6 +85,24 @@ class AskIntentClassifier:
         value = question.casefold()
         if PUBLIC_WEB_PATTERN.search(value):
             return "unsupported_public_web"
+        if any(
+            term in value
+            for term in (
+                "what do we sell",
+                "what does our company",
+                "our company description",
+                "our offering",
+                "our product",
+                "who normally buys",
+                "why customers choose us",
+                "our differentiator",
+                "our approved claim",
+                "our approved proof",
+                "alternatives do we position",
+                "competitors do we position",
+            )
+        ):
+            return "selling_context"
         if scope_type == "workspace" and (
             "today" in value
             or "need to do" in value
@@ -196,6 +215,8 @@ class AskRevenueOSService:
                 question_class,
                 "I don’t have that information in RevenueOS. Ask RevenueOS does not research the public web yet.",
             )
+        elif question_class == "selling_context":
+            answer = await self._selling_context_answer(request_id, generated_at, scope, request.question)
         elif question_class == "daily_focus":
             answer = await self._daily_answer(request_id, generated_at, scope, request.timezone)
         elif request.scope_type == "workspace":
@@ -233,6 +254,98 @@ class AskRevenueOSService:
             },
         )
         return answer
+
+    async def _selling_context_answer(
+        self,
+        request_id: UUID,
+        generated_at: datetime,
+        scope: AskScope,
+        question: str,
+    ) -> AskAnswer:
+        try:
+            projection = await SellingProfileService(self.session, self.tenant).context()
+        except PublicAPIError as exc:
+            if exc.code != "selling_profile_content_invalid":
+                raise
+            return self._unknown_answer(
+                request_id,
+                generated_at,
+                scope,
+                "selling_context",
+                "The approved Company & Selling Profile is unavailable because its stored content is invalid.",
+            )
+        if (
+            not projection.available
+            or projection.content is None
+            or projection.revision_id is None
+            or projection.revision_number is None
+        ):
+            return self._unknown_answer(
+                request_id,
+                generated_at,
+                scope,
+                "selling_context",
+                "No approved Company & Selling Profile is available for this organisation.",
+            )
+        content = projection.content
+        lowered = question.casefold()
+        values: list[str] = [content.company_description]
+        for offering in content.offerings:
+            values.append(f"{offering.name}: {offering.description}")
+            selected: tuple[str, ...] = ()
+            if "who" in lowered or "buy" in lowered:
+                selected = offering.who_normally_buys
+            elif "problem" in lowered:
+                selected = offering.problems_solved
+            elif "outcome" in lowered:
+                selected = offering.intended_outcomes
+            elif "different" in lowered or "choose us" in lowered:
+                selected = offering.differentiators
+            elif "competitor" in lowered or "alternative" in lowered:
+                selected = offering.competitors_alternatives
+            elif "proof" in lowered:
+                selected = offering.approved_proof
+            elif "claim" in lowered:
+                selected = offering.approved_claims
+            values.extend(f"{offering.name} · {item}" for item in selected)
+        safe_values = [self._short(value) for value in values if not INSTRUCTION_PATTERN.search(value)]
+        if not safe_values:
+            return self._unknown_answer(
+                request_id,
+                generated_at,
+                scope,
+                "selling_context",
+                "The approved profile contains no safe bounded context for this question.",
+            )
+        source = AskSource(
+            id=projection.revision_id,
+            source_type="selling_profile",
+            label=f"Approved Company & Selling Profile · revision {projection.revision_number}",
+            occurred_at=projection.approved_at,
+            excerpt=safe_values[0],
+            provenance="organisation_approved",
+            href="/settings#company-selling-profile",
+        )
+        points = tuple(AskSummaryPoint(text=value, source_ids=(source.id,)) for value in safe_values[:6])
+        return AskAnswer(
+            ask_request_id=request_id,
+            answer=safe_values[0],
+            answer_status="supported",
+            question_class="selling_context",
+            summary_points=points,
+            sources=(source,),
+            uncertainties=(
+                "This is organisation-approved selling context, not customer Evidence or proof about a specific buyer.",
+            ),
+            suggested_action=AskSuggestedAction(
+                label="Review the approved Company & Selling Profile",
+                href="/settings#company-selling-profile",
+                source_id=source.id,
+            ),
+            follow_up_questions=("What do we sell?", "Who normally buys our offerings?"),
+            scope=scope,
+            generated_at=generated_at,
+        )
 
     async def record_telemetry(self, request: AskTelemetryRequest) -> None:
         self._require_enabled()
@@ -1210,6 +1323,8 @@ class AskRevenueOSService:
             return "I don’t have enough eligible Revenue Brain history to explain what changed yet."
         if question_class == "general_sales_question":
             return "I can answer bounded questions about deals, stakeholders, methodology, risks, commitments, actions and accepted customer evidence. I don’t have enough reliable evidence to answer that question as asked."
+        if question_class == "selling_context":
+            return "No approved Company & Selling Profile is available for this organisation."
         return "I don’t have enough reliable evidence to answer that yet."
 
     @staticmethod
@@ -1220,6 +1335,8 @@ class AskRevenueOSService:
             return ["What are the biggest risks?", "What should I do next?"]
         if question_class == "action":
             return ["Why is that the next action?", "What is still unknown?"]
+        if question_class == "selling_context":
+            return ["What do we sell?", "Who normally buys our offerings?"]
         return ["Show me the evidence.", "What changed recently?", "What should I do next?"]
 
     @staticmethod

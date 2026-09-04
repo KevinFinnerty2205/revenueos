@@ -760,6 +760,24 @@ All payloads are strict and product-safe. The API never accepts organisation IDs
 arbitrary rules/prompts, source conclusions, provider choices or scores. Current
 reads hide a stale projection's conclusions when the source fingerprint changes.
 
+## Company & Selling Profile
+
+| Method  | Path                                                        | Purpose                                                           |
+| ------- | ----------------------------------------------------------- | ----------------------------------------------------------------- |
+| `GET`   | `/api/v1/selling-profile`                                   | Admin management view with current, draft and immutable history   |
+| `GET`   | `/api/v1/selling-profile/context`                           | Active-member approved context projection; never customer Evidence |
+| `POST`  | `/api/v1/selling-profile/revisions`                         | Create one bounded draft idempotently                              |
+| `PATCH` | `/api/v1/selling-profile/revisions/{revision_id}`           | Edit a draft with optimistic lock version                          |
+| `POST`  | `/api/v1/selling-profile/revisions/{revision_id}/approve`   | Approve draft and atomically supersede the prior current revision  |
+| `POST`  | `/api/v1/selling-profile/revisions/{revision_id}/retire`    | Retire current projection without deleting history                 |
+
+Mutation is administrator-only and requires an active membership. The approved
+projection carries the exact profile/revision/version plus
+`authority: organisation_approved` and `customerEvidence: false`. No profile content
+is accepted as customer Evidence, public research, CRM authority or AI instruction.
+Ask RevenueOS may cite this exact projection for organisation-context questions; no
+other persistent consumer is connected in WO-046.
+
 ## Ask RevenueOS API
 
 | Method | Path | Behaviour |

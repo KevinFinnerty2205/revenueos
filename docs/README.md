@@ -144,6 +144,8 @@ This is the canonical product and engineering documentation index. Documents dis
 133. [ADR 0066: Bounded Native CRM CSV import](08-decisions/0066-bounded-native-crm-csv-import.md)
 134. [ADR 0067: Human-reviewed CRM merge](08-decisions/0067-human-reviewed-crm-merge.md)
 135. [First supervised real-data design-partner launch gate](06-roadmap/first-design-partner/first-design-partner-launch-gate.md) — controlling named-partner release gate
+136. [WO-046: Company & Selling Profile](07-sprints/wo-046-company-selling-profile.md) — approved organisation context, revision history and bounded Ask reuse
+137. [ADR 0068: Versioned Company & Selling Profile](08-decisions/0068-versioned-company-selling-profile.md)
 
 ## First design-partner launch package
 
@@ -659,6 +661,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-037: Targets & KPI Engine](07-sprints/wo-037-targets-kpi-engine.md)
 - [WO-038: Transparent Forecasting](07-sprints/wo-038-transparent-forecasting.md)
 - [WO-039: Manager Intelligence & Coaching](07-sprints/wo-039-manager-intelligence.md)
+- [WO-046: Company & Selling Profile](07-sprints/wo-046-company-selling-profile.md)
 
 ## 08 — Decision records
 
@@ -724,6 +727,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0052: Immutable approved Value Model versions](08-decisions/0052-immutable-approved-value-model-versions.md)
 - [ADR 0053: Approved Business Case as a Create source](08-decisions/0053-approved-business-case-create-source.md)
 - [ADR 0054: Canonical records form the native CRM](08-decisions/0054-canonical-record-native-crm.md)
+- [ADR 0068: Versioned organisation-approved Company & Selling Profile](08-decisions/0068-versioned-company-selling-profile.md)
 
 ## Current delivery boundary
 
