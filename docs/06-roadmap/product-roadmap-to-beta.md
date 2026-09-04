@@ -1,5 +1,10 @@
 # Product roadmap to beta
 
+> **Oryntela consolidation — 4 September 2026:** Completed work-order history is
+> preserved here. The
+> [post-design-partner roadmap framework](oryntela-post-design-partner-roadmap-framework.md)
+> consolidates future sequencing; it does not authorise WO-040 or later work.
+
 **Status:** Historical integration-led sequence retained for completed-baseline and
 planning context. WO-010's
 [Interaction Intelligence roadmap](interaction-intelligence-roadmap.md) governs the

@@ -1,5 +1,10 @@
 # Transparent Forecasting
 
+> **Oryntela consolidation — 4 September 2026:** Transparent forecast is a core
+> differentiating capability in the
+> [Oryntela master product blueprint](oryntela-master-product-blueprint.md); it
+> remains distinct from targets and pipeline value.
+
 **Status:** Implemented by WO-038 as a RevenueOS Core capability.
 
 Forecast answers what may close in a calendar month or quarter without presenting a

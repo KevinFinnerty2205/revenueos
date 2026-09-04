@@ -1,5 +1,11 @@
 # RevenueOS commercial packaging
 
+> **Oryntela consolidation — 4 September 2026:** This checkpoint record remains
+> useful product-module history. Current plan, pricing, trial and Credits
+> hypotheses are consolidated in
+> [Oryntela packaging](../04-commercial/oryntela-packaging-hypothesis.md) and are
+> not approved for publication or implementation.
+
 - **Status:** Checkpoint 2 packaging direction; no price or billing implementation
 - **Principle:** Core is enough to love RevenueOS. Add-ons expand what RevenueOS can do.
 

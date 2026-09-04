@@ -1,13 +1,17 @@
 # First supervised real-data design-partner launch gate
 
-- **Gate date:** 2 September 2026 (Australia/Sydney)
-- **Branch:** `docs/pre-beta-owner-production-decisions`
-- **Reviewed baseline:** `9e48548`
+- **Gate date:** 2 September 2026; commercial consolidation reviewed 4 September 2026 (Australia/Sydney)
+- **Current documentation branch:** `docs/oryntela-product-commercial-consolidation`
+- **Reviewed repository baseline:** `daedbbc`
 - **Repository baseline:** WO-039A, WO-039B and WO-039C are on `main`; the single Alembic head is `0050_real_data_operations`
 - **Current launch decision:** **WAITING FOR TARGET ENVIRONMENT PROOF**
 - **Scope:** one named, supervised, Native CRM design partner; no Gmail, Apollo, live Prospect provider, live email or autonomous external execution
 
 This is the controlling launch record. It turns the repository-level **GO WITH RESTRICTIONS** decision into a reusable, partner-specific release gate. It does not approve a deployment, legal position, provider or customer-data use.
+
+The [Oryntela commercial-product handoff](../oryntela-commercial-product-handoff.md)
+consolidates brand and commercial hypotheses without changing this gate. The
+current launch decision remains **WAITING FOR TARGET ENVIRONMENT PROOF**.
 
 The 2 September 2026 owner/target preparation reduces the remaining business input
 to the [authoritative eight-decision register](owner-decision-register.md), recommends
@@ -20,17 +24,17 @@ spend, provider or real-data use has been approved.
 
 Complete this before any final drill. An abstract customer cannot pass this gate.
 
-| Field | Required value | Current status |
-| --- | --- | --- |
-| Design partner legal and trading name | Owner-approved name | **WAITING FOR PARTNER** |
-| Partner accountable administrator | Name, business email and role | **WAITING FOR PARTNER** |
-| Deployment environment and public origins | Platform/project, region, web origin and API origin | **WAITING FOR TARGET** |
-| Immutable release | Commit SHA and image/build identifiers | **WAITING FOR TARGET** |
-| CRM mode | `native` | **RECOMMENDED; PARTNER CONFIRMATION REQUIRED** |
-| Feature profile | Signed copy of [the approved profile](real-data-feature-profile.md) | **OWNER AND PARTNER APPROVAL REQUIRED** |
-| Hosting/storage configuration | Database, private object storage, backups, logs and regions | **WAITING FOR TARGET** |
-| AI configuration | Disabled profile or approved provider/model/data-flow profile | **OWNER AND PARTNER APPROVAL REQUIRED** |
-| Evidence location | Access-restricted launch record or ticket | **WAITING FOR TARGET** |
+| Field                                     | Required value                                                      | Current status                                 |
+| ----------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------- |
+| Design partner legal and trading name     | Owner-approved name                                                 | **WAITING FOR PARTNER**                        |
+| Partner accountable administrator         | Name, business email and role                                       | **WAITING FOR PARTNER**                        |
+| Deployment environment and public origins | Platform/project, region, web origin and API origin                 | **WAITING FOR TARGET**                         |
+| Immutable release                         | Commit SHA and image/build identifiers                              | **WAITING FOR TARGET**                         |
+| CRM mode                                  | `native`                                                            | **RECOMMENDED; PARTNER CONFIRMATION REQUIRED** |
+| Feature profile                           | Signed copy of [the approved profile](real-data-feature-profile.md) | **OWNER AND PARTNER APPROVAL REQUIRED**        |
+| Hosting/storage configuration             | Database, private object storage, backups, logs and regions         | **WAITING FOR TARGET**                         |
+| AI configuration                          | Disabled profile or approved provider/model/data-flow profile       | **OWNER AND PARTNER APPROVAL REQUIRED**        |
+| Evidence location                         | Access-restricted launch record or ticket                           | **WAITING FOR TARGET**                         |
 
 Use only these evidence states: `PASS`, `FAIL`, `OWNER APPROVAL REQUIRED`, `PARTNER APPROVAL REQUIRED`, `WAITING FOR TARGET`, `WAITING FOR PARTNER` or `NOT APPLICABLE — APPROVED REASON`. Repository code or a local test cannot turn an environment, legal or partner item into `PASS`.
 
@@ -38,21 +42,21 @@ Use only these evidence states: `PASS`, `FAIL`, `OWNER APPROVAL REQUIRED`, `PART
 
 ### Repository ready
 
-| Check | Status | Evidence |
-| --- | --- | --- |
-| Requested branch started clean from `main` | **PASS** | Git inspection at gate start; no branch was created or changed |
-| WO-039A, WO-039B and WO-039C are on `main` | **PASS** | Merge commits `558795c`, `5f0a61c` and `93c386e` |
-| One Alembic head: `0050_real_data_operations` | **PASS** | Migration chain and WO-039C migration tests |
-| Production build and complete repository gate | **PASS AT WO-039C BASELINE** | [WO-039C validation record](../../07-sprints/wo-039c-real-data-operations.md#frozen-validation-gate); this documentation branch must also pass its required checks |
-| Production preflight command | **PASS** | `revenueos-operations production-preflight` exists and fails closed |
-| Forced RLS and runtime-role requirements | **PASS — REPOSITORY ONLY** | All-table PostgreSQL proof and non-bypass preflight exist; target repetition is separate |
-| Encrypted database/object backup and isolated restore | **PASS — REPOSITORY ONLY** | AES-256-GCM backup/verify/restore tooling and synthetic local drill exist |
-| Organisation/member provisioning and disablement | **PASS — REPOSITORY ONLY** | Idempotent operator commands and access-denial tests exist |
-| Export, retention and organisation deletion | **PASS — REPOSITORY ONLY** | Export v29 and tenant-scoped maintenance/deletion paths exist |
-| Native CRM import and Account/Contact merge | **PASS — REPOSITORY ONLY** | Bounded preview/confirm import and deliberate merge exist |
-| Create private files and downloads | **PASS — REPOSITORY ONLY** | Validated PPTX output and authenticated one-time download grants exist |
-| Feature kill switches and safe inventory | **PASS — REPOSITORY ONLY** | Server-authoritative flags are returned by `safe_feature_flags()` |
-| Dependency audits | **PASS AT WO-039C BASELINE** | Production JavaScript/Python audits were green; rerun for the release SHA |
+| Check                                                 | Status                       | Evidence                                                                                                                                                           |
+| ----------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requested branch started clean from `main`            | **PASS**                     | Git inspection at gate start; no branch was created or changed                                                                                                     |
+| WO-039A, WO-039B and WO-039C are on `main`            | **PASS**                     | Merge commits `558795c`, `5f0a61c` and `93c386e`                                                                                                                   |
+| One Alembic head: `0050_real_data_operations`         | **PASS**                     | Migration chain and WO-039C migration tests                                                                                                                        |
+| Production build and complete repository gate         | **PASS AT WO-039C BASELINE** | [WO-039C validation record](../../07-sprints/wo-039c-real-data-operations.md#frozen-validation-gate); this documentation branch must also pass its required checks |
+| Production preflight command                          | **PASS**                     | `revenueos-operations production-preflight` exists and fails closed                                                                                                |
+| Forced RLS and runtime-role requirements              | **PASS — REPOSITORY ONLY**   | All-table PostgreSQL proof and non-bypass preflight exist; target repetition is separate                                                                           |
+| Encrypted database/object backup and isolated restore | **PASS — REPOSITORY ONLY**   | AES-256-GCM backup/verify/restore tooling and synthetic local drill exist                                                                                          |
+| Organisation/member provisioning and disablement      | **PASS — REPOSITORY ONLY**   | Idempotent operator commands and access-denial tests exist                                                                                                         |
+| Export, retention and organisation deletion           | **PASS — REPOSITORY ONLY**   | Export v29 and tenant-scoped maintenance/deletion paths exist                                                                                                      |
+| Native CRM import and Account/Contact merge           | **PASS — REPOSITORY ONLY**   | Bounded preview/confirm import and deliberate merge exist                                                                                                          |
+| Create private files and downloads                    | **PASS — REPOSITORY ONLY**   | Validated PPTX output and authenticated one-time download grants exist                                                                                             |
+| Feature kill switches and safe inventory              | **PASS — REPOSITORY ONLY**   | Server-authoritative flags are returned by `safe_feature_flags()`                                                                                                  |
+| Dependency audits                                     | **PASS AT WO-039C BASELINE** | Production JavaScript/Python audits were green; rerun for the release SHA                                                                                          |
 
 ### Target environment ready
 

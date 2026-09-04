@@ -1,5 +1,10 @@
 # RevenueOS CRM
 
+> **Oryntela consolidation — 4 September 2026:** Native CRM is a product mode and
+> foundation, not permission to pursue full CRM parity. The
+> [Oryntela master product blueprint](oryntela-master-product-blueprint.md) keeps
+> Oryntela complementary to systems of record and supports a core-first partner.
+
 - **Status:** Native CRM Foundation implemented by WO-034; Native Pipeline implemented by WO-035
 - **Principle:** RevenueOS works with your CRM—or it can be your intentionally simple sales CRM.
 

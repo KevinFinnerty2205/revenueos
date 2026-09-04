@@ -1,5 +1,12 @@
 # RevenueOS master product blueprint
 
+> **Oryntela consolidation — 4 September 2026:** This remains the historical
+> technical product contract. The
+> [Oryntela master product blueprint](oryntela-master-product-blueprint.md) is the
+> authoritative source for the selected public brand, consolidated product
+> principles, commercial hypotheses and future sequencing. It does not authorise
+> a technical RevenueOS-to-Oryntela rebrand or any implementation.
+
 - **Status:** Target product direction through the Interaction Platform private beta
 - **Current shipped baseline:** Sprints 1–3 plus Meeting Intelligence, Opportunity
   Workspace, deterministic Revenue Brain, private-beta controls, Interaction

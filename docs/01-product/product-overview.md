@@ -1,5 +1,10 @@
 # Product overview
 
+> **Oryntela consolidation — 4 September 2026:** Read this implemented RevenueOS
+> history with the [Oryntela master product blueprint](oryntela-master-product-blueprint.md).
+> Oryntela is the selected public brand; current technical identifiers remain
+> RevenueOS until separately authorised.
+
 WO-025A presents the implemented Core as one outcome-led experience: Home, Sell,
 Pipeline and bounded Search on desktop; Today, Interactions, Actions and Search on
 mobile; deal-first Opportunity hierarchy; and lifecycle-led Interaction capture.

@@ -1,38 +1,40 @@
 # First-partner support, privacy and incident contacts
 
-- **Status:** **OWNER INPUT REQUIRED**
+- **Status:** **PARTLY RESOLVED — ROUTES VERIFIED; HUMAN OWNERS AND OPERATING PROCESS REQUIRED**
 - **Minimum:** one monitored mailbox, three clear functions, two accountable humans
 
-The repository contains no approved support address, privacy address,
-security/incident address, primary owner, backup owner or operating hours. No value
-may be inferred from a Git identity, personal email, domain or placeholder.
+The owner approved `support@oryntela.com.au` as the shared customer-support and
+private-beta privacy/security address. Synthetic inbound and matching outbound reply
+tests passed, and SPF, DKIM and DMARC passed at the external receiving system. The
+primary accountable human, backup human, operating hours and emergency escalation
+route remain unresolved. No value may be inferred from a Git identity, personal
+email, domain or placeholder.
 
 ## Simplest safe arrangement
 
-One secured and actively monitored mailbox can safely serve all three functions for
-the first supervised partner. If an existing approved domain/mail service supports
-aliases, publish three role addresses that route to it:
+One secured and actively monitored mailbox serves all three private-beta functions:
 
-- `support@…` — product access, data-quality and workflow help;
-- `privacy@…` — access/export/correction/deletion and privacy questions; and
-- `security@…` — suspected unauthorised access, disclosure, credential or service
-  security incidents.
+- `support@oryntela.com.au` — product access, data-quality and workflow help;
+- `support@oryntela.com.au` — access/export/correction/deletion and privacy questions;
+  and
+- `support@oryntela.com.au` — suspected unauthorised access, disclosure, credential
+  or service-security incidents.
 
-The aliases are examples, not approved addresses. If aliases are unavailable, one
-owner-supplied email may be published for all three functions, labelled clearly.
-RevenueOS does not need three paid mailboxes for this cohort.
+This address is a zero-cost alias of `kevin@oryntela.com.au`, the single paid Zoho
+mailbox. `hello@oryntela.com.au` is the separate general-enquiries alias. No
+`privacy@` or `security@` address exists, and neither should be published.
 
 ## Owner inputs required
 
-| Field | Requirement | Current status |
-| --- | --- | --- |
-| Support email | Public, monitored address | **OWNER INPUT REQUIRED** |
-| Privacy email | May be the same mailbox/alias; public and monitored | **OWNER INPUT REQUIRED** |
-| Security/incident email | May be the same mailbox/alias; monitored with urgent escalation | **OWNER INPUT REQUIRED** |
-| Primary human | Name/role authorised to triage, communicate and invoke launch pause | **OWNER INPUT REQUIRED** |
-| Backup human | Name/role who can act when the primary is unavailable | **OWNER INPUT REQUIRED** |
-| Operating hours | Timezone and days/hours the beta is supervised | **OWNER INPUT REQUIRED** |
-| Emergency route | How the mailbox alerts the primary/backup for urgent security events; do not publish personal details unnecessarily | **OWNER INPUT REQUIRED** |
+| Field                   | Requirement                                                                                                         | Current status                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Support email           | Public, monitored address                                                                                           | `support@oryntela.com.au` — **APPROVED; ROUTING VERIFIED**                  |
+| Privacy email           | May be the same mailbox/alias; public and monitored                                                                 | `support@oryntela.com.au` — **APPROVED FOR PRIVATE BETA; ROUTING VERIFIED** |
+| Security/incident email | May be the same mailbox/alias; monitored with urgent escalation                                                     | `support@oryntela.com.au` — **APPROVED FOR PRIVATE BETA; ROUTING VERIFIED** |
+| Primary human           | Name/role authorised to triage, communicate and invoke launch pause                                                 | **OWNER INPUT REQUIRED**                                                    |
+| Backup human            | Name/role who can act when the primary is unavailable                                                               | **OWNER INPUT REQUIRED**                                                    |
+| Operating hours         | Timezone and days/hours the beta is supervised                                                                      | **OWNER INPUT REQUIRED**                                                    |
+| Emergency route         | How the mailbox alerts the primary/backup for urgent security events; do not publish personal details unnecessarily | **OWNER INPUT REQUIRED**                                                    |
 
 Recommended initial hours are agreed Australian business hours in AEST/AEDT for a
 scheduled supervised cohort. Use internal operating targets—not contractual SLAs—of
@@ -54,14 +56,15 @@ must state the actual route/hours and avoid an unsupported 24/7 or uptime promis
 - route suspected tenant leak, failed revocation, unsafe AI transfer or unrecoverable
   data corruption directly to the launch-pause procedure.
 
-The actual mailbox provider must be added to the
-[subprocessor register](first-partner-subprocessor-register.md) if it processes
-partner personal data. Selecting an address does not authorise Codex to purchase a
-domain, create mail accounts or send external messages.
+Zoho Mail is recorded in the
+[subprocessor register](first-partner-subprocessor-register.md). Its operational
+selection does not itself approve the legal/privacy schedule or authorise real
+partner data.
 
 ## Implementation after approval
 
-Codex can place the approved support address in production configuration and approved
-partner/legal documents, configure metadata-only alert routing in the target, and run
-a synthetic support/privacy/security routing exercise. Human ownership, mailbox
-creation and public addresses remain owner decisions.
+The mailbox and public address are active, and the synthetic
+support/privacy/security routing exercise passed. Codex can place the approved
+support address in production configuration and owner-approved partner/legal
+documents after the remaining gate approvals. Human ownership, alerting, hours and
+escalation remain owner decisions.

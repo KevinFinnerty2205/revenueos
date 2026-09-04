@@ -1,5 +1,10 @@
 # RevenueOS Engage
 
+> **Oryntela consolidation — 4 September 2026:** Engage remains a product
+> capability, not a customer plan or a live-send claim. The
+> [Oryntela master product blueprint](oryntela-master-product-blueprint.md) retains
+> supervised review and provider-readiness gates.
+
 - **Status:** WO-029 outreach, WO-030 campaigns and WO-031 Events implemented as an entitled add-on
 - **Purpose:** Turn target accounts into conversations
 - **Checkpoint 2:** Keep Engage and proceed to Create; external sending remains

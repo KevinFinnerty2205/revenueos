@@ -1,0 +1,98 @@
+# Oryntela Company & Selling Profile concept
+
+- **Status:** **VALIDATE WITH DESIGN PARTNER — NOT BUILT**
+- **Priority:** High-leverage post-partner candidate
+- **Authority:** Concept only; no schema, prompt, provider or UI implementation
+
+## Problem
+
+Sales Brain understands the buyer and deal from authorised Evidence, but its reuse of
+approved context about **what the Oryntela customer sells** is fragmented. Prospect,
+Engage, Create, Business Case, Methodology and Ask already carry pieces of offering,
+target-market, proof-point and approved-content context. A new capability is justified
+only if first-partner use shows that this fragmentation reduces output relevance or
+creates repeated entry.
+
+## Existing overlap to reuse
+
+- organisation identity and settings;
+- Target Markets and ICP criteria;
+- Engage offering, value and call-to-action context;
+- approved Create templates, slides, claims and content;
+- approved Value Models and Business Case assumptions;
+- Prospect research objectives and exclusions; and
+- bounded custom Methodology definitions.
+
+The profile must compose or reference these primitives. It must not copy them into a
+second source of truth.
+
+## Smallest coherent future concept
+
+An organisation-owned, administrator-controlled and versioned profile can explain:
+
+- company description and approved market language;
+- products/services and multiple distinct offerings;
+- ideal customer profiles, industries, company sizes, personas and territories;
+- problems solved, customer outcomes and differentiators;
+- approved proof points, case studies, objections and competitor context;
+- value propositions and customer-safe claims; and
+- pricing/packaging context only where separately authorised.
+
+Each item should have status, source/owner, approval, version and optional expiry. An
+offering-specific projection should give a workflow only the context it needs.
+
+## Context and authority layers
+
+| Layer                                 | Authority                                     | Permitted use                                                   |
+| ------------------------------------- | --------------------------------------------- | --------------------------------------------------------------- |
+| Organisation-approved selling context | Approved internal context, not buyer truth    | Constrain and improve drafts/research/questions                 |
+| Public professional research          | Sourced external observation or inference     | Suggest relevance; never establish customer intent              |
+| Seller-reported context               | Explicit salesperson statement                | Context with visible attribution                                |
+| Customer-direct Evidence              | Highest customer-claim support where verified | Deal understanding and methodology according to Evidence policy |
+| System facts                          | Canonical product/record state                | Workflow control, not market truth                              |
+
+Approved profile text remains untrusted input to AI execution. It must be bounded,
+escaped/structured, content-minimised, tenant-isolated and protected against prompt
+injection. It never becomes customer Evidence automatically.
+
+## Reuse across Oryntela
+
+| Consumer                  | Potential improvement                                                          |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| Sales Brain / preparation | Explain why a buyer issue matters to the relevant offering                     |
+| Prospect                  | Reuse approved ICP and offering constraints without broadening data collection |
+| Engage                    | Produce more specific drafts within approved claims and seller voice           |
+| Create                    | Reuse approved positioning, proof and brand content                            |
+| Business Case             | Select approved value models; never invent numbers                             |
+| Ask                       | Answer organisation-context questions separately from customer Evidence        |
+| Methodology / Actions     | Suggest relevant questions and work without marking fields complete            |
+
+## First-partner manual experiment
+
+Before building, collect a short, approved onboarding brief outside customer Evidence:
+
+1. What do you sell?
+2. Who normally buys it?
+3. Which problems and outcomes may be stated?
+4. Which proof, material and claims are approved?
+5. Which offering is relevant to the initial opportunities?
+
+Aim for a useful first version in under ten minutes, review it with the partner, and
+reuse existing fields/documents manually where possible. Record repeated missing
+context and correction—not sensitive customer content—in the feedback process.
+
+## Entry criteria
+
+Promote this concept into a work order only when partner evidence shows repeated
+output irrelevance or duplicate entry across at least two existing workflows, a
+manual approved brief improves the result, and the smallest owning model is clear.
+
+## Non-goals
+
+- knowledge-base or document-management platform;
+- public website crawler that silently defines company truth;
+- automatic approval of claims, proof points or prices;
+- prompt repository exposed to administrators;
+- customer Evidence or CRM replacement;
+- per-seller private company profiles; or
+- a requirement before the first design partner.

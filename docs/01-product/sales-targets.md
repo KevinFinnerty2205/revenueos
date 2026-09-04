@@ -1,5 +1,10 @@
 # Sales Targets and KPI progress
 
+> **Oryntela consolidation — 4 September 2026:** Targets remain distinct from
+> forecast and pipeline. The possible Daily presentation is a
+> [future-state hypothesis](../02-design/oryntela-daily-future-state.md), not an
+> authorised Home change.
+
 **Status:** Implemented by WO-037 as a RevenueOS Core capability.
 
 ## Product promise

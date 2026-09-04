@@ -1,5 +1,9 @@
 # RevenueOS Sales Analytics and Win/Loss Intelligence
 
+> **Oryntela consolidation — 4 September 2026:** Analytics supports the
+> evidence-to-action loop; it is not a general BI expansion mandate. See the
+> [Oryntela master product blueprint](oryntela-master-product-blueprint.md).
+
 **Status:** implemented by WO-036 as a RevenueOS Core capability.
 
 > **WO-038 handoff:** Transparent Forecasting reuses `won_value` definition version 1

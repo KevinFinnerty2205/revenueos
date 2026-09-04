@@ -1,29 +1,32 @@
 # Legal and owner approval checklist
 
-Status: **OWNER APPROVAL REQUIRED** for every applicable row. This is a blocking evidence template, not legal advice, compliance certification or a substitute for qualified counsel.
+Status: **OWNER APPROVAL REQUIRED** for every applicable launch row. Approved contact
+addresses are recorded below, but they do not complete the remaining owner, process
+or legal approvals. This is a blocking evidence template, not legal advice,
+compliance certification or a substitute for qualified counsel.
 
 The repository contains technical privacy/security guidance and a product data notice mechanism. It does **not** contain an approved Privacy Policy/Notice, Terms of Use, DPA, beta agreement or subprocessor schedule. Do not invent or infer approval from code, a preflight flag or a document draft.
 
 ## Owner-supplied decisions
 
-| Item | Owner must provide | Current status |
-| --- | --- | --- |
-| Publisher/legal entity | Exact contracting/publishing entity name, registered address and governing jurisdiction | **OWNER APPROVAL REQUIRED** |
-| ABN | ABN, or signed reason it is not applicable | **OWNER APPROVAL REQUIRED** |
-| Privacy notice | Approved customer/user-facing notice, version/effective date, public location and counsel/owner approval reference | **OWNER APPROVAL REQUIRED** |
-| Terms | Approved beta Terms of Use/service terms, version/effective date and acceptance method | **OWNER APPROVAL REQUIRED** |
-| DPA/data-processing terms | Approved controller/processor roles, instructions, security measures, deletion/return and audit/incident terms | **OWNER APPROVAL REQUIRED** |
-| Support contact | Approved monitored address, hours, response expectations and owner | **OWNER APPROVAL REQUIRED** |
-| Privacy contact | Approved address/person and response process for access, correction, deletion and complaints | **OWNER APPROVAL REQUIRED** |
-| Incident/security contact | Primary and backup incident contacts, escalation path and partner-communication authority | **OWNER APPROVAL REQUIRED** |
-| Hosting/data location | Exact regions for web, API, workers, PostgreSQL, object storage, backups and logs | **OWNER APPROVAL REQUIRED** |
-| Subprocessor list | Legal name, purpose, data categories and locations for Clerk, hosting, database, storage, OpenAI if enabled and any monitoring/support provider | **OWNER APPROVAL REQUIRED** |
-| Backup retention | Backup frequency, maximum retention, access, encryption, expiry and restore objectives; explain immutable-copy deletion timing | **OWNER APPROVAL REQUIRED** |
-| Production-data retention | Default/allowed active retention, logs/audits/export expiry, deletion/export process and any lawful-hold limitation | **OWNER APPROVAL REQUIRED** |
-| AI processing/data flow | Approve disabled AI or the exact OpenAI account/project, models, data categories, `store=false`, provider terms/settings, data use, retention, locations, quotas and disablement fallback | **OWNER APPROVAL REQUIRED** |
-| Cross-border processing/disclosure | Approved disclosure/transfer position for each provider/region and required contractual safeguards | **OWNER APPROVAL REQUIRED** |
-| Beta agreement | Named partner agreement covering purpose, supported use, supervision, no warranties/SLA beyond approved terms, data boundary, feedback, pause/offboarding and deletion | **OWNER APPROVAL REQUIRED** |
-| Exact partner feature profile | Signed profile revision, Native CRM mode, enabled sources, Create status, providers, limits and kill-switch owner | **OWNER APPROVAL REQUIRED** |
+| Item                               | Owner must provide                                                                                                                                                                        | Current status                                   |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Publisher/legal entity             | Exact contracting/publishing entity name, registered address and governing jurisdiction                                                                                                   | **OWNER APPROVAL REQUIRED**                      |
+| ABN                                | ABN, or signed reason it is not applicable                                                                                                                                                | **OWNER APPROVAL REQUIRED**                      |
+| Privacy notice                     | Approved customer/user-facing notice, version/effective date, public location and counsel/owner approval reference                                                                        | **OWNER APPROVAL REQUIRED**                      |
+| Terms                              | Approved beta Terms of Use/service terms, version/effective date and acceptance method                                                                                                    | **OWNER APPROVAL REQUIRED**                      |
+| DPA/data-processing terms          | Approved controller/processor roles, instructions, security measures, deletion/return and audit/incident terms                                                                            | **OWNER APPROVAL REQUIRED**                      |
+| Support contact                    | `support@oryntela.com.au` is the approved and routing-verified address; hours, response expectations and accountable humans remain required                                               | **ADDRESS APPROVED; OPERATING DETAILS REQUIRED** |
+| Privacy contact                    | `support@oryntela.com.au` is the approved and routing-verified private-beta address; accountable person and response process remain required                                              | **ADDRESS APPROVED; PROCESS/OWNER REQUIRED**     |
+| Incident/security contact          | `support@oryntela.com.au` is the approved and routing-verified private-beta address; primary/backup humans, escalation path and communication authority remain required                   | **ADDRESS APPROVED; ESCALATION/OWNERS REQUIRED** |
+| Hosting/data location              | Exact regions for web, API, workers, PostgreSQL, object storage, backups and logs                                                                                                         | **OWNER APPROVAL REQUIRED**                      |
+| Subprocessor list                  | Legal name, purpose, data categories and locations for Clerk, hosting, database, storage, OpenAI if enabled and any monitoring/support provider                                           | **OWNER APPROVAL REQUIRED**                      |
+| Backup retention                   | Backup frequency, maximum retention, access, encryption, expiry and restore objectives; explain immutable-copy deletion timing                                                            | **OWNER APPROVAL REQUIRED**                      |
+| Production-data retention          | Default/allowed active retention, logs/audits/export expiry, deletion/export process and any lawful-hold limitation                                                                       | **OWNER APPROVAL REQUIRED**                      |
+| AI processing/data flow            | Approve disabled AI or the exact OpenAI account/project, models, data categories, `store=false`, provider terms/settings, data use, retention, locations, quotas and disablement fallback | **OWNER APPROVAL REQUIRED**                      |
+| Cross-border processing/disclosure | Approved disclosure/transfer position for each provider/region and required contractual safeguards                                                                                        | **OWNER APPROVAL REQUIRED**                      |
+| Beta agreement                     | Named partner agreement covering purpose, supported use, supervision, no warranties/SLA beyond approved terms, data boundary, feedback, pause/offboarding and deletion                    | **OWNER APPROVAL REQUIRED**                      |
+| Exact partner feature profile      | Signed profile revision, Native CRM mode, enabled sources, Create status, providers, limits and kill-switch owner                                                                         | **OWNER APPROVAL REQUIRED**                      |
 
 ## Approval record
 
