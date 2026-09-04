@@ -1,5 +1,10 @@
 # RevenueOS Create
 
+> **Oryntela consolidation — 4 September 2026:** Create remains a product
+> capability rather than a customer plan. See the
+> [Oryntela master product blueprint](oryntela-master-product-blueprint.md) and
+> [packaging hypothesis](../04-commercial/oryntela-packaging-hypothesis.md).
+
 - **Status:** WO-032/033 presentation and Business Case slice, hardened by WO-039B, behind the `create` organisation entitlement
 - **Purpose:** Create customer-specific, reviewable PPTX material from approved company content and customer-safe context
 

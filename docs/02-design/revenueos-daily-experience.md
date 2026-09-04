@@ -1,5 +1,10 @@
 # RevenueOS Daily experience
 
+> **Oryntela consolidation — 4 September 2026:** This is the implemented Daily
+> contract. Potential role-aware target and forecast context is documented in the
+> [Oryntela Daily future state](oryntela-daily-future-state.md) and requires
+> partner validation before implementation.
+
 - **Status:** Implemented in WO-025
 - **Question:** What matters today?
 

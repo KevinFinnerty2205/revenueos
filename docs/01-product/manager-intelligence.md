@@ -1,5 +1,10 @@
 # Manager Intelligence & Coaching
 
+> **Oryntela consolidation — 4 September 2026:** Manager intelligence remains
+> evidence-led attention and coaching, not employee scoring. See the
+> [Oryntela master product blueprint](oryntela-master-product-blueprint.md) and
+> [Daily future-state hypothesis](../02-design/oryntela-daily-future-state.md).
+
 - **Status:** Implemented Core private-beta capability in WO-039
 - **Primary question:** Which deals need attention, why, and what should we discuss?
 

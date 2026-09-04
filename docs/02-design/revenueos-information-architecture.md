@@ -1,5 +1,10 @@
 # RevenueOS information architecture
 
+> **Oryntela consolidation — 4 September 2026:** Keep the implemented grouped
+> navigation until user evidence supports a change. The
+> [Oryntela navigation exploration](oryntela-product-navigation-exploration.md)
+> is research only and does not authorise a product-to-feature rewrite.
+
 - **Status:** Current shell includes Core Insights with Overview/Targets and the
   entitlement-aware desktop Prospect/Find slice; other target areas remain staged
 - **Design rule:** Organise around seller goals, not entities or implementation boundaries

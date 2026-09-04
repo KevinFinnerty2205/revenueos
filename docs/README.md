@@ -5,7 +5,10 @@ This is the canonical product and engineering documentation index. Documents dis
 ## Start here
 
 1. [Company vision](00-company/vision.md)
-2. [Master product blueprint](01-product/master-product-blueprint.md) — primary product contract
+   - [Oryntela owner register](00-company/oryntela-owner-register.md) — approved brand, domain and business-email facts
+2. [Oryntela master product blueprint](01-product/oryntela-master-product-blueprint.md) — authoritative public-brand, product and future-direction consolidation
+   - [RevenueOS master product blueprint](01-product/master-product-blueprint.md) — historical technical product contract
+   - [Oryntela commercial-product handoff](06-roadmap/oryntela-commercial-product-handoff.md) — owner decision brief
 3. [Interaction Intelligence vision](01-product/interaction-intelligence-vision.md) — approved post-WO-009 direction
 4. [Interaction Intelligence product blueprint](01-product/interaction-intelligence-product-blueprint.md) — Capture, Intelligence and Action target
 5. [Interaction Intelligence roadmap](06-roadmap/interaction-intelligence-roadmap.md) — recommended future work orders
@@ -143,6 +146,16 @@ This is the canonical product and engineering documentation index. Documents dis
 ## First design-partner launch package
 
 - [Launch gate and concise operator runbook](06-roadmap/first-design-partner/first-design-partner-launch-gate.md)
+- [Owner decision register](06-roadmap/first-design-partner/owner-decision-register.md) — authoritative eight-question owner surface
+- [Private-beta target-environment options](06-roadmap/first-design-partner/private-beta-target-environment-options.md) — primary AWS Sydney recommendation and one alternative
+- [Target-environment cost model](06-roadmap/first-design-partner/target-environment-cost-model.md)
+- [First-partner OpenAI decision](06-roadmap/first-design-partner/first-partner-openai-decision.md)
+- [First-partner subprocessor register](06-roadmap/first-design-partner/first-partner-subprocessor-register.md)
+- [First-partner retention decisions](06-roadmap/first-design-partner/first-partner-retention-decisions.md)
+- [First-partner support/contact requirements](06-roadmap/first-design-partner/first-partner-support-contact-requirements.md)
+- [Ideal first design-partner profile](06-roadmap/first-design-partner/first-design-partner-profile.md)
+- [First design-partner commercial model](06-roadmap/first-design-partner/first-design-partner-commercial-model.md)
+- [Owner approval block](06-roadmap/first-design-partner/owner-approval-block.md) — single fill-in response; no approval is prefilled
 - [Target-environment preflight checklist](06-roadmap/first-design-partner/target-environment-preflight-checklist.md)
 - [Clerk/session proof procedure](06-roadmap/first-design-partner/Clerk-session-proof-procedure.md)
 - [Target RLS proof procedure](06-roadmap/first-design-partner/target-RLS-proof-procedure.md)
@@ -162,9 +175,16 @@ This is the canonical product and engineering documentation index. Documents dis
 ## 00 — Company
 
 - [Vision](00-company/vision.md)
+- [Oryntela owner register](00-company/oryntela-owner-register.md)
 
 ## 01 — Product
 
+- [Oryntela master product blueprint](01-product/oryntela-master-product-blueprint.md)
+- [Oryntela executive product map](01-product/oryntela-executive-product-map.md)
+- [Oryntela product principles](01-product/oryntela-product-principles.md)
+- [Oryntela Company Selling Profile concept](01-product/oryntela-company-selling-profile-concept.md)
+- [Oryntela future product opportunities](01-product/oryntela-future-product-opportunities.md)
+- [Oryntela do-not-build register](01-product/oryntela-do-not-build-register.md)
 - [Master product blueprint](01-product/master-product-blueprint.md)
 - [Personas and jobs](01-product/personas-and-jobs.md)
 - [User journeys](01-product/user-journeys.md)
@@ -223,6 +243,9 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## 02 — Design
 
+- [Oryntela simplicity principles](02-design/oryntela-simplicity-principles.md)
+- [Oryntela Daily future state](02-design/oryntela-daily-future-state.md)
+- [Oryntela product navigation exploration](02-design/oryntela-product-navigation-exploration.md)
 - [Information architecture](02-design/information-architecture.md)
 - [Core workflows](02-design/core-workflows.md)
 - [Design principles](02-design/design-principles.md)
@@ -288,6 +311,10 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Campaigns & Sequences UX](02-design/campaigns-and-sequences-ux.md)
 
 ## 03 — Engineering
+
+- [Oryntela variable-cost safety gate](03-engineering/oryntela-variable-cost-safety-gate.md)
+- [Oryntela future SMS boundary](03-engineering/oryntela-future-sms-boundary.md)
+- [Oryntela native mobile recording boundary](03-engineering/oryntela-native-mobile-recording-boundary.md)
 
 ### Current implementation
 
@@ -506,6 +533,16 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Core capability gap analysis](03-engineering/core-capability-gap-analysis.md)
 - [Prospect foundation readiness](03-engineering/prospect-foundation-readiness.md)
 
+## 04 — Commercial
+
+- [Oryntela pricing hypothesis](04-commercial/oryntela-pricing-hypothesis.md)
+- [Oryntela Credits commercial model](04-commercial/oryntela-credits-commercial-model.md)
+- [Oryntela free-trial hypothesis](04-commercial/oryntela-free-trial-hypothesis.md)
+- [Oryntela packaging hypothesis](04-commercial/oryntela-packaging-hypothesis.md)
+- [Oryntela first design-partner commercial model](04-commercial/oryntela-first-design-partner-commercial-model.md)
+- [Oryntela pricing validation plan](04-commercial/oryntela-pricing-validation-plan.md)
+- [Oryntela competitive landscape](04-commercial/oryntela-competitive-landscape.md)
+
 ## 04 — AI
 
 - [AI documentation index](04-ai/README.md)
@@ -540,6 +577,9 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## 06 — Roadmap
 
+- [Oryntela owner-notes reconciliation](06-roadmap/oryntela-owner-notes-reconciliation.md)
+- [Oryntela post-design-partner roadmap framework](06-roadmap/oryntela-post-design-partner-roadmap-framework.md)
+- [Oryntela commercial-product handoff](06-roadmap/oryntela-commercial-product-handoff.md)
 - [Product roadmap to beta](06-roadmap/product-roadmap-to-beta.md)
 - [MVP and beta scope](06-roadmap/mvp-and-beta-scope.md)
 - [Long-range product roadmap](06-roadmap/product-roadmap.md)

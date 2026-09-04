@@ -1,5 +1,9 @@
 # End-to-end Sales Platform security and privacy
 
+> **Oryntela consolidation — 4 September 2026:** These controls continue under
+> the selected public brand. Future SMS, native recording and any provider-backed
+> cost exposure have additional documented gates; none is authorised or built.
+
 - **Status:** WO-023 threat and control direction; future capabilities are not implemented
 - **Authority:** Extends the canonical security, privacy and trust requirements; it
   does not weaken current fail-closed controls

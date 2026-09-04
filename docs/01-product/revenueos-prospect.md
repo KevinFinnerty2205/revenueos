@@ -1,5 +1,10 @@
 # RevenueOS Prospect
 
+> **Oryntela consolidation — 4 September 2026:** Prospect remains a product
+> capability, not a customer plan or a live-data claim. See the
+> [Oryntela master product blueprint](oryntela-master-product-blueprint.md) for its
+> current mock-backed boundary and validation sequence.
+
 - **Status:** WO-026 Account Research, WO-027 Prospect Person Intelligence, WO-028 Target Market discovery and the WO-029 Engage handoff implemented
 - **Purpose:** Find the right customers and the right people
 - **Checkpoint 2:** Keep Prospect and proceed to Create; real provider-backed use
