@@ -176,6 +176,54 @@ describe("SellingProfileSettings", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("does not approve while the form contains unsaved draft changes", async () => {
+    const draft = revision();
+    const changedContent = {
+      ...content,
+      companyDescription: "Updated approved organisation context.",
+    };
+    const savedDraft = {
+      ...draft,
+      lockVersion: 2,
+      content: changedContent,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(profile({ status: "draft", draft, history: [draft] })),
+      )
+      .mockResolvedValueOnce(
+        response(
+          profile({
+            status: "draft",
+            draft: savedDraft,
+            history: [savedDraft],
+          }),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SellingProfileSettings />);
+
+    await screen.findByText("Draft revision 2");
+    fireEvent.change(screen.getByLabelText(/^Company description/i), {
+      target: { value: changedContent.companyDescription },
+    });
+    expect(
+      screen.getByRole("button", { name: "Approve as current" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Save this draft before approving your latest changes."),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Approve as current" }),
+      ).toBeEnabled(),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("retires the approved projection without deleting its history", async () => {
     const current = revision("approved");
     const retired = {

@@ -40,7 +40,7 @@ def _enable_rls_and_history_guard() -> None:
                 IF OLD.state <> 'draft' AND (
                     NEW.id IS DISTINCT FROM OLD.id OR
                     NEW.organisation_id IS DISTINCT FROM OLD.organisation_id OR
-                    NEW.content_json IS DISTINCT FROM OLD.content_json OR
+                    NEW.content_json::text IS DISTINCT FROM OLD.content_json::text OR
                     NEW.content_fingerprint IS DISTINCT FROM OLD.content_fingerprint OR
                     NEW.revision_number IS DISTINCT FROM OLD.revision_number OR
                     NEW.schema_version IS DISTINCT FROM OLD.schema_version OR

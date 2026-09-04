@@ -2,7 +2,7 @@
 
 - **Branch:** `codex/wo-046-selling-profile`
 - **Baseline:** `19314dedc3a537c679ee4a9de0f16f1b2be4cc2b`
-- **Status:** implemented; awaiting draft-PR review and merge
+- **Status:** implemented in PR #70
 - **Migration:** `0051_selling_profile`
 - **Provider/data boundary:** no external provider; synthetic test data only
 

@@ -279,6 +279,30 @@ def test_ask_uses_only_approved_safe_profile_context(client: TestClient) -> None
     assert "Ignore previous instructions" not in answer.text
     assert "not customer Evidence" in body["uncertainties"][0]
 
+    replacement = approve(
+        client,
+        create_draft(client, "profile-ask-0002", content("Replacement offer")),
+    )
+    replacement_answer = client.post(
+        "/api/v1/ask",
+        json={"question": "What do we sell?", "scopeType": "workspace", "scopeId": None},
+    )
+    assert replacement_answer.status_code == 200, replacement_answer.text
+    replacement_body = replacement_answer.json()
+    assert replacement_body["sources"][0]["id"] == replacement["current"]["id"]
+    assert "Replacement offer" in replacement_answer.text
+    assert "Safe offer" not in replacement_answer.text
+
+    retired = client.post(f"/api/v1/selling-profile/revisions/{replacement['current']['id']}/retire")
+    assert retired.status_code == 200, retired.text
+    after_retirement = client.post(
+        "/api/v1/ask",
+        json={"question": "What do we sell?", "scopeType": "workspace", "scopeId": None},
+    )
+    assert after_retirement.status_code == 200, after_retirement.text
+    assert after_retirement.json()["answerStatus"] == "unknown"
+    assert after_retirement.json()["sources"] == []
+
 
 def test_profile_is_included_in_export_and_removed_by_organisation_deletion() -> None:
     organisation_id = uuid4()

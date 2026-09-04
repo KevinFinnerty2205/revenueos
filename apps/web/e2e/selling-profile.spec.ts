@@ -125,6 +125,19 @@ test("administrator creates, reviews and approves selling context responsively",
     .fill("Founders and sales leaders");
   await section.getByRole("button", { name: "Create draft" }).click();
   await expect(section.getByText(/not current until approved/i)).toBeVisible();
+  await section
+    .getByLabel(/^Company description/i)
+    .fill(`${profileContent.companyDescription} Updated`);
+  await expect(
+    section.getByRole("button", { name: "Approve as current" }),
+  ).toBeDisabled();
+  await expect(
+    section.getByText(/Save this draft before approving your latest changes/i),
+  ).toBeVisible();
+  await section.getByRole("button", { name: "Save draft" }).click();
+  await expect(
+    section.getByRole("button", { name: "Approve as current" }),
+  ).toBeEnabled();
   await section.getByRole("button", { name: "Approve as current" }).focus();
   await expect(
     section.getByRole("button", { name: "Approve as current" }),

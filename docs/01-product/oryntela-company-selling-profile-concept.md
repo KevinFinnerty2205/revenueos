@@ -1,6 +1,6 @@
 # Oryntela Company & Selling Profile concept
 
-- **Status:** **IMPLEMENTED IN WO-046 — AWAITING MERGE**
+- **Status:** **IMPLEMENTED IN WO-046**
 - **Priority:** Phase 1 of the owner-approved pre-launch roadmap
 - **Authority:** Organisation-supplied/company-approved context; never customer Evidence
 
@@ -23,20 +23,21 @@ existing authority domains.
 - Prospect research objectives and exclusions; and
 - bounded custom Methodology definitions.
 
-The profile must compose or reference these primitives. It must not copy them into a
-second source of truth.
+Those domains remain separate sources of authority. WO-046 does not copy, compose or
+reference them; future consumer work must reconcile overlap explicitly rather than
+silently treating the profile as their source of truth.
 
 ## Implemented bounded model
 
-The organisation-owned, administrator-controlled and versioned profile can explain:
+The organisation-owned, administrator-controlled and versioned profile contains:
 
-- company description and approved market language;
-- products/services and multiple distinct offerings;
-- ideal customer profiles, industries, company sizes, personas and territories;
-- problems solved, customer outcomes and differentiators;
-- approved proof points, case studies, objections and competitor context;
-- value propositions and customer-safe claims; and
-- pricing/packaging context only where separately authorised.
+- a concise company description;
+- one to eight offerings with a name and concise description; and
+- optional bounded lists for who normally buys, problems solved, intended outcomes,
+  differentiators, competitors/alternatives, approved proof and approved claims.
+
+It does not add pricing, packaging, industries, territories, a second ICP, case-study
+records, objection handling or a product catalogue.
 
 One stable profile has immutable revision snapshots. A draft can be edited with
 optimistic concurrency, approved as current, superseded by a later approval or

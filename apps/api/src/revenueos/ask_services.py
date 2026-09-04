@@ -49,7 +49,7 @@ from revenueos.models import (
     RevenueBrainSourceSnapshot,
 )
 from revenueos.revenue_brain_reasoning_contracts import RevenueBrainInsightContent
-from revenueos.selling_profile_contracts import SellingProfileContent
+from revenueos.selling_profile_services import SellingProfileService
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.ask")
@@ -262,18 +262,11 @@ class AskRevenueOSService:
         scope: AskScope,
         question: str,
     ) -> AskAnswer:
-        revision = await self.repository.current_selling_profile(self.tenant.organisation_id)
-        if revision is None:
-            return self._unknown_answer(
-                request_id,
-                generated_at,
-                scope,
-                "selling_context",
-                "No approved Company & Selling Profile is available for this organisation.",
-            )
         try:
-            content = SellingProfileContent.model_validate(revision.content_json)
-        except ValidationError:
+            projection = await SellingProfileService(self.session, self.tenant).context()
+        except PublicAPIError as exc:
+            if exc.code != "selling_profile_content_invalid":
+                raise
             return self._unknown_answer(
                 request_id,
                 generated_at,
@@ -281,6 +274,20 @@ class AskRevenueOSService:
                 "selling_context",
                 "The approved Company & Selling Profile is unavailable because its stored content is invalid.",
             )
+        if (
+            not projection.available
+            or projection.content is None
+            or projection.revision_id is None
+            or projection.revision_number is None
+        ):
+            return self._unknown_answer(
+                request_id,
+                generated_at,
+                scope,
+                "selling_context",
+                "No approved Company & Selling Profile is available for this organisation.",
+            )
+        content = projection.content
         lowered = question.casefold()
         values: list[str] = [content.company_description]
         for offering in content.offerings:
@@ -311,10 +318,10 @@ class AskRevenueOSService:
                 "The approved profile contains no safe bounded context for this question.",
             )
         source = AskSource(
-            id=revision.id,
+            id=projection.revision_id,
             source_type="selling_profile",
-            label=f"Approved Company & Selling Profile · revision {revision.revision_number}",
-            occurred_at=revision.approved_at,
+            label=f"Approved Company & Selling Profile · revision {projection.revision_number}",
+            occurred_at=projection.approved_at,
             excerpt=safe_values[0],
             provenance="organisation_approved",
             href="/settings#company-selling-profile",

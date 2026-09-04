@@ -767,9 +767,9 @@ reads hide a stale projection's conclusions when the source fingerprint changes.
 | `GET`   | `/api/v1/selling-profile`                                   | Admin management view with current, draft and immutable history   |
 | `GET`   | `/api/v1/selling-profile/context`                           | Active-member approved context projection; never customer Evidence |
 | `POST`  | `/api/v1/selling-profile/revisions`                         | Create one bounded draft idempotently                              |
-| `PATCH` | `/api/v1/selling-profile/revisions/{revisionId}`            | Edit a draft with optimistic lock version                          |
-| `POST`  | `/api/v1/selling-profile/revisions/{revisionId}/approve`    | Approve draft and atomically supersede the prior current revision  |
-| `POST`  | `/api/v1/selling-profile/revisions/{revisionId}/retire`     | Retire current projection without deleting history                 |
+| `PATCH` | `/api/v1/selling-profile/revisions/{revision_id}`           | Edit a draft with optimistic lock version                          |
+| `POST`  | `/api/v1/selling-profile/revisions/{revision_id}/approve`   | Approve draft and atomically supersede the prior current revision  |
+| `POST`  | `/api/v1/selling-profile/revisions/{revision_id}/retire`    | Retire current projection without deleting history                 |
 
 Mutation is administrator-only and requires an active membership. The approved
 projection carries the exact profile/revision/version plus

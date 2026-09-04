@@ -3138,8 +3138,20 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         {"id": tenant_a["opportunity_stage_event_id"]},
                     )
                 await immutable_event_savepoint.rollback()
+                selling_profile_transition = await connection.execute(
+                    text(
+                        """
+                        UPDATE selling_profile_revisions
+                        SET state = 'retired', retired_at = now(), updated_at = now()
+                        WHERE id = :id
+                        RETURNING state
+                        """
+                    ),
+                    {"id": tenant_a["selling_profile_revision_id"]},
+                )
+                assert selling_profile_transition.scalar_one() == "retired"
                 immutable_selling_profile = await connection.begin_nested()
-                with pytest.raises(DBAPIError):
+                with pytest.raises(DBAPIError, match="approved selling-profile history is immutable"):
                     await connection.execute(
                         text(
                             """

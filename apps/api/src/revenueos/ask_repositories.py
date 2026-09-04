@@ -24,7 +24,6 @@ from revenueos.models import (
     RevenueBrainInsight,
     RevenueBrainSnapshot,
     RevenueBrainSourceSnapshot,
-    SellingProfileRevision,
 )
 from revenueos.source_evidence_contracts import OpportunityEvidenceItemResponse
 
@@ -60,17 +59,6 @@ class AskRepository:
                 )
             )
             is not None
-        )
-
-    async def current_selling_profile(self, organisation_id: UUID) -> SellingProfileRevision | None:
-        return cast(
-            SellingProfileRevision | None,
-            await self.session.scalar(
-                select(SellingProfileRevision).where(
-                    SellingProfileRevision.organisation_id == organisation_id,
-                    SellingProfileRevision.state == "approved",
-                )
-            ),
         )
 
     async def opportunity(self, organisation_id: UUID, opportunity_id: UUID) -> Opportunity | None:

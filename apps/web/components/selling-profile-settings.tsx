@@ -59,6 +59,13 @@ function lines(value: string): string[] {
     .filter(Boolean);
 }
 
+function contentMatches(
+  first: SellingProfileContent,
+  second: SellingProfileContent,
+): boolean {
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+
 export function SellingProfileSettings() {
   const [profile, setProfile] = useState<SellingProfileManagement | null>(null);
   const [content, setContent] = useState(() => copyContent(EMPTY_CONTENT));
@@ -67,6 +74,9 @@ export function SellingProfileSettings() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const draftHasUnsavedChanges = Boolean(
+    profile?.draft && !contentMatches(content, profile.draft.content),
+  );
 
   const apply = useCallback((next: SellingProfileManagement) => {
     setProfile(next);
@@ -452,13 +462,26 @@ export function SellingProfileSettings() {
               <button
                 type="button"
                 className="secondary-button"
-                disabled={busy}
+                disabled={busy || draftHasUnsavedChanges}
+                aria-describedby={
+                  draftHasUnsavedChanges
+                    ? "selling-profile-approval-help"
+                    : undefined
+                }
                 onClick={() => void transition("approve")}
               >
                 Approve as current
               </button>
             ) : null}
           </div>
+          {profile.draft && draftHasUnsavedChanges ? (
+            <p
+              id="selling-profile-approval-help"
+              className="mt-3 text-sm text-amber-800"
+            >
+              Save this draft before approving your latest changes.
+            </p>
+          ) : null}
         </form>
       ) : null}
 
