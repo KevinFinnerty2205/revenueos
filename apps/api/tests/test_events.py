@@ -306,7 +306,7 @@ def test_event_flow_preserves_truth_provenance_and_canonical_records(
         return payload
 
     export = asyncio.run(export_data())
-    assert export["exportVersion"] == EXPORT_VERSION == 29
+    assert export["exportVersion"] == EXPORT_VERSION == 30
     assert "eventAttendeeImports" in export
 
 

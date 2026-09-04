@@ -273,7 +273,7 @@ const AskAnswerView = forwardRef<
             id={titleId}
             className="mt-2 text-2xl font-semibold text-slate-950"
           >
-            {statusLabel(answer.answerStatus)}
+            {statusLabel(answer)}
           </h2>
         </div>
         <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
@@ -287,7 +287,9 @@ const AskAnswerView = forwardRef<
       {answer.summaryPoints.length ? (
         <div className="mt-7">
           <h3 className="font-semibold text-slate-950">
-            Why RevenueOS believes it
+            {answer.questionClass === "selling_context"
+              ? "Approved profile statements"
+              : "Why RevenueOS believes it"}
           </h3>
           <ul className="mt-3 space-y-3">
             {answer.summaryPoints.map((point, index) => (
@@ -410,13 +412,18 @@ const AskAnswerView = forwardRef<
   );
 });
 
-function statusLabel(status: AskAnswer["answerStatus"]) {
+function statusLabel(answer: AskAnswer) {
+  if (
+    answer.questionClass === "selling_context" &&
+    answer.answerStatus === "supported"
+  )
+    return "Approved organisation context";
   return {
     supported: "Supported by current evidence",
     partially_supported: "Partially supported",
     conflicting: "Conflicting evidence",
     unknown: "Not enough reliable evidence",
-  }[status];
+  }[answer.answerStatus];
 }
 
 function provenanceLabel(
@@ -429,6 +436,7 @@ function provenanceLabel(
     imported_external: "Imported evidence",
     validated_intelligence: "Validated RevenueOS intelligence",
     system_metadata: "RevenueOS record",
+    organisation_approved: "Organisation-approved context",
   }[provenance];
 }
 

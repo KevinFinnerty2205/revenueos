@@ -12,6 +12,17 @@ No production customer data should be used until the production readiness gates 
 
 ## Trust promises
 
+### Company & Selling Profile authority
+
+WO-046 profile content is organisation-supplied and company-approved, but remains
+untrusted application data. Approval does not make it customer Evidence, public
+research, buyer truth, CRM authority or executable instruction. Only active
+administrators may mutate it; active members may consume only the current approved
+projection. Forced tenant RLS, composite tenant references, bounded validation,
+immutable approved history, content-minimised audit/log metadata and organisation
+export/deletion apply. Consumer code must cite or persist the exact revision and keep
+this authority separate from customer-direct and seller-reported Evidence.
+
 RevenueOS must be able to demonstrate that:
 
 1. one organisation cannot access another organisation's data;

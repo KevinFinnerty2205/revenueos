@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/page-header";
 import { PipelineSettings } from "@/components/pipeline-settings";
 import { ProspectModuleSettings } from "@/components/prospect-module-settings";
 import { SalesMethodologySettings } from "@/components/sales-methodology-settings";
+import { SellingProfileSettings } from "@/components/selling-profile-settings";
 import { apiRequest } from "@/lib/api";
 
 export function SettingsExperience() {
@@ -122,6 +123,7 @@ export function SettingsExperience() {
 
       {isAdmin ? (
         <>
+          <SellingProfileSettings />
           <ProspectModuleSettings />
           <EngageSettings />
           <CreateModuleSettings />

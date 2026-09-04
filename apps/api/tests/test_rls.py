@@ -196,6 +196,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "methodology_projections",
         "methodology_reviews",
         "organisation_module_entitlements",
+        "selling_profiles",
+        "selling_profile_revisions",
         "prospect_usage_counters",
         "prospect_research_targets",
         "prospect_research_runs",
@@ -426,6 +428,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "sales_forecast_revision_id": uuid.uuid4(),
                 "sales_forecast_reviewer_judgment_id": uuid.uuid4(),
                 "sales_forecast_reviewer_revision_id": uuid.uuid4(),
+                "selling_profile_id": uuid.uuid4(),
+                "selling_profile_revision_id": uuid.uuid4(),
             }
         )
 
@@ -528,6 +532,46 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO selling_profiles
+                                (id, organisation_id, created_by_user_id)
+                            VALUES
+                                (:selling_profile_id, :organisation_id, :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO selling_profile_revisions
+                                (id, organisation_id, profile_id,
+                                 revision_number, schema_version, state,
+                                 lock_version, content_json,
+                                 content_fingerprint, created_by_user_id,
+                                 approved_by_user_id, idempotency_key,
+                                 approved_at)
+                            VALUES
+                                (:selling_profile_revision_id,
+                                 :organisation_id, :selling_profile_id,
+                                 1, 1, 'approved', 1,
+                                 CAST(:selling_profile_content AS json),
+                                 :selling_profile_fingerprint, :user_id,
+                                 :user_id, :selling_profile_key, now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "selling_profile_content": (
+                                '{"companyDescription":"RLS approved context",'
+                                '"offerings":[{"name":"RLS offer","description":"Approved detail"}]}'
+                            ),
+                            "selling_profile_fingerprint": suffix.lower() * 64,
+                            "selling_profile_key": f"rls-selling-profile-{suffix.lower()}",
+                        },
                     )
                     await connection.execute(
                         text(
@@ -3012,6 +3056,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'methodology_projections',
                                     'methodology_reviews',
                                     'organisation_module_entitlements',
+                                    'selling_profiles',
+                                    'selling_profile_revisions',
                                     'prospect_usage_counters',
                                     'prospect_research_targets',
                                     'prospect_research_runs',
@@ -3092,6 +3138,19 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         {"id": tenant_a["opportunity_stage_event_id"]},
                     )
                 await immutable_event_savepoint.rollback()
+                immutable_selling_profile = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE selling_profile_revisions
+                            SET content_fingerprint = :fingerprint
+                            WHERE id = :id
+                            """
+                        ),
+                        {"id": tenant_a["selling_profile_revision_id"], "fingerprint": "z" * 64},
+                    )
+                await immutable_selling_profile.rollback()
                 immutable_target_savepoint = await connection.begin_nested()
                 with pytest.raises(DBAPIError):
                     await connection.execute(
@@ -3147,6 +3206,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["company_id"]},
                 )
                 assert company_update.rowcount == 0
+                selling_profile_update = await connection.execute(
+                    text("UPDATE selling_profiles SET updated_at = now() WHERE id = :id"),
+                    {"id": tenant_b["selling_profile_id"]},
+                )
+                assert selling_profile_update.rowcount == 0
                 event_update = await connection.execute(
                     text("UPDATE sales_events SET name = 'Blocked' WHERE id = :id"),
                     {"id": tenant_b["sales_event_id"]},
@@ -3688,6 +3752,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "prospect_research_targets",
                     "prospect_usage_counters",
                     "organisation_module_entitlements",
+                    "selling_profile_revisions",
+                    "selling_profiles",
                     "crm_stage_mappings",
                     "crm_field_mappings",
                     "crm_entity_mappings",

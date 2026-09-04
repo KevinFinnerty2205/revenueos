@@ -151,6 +151,8 @@ from revenueos.models import (
     SalesPipelineStage,
     SalesTarget,
     SalesTargetRevision,
+    SellingProfile,
+    SellingProfileRevision,
     SourceCandidateEvidence,
     Task,
     Transcript,
@@ -167,7 +169,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 29
+EXPORT_VERSION = 30
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1225,6 +1227,10 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(OnboardingProgress).where(OnboardingProgress.organisation_id == organisation_id))
         await session.execute(delete(AIUsageCounter).where(AIUsageCounter.organisation_id == organisation_id))
+        await session.execute(
+            delete(SellingProfileRevision).where(SellingProfileRevision.organisation_id == organisation_id)
+        )
+        await session.execute(delete(SellingProfile).where(SellingProfile.organisation_id == organisation_id))
         await session.execute(delete(BetaSystemEvent).where(BetaSystemEvent.organisation_id == organisation_id))
         await session.execute(
             delete(OperatorProvisioningEvent).where(OperatorProvisioningEvent.organisation_id == organisation_id)
@@ -2987,6 +2993,14 @@ async def _export_payload(
         .where(MethodologyReview.organisation_id == organisation_id)
         .order_by(MethodologyReview.opportunity_id, MethodologyReview.created_at)
     )
+    selling_profiles = await rows(
+        select(SellingProfile).where(SellingProfile.organisation_id == organisation_id).order_by(SellingProfile.id)
+    )
+    selling_profile_revisions = await rows(
+        select(SellingProfileRevision)
+        .where(SellingProfileRevision.organisation_id == organisation_id)
+        .order_by(SellingProfileRevision.profile_id, SellingProfileRevision.revision_number)
+    )
     action_proposals = await rows(
         select(ActionProposal)
         .where(ActionProposal.organisation_id == organisation_id)
@@ -4657,6 +4671,41 @@ async def _export_payload(
                 ),
             )
             for item in methodology_reviews
+        ],
+        "sellingProfiles": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "created_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in selling_profiles
+        ],
+        "sellingProfileRevisions": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "profile_id",
+                    "revision_number",
+                    "schema_version",
+                    "state",
+                    "lock_version",
+                    "content_json",
+                    "content_fingerprint",
+                    "created_by_user_id",
+                    "approved_by_user_id",
+                    "approved_at",
+                    "superseded_at",
+                    "retired_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in selling_profile_revisions
         ],
         "actionProposals": [
             _columns(

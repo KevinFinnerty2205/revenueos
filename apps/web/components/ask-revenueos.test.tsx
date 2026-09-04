@@ -171,6 +171,62 @@ describe("AskRevenueOS", () => {
     });
   });
 
+  it("labels Selling Profile answers as organisation context rather than customer Evidence", async () => {
+    const sellingAnswer = answer({
+      answer: "Sales Brain: A reviewed relationship-intelligence workspace.",
+      answerStatus: "supported",
+      questionClass: "selling_context",
+      summaryPoints: [
+        {
+          text: "Sales Brain: A reviewed relationship-intelligence workspace.",
+          sourceIds: ["profile-revision-2"],
+        },
+      ],
+      sources: [
+        {
+          id: "profile-revision-2",
+          sourceType: "selling_profile",
+          label: "Approved Company & Selling Profile · revision 2",
+          occurredAt: "2026-09-04T00:00:00Z",
+          excerpt:
+            "Sales Brain: A reviewed relationship-intelligence workspace.",
+          provenance: "organisation_approved",
+          href: "/settings#company-selling-profile",
+        },
+      ],
+      uncertainties: [
+        "This is organisation-approved selling context, not customer Evidence or proof about a specific buyer.",
+      ],
+      suggestedAction: null,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse(capabilities))
+        .mockResolvedValueOnce(jsonResponse(sellingAnswer)),
+    );
+    render(<AskRevenueOS scopeType="opportunity" scopeId="opportunity-1" />);
+    await screen.findByText("About: Qantas expansion");
+    fireEvent.change(screen.getByLabelText("Ask RevenueOS"), {
+      target: { value: "What do we sell?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Approved organisation context",
+        level: 2,
+      }),
+    ).toBeVisible();
+    expect(screen.getByText(/not customer Evidence/i)).toBeVisible();
+    fireEvent.click(screen.getByText("Sources (1)"));
+    expect(screen.getByText("Organisation-approved context")).toBeVisible();
+    expect(
+      screen.queryByText("Supported by current evidence"),
+    ).not.toBeInTheDocument();
+  });
+
   it.each([
     ["conflicting", "Conflicting evidence"],
     ["unknown", "Not enough reliable evidence"],
