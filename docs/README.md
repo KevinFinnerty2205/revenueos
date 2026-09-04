@@ -6,6 +6,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 1. [Company vision](00-company/vision.md)
    - [Oryntela owner register](00-company/oryntela-owner-register.md) — approved brand, domain and business-email facts
+   - [Oryntela preliminary trade-mark preparation](00-company/oryntela-trademark-preparation.md) — dated search record and adviser handoff; not legal clearance
 2. [Oryntela master product blueprint](01-product/oryntela-master-product-blueprint.md) — authoritative public-brand, product and future-direction consolidation
    - [RevenueOS master product blueprint](01-product/master-product-blueprint.md) — historical technical product contract
    - [Oryntela commercial-product handoff](06-roadmap/oryntela-commercial-product-handoff.md) — owner decision brief
@@ -176,6 +177,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 - [Vision](00-company/vision.md)
 - [Oryntela owner register](00-company/oryntela-owner-register.md)
+- [Oryntela preliminary trade-mark preparation](00-company/oryntela-trademark-preparation.md)
 
 ## 01 — Product
 
