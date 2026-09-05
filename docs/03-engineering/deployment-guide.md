@@ -8,7 +8,7 @@ and operating boundary for the current web, API, worker and PostgreSQL
 components; it is not production-data approval.
 
 WO-039C adds a conditional supervised real-data path through current Alembic head
-`0054_credits_variable_cost`; it is not blanket approval. Before any named partner,
+`0055_live_prospect_provider`; it is not blanket approval. Before any named partner,
 run the [real-data production preflight and lifecycle runbook](real-data-operations.md)
 and satisfy its Clerk, runtime-role/RLS, encrypted backup/restore, support, legal,
 provider and feature-profile gates. Unsupervised and commercial beta remain blocked.

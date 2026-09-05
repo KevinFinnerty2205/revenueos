@@ -3279,15 +3279,46 @@ export type ProspectAvailabilityState =
 export type ProspectTrustState =
   "verified" | "provider_supplied" | "inferred" | "unknown";
 export type ProspectResearchStatus =
-  "not_started" | "pending" | "researching" | "ready" | "partial" | "failed";
+  | "not_started"
+  | "pending"
+  | "researching"
+  | "ready"
+  | "partial"
+  | "no_result"
+  | "unknown"
+  | "failed";
 export type ProspectRunStatus =
-  "pending" | "fetching" | "synthesizing" | "completed" | "partial" | "failed";
+  | "pending"
+  | "fetching"
+  | "synthesizing"
+  | "completed"
+  | "partial"
+  | "no_result"
+  | "unknown"
+  | "failed";
 
 export interface ProspectAvailability {
   moduleKey: "prospect";
   state: ProspectAvailabilityState;
   enabled: boolean;
   canManage: boolean;
+  executionMode: "demo" | "credits" | "unavailable";
+  message: string;
+}
+
+export interface ProspectProviderReadiness {
+  candidateProvider: "apollo";
+  adapterState: "UNCONFIGURED" | "READY" | "DEGRADED" | "DISABLED";
+  productionCapable: true;
+  productionActive: false;
+  externalExecutionEnabled: boolean;
+  credentialConfigured: boolean;
+  productionCreditPricesAvailable: boolean;
+  productionCreditPacksAvailable: false;
+  autoTopUp: false;
+  recentProfessionalPostsAvailable: false;
+  phoneRevealEnabled: false;
+  blockers: string[];
   message: string;
 }
 
@@ -3647,6 +3678,9 @@ export interface ProspectResearchRun {
   sourceCount: number;
   observationCount: number;
   errorCode: string | null;
+  providerOutcome?: string | null;
+  creditOperationId?: string | null;
+  sellingProfileRevisionId?: string | null;
 }
 
 export interface ProspectResearchSource {
@@ -3844,8 +3878,7 @@ export interface ProspectDiscoveryCandidate {
   saved: boolean;
   excludedByUser: boolean;
   exclusionReason: string | null;
-  researchStatus:
-    "not_started" | "pending" | "researching" | "ready" | "partial" | "failed";
+  researchStatus: ProspectResearchStatus;
 }
 
 export interface ProspectDiscovery {
@@ -3912,8 +3945,7 @@ export interface ProspectPerson {
   providerAttribution: string;
   identityState: "supported" | "ambiguous";
   employmentState: ProspectPersonEmploymentState;
-  researchStatus:
-    "not_started" | "pending" | "researching" | "ready" | "partial" | "failed";
+  researchStatus: ProspectResearchStatus;
   promotedContactId: string | null;
   promotedAt: string | null;
   createdAt: string;

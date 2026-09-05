@@ -658,9 +658,34 @@ TEST-only Credit ledger, non-negative projection, purchased/promotional lots,
 quote/reservation/settlement/reconciliation lifecycle, versioned cost catalogue,
 margin checks, exposure caps and kill switches. Verified TEST billing can create one
 exact purchased grant and active trials can receive bounded promotional grants.
-Production prices, packs, margin floor, providers, live Stripe and real sales remain
-absent. WO-050 remains unstarted and depends on separate authority plus the relevant
-provider/economics/safety approvals.
+Production prices, packs, margin floor, live Stripe and real sales remain absent.
+WO-050 is implemented through migration `0055_live_prospect_provider`: it adds a
+provider-neutral Credit execution link, explicit provider outcomes, approved Selling
+Profile revision pinning, a dormant Apollo adapter and honest readiness UI. Apollo is
+not production-active. A written external-product/data agreement, exact custom cost,
+privacy approval, production Credit prices and owner margin floor remain required.
+
+The authorised sequence after WO-050 remains:
+
+1. WO-040 — Microsoft 365 Sales Integration
+2. WO-041 — Google Workspace Sales Integration
+3. WO-042 — Production CRM Connectors
+4. WO-043 — Simple Opportunity Deal Room
+5. WO-044 — Reviewed Closed-Won Handover
+6. WO-051 — Oryntela Brand Identity
+7. WO-052 — Customer-Facing Oryntela Rebrand
+8. WO-053 — Oryntela Marketing Website
+9. **WO-055 — Manual Paid Credit Grant**
+10. WO-054 — Production Deployment & Launch Operations
+11. WO-045 — End-to-End Pre-Launch Acceptance
+
+WO-055 is a future, separately authorised pre-launch commercial-operations item. It
+may add an internal-only `MANUAL_PAID_GRANT` after Kevin/Oryntela independently
+confirms cleared funds for an exceptional negotiated Credit purchase. Invoice issue,
+unpaid/pending payment and customer self-service never grant Credits. Normal customers
+continue to use card payment followed by verified payment reconciliation. WO-055 is
+placed after the principal product/provider/integration phases and before production
+deployment/final acceptance; it is not part of WO-050 implementation.
 
 ## Related documents
 

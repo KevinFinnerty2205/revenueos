@@ -1966,10 +1966,26 @@ class ProspectResearchRun(TimestampMixin, Base):
     __tablename__ = "prospect_research_runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'fetching', 'synthesizing', 'completed', 'partial', 'failed')",
+            "status IN ('pending', 'fetching', 'synthesizing', 'completed', 'partial', 'no_result', 'unknown', "
+            "'failed')",
             name="ck_prospect_runs_status",
         ),
         CheckConstraint("schema_version > 0", name="ck_prospect_runs_schema_version"),
+        CheckConstraint("provider_mode IN ('deterministic', 'external')", name="ck_prospect_runs_provider_mode"),
+        CheckConstraint(
+            "provider_outcome IS NULL OR provider_outcome IN ('completed', 'partial', 'no_result', 'unknown')",
+            name="ck_prospect_runs_provider_outcome",
+        ),
+        CheckConstraint(
+            "provider_units >= 0 AND successful_units >= 0 AND successful_units <= provider_units "
+            "AND provider_cost_micros >= 0",
+            name="ck_prospect_runs_provider_amounts",
+        ),
+        CheckConstraint(
+            "provider_cost_currency IS NULL OR "
+            "(length(provider_cost_currency) = 3 AND provider_cost_currency = upper(provider_cost_currency))",
+            name="ck_prospect_runs_provider_currency",
+        ),
         CheckConstraint("attempt_count >= 0", name="ck_prospect_runs_attempts"),
         CheckConstraint("max_attempts >= 1", name="ck_prospect_runs_max_attempts"),
         CheckConstraint(
@@ -1998,6 +2014,18 @@ class ProspectResearchRun(TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["organisation_id", "credit_operation_id"],
+            ["credit_operations.organisation_id", "credit_operations.id"],
+            name="fk_prospect_runs_credit_operation",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "selling_profile_revision_id"],
+            ["selling_profile_revisions.organisation_id", "selling_profile_revisions.id"],
+            name="fk_prospect_runs_selling_profile_revision",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["organisation_id", "refresh_of_run_id", "target_id"],
             [
                 "prospect_research_runs.organisation_id",
@@ -2008,6 +2036,7 @@ class ProspectResearchRun(TimestampMixin, Base):
         ),
         UniqueConstraint("organisation_id", "id", name="uq_prospect_runs_org_id"),
         UniqueConstraint("organisation_id", "id", "target_id", name="uq_prospect_runs_org_id_target"),
+        UniqueConstraint("organisation_id", "credit_operation_id", name="uq_prospect_runs_credit_operation"),
         UniqueConstraint(
             "organisation_id",
             "target_id",
@@ -2017,6 +2046,7 @@ class ProspectResearchRun(TimestampMixin, Base):
         Index("ix_prospect_runs_org_target_created", "organisation_id", "target_id", "created_at"),
         Index("ix_prospect_runs_org_person_created", "organisation_id", "person_id", "created_at"),
         Index("ix_prospect_runs_org_status", "organisation_id", "status"),
+        Index("ix_prospect_runs_org_provider_outcome", "organisation_id", "provider_outcome"),
         Index("ix_prospect_runs_status_attempt", "status", "next_attempt_at"),
         Index("ix_prospect_runs_status_lease", "status", "lease_expires_at"),
     )
@@ -2031,6 +2061,8 @@ class ProspectResearchRun(TimestampMixin, Base):
     person_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     refresh_of_run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    credit_operation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    selling_profile_revision_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     status: Mapped[str] = mapped_column(
         String(24),
         nullable=False,
@@ -2039,6 +2071,15 @@ class ProspectResearchRun(TimestampMixin, Base):
     )
     provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
     provider_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="deterministic", server_default="deterministic"
+    )
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    provider_outcome: Mapped[str | None] = mapped_column(String(24))
+    provider_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    successful_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    provider_cost_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    provider_cost_currency: Mapped[str | None] = mapped_column(String(3))
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)

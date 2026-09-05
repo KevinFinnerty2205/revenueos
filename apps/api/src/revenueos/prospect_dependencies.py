@@ -14,8 +14,14 @@ from revenueos.prospect_target_market_services import ProspectTargetMarketServic
 from revenueos.tenant import TenantContext, get_tenant_context
 
 
-def get_prospect_provider(settings: Settings = Depends(get_settings)) -> ProspectResearchProvider:
-    return create_prospect_provider(settings.prospect_research_provider_name)
+async def get_prospect_provider(
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[ProspectResearchProvider]:
+    provider = create_prospect_provider(settings.prospect_research_provider_name, settings)
+    try:
+        yield provider
+    finally:
+        await provider.aclose()
 
 
 async def get_prospect_service(

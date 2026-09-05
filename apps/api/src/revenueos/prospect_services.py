@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
@@ -15,11 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
+from revenueos.credit_repositories import CreditRepository
+from revenueos.credit_services import CreditService
 from revenueos.crm_history import crm_creation_changes
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
     Company,
+    CreditOperation,
     ProspectResearchRun,
     ProspectResearchSource,
     ProspectResearchTarget,
@@ -34,6 +37,7 @@ from revenueos.prospect_contracts import (
     PromotionResponse,
     ProspectAvailabilityResponse,
     ProspectEntitlementUpdate,
+    ProspectProviderReadinessResponse,
     RecentResearchItem,
     RecentResearchResponse,
     ResearchBriefResponse,
@@ -57,13 +61,16 @@ from revenueos.prospect_repositories import (
     ProspectRepository,
 )
 from revenueos.prospect_url_security import PublicUrlSafetyError, normalise_company_website
+from revenueos.selling_profile_repositories import SellingProfileRepository
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.prospect")
 RESEARCH_SCHEMA_VERSION = 1
 RECENT_RESEARCH_LIMIT = 20
 HISTORY_LIMIT = 10
-CustomerResearchStatus = Literal["not_started", "pending", "researching", "ready", "partial", "failed"]
+CustomerResearchStatus = Literal[
+    "not_started", "pending", "researching", "ready", "partial", "no_result", "unknown", "failed"
+]
 
 
 class ProspectService:
@@ -79,7 +86,7 @@ class ProspectService:
         self.tenant = tenant
         self.settings = settings
         self.repository = ProspectRepository(session)
-        self.provider = provider or create_prospect_provider(settings.prospect_research_provider_name)
+        self.provider = provider or create_prospect_provider(settings.prospect_research_provider_name, settings)
 
     async def availability(self) -> ProspectAvailabilityResponse:
         access = await CommercialService(self.session, self.settings).module_access(
@@ -90,6 +97,7 @@ class ProspectService:
                 state="not_in_plan",
                 enabled=False,
                 can_manage=self.tenant.can_manage(),
+                execution_mode="unavailable",
                 message="Prospect isn't included in your organisation's current plan.",
             )
         if access == "read":
@@ -97,22 +105,120 @@ class ProspectService:
                 state="read_only",
                 enabled=False,
                 can_manage=False,
+                execution_mode="unavailable",
                 message="Historical Prospect records remain available to view and export. New research is blocked.",
             )
-        if not self.settings.feature_prospect_enabled or (
-            self.settings.environment == "production" and self.settings.prospect_research_provider_name == "mock"
+        if (
+            not self.settings.feature_prospect_enabled
+            or (self.settings.environment == "production" and self.provider.mode == "deterministic")
+            or (self.provider.mode == "external" and not self.settings.feature_prospect_external_provider_enabled)
         ):
             return ProspectAvailabilityResponse(
                 state="temporarily_unavailable",
                 enabled=False,
                 can_manage=self.tenant.can_manage(),
+                execution_mode="unavailable",
                 message="RevenueOS Prospect is not available in this environment.",
             )
         return ProspectAvailabilityResponse(
             state="available",
             enabled=True,
             can_manage=self.tenant.can_manage(),
+            execution_mode="credits" if self.provider.mode == "external" else "demo",
             message="RevenueOS Prospect is available for this organisation.",
+        )
+
+    async def provider_readiness(self) -> ProspectProviderReadinessResponse:
+        if not self.tenant.can_manage():
+            raise PublicAPIError("forbidden", "Administrator access is required.", 403)
+        blockers: list[str] = []
+        if self.settings.apollo_api_key is None:
+            blockers.append("Provider credentials are not configured.")
+        if self.settings.prospect_provider_health_reference is None:
+            blockers.append("Provider health has not been confirmed by an authorised zero-cost check.")
+        credit_repository = CreditRepository(self.session)
+        production_prices = (
+            await credit_repository.active_price("PROSPECT_COMPANY_RESEARCH", "production"),
+            await credit_repository.active_price("PROSPECT_PERSON_RESEARCH", "production"),
+        )
+        production_prices_available = all(price is not None for price in production_prices)
+        company_price = production_prices[0]
+        for approved, message in (
+            (self.settings.prospect_provider_approved, "Provider selection is not owner-approved."),
+            (self.settings.prospect_provider_terms_approved, "Product-use licensing is not approved."),
+            (self.settings.prospect_provider_privacy_approved, "Privacy and subprocessor review is incomplete."),
+            (
+                self.settings.prospect_provider_production_credit_prices_approved and production_prices_available,
+                "Production Credit action prices are not approved.",
+            ),
+            (
+                self.settings.credits_margin_floor_basis_points is not None
+                and self.settings.credits_margin_policy_reference is not None,
+                "The production margin floor is not owner-approved.",
+            ),
+            (
+                self.settings.prospect_provider_cost_model_reference is not None
+                and self.settings.prospect_provider_cost_micros_per_credit is not None,
+                "The provider cost model is incomplete.",
+            ),
+        ):
+            if not approved:
+                blockers.append(message)
+        if company_price is not None and (
+            company_price.customer_charge_basis != "requested_unit"
+            or "no result" not in company_price.pricing_note.casefold().replace("-", " ")
+        ):
+            blockers.append(
+                "Company research pricing must use requested-unit charging and disclose no-result charging."
+            )
+        policy = await credit_repository.policy(self.tenant.organisation_id)
+        if (
+            policy is None
+            or not policy.metered_actions_enabled
+            or any(
+                value <= 0
+                for value in (
+                    policy.max_credits_per_operation,
+                    policy.max_credits_per_day,
+                    policy.max_provider_cost_micros_per_day,
+                    policy.max_operations_per_minute,
+                )
+            )
+        ):
+            blockers.append("Bounded Credit exposure and provider-cost caps are not configured.")
+        controls = (
+            await credit_repository.control("global", "metered_actions"),
+            await credit_repository.control("action", "PROSPECT_COMPANY_RESEARCH"),
+            await credit_repository.control("action", "PROSPECT_PERSON_RESEARCH"),
+            await credit_repository.control("provider_capability", "apollo:prospect_research"),
+        )
+        if any(control is None or not control.enabled for control in controls):
+            blockers.append("Global, Prospect-action or Apollo execution controls are disabled.")
+        if self.settings.prospect_research_provider_name != "apollo":
+            blockers.append("The live provider is not selected in this environment.")
+        if not self.settings.feature_prospect_external_provider_enabled:
+            blockers.append("External provider execution is disabled by the server kill switch.")
+        state: Literal["UNCONFIGURED", "READY", "DEGRADED", "DISABLED"]
+        if self.settings.apollo_api_key is None:
+            state = "UNCONFIGURED"
+        elif not self.settings.feature_prospect_external_provider_enabled:
+            state = "DISABLED"
+        elif blockers:
+            state = "DEGRADED"
+        else:
+            state = "READY"
+        return ProspectProviderReadinessResponse(
+            adapter_state=state,
+            external_execution_enabled=self.settings.feature_prospect_external_provider_enabled,
+            credential_configured=self.settings.apollo_api_key is not None,
+            production_credit_prices_available=production_prices_available,
+            blockers=blockers,
+            message=(
+                "The live Prospect adapter is installed but cannot execute until every commercial, licensing, "
+                "privacy and Credit gate is approved."
+                if blockers
+                else "All configured gates are ready; production activation remains separately prohibited."
+            ),
         )
 
     async def update_entitlement(self, request: ProspectEntitlementUpdate) -> ProspectAvailabilityResponse:
@@ -225,6 +331,11 @@ class ProspectService:
             raise PublicAPIError("research_target_not_found", "The research target was not found.", 404)
         active = await self.repository.active_run(self.tenant.organisation_id, locked_target.id)
         if active is not None:
+            await self._release_unused_credit_operation(
+                request.credit_operation_id,
+                existing_run=active,
+                reason="No provider execution occurred because company research is already in progress.",
+            )
             await self.repository.commit()
             return await self.get_research(locked_target.id)
         fresh = await self.repository.fresh_run(
@@ -233,6 +344,11 @@ class ProspectService:
             fresh_after=datetime.now(UTC) - timedelta(days=self.settings.private_beta_prospect_fresh_days),
         )
         if fresh is not None:
+            await self._release_unused_credit_operation(
+                request.credit_operation_id,
+                existing_run=fresh,
+                reason="No provider execution occurred because current company research is still fresh.",
+            )
             await self.repository.commit()
             return await self.get_research(locked_target.id)
         default_key = self._fingerprint(
@@ -243,7 +359,18 @@ class ProspectService:
             self.provider.provider_version,
             str(RESEARCH_SCHEMA_VERSION),
         )
-        await self._queue_run(locked_target, request.idempotency_key or default_key, refresh_of_run_id=None)
+        key = request.idempotency_key or default_key
+        credit_operation_id = await self._credit_operation_for_quote(
+            request.credit_operation_id,
+            request.credit_quote_id,
+            key,
+        )
+        await self._queue_run(
+            locked_target,
+            key,
+            refresh_of_run_id=None,
+            credit_operation_id=credit_operation_id,
+        )
         return await self.get_research(locked_target.id)
 
     async def refresh_research(
@@ -257,11 +384,26 @@ class ProspectService:
             raise PublicAPIError("research_target_not_found", "The research target was not found.", 404)
         active = await self.repository.active_run(self.tenant.organisation_id, target_id)
         if active is not None:
+            await self._release_unused_credit_operation(
+                request.credit_operation_id,
+                existing_run=active,
+                reason="No provider execution occurred because company research is already in progress.",
+            )
             await self.repository.commit()
             return await self.get_research(target_id)
         current = await self.repository.current_run(self.tenant.organisation_id, target_id)
         key = request.idempotency_key or f"refresh:{uuid.uuid4()}"
-        await self._queue_run(target, key, refresh_of_run_id=current.id if current else None)
+        credit_operation_id = await self._credit_operation_for_quote(
+            request.credit_operation_id,
+            request.credit_quote_id,
+            key,
+        )
+        await self._queue_run(
+            target,
+            key,
+            refresh_of_run_id=current.id if current else None,
+            credit_operation_id=credit_operation_id,
+        )
         return await self.get_research(target_id)
 
     async def get_research(self, target_id: UUID) -> ResearchBriefResponse:
@@ -376,6 +518,13 @@ class ProspectService:
         current = await self.repository.current_run(self.tenant.organisation_id, target.id)
         if current is None:
             raise PublicAPIError("research_not_ready", "Complete company research before adding it to Sales.", 409)
+        runs = await self.repository.runs_for_target(self.tenant.organisation_id, target.id)
+        if runs and runs[0].status in {"unknown", "no_result"}:
+            raise PublicAPIError(
+                "research_not_promotable",
+                "Resolve or refresh the latest company research result before adding it to Sales.",
+                409,
+            )
         existing = await self.repository.company_by_domain(
             self.tenant.organisation_id,
             target.normalized_domain,
@@ -493,23 +642,46 @@ class ProspectService:
         idempotency_key: str,
         *,
         refresh_of_run_id: UUID | None,
+        credit_operation_id: UUID | None,
     ) -> ProspectResearchRun:
         existing_runs = await self.repository.runs_for_target(self.tenant.organisation_id, target.id)
         duplicate = next((run for run in existing_runs if run.idempotency_key == idempotency_key), None)
         if duplicate is not None:
+            if (
+                duplicate.requested_by_user_id != self.tenant.user_id
+                or duplicate.credit_operation_id != credit_operation_id
+            ):
+                await self._release_unused_credit_operation(
+                    credit_operation_id,
+                    existing_run=None,
+                    reason="No provider execution occurred because the research idempotency key was already used.",
+                )
+                raise PublicAPIError(
+                    "research_idempotency_conflict",
+                    "That research request key is already bound to a different request.",
+                    409,
+                )
             await self.repository.commit()
             return duplicate
+        operation = await self._required_credit_operation(credit_operation_id)
         await self.repository.lock_organisation(self.tenant.organisation_id)
         if await self.repository.active_run_count(self.tenant.organisation_id) >= (
             self.settings.private_beta_max_concurrent_prospect_research
         ):
             await self.repository.rollback()
+            await set_tenant_database_context(self.session, self.tenant.organisation_id)
+            await self._release_unused_credit_operation(
+                operation.id if operation is not None else None,
+                existing_run=None,
+                reason="No provider execution occurred because the company research concurrency limit was reached.",
+            )
             raise PublicAPIError(
                 "prospect_concurrency_limit",
                 "This organisation already has the maximum number of company research runs in progress.",
                 429,
             )
         try:
+            selling_profile = await SellingProfileRepository(self.session).current(self.tenant.organisation_id)
             await self._reserve_usage()
             queued_at = datetime.now(UTC)
             run = ProspectResearchRun(
@@ -517,9 +689,12 @@ class ProspectService:
                 target_id=target.id,
                 requested_by_user_id=self.tenant.user_id,
                 refresh_of_run_id=refresh_of_run_id,
+                credit_operation_id=operation.id if operation is not None else None,
+                selling_profile_revision_id=selling_profile.id if selling_profile is not None else None,
                 status="pending",
                 provider_key=self.provider.provider_key,
                 provider_version=self.provider.provider_version,
+                provider_mode=self.provider.mode,
                 schema_version=RESEARCH_SCHEMA_VERSION,
                 request_fingerprint=self._fingerprint(
                     str(self.tenant.organisation_id),
@@ -541,6 +716,12 @@ class ProspectService:
             await self.repository.commit()
         except PublicAPIError:
             await self.repository.rollback()
+            await set_tenant_database_context(self.session, self.tenant.organisation_id)
+            await self._release_unused_credit_operation(
+                operation.id if operation is not None else None,
+                existing_run=None,
+                reason="No provider execution occurred because the company research request was rejected.",
+            )
             raise
         except IntegrityError as exc:
             await self.repository.rollback()
@@ -548,12 +729,40 @@ class ProspectService:
             concurrent = await self.repository.runs_for_target(self.tenant.organisation_id, target.id)
             duplicate = next((item for item in concurrent if item.idempotency_key == idempotency_key), None)
             if duplicate is None:
+                await self._release_unused_credit_operation(
+                    operation.id if operation is not None else None,
+                    existing_run=None,
+                    reason="No provider execution occurred because the company research request conflicted.",
+                )
                 raise PublicAPIError(
                     "research_conflict",
                     "The research request conflicted with another update. Try again.",
                     409,
                 ) from exc
+            if (
+                duplicate.requested_by_user_id != self.tenant.user_id
+                or duplicate.credit_operation_id != credit_operation_id
+            ):
+                await self._release_unused_credit_operation(
+                    operation.id if operation is not None else None,
+                    existing_run=None,
+                    reason="No provider execution occurred because the research idempotency key was already used.",
+                )
+                raise PublicAPIError(
+                    "research_idempotency_conflict",
+                    "That research request key is already bound to a different request.",
+                    409,
+                ) from exc
             return duplicate
+        except Exception:
+            await self.repository.rollback()
+            await set_tenant_database_context(self.session, self.tenant.organisation_id)
+            await self._release_unused_credit_operation(
+                operation.id if operation is not None else None,
+                existing_run=None,
+                reason="No provider execution occurred because the company research request could not be queued.",
+            )
+            raise
         logger.info(
             "prospect_research_queued",
             extra={
@@ -566,6 +775,140 @@ class ProspectService:
             },
         )
         return run
+
+    async def _release_unused_credit_operation(
+        self,
+        operation_id: UUID | None,
+        *,
+        existing_run: ProspectResearchRun | None,
+        reason: str,
+    ) -> None:
+        if operation_id is None:
+            return
+        if self.provider.mode == "deterministic":
+            raise PublicAPIError(
+                "credit_operation_not_required",
+                "The clearly labelled demo provider does not consume Credits.",
+                409,
+            )
+        operation = await self.session.scalar(
+            select(CreditOperation).where(
+                CreditOperation.organisation_id == self.tenant.organisation_id,
+                CreditOperation.id == operation_id,
+            )
+        )
+        if (
+            operation is None
+            or operation.requested_by_user_id != self.tenant.user_id
+            or operation.action_code != "PROSPECT_COMPANY_RESEARCH"
+            or operation.quantity != 1
+        ):
+            raise PublicAPIError(
+                "credit_operation_invalid",
+                "That Credit reservation cannot authorise this Prospect action.",
+                409,
+            )
+        if (
+            existing_run is not None
+            and existing_run.requested_by_user_id == self.tenant.user_id
+            and existing_run.credit_operation_id == operation.id
+        ):
+            return
+        linked_run = await self.session.scalar(
+            select(ProspectResearchRun).where(
+                ProspectResearchRun.organisation_id == self.tenant.organisation_id,
+                ProspectResearchRun.credit_operation_id == operation.id,
+            )
+        )
+        if linked_run is not None:
+            raise PublicAPIError(
+                "credit_operation_invalid",
+                "That Credit reservation is already bound to another Prospect action.",
+                409,
+            )
+        if operation.status == "released":
+            return
+        if operation.status != "reserved":
+            raise PublicAPIError(
+                "credit_operation_invalid",
+                "That Credit reservation cannot authorise this Prospect action.",
+                409,
+            )
+        await CreditService(self.session, self.settings).release(
+            self.tenant.organisation_id,
+            operation.id,
+            idempotency_key=f"prospect-unused:{operation.id}",
+            reason=reason,
+        )
+
+    async def _required_credit_operation(self, operation_id: UUID | None) -> CreditOperation | None:
+        if self.provider.mode == "deterministic":
+            if operation_id is not None:
+                raise PublicAPIError(
+                    "credit_operation_not_required",
+                    "The clearly labelled demo provider does not consume Credits.",
+                    409,
+                )
+            return None
+        if not self.settings.feature_prospect_external_provider_enabled:
+            raise PublicAPIError(
+                "prospect_provider_unavailable",
+                "Provider-backed Prospect research is not enabled.",
+                503,
+            )
+        if operation_id is None:
+            raise PublicAPIError(
+                "credit_operation_required",
+                "Review the Credit quote and confirm the reservation before starting research.",
+                409,
+            )
+        operation = await self.session.scalar(
+            select(CreditOperation).where(
+                CreditOperation.organisation_id == self.tenant.organisation_id,
+                CreditOperation.id == operation_id,
+            )
+        )
+        if (
+            operation is None
+            or operation.requested_by_user_id != self.tenant.user_id
+            or operation.action_code != "PROSPECT_COMPANY_RESEARCH"
+            or operation.quantity != 1
+            or operation.status != "reserved"
+        ):
+            raise PublicAPIError(
+                "credit_operation_invalid",
+                "That Credit reservation cannot authorise this Prospect action.",
+                409,
+            )
+        return operation
+
+    async def _credit_operation_for_quote(
+        self,
+        operation_id: UUID | None,
+        quote_id: UUID | None,
+        idempotency_key: str,
+    ) -> UUID | None:
+        if quote_id is None:
+            return operation_id
+        if operation_id is not None:
+            raise PublicAPIError(
+                "credit_authorisation_ambiguous",
+                "Provide one Credit authorisation for this Prospect action.",
+                422,
+            )
+        if self.provider.mode == "deterministic":
+            raise PublicAPIError(
+                "credit_operation_not_required",
+                "The clearly labelled demo provider does not consume Credits.",
+                409,
+            )
+        operation = await CreditService(self.session, self.settings).reserve(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            quote_id=quote_id,
+            idempotency_key=f"prospect-company:{hashlib.sha256(idempotency_key.encode()).hexdigest()}",
+        )
+        return operation.operation_id
 
     async def _reserve_usage(self) -> None:
         await self._reserve_counter(
@@ -676,6 +1019,9 @@ class ProspectService:
                 "sourceCount": len(sources),
                 "observationCount": len(observations),
                 "errorCode": run.last_error_code,
+                "providerOutcome": run.provider_outcome,
+                "creditOperationId": run.credit_operation_id,
+                "sellingProfileRevisionId": run.selling_profile_revision_id,
             }
         )
 
@@ -758,6 +1104,10 @@ class ProspectService:
                 "pending" if latest.status == "pending" else "researching",
                 "RevenueOS is checking permitted public business sources. You can leave this page and return later.",
             )
+        if latest.status == "unknown":
+            return "unknown", "The provider outcome is unknown. Credits remain reserved while it is reconciled."
+        if latest.status == "no_result":
+            return "no_result", "No reliable result was returned. No unsupported facts were created."
         if latest.status == "failed" and current is None:
             return "failed", "RevenueOS couldn’t find enough reliable public information about this company."
         if latest.status == "failed" and current is not None:

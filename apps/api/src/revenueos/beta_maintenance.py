@@ -183,7 +183,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 33
+EXPORT_VERSION = 34
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -4182,9 +4182,15 @@ async def _export_payload(
                     "person_id",
                     "requested_by_user_id",
                     "refresh_of_run_id",
+                    "credit_operation_id",
+                    "selling_profile_revision_id",
                     "status",
                     "provider_key",
                     "provider_version",
+                    "provider_mode",
+                    "provider_outcome",
+                    "provider_units",
+                    "successful_units",
                     "schema_version",
                     "attempt_count",
                     "max_attempts",

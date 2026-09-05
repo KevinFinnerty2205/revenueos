@@ -168,5 +168,6 @@ no legal period has been invented.
 provider request reference, outcome, requested/successful units and exact provider
 cost. The deterministic adapter is network-free and idempotent. It exists only to
 prove success, partial, failure and unknown outcomes. No Apollo or other Prospect
-provider, live Stripe, real Credit sale, customer data, worker claiming, SMS, voice,
-auto-top-up or WO-050 functionality is present.
+provider, live Stripe, real Credit sale, customer data, SMS, voice or auto-top-up is
+active. WO-050 reuses this lifecycle for a dormant Prospect provider adapter; see
+[Live Prospect provider boundary](live-prospect-provider.md).

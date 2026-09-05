@@ -12,6 +12,7 @@ import { CRMSettings } from "@/components/crm-settings";
 import { EngageSettings } from "@/components/engage-settings";
 import { PageHeader } from "@/components/page-header";
 import { PipelineSettings } from "@/components/pipeline-settings";
+import { ProspectModuleSettings } from "@/components/prospect-module-settings";
 import { SalesMethodologySettings } from "@/components/sales-methodology-settings";
 import { SellingProfileSettings } from "@/components/selling-profile-settings";
 import { apiRequest } from "@/lib/api";
@@ -128,6 +129,7 @@ export function SettingsExperience() {
           <CommercialPlanSettings />
           <BillingSubscriptionSettings />
           <CreditsSettings />
+          <ProspectModuleSettings />
           <EngageSettings />
           <CRMSettings />
           <CRMImportOnboarding />

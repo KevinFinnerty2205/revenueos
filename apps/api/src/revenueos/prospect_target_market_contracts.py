@@ -138,7 +138,9 @@ class DiscoveryCandidateResponse(APIModel):
     saved: bool
     excluded_by_user: bool
     exclusion_reason: str | None
-    research_status: Literal["not_started", "pending", "researching", "ready", "partial", "failed"]
+    research_status: Literal[
+        "not_started", "pending", "researching", "ready", "partial", "no_result", "unknown", "failed"
+    ]
 
 
 class DiscoverySummaryResponse(APIModel):

@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
+from pydantic import model_validator
+
 from revenueos.contracts import APIModel
 from revenueos.domain import (
     ProspectBuyingRole,
@@ -23,6 +25,16 @@ from revenueos.prospect_contracts import (
 
 class PersonResearchRequest(APIModel):
     idempotency_key: IdempotencyKey | None = None
+    credit_operation_id: UUID | None = None
+    credit_quote_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_credit_authorisation(self) -> PersonResearchRequest:
+        if self.credit_operation_id is not None and self.credit_quote_id is not None:
+            raise ValueError("Provide either a Credit operation or a Credit quote, not both.")
+        if self.credit_quote_id is not None and self.idempotency_key is None:
+            raise ValueError("A stable idempotency key is required when confirming a Credit quote.")
+        return self
 
 
 class RelevantFunctionResponse(APIModel):
@@ -44,7 +56,9 @@ class ProspectPersonResponse(APIModel):
     provider_attribution: str
     identity_state: Literal["supported", "ambiguous"]
     employment_state: ProspectPersonEmploymentState
-    research_status: Literal["not_started", "pending", "researching", "ready", "partial", "failed"]
+    research_status: Literal[
+        "not_started", "pending", "researching", "ready", "partial", "no_result", "unknown", "failed"
+    ]
     promoted_contact_id: UUID | None
     promoted_at: datetime | None
     created_at: datetime
@@ -106,7 +120,7 @@ class ExistingContactMatchResponse(APIModel):
 
 class PersonResearchBriefResponse(APIModel):
     person: ProspectPersonResponse
-    status: Literal["pending", "researching", "ready", "partial", "failed"]
+    status: Literal["pending", "researching", "ready", "partial", "no_result", "unknown", "failed"]
     status_message: str
     current_run: ResearchRunSummary | None
     latest_run: ResearchRunSummary | None

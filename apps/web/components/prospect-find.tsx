@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
+import { ProspectCreditAction } from "@/components/prospect-credit-action";
 import { apiRequest } from "@/lib/api";
 
 const statusLabels: Record<ProspectResearchStatus, string> = {
@@ -21,6 +22,8 @@ const statusLabels: Record<ProspectResearchStatus, string> = {
   researching: "Researching company…",
   ready: "Research ready",
   partial: "Research incomplete",
+  no_result: "No results",
+  unknown: "Reconciling provider outcome",
   failed: "Couldn’t complete research",
 };
 
@@ -75,6 +78,10 @@ export function ProspectFind() {
     return () => controller.abort();
   }, [retryKey]);
 
+  useEffect(() => {
+    if (results) resultsHeading.current?.focus();
+  }, [results]);
+
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleaned = query.trim();
@@ -90,7 +97,6 @@ export function ProspectFind() {
         `/api/v1/prospect/companies/search?q=${encodeURIComponent(cleaned)}`,
       );
       setResults(nextResults);
-      window.requestAnimationFrame(() => resultsHeading.current?.focus());
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -102,7 +108,11 @@ export function ProspectFind() {
     }
   }
 
-  async function startResearch(candidate: ProspectCompanyCandidate) {
+  async function startResearch(
+    candidate: ProspectCompanyCandidate,
+    creditQuoteId: string | null,
+    idempotencyKey: string,
+  ): Promise<boolean> {
     setStartingCandidate(candidate.candidateId);
     setError(null);
     try {
@@ -112,11 +122,13 @@ export function ProspectFind() {
           method: "POST",
           body: JSON.stringify({
             candidateId: candidate.candidateId,
-            idempotencyKey: `find:${crypto.randomUUID()}`,
+            idempotencyKey,
+            creditQuoteId,
           }),
         },
       );
       router.push(`/find/${brief.target.id}`);
+      return true;
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -124,6 +136,7 @@ export function ProspectFind() {
           : "Company research could not be started.",
       );
       setStartingCandidate(null);
+      return false;
     }
   }
 
@@ -289,16 +302,17 @@ export function ProspectFind() {
                       {candidate.providerAttribution}
                     </p>
                   </div>
-                  <button
-                    type="button"
+                  <ProspectCreditAction
+                    actionCode="PROSPECT_COMPANY_RESEARCH"
                     className="primary-button shrink-0"
                     disabled={startingCandidate !== null}
-                    onClick={() => void startResearch(candidate)}
-                  >
-                    {startingCandidate === candidate.candidateId
-                      ? "Starting research…"
-                      : "Research company"}
-                  </button>
+                    executionMode={availability.executionMode}
+                    label="Research company"
+                    busyLabel="Starting research…"
+                    onAuthorised={(creditQuoteId, idempotencyKey) =>
+                      startResearch(candidate, creditQuoteId, idempotencyKey)
+                    }
+                  />
                 </article>
               ))}
             </div>

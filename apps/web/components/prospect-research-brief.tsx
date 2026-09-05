@@ -11,6 +11,7 @@ import type {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { ProspectCreditAction } from "@/components/prospect-credit-action";
 import { ProspectPeopleSection } from "@/components/prospect-people";
 
 const trustLabels: Record<ProspectTrustState, string> = {
@@ -176,7 +177,10 @@ export function ProspectResearchBriefView({
     [brief?.sources],
   );
 
-  async function refresh() {
+  async function refresh(
+    creditQuoteId: string | null,
+    idempotencyKey: string,
+  ): Promise<boolean> {
     setRefreshing(true);
     setError(null);
     try {
@@ -186,17 +190,20 @@ export function ProspectResearchBriefView({
           {
             method: "POST",
             body: JSON.stringify({
-              idempotencyKey: `refresh:${crypto.randomUUID()}`,
+              idempotencyKey,
+              creditQuoteId,
             }),
           },
         ),
       );
+      return true;
     } catch (reason) {
       setError(
         reason instanceof Error
           ? reason.message
           : "Research could not be refreshed.",
       );
+      return false;
     } finally {
       setRefreshing(false);
     }
@@ -333,6 +340,8 @@ export function ProspectResearchBriefView({
               </Link>
             ) : !isProcessing &&
               brief.status !== "failed" &&
+              brief.status !== "no_result" &&
+              brief.status !== "unknown" &&
               brief.status !== "not_started" ? (
               <button
                 ref={promotionTrigger}
@@ -343,19 +352,21 @@ export function ProspectResearchBriefView({
                 Add to Sales
               </button>
             ) : null}
-            {!isProcessing && brief.status !== "failed" ? (
-              <button
-                type="button"
+            {!isProcessing &&
+            brief.status !== "failed" &&
+            brief.status !== "unknown" ? (
+              <ProspectCreditAction
+                actionCode="PROSPECT_COMPANY_RESEARCH"
                 className="secondary-button"
-                onClick={() => void refresh()}
                 disabled={refreshing}
-              >
-                {refreshing
-                  ? "Starting…"
-                  : brief.status === "not_started"
+                label={
+                  brief.status === "not_started"
                     ? "Research company"
-                    : "Refresh research"}
-              </button>
+                    : "Refresh research"
+                }
+                busyLabel="Starting…"
+                onAuthorised={refresh}
+              />
             ) : null}
           </div>
         </div>
@@ -420,14 +431,14 @@ export function ProspectResearchBriefView({
             No research job has been started. Begin a bounded review of
             permitted public business sources when you are ready.
           </p>
-          <button
-            type="button"
+          <ProspectCreditAction
+            actionCode="PROSPECT_COMPANY_RESEARCH"
             className="primary-button mt-5"
             disabled={refreshing}
-            onClick={() => void refresh()}
-          >
-            {refreshing ? "Starting research…" : "Research company"}
-          </button>
+            label="Research company"
+            busyLabel="Starting research…"
+            onAuthorised={refresh}
+          />
         </section>
       ) : brief.status === "failed" ? (
         <section className="rounded-3xl border border-rose-200 bg-rose-50 p-7">
@@ -439,13 +450,13 @@ export function ProspectResearchBriefView({
             this company.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
+            <ProspectCreditAction
+              actionCode="PROSPECT_COMPANY_RESEARCH"
               className="primary-button"
-              onClick={() => void refresh()}
-            >
-              Try again
-            </button>
+              label="Try again"
+              busyLabel="Starting…"
+              onAuthorised={refresh}
+            />
             <a
               href={brief.target.websiteUrl}
               target="_blank"
@@ -456,6 +467,30 @@ export function ProspectResearchBriefView({
               Check company website ↗
             </a>
           </div>
+        </section>
+      ) : brief.status === "unknown" ? (
+        <section
+          className="rounded-3xl border border-amber-200 bg-amber-50 p-7"
+          aria-live="polite"
+        >
+          <h2 className="text-xl font-semibold text-amber-950">
+            Reconciling provider outcome
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-900">
+            The provider outcome is uncertain. Reserved Credits remain held and
+            RevenueOS will not retry or charge again until the operation is
+            reconciled.
+          </p>
+        </section>
+      ) : brief.status === "no_result" ? (
+        <section className="rounded-3xl border border-slate-200 bg-slate-50 p-7">
+          <h2 className="text-xl font-semibold text-slate-950">
+            No reliable results
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-700">
+            No supported company facts were returned, so no research was
+            promoted into Sales or treated as customer Evidence.
+          </p>
         </section>
       ) : (
         <>
@@ -640,6 +675,8 @@ function ResearchStatus({ brief }: { brief: ProspectResearchBrief }) {
     researching: ["Researching company…", "bg-teal-50 text-teal-950"],
     ready: ["Research ready", "bg-emerald-50 text-emerald-950"],
     partial: ["Research incomplete", "bg-amber-50 text-amber-950"],
+    no_result: ["No reliable results", "bg-slate-100 text-slate-800"],
+    unknown: ["Reconciling outcome", "bg-amber-50 text-amber-950"],
     failed: ["Couldn’t complete research", "bg-rose-50 text-rose-950"],
   }[brief.status];
   return (

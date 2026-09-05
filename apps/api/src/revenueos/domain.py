@@ -158,6 +158,8 @@ class ProspectResearchRunStatus(StrEnum):
     SYNTHESIZING = "synthesizing"
     COMPLETED = "completed"
     PARTIAL = "partial"
+    NO_RESULT = "no_result"
+    UNKNOWN = "unknown"
     FAILED = "failed"
 
 

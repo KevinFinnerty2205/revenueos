@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiClientError, apiRequest } from "@/lib/api";
+import { ProspectCreditAction } from "@/components/prospect-credit-action";
 import { ProspectTrustLabel } from "@/components/prospect-research-brief";
 
 function humanise(value: string): string {
@@ -245,6 +246,8 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
   const [companyPromotionRequired, setCompanyPromotionRequired] =
     useState(false);
   const dialogHeading = useRef<HTMLHeadingElement>(null);
+  const promotionDialog = useRef<HTMLDivElement>(null);
+  const promotionTrigger = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -298,7 +301,38 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
   }, [brief?.status, load]);
 
   useEffect(() => {
-    if (promotionOpen) dialogHeading.current?.focus();
+    if (!promotionOpen) return;
+    const trigger = promotionTrigger.current;
+    dialogHeading.current?.focus();
+    function manageDialogKeyboard(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setPromotionOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const controls = promotionDialog.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!controls || controls.length === 0) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      const active = document.activeElement;
+      if (
+        event.shiftKey &&
+        (active === first || active === dialogHeading.current)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    window.addEventListener("keydown", manageDialogKeyboard);
+    return () => {
+      window.removeEventListener("keydown", manageDialogKeyboard);
+      trigger?.focus();
+    };
   }, [promotionOpen]);
 
   const sourceById = useMemo(
@@ -306,7 +340,11 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
     [brief?.sources],
   );
 
-  async function queueResearch(refresh: boolean) {
+  async function queueResearch(
+    refresh: boolean,
+    creditQuoteId: string | null,
+    idempotencyKey: string,
+  ): Promise<boolean> {
     setWorking(true);
     setError(null);
     setCompanyPromotionRequired(false);
@@ -317,11 +355,13 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
           {
             method: "POST",
             body: JSON.stringify({
-              idempotencyKey: `${refresh ? "refresh" : "research"}:${crypto.randomUUID()}`,
+              idempotencyKey,
+              creditQuoteId,
             }),
           },
         ),
       );
+      return true;
     } catch (reason) {
       const needsCompany =
         reason instanceof ApiClientError &&
@@ -332,6 +372,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
           ? reason.message
           : "Professional research could not be started.",
       );
+      return false;
     } finally {
       setWorking(false);
     }
@@ -475,6 +516,12 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
   const processing =
     brief.status === "pending" || brief.status === "researching";
   const hasResearch = Boolean(brief.currentRun);
+  const outcomeRequiresResolution = brief.status === "unknown";
+  const canPromote =
+    hasResearch &&
+    !processing &&
+    brief.status !== "unknown" &&
+    brief.status !== "no_result";
   const contactId = promotion?.contactId ?? brief.person.promotedContactId;
 
   return (
@@ -504,29 +551,39 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            {!hasResearch ? (
-              <button
-                type="button"
+            {!hasResearch && !outcomeRequiresResolution ? (
+              <ProspectCreditAction
+                actionCode="PROSPECT_PERSON_RESEARCH"
                 className="primary-button"
                 disabled={working}
-                onClick={() => void queueResearch(false)}
-              >
-                {working ? "Starting…" : "Research person"}
-              </button>
-            ) : !processing ? (
-              <button
-                type="button"
+                label={
+                  brief.status === "no_result" || brief.status === "failed"
+                    ? "Try again"
+                    : "Research person"
+                }
+                busyLabel="Starting…"
+                onAuthorised={(creditQuoteId, idempotencyKey) =>
+                  queueResearch(false, creditQuoteId, idempotencyKey)
+                }
+              />
+            ) : hasResearch && !processing && !outcomeRequiresResolution ? (
+              <ProspectCreditAction
+                actionCode="PROSPECT_PERSON_RESEARCH"
                 className="secondary-button"
                 disabled={working}
-                onClick={() => void queueResearch(true)}
-              >
-                Refresh research
-              </button>
+                label="Refresh research"
+                busyLabel="Starting…"
+                onAuthorised={(creditQuoteId, idempotencyKey) =>
+                  queueResearch(true, creditQuoteId, idempotencyKey)
+                }
+              />
             ) : null}
-            {hasResearch && !processing && !contactId ? (
+            {canPromote && !contactId ? (
               <button
+                ref={promotionTrigger}
                 type="button"
                 className="primary-button"
+                disabled={working}
                 onClick={() => setPromotionOpen(true)}
               >
                 Add to Sales as Contact
@@ -601,6 +658,40 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
           <p className="mt-2 text-sm leading-6 text-teal-900">
             RevenueOS is checking permitted business sources. It will not create
             a Contact, outreach or customer evidence.
+          </p>
+        </section>
+      ) : brief.status === "unknown" ? (
+        <section
+          className="rounded-3xl border border-amber-200 bg-amber-50 p-7"
+          aria-live="polite"
+        >
+          <h2 className="text-xl font-semibold text-amber-950">
+            Reconciling provider outcome
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-amber-900">
+            The provider outcome is uncertain. Reserved Credits remain held and
+            RevenueOS will not retry or charge again until the operation is
+            reconciled.
+          </p>
+        </section>
+      ) : brief.status === "no_result" ? (
+        <section className="rounded-3xl border border-slate-200 bg-slate-50 p-7">
+          <h2 className="text-xl font-semibold text-slate-950">
+            No reliable professional result
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            No supported professional facts were returned, so no Contact,
+            buying-role claim or customer Evidence was created.
+          </p>
+        </section>
+      ) : brief.status === "failed" ? (
+        <section className="rounded-3xl border border-rose-200 bg-rose-50 p-7">
+          <h2 className="text-xl font-semibold text-rose-950">
+            Couldn’t complete professional research
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-rose-900">
+            RevenueOS could not establish reliable public professional context.
+            No Contact or outreach was created.
           </p>
         </section>
       ) : hasResearch ? (
@@ -814,7 +905,10 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
           aria-labelledby="person-promotion-title"
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4"
         >
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+          <div
+            ref={promotionDialog}
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+          >
             <h2
               id="person-promotion-title"
               ref={dialogHeading}
