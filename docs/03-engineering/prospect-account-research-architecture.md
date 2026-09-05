@@ -56,7 +56,8 @@ longer supported findings without mutating earlier runs.
 ## API surface
 
 - `GET /prospect/availability`
-- `PATCH /prospect/admin/entitlement`
+- `PATCH /prospect/admin/entitlement` is retained only as a legacy rejection;
+  commercial plan authority owns Prospect access
 - `GET /prospect/companies/search?q=…`
 - `GET|POST /prospect/research`
 - `GET /prospect/research/{target_id}`

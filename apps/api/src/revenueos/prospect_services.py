@@ -13,13 +13,13 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.crm_history import crm_creation_changes
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
     Company,
-    OrganisationModuleEntitlement,
     ProspectResearchRun,
     ProspectResearchSource,
     ProspectResearchTarget,
@@ -82,7 +82,23 @@ class ProspectService:
         self.provider = provider or create_prospect_provider(settings.prospect_research_provider_name)
 
     async def availability(self) -> ProspectAvailabilityResponse:
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
+        access = await CommercialService(self.session, self.settings).module_access(
+            self.tenant.organisation_id, "prospect"
+        )
+        if access == "none":
+            return ProspectAvailabilityResponse(
+                state="not_in_plan",
+                enabled=False,
+                can_manage=self.tenant.can_manage(),
+                message="Prospect isn't included in your organisation's current plan.",
+            )
+        if access == "read":
+            return ProspectAvailabilityResponse(
+                state="read_only",
+                enabled=False,
+                can_manage=False,
+                message="Historical Prospect records remain available to view and export. New research is blocked.",
+            )
         if not self.settings.feature_prospect_enabled or (
             self.settings.environment == "production" and self.settings.prospect_research_provider_name == "mock"
         ):
@@ -92,13 +108,6 @@ class ProspectService:
                 can_manage=self.tenant.can_manage(),
                 message="RevenueOS Prospect is not available in this environment.",
             )
-        if entitlement is None or not entitlement.enabled:
-            return ProspectAvailabilityResponse(
-                state="not_in_plan",
-                enabled=False,
-                can_manage=self.tenant.can_manage(),
-                message="Find and research the companies you should sell to.",
-            )
         return ProspectAvailabilityResponse(
             state="available",
             enabled=True,
@@ -107,42 +116,14 @@ class ProspectService:
         )
 
     async def update_entitlement(self, request: ProspectEntitlementUpdate) -> ProspectAvailabilityResponse:
+        del request
         if not self.tenant.can_manage():
             raise PublicAPIError("forbidden", "Administrator access is required.", 403)
-        if request.enabled and not self.settings.feature_prospect_enabled:
-            raise PublicAPIError(
-                "prospect_unavailable",
-                "RevenueOS Prospect cannot be enabled in this environment.",
-                503,
-            )
-        now = datetime.now(UTC)
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
-        if entitlement is None:
-            entitlement = OrganisationModuleEntitlement(
-                organisation_id=self.tenant.organisation_id,
-                module_key="prospect",
-                enabled=request.enabled,
-                source="manual_private_beta",
-                configured_by_user_id=self.tenant.user_id,
-                enabled_at=now if request.enabled else None,
-                disabled_at=now if not request.enabled else None,
-            )
-            self.repository.add(entitlement)
-        else:
-            entitlement.enabled = request.enabled
-            entitlement.configured_by_user_id = self.tenant.user_id
-            entitlement.enabled_at = now if request.enabled else entitlement.enabled_at
-            entitlement.disabled_at = now if not request.enabled else None
-        await self._commit("The Prospect entitlement could not be saved.")
-        logger.info(
-            "prospect_entitlement_changed",
-            extra={
-                "organisation_id": str(self.tenant.organisation_id),
-                "actor_user_id": str(self.tenant.user_id),
-                "enabled": request.enabled,
-            },
+        raise PublicAPIError(
+            "commercial_plan_managed",
+            "Module access is managed by your organisation's commercial plan. Contact support to change it.",
+            403,
         )
-        return await self.availability()
 
     async def search_companies(self, query: str) -> CompanySearchResponse:
         await self._require_entitled()
@@ -284,7 +265,7 @@ class ProspectService:
         return await self.get_research(target_id)
 
     async def get_research(self, target_id: UUID) -> ResearchBriefResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         target = await self.repository.get_target(self.tenant.organisation_id, target_id)
         if target is None:
             raise PublicAPIError("research_target_not_found", "The research target was not found.", 404)
@@ -355,7 +336,7 @@ class ProspectService:
         )
 
     async def recent_research(self) -> RecentResearchResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         targets = await self.repository.recent_targets(
             self.tenant.organisation_id,
             limit=RECENT_RESEARCH_LIMIT,
@@ -489,7 +470,7 @@ class ProspectService:
         )
 
     async def account_research_link(self, company_id: UUID) -> AccountResearchLinkResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         company = await self.repository.get_company(self.tenant.organisation_id, company_id)
         if company is None:
             raise PublicAPIError("company_not_found", "The requested company was not found.", 404)
@@ -698,14 +679,20 @@ class ProspectService:
             }
         )
 
-    async def _require_entitled(self) -> None:
-        availability = await self.availability()
-        if availability.state == "temporarily_unavailable":
-            raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
-        if not availability.enabled:
+    async def _require_entitled(self, *, write: bool = True) -> None:
+        commercial = CommercialService(self.session, self.settings)
+        access = await commercial.module_access(self.tenant.organisation_id, "prospect")
+        if access == "none":
             raise PublicAPIError(
-                "prospect_not_entitled", "RevenueOS Prospect is not enabled for this organisation.", 403
+                "prospect_not_in_plan", "Prospect isn't included in your organisation's current plan.", 403
             )
+        if not write:
+            return
+        if not self.settings.feature_prospect_enabled or (
+            self.settings.environment == "production" and self.settings.prospect_research_provider_name == "mock"
+        ):
+            raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
+        await commercial.require_module_write(self.tenant.organisation_id, "prospect")
 
     def _normalise_search_query(self, value: str) -> str:
         if "://" in value or ("." in value and " " not in value):

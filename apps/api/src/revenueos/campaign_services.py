@@ -31,6 +31,7 @@ from revenueos.campaign_contracts import (
     CampaignUpdateRequest,
 )
 from revenueos.campaign_repositories import CampaignRecord, CampaignRepository
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import (
@@ -883,12 +884,13 @@ class CampaignService:
             raise PublicAPIError("forbidden", "You do not have permission to manage this campaign.", 403)
 
     async def _entitled(self) -> bool:
-        entitlement = await self.outreach_repository.entitlement(self.tenant.organisation_id)
+        access = await CommercialService(self.session, self.settings).module_access(
+            self.tenant.organisation_id, "engage"
+        )
         return bool(
             self.settings.feature_engage_enabled
             and self.settings.feature_engage_campaigns_enabled
-            and entitlement is not None
-            and entitlement.enabled
+            and access == "write"
         )
 
     def _require_feature(self) -> None:
@@ -897,8 +899,7 @@ class CampaignService:
 
     async def _require_mutation_available(self) -> None:
         self._require_feature()
-        if not await self._entitled():
-            raise PublicAPIError("engage_unavailable", "RevenueOS Engage is not enabled for this organisation.", 403)
+        await CommercialService(self.session, self.settings).require_module_write(self.tenant.organisation_id, "engage")
 
     async def _commit(self, message: str) -> None:
         try:

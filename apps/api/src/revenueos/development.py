@@ -3,10 +3,12 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from revenueos.commercial_services import PLAN_CATALOGUE, ensure_plan_catalogue
 from revenueos.database import set_tenant_database_context
 from revenueos.models import (
     IntegrationConnection,
     Organisation,
+    OrganisationCommercialState,
     OrganisationMembership,
     OrganisationModuleEntitlement,
     OutreachPolicy,
@@ -56,7 +58,25 @@ async def ensure_development_identity(
                 )
             )
         await session.flush()
-        for module_key in ("prospect", "engage", "create", "crm"):
+        await ensure_plan_catalogue(session)
+        commercial_state = await session.get(OrganisationCommercialState, DEVELOPMENT_ORGANISATION_ID)
+        if commercial_state is None:
+            complete_plan = next(plan for plan in PLAN_CATALOGUE if plan.code == "complete")
+            now = datetime.now(UTC)
+            commercial_state = OrganisationCommercialState(
+                organisation_id=DEVELOPMENT_ORGANISATION_ID,
+                plan_version_id=complete_plan.id,
+                status="active",
+                billing_interval="monthly",
+                add_on_modules_json=[],
+                seat_limit_status="within_limit",
+                effective_at=now,
+                source="migration",
+                actor_reference="development-bootstrap",
+                reason="Synthetic development commercial baseline.",
+            )
+            session.add(commercial_state)
+        for module_key in ("core", "prospect", "engage", "create", "crm"):
             entitlement = await session.get(
                 OrganisationModuleEntitlement,
                 (DEVELOPMENT_ORGANISATION_ID, module_key),
@@ -67,6 +87,7 @@ async def ensure_development_identity(
                         organisation_id=DEVELOPMENT_ORGANISATION_ID,
                         module_key=module_key,
                         enabled=True,
+                        access_level="write",
                         source="manual_private_beta",
                         configured_by_user_id=DEVELOPMENT_USER_ID,
                         enabled_at=datetime.now(UTC),

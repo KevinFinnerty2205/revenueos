@@ -47,7 +47,7 @@ Option = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, m
 
 class CRMAvailabilityResponse(APIModel):
     module_key: Literal["crm"] = "crm"
-    state: Literal["available", "not_in_plan", "setup_required", "temporarily_unavailable"]
+    state: Literal["available", "read_only", "not_in_plan", "setup_required", "temporarily_unavailable"]
     enabled: bool
     can_manage: bool
     mode: CRMMode

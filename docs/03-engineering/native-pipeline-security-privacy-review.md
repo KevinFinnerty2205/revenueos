@@ -15,7 +15,7 @@
 | event tampering | no update API and PostgreSQL trigger rejects UPDATE; stage/pipeline archive preserves references |
 | closure-note disclosure | RLS, normal Opportunity permission, 500-character bound, export only in authorised organisation export; never logged |
 | filter inference | every board query includes organisation predicate before owner/Account/search filters |
-| admin abuse | definition configuration requires organisation admin plus CRM entitlement/native mode/features |
+| admin abuse | definition configuration requires organisation admin plus Core commercial access/native mode/features |
 
 PostgreSQL enables and forces RLS on `sales_pipelines`, `sales_pipeline_stages` and
 `opportunity_stage_events`. The runtime role does not bypass RLS. Tenant-owned unique

@@ -5,6 +5,9 @@ import { SettingsExperience } from "@/components/settings-experience";
 vi.mock("@/components/beta-admin", () => ({
   BetaAdmin: () => <section>Administrator controls</section>,
 }));
+vi.mock("@/components/commercial-plan-settings", () => ({
+  CommercialPlanSettings: () => <section>Commercial plan controls</section>,
+}));
 vi.mock("@/components/sales-methodology-settings", () => ({
   SalesMethodologySettings: () => <section>Methodology controls</section>,
 }));
@@ -12,12 +15,6 @@ vi.mock("@/components/selling-profile-settings", () => ({
   SellingProfileSettings: () => (
     <section>Company and selling profile controls</section>
   ),
-}));
-vi.mock("@/components/prospect-module-settings", () => ({
-  ProspectModuleSettings: () => <section>Prospect controls</section>,
-}));
-vi.mock("@/components/create-module-settings", () => ({
-  CreateModuleSettings: () => <section>Create controls</section>,
 }));
 vi.mock("@/components/crm-settings", () => ({
   CRMSettings: () => <section>CRM controls</section>,
@@ -88,8 +85,7 @@ describe("SettingsExperience", () => {
     expect(
       screen.getByText("Company and selling profile controls"),
     ).toBeVisible();
-    expect(screen.getByText("Prospect controls")).toBeVisible();
-    expect(screen.getByText("Create controls")).toBeVisible();
+    expect(screen.getByText("Commercial plan controls")).toBeVisible();
     expect(screen.getByText("CRM controls")).toBeVisible();
     expect(screen.getByText("Pipeline controls")).toBeVisible();
     expect(screen.getByText("Administrator controls")).toBeVisible();

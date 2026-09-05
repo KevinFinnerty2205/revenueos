@@ -36,7 +36,13 @@ from revenueos.create_worker import CreateWorkerService, _validate_claim_manifes
 from revenueos.models import CreateDownloadGrant, CreatePresentationVersion, OrganisationMembership
 from revenueos.visual_storage import create_visual_storage
 
-from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL, TEST_VISUAL_STORAGE
+from .conftest import (
+    PRIMARY_ORGANISATION_ID,
+    PRIMARY_USER_ID,
+    TEST_DB_URL,
+    TEST_VISUAL_STORAGE,
+    set_test_commercial_plan,
+)
 from .test_business_api import create_company, create_contact, create_opportunity
 from .test_business_cases import _create_approved_model, _inputs
 from .test_meeting_api import cast_auth_dependency, secondary_user
@@ -1197,13 +1203,26 @@ def test_approved_business_case_flows_into_create_with_exact_scenario_provenance
     assert cross_tenant.json()["code"] == "template_not_found"
 
 
-def test_create_entitlement_fails_closed_and_is_admin_managed(client: TestClient) -> None:
+def test_create_entitlement_fails_closed_and_is_support_managed(client: TestClient) -> None:
     disabled = client.patch("/api/v1/create/admin/entitlement", json={"enabled": False})
-    assert disabled.status_code == 200
-    assert disabled.json()["state"] == "not_in_plan"
-    denied = client.get("/api/v1/create/templates")
+    assert disabled.status_code == 403
+    assert disabled.json()["code"] == "commercial_plan_managed"
+    set_test_commercial_plan("core")
+    assert client.get("/api/v1/create/templates").status_code == 200
+    content = _pptx()
+    denied = client.post(
+        "/api/v1/create/templates",
+        json={
+            "name": "Removed Create access",
+            "fileName": "removed-create-access.pptx",
+            "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "contentBase64": base64.b64encode(content).decode(),
+            "checksumSha256": hashlib.sha256(content).hexdigest(),
+            "authorityAttested": True,
+            "attestationVersion": 1,
+        },
+    )
     assert denied.status_code == 403
-    assert denied.json()["code"] == "create_not_entitled"
-    enabled = client.patch("/api/v1/create/admin/entitlement", json={"enabled": True})
-    assert enabled.status_code == 200
-    assert enabled.json()["state"] == "available"
+    assert denied.json()["code"] == "create_not_in_plan"
+    set_test_commercial_plan("complete")
+    assert client.get("/api/v1/create/availability").json()["state"] == "available"

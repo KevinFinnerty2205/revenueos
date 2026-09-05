@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.action_contracts import PersonalizedOutreachPayload
 from revenueos.action_repositories import ActionRecord
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import (
@@ -42,7 +43,6 @@ from revenueos.models import (
     EngageCampaign,
     EngageCampaignEnrollment,
     EngageEnrollmentStep,
-    OrganisationModuleEntitlement,
     OutreachMessage,
     OutreachPersonalizationSource,
     OutreachPolicy,
@@ -194,8 +194,8 @@ async def evaluate_contactability(
     sender_user_id: UUID | None = None,
     check_frequency_limits: bool = True,
 ) -> ContactabilityResult:
-    entitlement = await repository.entitlement(tenant.organisation_id)
-    if not settings.feature_engage_enabled or entitlement is None or not entitlement.enabled:
+    access = await CommercialService(repository.session, settings).module_access(tenant.organisation_id, "engage")
+    if not settings.feature_engage_enabled or access != "write":
         return ContactabilityResult(
             OutreachContactability.ENGAGE_UNAVAILABLE,
             "RevenueOS Engage is not enabled for this organisation.",
@@ -377,20 +377,29 @@ class OutreachService:
         self.repository = OutreachRepository(session)
 
     async def availability(self) -> EngageAvailabilityResponse:
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
+        access = await CommercialService(self.session, self.settings).module_access(
+            self.tenant.organisation_id, "engage"
+        )
+        if access == "none":
+            return EngageAvailabilityResponse(
+                state="not_in_plan",
+                enabled=False,
+                can_manage=self.tenant.can_manage(),
+                message="Engage isn't included in your organisation's current plan.",
+            )
+        if access == "read":
+            return EngageAvailabilityResponse(
+                state="read_only",
+                enabled=False,
+                can_manage=False,
+                message="Historical Engage records remain available to view and export. New sending is blocked.",
+            )
         if not self.settings.feature_engage_enabled:
             return EngageAvailabilityResponse(
                 state="temporarily_unavailable",
                 enabled=False,
                 can_manage=self.tenant.can_manage(),
                 message="RevenueOS Engage is unavailable in this environment.",
-            )
-        if entitlement is None or not entitlement.enabled:
-            return EngageAvailabilityResponse(
-                state="not_in_plan",
-                enabled=False,
-                can_manage=self.tenant.can_manage(),
-                message="Create source-backed personalised outreach and follow-up.",
             )
         return EngageAvailabilityResponse(
             state="available",
@@ -400,45 +409,20 @@ class OutreachService:
         )
 
     async def update_entitlement(self, request: EngageEntitlementUpdate) -> EngageAvailabilityResponse:
+        del request
         self._require_admin()
-        if request.enabled and not self.settings.feature_engage_enabled:
-            raise PublicAPIError("engage_unavailable", "RevenueOS Engage cannot be enabled here.", 503)
-        now = datetime.now(UTC)
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
-        if entitlement is None:
-            entitlement = OrganisationModuleEntitlement(
-                organisation_id=self.tenant.organisation_id,
-                module_key="engage",
-                enabled=request.enabled,
-                source="manual_private_beta",
-                configured_by_user_id=self.tenant.user_id,
-                enabled_at=now if request.enabled else None,
-                disabled_at=None if request.enabled else now,
-            )
-            self.repository.add(entitlement)
-        else:
-            entitlement.enabled = request.enabled
-            entitlement.configured_by_user_id = self.tenant.user_id
-            entitlement.enabled_at = now if request.enabled else entitlement.enabled_at
-            entitlement.disabled_at = None if request.enabled else now
-        if not request.enabled:
-            await self._halt_active_campaigns("engage_unavailable", now)
-        await self._commit("The Engage entitlement could not be saved.")
-        logger.info(
-            "engage_entitlement_changed",
-            extra={
-                "organisation_id": str(self.tenant.organisation_id),
-                "actor_user_id": str(self.tenant.user_id),
-                "enabled": request.enabled,
-            },
+        raise PublicAPIError(
+            "commercial_plan_managed",
+            "Module access is managed by your organisation's commercial plan. Contact support to change it.",
+            403,
         )
-        return await self.availability()
 
     async def get_policy(self) -> OutreachPolicyResponse:
         policy = await self.repository.policy(self.tenant.organisation_id)
         return self._policy_response(policy)
 
     async def update_policy(self, request: OutreachPolicyUpdate) -> OutreachPolicyResponse:
+        await self._require_entitled()
         self._require_admin()
         now = datetime.now(UTC)
         policy = await self.repository.policy(self.tenant.organisation_id, for_update=True)
@@ -475,6 +459,7 @@ class OutreachService:
         return self._policy_response(policy)
 
     async def workspace(self, contact_id: UUID) -> ContactOutreachWorkspaceResponse:
+        await self._require_entitled(write=False)
         contact = await self._contact(contact_id)
         company = await self.repository.company(self.tenant.organisation_id, contact.company_id)
         assert company is not None
@@ -872,7 +857,7 @@ class OutreachService:
         return OutreachRecord(message, version)
 
     async def get(self, outreach_id: UUID) -> OutreachResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         record = await self._message(outreach_id)
         return await self._response(record)
 
@@ -1820,10 +1805,16 @@ class OutreachService:
         if message.sender_user_id != self.tenant.user_id:
             raise PublicAPIError("outreach_sender_mismatch", "Only the message sender can edit or approve it.", 403)
 
-    async def _require_entitled(self) -> None:
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
-        if not self.settings.feature_engage_enabled or entitlement is None or not entitlement.enabled:
-            raise PublicAPIError("engage_unavailable", "RevenueOS Engage is not enabled for this organisation.", 403)
+    async def _require_entitled(self, *, write: bool = True) -> None:
+        commercial = CommercialService(self.session, self.settings)
+        if self.settings.feature_engage_enabled and write:
+            await commercial.require_module_write(self.tenant.organisation_id, "engage")
+            return
+        access = await commercial.module_access(self.tenant.organisation_id, "engage")
+        if access == "none" or (write and (not self.settings.feature_engage_enabled or access != "write")):
+            raise PublicAPIError(
+                "engage_not_in_plan", "Engage isn't included in your organisation's current plan.", 403
+            )
 
     def _require_admin(self) -> None:
         if not self.tenant.can_manage():

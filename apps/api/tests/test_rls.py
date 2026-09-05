@@ -7,21 +7,196 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from revenueos.ai_repositories import AIJobRepository
 from revenueos.ai_services import AIArtifactService, AIJobService
 from revenueos.ai_worker_repositories import AIWorkerRepository
 from revenueos.auth import VerifiedIdentity, _resolve_identity
 from revenueos.beta_services import BetaService
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.daily_repositories import DailyRepository
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import AIJobStatus
 from revenueos.errors import PublicAPIError
+from revenueos.models import OrganisationCommercialState
+from revenueos.operations import ProvisioningResult, provision_member, provision_organisation
 from revenueos.tenant import TenantContext
+
+
+def test_postgresql_commercial_seat_boundary_serialises_concurrent_members() -> None:
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith(("postgresql", "postgres")):
+        pytest.skip("A PostgreSQL DATABASE_URL is required for the commercial concurrency test.")
+
+    suffix = uuid.uuid4().hex
+    external_organisation_id = f"org_commercial_concurrency_{suffix}"
+    user_external_ids = [f"user_commercial_concurrency_{index}_{suffix}" for index in range(1, 7)]
+
+    async def scenario() -> None:
+        engine = create_async_engine(database_url)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        organisation_id: uuid.UUID | None = None
+        try:
+            provisioned = await provision_organisation(
+                factory,
+                external_organisation_id=external_organisation_id,
+                organisation_name="Synthetic commercial concurrency team",
+                timezone="Australia/Sydney",
+                admin_external_user_id=user_external_ids[0],
+                admin_email=f"{user_external_ids[0]}@example.com",
+                admin_display_name="Synthetic seat admin",
+                idempotency_key=f"commercial-concurrency-org-{suffix}",
+                operator_reference="commercial-concurrency-test",
+            )
+            organisation_id = uuid.UUID(provisioned.organisation_id)
+            for index in range(1, 4):
+                await provision_member(
+                    factory,
+                    organisation_id=organisation_id,
+                    external_user_id=user_external_ids[index],
+                    email=f"{user_external_ids[index]}@example.com",
+                    display_name=f"Synthetic seat member {index}",
+                    role="member",
+                    idempotency_key=f"commercial-concurrency-member-{index}-{suffix}",
+                    operator_reference="commercial-concurrency-test",
+                )
+
+            attempts = await asyncio.gather(
+                *(
+                    provision_member(
+                        factory,
+                        organisation_id=organisation_id,
+                        external_user_id=user_external_ids[index],
+                        email=f"{user_external_ids[index]}@example.com",
+                        display_name=f"Synthetic concurrent member {index}",
+                        role="member",
+                        idempotency_key=f"commercial-concurrency-member-{index}-{suffix}",
+                        operator_reference="commercial-concurrency-test",
+                    )
+                    for index in (4, 5)
+                ),
+                return_exceptions=True,
+            )
+            assert sum(isinstance(item, ProvisioningResult) for item in attempts) == 1
+            assert sum(isinstance(item, ValueError) for item in attempts) == 1
+            assert any("included limit of 5 active users" in str(item) for item in attempts)
+            async with factory() as session:
+                await set_tenant_database_context(session, organisation_id)
+                count = await session.scalar(
+                    text(
+                        """
+                        SELECT count(*)
+                        FROM organisation_memberships
+                        WHERE organisation_id = :organisation_id
+                          AND status = 'active'
+                        """
+                    ),
+                    {"organisation_id": organisation_id},
+                )
+                assert count == 5
+
+            async def assign_competing_plan(plan_code: str) -> object:
+                async with factory() as session:
+                    await set_tenant_database_context(session, organisation_id)
+                    return await CommercialService(
+                        session,
+                        Settings(environment="test", database_url=database_url),
+                    ).assign_plan(
+                        organisation_id,
+                        plan_code=plan_code,  # type: ignore[arg-type]
+                        billing_interval="monthly",
+                        actor_reference=f"commercial-concurrency-{plan_code}",
+                        reason="Synthetic simultaneous plan-change test.",
+                        expected_lock_version=1,
+                    )
+
+            plan_attempts = await asyncio.gather(
+                assign_competing_plan("growth"),
+                assign_competing_plan("complete"),
+                return_exceptions=True,
+            )
+            assert sum(isinstance(item, PublicAPIError) for item in plan_attempts) == 1
+            stale = next(item for item in plan_attempts if isinstance(item, PublicAPIError))
+            assert stale.code == "commercial_state_stale"
+
+            async with factory() as preparation_session:
+                await set_tenant_database_context(preparation_session, organisation_id)
+                commercial = CommercialService(
+                    preparation_session,
+                    Settings(environment="test", database_url=database_url),
+                )
+                complete = await commercial.projection(organisation_id)
+                if complete.plan.code != "complete":
+                    complete = await commercial.assign_plan(
+                        organisation_id,
+                        plan_code="complete",
+                        billing_interval="monthly",
+                        actor_reference="commercial-concurrency-prepare",
+                        reason="Prepare the synthetic downgrade race test.",
+                        expected_lock_version=complete.state_version,
+                    )
+
+            async def request_create_write() -> PublicAPIError | str:
+                async with factory() as operation_session:
+                    await set_tenant_database_context(operation_session, organisation_id)
+                    try:
+                        await CommercialService(
+                            operation_session,
+                            Settings(environment="test", database_url=database_url),
+                        ).require_module_write(organisation_id, "create")
+                    except PublicAPIError as exc:
+                        return exc
+                    return "allowed"
+
+            async with factory() as downgrade_session:
+                await set_tenant_database_context(downgrade_session, organisation_id)
+                locked_state = await downgrade_session.scalar(
+                    select(OrganisationCommercialState)
+                    .where(OrganisationCommercialState.organisation_id == organisation_id)
+                    .with_for_update()
+                )
+                assert locked_state is not None
+                operation = asyncio.create_task(request_create_write())
+                await asyncio.sleep(0.05)
+                assert not operation.done()
+
+                await CommercialService(
+                    downgrade_session,
+                    Settings(environment="test", database_url=database_url),
+                ).assign_plan(
+                    organisation_id,
+                    plan_code="core",
+                    billing_interval="monthly",
+                    actor_reference="commercial-concurrency-downgrade",
+                    reason="Synthetic downgrade while Create is requested.",
+                    expected_lock_version=complete.state_version,
+                )
+                operation_result = await asyncio.wait_for(operation, timeout=2)
+                assert isinstance(operation_result, PublicAPIError)
+                assert operation_result.code == "create_not_in_plan"
+        finally:
+            if organisation_id is not None:
+                async with engine.begin() as connection:
+                    await connection.execute(
+                        text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
+                        {"organisation_id": str(organisation_id)},
+                    )
+                    await connection.execute(text("SELECT set_config('app.beta_maintenance', 'approved', true)"))
+                    await connection.execute(
+                        text("DELETE FROM organisations WHERE id = :organisation_id"),
+                        {"organisation_id": organisation_id},
+                    )
+                    await connection.execute(
+                        text("DELETE FROM users WHERE external_auth_id = ANY(:external_ids)"),
+                        {"external_ids": user_external_ids},
+                    )
+            await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_postgresql_clerk_identity_reconciliation_uses_deterministic_rls_context() -> None:
@@ -196,6 +371,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "methodology_projections",
         "methodology_reviews",
         "organisation_module_entitlements",
+        "organisation_commercial_states",
+        "commercial_state_events",
         "selling_profiles",
         "selling_profile_revisions",
         "prospect_usage_counters",
@@ -430,6 +607,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "sales_forecast_reviewer_revision_id": uuid.uuid4(),
                 "selling_profile_id": uuid.uuid4(),
                 "selling_profile_revision_id": uuid.uuid4(),
+                "commercial_event_id": uuid.uuid4(),
             }
         )
 
@@ -524,11 +702,52 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                         text(
                             """
                             INSERT INTO organisation_module_entitlements
-                                (organisation_id, module_key, enabled, source,
+                                (organisation_id, module_key, enabled, access_level, source,
                                  configured_by_user_id, enabled_at)
                             VALUES
-                                (:organisation_id, 'prospect', true,
+                                (:organisation_id, 'prospect', true, 'write',
                                  'manual_private_beta', :user_id, now())
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO organisation_commercial_states
+                                (organisation_id, plan_version_id, status,
+                                 billing_interval, add_on_modules_json,
+                                 seat_limit_status, effective_at, source,
+                                 actor_reference, reason, lock_version)
+                            SELECT :organisation_id, id, 'active', 'monthly',
+                                   '[]'::json, 'within_limit', now(),
+                                   'manual_support', 'rls-test-operator',
+                                   'Synthetic RLS verification.', 1
+                            FROM commercial_plan_versions
+                            WHERE code = 'core' AND version = 1
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO commercial_state_events
+                                (id, organisation_id, plan_version_id,
+                                 event_type, effective_status,
+                                 billing_interval, entitled_modules_json,
+                                 readable_modules_json, included_user_limit,
+                                 active_user_count, seat_limit_status,
+                                 effective_at, source, actor_reference,
+                                 reason, state_version)
+                            SELECT :commercial_event_id, :organisation_id, id,
+                                   'plan_assigned', 'active', 'monthly',
+                                   '["core"]'::json, '["core"]'::json,
+                                   5, 1, 'within_limit', now(),
+                                   'manual_support', 'rls-test-operator',
+                                   'Synthetic RLS verification.', 1
+                            FROM commercial_plan_versions
+                            WHERE code = 'core' AND version = 1
                             """
                         ),
                         identity_parameters,
@@ -3056,6 +3275,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'methodology_projections',
                                     'methodology_reviews',
                                     'organisation_module_entitlements',
+                                    'organisation_commercial_states',
+                                    'commercial_state_events',
                                     'selling_profiles',
                                     'selling_profile_revisions',
                                     'prospect_usage_counters',
@@ -3763,6 +3984,8 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "prospect_people",
                     "prospect_research_targets",
                     "prospect_usage_counters",
+                    "commercial_state_events",
+                    "organisation_commercial_states",
                     "organisation_module_entitlements",
                     "selling_profile_revisions",
                     "selling_profiles",

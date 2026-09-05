@@ -22,7 +22,7 @@ class StrictOutreachModel(APIModel):
 
 class EngageAvailabilityResponse(APIModel):
     module_key: Literal["engage"] = "engage"
-    state: Literal["available", "not_in_plan", "temporarily_unavailable"]
+    state: Literal["available", "read_only", "not_in_plan", "temporarily_unavailable"]
     enabled: bool
     can_manage: bool
     message: str

@@ -4,7 +4,10 @@
 
 - Verified tenant/membership supplies organisation context; record/custom/history repositories add explicit organisation predicates.
 - New tenant tables use organisation keys, composite membership/definition FKs and PostgreSQL forced RLS; RLS tests exercise cross-organisation denial.
-- CRM mode, entitlement and schema administration require admin. Owner assignment validates active same-organisation membership; members can assign only themselves.
+- CRM mode and schema administration require admin plus Core commercial access;
+  external mode also requires CRM connector entitlement. Plan mutation is not exposed
+  to organisation admins. Owner assignment validates active same-organisation
+  membership; members can assign only themselves.
 - Exact domain/email duplicates are enforced by service checks and unique indexes. Safe responses expose only entity type/ID, never the conflicting value.
 - Custom fields are bounded, strictly typed, non-executable and rendered as text. URLs accept HTTP(S) only; arbitrary HTML/JSON, formulas and scripts are unsupported.
 - Optimistic concurrency prevents silent overwrites. External authority is enforced server-side even if a client ignores disabled controls.

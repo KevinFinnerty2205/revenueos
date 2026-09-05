@@ -27,6 +27,8 @@ from revenueos.action_contracts import (
     ScheduleInteractionPayload,
 )
 from revenueos.action_repositories import ActionRecord, ActionRepository
+from revenueos.commercial_contracts import ModuleCode
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.credential_store import (
     CredentialStore,
@@ -110,6 +112,16 @@ if TYPE_CHECKING:
     from revenueos.hubspot_connector import HubSpotClient
 
 logger = logging.getLogger("revenueos.integrations")
+
+
+def _commercial_module_for_connector(connector_key: str) -> ModuleCode:
+    if connector_key in {ConnectorKey.HUBSPOT.value, ConnectorKey.MOCK_CRM.value}:
+        return "crm"
+    if connector_key == ConnectorKey.MOCK_EMAIL.value:
+        return "engage"
+    return "core"
+
+
 _PAYLOAD_ADAPTER: TypeAdapter[ActionPayload] = TypeAdapter(ActionPayload)
 _SOURCE_ADAPTER: TypeAdapter[list[ActionSourceReference]] = TypeAdapter(list[ActionSourceReference])
 
@@ -195,6 +207,7 @@ class IntegrationService:
                 "Start the HubSpot authorisation flow to create this connection.",
                 409,
             )
+        await self._require_connector_entitlement(request.connector_key.value)
         self._require_mock_connectors()
         definition = CONNECTOR_DEFINITIONS[request.connector_key]
         await self.executors.get(request.connector_key).validate_connection()
@@ -242,6 +255,7 @@ class IntegrationService:
         self._require_admin()
         self._require_integrations()
         connection = await self._require_connection(connection_id, for_update=True)
+        await self._require_connector_entitlement(connection.connector_key)
         self._require_connector_available(connection.connector_key)
         self._require_active_connection(connection)
         checked_at = datetime.now(UTC)
@@ -326,6 +340,7 @@ class IntegrationService:
 
     async def start_hubspot_oauth(self) -> OAuthStartResponse:
         self._require_admin()
+        await self._require_crm_connector_write()
         client = self._require_hubspot()
         state = secrets.token_urlsafe(48)
         now = datetime.now(UTC)
@@ -354,6 +369,7 @@ class IntegrationService:
         request: OAuthCallbackRequest,
     ) -> OrganisationConnectionResponse:
         self._require_admin()
+        await self._require_crm_connector_write()
         client = self._require_hubspot()
         now = datetime.now(UTC)
         state = await self.repository.oauth_state_by_hash(
@@ -470,6 +486,7 @@ class IntegrationService:
         entity_type: str,
         query: str,
     ) -> CRMSearchResponse:
+        await self._require_crm_connector_write()
         connection = await self._require_hubspot_connection(connection_id)
         query = query.strip()
         if len(query) < 2 or len(query) > 120:
@@ -519,6 +536,7 @@ class IntegrationService:
         entity_id: UUID,
         request: CRMEntityLinkRequest,
     ) -> CRMEntityMappingResponse:
+        await self._require_crm_connector_write()
         connection = await self._require_hubspot_connection(request.connection_id)
         expected_object = {"company": "company", "contact": "contact", "opportunity": "deal"}.get(entity_type)
         if expected_object is None or request.external_object_type != expected_object:
@@ -571,6 +589,7 @@ class IntegrationService:
         return self._entity_mapping_response(mapping)
 
     async def unlink_entity(self, connection_id: UUID, entity_type: str, entity_id: UUID) -> None:
+        await self._require_crm_connector_write()
         connection = await self._require_hubspot_connection(connection_id)
         mapping = await self.repository.entity_mapping(
             self.tenant.organisation_id,
@@ -591,6 +610,7 @@ class IntegrationService:
         entity_type: str,
     ) -> CRMFieldConfigurationResponse:
         self._require_admin()
+        await self._require_crm_connector_write()
         connection = await self._require_hubspot_connection(connection_id)
         object_type = {"opportunity": "deals", "contact": "contacts"}.get(entity_type)
         if object_type is None:
@@ -679,6 +699,7 @@ class IntegrationService:
 
     async def stage_configuration(self, connection_id: UUID) -> CRMStageConfigurationResponse:
         self._require_admin()
+        await self._require_crm_connector_write()
         connection = await self._require_hubspot_connection(connection_id)
         try:
             pipelines = await self._require_hubspot().pipelines(self._connection_context(connection))
@@ -754,6 +775,15 @@ class IntegrationService:
     def _require_integrations(self) -> None:
         if not self.settings.feature_integrations_enabled:
             raise PublicAPIError("feature_unavailable", "This feature is not enabled for the private beta.", 404)
+
+    async def _require_crm_connector_write(self) -> None:
+        await CommercialService(self.session, self.settings).require_module_write(self.tenant.organisation_id, "crm")
+
+    async def _require_connector_entitlement(self, connector_key: str) -> None:
+        await CommercialService(self.session, self.settings).require_module_write(
+            self.tenant.organisation_id,
+            _commercial_module_for_connector(connector_key),
+        )
 
     def _credential_store(self) -> CredentialStore:
         if not self.settings.feature_hubspot_crm_enabled:
@@ -1080,6 +1110,7 @@ class ActionExecutionService:
         self._require_execution_features()
         action_record = await self._require_approved_action(action_id)
         connection = await self._require_active_connection(connection_id, for_update=True)
+        await self._require_connection_entitlement(connection)
         action = await self._action_input(action_record)
         self._require_outreach_mailbox_binding(action, connection)
         action = await self._bind_external_target(action, connection)
@@ -1136,6 +1167,7 @@ class ActionExecutionService:
             if connection.connection_status != ConnectionStatus.ACTIVE.value:
                 continue
             try:
+                await self._require_connection_entitlement(connection)
                 self._require_outreach_mailbox_binding(action, connection)
                 self._executor(connection, capability, action.risk_class)
             except PublicAPIError:
@@ -1185,6 +1217,7 @@ class ActionExecutionService:
                 "action_version_stale", "The approved Action version changed. Review execution again.", 409
             )
         connection = await self._require_active_connection(request.connection_id, for_update=True)
+        await self._require_connection_entitlement(connection)
         action = await self._action_input(action_record)
         self._require_outreach_mailbox_binding(action, connection)
         action = await self._bind_external_target(action, connection)
@@ -1330,6 +1363,7 @@ class ActionExecutionService:
         if execution.execution_status != ExecutionStatus.UNKNOWN_EXTERNAL_STATE.value:
             return self._execution_response(record)
         connection = await self._require_active_connection(execution.connection_id, for_update=True)
+        await self._require_connection_entitlement(connection)
         action_record = await self.repository.approved_action(
             self.tenant.organisation_id,
             execution.action_id,
@@ -1431,6 +1465,12 @@ class ActionExecutionService:
             )
         ):
             raise PublicAPIError("feature_unavailable", "This feature is not enabled for the private beta.", 404)
+
+    async def _require_connection_entitlement(self, connection: IntegrationConnection) -> None:
+        await CommercialService(self.session, self.settings).require_module_write(
+            self.tenant.organisation_id,
+            _commercial_module_for_connector(connection.connector_key),
+        )
 
     def _credential_store(self) -> CredentialStore:
         if not self.settings.feature_hubspot_crm_enabled:

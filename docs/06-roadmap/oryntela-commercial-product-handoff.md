@@ -1,8 +1,8 @@
 # Oryntela commercial-product handoff
 
-- **Status:** Owner decision brief
+- **Status:** Owner decision brief updated for WO-047 commercial authority
 - **Prepared:** 4 September 2026
-- **Scope:** Documentation consolidation; no launch or implementation authority
+- **Scope:** Internal plan/trial/entitlement authority implemented; no billing or launch authority
 
 This consolidation incurred **AUD $0 new spend**, used only repository material,
 public official competitor sources and synthetic evidence, and did not use customer
@@ -23,9 +23,9 @@ The single recommended next owner milestone is **professional Oryntela trade-mar
 | ------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | Brand         | Oryntela selected; business name and domains held  | Professional trade-mark clearance and approved brand implementation plan               |
 | Positioning   | Internal line approved for consolidation           | Evidence-backed customer copy and legal review of material claims                      |
-| Plans         | Core, Growth, Complete and Enterprise hypothesis   | Customer validation and entitlement design                                             |
-| Price         | AUD 200/350/500 monthly anchors; Enterprise custom | Willingness-to-pay, unit economics, GST, billing-period and owner approval             |
-| Trial         | 14 days, no card, broad Complete access hypothesis | Abuse controls, exclusions, data lifecycle, support model and technical implementation |
+| Plans         | Versioned Core, Growth, Complete and Enterprise V1 authority | Customer validation and public packaging approval                              |
+| Price         | AUD 200/350/500 monthly internal catalogue; Enterprise custom | Willingness-to-pay, unit economics, GST and publication approval                |
+| Trial         | Explicit 14 days, no card/charge, Complete profile, 30-day read grace | Public signup, abuse controls, legal/provider/support readiness                 |
 | Credits       | Prepaid variable-cost control hypothesis           | Provider economics, ledger, reconciliation, refund and exposure controls               |
 | Billing       | Not implemented                                    | Approved provider, tax/terms design, tenant-safe implementation and tests              |
 | First partner | Free 6–8 weeks, 3–5 users, Native CRM, supervised  | All launch-gate evidence and owner GO                                                  |
@@ -39,11 +39,14 @@ Nothing in this table is permission to advertise a price, accept payment, start 
 - **External providers:** focused integration architecture may exist, but no broad connector, live mailbox, SMS, research, voice or recording claim is authorised.
 - **Launch:** the documented state is waiting for target-environment proof. WO-040 is not authorised by this consolidation.
 - **Brand:** public Oryntela identity is selected; technical RevenueOS names remain intentional until separate approval.
+- **Commercial authority:** WO-047 server-side plan, trial, seat, downgrade and audit enforcement is built; payment and Credits are not.
 
 ## Decisions made
 
 - Oryntela is the public brand direction; RevenueOS is not yet technically renamed.
 - Plans and product modules remain different concepts.
+- V1 packages are Core; Core + Prospect + Engage for Growth; and Growth + Create + supported external CRM connectors for Complete. Native CRM remains Core.
+- A trial is explicitly started once, lasts 14 days and then has 30 days of read/export grace with no card or automatic charge.
 - monday CRM is an overlapping competitor, not a dependency or feature checklist.
 - The first design partner remains core-first, free and supervised.
 - Every future work order must pass the simplicity gate.
@@ -55,8 +58,8 @@ Nothing in this table is permission to advertise a price, accept payment, start 
 - Trade-mark availability, filing strategy and relevant classes.
 - Public brand rollout and technical rebrand sequencing.
 - Published positioning and proof points.
-- Final plans, price, GST presentation, annual terms and discount authority.
-- Trial eligibility, exclusions, abuse controls, data lifecycle and conversion path.
+- Public plan/price publication, GST presentation, annual terms and discount authority.
+- Public trial eligibility, exclusions, abuse controls and conversion/purchase path.
 - Credits unit, allowance, expiry, refunds and ledger behaviour.
 - Which provider-backed capability, if any, partner evidence justifies first.
 - Target environment and final design-partner GO.

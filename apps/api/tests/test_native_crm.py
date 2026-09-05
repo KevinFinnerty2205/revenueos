@@ -16,7 +16,7 @@ from revenueos.beta_maintenance import _export_payload
 from revenueos.database import set_tenant_database_context
 from revenueos.models import CRMCustomFieldValue, CRMFieldMapping, CRMRecordChange, IntegrationConnection
 
-from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL
+from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL, set_test_commercial_plan
 from .test_business_api import create_company, create_contact, create_opportunity
 from .test_meeting_api import secondary_user
 
@@ -111,7 +111,7 @@ def test_crm_configuration_custom_fields_history_activity_and_archive(app: FastA
         return payload
 
     exported = asyncio.run(export_payload())
-    assert exported["exportVersion"] == 30
+    assert exported["exportVersion"] == 31
     assert len(exported["crmCustomFieldDefinitions"]) == 1  # type: ignore[arg-type]
     assert len(exported["crmCustomFieldValues"]) == 1  # type: ignore[arg-type]
     assert exported["companies"][0]["archived_at"] is None  # type: ignore[index]
@@ -237,7 +237,7 @@ def test_hard_delete_removes_polymorphic_crm_values_and_history(client: TestClie
     assert asyncio.run(crm_row_counts()) == (0, 0)
 
 
-def test_entitlement_off_preserves_reads_and_blocks_advanced_mutation(client: TestClient) -> None:
+def test_core_plan_preserves_native_crm_workflow(client: TestClient) -> None:
     company = create_company(client, name="Entitlement Account")
     definition = client.post(
         "/api/v1/crm/custom-fields",
@@ -255,21 +255,21 @@ def test_entitlement_off_preserves_reads_and_blocks_advanced_mutation(client: Te
     assert set_value.status_code == 200, set_value.text
 
     disabled = client.patch("/api/v1/crm/admin/entitlement", json={"enabled": False})
-    assert disabled.status_code == 200
-    assert disabled.json()["state"] == "not_in_plan"
+    assert disabled.status_code == 403
+    assert disabled.json()["code"] == "commercial_plan_managed"
+    set_test_commercial_plan("core")
     record = client.get(f"/api/v1/crm/records/account/{company['id']}")
     assert record.status_code == 200
     assert record.json()["customFields"][0]["value"] == "2027-06-30"
-    assert record.json()["customFields"][0]["editable"] is False
-    assert (
-        client.put(
-            f"/api/v1/crm/records/account/{company['id']}/custom-fields/{definition['id']}",
-            json={"value": "2028-06-30"},
-        ).status_code
-        == 403
+    assert record.json()["customFields"][0]["editable"] is True
+    changed = client.put(
+        f"/api/v1/crm/records/account/{company['id']}/custom-fields/{definition['id']}",
+        json={"value": "2028-06-30"},
     )
-    assert client.post(f"/api/v1/crm/records/account/{company['id']}/archive").status_code == 403
+    assert changed.status_code == 200
+    assert changed.json()["value"] == "2028-06-30"
     assert client.patch(f"/api/v1/companies/{company['id']}", json={"location": "Sydney"}).status_code == 200
+    assert client.post(f"/api/v1/crm/records/account/{company['id']}/archive").status_code == 200
 
 
 def test_roles_concurrency_and_custom_field_validation(app: FastAPI, client: TestClient) -> None:

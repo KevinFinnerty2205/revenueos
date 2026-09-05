@@ -36,6 +36,8 @@ from revenueos.models import (
     BetaSystemEvent,
     CandidateEvidence,
     CaptureSession,
+    CommercialPlanVersion,
+    CommercialStateEvent,
     Company,
     Contact,
     ContactFieldSource,
@@ -107,6 +109,7 @@ from revenueos.models import (
     OpportunityStageEvent,
     Organisation,
     OrganisationBetaSettings,
+    OrganisationCommercialState,
     OrganisationCRMSetting,
     OrganisationMembership,
     OrganisationMethodologySetting,
@@ -169,7 +172,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 30
+EXPORT_VERSION = 31
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1242,6 +1245,12 @@ async def _delete_organisation_records(
             delete(OrganisationModuleEntitlement).where(
                 OrganisationModuleEntitlement.organisation_id == organisation_id
             )
+        )
+        await session.execute(
+            delete(CommercialStateEvent).where(CommercialStateEvent.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(OrganisationCommercialState).where(OrganisationCommercialState.organisation_id == organisation_id)
         )
         await session.execute(delete(OutreachPolicy).where(OutreachPolicy.organisation_id == organisation_id))
         await session.execute(delete(BetaDataRequest).where(BetaDataRequest.organisation_id == organisation_id))
@@ -2652,6 +2661,30 @@ async def _export_payload(
             .order_by(OrganisationMembership.user_id)
         )
     ).all()
+    commercial_state = await session.get(OrganisationCommercialState, organisation_id)
+    commercial_plan = (
+        await session.get(CommercialPlanVersion, commercial_state.plan_version_id)
+        if commercial_state is not None
+        else None
+    )
+    commercial_history = list(
+        (
+            await session.scalars(
+                select(CommercialStateEvent)
+                .where(CommercialStateEvent.organisation_id == organisation_id)
+                .order_by(CommercialStateEvent.effective_at, CommercialStateEvent.id)
+            )
+        ).all()
+    )
+    module_entitlements = list(
+        (
+            await session.scalars(
+                select(OrganisationModuleEntitlement)
+                .where(OrganisationModuleEntitlement.organisation_id == organisation_id)
+                .order_by(OrganisationModuleEntitlement.module_key)
+            )
+        ).all()
+    )
 
     async def rows[T](statement: Select[tuple[T]]) -> list[T]:
         return list((await session.scalars(statement)).all())
@@ -3457,6 +3490,97 @@ async def _export_payload(
             "slug": organisation.slug,
             "timezone": organisation.timezone,
         },
+        "commercialState": (
+            {
+                **_columns(
+                    commercial_state,
+                    (
+                        "status",
+                        "billing_interval",
+                        "trial_started_at",
+                        "trial_ends_at",
+                        "grace_ends_at",
+                        "trial_used_at",
+                        "custom_user_limit",
+                        "add_on_modules_json",
+                        "seat_limit_status",
+                        "effective_at",
+                        "source",
+                        "actor_reference",
+                        "reason",
+                        "lock_version",
+                        "created_at",
+                        "updated_at",
+                    ),
+                ),
+                "plan": (
+                    _columns(
+                        commercial_plan,
+                        (
+                            "code",
+                            "display_name",
+                            "version",
+                            "monthly_price_amount",
+                            "annual_price_amount",
+                            "currency",
+                            "included_user_limit",
+                            "modules_json",
+                            "effective_from",
+                            "effective_to",
+                            "status",
+                        ),
+                    )
+                    if commercial_plan is not None
+                    else None
+                ),
+            }
+            if commercial_state is not None
+            else None
+        ),
+        "commercialHistory": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "plan_version_id",
+                    "event_type",
+                    "effective_status",
+                    "billing_interval",
+                    "entitled_modules_json",
+                    "readable_modules_json",
+                    "included_user_limit",
+                    "active_user_count",
+                    "seat_limit_status",
+                    "trial_started_at",
+                    "trial_ends_at",
+                    "grace_ends_at",
+                    "effective_at",
+                    "source",
+                    "actor_reference",
+                    "reason",
+                    "state_version",
+                    "created_at",
+                ),
+            )
+            for item in commercial_history
+        ],
+        "moduleEntitlements": [
+            _columns(
+                item,
+                (
+                    "module_key",
+                    "enabled",
+                    "access_level",
+                    "source",
+                    "configured_by_actor",
+                    "enabled_at",
+                    "disabled_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in module_entitlements
+        ],
         "members": [
             {
                 "userId": user.id,

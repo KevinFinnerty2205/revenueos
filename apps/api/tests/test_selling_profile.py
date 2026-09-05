@@ -398,7 +398,7 @@ def test_profile_is_included_in_export_and_removed_by_organisation_deletion() ->
             await engine.dispose()
 
     exported, profiles, revisions = asyncio.run(scenario())
-    assert exported["exportVersion"] == EXPORT_VERSION == 30
+    assert exported["exportVersion"] == EXPORT_VERSION == 31
     assert exported["sellingProfiles"][0]["id"] == profile_id
     assert exported["sellingProfileRevisions"][0]["content_json"] == profile_content
     assert profiles == revisions == 0

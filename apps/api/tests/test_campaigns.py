@@ -23,7 +23,7 @@ from revenueos.models import (
     OutreachMessage,
 )
 
-from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL
+from .conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL, set_test_commercial_plan
 from .test_integration_execution import _enable_execution
 from .test_meeting_api import cast_auth_dependency, secondary_user
 from .test_outreach import _configure_policy, _promote_jane
@@ -405,7 +405,7 @@ def test_published_campaign_version_carries_launch_fingerprint(app: FastAPI, cli
             assert version.launch_fingerprint is not None and len(version.launch_fingerprint) == 64
             assert version.approved_by_user_id is not None
             export = await _export_payload(session, PRIMARY_ORGANISATION_ID, app.state.settings)
-            assert export["exportVersion"] == EXPORT_VERSION == 30
+            assert export["exportVersion"] == EXPORT_VERSION == 31
             assert len(export["engageCampaigns"]) == 1  # type: ignore[arg-type]
             assert len(export["engageCampaignVersions"]) == 1  # type: ignore[arg-type]
             assert len(export["engageSequenceSteps"]) == 2  # type: ignore[arg-type]
@@ -518,12 +518,13 @@ def test_disabling_engage_halts_campaign_and_future_steps(app: FastAPI, client: 
     assert launched.status_code == 200, launched.text
 
     disabled = client.patch("/api/v1/engage/admin/entitlement", json={"enabled": False})
-    assert disabled.status_code == 200, disabled.text
-    assert disabled.json()["enabled"] is False
+    assert disabled.status_code == 403, disabled.text
+    assert disabled.json()["code"] == "commercial_plan_managed"
+    set_test_commercial_plan("core")
     halted = client.get(f"/api/v1/engage/campaigns/{campaign['id']}")
     assert halted.status_code == 200, halted.text
     assert halted.json()["state"] == "needs_attention"
-    assert halted.json()["needsAttentionReason"] == "engage_unavailable"
+    assert halted.json()["needsAttentionReason"] == "engage_not_in_plan"
     enrollment = client.get(f"/api/v1/engage/campaigns/{campaign['id']}/enrollments").json()["items"][0]
     assert enrollment["state"] == "needs_attention"
     assert enrollment["steps"][0]["state"] == "blocked"

@@ -215,8 +215,22 @@ class OrganisationBetaSettings(TimestampMixin, Base):
 class OrganisationModuleEntitlement(TimestampMixin, Base):
     __tablename__ = "organisation_module_entitlements"
     __table_args__ = (
-        CheckConstraint("module_key IN ('prospect', 'engage', 'create', 'crm')", name="ck_module_entitlements_key"),
-        CheckConstraint("source = 'manual_private_beta'", name="ck_module_entitlements_source"),
+        CheckConstraint(
+            "module_key IN ('core', 'prospect', 'engage', 'create', 'crm')",
+            name="ck_module_entitlements_key",
+        ),
+        CheckConstraint(
+            "source IN ('manual_private_beta', 'commercial_plan', 'trial', 'add_on')",
+            name="ck_module_entitlements_source",
+        ),
+        CheckConstraint(
+            "access_level IN ('none', 'read', 'write')",
+            name="ck_module_entitlements_access_level",
+        ),
+        CheckConstraint(
+            "(enabled AND access_level = 'write') OR (NOT enabled AND access_level IN ('none', 'read'))",
+            name="ck_module_entitlements_enabled_access",
+        ),
         ForeignKeyConstraint(
             ["organisation_id", "configured_by_user_id"],
             [
@@ -241,9 +255,167 @@ class OrganisationModuleEntitlement(TimestampMixin, Base):
         default="manual_private_beta",
         server_default="manual_private_beta",
     )
-    configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    access_level: Mapped[str] = mapped_column(String(12), nullable=False, default="none", server_default="none")
+    configured_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    configured_by_actor: Mapped[str | None] = mapped_column(String(200))
     enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CommercialPlanVersion(TimestampMixin, Base):
+    __tablename__ = "commercial_plan_versions"
+    __table_args__ = (
+        CheckConstraint("code IN ('core', 'growth', 'complete', 'enterprise')", name="ck_plan_versions_code"),
+        CheckConstraint("version > 0", name="ck_plan_versions_version"),
+        CheckConstraint("currency = 'AUD'", name="ck_plan_versions_currency"),
+        CheckConstraint("status IN ('active', 'retired')", name="ck_plan_versions_status"),
+        CheckConstraint(
+            "(code = 'enterprise' AND monthly_price_amount IS NULL AND annual_price_amount IS NULL "
+            "AND included_user_limit IS NULL) OR "
+            "(code <> 'enterprise' AND monthly_price_amount IS NOT NULL AND annual_price_amount IS NOT NULL "
+            "AND included_user_limit IS NOT NULL)",
+            name="ck_plan_versions_commercial_values",
+        ),
+        CheckConstraint(
+            "monthly_price_amount IS NULL OR monthly_price_amount >= 0",
+            name="ck_plan_versions_monthly_price",
+        ),
+        CheckConstraint(
+            "annual_price_amount IS NULL OR annual_price_amount >= 0",
+            name="ck_plan_versions_annual_price",
+        ),
+        CheckConstraint(
+            "included_user_limit IS NULL OR included_user_limit > 0",
+            name="ck_plan_versions_user_limit",
+        ),
+        UniqueConstraint("code", "version", name="uq_plan_versions_code_version"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    code: Mapped[str] = mapped_column(String(20), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    monthly_price_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    annual_price_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="AUD", server_default="AUD")
+    included_user_limit: Mapped[int | None] = mapped_column(Integer)
+    modules_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False, default=list)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", server_default="active")
+
+
+class OrganisationCommercialState(TimestampMixin, Base):
+    __tablename__ = "organisation_commercial_states"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('trial', 'active', 'inactive', 'suspended')",
+            name="ck_commercial_states_status",
+        ),
+        CheckConstraint(
+            "billing_interval IS NULL OR billing_interval IN ('monthly', 'annual')",
+            name="ck_commercial_states_interval",
+        ),
+        CheckConstraint(
+            "seat_limit_status IN ('within_limit', 'requires_resolution')",
+            name="ck_commercial_states_seat_limit_status",
+        ),
+        CheckConstraint("lock_version > 0", name="ck_commercial_states_lock_version"),
+        CheckConstraint(
+            "custom_user_limit IS NULL OR custom_user_limit > 0",
+            name="ck_commercial_states_custom_user_limit",
+        ),
+        CheckConstraint(
+            "(status <> 'trial' AND trial_started_at IS NULL AND trial_ends_at IS NULL "
+            "AND grace_ends_at IS NULL AND trial_used_at IS NULL) OR "
+            "(trial_started_at IS NOT NULL AND trial_ends_at > trial_started_at "
+            "AND grace_ends_at > trial_ends_at AND trial_used_at = trial_started_at)",
+            name="ck_commercial_states_trial_dates",
+        ),
+        CheckConstraint(
+            "status <> 'trial' OR billing_interval IS NULL",
+            name="ck_commercial_states_trial_interval",
+        ),
+        CheckConstraint(
+            "source IN ('manual_support', 'migration')",
+            name="ck_commercial_states_source",
+        ),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organisations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    plan_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("commercial_plan_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    billing_interval: Mapped[str | None] = mapped_column(String(12))
+    trial_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    grace_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trial_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    custom_user_limit: Mapped[int | None] = mapped_column(Integer)
+    add_on_modules_json: Mapped[list[object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=list, server_default="[]"
+    )
+    seat_limit_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="within_limit", server_default="within_limit"
+    )
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source: Mapped[str] = mapped_column(String(24), nullable=False)
+    actor_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class CommercialStateEvent(Base):
+    __tablename__ = "commercial_state_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('trial_started', 'plan_assigned', 'plan_changed', 'state_changed')",
+            name="ck_commercial_events_type",
+        ),
+        CheckConstraint(
+            "effective_status IN ('trial_active', 'active', 'grace', 'expired', 'inactive', 'suspended')",
+            name="ck_commercial_events_status",
+        ),
+        CheckConstraint("state_version > 0", name="ck_commercial_events_state_version"),
+        UniqueConstraint(
+            "organisation_id",
+            "state_version",
+            name="uq_commercial_events_org_state_version",
+        ),
+        Index("ix_commercial_events_org_effective", "organisation_id", "effective_at", "id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    plan_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("commercial_plan_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    effective_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    billing_interval: Mapped[str | None] = mapped_column(String(12))
+    entitled_modules_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    readable_modules_json: Mapped[list[object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    included_user_limit: Mapped[int | None] = mapped_column(Integer)
+    active_user_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    seat_limit_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    trial_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    grace_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source: Mapped[str] = mapped_column(String(24), nullable=False)
+    actor_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class SellingProfile(TimestampMixin, Base):

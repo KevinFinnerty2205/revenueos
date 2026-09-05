@@ -33,7 +33,13 @@ The `0043` migration performs a metadata-only duplicate preflight before creatin
 
 ## Policy and entitlement
 
-Basic canonical record create/read/update and readable canonical activity/history remain Core. The `crm` organisation entitlement and `API_FEATURE_NATIVE_CRM_ENABLED` gate system-of-record setup, custom-field definitions/mutation and record archive/restore. Disabling CRM preserves custom values as read-only and does not delete or hide Core records. Only administrators configure the mode, entitlement or field definitions and archive/restore records; archived records reject all field mutation.
+Canonical record create/read/update, Native CRM setup, custom fields, activity/history
+and archive/restore are Core under `API_FEATURE_NATIVE_CRM_ENABLED`. The `crm`
+commercial entitlement now means supported external CRM connectors, not Native CRM.
+External mode and new HubSpot connection/sync actions require it; downgrade preserves
+external history as read-only. Only administrators configure mode or field definitions
+and archive/restore records; plan access is operator-owned. Archived records reject
+all field mutation.
 
 Owners are active organisation members. Administrators may assign any active member; members may assign only themselves. Disabled owners remain readable historical references and can be reassigned; no owner change cascades to related records.
 
@@ -78,7 +84,7 @@ Company, Contact and Opportunity edit contracts accept `expectedUpdatedAt`; cust
 
 ## WO-035 extension
 
-Native Pipeline reuses the same `Opportunity`, CRM entitlement/mode, owner, field
+Native Pipeline reuses the same `Opportunity`, Core commercial access/CRM mode, owner, field
 history and external authority model. Stable pipeline/stage IDs and append-only events
 augment rather than replace the legacy stage/status compatibility fields. Native
 definition administration is CRM-gated; the descriptive board/history remains a Core

@@ -16,7 +16,12 @@ Run from the immutable API release with secrets injected by the platform:
 revenueos-operations production-preflight
 ```
 
-The command exits non-zero unless typed configuration has already passed and it can prove: current Alembic head `0050_real_data_operations`; a runtime PostgreSQL role that is neither superuser nor `BYPASSRLS`; transaction-local tenant context reset; private object write/read/delete; owner-only durable export directory; real-data flag; legal approval reference; and support address. Output contains safe feature states and generic results only.
+The command exits non-zero unless typed configuration has already passed and it can
+prove: current Alembic head `0052_commercial_plans_trial`; a runtime PostgreSQL role
+that is neither superuser nor `BYPASSRLS`; transaction-local tenant context reset;
+private object write/read/delete; owner-only durable export directory; real-data
+flag; legal approval reference; and support address. Output contains safe feature
+states and generic results only.
 
 The migration role is separate. A production runtime-role sketch is:
 
@@ -49,11 +54,23 @@ revenueos-operations provision-organisation \
   --confirm "PROVISION <clerk-org-id>"
 ```
 
-The command creates a deterministic organisation/user identity, active first-admin membership, explicit CRM/add-on entitlements, retention settings, onboarding state and a content-free immutable provisioning event. Repeating identical input returns `already_applied`; reusing the key for different input blocks.
+The command creates a deterministic organisation/user identity, active first-admin
+membership, Core commercial state plus any explicitly selected add-ons, Native CRM
+configuration when requested, retention settings, onboarding state and content-free
+immutable provisioning/commercial events. Native CRM itself is Core; select the CRM
+add-on only for supported external CRM connector access. Repeating identical input
+returns `already_applied`; reusing the key for different input blocks.
 
 Add a verified Clerk user with `provision-member` and its printed exact confirmation. Role changes and disable/re-enable use the existing authenticated admin membership route so the decision remains visible to the tenant. Disable the Clerk membership/session first for emergency revocation, then disable RevenueOS membership. Existing business history remains, active personal targets are archived and access/download grants fail on the next API request; already-issued JWTs remain valid only until Clerk revocation/expiry, so the target Clerk policy and measured maximum latency belong in partner evidence.
 
 Run `tenant-preflight --organisation-id <uuid>` before access. It checks an active admin, Native CRM configuration and pipeline/import state without printing names or content.
+
+Plan/trial changes are a separate support authority. Inspect first, then run
+`commercial-start-trial`, `commercial-assign-plan` or `commercial-change-state` with
+the returned lock version, exact confirmation, bounded operator reference and reason.
+Organisation administrators have read-only commercial visibility and cannot use the
+legacy module switches. See the exact commands and recovery rules in
+[Commercial authority](commercial-authority.md).
 
 ## Worker and support visibility
 

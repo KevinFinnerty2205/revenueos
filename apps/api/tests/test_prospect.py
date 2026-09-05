@@ -56,6 +56,7 @@ from .conftest import (
     PRIMARY_USER_ID,
     SECONDARY_ORGANISATION_ID,
     TEST_DB_URL,
+    set_test_commercial_plan,
 )
 
 Scenario = Callable[[async_sessionmaker[AsyncSession]], Awaitable[None]]
@@ -125,7 +126,7 @@ def _result(observation: ProviderResearchObservation, *sources: ProviderResearch
     return ProviderResearchResult(outcome="completed", sources=sources or (_source(),), observations=(observation,))
 
 
-def test_flag_and_entitlement_fail_closed_but_admin_can_manage(client: TestClient, app: object) -> None:
+def test_flag_and_entitlement_fail_closed_and_plan_is_support_managed(client: TestClient, app: object) -> None:
     available = client.get("/api/v1/prospect/availability")
     assert available.status_code == 200
     assert available.json() == {
@@ -137,15 +138,16 @@ def test_flag_and_entitlement_fail_closed_but_admin_can_manage(client: TestClien
     }
 
     disabled = client.patch("/api/v1/prospect/admin/entitlement", json={"enabled": False})
-    assert disabled.status_code == 200
-    assert disabled.json()["state"] == "not_in_plan"
+    assert disabled.status_code == 403
+    assert disabled.json()["code"] == "commercial_plan_managed"
+
+    set_test_commercial_plan("core")
     denied = client.get("/api/v1/prospect/companies/search", params={"q": "Northstar"})
     assert denied.status_code == 403
-    assert denied.json()["code"] == "prospect_not_entitled"
+    assert denied.json()["code"] == "prospect_not_in_plan"
 
-    enabled = client.patch("/api/v1/prospect/admin/entitlement", json={"enabled": True})
-    assert enabled.status_code == 200
-    assert enabled.json()["enabled"] is True
+    set_test_commercial_plan("complete")
+    assert client.get("/api/v1/prospect/availability").json()["enabled"] is True
 
 
 def test_production_mock_provider_fails_closed_for_access_and_worker(client: TestClient) -> None:
@@ -425,7 +427,7 @@ def test_exact_domain_attaches_to_existing_but_similar_name_does_not_merge(clien
 
 def test_revoked_entitlement_and_removed_requester_fail_queued_runs(client: TestClient) -> None:
     target_id = _start_research(client)["target"]["id"]
-    assert client.patch("/api/v1/prospect/admin/entitlement", json={"enabled": False}).status_code == 200
+    set_test_commercial_plan("core")
     _complete_one_run()
 
     async def assert_failed(session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -438,7 +440,7 @@ def test_revoked_entitlement_and_removed_requester_fail_queued_runs(client: Test
             assert run.last_error_code == "prospect_not_entitled"
 
     _run(assert_failed)
-    assert client.patch("/api/v1/prospect/admin/entitlement", json={"enabled": True}).status_code == 200
+    set_test_commercial_plan("complete")
 
     other_target = _start_research(client, "northstar-software")["target"]["id"]
 
@@ -650,7 +652,7 @@ def test_authorised_export_contains_safe_research_schema_without_raw_pages(clien
     async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
         async with session_factory() as session:
             payload = await _export_payload(session, PRIMARY_ORGANISATION_ID, _settings())
-        assert payload["exportVersion"] == EXPORT_VERSION == 30
+        assert payload["exportVersion"] == EXPORT_VERSION == 31
         assert len(payload["prospectTargets"]) == 1  # type: ignore[arg-type]
         assert len(payload["prospectRuns"]) == 1  # type: ignore[arg-type]
         assert len(payload["prospectSources"]) >= 1  # type: ignore[arg-type]

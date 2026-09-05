@@ -306,7 +306,7 @@ def test_event_flow_preserves_truth_provenance_and_canonical_records(
         return payload
 
     export = asyncio.run(export_data())
-    assert export["exportVersion"] == EXPORT_VERSION == 30
+    assert export["exportVersion"] == EXPORT_VERSION == 31
     assert "eventAttendeeImports" in export
 
 
@@ -438,7 +438,7 @@ def test_event_tenant_isolation_and_disabled_engage_history(app: FastAPI, client
                     OrganisationModuleEntitlement.organisation_id == PRIMARY_ORGANISATION_ID,
                     OrganisationModuleEntitlement.module_key == "engage",
                 )
-                .values(enabled=False, disabled_at=datetime.now(UTC))
+                .values(enabled=False, access_level="read", disabled_at=datetime.now(UTC))
             )
             await session.commit()
         await engine.dispose()

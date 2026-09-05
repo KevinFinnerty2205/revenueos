@@ -15,6 +15,8 @@ from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import ConnectionPoolEntry
 
+from revenueos.commercial_contracts import ModuleCode, PlanCode
+from revenueos.commercial_services import PLAN_CATALOGUE, CommercialService, ensure_plan_catalogue
 from revenueos.config import Settings
 from revenueos.main import create_app
 from revenueos.models import (
@@ -32,6 +34,7 @@ from revenueos.models import (
     BetaSystemEvent,
     CandidateEvidence,
     CaptureSession,
+    CommercialStateEvent,
     Company,
     Contact,
     ContactFieldSource,
@@ -104,6 +107,7 @@ from revenueos.models import (
     OpportunityStageEvent,
     Organisation,
     OrganisationBetaSettings,
+    OrganisationCommercialState,
     OrganisationCRMSetting,
     OrganisationMembership,
     OrganisationMethodologySetting,
@@ -165,6 +169,43 @@ PRIMARY_ORGANISATION_ID = UUID("00000000-0000-4000-8000-000000000002")
 PRIMARY_USER_ID = UUID("00000000-0000-4000-8000-000000000001")
 SECONDARY_ORGANISATION_ID = UUID("00000000-0000-4000-8000-000000000012")
 SECONDARY_USER_ID = UUID("00000000-0000-4000-8000-000000000011")
+
+
+def set_test_commercial_plan(
+    plan_code: PlanCode,
+    *,
+    add_ons: tuple[ModuleCode, ...] = (),
+    organisation_id: UUID = PRIMARY_ORGANISATION_ID,
+) -> None:
+    async def assign() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                state = await session.get(OrganisationCommercialState, organisation_id)
+                assert state is not None
+                service = CommercialService(
+                    session,
+                    Settings(
+                        environment="test",
+                        auth_mode="mock",
+                        mock_auth_enabled=True,
+                        database_url=TEST_DB_URL,
+                    ),
+                )
+                await service.assign_plan(
+                    organisation_id,
+                    plan_code=plan_code,
+                    billing_interval="monthly",
+                    actor_reference="test-support-operator",
+                    reason="Exercise commercial entitlement behaviour in a synthetic test.",
+                    expected_lock_version=state.lock_version,
+                    add_ons=add_ons,
+                    custom_user_limit=25 if plan_code == "enterprise" else None,
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(assign())
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -229,12 +270,52 @@ def database() -> Iterator[None]:
                 ]
             )
             await session.commit()
+            await ensure_plan_catalogue(session)
+            complete_plan = next(plan for plan in PLAN_CATALOGUE if plan.code == "complete")
+            commercial_now = datetime.now(UTC)
+            session.add_all(
+                [
+                    OrganisationCommercialState(
+                        organisation_id=organisation_id,
+                        plan_version_id=complete_plan.id,
+                        status="active",
+                        billing_interval="monthly",
+                        add_on_modules_json=[],
+                        seat_limit_status="within_limit",
+                        effective_at=commercial_now,
+                        source="migration",
+                        actor_reference="test-fixture",
+                        reason="Synthetic test commercial baseline.",
+                    )
+                    for organisation_id in (PRIMARY_ORGANISATION_ID, SECONDARY_ORGANISATION_ID)
+                ]
+            )
+            await session.commit()
             session.add_all(
                 [
                     OrganisationModuleEntitlement(
                         organisation_id=PRIMARY_ORGANISATION_ID,
+                        module_key="core",
+                        enabled=True,
+                        access_level="write",
+                        source="commercial_plan",
+                        configured_by_actor="test-fixture",
+                        enabled_at=datetime.now(UTC),
+                    ),
+                    OrganisationModuleEntitlement(
+                        organisation_id=SECONDARY_ORGANISATION_ID,
+                        module_key="core",
+                        enabled=True,
+                        access_level="write",
+                        source="commercial_plan",
+                        configured_by_actor="test-fixture",
+                        enabled_at=datetime.now(UTC),
+                    ),
+                    OrganisationModuleEntitlement(
+                        organisation_id=PRIMARY_ORGANISATION_ID,
                         module_key="prospect",
                         enabled=True,
+                        access_level="write",
                         source="manual_private_beta",
                         configured_by_user_id=PRIMARY_USER_ID,
                         enabled_at=datetime.now(UTC),
@@ -243,6 +324,7 @@ def database() -> Iterator[None]:
                         organisation_id=PRIMARY_ORGANISATION_ID,
                         module_key="engage",
                         enabled=True,
+                        access_level="write",
                         source="manual_private_beta",
                         configured_by_user_id=PRIMARY_USER_ID,
                         enabled_at=datetime.now(UTC),
@@ -251,6 +333,7 @@ def database() -> Iterator[None]:
                         organisation_id=SECONDARY_ORGANISATION_ID,
                         module_key="engage",
                         enabled=True,
+                        access_level="write",
                         source="manual_private_beta",
                         configured_by_user_id=SECONDARY_USER_ID,
                         enabled_at=datetime.now(UTC),
@@ -259,6 +342,7 @@ def database() -> Iterator[None]:
                         organisation_id=SECONDARY_ORGANISATION_ID,
                         module_key="prospect",
                         enabled=True,
+                        access_level="write",
                         source="manual_private_beta",
                         configured_by_user_id=SECONDARY_USER_ID,
                         enabled_at=datetime.now(UTC),
@@ -267,6 +351,7 @@ def database() -> Iterator[None]:
                         organisation_id=PRIMARY_ORGANISATION_ID,
                         module_key="create",
                         enabled=True,
+                        access_level="write",
                         source="manual_private_beta",
                         configured_by_user_id=PRIMARY_USER_ID,
                         enabled_at=datetime.now(UTC),
@@ -275,6 +360,7 @@ def database() -> Iterator[None]:
                         organisation_id=SECONDARY_ORGANISATION_ID,
                         module_key="create",
                         enabled=True,
+                        access_level="write",
                         source="manual_private_beta",
                         configured_by_user_id=SECONDARY_USER_ID,
                         enabled_at=datetime.now(UTC),
@@ -283,6 +369,7 @@ def database() -> Iterator[None]:
                         organisation_id=PRIMARY_ORGANISATION_ID,
                         module_key="crm",
                         enabled=True,
+                        access_level="write",
                         source="manual_private_beta",
                         configured_by_user_id=PRIMARY_USER_ID,
                         enabled_at=datetime.now(UTC),
@@ -291,6 +378,7 @@ def database() -> Iterator[None]:
                         organisation_id=SECONDARY_ORGANISATION_ID,
                         module_key="crm",
                         enabled=True,
+                        access_level="write",
                         source="manual_private_beta",
                         configured_by_user_id=SECONDARY_USER_ID,
                         enabled_at=datetime.now(UTC),
@@ -331,6 +419,7 @@ def clean_business_entities() -> Iterator[None]:
         async with session_factory() as session:
             await session.execute(update(RecordingSession).values(transcript_version_id=None))
             for model in (
+                CommercialStateEvent,
                 BetaFeedback,
                 BetaSystemEvent,
                 BetaDataRequest,
@@ -474,7 +563,28 @@ def clean_business_entities() -> Iterator[None]:
             await session.execute(
                 update(OrganisationModuleEntitlement).values(
                     enabled=True,
+                    access_level="write",
+                    source="commercial_plan",
                     disabled_at=None,
+                )
+            )
+            complete_plan = next(plan for plan in PLAN_CATALOGUE if plan.code == "complete")
+            await session.execute(
+                update(OrganisationCommercialState).values(
+                    plan_version_id=complete_plan.id,
+                    status="active",
+                    billing_interval="monthly",
+                    trial_started_at=None,
+                    trial_ends_at=None,
+                    grace_ends_at=None,
+                    trial_used_at=None,
+                    custom_user_limit=None,
+                    add_on_modules_json=[],
+                    seat_limit_status="within_limit",
+                    source="migration",
+                    actor_reference="test-fixture",
+                    reason="Synthetic test commercial baseline.",
+                    lock_version=1,
                 )
             )
             await session.commit()

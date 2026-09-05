@@ -538,14 +538,14 @@ part of their future gates.
 - **Security gates:** Approval digest, current membership/role, minimum write scopes and safe audit.
 - **Demonstration:** Apply and reconcile one approved change in the second CRM.
 
-### Sprint 25 — Billing and Entitlements
+### Sprint 25 — Billing integration over implemented commercial authority
 
-- **Objective:** Enforce a simple commercially approved private-beta entitlement model if required.
+- **Objective:** If approved, integrate a billing provider into the WO-047 commercial authority without duplicating it.
 - **User value:** Organisations understand available capabilities and limits without unsafe partial activation.
-- **Major deliverables:** Stripe customer/subscription projection, plan entitlements, usage guardrails, admin visibility, webhook idempotency and manual support path.
+- **Major deliverables:** Approved-provider customer/subscription projection, webhook idempotency and reconciliation into existing plan/trial state; payment-safe admin visibility.
 - **Dependencies:** Confirmed commercial packaging and measured AI/storage/integration costs.
 - **Out of scope:** Complex usage billing, annual-contract automation, tax/accounting platform breadth and self-serve plan experimentation.
-- **Acceptance criteria:** Entitlement changes follow verified Stripe state; duplicate/out-of-order webhooks are safe; suspended payment never causes data loss.
+- **Acceptance criteria:** Entitlement changes follow verified provider state; duplicate/out-of-order webhooks are safe; suspended payment never causes data loss.
 - **Security gates:** Signed webhooks, no card data in RevenueOS, tenant-scoped customer mapping and least-privilege billing administration.
 - **Demonstration:** Change a test subscription and see capability availability update without altering retained customer data.
 
@@ -604,8 +604,10 @@ missing need; (C) fix usability/trust before providers; or (D) reconsider the
 roadmap if the product is not delivering enough value. Gmail is not automatically
 next. Every implementation still requires a separately approved work order.
 
-WO-039 Manager Intelligence is the current implemented baseline. WO-026–039 are
-implemented within their separately approved boundaries.
+WO-047 commercial plan, trial, seat-limit and downgrade authority is the current
+implemented commercial baseline. It adds no billing, Credits, public trial or launch
+authority. WO-026–039 and WO-046 are implemented within their separately approved
+boundaries.
 WO-009 supplies the smallest verified
 identity, organisation-administration and operational controls needed for a
 controlled beta, so the older Sprint 4 description below is retained as target
@@ -627,6 +629,19 @@ explicit checkpoints rather than an unconditional build queue.
 The older Sprint 4–26 entries remain useful integration/release-gate context but must
 be reconciled into the Interaction work orders rather than implemented in parallel
 as a contradictory plan.
+
+## WO-047 current boundary
+
+WO-047 is implemented through migration `0052_commercial_plans_trial`. The server now
+owns immutable V1 Core/Growth/Complete/Enterprise definitions, explicit one-time
+14-day Complete-profile trial plus 30-day read/export grace, plan/add-on entitlements,
+active-user limits, safe downgrade and immutable tenant commercial history. An admin
+can inspect a read-only Settings projection; only reviewed operator commands mutate
+state. Native CRM remains Core and CRM entitlement governs external connectors.
+
+This does not implement Stripe or another billing provider, checkout, payment,
+invoices, Credits, public signup/trial, extra-user pricing or automatic payment-state
+transitions. WO-048 and all later work remain unstarted and require separate authority.
 
 ## Related documents
 

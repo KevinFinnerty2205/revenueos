@@ -12,11 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.domain import ProspectRelationshipState, ProspectTrustState
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
-    OrganisationModuleEntitlement,
     ProspectCandidateReason,
     ProspectDiscoveryCandidate,
     ProspectDiscoveryRun,
@@ -97,7 +97,7 @@ class ProspectTargetMarketService:
         self.provider = provider or create_discovery_provider(settings.prospect_research_provider_name)
 
     async def capabilities(self) -> DiscoveryCapabilitiesResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         capabilities = self.provider.capabilities()
         return DiscoveryCapabilitiesResponse(
             industries=list(capabilities.industries),
@@ -116,7 +116,7 @@ class ProspectTargetMarketService:
         )
 
     async def list_markets(self) -> TargetMarketListResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         markets = await self.repository.markets(self.tenant.organisation_id)
         return TargetMarketListResponse(
             items=[await self._market_response(market) for market in markets],
@@ -125,7 +125,7 @@ class ProspectTargetMarketService:
         )
 
     async def get_market(self, target_market_id: UUID) -> TargetMarketResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         market = await self.repository.market(self.tenant.organisation_id, target_market_id)
         if market is None:
             raise PublicAPIError("target_market_not_found", "The target market was not found.", 404)
@@ -360,7 +360,7 @@ class ProspectTargetMarketService:
         return await self._execute_discovery(run.id, version)
 
     async def get_discovery(self, run_id: UUID) -> DiscoveryResponse:
-        await self._require_entitled()
+        await self._require_entitled(write=False)
         run = await self.repository.run(self.tenant.organisation_id, run_id)
         if run is None:
             raise PublicAPIError("discovery_not_found", "The account search was not found.", 404)
@@ -757,21 +757,21 @@ class ProspectTargetMarketService:
             updated_at=market.updated_at,
         )
 
-    async def _require_entitled(self) -> None:
-        if not self.settings.feature_prospect_enabled or (
-            self.settings.environment == "production" and isinstance(self.provider, DeterministicMockDiscoveryProvider)
-        ):
-            raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
-        entitlement = await self.session.scalar(
-            select(OrganisationModuleEntitlement).where(
-                OrganisationModuleEntitlement.organisation_id == self.tenant.organisation_id,
-                OrganisationModuleEntitlement.module_key == "prospect",
-            )
-        )
-        if entitlement is None or not entitlement.enabled:
+    async def _require_entitled(self, *, write: bool = True) -> None:
+        commercial = CommercialService(self.session, self.settings)
+        if write:
+            if not self.settings.feature_prospect_enabled or (
+                self.settings.environment == "production"
+                and isinstance(self.provider, DeterministicMockDiscoveryProvider)
+            ):
+                raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
+            await commercial.require_module_write(self.tenant.organisation_id, "prospect")
+            return
+        access = await commercial.module_access(self.tenant.organisation_id, "prospect")
+        if access == "none":
             raise PublicAPIError(
-                "prospect_not_entitled",
-                "RevenueOS Prospect is not enabled for this organisation.",
+                "prospect_not_in_plan",
+                "Prospect isn't included in your organisation's current plan.",
                 403,
             )
 

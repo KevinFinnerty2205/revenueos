@@ -56,6 +56,10 @@ revenueos-operations production-preflight > preflight.json
 jq -e '.status == "ready"' preflight.json
 ```
 
-The command proves migration `0050_real_data_operations`, non-superuser/non-`BYPASSRLS` runtime role, transaction-local tenant reset, private object write/read/delete, owner-only durable export storage, real-data mode and configured approval/support references. It does not prove Clerk dashboard policy, managed backups, monitoring, legal approval or partner consent.
+The command proves migration `0052_commercial_plans_trial`, non-superuser/non-`BYPASSRLS`
+runtime role, transaction-local tenant reset, private object write/read/delete,
+owner-only durable export storage, real-data mode and configured approval/support
+references. It does not prove Clerk dashboard policy, managed backups, monitoring,
+legal approval or partner consent.
 
 Any failed or unexecuted row blocks data entry. Attach the completed Clerk, RLS, backup/restore, monitoring and offboarding evidence before changing this checklist to `PASS`.

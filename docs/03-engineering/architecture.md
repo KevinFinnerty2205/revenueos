@@ -567,6 +567,23 @@ datastore, vector index, provider call or schema migration. The web exposes it t
 the existing Search route and contextual workspace links. See
 [ADR 0036](../08-decisions/0036-ephemeral-deterministic-ask-revenueos.md).
 
+## WO-047 commercial authority
+
+Migration `0052_commercial_plans_trial` adds immutable global plan versions,
+tenant-owned commercial state and immutable tenant commercial events inside the
+existing API/PostgreSQL modular monolith. The existing module-entitlement table now
+records `none`, retained `read` or active `write` access with plan/trial/add-on
+provenance. `CommercialService` owns plan translation, one-time trial/grace
+boundaries, active-seat limits, optimistic operator changes and safe downgrade;
+business services and workers consume that authority.
+
+The web adds only an administrator read model. Support mutation remains an explicit
+CLI operation. Forced RLS protects tenant commercial rows, database triggers protect
+catalogue/history immutability and export v31/approved deletion cover the lifecycle.
+No service, broker, datastore, payment provider, Credits ledger or public signup was
+added. See [Commercial authority](commercial-authority.md) and
+[ADR 0069](../08-decisions/0069-versioned-commercial-authority.md).
+
 ## WO-026 Prospect Account Research extension
 
 WO-026 adds a separate tenant-owned Prospect Research Target, immutable Research

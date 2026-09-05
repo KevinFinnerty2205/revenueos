@@ -146,6 +146,9 @@ This is the canonical product and engineering documentation index. Documents dis
 135. [First supervised real-data design-partner launch gate](06-roadmap/first-design-partner/first-design-partner-launch-gate.md) — controlling named-partner release gate
 136. [WO-046: Company & Selling Profile](07-sprints/wo-046-company-selling-profile.md) — approved organisation context, revision history and bounded Ask reuse
 137. [ADR 0068: Versioned Company & Selling Profile](08-decisions/0068-versioned-company-selling-profile.md)
+138. [WO-047: Commercial Plans, Entitlements & Trial](07-sprints/wo-047-commercial-plans-entitlements-trial.md) — immutable V1 plans, one-time trial/grace, seat limits and safe downgrade; no billing
+139. [Commercial authority](03-engineering/commercial-authority.md) — domain, security, operator and lifecycle contract
+140. [ADR 0069: Versioned commercial authority without billing](08-decisions/0069-versioned-commercial-authority.md)
 
 ## First design-partner launch package
 
@@ -541,6 +544,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## 04 — Commercial
 
+- [Implemented commercial authority](03-engineering/commercial-authority.md)
 - [Oryntela pricing hypothesis](04-commercial/oryntela-pricing-hypothesis.md)
 - [Oryntela Credits commercial model](04-commercial/oryntela-credits-commercial-model.md)
 - [Oryntela free-trial hypothesis](04-commercial/oryntela-free-trial-hypothesis.md)
@@ -662,6 +666,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-038: Transparent Forecasting](07-sprints/wo-038-transparent-forecasting.md)
 - [WO-039: Manager Intelligence & Coaching](07-sprints/wo-039-manager-intelligence.md)
 - [WO-046: Company & Selling Profile](07-sprints/wo-046-company-selling-profile.md)
+- [WO-047: Commercial Plans, Entitlements & Trial](07-sprints/wo-047-commercial-plans-entitlements-trial.md)
 
 ## 08 — Decision records
 
@@ -728,6 +733,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0053: Approved Business Case as a Create source](08-decisions/0053-approved-business-case-create-source.md)
 - [ADR 0054: Canonical records form the native CRM](08-decisions/0054-canonical-record-native-crm.md)
 - [ADR 0068: Versioned organisation-approved Company & Selling Profile](08-decisions/0068-versioned-company-selling-profile.md)
+- [ADR 0069: Versioned commercial authority without billing](08-decisions/0069-versioned-commercial-authority.md)
 
 ## Current delivery boundary
 

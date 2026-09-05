@@ -14,7 +14,11 @@ Imported records use CRM source `imported` and batch/row provenance. Imported op
 
 ## Merge boundary
 
-`POST /api/v1/crm/merges/preview` and `/confirm` support admin-only same-type, same-tenant Account or Contact merges under Native CRM entitlement. Preview fingerprints both records and enumerates permitted field conflicts. Confirmation requires a survivor/source choice and explicit value selections, then locks both records in sorted UUID order and revalidates fingerprints.
+`POST /api/v1/crm/merges/preview` and `/confirm` support admin-only same-type,
+same-tenant Account or Contact merges under active Core commercial access and Native
+CRM mode. Preview fingerprints both records and enumerates permitted field conflicts.
+Confirmation requires a survivor/source choice and explicit value selections, then
+locks both records in sorted UUID order and revalidates fingerprints.
 
 The transaction moves the complete inspected canonical relationship graph, resolves safe unique collisions, applies selected fields/custom values, preserves source/history snapshots, archives the source and writes immutable `crm_record_merges` metadata. The source ID resolves as a tombstone with survivor deep link; restore/edit is blocked. Repeating the same merge is idempotent; inverse/double/stale/cross-tenant attempts fail.
 

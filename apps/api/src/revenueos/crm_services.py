@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.crm_contracts import (
     CRMActivityItemResponse,
@@ -40,7 +41,6 @@ from revenueos.models import (
     CRMRecordChange,
     Opportunity,
     OrganisationCRMSetting,
-    OrganisationModuleEntitlement,
 )
 from revenueos.tenant import TenantContext
 
@@ -81,23 +81,35 @@ class CRMService:
     """Tenant-aware policy and read models over the canonical business records."""
 
     def __init__(self, session: AsyncSession, tenant: TenantContext, settings: Settings) -> None:
+        self.session = session
         self.repository = CRMRepository(session)
         self.tenant = tenant
         self.settings = settings
 
     async def availability(self) -> CRMAvailabilityResponse:
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id)
-        enabled = bool(entitlement and entitlement.enabled)
+        commercial = CommercialService(self.session, self.settings)
+        core_access = await commercial.module_access(self.tenant.organisation_id, "core")
+        connector_access = await commercial.module_access(self.tenant.organisation_id, "crm")
         setting = await self.repository.setting(self.tenant.organisation_id)
         connection = await self.repository.active_hubspot_connection(self.tenant.organisation_id)
         connection_active = connection is not None and connection.connection_status == "active"
         mode = self._effective_mode(setting, connection is not None)
+        enabled = core_access == "write" and (mode != "external" or connector_access == "write")
         if not self.settings.feature_native_crm_enabled:
             state = "temporarily_unavailable"
             message = "CRM administration is temporarily unavailable. Core records remain available."
-        elif not enabled:
+        elif core_access == "none":
             state = "not_in_plan"
-            message = "CRM administration is not included for this organisation. Core records remain available."
+            message = "Your organisation does not have active access to the Core CRM workflow."
+        elif core_access == "read":
+            state = "read_only"
+            message = "Historical CRM data remains available to view and export. New CRM administration is blocked."
+        elif mode == "external" and connector_access == "none":
+            state = "not_in_plan"
+            message = "External CRM connectors aren't included in your organisation's current plan."
+        elif mode == "external" and connector_access == "read":
+            state = "read_only"
+            message = "Historical external CRM data remains available to view and export. New sync is blocked."
         elif setting is None:
             state = "setup_required"
             message = "Choose RevenueOS or an external CRM as the system of record."
@@ -109,7 +121,7 @@ class CRMService:
             message = "CRM administration is available."
         return CRMAvailabilityResponse(
             state=cast(
-                Literal["available", "not_in_plan", "setup_required", "temporarily_unavailable"],
+                Literal["available", "read_only", "not_in_plan", "setup_required", "temporarily_unavailable"],
                 state,
             ),
             enabled=enabled,
@@ -122,31 +134,21 @@ class CRMService:
         )
 
     async def update_entitlement(self, enabled: bool) -> CRMAvailabilityResponse:
+        del enabled
         self._require_admin()
-        now = datetime.now(UTC)
-        entitlement = await self.repository.entitlement(self.tenant.organisation_id, for_update=True)
-        if entitlement is None:
-            entitlement = OrganisationModuleEntitlement(
-                organisation_id=self.tenant.organisation_id,
-                module_key="crm",
-                enabled=enabled,
-                source="manual_private_beta",
-                configured_by_user_id=self.tenant.user_id,
-                enabled_at=now if enabled else None,
-                disabled_at=None if enabled else now,
-            )
-            self.repository.add(entitlement)
-        else:
-            entitlement.enabled = enabled
-            entitlement.configured_by_user_id = self.tenant.user_id
-            entitlement.enabled_at = now if enabled else entitlement.enabled_at
-            entitlement.disabled_at = None if enabled else now
-        await self._commit()
-        return await self.availability()
+        raise PublicAPIError(
+            "commercial_plan_managed",
+            "Module access is managed by your organisation's commercial plan. Contact support to change it.",
+            403,
+        )
 
     async def update_settings(self, request: CRMSettingsUpdate) -> CRMAvailabilityResponse:
         self._require_admin()
         await self._require_crm_enabled(for_update=True)
+        if request.mode == "external":
+            await CommercialService(self.session, self.settings).require_module_write(
+                self.tenant.organisation_id, "crm"
+            )
         connection = await self.repository.active_hubspot_connection(self.tenant.organisation_id)
         if request.mode == "external" and (connection is None or connection.connection_status != "active"):
             raise PublicAPIError(
@@ -490,16 +492,8 @@ class CRMService:
     async def _require_crm_enabled(self, *, for_update: bool = False) -> None:
         if not self.settings.feature_native_crm_enabled:
             raise PublicAPIError("crm_temporarily_unavailable", "CRM administration is temporarily unavailable.", 503)
-        entitlement = await self.repository.entitlement(
-            self.tenant.organisation_id,
-            for_update=for_update,
-        )
-        if entitlement is None or not entitlement.enabled:
-            raise PublicAPIError(
-                "crm_not_in_plan",
-                "CRM administration is not included for this organisation.",
-                403,
-            )
+        del for_update
+        await CommercialService(self.session, self.settings).require_module_write(self.tenant.organisation_id, "core")
 
     def _require_admin(self) -> None:
         if not self.tenant.can_manage():

@@ -29,6 +29,7 @@ from revenueos.beta_contracts import (
     SystemEventResponse,
     UsageResponse,
 )
+from revenueos.commercial_services import refresh_seat_limit_status, require_seat_available
 from revenueos.config import Settings
 from revenueos.contracts import OrganisationSummary, UserSummary
 from revenueos.database import set_tenant_database_context
@@ -398,7 +399,15 @@ class BetaService:
             raise PublicAPIError("member_not_found", "The organisation member was not found.", 404)
         if user_id == self.tenant.user_id and status == "disabled":
             raise PublicAPIError("cannot_disable_self", "An administrator cannot disable their own membership.", 409)
+        if status == "active" and membership.status != "active":
+            await require_seat_available(
+                self.session,
+                self.tenant.organisation_id,
+                now=datetime.now(UTC),
+            )
         membership.status = status
+        await self.session.flush()
+        await refresh_seat_limit_status(self.session, self.tenant.organisation_id)
         archived_target_count = 0
         if status == "disabled":
             owned_targets = await self.session.scalars(

@@ -1,16 +1,16 @@
 # Oryntela pricing hypothesis
 
-- **Status:** **OWNER-APPROVED HYPOTHESIS FOR VALIDATION**
+- **Status:** **OWNER-APPROVED V1 INTERNAL CATALOGUE; BILLING NOT IMPLEMENTED**
 - **Consolidated:** 4 September 2026
-- **Publication:** Internal only; not final, public or implemented in billing
+- **Publication:** Internal only; implemented as commercial authority, not public pricing or billing
 
 ## Current hypothesis
 
 | Plan       |    Monthly price |      Annual prepay | Included-user hypothesis | Purpose                                                      |
 | ---------- | ---------------: | -----------------: | -----------------------: | ------------------------------------------------------------ |
-| Core       | AUD $200/company | AUD $2,000/company |                  Up to 5 | A complete, valuable Sales Brain operating loop              |
-| Growth     | AUD $350/company | AUD $3,500/company |                 Up to 10 | Core plus a coherent, still-to-be-validated expansion bundle |
-| Complete   | AUD $500/company | AUD $5,000/company |                 Up to 15 | Intended end-to-end platform bundle; exact modules not final |
+| Core       | AUD $200/company | AUD $2,000/company |                  Up to 5 | Core operating loop, including Native CRM and Pipeline       |
+| Growth     | AUD $350/company | AUD $3,500/company |                 Up to 10 | Core plus Prospect and Engage                                |
+| Complete   | AUD $500/company | AUD $5,000/company |                 Up to 15 | Growth plus Create and supported external CRM connectors     |
 | Enterprise |           Custom |             Custom |               Contracted | Larger teams and approved enterprise requirements            |
 
 Annual pricing is paid annually under the current hypothesis and equates to
@@ -34,9 +34,9 @@ and prices are not decided.
 
 | Item                                   | Status                                       |
 | -------------------------------------- | -------------------------------------------- |
-| Plan names and price/user hypotheses   | Owner-approved for validation                |
-| Growth bundle                          | **UNDECIDED**                                |
-| Complete module matrix                 | **UNDECIDED**                                |
+| Plan names, price anchors and user bands | Implemented as immutable V1 internal authority |
+| Growth bundle                          | Core + Prospect + Engage                     |
+| Complete module matrix                 | Growth + Create + external CRM connectors    |
 | Add-on prices                          | **UNDECIDED**                                |
 | Extra-user bands/prices                | **UNDECIDED**                                |
 | GST-inclusive or ex-GST public display | **OWNER/LEGAL/COMMERCIAL DECISION REQUIRED** |
@@ -58,8 +58,8 @@ and prices are not decided.
 
 If later approved, show one company price, included users, monthly/annual toggle,
 annual saving, 14-day trial, concise outcome and clearly separate optional modules
-from Credits. Do not publish a detailed feature grid until Growth and Complete are
-decided and the advertised capabilities are genuinely live.
+from Credits. Do not publish a detailed feature grid until publication is separately
+approved and the advertised provider-backed capabilities are genuinely live.
 
 See the [packaging hypothesis](oryntela-packaging-hypothesis.md),
 [Credits model](oryntela-credits-commercial-model.md),

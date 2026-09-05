@@ -137,7 +137,7 @@ FIND -> UNDERSTAND -> ENGAGE -> INTERACT -> EVIDENCE -> ACT
 | Prospect | Net-new account/person research, Target Markets and safe promotion      | Saved Accounts, customer Evidence or buyer intent truth         |
 | Engage   | Reviewed outreach, bounded Campaigns, sequences and Event follow-up     | Customer truth, uncontrolled sending or open/click surveillance |
 | Create   | Approved-template presentations and deterministic Business Cases        | Pricing authority, customer acceptance or invented claims       |
-| CRM      | Optional Native CRM administration within Accounts, People and Pipeline | Sales Brain, a second shell or Salesforce feature parity        |
+| CRM      | Supported external CRM connectors over the Core-native sales graph       | Native CRM, Sales Brain, a second shell or Salesforce parity    |
 
 `Core`, `Growth`, `Complete` and `Enterprise` are commercial **plans**. Prospect,
 Engage, Create and CRM are product **modules**. Core is also the name of the product
@@ -158,6 +158,7 @@ separate module.
 | Create                                             | **BUILT**                                              | No for current PPTX/Business Case path              | Yes, including storage/restore | Yes                                                  |
 | Focused HubSpot connector                          | **BUILT — TARGET PROVIDER PROOF NOT YET COMPLETE**     | Yes                                                 | Yes                            | Yes if selected                                      |
 | Company & Selling Profile                          | **BUILT — WO-046**                                      | No                                                  | Later                          | Yes                                                  |
+| Commercial plan, trial and entitlement authority   | **BUILT — WO-047; BILLING NOT IMPLEMENTED**             | No                                                  | Yes                            | Yes                                                  |
 | What Changed                                       | **VALIDATE WITH DESIGN PARTNER**                       | No new truth provider                               | Later                          | Yes                                                  |
 | SMS                                                | **FUTURE / PROVIDER CANDIDATE**                        | Yes                                                 | Later                          | Yes, plus legal/economics                            |
 | Native mobile/background recording                 | **FUTURE**                                             | Platform/provider dependent                         | Later                          | Yes                                                  |
@@ -185,10 +186,11 @@ Professional advice is needed to decide whether clearance is required before a
 private branded design partnership or only before broader public/commercial launch.
 That is an owner/legal decision, not a conclusion this document makes.
 
-## Commercial hypothesis
+## Commercial authority and validation hypothesis
 
-The following is an **owner-approved internal hypothesis for validation**, not public
-pricing and not implemented billing:
+The following is an **owner-approved immutable V1 internal catalogue** implemented as
+server commercial authority. It remains for validation, is not public pricing and is
+not billing:
 
 | Plan       |          Monthly |      Annual prepay | Included-user hypothesis |
 | ---------- | ---------------: | -----------------: | -----------------------: |
@@ -197,18 +199,19 @@ pricing and not implemented billing:
 | Complete   | AUD $500/company | AUD $5,000/company |                 Up to 15 |
 | Enterprise |           Custom |             Custom |               Contracted |
 
-The annual figures are equivalent to approximately two months free. Growth and
-Complete composition, add-on prices, extra-user bands, GST presentation and billing
+The annual figures are equivalent to approximately two months free. Growth is Core +
+Prospect + Engage; Complete adds Create and supported external CRM connectors. Native
+CRM remains Core. Add-on prices, extra-user bands, GST presentation and billing
 provider remain undecided. See [pricing](../04-commercial/oryntela-pricing-hypothesis.md)
 and [packaging](../04-commercial/oryntela-packaging-hypothesis.md).
 
 ## Trial and Credits
 
-The current trial hypothesis is 14 days, no card initially, no automatic charge and
-a broad-enough experience to reveal Oryntela's value. Trial expiry pauses paid
-capability while retaining data for an undecided reasonable conversion window.
-Self-service public trial is not ready: onboarding, billing/trial state, abuse
-controls, provider-cost protection and operations are prerequisites.
+The implemented authority supports one explicitly started 14-day Complete-profile
+trial, no card and no automatic charge. The exact end begins a 30-day read/export
+grace period; the exact grace end expires access without deleting data. Self-service
+public trial is not ready: signup, billing, abuse controls, provider-cost protection,
+legal approval and production operations remain prerequisites.
 
 The subscription pays for Oryntela software. Prepaid **Oryntela Credits** may fund
 material third-party variable-cost operations such as paid enrichment, verification,

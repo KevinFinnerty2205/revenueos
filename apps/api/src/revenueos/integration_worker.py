@@ -289,6 +289,7 @@ class ActionExecutionWorkerService:
                 executors=self._executors,
             )
             try:
+                await action_service._require_connection_entitlement(record.connection)
                 action_record = await action_service._require_approved_action(
                     execution.action_id,
                     for_update=True,

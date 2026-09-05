@@ -5,6 +5,7 @@ import hashlib
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Literal, Protocol, cast
 from uuid import UUID
@@ -17,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from revenueos.commercial_services import require_seat_available
 from revenueos.config import Settings, get_settings
 from revenueos.database import set_tenant_database_context
 from revenueos.development import DEVELOPMENT_ORGANISATION_ID, DEVELOPMENT_USER_ID
@@ -267,6 +269,7 @@ async def _resolve_identity(
             Organisation.external_auth_id == identity.external_organisation_id,
         )
     )
+    is_new_organisation = organisation is None
     user = await session.scalar(select(User).where(User.external_auth_id == identity.external_auth_id))
     if not allow_provisioning and (organisation is None or user is None):
         raise AuthenticationError("The authenticated organisation or user has not been provisioned.")
@@ -306,6 +309,11 @@ async def _resolve_identity(
     if membership is None:
         if not allow_provisioning:
             raise AuthenticationError("The authenticated membership has not been provisioned.")
+        try:
+            await require_seat_available(session, organisation.id, now=datetime.now(UTC))
+        except PublicAPIError as exc:
+            if not is_new_organisation:
+                raise AuthenticationError("The organisation cannot activate another member.") from exc
         membership = OrganisationMembership(
             organisation_id=organisation.id,
             user_id=user.id,

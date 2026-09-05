@@ -1,147 +1,77 @@
 # RevenueOS commercial packaging
 
-> **Oryntela consolidation — 4 September 2026:** This checkpoint record remains
-> useful product-module history. Current plan, pricing, trial and Credits
-> hypotheses are consolidated in
-> [Oryntela packaging](../04-commercial/oryntela-packaging-hypothesis.md) and are
-> not approved for publication or implementation.
+> **Oryntela consolidation — 4 September 2026:** Oryntela is the selected public
+> brand direction; RevenueOS remains the technical product/repository name. WO-047
+> implements this V1 package as internal commercial authority only. It does not
+> authorise public pricing, billing or launch.
 
-- **Status:** Checkpoint 2 packaging direction; no price or billing implementation
-- **Principle:** Core is enough to love RevenueOS. Add-ons expand what RevenueOS can do.
+- **Status:** V1 server authority implemented; customer validation still required
+- **Principle:** Core is a coherent operating loop; modules extend it without making
+  trust, provenance, correction, security or data portability premium features
 
-## Recommended package
+## V1 plan catalogue
 
-| Package            | Customer outcome                                                          | Included capabilities                                                                           |
-| ------------------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| RevenueOS Core     | Understand relationships, progress opportunities and know what to do next | Sales Brain, Sales Methodology, RevenueOS Intelligence, RevenueOS Workspace and RevenueOS Daily |
-| RevenueOS Prospect | Find the right customers and people                                       | Account/person research, ICP, territory and responsible contact intelligence                    |
-| RevenueOS Engage   | Turn target accounts into conversations                                   | Personalised outreach, sequences, campaigns and event follow-up                                 |
-| RevenueOS Create   | Create customer-specific sales material                                   | Presentations, proposals, business cases, ROI and approved content library                      |
-| RevenueOS CRM      | Use RevenueOS as the primary lightweight system of record                 | Minimum lovable native CRM within Sell and Pipeline                                             |
-| RevenueOS Complete | Buy the connected Sales OS as one package                                 | Core plus Prospect, Engage, Create and CRM                                                      |
+| Plan       | Monthly | Annual | Included active users | Package                                      |
+| ---------- | ------: | -----: | --------------------: | -------------------------------------------- |
+| Core       | AUD 200 | AUD 2,000 | 5                  | Core operating loop                          |
+| Growth     | AUD 350 | AUD 3,500 | 10                 | Core + Prospect + Engage                     |
+| Complete   | AUD 500 | AUD 5,000 | 15                 | Growth + Create + external CRM connectors    |
+| Enterprise | Custom  | Custom | operator-approved      | Complete + specifically contracted needs     |
 
-An Enterprise tier may add SSO, SCIM, data residency, custom retention, advanced
-permissions, governance, audit controls, support and approved custom integrations.
-It must not become the only way to obtain essential Sales Brain safety or evidence
-features.
+These amounts are immutable V1 internal catalogue data, not a checkout, invoice or
+public offer. Enterprise does not imply SSO, SCIM, residency, custom SLA or any other
+unbuilt feature.
 
-## Exact Core boundary
+## Core boundary
 
-Core includes:
+Core includes the current Sales/Revenue Brain foundations, Accounts, Contacts,
+Opportunities, Interactions, Evidence, Methodology, Actions, Daily/Home, Native CRM,
+Native Pipeline, Analytics, Targets, Forecast, Manager Intelligence, Ask, the simple
+Deal Room and reviewed Closed-Won handover. Supported Core mailbox/calendar
+connections remain dependent on separately approved and implemented connector work.
 
-- every before/during/after Sales Brain workflow;
-- Revenue Brain and Opportunity Workspace;
-- standard and custom methodology projections;
-- personal and manager descriptive/diagnostic intelligence;
-- implemented Targets/KPI progress plus evidence-based forecast and coaching when
-  those later capabilities mature;
-- Account/Opportunity Workspace evidence and bounded file organisation;
-- RevenueOS Daily; and
-- reviewable Action proposals.
+Live provider operation may require deployment capability and configuration, but
+review, provenance, correction and the ability to act manually remain Core.
 
-Live provider execution may depend on the relevant connected module and provider,
-but review, provenance, correction and the ability to act manually remain Core.
-Essential evidence or explanation is never removed to manufacture an upsell.
+## Expansion module boundaries
 
-## Add-on boundaries
+- **Prospect** owns net-new account/person research, Target Markets and safe
+  promotion. It does not own saved Accounts, Contacts or customer Evidence.
+- **Engage** owns reviewed outreach, Campaigns/Sequences and Event follow-up. It does
+  not own customer truth or uncontrolled sending.
+- **Create** owns approved-template presentations and deterministic Business Cases.
+  It does not own pricing authority, customer acceptance or invented claims.
+- **CRM** owns supported external CRM connector access. Native CRM and Pipeline are
+  Core; CRM is not a second product shell or a promise of broad provider parity.
 
-- **Prospect** expands how pipeline is found; it does not own saved Accounts,
-  Contacts or Revenue Brain.
-- **Engage** expands customer outreach execution; it consumes approved research and
-  supports Campaign and Event preparation/follow-up. Event-list and seller activity
-  remain Engage context; a deliberately captured Interaction and its accepted customer
-  Evidence belong to Core.
-- **Create** expands reusable customer material; it consumes Revenue Brain and
-  approved organisation content but does not own customer truth.
-- **CRM** expands native record administration. It is a capability of Sell and
-  Pipeline, not a separate product shell, and does not replace external CRM support.
+Operator-selected add-ons support combinations such as Core + Create or Core + CRM.
+No public add-on price or complex SKU configurator exists.
 
-## Entitlement experience
+## Access experience
 
-The server should eventually return one product-safe availability projection derived
-from subscription, organisation policy, system capability and user permission. Pages
-consume that projection; they do not scatter plan names, price rules or Stripe state.
+The server derives effective access from immutable plan version, tenant commercial
+state, translated module access, organisation policy, user permission and operational
+provider state. The browser cannot grant a module. Commercial inclusion does not
+mean a provider is live.
 
-An unavailable module behaves as follows:
+Downgrade keeps historical removed-module data readable/exportable, blocks new work
+and never deletes content or users. Trial provides Complete-profile access for 14
+days and then 30 days read/export grace, with no card or automatic charge.
 
-- core workflows continue normally;
-- navigation does not fill with locked items;
-- a relevant result may show one calm explanation and **Learn more** action;
-- direct links explain what the module does and who can enable it;
-- existing data stays readable under retention/export policy after downgrade; and
-- payment failure never deletes customer data.
-
-Example: Daily may explain a qualified-pipeline gap. With Prospect enabled it shows
-**Find opportunities**. Without Prospect it may say **Prospect can help identify
-target accounts** with a single learn-more link.
-
-## Dimensions to evaluate, not prices
-
-- per active user or team;
-- included AI usage and fair-use guardrails;
-- storage and media retention;
-- verified-contact credits for Prospect;
-- outreach/execution volume for Engage;
-- generation or export volume for Create; and
-- organisation, sandbox or connector limits for enterprise needs.
-
-Avoid pricing that rewards spam, excessive data retention or low-value model calls.
-Do not charge separately for trust controls, correction, provenance, accessibility,
-security fixes or the basic ability to export/delete authorised data.
-
-## Land and expand
-
-1. A customer lands with Core to understand interactions and progress opportunities.
-2. Daily or Intelligence reveals an evidence-based pipeline gap.
-3. Prospect can help identify relevant accounts.
-4. Engage can help reach approved targets responsibly.
-5. Create can help convert active opportunities with customer-specific material.
-6. CRM can replace an oversized CRM for smaller organisations, or RevenueOS can
-   continue alongside the customer's existing CRM.
-
-Expansion should follow demonstrated workflow value, not interruptions or artificial
-limitations.
+Ordinary sellers see calm contextual explanations, not plan internals or prices.
+Organisation admins may inspect the current plan/status/users/modules in Settings but
+cannot mutate it. Approved support operators use the reviewed commercial workflow.
 
 ## Open commercial decisions
 
-- packaging metric and minimum team size;
-- fair-use, credit and storage envelopes based on measured cost;
-- whether manager functionality has one plan or enterprise governance controls;
-- whether live provider execution is included with Core or its source module;
-- manual contracting versus automated billing for each beta stage; and
-- region-specific tax, data-processing and enterprise support obligations.
+- willingness-to-pay and publication approval;
+- add-on and extra-user prices;
+- GST/tax, terms, cancellation, proration and discount authority;
+- billing provider and payment-failure reconciliation;
+- public-trial signup, abuse and conversion controls;
+- Credits unit, allowance, pack, expiry, refund and provider economics; and
+- any individually contracted Enterprise requirement.
 
-Exact prices require market research and customer interviews outside WO-023.
-
-Checkpoint 2 keeps this package structure. Prospect and Engage may be demonstrated
-with labelled synthetic providers, but real research and external delivery must not be
-sold as available until their provider-specific launch gates pass. See the
-[Prospect and Engage readiness review](prospect-engage-readiness.md).
-
-## WO-034 CRM entitlement boundary
-
-The implemented private-beta `crm` entitlement does not hide or disable the
-Company, Contact and Opportunity records required by Core. It unlocks the explicit
-RevenueOS system-of-record setup and bounded custom-field administration/mutation;
-administrator-only archive/restore is gated by the same entitlement. Existing custom
-values become read-only after entitlement loss. Ownership is shown on Core records and
-enforced by normal membership policy. There is no price, subscription, trial or billing
-implementation attached to the manual entitlement.
-
-External HubSpot field authority remains a Core integration safety boundary rather
-than being weakened to manufacture an add-on. WO-035 applies the split below.
-
-## WO-035 Pipeline boundary
-
-The current Pipeline Board/List/Closed view, canonical Opportunity workflow/history
-and later Core Intelligence consumers remain Core. The CRM entitlement unlocks native
-definition administration: up to five pipelines, bounded stages, default selection and
-safe archive. External HubSpot authority remains read-only and is never paywalled or
-bypassed. Sales Analytics (WO-036) and Forecasting (WO-038) remain Core.
-
-WO-036 implements Sales Analytics and bounded seller-reported aggregate Win/Loss as
-**Core**. WO-037 Targets and WO-038 Transparent Forecasting are also implemented Core
-capabilities with rollout flags, not separate entitlements or per-seat add-ons.
-WO-039 Manager Intelligence is now an implemented **Core** capability with a rollout
-flag, not a separate manager product, entitlement or per-seat add-on. V1 authority is
-the existing organisation admin role; formal manager/team packaging remains future.
+See [Oryntela packaging](../04-commercial/oryntela-packaging-hypothesis.md),
+[Commercial authority](../03-engineering/commercial-authority.md) and
+[ADR 0069](../08-decisions/0069-versioned-commercial-authority.md).
