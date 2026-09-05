@@ -758,16 +758,17 @@ class ProspectTargetMarketService:
         )
 
     async def _require_entitled(self, *, write: bool = True) -> None:
-        if not self.settings.feature_prospect_enabled or (
-            self.settings.environment == "production" and isinstance(self.provider, DeterministicMockDiscoveryProvider)
-        ):
-            raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
         commercial = CommercialService(self.session, self.settings)
         if write:
+            if not self.settings.feature_prospect_enabled or (
+                self.settings.environment == "production"
+                and isinstance(self.provider, DeterministicMockDiscoveryProvider)
+            ):
+                raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
             await commercial.require_module_write(self.tenant.organisation_id, "prospect")
             return
         access = await commercial.module_access(self.tenant.organisation_id, "prospect")
-        if access == "none" or (write and access != "write"):
+        if access == "none":
             raise PublicAPIError(
                 "prospect_not_in_plan",
                 "Prospect isn't included in your organisation's current plan.",

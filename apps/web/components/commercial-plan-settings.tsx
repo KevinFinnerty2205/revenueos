@@ -1,7 +1,7 @@
 "use client";
 
 import type { CommercialProjection } from "@revenueos/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 
 const statusLabels: Record<CommercialProjection["status"], string> = {
@@ -28,6 +28,8 @@ export function CommercialPlanSettings() {
   );
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const restoreFocusAfterRetry = useRef(false);
 
   const load = useCallback(async (signal: AbortSignal) => {
     setError(null);
@@ -55,6 +57,13 @@ export function CommercialPlanSettings() {
     };
   }, [load, retryKey]);
 
+  useEffect(() => {
+    if (commercial && restoreFocusAfterRetry.current) {
+      restoreFocusAfterRetry.current = false;
+      titleRef.current?.focus();
+    }
+  }, [commercial]);
+
   if (error && !commercial) {
     return (
       <section className="form-card" aria-labelledby="commercial-plan-title">
@@ -67,7 +76,10 @@ export function CommercialPlanSettings() {
         <button
           type="button"
           className="secondary-button mt-4"
-          onClick={() => setRetryKey((value) => value + 1)}
+          onClick={() => {
+            restoreFocusAfterRetry.current = true;
+            setRetryKey((value) => value + 1);
+          }}
         >
           Try again
         </button>
@@ -102,7 +114,12 @@ export function CommercialPlanSettings() {
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
             Commercial access
           </p>
-          <h2 id="commercial-plan-title" className="form-legend mt-2">
+          <h2
+            ref={titleRef}
+            id="commercial-plan-title"
+            className="form-legend mt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-700"
+            tabIndex={-1}
+          >
             Billing &amp; plan
           </h2>
         </div>

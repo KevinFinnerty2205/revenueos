@@ -182,4 +182,7 @@ test("commercial settings recovery is keyboard operable and restores focus", asy
   await page.keyboard.press("Enter");
 
   await expect(plan.getByText("Complete", { exact: true })).toBeVisible();
+  await expect(
+    plan.getByRole("heading", { name: "Billing & plan" }),
+  ).toBeFocused();
 });

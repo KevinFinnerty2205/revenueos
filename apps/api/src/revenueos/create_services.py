@@ -156,17 +156,15 @@ class CreateService:
             self.tenant.organisation_id, "create"
         )
         enabled = self.settings.feature_create_enabled and access == "write"
-        if not self.settings.feature_create_enabled:
-            state: Literal["available", "read_only", "temporarily_unavailable", "not_in_plan"] = (
-                "temporarily_unavailable"
-            )
-            message = "Create is temporarily unavailable in this environment."
-        elif access == "none":
-            state = "not_in_plan"
+        if access == "none":
+            state: Literal["available", "read_only", "temporarily_unavailable", "not_in_plan"] = "not_in_plan"
             message = "Create isn't included in your organisation's current plan."
         elif access == "read":
             state = "read_only"
             message = "Historical Create artefacts remain available to view and export. New creation is blocked."
+        elif not self.settings.feature_create_enabled:
+            state = "temporarily_unavailable"
+            message = "Create is temporarily unavailable in this environment."
         else:
             state = "available"
             message = "Create is ready for approved PowerPoint templates."
@@ -1668,14 +1666,14 @@ class CreateService:
         return selected
 
     async def _require_entitled(self, *, write: bool = True) -> None:
-        if not self.settings.feature_create_enabled:
-            raise PublicAPIError("create_unavailable", "RevenueOS Create is temporarily unavailable.", 503)
         commercial = CommercialService(self.session, self.settings)
         if write:
+            if not self.settings.feature_create_enabled:
+                raise PublicAPIError("create_unavailable", "RevenueOS Create is temporarily unavailable.", 503)
             await commercial.require_module_write(self.tenant.organisation_id, "create")
             return
         access = await commercial.module_access(self.tenant.organisation_id, "create")
-        if access == "none" or (write and access != "write"):
+        if access == "none":
             raise PublicAPIError(
                 "create_not_in_plan", "Create isn't included in your organisation's current plan.", 403
             )

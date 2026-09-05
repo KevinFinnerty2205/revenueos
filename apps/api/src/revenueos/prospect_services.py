@@ -85,15 +85,6 @@ class ProspectService:
         access = await CommercialService(self.session, self.settings).module_access(
             self.tenant.organisation_id, "prospect"
         )
-        if not self.settings.feature_prospect_enabled or (
-            self.settings.environment == "production" and self.settings.prospect_research_provider_name == "mock"
-        ):
-            return ProspectAvailabilityResponse(
-                state="temporarily_unavailable",
-                enabled=False,
-                can_manage=self.tenant.can_manage(),
-                message="RevenueOS Prospect is not available in this environment.",
-            )
         if access == "none":
             return ProspectAvailabilityResponse(
                 state="not_in_plan",
@@ -107,6 +98,15 @@ class ProspectService:
                 enabled=False,
                 can_manage=False,
                 message="Historical Prospect records remain available to view and export. New research is blocked.",
+            )
+        if not self.settings.feature_prospect_enabled or (
+            self.settings.environment == "production" and self.settings.prospect_research_provider_name == "mock"
+        ):
+            return ProspectAvailabilityResponse(
+                state="temporarily_unavailable",
+                enabled=False,
+                can_manage=self.tenant.can_manage(),
+                message="RevenueOS Prospect is not available in this environment.",
             )
         return ProspectAvailabilityResponse(
             state="available",
@@ -680,17 +680,19 @@ class ProspectService:
         )
 
     async def _require_entitled(self, *, write: bool = True) -> None:
-        availability = await self.availability()
-        if availability.state == "temporarily_unavailable":
-            raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
-        if availability.state == "not_in_plan" or (write and not availability.enabled):
+        commercial = CommercialService(self.session, self.settings)
+        access = await commercial.module_access(self.tenant.organisation_id, "prospect")
+        if access == "none":
             raise PublicAPIError(
                 "prospect_not_in_plan", "Prospect isn't included in your organisation's current plan.", 403
             )
-        if write:
-            await CommercialService(self.session, self.settings).require_module_write(
-                self.tenant.organisation_id, "prospect"
-            )
+        if not write:
+            return
+        if not self.settings.feature_prospect_enabled or (
+            self.settings.environment == "production" and self.settings.prospect_research_provider_name == "mock"
+        ):
+            raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
+        await commercial.require_module_write(self.tenant.organisation_id, "prospect")
 
     def _normalise_search_query(self, value: str) -> str:
         if "://" in value or ("." in value and " " not in value):

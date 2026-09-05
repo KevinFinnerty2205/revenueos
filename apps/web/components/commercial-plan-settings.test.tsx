@@ -52,7 +52,7 @@ function commercial(
     readAccessEndsAt: status === "grace" ? "2032-05-19T06:30:00Z" : null,
     message:
       status === "grace"
-        ? "Your trial has ended. Your workspace remains available for viewing and export during the grace period."
+        ? "Your trial has ended. No payment was taken. Your workspace remains available for viewing and export during the grace period."
         : status === "trial_active"
           ? "Your 14-day trial is active."
           : `Commercial status: ${status}.`,
@@ -126,6 +126,7 @@ describe("CommercialPlanSettings", () => {
     );
     render(<CommercialPlanSettings />);
     expect(await screen.findByText("Viewing and export grace")).toBeVisible();
+    expect(screen.getByText(/No payment was taken/i)).toBeVisible();
     expect(screen.getByText(/19 May 2032/i)).toBeVisible();
     expect(screen.getByText("View only")).toBeVisible();
   });
@@ -178,5 +179,8 @@ describe("CommercialPlanSettings", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Complete")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Billing & plan" }),
+    ).toHaveFocus();
   });
 });

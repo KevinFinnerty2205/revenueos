@@ -1042,14 +1042,14 @@ class BusinessCaseService:
         }
 
     async def _require_entitled(self, *, write: bool = True) -> None:
-        if not self.settings.feature_create_enabled:
-            raise PublicAPIError("create_unavailable", "RevenueOS Create is temporarily unavailable.", 503)
         commercial = CommercialService(self.session, self.settings)
         if write:
+            if not self.settings.feature_create_enabled:
+                raise PublicAPIError("create_unavailable", "RevenueOS Create is temporarily unavailable.", 503)
             await commercial.require_module_write(self.tenant.organisation_id, "create")
             return
         access = await commercial.module_access(self.tenant.organisation_id, "create")
-        if access == "none" or (write and access != "write"):
+        if access == "none":
             raise PublicAPIError(
                 "create_not_in_plan", "Create isn't included in your organisation's current plan.", 403
             )

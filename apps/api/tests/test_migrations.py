@@ -3374,6 +3374,23 @@ def test_commercial_migration_seeds_versions_backfills_add_ons_and_is_reversible
         ).fetchone()
         assert state is not None
         assert (state[0], state[1], json.loads(state[2]), state[3]) == ("core", "active", ["create"], 1)
+        malformed_organisation_id = str(uuid.uuid4())
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Malformed commercial state', ?)",
+            (malformed_organisation_id, f"malformed-{malformed_organisation_id[:8]}"),
+        )
+        connection.commit()
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                "INSERT INTO organisation_commercial_states "
+                "(organisation_id, plan_version_id, status, billing_interval, add_on_modules_json, "
+                "effective_at, source, actor_reference, reason) "
+                "SELECT ?, id, 'trial', NULL, '[]', ?, 'manual_support', 'constraint-test', "
+                "'Synthetic malformed state must fail.' "
+                "FROM commercial_plan_versions WHERE code = 'complete'",
+                (malformed_organisation_id, "2032-04-05T06:30:00+00:00"),
+            )
+        connection.rollback()
         entitlements = connection.execute(
             "SELECT module_key, enabled, access_level, source FROM organisation_module_entitlements "
             "WHERE organisation_id = ? ORDER BY module_key",

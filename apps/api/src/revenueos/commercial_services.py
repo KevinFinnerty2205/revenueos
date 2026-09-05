@@ -823,7 +823,8 @@ class CommercialService:
             )
         if status == "grace":
             return (
-                "Your trial has ended. Your workspace remains available for viewing and export during the grace period."
+                "Your trial has ended. No payment was taken. Your workspace remains available for viewing and "
+                "export during the grace period."
             )
         if status == "expired":
             return "Your trial and viewing grace period have ended. Contact support to reactivate the workspace."

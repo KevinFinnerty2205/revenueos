@@ -380,13 +380,6 @@ class OutreachService:
         access = await CommercialService(self.session, self.settings).module_access(
             self.tenant.organisation_id, "engage"
         )
-        if not self.settings.feature_engage_enabled:
-            return EngageAvailabilityResponse(
-                state="temporarily_unavailable",
-                enabled=False,
-                can_manage=self.tenant.can_manage(),
-                message="RevenueOS Engage is unavailable in this environment.",
-            )
         if access == "none":
             return EngageAvailabilityResponse(
                 state="not_in_plan",
@@ -400,6 +393,13 @@ class OutreachService:
                 enabled=False,
                 can_manage=False,
                 message="Historical Engage records remain available to view and export. New sending is blocked.",
+            )
+        if not self.settings.feature_engage_enabled:
+            return EngageAvailabilityResponse(
+                state="temporarily_unavailable",
+                enabled=False,
+                can_manage=self.tenant.can_manage(),
+                message="RevenueOS Engage is unavailable in this environment.",
             )
         return EngageAvailabilityResponse(
             state="available",
@@ -1811,7 +1811,7 @@ class OutreachService:
             await commercial.require_module_write(self.tenant.organisation_id, "engage")
             return
         access = await commercial.module_access(self.tenant.organisation_id, "engage")
-        if not self.settings.feature_engage_enabled or access == "none" or (write and access != "write"):
+        if access == "none" or (write and (not self.settings.feature_engage_enabled or access != "write")):
             raise PublicAPIError(
                 "engage_not_in_plan", "Engage isn't included in your organisation's current plan.", 403
             )

@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from revenueos.auth import AuthenticatedUser, get_current_user
@@ -31,10 +32,12 @@ from revenueos.models import (
     CommercialPlanVersion,
     CommercialStateEvent,
     Organisation,
+    OrganisationCommercialState,
     OrganisationMembership,
     OrganisationModuleEntitlement,
     User,
 )
+from revenueos.prospect_services import ProspectService
 from revenueos.tenant import TenantContext
 from tests.conftest import (
     PRIMARY_ORGANISATION_ID,
@@ -186,6 +189,7 @@ def test_trial_boundaries_are_deterministic_and_never_charge_or_delete() -> None
             clock[0] = FIXED_NOW + timedelta(days=14)
             grace = await service.projection(organisation_id)
             assert grace.status == "grace"
+            assert "No payment was taken" in grace.message
             assert grace.can_create_new_work is False
             assert grace.read_access_ends_at == FIXED_NOW + timedelta(days=44)
             assert all(module.access_level == "read" for module in grace.modules)
@@ -210,6 +214,61 @@ def test_trial_boundaries_are_deterministic_and_never_charge_or_delete() -> None
                     expected_lock_version=1,
                 )
             assert duplicate.value.code == "trial_already_used"
+
+    asyncio.run(with_database(scenario))
+
+
+def test_database_rejects_contradictory_trial_state() -> None:
+    async def scenario(factory: async_sessionmaker[AsyncSession], organisation_id: UUID, user_id: UUID) -> None:
+        del user_id
+        async with factory() as session:
+            await ensure_plan_catalogue(session)
+            await session.commit()
+            complete_plan_id = next(plan.id for plan in PLAN_CATALOGUE if plan.code == "complete")
+            malformed_states = (
+                ("trial", None, None, None, None, None),
+                (
+                    "trial",
+                    "monthly",
+                    FIXED_NOW,
+                    FIXED_NOW + timedelta(days=14),
+                    FIXED_NOW + timedelta(days=44),
+                    FIXED_NOW,
+                ),
+                ("active", "monthly", None, None, None, FIXED_NOW),
+                (
+                    "active",
+                    "monthly",
+                    FIXED_NOW,
+                    FIXED_NOW + timedelta(days=14),
+                    FIXED_NOW + timedelta(days=44),
+                    FIXED_NOW + timedelta(seconds=1),
+                ),
+            )
+            for status, interval, started_at, ends_at, grace_ends_at, used_at in malformed_states:
+                session.add(
+                    OrganisationCommercialState(
+                        organisation_id=organisation_id,
+                        plan_version_id=complete_plan_id,
+                        status=status,
+                        billing_interval=interval,
+                        trial_started_at=started_at,
+                        trial_ends_at=ends_at,
+                        grace_ends_at=grace_ends_at,
+                        trial_used_at=used_at,
+                        custom_user_limit=None,
+                        add_on_modules_json=[],
+                        seat_limit_status="within_limit",
+                        effective_at=FIXED_NOW,
+                        source="manual_support",
+                        actor_reference="constraint-test",
+                        reason="Synthetic malformed state must fail.",
+                        lock_version=1,
+                    )
+                )
+                with pytest.raises(IntegrityError):
+                    await session.flush()
+                await session.rollback()
 
     asyncio.run(with_database(scenario))
 
@@ -284,7 +343,6 @@ def test_plan_entitlement_matrix_and_enterprise_manual_limit(plan: str, limit: i
 
 def test_add_on_upgrade_and_downgrade_preserve_readable_history_and_block_new_work() -> None:
     async def scenario(factory: async_sessionmaker[AsyncSession], organisation_id: UUID, user_id: UUID) -> None:
-        del user_id
         async with factory() as session:
             service = CommercialService(session, settings(), now=lambda: FIXED_NOW)
             complete = await service.assign_plan(
@@ -312,6 +370,16 @@ def test_add_on_upgrade_and_downgrade_preserve_readable_history_and_block_new_wo
             assert create_row is not None
             assert create_row.access_level == "read"
             assert create_row.enabled is False
+            prospect = ProspectService(
+                session,
+                TenantContext(organisation_id=organisation_id, user_id=user_id, role="admin"),
+                settings(feature_prospect_enabled=False),
+            )
+            assert (await prospect.availability()).state == "read_only"
+            await prospect._require_entitled(write=False)
+            with pytest.raises(PublicAPIError) as provider_blocked_write:
+                await prospect._require_entitled()
+            assert provider_blocked_write.value.code == "prospect_unavailable"
             exported = await _export_payload(session, organisation_id, settings())
             exported_state = cast(dict[str, object], exported["commercialState"])
             exported_plan = cast(dict[str, object], exported_state["plan"])

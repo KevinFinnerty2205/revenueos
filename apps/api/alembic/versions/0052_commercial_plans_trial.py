@@ -488,10 +488,15 @@ def upgrade() -> None:
             "custom_user_limit IS NULL OR custom_user_limit > 0", name="ck_commercial_states_custom_user_limit"
         ),
         sa.CheckConstraint(
-            "(trial_started_at IS NULL AND trial_ends_at IS NULL AND grace_ends_at IS NULL) OR "
+            "(status <> 'trial' AND trial_started_at IS NULL AND trial_ends_at IS NULL "
+            "AND grace_ends_at IS NULL AND trial_used_at IS NULL) OR "
             "(trial_started_at IS NOT NULL AND trial_ends_at > trial_started_at "
-            "AND grace_ends_at > trial_ends_at AND trial_used_at IS NOT NULL)",
+            "AND grace_ends_at > trial_ends_at AND trial_used_at = trial_started_at)",
             name="ck_commercial_states_trial_dates",
+        ),
+        sa.CheckConstraint(
+            "status <> 'trial' OR billing_interval IS NULL",
+            name="ck_commercial_states_trial_interval",
         ),
         sa.CheckConstraint("source IN ('manual_support', 'migration')", name="ck_commercial_states_source"),
         sa.ForeignKeyConstraint(["organisation_id"], ["organisations.id"], ondelete="CASCADE"),

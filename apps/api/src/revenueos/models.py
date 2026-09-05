@@ -326,10 +326,15 @@ class OrganisationCommercialState(TimestampMixin, Base):
             name="ck_commercial_states_custom_user_limit",
         ),
         CheckConstraint(
-            "(trial_started_at IS NULL AND trial_ends_at IS NULL AND grace_ends_at IS NULL) OR "
+            "(status <> 'trial' AND trial_started_at IS NULL AND trial_ends_at IS NULL "
+            "AND grace_ends_at IS NULL AND trial_used_at IS NULL) OR "
             "(trial_started_at IS NOT NULL AND trial_ends_at > trial_started_at "
-            "AND grace_ends_at > trial_ends_at AND trial_used_at IS NOT NULL)",
+            "AND grace_ends_at > trial_ends_at AND trial_used_at = trial_started_at)",
             name="ck_commercial_states_trial_dates",
+        ),
+        CheckConstraint(
+            "status <> 'trial' OR billing_interval IS NULL",
+            name="ck_commercial_states_trial_interval",
         ),
         CheckConstraint(
             "source IN ('manual_support', 'migration')",
