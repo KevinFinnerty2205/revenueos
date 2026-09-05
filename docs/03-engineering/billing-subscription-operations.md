@@ -176,10 +176,12 @@ are never accepted from the client.
 
 ## Credit purchase boundary
 
-`credit_purchase` is a reserved billing-operation kind and provider-neutral boundary
-only. There is no public endpoint, provider product mapping, price, purchase flow,
-balance, allowance, pack, ledger, grant, expiry, refund or consumption. WO-049 owns
-all Credit semantics and has not started.
+WO-048 introduced `credit_purchase` as a reserved billing-operation kind. WO-049 now
+attaches separate TEST-only Credit infrastructure: an exactly matched, verified
+test-mode payment event can atomically create one purchased lot and ledger grant.
+There is still no public purchase endpoint, live provider product mapping, production
+price/pack, live payment or real sale. All Credit semantics belong to
+[Credits and variable-cost controls](credits-variable-cost-controls.md).
 
 ## Pre-live decisions and proof
 

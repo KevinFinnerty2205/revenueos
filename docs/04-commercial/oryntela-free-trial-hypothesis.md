@@ -46,7 +46,7 @@ No complimentary Credits, paid provider allowance or automatic top-up is impleme
 | Trial expiry and 30-day read/export grace         | Implemented                                        |
 | Self-service signup and abuse/fraud operations    | Not approved or implemented                        |
 | Billing and explicit purchase                     | Not implemented                                    |
-| Credits/provider-cost caps                        | Not implemented; quantities undecided              |
+| Credits/provider-cost caps                        | TEST-only controls implemented; production quantities undecided |
 | Terms, privacy, tax and consumer/B2B legal review | Required                                           |
 | Production provider and support readiness         | Required for any advertised provider-backed value |
 | Supervised customer value evidence                | Required                                           |

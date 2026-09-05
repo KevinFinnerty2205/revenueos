@@ -87,6 +87,9 @@ class VerifiedBillingEvent:
     invoice_identifier: str | None
     object_identifier: str | None
     created_at: datetime
+    amount_minor_units: int | None = None
+    currency: str | None = None
+    credit_pack_version_id: UUID | None = None
 
 
 class BillingProvider(Protocol):
@@ -357,6 +360,18 @@ class DeterministicBillingProvider:
                 invoice_identifier=cast(str | None, body.get("invoice_id")),
                 object_identifier=cast(str | None, body.get("object_id")),
                 created_at=created_at,
+                amount_minor_units=(
+                    cast(int, body.get("amount_minor_units"))
+                    if isinstance(body.get("amount_minor_units"), int)
+                    and not isinstance(body.get("amount_minor_units"), bool)
+                    else None
+                ),
+                currency=cast(str | None, body.get("currency")),
+                credit_pack_version_id=(
+                    UUID(cast(str, body["credit_pack_version_id"]))
+                    if isinstance(body.get("credit_pack_version_id"), str)
+                    else None
+                ),
             )
         except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
             raise PublicAPIError("billing_webhook_invalid", "Webhook content is invalid.", 400) from exc
@@ -812,6 +827,17 @@ class StripeTestBillingProvider:
                 invoice_identifier=invoice_identifier,
                 object_identifier=_required_string(obj, "id"),
                 created_at=_aware_from_timestamp(event.get("created")) or datetime.now(UTC),
+                amount_minor_units=(
+                    cast(int, obj.get("amount_total"))
+                    if isinstance(obj.get("amount_total"), int) and not isinstance(obj.get("amount_total"), bool)
+                    else None
+                ),
+                currency=(cast(str, obj.get("currency")).upper() if isinstance(obj.get("currency"), str) else None),
+                credit_pack_version_id=(
+                    UUID(cast(str, metadata["oryntela_credit_pack_version_id"]))
+                    if isinstance(metadata, dict) and isinstance(metadata.get("oryntela_credit_pack_version_id"), str)
+                    else None
+                ),
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise PublicAPIError("billing_webhook_invalid", "Webhook content is invalid.", 400) from exc

@@ -59,6 +59,11 @@ from revenueos.models import (
     CreateUsageCounter,
     CreateValueModel,
     CreateValueModelVersion,
+    CreditLedgerEntry,
+    CreditLot,
+    CreditOperation,
+    CreditOrganisationPolicy,
+    CreditQuote,
     CRMCustomFieldDefinition,
     CRMCustomFieldValue,
     CRMEntityMapping,
@@ -115,6 +120,7 @@ from revenueos.models import (
     Organisation,
     OrganisationBetaSettings,
     OrganisationCommercialState,
+    OrganisationCreditBalance,
     OrganisationCRMSetting,
     OrganisationMembership,
     OrganisationMethodologySetting,
@@ -177,7 +183,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 32
+EXPORT_VERSION = 33
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -958,9 +964,15 @@ async def _delete_organisation_records(
         billing_record_count = await session.scalar(
             select(func.count()).select_from(BillingAccount).where(BillingAccount.organisation_id == organisation_id)
         )
-        if billing_record_count:
+        credit_history_count = await session.scalar(
+            select(func.count())
+            .select_from(CreditLedgerEntry)
+            .where(CreditLedgerEntry.organisation_id == organisation_id)
+        )
+        if billing_record_count or credit_history_count:
             raise RuntimeError(
-                "Billing history requires an approved accounting-retention decision before organisation deletion."
+                "Billing or Credit transaction history requires an approved accounting-retention decision "
+                "before organisation deletion."
             )
         interaction_ids = list(
             (await session.scalars(select(Interaction.id).where(Interaction.organisation_id == organisation_id))).all()
@@ -1260,6 +1272,13 @@ async def _delete_organisation_records(
         )
         await session.execute(
             delete(CommercialStateEvent).where(CommercialStateEvent.organisation_id == organisation_id)
+        )
+        await session.execute(delete(CreditQuote).where(CreditQuote.organisation_id == organisation_id))
+        await session.execute(
+            delete(CreditOrganisationPolicy).where(CreditOrganisationPolicy.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(OrganisationCreditBalance).where(OrganisationCreditBalance.organisation_id == organisation_id)
         )
         await session.execute(
             delete(OrganisationCommercialState).where(OrganisationCommercialState.organisation_id == organisation_id)
@@ -2726,6 +2745,22 @@ async def _export_payload(
         .where(BillingProviderEventReceipt.organisation_id == organisation_id)
         .order_by(BillingProviderEventReceipt.received_at, BillingProviderEventReceipt.id)
     )
+    credit_balance = await session.get(OrganisationCreditBalance, organisation_id)
+    credit_lots = await rows(
+        select(CreditLot)
+        .where(CreditLot.organisation_id == organisation_id)
+        .order_by(CreditLot.created_at, CreditLot.id)
+    )
+    credit_operations = await rows(
+        select(CreditOperation)
+        .where(CreditOperation.organisation_id == organisation_id)
+        .order_by(CreditOperation.created_at, CreditOperation.id)
+    )
+    credit_transactions = await rows(
+        select(CreditLedgerEntry)
+        .where(CreditLedgerEntry.organisation_id == organisation_id)
+        .order_by(CreditLedgerEntry.created_at, CreditLedgerEntry.id)
+    )
 
     companies = await rows(select(Company).where(Company.organisation_id == organisation_id).order_by(Company.id))
     create_templates = await rows(
@@ -3685,6 +3720,82 @@ async def _export_payload(
                     ),
                 )
                 for item in billing_receipts
+            ],
+        },
+        "credits": {
+            "balance": (
+                _columns(
+                    credit_balance,
+                    (
+                        "purchased_available",
+                        "promotional_available",
+                        "purchased_reserved",
+                        "promotional_reserved",
+                        "updated_at",
+                    ),
+                )
+                if credit_balance is not None
+                else None
+            ),
+            "lots": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "credit_type",
+                        "original_credits",
+                        "available_credits",
+                        "reserved_credits",
+                        "consumed_credits",
+                        "expires_at",
+                        "created_at",
+                    ),
+                )
+                for item in credit_lots
+            ],
+            "operations": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "requested_by_user_id",
+                        "action_code",
+                        "quantity",
+                        "status",
+                        "outcome",
+                        "reserved_credits",
+                        "settled_credits",
+                        "released_credits",
+                        "successful_units",
+                        "execution_started_at",
+                        "outcome_recorded_at",
+                        "completed_at",
+                        "created_at",
+                        "updated_at",
+                    ),
+                )
+                for item in credit_operations
+            ],
+            "transactions": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "event_type",
+                        "credit_type",
+                        "purchased_available_delta",
+                        "promotional_available_delta",
+                        "reserved_delta",
+                        "operation_id",
+                        "referenced_entry_id",
+                        "action_code",
+                        "quantity",
+                        "actor_reference",
+                        "reason",
+                        "created_at",
+                    ),
+                )
+                for item in credit_transactions
             ],
         },
         "moduleEntitlements": [

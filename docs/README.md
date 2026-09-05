@@ -151,6 +151,8 @@ This is the canonical product and engineering documentation index. Documents dis
 140. [ADR 0069: Versioned commercial authority without billing](08-decisions/0069-versioned-commercial-authority.md)
 141. [WO-048: Billing & Subscription Operations](07-sprints/wo-048-billing-subscription-operations.md) — provider-neutral subscriptions, hosted checkout/portal, signed reconciliation and safe invoices in test mode only
 142. [Billing and subscription operations](03-engineering/billing-subscription-operations.md) — provider boundary, lifecycle, security, retention and pre-live decisions
+143. [WO-049: Credits & Variable-Cost Controls](07-sprints/wo-049-credits-variable-cost-controls.md) — TEST-only ledger, lots, reservations, reconciliation, economics and exposure controls
+144. [Credits and variable-cost controls](03-engineering/credits-variable-cost-controls.md) — canonical Credit lifecycle, provider boundary, security, export and production-activation rules
 
 ## First design-partner launch package
 
@@ -549,6 +551,7 @@ This is the canonical product and engineering documentation index. Documents dis
 ## 04 — Commercial
 
 - [Implemented commercial authority](03-engineering/commercial-authority.md)
+- [Credits and variable-cost controls](03-engineering/credits-variable-cost-controls.md)
 - [Oryntela pricing hypothesis](04-commercial/oryntela-pricing-hypothesis.md)
 - [Oryntela Credits commercial model](04-commercial/oryntela-credits-commercial-model.md)
 - [Oryntela free-trial hypothesis](04-commercial/oryntela-free-trial-hypothesis.md)
@@ -672,6 +675,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-046: Company & Selling Profile](07-sprints/wo-046-company-selling-profile.md)
 - [WO-047: Commercial Plans, Entitlements & Trial](07-sprints/wo-047-commercial-plans-entitlements-trial.md)
 - [WO-048: Billing & Subscription Operations](07-sprints/wo-048-billing-subscription-operations.md)
+- [WO-049: Credits & Variable-Cost Controls](07-sprints/wo-049-credits-variable-cost-controls.md)
 
 ## 08 — Decision records
 

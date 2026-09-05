@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BetaAdmin } from "@/components/beta-admin";
 import { BillingSubscriptionSettings } from "@/components/billing-subscription-settings";
 import { CommercialPlanSettings } from "@/components/commercial-plan-settings";
+import { CreditsSettings } from "@/components/credits-settings";
 import { CRMImportOnboarding } from "@/components/crm-import-onboarding";
 import { CRMSettings } from "@/components/crm-settings";
 import { EngageSettings } from "@/components/engage-settings";
@@ -126,6 +127,7 @@ export function SettingsExperience() {
           <SellingProfileSettings />
           <CommercialPlanSettings />
           <BillingSubscriptionSettings />
+          <CreditsSettings />
           <EngageSettings />
           <CRMSettings />
           <CRMImportOnboarding />

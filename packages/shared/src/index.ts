@@ -159,6 +159,70 @@ export interface BillingSuccessStatus {
   message: string;
 }
 
+export type CreditLedgerEventType =
+  | "purchase"
+  | "promotional_grant"
+  | "reservation"
+  | "consumption"
+  | "release"
+  | "refund"
+  | "correction"
+  | "expiry";
+
+export interface CreditsProjection {
+  unitName: "Oryntela Credit";
+  balance: {
+    available: number;
+    purchasedAvailable: number;
+    promotionalAvailable: number;
+    reserved: number;
+    purchasedReserved: number;
+    promotionalReserved: number;
+    totalHeld: number;
+  };
+  recentActivity: Array<{
+    id: string;
+    eventType: CreditLedgerEventType;
+    creditType: "purchased" | "promotional";
+    availableChange: number;
+    reservedChange: number;
+    actionCode: string | null;
+    operationId: string | null;
+    reason: string;
+    createdAt: string;
+  }>;
+  testPacks: Array<{
+    id: string;
+    packCode: string;
+    displayName: string;
+    version: number;
+    creditQuantity: number;
+    amountMinorUnits: number;
+    currency: "AUD";
+    testOnly: true;
+    purchaseAvailable: false;
+    pricingNote: string;
+  }>;
+  lowBalance: boolean;
+  autoTopUp: false;
+  productionPricesAvailable: false;
+  message: string;
+}
+
+export interface CreditQuote {
+  quoteId: string;
+  actionPriceVersionId: string;
+  actionCode: string;
+  actionName: string;
+  quantity: number;
+  creditCostPerUnit: number;
+  maximumCreditCost: number;
+  currentBalance: number;
+  sufficientBalance: boolean;
+  expiresAt: string;
+  pricingNotice: string;
+}
+
 export interface DependencyCheck {
   status: "ready" | "unavailable" | "misconfigured";
   detail: string;

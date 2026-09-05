@@ -131,6 +131,62 @@ const billingProjection = {
     "Billing is not configured or is manually managed. No provider subscription is being represented.",
 };
 
+const creditsProjection = {
+  unitName: "Oryntela Credit",
+  balance: {
+    available: 1000,
+    purchasedAvailable: 800,
+    promotionalAvailable: 200,
+    reserved: 20,
+    purchasedReserved: 20,
+    promotionalReserved: 0,
+    totalHeld: 1020,
+  },
+  recentActivity: [
+    {
+      id: "00000000-0000-4000-9000-000000000501",
+      eventType: "purchase",
+      creditType: "purchased",
+      availableChange: 1000,
+      reservedChange: 0,
+      actionCode: null,
+      operationId: null,
+      reason: "Verified test purchase.",
+      createdAt: "2032-04-05T06:30:00Z",
+    },
+    {
+      id: "00000000-0000-4000-9000-000000000502",
+      eventType: "reservation",
+      creditType: "purchased",
+      availableChange: -20,
+      reservedChange: 20,
+      actionCode: "PROSPECT_COMPANY_RESEARCH",
+      operationId: "00000000-0000-4000-9000-000000000601",
+      reason: "Reserved before deterministic work.",
+      createdAt: "2032-04-06T06:30:00Z",
+    },
+  ],
+  testPacks: [
+    {
+      id: "00000000-0000-4000-9000-000000000049",
+      packCode: "TEST_100",
+      displayName: "100 test Credits",
+      version: 1,
+      creditQuantity: 100,
+      amountMinorUnits: 2000,
+      currency: "AUD",
+      testOnly: true,
+      purchaseAvailable: false,
+      pricingNote: "TEST ONLY / NOT CUSTOMER PRICING",
+    },
+  ],
+  lowBalance: false,
+  autoTopUp: false,
+  productionPricesAvailable: false,
+  message:
+    "Credits cover meaningful metered external services. Ordinary Oryntela software use is not metered. Test catalogue values are not customer pricing.",
+};
+
 async function routeSettingsBase(page: Page) {
   await page.route(`${apiOrigin}/api/v1/**`, async (route) => {
     await route.fulfill({
@@ -181,6 +237,13 @@ async function routeSettings(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(billingProjection),
+    });
+  });
+  await page.route(`${apiOrigin}/api/v1/credits`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(creditsProjection),
     });
   });
 }
@@ -252,6 +315,39 @@ test("test billing checkout preparation is keyboard reachable and responsive", a
   ).toBeVisible();
   await billing.screenshot({
     path: "../../docs/07-sprints/assets/wo-048-billing-settings-mobile.png",
+  });
+});
+
+test("Credits settings are clear, bounded and responsive", async ({ page }) => {
+  await routeSettings(page);
+  await page.goto("/settings");
+
+  const credits = page.getByRole("region", { name: "Oryntela Credits" });
+  await expect(credits).toBeVisible();
+  await expect(credits.getByText("1,000", { exact: true })).toBeVisible();
+  await expect(credits.getByText("800", { exact: true })).toBeVisible();
+  await expect(credits.getByText("200", { exact: true })).toBeVisible();
+  await expect(credits.getByText(/20 Credits are reserved/i)).toBeVisible();
+  await expect(
+    credits.getByText("TEST ONLY / NOT CUSTOMER PRICING"),
+  ).toBeVisible();
+  await expect(credits.getByText("100 Credits · $20.00")).toBeVisible();
+  await expect(
+    credits.getByRole("button", { name: "Purchase unavailable" }),
+  ).toBeDisabled();
+  await expect(credits.getByText(/provider cost/i)).toHaveCount(0);
+  await credits.screenshot({
+    path: "../../docs/07-sprints/assets/wo-049-credits-settings-desktop.png",
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await credits.scrollIntoViewIfNeeded();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  await expect(credits.getByText("1,000", { exact: true })).toBeVisible();
+  await credits.screenshot({
+    path: "../../docs/07-sprints/assets/wo-049-credits-settings-mobile.png",
   });
 });
 

@@ -1,8 +1,9 @@
 # Oryntela variable-cost safety gate
 
 - **Status:** Required approval gate for any future variable-cost capability
-- **Last reviewed:** 4 September 2026
-- **Current implementation:** No Credits, billing or variable-cost enforcement is authorised by this document
+- **Last reviewed:** 5 September 2026
+- **Current implementation:** WO-049 provides TEST-only Credits and variable-cost
+  enforcement infrastructure; this gate still authorises no production price or provider
 
 ## Decision
 

@@ -34,6 +34,7 @@ from revenueos.routes import (
     companies,
     contacts,
     create,
+    credits,
     crm,
     daily,
     events,
@@ -163,6 +164,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(beta.router)
     app.include_router(billing.router)
     app.include_router(commercial.router)
+    app.include_router(credits.router)
     commercial_access = [Depends(require_commercial_workspace_access)]
     app.include_router(companies.router, dependencies=commercial_access)
     app.include_router(contacts.router, dependencies=commercial_access)

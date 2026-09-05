@@ -40,6 +40,7 @@ from revenueos.billing_repositories import BillingRepository
 from revenueos.commercial_contracts import BillingInterval, PlanCode
 from revenueos.commercial_services import CommercialService, ensure_plan_catalogue
 from revenueos.config import Settings
+from revenueos.credit_services import CreditService
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
@@ -532,11 +533,36 @@ class BillingService:
         operation = await self.session.scalar(
             select(BillingOperation).where(
                 BillingOperation.organisation_id == event.organisation_id,
-                BillingOperation.operation_type == "checkout",
+                BillingOperation.operation_type.in_(("checkout", "credit_purchase")),
                 BillingOperation.provider_object_id == checkout.identifier,
             )
         )
-        if operation is None or checkout.subscription_identifier is None:
+        if operation is None:
+            return "reconciliation_required"
+        if operation.operation_type == "credit_purchase":
+            if (
+                event.amount_minor_units is None
+                or event.currency != "AUD"
+                or event.credit_pack_version_id is None
+                or operation.credit_pack_version_id != event.credit_pack_version_id
+                or operation.amount is None
+                or int(operation.amount * 100) != event.amount_minor_units
+            ):
+                raise PublicAPIError(
+                    "credit_purchase_payment_mismatch",
+                    "The verified Credit-pack payment did not match the server-owned purchase operation.",
+                    409,
+                )
+            operation.status = "succeeded"
+            operation.completed_at = _aware(self._now())
+            await CreditService(self.session, self.settings, clock=self._now).grant_verified_purchase(
+                event.organisation_id,
+                billing_operation_id=operation.id,
+                provider_event_id=event.identifier,
+                commit=False,
+            )
+            return "processed"
+        if checkout.subscription_identifier is None:
             return "reconciliation_required"
         checkout_subscription = await self.provider.retrieve_subscription(checkout.subscription_identifier)
         mapped = self.prices.reverse(checkout_subscription.price_identifier)
@@ -1193,4 +1219,7 @@ def replace_event_subscription(event: VerifiedBillingEvent, subscription_identif
         invoice_identifier=event.invoice_identifier,
         object_identifier=event.object_identifier,
         created_at=event.created_at,
+        amount_minor_units=event.amount_minor_units,
+        currency=event.currency,
+        credit_pack_version_id=event.credit_pack_version_id,
     )

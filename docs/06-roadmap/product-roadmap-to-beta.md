@@ -635,7 +635,7 @@ The older Sprint 4–26 entries remain useful integration/release-gate context b
 be reconciled into the Interaction work orders rather than implemented in parallel
 as a contradictory plan.
 
-## WO-047/048 current commercial boundary
+## WO-047/048/049 current commercial boundary
 
 WO-047 is implemented through migration `0052_commercial_plans_trial`. The server now
 owns immutable V1 Core/Growth/Complete/Enterprise definitions, explicit one-time
@@ -650,10 +650,17 @@ checkout/portal boundaries, signed webhook reconciliation, safe invoice projecti
 period-end cancellation/reactivation, provider-confirmed immediate higher-tier
 upgrade with provider-calculated proration, and next-renewal downgrade. Verified
 billing facts feed WO-047; they do not replace its entitlement authority. Live
-billing, public signup/trial, extra-user pricing, final GST/refund policy, exact
-production retry/dunning configuration and proof, and Credit balances/ledger/grants
-remain unimplemented. WO-049 and all later work remain unstarted and require
-separate authority.
+billing, public signup/trial, extra-user pricing, final GST/refund policy and exact
+production retry/dunning configuration and proof remain unimplemented.
+
+WO-049 migration `0054_credits_variable_cost` now provides the provider-neutral,
+TEST-only Credit ledger, non-negative projection, purchased/promotional lots,
+quote/reservation/settlement/reconciliation lifecycle, versioned cost catalogue,
+margin checks, exposure caps and kill switches. Verified TEST billing can create one
+exact purchased grant and active trials can receive bounded promotional grants.
+Production prices, packs, margin floor, providers, live Stripe and real sales remain
+absent. WO-050 remains unstarted and depends on separate authority plus the relevant
+provider/economics/safety approvals.
 
 ## Related documents
 

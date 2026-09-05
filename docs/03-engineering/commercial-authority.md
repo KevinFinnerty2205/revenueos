@@ -1,9 +1,10 @@
 # Commercial authority
 
-- **Status:** Implemented by WO-047; test billing facts added by WO-048
+- **Status:** Implemented by WO-047; test billing facts added by WO-048 and TEST-only Credits by WO-049
 - **Migration:** `0052_commercial_plans_trial`
 - **Billing:** Provider-neutral architecture and test mode implemented by WO-048; live disabled
-- **Credits:** Not implemented
+- **Credits:** Provider-neutral infrastructure implemented in TEST mode; no production
+  prices, packs or provider activation
 
 ## Authoritative catalogue
 
@@ -158,5 +159,8 @@ a billing-provider-managed commercial state inactive without deletion. Scheduled
 cancellation keeps paid access through the current period. A higher-tier plan is
 assigned only after provider confirmation; lower-tier assignment occurs only at the
 verified renewal event and uses the existing non-destructive downgrade path. There
-is no live billing, final tax/refund policy, Credits ledger, allowance, pack, expiry
-or top-up. See [Billing and subscription operations](billing-subscription-operations.md).
+is no live billing, final tax/refund policy, production Credit price/pack, approved
+allowance, live provider or top-up. WO-049's separate TEST-only Credit ledger consumes
+entitlement authority but never creates it. See
+[Billing and subscription operations](billing-subscription-operations.md) and
+[Credits and variable-cost controls](credits-variable-cost-controls.md).
