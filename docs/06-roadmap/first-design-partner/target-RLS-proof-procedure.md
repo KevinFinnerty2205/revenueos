@@ -20,7 +20,7 @@ FROM pg_stat_ssl WHERE pid = pg_backend_pid();
 SQL
 ```
 
-PASS requires head `0052_commercial_plans_trial`, `rolsuper=false`,
+PASS requires head `0053_billing_subscriptions`, `rolsuper=false`,
 `rolbypassrls=false`, TLS on and a recorded PostgreSQL version.
 
 ## All-table automated proof

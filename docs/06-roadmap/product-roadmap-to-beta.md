@@ -540,6 +540,10 @@ part of their future gates.
 
 ### Sprint 25 — Billing integration over implemented commercial authority
 
+**Repository status:** WO-048 now implements this architecture in test mode only.
+Live billing, public pricing and production-provider activation remain separately
+gated.
+
 - **Objective:** If approved, integrate a billing provider into the WO-047 commercial authority without duplicating it.
 - **User value:** Organisations understand available capabilities and limits without unsafe partial activation.
 - **Major deliverables:** Approved-provider customer/subscription projection, webhook idempotency and reconciliation into existing plan/trial state; payment-safe admin visibility.
@@ -604,10 +608,11 @@ missing need; (C) fix usability/trust before providers; or (D) reconsider the
 roadmap if the product is not delivering enough value. Gmail is not automatically
 next. Every implementation still requires a separately approved work order.
 
-WO-047 commercial plan, trial, seat-limit and downgrade authority is the current
-implemented commercial baseline. It adds no billing, Credits, public trial or launch
-authority. WO-026–039 and WO-046 are implemented within their separately approved
-boundaries.
+WO-047 commercial plan, trial, seat-limit and downgrade authority remains the
+commercial baseline. WO-048 now supplies provider-neutral billing facts and
+subscription operations in test mode without changing that authority. It adds no
+live billing, Credit ledger, public trial or launch authority. WO-026–039 and WO-046
+are implemented within their separately approved boundaries.
 WO-009 supplies the smallest verified
 identity, organisation-administration and operational controls needed for a
 controlled beta, so the older Sprint 4 description below is retained as target
@@ -630,7 +635,7 @@ The older Sprint 4–26 entries remain useful integration/release-gate context b
 be reconciled into the Interaction work orders rather than implemented in parallel
 as a contradictory plan.
 
-## WO-047 current boundary
+## WO-047/048 current commercial boundary
 
 WO-047 is implemented through migration `0052_commercial_plans_trial`. The server now
 owns immutable V1 Core/Growth/Complete/Enterprise definitions, explicit one-time
@@ -639,9 +644,14 @@ active-user limits, safe downgrade and immutable tenant commercial history. An a
 can inspect a read-only Settings projection; only reviewed operator commands mutate
 state. Native CRM remains Core and CRM entitlement governs external connectors.
 
-This does not implement Stripe or another billing provider, checkout, payment,
-invoices, Credits, public signup/trial, extra-user pricing or automatic payment-state
-transitions. WO-048 and all later work remain unstarted and require separate authority.
+WO-048 migration `0053_billing_subscriptions` adds provider-neutral tenant billing,
+deterministic lifecycle validation, an unactivated Stripe test adapter, hosted
+checkout/portal boundaries, signed webhook reconciliation, safe invoice projection,
+period-end cancellation/reactivation and next-renewal plan change. Verified billing
+facts feed WO-047; they do not replace its entitlement authority. Live billing,
+public signup/trial, extra-user pricing, final GST/proration/dunning/refund policy and
+Credit balances/ledger/grants remain unimplemented. WO-049 and all later work remain
+unstarted and require separate authority.
 
 ## Related documents
 

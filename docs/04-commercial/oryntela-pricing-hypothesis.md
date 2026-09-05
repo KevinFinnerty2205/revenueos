@@ -1,8 +1,8 @@
 # Oryntela pricing hypothesis
 
-- **Status:** **OWNER-APPROVED V1 INTERNAL CATALOGUE; BILLING NOT IMPLEMENTED**
+- **Status:** **OWNER-APPROVED V1 INTERNAL CATALOGUE; TEST BILLING IMPLEMENTED, LIVE DISABLED**
 - **Consolidated:** 4 September 2026
-- **Publication:** Internal only; implemented as commercial authority, not public pricing or billing
+- **Publication:** Internal only; implemented as commercial authority and test checkout mapping, not public pricing or live billing
 
 ## Current hypothesis
 
@@ -40,7 +40,7 @@ and prices are not decided.
 | Add-on prices                          | **UNDECIDED**                                |
 | Extra-user bands/prices                | **UNDECIDED**                                |
 | GST-inclusive or ex-GST public display | **OWNER/LEGAL/COMMERCIAL DECISION REQUIRED** |
-| Billing provider and implementation    | **NOT SELECTED / NOT BUILT**                 |
+| Billing provider and implementation    | **PROVIDER-NEUTRAL TEST MODE BUILT; STRIPE TEST ADAPTER UNACTIVATED; LIVE NOT APPROVED** |
 | Terms, cancellation and public launch  | **NOT READY**                                |
 
 ## Economic risks to test

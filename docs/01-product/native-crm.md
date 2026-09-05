@@ -27,7 +27,7 @@ module means supported external CRM connectors. Removing that connector entitlem
 preserves external history but blocks new connection/sync actions; it does not remove
 Native CRM from Core.
 
-WO-047 adds plan and trial authority but no billing or payment implementation. Plan
+WO-047 adds plan and trial authority; WO-048 adds test billing/payment operations only. Plan
 and connector access is support-operator managed, not an organisation-admin switch.
 
 ## Record experience

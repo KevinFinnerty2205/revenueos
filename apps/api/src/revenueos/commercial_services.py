@@ -431,6 +431,8 @@ class CommercialService:
         expected_lock_version: int,
         add_ons: Iterable[ModuleCode] = (),
         custom_user_limit: int | None = None,
+        source: Literal["manual_support", "billing_provider"] = "manual_support",
+        commit: bool = True,
     ) -> CommercialProjectionResponse:
         actor_reference, reason = self._validate_operator_metadata(actor_reference, reason)
         now = _aware(self._now())
@@ -469,9 +471,9 @@ class CommercialService:
                 custom_user_limit=custom_user_limit,
                 add_on_modules_json=list(requested_add_ons),
                 effective_at=now,
-                source="manual_support",
                 actor_reference=actor_reference,
                 reason=reason,
+                source=source,
                 lock_version=1,
             )
             self.session.add(state)
@@ -487,6 +489,7 @@ class CommercialService:
                 now=now,
                 actor_reference=actor_reference,
                 reason=reason,
+                source=source,
             )
         count = await active_user_count(self.session, organisation_id)
         limit = custom_user_limit if plan.code == "enterprise" else plan.included_user_limit
@@ -494,7 +497,8 @@ class CommercialService:
         await self._sync_entitlements(state, plan, requested_add_ons, source="commercial_plan", now=now)
         event_type = "plan_assigned" if previous_plan_id is None else "plan_changed"
         await self._add_event(state, plan, event_type, "active", count)
-        await self._commit(organisation_id, "The commercial plan could not be assigned.")
+        if commit:
+            await self._commit(organisation_id, "The commercial plan could not be assigned.")
         return await self.projection(organisation_id)
 
     async def change_state(
@@ -505,6 +509,8 @@ class CommercialService:
         actor_reference: str,
         reason: str,
         expected_lock_version: int,
+        source: Literal["manual_support", "billing_provider"] = "manual_support",
+        commit: bool = True,
     ) -> CommercialProjectionResponse:
         actor_reference, reason = self._validate_operator_metadata(actor_reference, reason)
         now = _aware(self._now())
@@ -525,11 +531,12 @@ class CommercialService:
         state.effective_at = now
         state.actor_reference = actor_reference
         state.reason = reason
-        state.source = "manual_support"
+        state.source = source
         state.lock_version += 1
         count = await active_user_count(self.session, organisation_id)
         await self._add_event(state, plan, "state_changed", status, count)
-        await self._commit(organisation_id, "The commercial state could not be changed.")
+        if commit:
+            await self._commit(organisation_id, "The commercial state could not be changed.")
         return await self.projection(organisation_id)
 
     async def catalogue(self) -> list[InternalPlanVersionResponse]:
@@ -587,6 +594,7 @@ class CommercialService:
         now: datetime,
         actor_reference: str,
         reason: str,
+        source: Literal["manual_support", "billing_provider"] = "manual_support",
     ) -> None:
         state.plan_version_id = plan.id
         state.status = status
@@ -594,7 +602,7 @@ class CommercialService:
         state.custom_user_limit = custom_user_limit
         state.add_on_modules_json = list(add_ons)
         state.effective_at = now
-        state.source = "manual_support"
+        state.source = source
         state.actor_reference = actor_reference
         state.reason = reason
         state.lock_version += 1

@@ -2,7 +2,7 @@
 
 - **Status:** **OWNER-APPROVED CONCEPT; VALUES AND IMPLEMENTATION UNDECIDED**
 - **Consolidated:** 4 September 2026
-- **Boundary:** No balance, ledger, purchase, billing or provider activation exists
+- **Boundary:** WO-048 reserves a billing-operation type only; no balance, ledger, priced purchase, grant or provider activation exists
 
 ## Purpose
 
@@ -93,6 +93,6 @@ them when execution begins.
 - billing provider, stored-value/legal/accounting treatment; and
 - provider-specific cost, margin and loss caps.
 
-No implementation may begin until billing/entitlement authority is defined and the
+No Credit-domain implementation may begin until billing/entitlement authority is defined and the
 [variable-cost safety gate](../03-engineering/oryntela-variable-cost-safety-gate.md)
 passes for the first operation.

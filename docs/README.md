@@ -149,6 +149,8 @@ This is the canonical product and engineering documentation index. Documents dis
 138. [WO-047: Commercial Plans, Entitlements & Trial](07-sprints/wo-047-commercial-plans-entitlements-trial.md) — immutable V1 plans, one-time trial/grace, seat limits and safe downgrade; no billing
 139. [Commercial authority](03-engineering/commercial-authority.md) — domain, security, operator and lifecycle contract
 140. [ADR 0069: Versioned commercial authority without billing](08-decisions/0069-versioned-commercial-authority.md)
+141. [WO-048: Billing & Subscription Operations](07-sprints/wo-048-billing-subscription-operations.md) — provider-neutral subscriptions, hosted checkout/portal, signed reconciliation and safe invoices in test mode only
+142. [Billing and subscription operations](03-engineering/billing-subscription-operations.md) — provider boundary, lifecycle, security, retention and pre-live decisions
 
 ## First design-partner launch package
 
@@ -365,6 +367,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Security and privacy baseline](03-engineering/security-and-privacy.md)
 - [Development guide](03-engineering/development-guide.md)
 - [Deployment guide](03-engineering/deployment-guide.md)
+- [Commercial authority](03-engineering/commercial-authority.md)
+- [Billing and subscription operations](03-engineering/billing-subscription-operations.md)
 - [Private beta readiness guide](03-engineering/private-beta-readiness.md)
 - [Private beta deployment, backup, restore and rollback](03-engineering/private-beta-deployment-and-recovery.md)
 - [Private beta operational and incident runbooks](03-engineering/private-beta-runbooks.md)
@@ -667,6 +671,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-039: Manager Intelligence & Coaching](07-sprints/wo-039-manager-intelligence.md)
 - [WO-046: Company & Selling Profile](07-sprints/wo-046-company-selling-profile.md)
 - [WO-047: Commercial Plans, Entitlements & Trial](07-sprints/wo-047-commercial-plans-entitlements-trial.md)
+- [WO-048: Billing & Subscription Operations](07-sprints/wo-048-billing-subscription-operations.md)
 
 ## 08 — Decision records
 

@@ -77,6 +77,88 @@ export interface CommercialProjection {
   message: string;
 }
 
+export type BillingSubscriptionStatus =
+  | "pending"
+  | "active"
+  | "past_due"
+  | "cancel_at_period_end"
+  | "cancelled"
+  | "unpaid"
+  | "incomplete"
+  | "unknown_reconciliation";
+
+export interface BillingPlanOption {
+  planCode: CommercialPlanCode;
+  displayName: string;
+  billingInterval: "monthly" | "annual" | null;
+  amount: string | null;
+  currency: "AUD";
+  includedUserLimit: number | null;
+  selfServiceAvailable: boolean;
+  paymentStatement: string;
+}
+
+export interface BillingProjection {
+  configured: boolean;
+  provider: "deterministic" | "stripe";
+  mode: "test";
+  legalEntityName: "Management Services Australia Pty. Ltd.";
+  legalEntityAbn: "15 113 119 556";
+  subscription: {
+    id: string;
+    planCode: CommercialPlanCode;
+    planName: string;
+    billingInterval: "monthly" | "annual";
+    amount: string;
+    currency: "AUD";
+    status: BillingSubscriptionStatus;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    pendingPlanCode: CommercialPlanCode | null;
+    pendingBillingInterval: "monthly" | "annual" | null;
+    paymentNeedsAttention: boolean;
+  } | null;
+  invoices: Array<{
+    id: string;
+    invoiceDate: string;
+    amountDue: string;
+    amountPaid: string;
+    taxAmount: string | null;
+    currency: "AUD";
+    status: "draft" | "open" | "paid" | "void" | "uncollectible" | "refunded";
+    hostedInvoiceUrl: string | null;
+    receiptUrl: string | null;
+  }>;
+  checkoutOptions: BillingPlanOption[];
+  portalAvailable: boolean;
+  message: string;
+}
+
+export interface BillingHostedAction {
+  operationId: string;
+  hostedUrl: string | null;
+  status: "succeeded" | "confirmation_pending";
+  message: string;
+}
+
+export interface BillingCheckoutResponse {
+  operationId: string;
+  checkoutUrl: string;
+  status: "redirect_ready" | "confirmation_pending";
+  planCode: CommercialPlanCode;
+  billingInterval: "monthly" | "annual";
+  amount: string;
+  currency: "AUD";
+  paymentStatement: string;
+}
+
+export interface BillingSuccessStatus {
+  confirmed: boolean;
+  status: BillingSubscriptionStatus | "not_configured";
+  message: string;
+}
+
 export interface DependencyCheck {
   status: "ready" | "unavailable" | "misconfigured";
   detail: string;

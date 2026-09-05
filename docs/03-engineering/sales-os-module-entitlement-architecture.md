@@ -100,7 +100,7 @@ tenant setting. Commercial events are immutable snapshots containing the plan
 version, entitled/readable module sets, status, dates, seats, actor, reason and state
 version. Stale operator writes fail with no last-writer-wins overwrite.
 
-Export schema v31 includes current commercial state with its immutable plan snapshot,
+Export schema v32 includes current commercial state with its immutable plan snapshot,
 commercial history and module entitlements. Approved organisation deletion removes
 them. Expiry and downgrade never do.
 

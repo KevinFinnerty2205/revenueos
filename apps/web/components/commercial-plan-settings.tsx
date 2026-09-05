@@ -215,9 +215,9 @@ export function CommercialPlanSettings() {
       </div>
 
       <p className="mt-5 text-xs leading-5 text-slate-500">
-        Plan access is managed by authorised support until billing is
-        implemented. This page does not show payment, invoice or Credit
-        balances.
+        This is Oryntela&apos;s server-authoritative plan and entitlement view.
+        Verified test billing may feed it, while manual commercial assignments
+        remain clearly separate.
       </p>
     </section>
   );

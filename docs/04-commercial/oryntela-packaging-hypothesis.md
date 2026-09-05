@@ -2,7 +2,7 @@
 
 - **Status:** V1 plan composition implemented as internal commercial authority
 - **Consolidated:** 4 September 2026
-- **Implementation:** Versioned plan/trial/entitlement authority exists; billing does not
+- **Implementation:** Versioned plan/trial/entitlement authority and test billing architecture exist; live billing does not
 
 ## Plans and modules are different
 

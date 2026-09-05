@@ -34,6 +34,11 @@ from revenueos.models import (
     BetaDataRequest,
     BetaFeedback,
     BetaSystemEvent,
+    BillingAccount,
+    BillingInvoiceProjection,
+    BillingOperation,
+    BillingProviderEventReceipt,
+    BillingSubscription,
     CandidateEvidence,
     CaptureSession,
     CommercialPlanVersion,
@@ -172,7 +177,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 31
+EXPORT_VERSION = 32
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -950,6 +955,13 @@ async def _delete_organisation_records(
 ) -> None:
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
+        billing_record_count = await session.scalar(
+            select(func.count()).select_from(BillingAccount).where(BillingAccount.organisation_id == organisation_id)
+        )
+        if billing_record_count:
+            raise RuntimeError(
+                "Billing history requires an approved accounting-retention decision before organisation deletion."
+            )
         interaction_ids = list(
             (await session.scalars(select(Interaction.id).where(Interaction.organisation_id == organisation_id))).all()
         )
@@ -2689,6 +2701,32 @@ async def _export_payload(
     async def rows[T](statement: Select[tuple[T]]) -> list[T]:
         return list((await session.scalars(statement)).all())
 
+    billing_accounts = await rows(
+        select(BillingAccount)
+        .where(BillingAccount.organisation_id == organisation_id)
+        .order_by(BillingAccount.created_at, BillingAccount.id)
+    )
+    billing_subscriptions = await rows(
+        select(BillingSubscription)
+        .where(BillingSubscription.organisation_id == organisation_id)
+        .order_by(BillingSubscription.created_at, BillingSubscription.id)
+    )
+    billing_invoices = await rows(
+        select(BillingInvoiceProjection)
+        .where(BillingInvoiceProjection.organisation_id == organisation_id)
+        .order_by(BillingInvoiceProjection.invoice_date, BillingInvoiceProjection.id)
+    )
+    billing_operations = await rows(
+        select(BillingOperation)
+        .where(BillingOperation.organisation_id == organisation_id)
+        .order_by(BillingOperation.created_at, BillingOperation.id)
+    )
+    billing_receipts = await rows(
+        select(BillingProviderEventReceipt)
+        .where(BillingProviderEventReceipt.organisation_id == organisation_id)
+        .order_by(BillingProviderEventReceipt.received_at, BillingProviderEventReceipt.id)
+    )
+
     companies = await rows(select(Company).where(Company.organisation_id == organisation_id).order_by(Company.id))
     create_templates = await rows(
         select(CreateTemplate)
@@ -3564,6 +3602,91 @@ async def _export_payload(
             )
             for item in commercial_history
         ],
+        "billing": {
+            "accounts": [
+                _columns(
+                    item,
+                    ("id", "provider", "provider_mode", "status", "last_reconciled_at", "created_at", "updated_at"),
+                )
+                for item in billing_accounts
+            ],
+            "subscriptions": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "plan_version_id",
+                        "pending_plan_version_id",
+                        "billing_interval",
+                        "pending_billing_interval",
+                        "amount",
+                        "currency",
+                        "status",
+                        "current_period_start",
+                        "current_period_end",
+                        "cancel_at_period_end",
+                        "ended_at",
+                        "created_at",
+                        "updated_at",
+                    ),
+                )
+                for item in billing_subscriptions
+            ],
+            "invoices": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "subscription_id",
+                        "invoice_date",
+                        "amount_due",
+                        "amount_paid",
+                        "tax_amount",
+                        "currency",
+                        "status",
+                        "created_at",
+                        "updated_at",
+                    ),
+                )
+                for item in billing_invoices
+            ],
+            "operations": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "requested_by_user_id",
+                        "operation_type",
+                        "status",
+                        "plan_version_id",
+                        "billing_interval",
+                        "amount",
+                        "currency",
+                        "safe_error_code",
+                        "completed_at",
+                        "created_at",
+                        "updated_at",
+                    ),
+                )
+                for item in billing_operations
+            ],
+            "providerEvents": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "provider",
+                        "provider_mode",
+                        "event_type",
+                        "provider_created_at",
+                        "result",
+                        "safe_detail_code",
+                        "received_at",
+                    ),
+                )
+                for item in billing_receipts
+            ],
+        },
         "moduleEntitlements": [
             _columns(
                 item,

@@ -4,6 +4,7 @@ import type { MeResponse } from "@revenueos/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { BetaAdmin } from "@/components/beta-admin";
+import { BillingSubscriptionSettings } from "@/components/billing-subscription-settings";
 import { CommercialPlanSettings } from "@/components/commercial-plan-settings";
 import { CRMImportOnboarding } from "@/components/crm-import-onboarding";
 import { CRMSettings } from "@/components/crm-settings";
@@ -124,6 +125,7 @@ export function SettingsExperience() {
         <>
           <SellingProfileSettings />
           <CommercialPlanSettings />
+          <BillingSubscriptionSettings />
           <EngageSettings />
           <CRMSettings />
           <CRMImportOnboarding />

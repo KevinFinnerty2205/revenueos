@@ -337,7 +337,7 @@ class OrganisationCommercialState(TimestampMixin, Base):
             name="ck_commercial_states_trial_interval",
         ),
         CheckConstraint(
-            "source IN ('manual_support', 'migration')",
+            "source IN ('manual_support', 'migration', 'billing_provider')",
             name="ck_commercial_states_source",
         ),
     )
@@ -416,6 +416,203 @@ class CommercialStateEvent(Base):
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
     state_version: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class BillingAccount(TimestampMixin, Base):
+    __tablename__ = "billing_accounts"
+    __table_args__ = (
+        CheckConstraint("provider IN ('deterministic', 'stripe')", name="ck_billing_accounts_provider"),
+        CheckConstraint("provider_mode = 'test'", name="ck_billing_accounts_mode"),
+        CheckConstraint("status IN ('active', 'manually_managed')", name="ck_billing_accounts_status"),
+        UniqueConstraint("organisation_id", "provider", "provider_mode", name="uq_billing_accounts_org_provider"),
+        UniqueConstraint("provider", "provider_mode", "provider_customer_id", name="uq_billing_accounts_customer"),
+        UniqueConstraint("organisation_id", "id", name="uq_billing_accounts_org_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(24), nullable=False)
+    provider_mode: Mapped[str] = mapped_column(String(12), nullable=False, default="test", server_default="test")
+    provider_customer_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", server_default="active")
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BillingSubscription(TimestampMixin, Base):
+    __tablename__ = "billing_subscriptions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'active', 'past_due', 'cancel_at_period_end', 'cancelled', "
+            "'unpaid', 'incomplete', 'unknown_reconciliation')",
+            name="ck_billing_subscriptions_status",
+        ),
+        CheckConstraint("billing_interval IN ('monthly', 'annual')", name="ck_billing_subscriptions_interval"),
+        CheckConstraint(
+            "pending_billing_interval IS NULL OR pending_billing_interval IN ('monthly', 'annual')",
+            name="ck_billing_subscriptions_pending_interval",
+        ),
+        CheckConstraint("currency = 'AUD'", name="ck_billing_subscriptions_currency"),
+        CheckConstraint("amount >= 0", name="ck_billing_subscriptions_amount"),
+        CheckConstraint("lock_version > 0", name="ck_billing_subscriptions_lock"),
+        CheckConstraint(
+            "(pending_plan_version_id IS NULL AND pending_billing_interval IS NULL) OR "
+            "(pending_plan_version_id IS NOT NULL AND pending_billing_interval IS NOT NULL)",
+            name="ck_billing_subscriptions_pending_plan",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "billing_account_id"],
+            ["billing_accounts.organisation_id", "billing_accounts.id"],
+            name="fk_billing_subscriptions_account",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_billing_subscriptions_org_id"),
+        UniqueConstraint("billing_account_id", "provider_subscription_id", name="uq_billing_subscriptions_provider_id"),
+        Index("ix_billing_subscriptions_org_status", "organisation_id", "status", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    billing_account_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_subscription_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    plan_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("commercial_plan_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    pending_plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("commercial_plan_versions.id", ondelete="RESTRICT")
+    )
+    billing_interval: Mapped[str] = mapped_column(String(12), nullable=False)
+    pending_billing_interval: Mapped[str | None] = mapped_column(String(12))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="AUD", server_default="AUD")
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    current_period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class BillingInvoiceProjection(TimestampMixin, Base):
+    __tablename__ = "billing_invoice_projections"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'open', 'paid', 'void', 'uncollectible', 'refunded')",
+            name="ck_billing_invoices_status",
+        ),
+        CheckConstraint("currency = 'AUD'", name="ck_billing_invoices_currency"),
+        CheckConstraint(
+            "amount_due >= 0 AND amount_paid >= 0 AND (tax_amount IS NULL OR tax_amount >= 0)",
+            name="ck_billing_invoices_amounts",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "subscription_id"],
+            ["billing_subscriptions.organisation_id", "billing_subscriptions.id"],
+            name="fk_billing_invoices_subscription",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_billing_invoices_org_id"),
+        UniqueConstraint("organisation_id", "provider_invoice_id", name="uq_billing_invoices_provider_id"),
+        Index("ix_billing_invoices_org_date", "organisation_id", "invoice_date", "id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    subscription_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_invoice_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    invoice_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    amount_due: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    amount_paid: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="AUD", server_default="AUD")
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    hosted_invoice_url: Mapped[str | None] = mapped_column(String(2048))
+    receipt_url: Mapped[str | None] = mapped_column(String(2048))
+    provider_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class BillingOperation(TimestampMixin, Base):
+    __tablename__ = "billing_operations"
+    __table_args__ = (
+        CheckConstraint(
+            "operation_type IN ('checkout', 'portal', 'cancel', 'reactivate', 'plan_change', 'credit_purchase')",
+            name="ck_billing_operations_type",
+        ),
+        CheckConstraint("status IN ('pending', 'succeeded', 'failed', 'unknown')", name="ck_billing_operations_status"),
+        CheckConstraint(
+            "billing_interval IS NULL OR billing_interval IN ('monthly', 'annual')",
+            name="ck_billing_operations_interval",
+        ),
+        CheckConstraint("currency IS NULL OR currency = 'AUD'", name="ck_billing_operations_currency"),
+        CheckConstraint("amount IS NULL OR amount >= 0", name="ck_billing_operations_amount"),
+        CheckConstraint("length(request_fingerprint) = 64", name="ck_billing_operations_fingerprint"),
+        ForeignKeyConstraint(
+            ["organisation_id", "requested_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_billing_operations_requester",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "operation_type", "idempotency_key", name="uq_billing_operations_key"),
+        UniqueConstraint("organisation_id", "id", name="uq_billing_operations_org_id"),
+        Index(
+            "uq_billing_operations_org_unresolved_checkout",
+            "organisation_id",
+            unique=True,
+            postgresql_where=text("operation_type = 'checkout' AND status IN ('pending', 'unknown')"),
+            sqlite_where=text("operation_type = 'checkout' AND status IN ('pending', 'unknown')"),
+        ),
+        Index("ix_billing_operations_org_created", "organisation_id", "created_at", "id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
+    )
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    operation_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("commercial_plan_versions.id", ondelete="RESTRICT")
+    )
+    billing_interval: Mapped[str | None] = mapped_column(String(12))
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str | None] = mapped_column(String(3))
+    provider_object_id: Mapped[str | None] = mapped_column(String(255))
+    hosted_url: Mapped[str | None] = mapped_column(String(2048))
+    safe_error_code: Mapped[str | None] = mapped_column(String(100))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BillingProviderEventReceipt(Base):
+    __tablename__ = "billing_provider_event_receipts"
+    __table_args__ = (
+        CheckConstraint("provider IN ('deterministic', 'stripe')", name="ck_billing_receipts_provider"),
+        CheckConstraint("provider_mode = 'test'", name="ck_billing_receipts_mode"),
+        CheckConstraint(
+            "result IN ('processed', 'ignored_stale', 'reconciliation_required')",
+            name="ck_billing_receipts_result",
+        ),
+        UniqueConstraint("provider", "provider_mode", "provider_event_id", name="uq_billing_receipts_event"),
+        Index("ix_billing_receipts_org_received", "organisation_id", "received_at", "id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(24), nullable=False)
+    provider_mode: Mapped[str] = mapped_column(String(12), nullable=False, default="test", server_default="test")
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    provider_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    result: Mapped[str] = mapped_column(String(32), nullable=False)
+    safe_detail_code: Mapped[str | None] = mapped_column(String(100))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class SellingProfile(TimestampMixin, Base):
