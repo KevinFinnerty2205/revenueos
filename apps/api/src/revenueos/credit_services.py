@@ -5,7 +5,7 @@ import json
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from typing import Literal, cast
 from uuid import UUID
 
@@ -180,6 +180,7 @@ class CreditService:
                     cost_basis="successful_unit",
                     provider_cost_minor_units=20,
                     provider_currency="USD",
+                    provider_minor_units_per_major=100,
                     fx_rate_to_aud=Decimal("1.50000000"),
                     fx_source="deterministic test assumption",
                     fx_observed_at=now,
@@ -338,6 +339,7 @@ class CreditService:
         cost_basis: Literal["fixed_operation", "successful_unit", "provider_unit", "message_segment", "minute"],
         provider_cost_minor_units: int,
         provider_currency: str,
+        provider_minor_units_per_major: int,
         fx_rate_to_aud: Decimal,
         fx_source: str,
         fx_observed_at: datetime,
@@ -359,6 +361,8 @@ class CreditService:
         if (
             customer_revenue_micros_per_unit <= 0
             or provider_cost_minor_units < 0
+            or provider_minor_units_per_major <= 0
+            or provider_minor_units_per_major > 1_000_000
             or other_variable_cost_micros < 0
             or expected_variable_cost_micros_per_unit < 0
             or maximum_variable_cost_micros_per_unit < expected_variable_cost_micros_per_unit
@@ -370,8 +374,29 @@ class CreditService:
             raise PublicAPIError(
                 "credit_action_price_invalid", "Complete exact provider-cost assumptions are required.", 422
             )
+        converted_provider_cost_micros = int(
+            (
+                Decimal(provider_cost_minor_units)
+                * fx_rate_to_aud
+                * Decimal(1_000_000)
+                / Decimal(provider_minor_units_per_major)
+            ).to_integral_value(rounding=ROUND_CEILING)
+        )
+        minimum_expected_cost = converted_provider_cost_micros + other_variable_cost_micros
+        if expected_variable_cost_micros_per_unit < minimum_expected_cost:
+            raise PublicAPIError(
+                "credit_action_price_invalid",
+                "Expected variable cost cannot be lower than the exact provider and other cost assumptions.",
+                422,
+            )
         environment = self.catalogue_environment
-        floor = self.settings.credits_margin_floor_basis_points if status == "production_active" else 1_000
+        floor = (
+            self.settings.credits_margin_floor_basis_points
+            if status == "production_active"
+            else 1_000
+            if environment == "test"
+            else None
+        )
         approval = self.settings.credits_margin_policy_reference if status == "production_active" else None
         margin = self.validate_margin(
             customer_revenue_micros_per_unit,
@@ -402,6 +427,7 @@ class CreditService:
             cost_basis=cost_basis,
             provider_cost_minor_units=provider_cost_minor_units,
             provider_currency=provider_currency.upper(),
+            provider_minor_units_per_major=provider_minor_units_per_major,
             fx_rate_to_aud=fx_rate_to_aud,
             fx_source=fx_source.strip(),
             fx_observed_at=_aware(fx_observed_at),
@@ -435,35 +461,43 @@ class CreditService:
     ) -> CreditLot:
         actor, resolved_reason = _require_actor_reason(actor_reference, reason)
         self._validate_credits(credits)
-        expiry = _aware(expires_at) if expires_at is not None else None
+        source = source_reference.strip()
+        if not source or len(source) > 200 or any(ord(character) < 32 for character in source):
+            raise PublicAPIError("credit_grant_source_invalid", "A valid promotional source is required.", 422)
+        requested_expiry = _aware(expires_at) if expires_at is not None else None
+        expiry = requested_expiry
         now = _aware(self._clock())
         if expiry is not None and expiry <= now:
             raise PublicAPIError("credit_grant_expired", "Promotional Credits require a future expiry.", 422)
+        commercial: OrganisationCommercialState | None = None
         if trial_only:
             commercial = await self.session.get(OrganisationCommercialState, organisation_id)
-            if commercial is None or commercial.status != "trial":
-                raise PublicAPIError("credit_trial_inactive", "Trial Credits require an active trial.", 409)
             if expiry is None:
-                expiry = commercial.trial_ends_at
-            if expiry is None or commercial.trial_ends_at is None or expiry > _aware(commercial.trial_ends_at):
-                raise PublicAPIError(
-                    "credit_trial_expiry_invalid", "Trial Credits cannot outlive the active trial.", 422
-                )
+                expiry = commercial.trial_ends_at if commercial is not None else None
         fingerprint = _fingerprint(
             {
                 "credits": credits,
-                "source_reference": source_reference,
-                "expires_at": expiry,
+                "source_reference": source,
+                "expires_at": requested_expiry,
                 "trial_only": trial_only,
+                "actor_reference": actor,
+                "reason": resolved_reason,
             }
         )
-        ledger_key = _event_key("promotional-grant", idempotency_key, source_reference)
+        ledger_key = _event_key("promotional-grant", idempotency_key, source)
         existing = await self.repository.ledger_by_key(organisation_id, ledger_key)
         if existing is not None:
             self._require_fingerprint(existing.request_fingerprint, fingerprint)
             lot = await self.repository.lot(organisation_id, existing.lot_id)
             assert lot is not None
             return lot
+        if trial_only:
+            if commercial is None or commercial.status != "trial":
+                raise PublicAPIError("credit_trial_inactive", "Trial Credits require an active trial.", 409)
+            if expiry is None or commercial.trial_ends_at is None or expiry > _aware(commercial.trial_ends_at):
+                raise PublicAPIError(
+                    "credit_trial_expiry_invalid", "Trial Credits cannot outlive the active trial.", 422
+                )
         balance = await self._locked_balance(organisation_id)
         existing = await self.repository.ledger_by_key(organisation_id, ledger_key)
         if existing is not None:
@@ -471,16 +505,33 @@ class CreditService:
             lot = await self.repository.lot(organisation_id, existing.lot_id)
             assert lot is not None
             return lot
+        if trial_only:
+            policy = await self.repository.policy(organisation_id)
+            if policy is None or policy.trial_max_credits_per_day is None:
+                raise PublicAPIError("credit_trial_cap_unavailable", "Trial Credit grants are disabled.", 409)
+            if credits > policy.trial_max_credits_per_day:
+                raise PublicAPIError(
+                    "credit_trial_grant_cap_exceeded",
+                    "The trial Credit grant exceeds the organisation trial safety cap.",
+                    409,
+                )
+            if await self.repository.trial_lot(organisation_id) is not None:
+                raise PublicAPIError(
+                    "credit_trial_grant_exists",
+                    "This organisation has already received its one-time trial Credit grant.",
+                    409,
+                )
         lot = CreditLot(
             id=uuid.uuid4(),
             organisation_id=organisation_id,
             credit_type="promotional",
-            source_reference=source_reference,
+            source_reference=source,
             original_credits=credits,
             available_credits=credits,
             original_revenue_micros=0,
             remaining_revenue_micros=0,
             expires_at=expiry,
+            trial_grant=trial_only,
             grant_actor_reference=actor,
             grant_reason=resolved_reason,
         )
@@ -547,7 +598,9 @@ class CreditService:
                 "currency": operation.currency,
             }
         )
-        ledger_key = _event_key("purchase", provider_event_id, billing_operation_id)
+        if not provider_event_id.strip() or len(provider_event_id) > 255:
+            raise PublicAPIError("credit_purchase_event_invalid", "A verified payment event is required.", 409)
+        ledger_key = _event_key("purchase", "billing-operation", billing_operation_id)
         existing = await self.repository.ledger_by_key(organisation_id, ledger_key)
         if existing is not None:
             self._require_fingerprint(existing.request_fingerprint, fingerprint)
@@ -678,6 +731,8 @@ class CreditService:
         quote = await self.repository.quote(organisation_id, quote_id, lock=True)
         if quote is None:
             raise PublicAPIError("credit_quote_not_found", "That Credit quote is unavailable.", 404)
+        if quote.created_by_user_id != user_id:
+            raise PublicAPIError("credit_quote_not_found", "That Credit quote is unavailable.", 404)
         now = _aware(self._clock())
         if _aware(quote.expires_at) <= now:
             quote.status = "expired"
@@ -795,6 +850,13 @@ class CreditService:
             raise PublicAPIError(
                 "credit_operation_state_invalid", "Provider execution cannot start in this state.", 409
             )
+        price = await self.repository.price(operation.action_price_version_id)
+        if price is None or price.action_code != operation.action_code:
+            raise PublicAPIError("credit_action_price_unavailable", "The historical action price is unavailable.", 409)
+        await CommercialService(self.session, self.settings).require_module_write(
+            organisation_id, cast(ModuleCode, price.required_module_code)
+        )
+        await self._require_new_execution_enabled(organisation_id, operation.action_code)
         await self._require_controls_enabled(operation.action_code, provider_capability=provider_capability)
         if not provider_request_id.strip() or len(provider_request_id) > 255:
             raise PublicAPIError(
@@ -1074,8 +1136,6 @@ class CreditService:
             raise PublicAPIError(
                 "credit_reconciliation_invalid", "Only an unknown provider outcome can reconcile.", 409
             )
-        if operation.status in {"settled", "released"}:
-            return self._operation_response(operation)
         if provider_definitely_executed:
             return await self.settle(
                 organisation_id,
@@ -1109,7 +1169,14 @@ class CreditService:
         original = await self.repository.ledger_entry(organisation_id, consumption_entry_id)
         if original is None or original.event_type != "consumption":
             raise PublicAPIError("credit_refund_reference_invalid", "Refunds must reference a consumption event.", 409)
-        fingerprint = _fingerprint({"entry_id": consumption_entry_id, "credits": credits})
+        fingerprint = _fingerprint(
+            {
+                "entry_id": consumption_entry_id,
+                "credits": credits,
+                "actor_reference": actor,
+                "reason": resolved_reason,
+            }
+        )
         ledger_key = _event_key("refund", idempotency_key, consumption_entry_id)
         existing = await self.repository.ledger_by_key(organisation_id, ledger_key)
         if existing is not None:
@@ -1117,37 +1184,43 @@ class CreditService:
             lot = await self.repository.lot(organisation_id, existing.lot_id)
             assert lot is not None
             return lot
-        already_refunded = int(
-            await self.session.scalar(
-                select(func.coalesce(func.sum(CreditLedgerEntry.purchased_available_delta), 0)).where(
+        balance = await self._locked_balance(organisation_id)
+        refund_totals = (
+            await self.session.execute(
+                select(
+                    func.coalesce(
+                        func.sum(
+                            CreditLedgerEntry.purchased_available_delta + CreditLedgerEntry.promotional_available_delta
+                        ),
+                        0,
+                    ),
+                    func.coalesce(func.sum(CreditLedgerEntry.customer_revenue_micros), 0),
+                ).where(
                     CreditLedgerEntry.organisation_id == organisation_id,
                     CreditLedgerEntry.event_type == "refund",
                     CreditLedgerEntry.referenced_entry_id == consumption_entry_id,
-                    CreditLedgerEntry.credit_type == "purchased",
+                    CreditLedgerEntry.credit_type == original.credit_type,
                 )
             )
-            or 0
-        ) + int(
-            await self.session.scalar(
-                select(func.coalesce(func.sum(CreditLedgerEntry.promotional_available_delta), 0)).where(
-                    CreditLedgerEntry.organisation_id == organisation_id,
-                    CreditLedgerEntry.event_type == "refund",
-                    CreditLedgerEntry.referenced_entry_id == consumption_entry_id,
-                    CreditLedgerEntry.credit_type == "promotional",
-                )
-            )
-            or 0
-        )
+        ).one()
+        already_refunded = int(refund_totals[0])
+        already_refunded_revenue = int(refund_totals[1])
         consumed = -original.reserved_delta
-        if credits > consumed - already_refunded:
+        remaining_refundable = consumed - already_refunded
+        if credits > remaining_refundable:
             raise PublicAPIError(
                 "credit_refund_exceeds_consumption", "Refund cannot exceed the original consumption.", 409
             )
         source_lot = await self.repository.lot(organisation_id, original.lot_id)
         if source_lot is None:
             raise PublicAPIError("credit_refund_reference_invalid", "The original Credit lot is unavailable.", 409)
-        revenue = (original.customer_revenue_micros * credits) // consumed if consumed else 0
-        balance = await self._locked_balance(organisation_id)
+        revenue = (
+            original.customer_revenue_micros - already_refunded_revenue
+            if credits == remaining_refundable
+            else (original.customer_revenue_micros * credits) // consumed
+            if consumed
+            else 0
+        )
         lot = CreditLot(
             id=uuid.uuid4(),
             organisation_id=organisation_id,
@@ -1157,7 +1230,7 @@ class CreditService:
             available_credits=credits,
             original_revenue_micros=revenue,
             remaining_revenue_micros=revenue,
-            expires_at=None,
+            expires_at=source_lot.expires_at if original.credit_type == "promotional" else None,
             pack_version_id=source_lot.pack_version_id,
             grant_actor_reference=actor,
             grant_reason=resolved_reason,
@@ -1185,6 +1258,8 @@ class CreditService:
         balance.purchased_available += purchased_delta
         balance.promotional_available += promotional_delta
         balance.lock_version += 1
+        if original.credit_type == "promotional":
+            await self._expire_promotional_lots(organisation_id, balance)
         await self._commit(organisation_id)
         return lot
 
@@ -1205,7 +1280,14 @@ class CreditService:
         if not reference.strip() or len(reference) > 200:
             raise PublicAPIError("credit_correction_reference_invalid", "A correction reference is required.", 422)
         fingerprint = _fingerprint(
-            {"credits": credits, "direction": direction, "credit_type": credit_type, "reference": reference}
+            {
+                "credits": credits,
+                "direction": direction,
+                "credit_type": credit_type,
+                "reference": reference,
+                "actor_reference": actor,
+                "reason": resolved_reason,
+            }
         )
         marker_key = _event_key("correction", idempotency_key, reference)
         existing = await self.repository.ledger_by_key(organisation_id, marker_key)
@@ -1301,25 +1383,46 @@ class CreditService:
 
     async def reconcile_balance(self, organisation_id: UUID) -> CreditReconciliationResponse:
         balance = await self.repository.balance(organisation_id)
-        purchased, promotional, reserved = await self.repository.ledger_totals(organisation_id)
-        lot_available, lot_reserved = await self.repository.lot_totals(organisation_id)
+        purchased, promotional, purchased_reserved, promotional_reserved = await self.repository.ledger_totals(
+            organisation_id
+        )
+        (
+            lot_purchased_available,
+            lot_promotional_available,
+            lot_purchased_reserved,
+            lot_promotional_reserved,
+        ) = await self.repository.lot_totals(organisation_id)
         projection = self._balance_response(balance)
+        reserved = purchased_reserved + promotional_reserved
+        lot_available = lot_purchased_available + lot_promotional_available
+        lot_reserved = lot_purchased_reserved + lot_promotional_reserved
         return CreditReconciliationResponse(
             consistent=(
                 projection.purchased_available == purchased
                 and projection.promotional_available == promotional
-                and projection.reserved == reserved
-                and projection.available == lot_available
-                and projection.reserved == lot_reserved
+                and projection.purchased_reserved == purchased_reserved
+                and projection.promotional_reserved == promotional_reserved
+                and projection.purchased_available == lot_purchased_available
+                and projection.promotional_available == lot_promotional_available
+                and projection.purchased_reserved == lot_purchased_reserved
+                and projection.promotional_reserved == lot_promotional_reserved
             ),
             projection_purchased_available=projection.purchased_available,
             ledger_purchased_available=purchased,
             projection_promotional_available=projection.promotional_available,
             ledger_promotional_available=promotional,
+            projection_purchased_reserved=projection.purchased_reserved,
+            ledger_purchased_reserved=purchased_reserved,
+            projection_promotional_reserved=projection.promotional_reserved,
+            ledger_promotional_reserved=promotional_reserved,
             projection_reserved=projection.reserved,
             ledger_reserved=reserved,
             lot_available=lot_available,
             lot_reserved=lot_reserved,
+            lot_purchased_available=lot_purchased_available,
+            lot_promotional_available=lot_promotional_available,
+            lot_purchased_reserved=lot_purchased_reserved,
+            lot_promotional_reserved=lot_promotional_reserved,
         )
 
     @staticmethod
@@ -1380,12 +1483,16 @@ class CreditService:
                 "credit_operation_cap_exceeded", "This operation exceeds the organisation safety cap.", 409
             )
         consumed = await self.repository.consumed_since(organisation_id, day_start)
-        if consumed + quote.required_credits > policy.max_credits_per_day:
+        active_credits, active_provider_cost = await self.repository.active_exposure(organisation_id)
+        if consumed + active_credits + quote.required_credits > policy.max_credits_per_day:
             raise PublicAPIError(
                 "credit_daily_cap_exceeded", "The organisation daily Credit safety cap is reached.", 409
             )
         provider_cost = await self.repository.provider_cost_since(organisation_id, day_start)
-        if provider_cost + quote.maximum_provider_cost_micros > policy.max_provider_cost_micros_per_day:
+        if (
+            provider_cost + active_provider_cost + quote.maximum_provider_cost_micros
+            > policy.max_provider_cost_micros_per_day
+        ):
             raise PublicAPIError(
                 "credit_provider_cost_cap_exceeded", "The organisation daily provider-cost safety cap is reached.", 409
             )
@@ -1393,7 +1500,7 @@ class CreditService:
         if commercial is not None and commercial.status == "trial":
             if policy.trial_max_credits_per_day is None:
                 raise PublicAPIError("credit_trial_cap_unavailable", "Trial metered execution is disabled.", 409)
-            if consumed + quote.required_credits > policy.trial_max_credits_per_day:
+            if consumed + active_credits + quote.required_credits > policy.trial_max_credits_per_day:
                 raise PublicAPIError("credit_trial_cap_exceeded", "The trial Credit safety cap is reached.", 409)
         minute_start = now - timedelta(minutes=1)
         if await self.repository.reservations_since(organisation_id, minute_start) >= policy.max_operations_per_minute:

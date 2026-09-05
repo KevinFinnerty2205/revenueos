@@ -79,6 +79,17 @@ class CreditRepository:
             statement = statement.with_for_update()
         return cast(CreditLot | None, await self.session.scalar(statement))
 
+    async def trial_lot(self, organisation_id: UUID) -> CreditLot | None:
+        return cast(
+            CreditLot | None,
+            await self.session.scalar(
+                select(CreditLot).where(
+                    CreditLot.organisation_id == organisation_id,
+                    CreditLot.trial_grant.is_(True),
+                )
+            ),
+        )
+
     async def ledger_by_key(self, organisation_id: UUID, idempotency_key: str) -> CreditLedgerEntry | None:
         return cast(
             CreditLedgerEntry | None,
@@ -235,25 +246,76 @@ class CreditRepository:
         )
         return int(value or 0)
 
-    async def ledger_totals(self, organisation_id: UUID) -> tuple[int, int, int]:
+    async def active_exposure(self, organisation_id: UUID) -> tuple[int, int]:
+        row = (
+            await self.session.execute(
+                select(
+                    func.coalesce(func.sum(CreditOperation.reserved_credits), 0),
+                    func.coalesce(func.sum(CreditQuote.maximum_provider_cost_micros), 0),
+                )
+                .join(
+                    CreditQuote,
+                    (CreditQuote.organisation_id == CreditOperation.organisation_id)
+                    & (CreditQuote.id == CreditOperation.quote_id),
+                )
+                .where(
+                    CreditOperation.organisation_id == organisation_id,
+                    CreditOperation.status.in_(("reserved", "executing", "unknown")),
+                )
+            )
+        ).one()
+        return int(row[0]), int(row[1])
+
+    async def ledger_totals(self, organisation_id: UUID) -> tuple[int, int, int, int]:
         row = (
             await self.session.execute(
                 select(
                     func.coalesce(func.sum(CreditLedgerEntry.purchased_available_delta), 0),
                     func.coalesce(func.sum(CreditLedgerEntry.promotional_available_delta), 0),
-                    func.coalesce(func.sum(CreditLedgerEntry.reserved_delta), 0),
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (CreditLedgerEntry.credit_type == "purchased", CreditLedgerEntry.reserved_delta),
+                                else_=0,
+                            )
+                        ),
+                        0,
+                    ),
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (CreditLedgerEntry.credit_type == "promotional", CreditLedgerEntry.reserved_delta),
+                                else_=0,
+                            )
+                        ),
+                        0,
+                    ),
                 ).where(CreditLedgerEntry.organisation_id == organisation_id)
             )
         ).one()
-        return int(row[0]), int(row[1]), int(row[2])
+        return int(row[0]), int(row[1]), int(row[2]), int(row[3])
 
-    async def lot_totals(self, organisation_id: UUID) -> tuple[int, int]:
+    async def lot_totals(self, organisation_id: UUID) -> tuple[int, int, int, int]:
         row = (
             await self.session.execute(
                 select(
-                    func.coalesce(func.sum(CreditLot.available_credits), 0),
-                    func.coalesce(func.sum(CreditLot.reserved_credits), 0),
+                    func.coalesce(
+                        func.sum(case((CreditLot.credit_type == "purchased", CreditLot.available_credits), else_=0)),
+                        0,
+                    ),
+                    func.coalesce(
+                        func.sum(case((CreditLot.credit_type == "promotional", CreditLot.available_credits), else_=0)),
+                        0,
+                    ),
+                    func.coalesce(
+                        func.sum(case((CreditLot.credit_type == "purchased", CreditLot.reserved_credits), else_=0)),
+                        0,
+                    ),
+                    func.coalesce(
+                        func.sum(case((CreditLot.credit_type == "promotional", CreditLot.reserved_credits), else_=0)),
+                        0,
+                    ),
                 ).where(CreditLot.organisation_id == organisation_id)
             )
         ).one()
-        return int(row[0]), int(row[1])
+        return int(row[0]), int(row[1]), int(row[2]), int(row[3])

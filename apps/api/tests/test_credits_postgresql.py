@@ -243,9 +243,75 @@ def test_postgresql_credit_contention_idempotency_and_rls_are_concurrency_safe()
 
             async with factory() as session:
                 await set_tenant_database_context(session, organisation_id)
+                consumption_entry_id = await session.scalar(
+                    select(CreditLedgerEntry.id).where(
+                        CreditLedgerEntry.organisation_id == organisation_id,
+                        CreditLedgerEntry.operation_id == winning.operation_id,
+                        CreditLedgerEntry.event_type == "consumption",
+                    )
+                )
+                assert consumption_entry_id is not None
+
+            async def refund(key: str) -> uuid.UUID | PublicAPIError:
+                async with factory() as session:
+                    await set_tenant_database_context(session, organisation_id)
+                    try:
+                        lot = await CreditService(session, settings).refund_consumption(
+                            organisation_id,
+                            consumption_entry_id=consumption_entry_id,
+                            credits=4,
+                            idempotency_key=key,
+                            actor_reference="credit-concurrency-test",
+                            reason="Prove concurrent refunds cannot exceed one consumption.",
+                        )
+                        return lot.id
+                    except PublicAPIError as exc:
+                        return exc
+
+            refunds = await asyncio.gather(
+                refund("concurrent-refund-a"),
+                refund("concurrent-refund-b"),
+            )
+            assert len([item for item in refunds if isinstance(item, uuid.UUID)]) == 1
+            refund_failures = [item for item in refunds if isinstance(item, PublicAPIError)]
+            assert len(refund_failures) == 1
+            assert refund_failures[0].code == "credit_refund_exceeds_consumption"
+
+            async with factory() as session:
+                await set_tenant_database_context(session, organisation_id)
+                service = CreditService(session, settings)
+                await service.configure_policy(
+                    organisation_id,
+                    metered_actions_enabled=True,
+                    max_credits_per_operation=100,
+                    max_credits_per_day=14,
+                    max_provider_cost_micros_per_day=100_000_000,
+                    trial_max_credits_per_day=100,
+                    max_operations_per_minute=100,
+                    actor_reference="credit-concurrency-test",
+                    reason="Bound concurrent in-flight daily Credit exposure.",
+                )
+                cap_quote_a = await service.create_quote(
+                    organisation_id, user_id, action_code=TEST_ACTION_CODE, quantity=1
+                )
+                cap_quote_b = await service.create_quote(
+                    organisation_id, user_id, action_code=TEST_ACTION_CODE, quantity=1
+                )
+
+            cap_attempts = await asyncio.gather(
+                reserve(cap_quote_a.quote_id, "concurrent-cap-reservation-a"),
+                reserve(cap_quote_b.quote_id, "concurrent-cap-reservation-b"),
+            )
+            assert len([item for item in cap_attempts if isinstance(item, CreditOperationResponse)]) == 1
+            cap_failures = [item for item in cap_attempts if isinstance(item, PublicAPIError)]
+            assert len(cap_failures) == 1
+            assert cap_failures[0].code == "credit_daily_cap_exceeded"
+
+            async with factory() as session:
+                await set_tenant_database_context(session, organisation_id)
                 service = CreditService(session, settings)
                 assert (await service.reconcile_balance(organisation_id)).consistent is True
-                for event_type in ("purchase", "correction"):
+                for event_type in ("purchase", "correction", "refund"):
                     count = await session.scalar(
                         select(func.count())
                         .select_from(CreditLedgerEntry)

@@ -3743,6 +3743,7 @@ async def _export_payload(
                     (
                         "id",
                         "credit_type",
+                        "trial_grant",
                         "original_credits",
                         "available_credits",
                         "reserved_credits",

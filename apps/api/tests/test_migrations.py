@@ -147,6 +147,12 @@ def test_credits_migration_schema_guards_and_cycle(tmp_path: Path, monkeypatch: 
         )
         billing_columns = {row[1] for row in connection.execute("PRAGMA table_info(billing_operations)")}
         assert "credit_pack_version_id" in billing_columns
+        price_columns = {row[1] for row in connection.execute("PRAGMA table_info(credit_action_price_versions)")}
+        assert "provider_minor_units_per_major" in price_columns
+        lot_columns = {row[1] for row in connection.execute("PRAGMA table_info(credit_lots)")}
+        assert "trial_grant" in lot_columns
+        lot_indexes = {row[1] for row in connection.execute("PRAGMA index_list(credit_lots)")}
+        assert "uq_credit_lots_org_trial_grant" in lot_indexes
         triggers = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'trigger'")}
         assert {
             "credit_pack_versions_immutable_update",

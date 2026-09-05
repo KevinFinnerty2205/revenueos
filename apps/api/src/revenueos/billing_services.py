@@ -540,6 +540,8 @@ class BillingService:
         if operation is None:
             return "reconciliation_required"
         if operation.operation_type == "credit_purchase":
+            if event.payment_status != "paid" or checkout.payment_status != "paid":
+                return "reconciliation_required"
             if (
                 event.amount_minor_units is None
                 or event.currency != "AUD"
@@ -1222,4 +1224,5 @@ def replace_event_subscription(event: VerifiedBillingEvent, subscription_identif
         amount_minor_units=event.amount_minor_units,
         currency=event.currency,
         credit_pack_version_id=event.credit_pack_version_id,
+        payment_status=event.payment_status,
     )

@@ -14,8 +14,10 @@ contact a person. Ordinary Oryntela software and existing AI use remain
 subscription-funded and outside this domain.
 
 The database stores Credits as bounded integers, provider and customer revenue as
-integer millionths of currency units, pack amounts as integer minor units, and FX as
-fixed-precision decimal. No binary floating-point money arithmetic is used.
+integer millionths of explicitly recorded currency units, pack amounts as integer
+minor units with their currency, and FX as fixed-precision decimal. A Credit has no
+fixed AUD value; the current accounting basis, TEST values and billing checks are
+AUD-only. No binary floating-point money arithmetic is used.
 
 ## Authority and data model
 
@@ -69,16 +71,18 @@ totals and reports mismatch; it never silently rewrites history.
 ## Grant, purchase, expiry, refund and correction
 
 Purchased Credits can arise only from a successful WO-048 `credit_purchase`
-`BillingOperation` whose verified provider event matches the server-owned TEST pack,
-AUD currency and exact amount. A success redirect, unsigned event, mismatched amount,
-duplicate event or arbitrary service call cannot grant value. The billing receipt,
-purchase lot, ledger event and balance change commit atomically.
+`BillingOperation` whose verified provider event and retrieved checkout both confirm
+paid status and match the server-owned TEST pack, AUD currency and exact amount. A
+success redirect, pending payment, unsigned event, mismatched amount, duplicate fact
+or arbitrary service call cannot grant value. The billing receipt, purchase lot,
+ledger event and balance change commit atomically.
 
 Promotional grants are an internal support operation requiring an actor, reason,
-source, amount and stable idempotency key. Trial grants additionally require an
-active WO-047 trial and cannot expire after the trial. Expired available promotional
+source, amount and stable idempotency key. A trial grant additionally requires an
+active WO-047 trial, is limited to one per organisation, cannot exceed the configured
+trial safety cap and cannot expire after the trial. Expired available promotional
 Credits append an expiry event; reserved Credits do not disappear underneath
-in-flight work.
+in-flight work, and a promotional refund retains the source lot's expiry.
 
 A refund references an existing consumption entry and cannot exceed its net
 refundable quantity. A correction is a separate, explicitly authorised event with
@@ -93,8 +97,9 @@ balance negative. These mutation paths are deliberately absent from the public A
 2. Confirmation submits only the quote ID and an idempotency key. Reservation locks
    the balance, revalidates the quote, entitlement, controls and caps, then moves lot
    amounts from available to reserved before provider work may begin.
-3. Provider execution requires a reserved operation and rechecks global, action and
-   provider-capability circuit breakers. Providers receive an operation identifier,
+3. Provider execution requires a reserved operation and rechecks the module
+   entitlement, organisation policy, and global, action and provider-capability
+   circuit breakers. Providers receive an operation identifier,
    requested units and idempotency key; they cannot mutate Credits.
 4. Settlement follows the immutable action version's explicit customer charge basis:
    successful units or requested units. It attributes purchased revenue exactly,
@@ -115,9 +120,9 @@ sees the maximum aggregate Credit cost before confirmation.
 ## Cost, margin and exposure
 
 Each action-price version preserves customer revenue per unit, provider native minor
-units/currency, cost basis, FX rate/source/time, other variable cost, expected and
-maximum AUD cost, derived gross margin, and any approved floor/reference. The
-conservative check is:
+units/currency and the minor-units-per-major scale, cost basis, FX rate/source/time,
+other variable cost, expected and maximum AUD cost, derived gross margin, and any
+approved floor/reference. The conservative check is:
 
 ```text
 gross_margin_basis_points =
@@ -130,7 +135,9 @@ owner-approved floor. The production floor and production prices remain undecide
 
 Before reservation, the service enforces maximum Credits per operation, Credits per
 organisation per UTC day, maximum provider-cost exposure per organisation per UTC
-day, an optional stricter trial daily cap, and operations per rolling minute. Global,
+day, an optional stricter trial daily cap, and operations per rolling minute. Daily
+Credit and provider-cost checks include already reserved, executing and unknown work,
+so multiple in-flight operations cannot collectively bypass a cap. Global,
 action and provider-capability controls are internal only and append an immutable
 control event with actor and reason. Organisation policy is disabled until explicitly
 configured. Auto-top-up is off and not implemented.

@@ -2,7 +2,7 @@
 
 - **Branch:** `codex/wo-049-credits-variable-cost`
 - **Baseline:** `d9f03d1a2098d3383269875c61af1a504a7f6b30`
-- **Status:** implemented; engineering review pending
+- **Status:** implemented; engineering review complete
 - **Migration:** `0054_credits_variable_cost`
 - **Provider/data/spend boundary:** deterministic test provider and TEST catalogue
   only; synthetic data only; AUD $0
@@ -29,27 +29,31 @@ labelled `TEST ONLY / NOT CUSTOMER PRICING`; the Settings purchase control is di
 These values prove mechanics and are not public or owner-approved production prices.
 
 WO-048 deterministic/test billing may grant a purchased lot only after a verified
-successful `credit_purchase` event matches the exact server-owned pack, AUD amount
-and billing operation. The grant and billing receipt commit atomically. Browser
-redirects, arbitrary calls, duplicate events and mismatches do not create Credits.
-Live Stripe remains inactive and no real charge is possible.
+successful `credit_purchase` event and retrieved checkout both confirm paid status
+and match the exact server-owned pack, AUD amount and billing operation. The grant
+and billing receipt commit atomically. Browser redirects, pending payments, arbitrary
+calls, duplicate payment facts and mismatches do not create Credits. Live Stripe
+remains inactive and no real charge is possible.
 
-Trial Credits are promotional, require active WO-047 trial authority, obey the
-organisation trial exposure cap and cannot outlive the trial. Credits neither grant a
-module nor override permission, suppression, quota, licensing or provider health.
+Trial Credits are promotional, require active WO-047 trial authority, are limited to
+one bounded grant per organisation, obey the organisation trial exposure cap and
+cannot outlive the trial. Credits neither grant a module nor override permission,
+suppression, quota, licensing or provider health.
 
 ## Economics and safety
 
-Action-price versions preserve provider-native minor units/currency, fixed-precision
-FX evidence, expected and maximum AUD variable cost, other variable cost, customer
-revenue and exact basis-point gross margin. Production activation fails closed
+Action-price versions preserve provider-native minor units/currency and scale,
+fixed-precision FX evidence, expected and maximum AUD variable cost, other variable
+cost, customer revenue and exact basis-point gross margin. Production activation fails closed
 without positive margin, a configured owner-approved margin policy reference and its
 floor. There is no approved production margin floor, Credit price or pack.
 
 Organisation policy caps Credits per operation/day, provider-cost exposure per day,
-trial Credits per day and operations per minute. Global, action and
-provider-capability circuit breakers stop new execution while allowing settlement,
-release and reconciliation of prior work. Auto-top-up is off and absent.
+trial Credits per day and operations per minute. In-flight reservations count against
+the daily Credit, provider-cost and trial exposure caps. Global, action and
+provider-capability circuit breakers, organisation policy and module entitlement are
+rechecked before provider execution; disablement stops new execution while allowing
+settlement, release and reconciliation of prior work. Auto-top-up is off and absent.
 
 ## Persistence, security and customer data
 

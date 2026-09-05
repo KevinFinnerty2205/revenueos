@@ -120,10 +120,18 @@ class CreditReconciliationResponse(APIModel):
     ledger_purchased_available: int
     projection_promotional_available: int
     ledger_promotional_available: int
+    projection_purchased_reserved: int
+    ledger_purchased_reserved: int
+    projection_promotional_reserved: int
+    ledger_promotional_reserved: int
     projection_reserved: int
     ledger_reserved: int
     lot_available: int
     lot_reserved: int
+    lot_purchased_available: int
+    lot_promotional_available: int
+    lot_purchased_reserved: int
+    lot_promotional_reserved: int
 
 
 class MarginValidationResponse(APIModel):

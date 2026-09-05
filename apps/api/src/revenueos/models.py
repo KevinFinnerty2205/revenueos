@@ -624,7 +624,10 @@ class CreditPackVersion(Base):
         CheckConstraint("version > 0", name="ck_credit_packs_version"),
         CheckConstraint("credit_quantity > 0", name="ck_credit_packs_quantity"),
         CheckConstraint("price_minor_units > 0", name="ck_credit_packs_price"),
-        CheckConstraint("currency = 'AUD'", name="ck_credit_packs_currency"),
+        CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)",
+            name="ck_credit_packs_currency",
+        ),
         CheckConstraint("environment IN ('test', 'production')", name="ck_credit_packs_environment"),
         CheckConstraint(
             "status IN ('draft', 'test_active', 'production_active', 'retired')",
@@ -680,7 +683,9 @@ class CreditActionPriceVersion(Base):
             name="ck_credit_prices_customer_charge_basis",
         ),
         CheckConstraint(
-            "provider_cost_minor_units >= 0 AND provider_currency <> '' AND other_variable_cost_micros >= 0",
+            "provider_cost_minor_units >= 0 AND provider_currency <> '' "
+            "AND provider_minor_units_per_major > 0 AND provider_minor_units_per_major <= 1000000 "
+            "AND other_variable_cost_micros >= 0",
             name="ck_credit_prices_provider_cost",
         ),
         CheckConstraint(
@@ -721,6 +726,9 @@ class CreditActionPriceVersion(Base):
     cost_basis: Mapped[str] = mapped_column(String(32), nullable=False)
     provider_cost_minor_units: Mapped[int] = mapped_column(BigInteger, nullable=False)
     provider_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    provider_minor_units_per_major: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100"
+    )
     fx_rate_to_aud: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
     fx_source: Mapped[str] = mapped_column(String(120), nullable=False)
     fx_observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -842,6 +850,10 @@ class CreditLot(TimestampMixin, Base):
         CheckConstraint(
             "credit_type = 'purchased' OR original_revenue_micros = 0", name="ck_credit_lots_promo_revenue"
         ),
+        CheckConstraint(
+            "NOT trial_grant OR (credit_type = 'promotional' AND expires_at IS NOT NULL)",
+            name="ck_credit_lots_trial_grant",
+        ),
         ForeignKeyConstraint(
             ["organisation_id", "billing_operation_id"],
             ["billing_operations.organisation_id", "billing_operations.id"],
@@ -850,6 +862,13 @@ class CreditLot(TimestampMixin, Base):
         ),
         UniqueConstraint("organisation_id", "source_reference", name="uq_credit_lots_source"),
         UniqueConstraint("organisation_id", "id", name="uq_credit_lots_org_id"),
+        Index(
+            "uq_credit_lots_org_trial_grant",
+            "organisation_id",
+            unique=True,
+            postgresql_where=text("trial_grant"),
+            sqlite_where=text("trial_grant = 1"),
+        ),
         Index("ix_credit_lots_consumption", "organisation_id", "credit_type", "expires_at", "created_at"),
     )
 
@@ -866,6 +885,7 @@ class CreditLot(TimestampMixin, Base):
     original_revenue_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
     remaining_revenue_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trial_grant: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     pack_version_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("credit_pack_versions.id", ondelete="RESTRICT")
     )

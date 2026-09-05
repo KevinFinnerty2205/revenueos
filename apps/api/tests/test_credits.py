@@ -42,8 +42,15 @@ from revenueos.models import (
     CreditQuote,
     Organisation,
     OrganisationCommercialState,
+    OrganisationCreditBalance,
 )
-from tests.conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, SECONDARY_ORGANISATION_ID, TEST_DB_URL
+from tests.conftest import (
+    PRIMARY_ORGANISATION_ID,
+    PRIMARY_USER_ID,
+    SECONDARY_ORGANISATION_ID,
+    SECONDARY_USER_ID,
+    TEST_DB_URL,
+)
 
 WEBHOOK_SECRET = "test-credit-webhook-secret-0001"
 
@@ -241,6 +248,7 @@ def test_append_only_ledger_balance_consumption_order_settlement_refund_and_corr
                     reason="Partial synthetic service-value refund.",
                 )
                 assert refunded.credit_type == "promotional"
+                assert refunded.expires_at == promotional.expires_at
                 with pytest.raises(PublicAPIError) as refund_conflict:
                     await service.refund_consumption(
                         PRIMARY_ORGANISATION_ID,
@@ -514,6 +522,17 @@ def test_expired_and_tampered_quotes_fail_closed() -> None:
                         idempotency_key="tampered-quote-reservation",
                     )
                 assert tampered_error.value.code == "credit_quote_tampered"
+                user_bound = await service.create_quote(
+                    PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, action_code=TEST_ACTION_CODE, quantity=1
+                )
+                with pytest.raises(PublicAPIError) as wrong_user:
+                    await service.reserve(
+                        PRIMARY_ORGANISATION_ID,
+                        SECONDARY_USER_ID,
+                        quote_id=user_bound.quote_id,
+                        idempotency_key="wrong-user-quote-reservation",
+                    )
+                assert wrong_user.value.code == "credit_quote_not_found"
         finally:
             await engine.dispose()
 
@@ -549,6 +568,44 @@ def test_expiry_trial_grant_validation_and_negative_balance_protection() -> None
                     trial_only=True,
                 )
                 assert lot.expires_at == commercial.trial_ends_at
+                commercial.status = "active"
+                await session.commit()
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                replayed_lot = await service.grant_promotional(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=20,
+                    idempotency_key="trial-grant-0001",
+                    source_reference="one-time-trial-org-primary",
+                    actor_reference="support-trial-operator",
+                    reason="One-time bounded trial Credit allowance.",
+                    trial_only=True,
+                )
+                assert replayed_lot.id == lot.id
+                commercial.status = "trial"
+                await session.commit()
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                with pytest.raises(PublicAPIError) as capped_trial_grant:
+                    await service.grant_promotional(
+                        PRIMARY_ORGANISATION_ID,
+                        credits=501,
+                        idempotency_key="trial-grant-over-cap",
+                        source_reference="trial-grant-over-cap",
+                        actor_reference="support-trial-operator",
+                        reason="Reject a trial grant above the configured safety cap.",
+                        trial_only=True,
+                    )
+                assert capped_trial_grant.value.code == "credit_trial_grant_cap_exceeded"
+                with pytest.raises(PublicAPIError) as duplicate_trial_grant:
+                    await service.grant_promotional(
+                        PRIMARY_ORGANISATION_ID,
+                        credits=20,
+                        idempotency_key="trial-grant-0002",
+                        source_reference="different-trial-source",
+                        actor_reference="support-trial-operator",
+                        reason="Reject a second one-time trial Credit grant.",
+                        trial_only=True,
+                    )
+                assert duplicate_trial_grant.value.code == "credit_trial_grant_exists"
                 with pytest.raises(PublicAPIError) as invalid:
                     await service.grant_promotional(
                         PRIMARY_ORGANISATION_ID,
@@ -709,6 +766,14 @@ def test_unknown_outcome_reconciliation_is_idempotent_and_provider_executes_once
                 assert reconciled.outcome == "reconciled_success"
                 assert reconciled.settled_credits == 15
                 assert reconciled.released_credits == 5
+                with pytest.raises(PublicAPIError) as conflicting_reconciliation:
+                    await service.reconcile_unknown(
+                        PRIMARY_ORGANISATION_ID,
+                        reserved.operation_id,
+                        provider_definitely_executed=False,
+                        idempotency_key="conflicting-reconciliation",
+                    )
+                assert conflicting_reconciliation.value.code == "credit_operation_state_invalid"
 
                 failed_quote = await service.create_quote(
                     PRIMARY_ORGANISATION_ID,
@@ -785,6 +850,7 @@ def test_quotes_are_server_owned_versioned_and_caps_kill_switch_and_rate_limit_f
                     cost_basis="successful_unit",
                     provider_cost_minor_units=20,
                     provider_currency="USD",
+                    provider_minor_units_per_major=100,
                     fx_rate_to_aud=Decimal("1.50000000"),
                     fx_source="deterministic test assumption",
                     fx_observed_at=datetime.now(UTC),
@@ -872,6 +938,36 @@ def test_quotes_are_server_owned_versioned_and_caps_kill_switch_and_rate_limit_f
                     PRIMARY_USER_ID,
                     quote_id=provider_quote.quote_id,
                     idempotency_key="provider-control-reservation",
+                )
+                await service.configure_policy(
+                    PRIMARY_ORGANISATION_ID,
+                    metered_actions_enabled=False,
+                    max_credits_per_operation=30,
+                    max_credits_per_day=10_000,
+                    max_provider_cost_micros_per_day=100_000_000,
+                    trial_max_credits_per_day=500,
+                    max_operations_per_minute=10,
+                    actor_reference="wo-049-test-support",
+                    reason="Exercise execution-time organisation policy revocation.",
+                )
+                with pytest.raises(PublicAPIError) as policy_disabled:
+                    await service.mark_executing(
+                        PRIMARY_ORGANISATION_ID,
+                        provider_operation.operation_id,
+                        provider_request_id="organisation-policy-blocked",
+                        provider_capability=TEST_PROVIDER_CAPABILITY,
+                    )
+                assert policy_disabled.value.code == "credit_exposure_policy_unavailable"
+                await service.configure_policy(
+                    PRIMARY_ORGANISATION_ID,
+                    metered_actions_enabled=True,
+                    max_credits_per_operation=30,
+                    max_credits_per_day=10_000,
+                    max_provider_cost_micros_per_day=100_000_000,
+                    trial_max_credits_per_day=500,
+                    max_operations_per_minute=10,
+                    actor_reference="wo-049-test-support",
+                    reason="Restore the organisation policy for provider-capability checks.",
                 )
                 await service.set_execution_control(
                     scope="provider_capability",
@@ -998,6 +1094,81 @@ def test_each_exposure_cap_blocks_reservation_before_provider_execution(cap: str
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize(
+    ("cap", "expected_code"),
+    [
+        ("daily", "credit_daily_cap_exceeded"),
+        ("provider", "credit_provider_cost_cap_exceeded"),
+        ("trial", "credit_trial_cap_exceeded"),
+    ],
+)
+def test_in_flight_reservations_count_towards_daily_exposure_caps(cap: str, expected_code: str) -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = await prepared_service(session)
+                commercial = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
+                assert commercial is not None
+                if cap == "trial":
+                    trial_started_at = datetime.now(UTC)
+                    commercial.status = "trial"
+                    commercial.billing_interval = None
+                    commercial.trial_started_at = trial_started_at
+                    commercial.trial_ends_at = trial_started_at + timedelta(days=14)
+                    commercial.grace_ends_at = trial_started_at + timedelta(days=44)
+                    commercial.trial_used_at = trial_started_at
+                await session.commit()
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                await service.configure_policy(
+                    PRIMARY_ORGANISATION_ID,
+                    metered_actions_enabled=True,
+                    max_credits_per_operation=100,
+                    max_credits_per_day=9 if cap == "daily" else 1_000,
+                    max_provider_cost_micros_per_day=799_999 if cap == "provider" else 100_000_000,
+                    trial_max_credits_per_day=9 if cap == "trial" else 100,
+                    max_operations_per_minute=100,
+                    actor_reference="wo-049-active-exposure-test",
+                    reason="Count in-flight work towards bounded daily exposure.",
+                )
+                await service.grant_promotional(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=100,
+                    idempotency_key=f"{cap}-active-exposure-grant",
+                    source_reference=f"{cap}-active-exposure-grant",
+                    actor_reference="wo-049-active-exposure-test",
+                    reason="Fund two exposure-controlled reservations.",
+                )
+                first_quote = await service.create_quote(
+                    PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, action_code=TEST_ACTION_CODE, quantity=1
+                )
+                second_quote = await service.create_quote(
+                    PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, action_code=TEST_ACTION_CODE, quantity=1
+                )
+                await service.reserve(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    quote_id=first_quote.quote_id,
+                    idempotency_key=f"{cap}-active-exposure-first",
+                )
+                with pytest.raises(PublicAPIError) as blocked:
+                    await service.reserve(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        quote_id=second_quote.quote_id,
+                        idempotency_key=f"{cap}-active-exposure-second",
+                    )
+                assert blocked.value.code == expected_code
+                projection = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert projection.balance.available == 95
+                assert projection.balance.reserved == 5
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
 def test_action_price_charge_basis_controls_partial_settlement_policy() -> None:
     async def scenario() -> None:
         engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
@@ -1017,6 +1188,7 @@ def test_action_price_charge_basis_controls_partial_settlement_policy() -> None:
                     cost_basis="successful_unit",
                     provider_cost_minor_units=20,
                     provider_currency="USD",
+                    provider_minor_units_per_major=100,
                     fx_rate_to_aud=Decimal("1.50000000"),
                     fx_source="deterministic test assumption",
                     fx_observed_at=datetime.now(UTC),
@@ -1154,6 +1326,7 @@ def test_production_action_price_requires_owner_approved_margin_policy() -> None
                         cost_basis="successful_unit",
                         provider_cost_minor_units=10,
                         provider_currency="USD",
+                        provider_minor_units_per_major=100,
                         fx_rate_to_aud=Decimal("1.50000000"),
                         fx_source="synthetic production-rejection test",
                         fx_observed_at=datetime.now(UTC),
@@ -1165,6 +1338,56 @@ def test_production_action_price_requires_owner_approved_margin_policy() -> None
                         actor_reference="wo-049-production-rejection-test",
                     )
                 assert unapproved.value.code == "credit_production_price_not_approved"
+                test_service = CreditService(session, credit_settings())
+                with pytest.raises(PublicAPIError) as understated_cost:
+                    await test_service.create_action_price_version(
+                        action_code="UNDERSTATED_TEST_COST",
+                        display_name="Understated test cost",
+                        required_module_code="prospect",
+                        version=1,
+                        credit_charge_per_unit=5,
+                        customer_charge_basis="successful_unit",
+                        max_units_per_operation=1,
+                        customer_revenue_micros_per_unit=1_000_000,
+                        cost_basis="successful_unit",
+                        provider_cost_minor_units=20,
+                        provider_currency="USD",
+                        provider_minor_units_per_major=100,
+                        fx_rate_to_aud=Decimal("1.50000000"),
+                        fx_source="synthetic cost-consistency test",
+                        fx_observed_at=datetime.now(UTC),
+                        other_variable_cost_micros=50_000,
+                        expected_variable_cost_micros_per_unit=349_999,
+                        maximum_variable_cost_micros_per_unit=400_000,
+                        status="test_active",
+                        pricing_note="Reject inconsistent TEST-only provider-cost assumptions.",
+                        actor_reference="wo-049-cost-consistency-test",
+                    )
+                assert understated_cost.value.code == "credit_action_price_invalid"
+                scaled_price = await test_service.create_action_price_version(
+                    action_code="SCALED_PROVIDER_COST_TEST",
+                    display_name="Scaled provider cost test",
+                    required_module_code="prospect",
+                    version=1,
+                    credit_charge_per_unit=5,
+                    customer_charge_basis="successful_unit",
+                    max_units_per_operation=1,
+                    customer_revenue_micros_per_unit=2_000_000,
+                    cost_basis="successful_unit",
+                    provider_cost_minor_units=2,
+                    provider_currency="JPY",
+                    provider_minor_units_per_major=1,
+                    fx_rate_to_aud=Decimal("0.50000000"),
+                    fx_source="synthetic non-decimal-scale test",
+                    fx_observed_at=datetime.now(UTC),
+                    other_variable_cost_micros=100_000,
+                    expected_variable_cost_micros_per_unit=1_100_000,
+                    maximum_variable_cost_micros_per_unit=1_200_000,
+                    status="test_active",
+                    pricing_note="TEST ONLY / NOT CUSTOMER PRICING — exact minor-unit scale.",
+                    actor_reference="wo-049-cost-scale-test",
+                )
+                assert scaled_price.provider_minor_units_per_major == 1
         finally:
             await engine.dispose()
 
@@ -1180,6 +1403,7 @@ def _signed_credit_event(
     amount_minor: int,
     currency: str = "AUD",
     pack_id: UUID = TEST_PACK_ID,
+    payment_status: str = "paid",
 ) -> tuple[bytes, str]:
     payload = json.dumps(
         {
@@ -1192,6 +1416,7 @@ def _signed_credit_event(
             "amount_minor_units": amount_minor,
             "currency": currency,
             "credit_pack_version_id": str(pack_id),
+            "payment_status": payment_status,
         },
         separators=(",", ":"),
     ).encode()
@@ -1247,6 +1472,7 @@ def test_verified_billing_payment_is_the_only_purchase_grant_authority() -> None
                     subscription_identifier=None,
                     hosted_url=f"https://checkout.stripe.test/pay/{checkout_id}",
                     status="complete",
+                    payment_status="paid",
                 )
                 with pytest.raises(PublicAPIError) as pending_payment:
                     await credits.grant_verified_purchase(
@@ -1270,6 +1496,16 @@ def test_verified_billing_payment_is_the_only_purchase_grant_authority() -> None
                 await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
                 assert (await credits.projection(PRIMARY_ORGANISATION_ID)).balance.available == 0
                 billing = BillingService(session, settings, provider)
+                pending_payload, pending_signature = _signed_credit_event(
+                    event_id="evt_credit_payment_pending",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=customer_id,
+                    checkout_id=checkout_id,
+                    amount_minor=2_000,
+                    payment_status="unpaid",
+                )
+                assert await billing.process_webhook(pending_payload, pending_signature) == "reconciliation_required"
+                assert (await credits.projection(PRIMARY_ORGANISATION_ID)).balance.available == 0
                 mismatches = (
                     ("evt_credit_bad_amount", PRIMARY_ORGANISATION_ID, 1_999, "AUD", TEST_PACK_ID),
                     ("evt_credit_bad_currency", PRIMARY_ORGANISATION_ID, 2_000, "USD", TEST_PACK_ID),
@@ -1298,6 +1534,14 @@ def test_verified_billing_payment_is_the_only_purchase_grant_authority() -> None
                 )
                 assert await billing.process_webhook(payload, signature) == "processed"
                 assert await billing.process_webhook(payload, signature) == "duplicate"
+                repeated_fact, repeated_signature = _signed_credit_event(
+                    event_id="evt_credit_paid_reconciliation",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=customer_id,
+                    checkout_id=checkout_id,
+                    amount_minor=2_000,
+                )
+                assert await billing.process_webhook(repeated_fact, repeated_signature) == "processed"
                 assert (await credits.projection(PRIMARY_ORGANISATION_ID)).balance.available == 100
                 assert (
                     await session.scalar(
@@ -1310,6 +1554,48 @@ def test_verified_billing_payment_is_the_only_purchase_grant_authority() -> None
                     )
                     == 1
                 )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_reconciliation_detects_reserved_credit_type_projection_swap() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = await prepared_service(session)
+                await grant_test_purchase(session, service, key="reconciliation-buckets")
+                await service.grant_promotional(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=10,
+                    idempotency_key="reconciliation-buckets-promo",
+                    source_reference="reconciliation-buckets-promo",
+                    actor_reference="wo-049-reconciliation-test",
+                    reason="Fund per-type reconciliation coverage.",
+                )
+                quote = await service.create_quote(
+                    PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, action_code=TEST_ACTION_CODE, quantity=3
+                )
+                await service.reserve(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    quote_id=quote.quote_id,
+                    idempotency_key="reconciliation-buckets-reservation",
+                )
+                balance = await session.get(OrganisationCreditBalance, PRIMARY_ORGANISATION_ID)
+                assert balance is not None
+                balance.purchased_reserved = 10
+                balance.promotional_reserved = 5
+                await session.commit()
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                reconciliation = await service.reconcile_balance(PRIMARY_ORGANISATION_ID)
+                assert reconciliation.projection_reserved == reconciliation.ledger_reserved == 15
+                assert reconciliation.projection_purchased_reserved == 10
+                assert reconciliation.ledger_purchased_reserved == 5
+                assert reconciliation.consistent is False
         finally:
             await engine.dispose()
 

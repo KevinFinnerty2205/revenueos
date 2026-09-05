@@ -105,7 +105,10 @@ def upgrade() -> None:
         sa.CheckConstraint("version > 0", name="ck_credit_packs_version"),
         sa.CheckConstraint("credit_quantity > 0", name="ck_credit_packs_quantity"),
         sa.CheckConstraint("price_minor_units > 0", name="ck_credit_packs_price"),
-        sa.CheckConstraint("currency = 'AUD'", name="ck_credit_packs_currency"),
+        sa.CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)",
+            name="ck_credit_packs_currency",
+        ),
         sa.CheckConstraint("environment IN ('test', 'production')", name="ck_credit_packs_environment"),
         sa.CheckConstraint(
             "status IN ('draft', 'test_active', 'production_active', 'retired')",
@@ -149,6 +152,7 @@ def upgrade() -> None:
         sa.Column("cost_basis", sa.String(length=32), nullable=False),
         sa.Column("provider_cost_minor_units", sa.BigInteger(), nullable=False),
         sa.Column("provider_currency", sa.String(length=3), nullable=False),
+        sa.Column("provider_minor_units_per_major", sa.Integer(), server_default="100", nullable=False),
         sa.Column("fx_rate_to_aud", sa.Numeric(18, 8), nullable=False),
         sa.Column("fx_source", sa.String(length=120), nullable=False),
         sa.Column("fx_observed_at", sa.DateTime(timezone=True), nullable=False),
@@ -187,7 +191,9 @@ def upgrade() -> None:
             name="ck_credit_prices_customer_charge_basis",
         ),
         sa.CheckConstraint(
-            "provider_cost_minor_units >= 0 AND provider_currency <> '' AND other_variable_cost_micros >= 0",
+            "provider_cost_minor_units >= 0 AND provider_currency <> '' "
+            "AND provider_minor_units_per_major > 0 AND provider_minor_units_per_major <= 1000000 "
+            "AND other_variable_cost_micros >= 0",
             name="ck_credit_prices_provider_cost",
         ),
         sa.CheckConstraint("fx_rate_to_aud > 0 AND fx_source <> ''", name="ck_credit_prices_fx"),
@@ -315,6 +321,7 @@ def upgrade() -> None:
         sa.Column("original_revenue_micros", sa.BigInteger(), server_default="0", nullable=False),
         sa.Column("remaining_revenue_micros", sa.BigInteger(), server_default="0", nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("trial_grant", sa.Boolean(), server_default=sa.false(), nullable=False),
         sa.Column("pack_version_id", uuid_type, nullable=True),
         sa.Column("billing_operation_id", uuid_type, nullable=True),
         sa.Column("grant_actor_reference", sa.String(length=200), nullable=False),
@@ -335,6 +342,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "credit_type = 'purchased' OR original_revenue_micros = 0", name="ck_credit_lots_promo_revenue"
         ),
+        sa.CheckConstraint(
+            "NOT trial_grant OR (credit_type = 'promotional' AND expires_at IS NOT NULL)",
+            name="ck_credit_lots_trial_grant",
+        ),
         sa.ForeignKeyConstraint(["organisation_id"], ["organisations.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["pack_version_id"], ["credit_pack_versions.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
@@ -351,6 +362,14 @@ def upgrade() -> None:
         "ix_credit_lots_consumption",
         "credit_lots",
         ["organisation_id", "credit_type", "expires_at", "created_at"],
+    )
+    op.create_index(
+        "uq_credit_lots_org_trial_grant",
+        "credit_lots",
+        ["organisation_id"],
+        unique=True,
+        postgresql_where=sa.text("trial_grant"),
+        sqlite_where=sa.text("trial_grant = 1"),
     )
 
     op.create_table(

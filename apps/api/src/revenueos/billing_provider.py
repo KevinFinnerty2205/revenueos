@@ -40,6 +40,7 @@ class ProviderCheckout:
     subscription_identifier: str | None
     hosted_url: str
     status: Literal["open", "complete", "expired"]
+    payment_status: Literal["paid", "unpaid", "no_payment_required"] | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,7 @@ class VerifiedBillingEvent:
     amount_minor_units: int | None = None
     currency: str | None = None
     credit_pack_version_id: UUID | None = None
+    payment_status: Literal["paid", "unpaid", "no_payment_required"] | None = None
 
 
 class BillingProvider(Protocol):
@@ -372,6 +374,11 @@ class DeterministicBillingProvider:
                     if isinstance(body.get("credit_pack_version_id"), str)
                     else None
                 ),
+                payment_status=(
+                    cast(Literal["paid", "unpaid", "no_payment_required"], body.get("payment_status"))
+                    if body.get("payment_status") in {"paid", "unpaid", "no_payment_required"}
+                    else None
+                ),
             )
         except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
             raise PublicAPIError("billing_webhook_invalid", "Webhook content is invalid.", 400) from exc
@@ -551,6 +558,11 @@ class StripeTestBillingProvider:
             subscription_identifier=subscription if isinstance(subscription, str) else None,
             hosted_url=_required_string(data, "url"),
             status=cast(Literal["open", "complete", "expired"], data.get("status", "open")),
+            payment_status=(
+                cast(Literal["paid", "unpaid", "no_payment_required"], data.get("payment_status"))
+                if data.get("payment_status") in {"paid", "unpaid", "no_payment_required"}
+                else None
+            ),
         )
 
     async def retrieve_checkout(self, identifier: str) -> ProviderCheckout:
@@ -563,6 +575,11 @@ class StripeTestBillingProvider:
             subscription_identifier=subscription if isinstance(subscription, str) else None,
             hosted_url=cast(str, data.get("url") or self.settings.billing_success_url),
             status=cast(Literal["open", "complete", "expired"], data.get("status", "open")),
+            payment_status=(
+                cast(Literal["paid", "unpaid", "no_payment_required"], data.get("payment_status"))
+                if data.get("payment_status") in {"paid", "unpaid", "no_payment_required"}
+                else None
+            ),
         )
 
     async def retrieve_subscription(self, identifier: str) -> ProviderSubscriptionSnapshot:
@@ -836,6 +853,11 @@ class StripeTestBillingProvider:
                 credit_pack_version_id=(
                     UUID(cast(str, metadata["oryntela_credit_pack_version_id"]))
                     if isinstance(metadata, dict) and isinstance(metadata.get("oryntela_credit_pack_version_id"), str)
+                    else None
+                ),
+                payment_status=(
+                    cast(Literal["paid", "unpaid", "no_payment_required"], obj.get("payment_status"))
+                    if obj.get("payment_status") in {"paid", "unpaid", "no_payment_required"}
                     else None
                 ),
             )
