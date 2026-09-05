@@ -2,7 +2,7 @@
 
 - **Branch:** `codex/wo-048-billing-subscriptions`
 - **Baseline:** `d884e770772c6b983d37635141f49809dff37ee4`
-- **Status:** billing architecture / test mode implemented; engineering review pending
+- **Status:** billing architecture / test mode implemented; engineering review completed
 - **Migration:** `0053_billing_subscriptions`
 - **Provider/data/spend boundary:** deterministic test provider and unactivated Stripe
   test adapter; synthetic data only; AUD $0
@@ -12,9 +12,10 @@
 WO-048 adds provider-neutral, tenant-owned billing operations over the WO-047
 commercial authority. The API prepares hosted checkout for the exact Core, Growth
 and Complete monthly/annual catalogue, reconciles verified subscription and invoice
-facts, supports cancellation at period end, pre-end reactivation, next-renewal plan
-changes and a hosted provider portal, and projects truthful state in Billing & Plan
-Settings. Enterprise remains manual.
+facts, supports cancellation at period end, pre-end reactivation, next-renewal
+changes, provider-confirmed immediate higher-tier upgrades with provider-calculated
+proration and a hosted provider portal, and projects truthful state in Billing &
+Plan Settings. Enterprise remains manual.
 
 The deterministic provider exercises the entire lifecycle without a network. A
 Stripe adapter implements the same boundary for test keys and configured test price
@@ -26,7 +27,8 @@ verification, terms, bank/payout, production webhook or live-mode action.
 Checkout amount, AUD currency, interval, plan contents, organisation and actor are
 server-derived. Stable idempotency protects checkout and every consequential
 operation. Hosted flows keep raw card data outside Oryntela. A browser success URL
-never grants access.
+never grants access. A hosted checkout remains unresolved until its verified
+completion event, preventing another key from opening a parallel subscription.
 
 Signed events resolve a unique server-owned customer mapping and retrieve current
 provider objects before changing state. Immutable receipts make duplicate delivery
@@ -34,11 +36,13 @@ one-effect; current-object reconciliation and a terminal-cancellation guard make
 out-of-order delivery safe. Trial-to-paid and grace-to-paid reuse the same
 organisation, retain data and append commercial history.
 
-Past-due/unpaid status is visible and provides a remediation path without invented
-dunning, deletion or automatic commercial suspension. Scheduled cancellation retains
-paid access until period end. Plan changes take effect at next renewal without
-immediate proration; that is an explicit test policy requiring owner/accounting
-approval before live use.
+Past-due status is a provider-bounded payment-recovery state with visible remediation
+and no data deletion. A verified terminal unpaid/cancelled state ends paid commercial
+authority without deleting retained data. Scheduled cancellation retains paid access
+until period end. Higher-tier upgrades apply immediately only after verified provider
+confirmation and use the provider's proration invoice; lower-tier and same-tier
+interval changes apply at renewal. Exact live retry/dunning configuration still
+requires owner approval before production use.
 
 ## Persistence, security and lifecycle
 
@@ -60,7 +64,8 @@ Tests cover all six exact checkout variants; Enterprise denial; price/currency/
 interval tampering; checkout idempotency, abandonment, timeout and unknown outcome;
 direct and trial/grace conversion; duplicate and out-of-order webhooks; signature,
 replay, customer-collision and cross-tenant denial; successful, past-due, unpaid and
-terminal states; cancellation, reversal and next-renewal plan change; invoices;
+terminal states and recovery; cancellation, reversal, immediate upgrade and
+replaceable/cancellable next-renewal downgrade; provider proration invoices;
 forged success URLs; ordinary-seller denial; test/live confusion; migration
 downgrade/re-upgrade; PostgreSQL RLS; export/deletion boundaries; and Settings/success
 UI loading, active, attention, cancellation, manual, invoice, error, desktop, 390 px,

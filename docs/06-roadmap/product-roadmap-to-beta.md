@@ -647,11 +647,13 @@ state. Native CRM remains Core and CRM entitlement governs external connectors.
 WO-048 migration `0053_billing_subscriptions` adds provider-neutral tenant billing,
 deterministic lifecycle validation, an unactivated Stripe test adapter, hosted
 checkout/portal boundaries, signed webhook reconciliation, safe invoice projection,
-period-end cancellation/reactivation and next-renewal plan change. Verified billing
-facts feed WO-047; they do not replace its entitlement authority. Live billing,
-public signup/trial, extra-user pricing, final GST/proration/dunning/refund policy and
-Credit balances/ledger/grants remain unimplemented. WO-049 and all later work remain
-unstarted and require separate authority.
+period-end cancellation/reactivation, provider-confirmed immediate higher-tier
+upgrade with provider-calculated proration, and next-renewal downgrade. Verified
+billing facts feed WO-047; they do not replace its entitlement authority. Live
+billing, public signup/trial, extra-user pricing, final GST/refund policy, exact
+production retry/dunning configuration and proof, and Credit balances/ledger/grants
+remain unimplemented. WO-049 and all later work remain unstarted and require
+separate authority.
 
 ## Related documents
 

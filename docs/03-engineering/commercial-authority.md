@@ -151,9 +151,12 @@ payloads.
 
 WO-048 test billing consumes this authority through a separate provider adapter.
 Verified active subscription facts can assign a paid plan with source
-`billing_provider`; provider-only status cannot grant modules. Past-due status is an
-attention state and does not invent a dunning/access rule. Scheduled cancellation
-keeps paid access through the current period; verified terminal cancellation makes a
-billing-provider-managed commercial state inactive without deletion. There is no
-live billing, final tax/proration/refund policy, Credits ledger, allowance, pack,
-expiry or top-up. See [Billing and subscription operations](billing-subscription-operations.md).
+`billing_provider`; provider-only status cannot grant modules. Past-due status is the
+provider-governed payment-recovery state and preserves current access without
+inventing a separate grace duration. Verified terminal unpaid/cancelled status makes
+a billing-provider-managed commercial state inactive without deletion. Scheduled
+cancellation keeps paid access through the current period. A higher-tier plan is
+assigned only after provider confirmation; lower-tier assignment occurs only at the
+verified renewal event and uses the existing non-destructive downgrade path. There
+is no live billing, final tax/refund policy, Credits ledger, allowance, pack, expiry
+or top-up. See [Billing and subscription operations](billing-subscription-operations.md).

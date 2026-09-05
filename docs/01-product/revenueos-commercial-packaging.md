@@ -70,9 +70,10 @@ Approved support operators retain the reviewed commercial workflow.
 - willingness-to-pay and publication approval;
 - add-on and extra-user prices;
 - GST/tax presentation, tax-invoice wording, terms, discounts and refund authority;
-- live billing/provider activation, dunning/access and production reconciliation;
-- final plan-change and proration timing (the test implementation uses next renewal
-  with no immediate proration);
+- live billing/provider activation, exact retry/dunning configuration and production
+  reconciliation proof;
+- production validation of the approved immediate higher-tier upgrade with
+  provider-calculated proration and next-renewal downgrade policy;
 - public-trial signup, abuse and conversion controls;
 - Credits unit, allowance, pack, expiry, refund and provider economics; and
 - any individually contracted Enterprise requirement.

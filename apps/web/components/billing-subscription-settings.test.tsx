@@ -196,13 +196,13 @@ describe("BillingSubscriptionSettings", () => {
 
     expect(await screen.findByText("Growth")).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Payment needs attention",
+      "Payment recovery is in progress",
     );
     expect(
       screen.getByText(/Access continues until 1 April 2033/i),
     ).toBeVisible();
     expect(
-      screen.getByText(/Plan change scheduled for next renewal/i),
+      screen.getByText(/Change scheduled for next renewal/i),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Keep subscription" }),
@@ -213,6 +213,62 @@ describe("BillingSubscriptionSettings", () => {
     expect(
       screen.getByRole("link", { name: "View provider invoice" }),
     ).toBeVisible();
+  });
+
+  it("distinguishes immediate upgrades from renewal changes", async () => {
+    const current = projection({
+      id: "00000000-0000-4000-8000-000000000084",
+      planCode: "core",
+      planName: "Core",
+      billingInterval: "monthly",
+      amount: "200.00",
+      currency: "AUD",
+      status: "active",
+      currentPeriodStart: "2032-04-01T00:00:00Z",
+      currentPeriodEnd: "2032-05-01T00:00:00Z",
+      cancelAtPeriodEnd: false,
+      pendingPlanCode: null,
+      pendingBillingInterval: null,
+      paymentNeedsAttention: false,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(current), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    );
+    render(<BillingSubscriptionSettings />);
+
+    expect(await screen.findByText("Core")).toBeVisible();
+    fireEvent.click(screen.getByRole("radio", { name: /Growth · monthly/i }));
+    expect(
+      screen.getByText(
+        /takes effect immediately only after provider payment confirmation/i,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/provider calculates and invoices the proration/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Confirm immediate upgrade" }),
+    ).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Core · annual/i }));
+    expect(screen.getByText(/takes effect at the next renewal/i)).toBeVisible();
+    expect(screen.getByText(/no immediate proration/i)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Schedule renewal change" }),
+    ).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Core · monthly/i }));
+    expect(
+      screen.getByRole("button", { name: "Already active" }),
+    ).toBeDisabled();
   });
 
   it("uses a fresh hosted checkout after a subscription has ended", async () => {

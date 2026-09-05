@@ -34,13 +34,16 @@ organisation.
 
 `BillingProvider` expresses the bounded operations Oryntela needs: hosted checkout,
 subscription and invoice retrieval, cancellation at period end, reactivation,
-next-renewal plan change, hosted billing portal and signed-event verification.
-Provider DTOs are translated into Oryntela states rather than leaking provider enums
-into commercial policy.
+provider-confirmed immediate upgrade, next-renewal change, hosted billing portal and
+signed-event verification. Proration is an invoice fact returned by the provider;
+it is not calculated by Oryntela or WO-047 commercial authority. Provider DTOs are
+translated into Oryntela states rather than leaking provider enums into commercial
+policy.
 
 The deterministic provider is the default for local tests and CI. It can model
 success, abandonment, duplicate/out-of-order events, failure, cancellation, renewal
-and an unknown checkout result without network or credentials. The Stripe adapter
+and unknown checkout or subscription-mutation results without network or
+credentials. The Stripe adapter
 uses Stripe's HTTPS API directly and is restricted to `sk_test_` credentials and
 configured test price identifiers. Production configuration rejects billing
 activation, Stripe selection, live keys and non-official Stripe API endpoints.
@@ -55,7 +58,7 @@ because no owner-approved test account credentials were available.
 
 - `billing_accounts` owns the unique organisation-to-provider customer mapping.
 - `billing_subscriptions` stores the bounded status, plan-version reference,
-  interval, current paid period, scheduled cancellation or next-renewal plan change,
+  interval, current paid period, scheduled cancellation or next-renewal change,
   provider timestamps and reconciliation state.
 - `billing_invoice_projections` stores invoice date, AUD amounts, optional
   provider-reported tax total, bounded status and validated provider-hosted links
@@ -84,7 +87,10 @@ Reusing it for the same request returns the same hosted result; reusing it for a
 different request fails. Stripe receives the same key as its idempotency key. If a
 provider call times out, the operation remains `unknown_reconciliation`; retrying
 uses the same operation/provider key and never assumes that a second subscription is
-safe.
+safe. A successfully created hosted session remains unresolved until its verified
+completion event and the database permits only one pending/unknown checkout per
+organisation. Another key therefore cannot open a parallel subscription checkout;
+an expired provider session must be resolved before a fresh key is accepted.
 
 Checkout and portal URLs are provider-hosted HTTPS links on an explicit allowlist.
 Application success/cancel/portal return URLs are fixed server configuration, with
@@ -128,17 +134,27 @@ The provider-neutral states are `pending`, `active`, `past_due`,
 `unknown_reconciliation`.
 
 - Active verified subscription facts activate the matching WO-047 plan once.
-- Past-due or unpaid facts mark payment as needing attention and offer the hosted
-  resolution path. V1 does not invent dunning, delete data or automatically remove
-  access.
+- `past_due` is the bounded payment-recovery state. It marks payment as needing
+  attention, preserves existing access and data, and offers the hosted resolution
+  path while the provider runs its configured retry policy. Oryntela does not
+  hard-code or extend the retry duration.
+- A verified terminal `unpaid` or `cancelled` fact ends billing-provider-managed
+  commercial authority and paid functionality without deleting customer data. A
+  later verified active fact can restore paid authority through the normal
+  commercial transition.
 - Cancellation is scheduled for period end. Paid access continues until the recorded
   end, after which a verified terminal provider state moves billing-provider-managed
   commercial state to inactive without deleting retained data.
 - A scheduled cancellation may be reversed before period end when the provider
   permits it. An ended subscription uses a new checkout for the same organisation.
-- Upgrades and downgrades are scheduled for the next renewal with no immediate
-  proration. This is the safest implemented test policy, not approved live commercial
-  policy; owner/accounting approval is required before live activation.
+- A genuinely higher-tier change is immediate only after the current provider state
+  confirms the target plan. The provider calculates and invoices proration;
+  ambiguous or payment-incomplete results leave the previous commercial plan
+  authoritative until reconciliation succeeds.
+- Lower-tier changes take effect at current paid period end. Same-tier interval
+  changes also use the renewal boundary. The provider schedule can be replaced or
+  released safely; WO-047 applies the effective downgrade once and preserves paid
+  capabilities until then without deleting data.
 
 Provider invoices remain the source of invoice/receipt documents. Oryntela displays
 only dates, amounts, currency, state and validated hosted links. Existing provider
@@ -172,8 +188,9 @@ all applicable items:
 
 - owner/accounting approval of GST-inclusive versus +GST presentation, tax-invoice
   wording and any Stripe Tax configuration;
-- owner approval of renewal plan-change/proration timing, dunning/access policy,
-  refunds, discounts, public prices and customer terms;
+- production proof of the approved immediate-upgrade/provider-proration and
+  next-renewal downgrade policy, plus owner approval of exact provider retry/dunning
+  settings, refunds, discounts, public prices and customer terms;
 - approved billing-history statutory retention, export and disposal procedure;
 - Stripe account ownership, commercial terms, business verification, bank/payout
   details, test/live product and price configuration, portal policy and production
@@ -195,3 +212,5 @@ only, no customer data, no live provider action, no real charge and AUD $0 spend
 - [Stripe API versioning](https://docs.stripe.com/api/versioning)
 - [Subscription item billing-period change](https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-subscription-current-period-start-and-end)
 - [Stripe subscription schedules](https://docs.stripe.com/api/subscription_schedules/object)
+- [Stripe subscription updates and proration behaviour](https://docs.stripe.com/api/subscriptions/update)
+- [Stripe idempotent requests](https://docs.stripe.com/api/idempotent_requests)

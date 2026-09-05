@@ -27,6 +27,17 @@ function operationKey(kind: string, target: string): string {
   return value;
 }
 
+function clearOperationKey(kind: string, target: string): void {
+  window.sessionStorage.removeItem(`oryntela-billing:${kind}:${target}`);
+}
+
+const planRank = {
+  core: 0,
+  growth: 1,
+  complete: 2,
+  enterprise: 3,
+} as const;
+
 export function BillingSubscriptionSettings() {
   const [billing, setBilling] = useState<BillingProjection | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,8 +96,23 @@ export function BillingSubscriptionSettings() {
   const canStartCheckout =
     billing?.subscription === null ||
     billing?.subscription.status === "cancelled";
-  const planSelectionAvailable =
-    canStartCheckout || billing?.subscription?.cancelAtPeriodEnd !== true;
+  const canChangePlan =
+    billing?.subscription?.status === "active" &&
+    billing.subscription.cancelAtPeriodEnd !== true;
+  const planSelectionAvailable = canStartCheckout || canChangePlan;
+  const selectionKind = (() => {
+    const subscription = billing?.subscription;
+    if (!selected || !subscription || canStartCheckout) return "checkout";
+    if (
+      selected.planCode === subscription.planCode &&
+      selected.billingInterval === subscription.billingInterval
+    ) {
+      return subscription.pendingPlanCode ? "keep-current" : "unchanged";
+    }
+    return planRank[selected.planCode] > planRank[subscription.planCode]
+      ? "upgrade"
+      : "scheduled";
+  })();
 
   async function submitSelection(): Promise<void> {
     if (!selected) return;
@@ -96,6 +122,7 @@ export function BillingSubscriptionSettings() {
     const target = `${selected.planCode}:${selected.billingInterval}`;
     try {
       if (!canStartCheckout) {
+        const idempotencyKey = operationKey("plan-change", target);
         const result = await apiRequest<BillingHostedAction>(
           "/api/v1/billing/plan-change",
           {
@@ -103,11 +130,15 @@ export function BillingSubscriptionSettings() {
             body: JSON.stringify({
               planCode: selected.planCode,
               billingInterval: selected.billingInterval,
-              idempotencyKey: operationKey("plan-change", target),
+              idempotencyKey,
             }),
           },
         );
         setActionMessage(result.message);
+        if (result.status === "succeeded") {
+          clearOperationKey("plan-change", target);
+        }
+        setRetryKey((value) => value + 1);
       } else {
         const result = await apiRequest<BillingCheckoutResponse>(
           "/api/v1/billing/checkout",
@@ -143,20 +174,20 @@ export function BillingSubscriptionSettings() {
     setActionError(null);
     setHostedUrl(null);
     try {
+      const target = billing?.subscription?.id ?? "account";
+      const idempotencyKey = operationKey(kind, target);
       const result = await apiRequest<BillingHostedAction>(
         `/api/v1/billing/${kind}`,
         {
           method: "POST",
           body: JSON.stringify({
-            idempotencyKey: operationKey(
-              kind,
-              billing?.subscription?.id ?? "account",
-            ),
+            idempotencyKey,
           }),
         },
       );
       setActionMessage(result.message);
       setHostedUrl(result.hostedUrl);
+      if (result.status === "succeeded") clearOperationKey(kind, target);
       if (kind !== "portal") setRetryKey((value) => value + 1);
     } catch (reason: unknown) {
       setActionError(
@@ -258,15 +289,17 @@ export function BillingSubscriptionSettings() {
               role="alert"
               className="mt-3 text-sm font-semibold text-amber-900"
             >
-              Payment needs attention. Your data has not been deleted. Open
-              hosted billing management to resolve the payment method.
+              {subscription.status === "unpaid"
+                ? "Provider payment recovery has ended. Paid functionality is inactive, but your data is preserved. Open hosted billing management to resolve it."
+                : subscription.status === "past_due"
+                  ? "Payment recovery is in progress. Access and your data are preserved while the provider runs its bounded retry policy. Open hosted billing management to resolve it."
+                  : "Payment is not confirmed. No new paid entitlement has been granted, and your data is preserved. Open hosted billing management to resolve it."}
             </p>
           ) : null}
           {subscription.pendingPlanCode ? (
             <p className="mt-3 text-sm text-slate-700">
-              Plan change scheduled for next renewal:{" "}
-              {subscription.pendingPlanCode} (
-              {subscription.pendingBillingInterval}). No immediate proration.
+              Change scheduled for next renewal: {subscription.pendingPlanCode}{" "}
+              ({subscription.pendingBillingInterval}). No immediate proration.
             </p>
           ) : null}
           <div className="mt-4 flex flex-wrap gap-3">
@@ -316,10 +349,12 @@ export function BillingSubscriptionSettings() {
       <fieldset className="mt-6 min-w-0" disabled={!planSelectionAvailable}>
         <legend className="text-sm font-bold text-slate-950">
           {!planSelectionAvailable
-            ? "Keep the subscription before changing plan"
+            ? subscription?.paymentNeedsAttention
+              ? "Resolve payment attention before changing plan"
+              : "Keep the subscription before changing plan"
             : canStartCheckout
               ? "Choose a paid plan"
-              : "Change at next renewal"}
+              : "Change plan"}
         </legend>
         <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {selfServiceOptions.map((option) => {
@@ -366,19 +401,31 @@ export function BillingSubscriptionSettings() {
             included.{" "}
             {canStartCheckout
               ? "You will continue in hosted checkout."
-              : "The change takes effect at next renewal."}
+              : selectionKind === "upgrade"
+                ? "This higher-tier change takes effect immediately only after provider payment confirmation. The provider calculates and invoices the proration; Oryntela does not estimate it here."
+                : selectionKind === "keep-current"
+                  ? "This keeps the current plan and cancels the scheduled renewal change."
+                  : selectionKind === "unchanged"
+                    ? "This plan and billing interval are already active."
+                    : "This lower-tier or interval change takes effect at the next renewal. Paid capabilities remain available until then, with no immediate proration."}
           </p>
           <button
             type="button"
             className="primary-button mt-4"
-            disabled={busy}
+            disabled={busy || selectionKind === "unchanged"}
             onClick={() => void submitSelection()}
           >
             {busy
               ? "Preparing…"
               : canStartCheckout
                 ? "Prepare secure checkout"
-                : "Schedule plan change"}
+                : selectionKind === "upgrade"
+                  ? "Confirm immediate upgrade"
+                  : selectionKind === "keep-current"
+                    ? "Keep current plan"
+                    : selectionKind === "unchanged"
+                      ? "Already active"
+                      : "Schedule renewal change"}
           </button>
         </div>
       ) : null}

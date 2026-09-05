@@ -72,6 +72,12 @@ class ProviderInvoiceSnapshot:
 
 
 @dataclass(frozen=True)
+class ProviderPlanChangeResult:
+    subscription: ProviderSubscriptionSnapshot
+    invoice: ProviderInvoiceSnapshot | None
+
+
+@dataclass(frozen=True)
 class VerifiedBillingEvent:
     identifier: str
     event_type: str
@@ -108,6 +114,14 @@ class BillingProvider(Protocol):
 
     async def reactivate(self, identifier: str, *, idempotency_key: str) -> ProviderSubscriptionSnapshot: ...
 
+    async def apply_plan_upgrade(
+        self,
+        identifier: str,
+        *,
+        price: ProviderPriceReference,
+        idempotency_key: str,
+    ) -> ProviderPlanChangeResult: ...
+
     async def schedule_plan_change(
         self,
         identifier: str,
@@ -115,6 +129,12 @@ class BillingProvider(Protocol):
         price: ProviderPriceReference,
         idempotency_key: str,
     ) -> ProviderSubscriptionSnapshot: ...
+
+    async def cancel_scheduled_plan_change(
+        self, identifier: str, *, idempotency_key: str
+    ) -> ProviderSubscriptionSnapshot: ...
+
+    async def reconcile_plan_change(self, identifier: str) -> ProviderPlanChangeResult: ...
 
     async def create_portal(self, customer_identifier: str, *, idempotency_key: str) -> str: ...
 
@@ -147,6 +167,8 @@ class DeterministicBillingProvider:
         self.subscriptions: dict[str, ProviderSubscriptionSnapshot] = {}
         self.invoices: dict[str, ProviderInvoiceSnapshot] = {}
         self.pending_price_changes: dict[str, str] = {}
+        self.plan_change_results: dict[str, ProviderPlanChangeResult] = {}
+        self.next_upgrade_invoice_amount: Decimal | None = None
 
     async def ensure_customer(self, organisation_id: UUID, *, idempotency_key: str) -> str:
         del idempotency_key
@@ -235,6 +257,48 @@ class DeterministicBillingProvider:
         self.subscriptions[identifier] = updated
         return updated
 
+    async def apply_plan_upgrade(
+        self,
+        identifier: str,
+        *,
+        price: ProviderPriceReference,
+        idempotency_key: str,
+    ) -> ProviderPlanChangeResult:
+        existing = self.plan_change_results.get(idempotency_key)
+        if existing is not None:
+            return existing
+        current = await self.retrieve_subscription(identifier)
+        if current.status != "active":
+            raise PublicAPIError(
+                "billing_plan_change_unavailable", "The plan cannot be changed in its current state.", 409
+            )
+        now = datetime.now(UTC)
+        updated = replace(current, price_identifier=price.identifier, provider_updated_at=now)
+        self.subscriptions[identifier] = updated
+        self.pending_price_changes.pop(identifier, None)
+        invoice_identifier = f"in_test_{uuid.uuid5(self._namespace, idempotency_key).hex}"
+        provider_calculated_amount = (
+            self.next_upgrade_invoice_amount if self.next_upgrade_invoice_amount is not None else price.amount
+        )
+        invoice = ProviderInvoiceSnapshot(
+            identifier=invoice_identifier,
+            customer_identifier=current.customer_identifier,
+            subscription_identifier=identifier,
+            invoice_date=now,
+            amount_due=provider_calculated_amount,
+            amount_paid=provider_calculated_amount,
+            tax_amount=None,
+            currency="AUD",
+            status="paid",
+            hosted_invoice_url=f"https://invoice.stripe.test/i/{invoice_identifier}",
+            receipt_url=None,
+            provider_updated_at=now,
+        )
+        self.invoices[invoice_identifier] = invoice
+        result = ProviderPlanChangeResult(subscription=updated, invoice=invoice)
+        self.plan_change_results[idempotency_key] = result
+        return result
+
     async def schedule_plan_change(
         self,
         identifier: str,
@@ -250,6 +314,20 @@ class DeterministicBillingProvider:
             )
         self.pending_price_changes[identifier] = price.identifier
         return current
+
+    async def cancel_scheduled_plan_change(
+        self, identifier: str, *, idempotency_key: str
+    ) -> ProviderSubscriptionSnapshot:
+        del idempotency_key
+        current = await self.retrieve_subscription(identifier)
+        self.pending_price_changes.pop(identifier, None)
+        return current
+
+    async def reconcile_plan_change(self, identifier: str) -> ProviderPlanChangeResult:
+        current = await self.retrieve_subscription(identifier)
+        invoices = [invoice for invoice in self.invoices.values() if invoice.subscription_identifier == identifier]
+        invoice = max(invoices, key=lambda value: value.provider_updated_at) if invoices else None
+        return ProviderPlanChangeResult(subscription=current, invoice=invoice)
 
     async def create_portal(self, customer_identifier: str, *, idempotency_key: str) -> str:
         portal_id = uuid.uuid5(self._namespace, f"portal:{customer_identifier}:{idempotency_key}").hex
@@ -473,11 +551,15 @@ class StripeTestBillingProvider:
         )
 
     async def retrieve_subscription(self, identifier: str) -> ProviderSubscriptionSnapshot:
-        data = await self._request("GET", f"/v1/subscriptions/{identifier}")
+        data = await self._retrieve_subscription_data(identifier)
         return self._subscription(data, datetime.now(UTC))
 
     async def retrieve_invoice(self, identifier: str) -> ProviderInvoiceSnapshot:
         data = await self._request("GET", f"/v1/invoices/{identifier}")
+        return self._invoice(data, datetime.now(UTC))
+
+    @staticmethod
+    def _invoice(data: dict[str, object], observed_at: datetime) -> ProviderInvoiceSnapshot:
         _require_stripe_test_object(data)
         if data.get("currency") != "aud":
             raise PublicAPIError(
@@ -512,8 +594,28 @@ class StripeTestBillingProvider:
             status=cast(InvoiceStatus, allowed_status),
             hosted_invoice_url=cast(str | None, data.get("hosted_invoice_url")),
             receipt_url=None,
-            provider_updated_at=datetime.now(UTC),
+            provider_updated_at=observed_at,
         )
+
+    async def _retrieve_subscription_data(self, identifier: str) -> dict[str, object]:
+        return await self._request("GET", f"/v1/subscriptions/{identifier}")
+
+    @staticmethod
+    def _subscription_schedule_identifier(data: dict[str, object]) -> str | None:
+        schedule = data.get("schedule")
+        if isinstance(schedule, str):
+            return schedule
+        if isinstance(schedule, dict):
+            candidate = schedule.get("id")
+            return candidate if isinstance(candidate, str) else None
+        return None
+
+    @staticmethod
+    def _subscription_item_identifier(data: dict[str, object]) -> str:
+        items = data.get("items")
+        item_data = items.get("data") if isinstance(items, dict) else None
+        first = item_data[0] if isinstance(item_data, list) and item_data and isinstance(item_data[0], dict) else {}
+        return _required_string(cast(dict[str, object], first), "id")
 
     async def cancel_at_period_end(self, identifier: str, *, idempotency_key: str) -> ProviderSubscriptionSnapshot:
         data = await self._request(
@@ -533,6 +635,46 @@ class StripeTestBillingProvider:
         )
         return self._subscription(data, datetime.now(UTC))
 
+    async def apply_plan_upgrade(
+        self,
+        identifier: str,
+        *,
+        price: ProviderPriceReference,
+        idempotency_key: str,
+    ) -> ProviderPlanChangeResult:
+        await self._verify_price(price)
+        current_data = await self._retrieve_subscription_data(identifier)
+        _require_stripe_test_object(current_data)
+        schedule_identifier = self._subscription_schedule_identifier(current_data)
+        if schedule_identifier is not None:
+            await self._request(
+                "POST",
+                f"/v1/subscription_schedules/{schedule_identifier}/release",
+                idempotency_key=f"{idempotency_key}:release-schedule",
+            )
+        data = await self._request(
+            "POST",
+            f"/v1/subscriptions/{identifier}",
+            form=[
+                ("items[0][id]", self._subscription_item_identifier(current_data)),
+                ("items[0][price]", price.identifier),
+                ("proration_behavior", "always_invoice"),
+                ("payment_behavior", "pending_if_incomplete"),
+                ("expand[]", "latest_invoice"),
+            ],
+            idempotency_key=f"{idempotency_key}:upgrade",
+        )
+        observed_at = datetime.now(UTC)
+        snapshot = self._subscription(data, observed_at)
+        invoice_data = data.get("latest_invoice")
+        if isinstance(invoice_data, dict):
+            invoice = self._invoice(cast(dict[str, object], invoice_data), observed_at)
+        elif isinstance(invoice_data, str):
+            invoice = await self.retrieve_invoice(invoice_data)
+        else:
+            invoice = None
+        return ProviderPlanChangeResult(subscription=snapshot, invoice=invoice)
+
     async def schedule_plan_change(
         self,
         identifier: str,
@@ -541,18 +683,22 @@ class StripeTestBillingProvider:
         idempotency_key: str,
     ) -> ProviderSubscriptionSnapshot:
         await self._verify_price(price)
-        current = await self.retrieve_subscription(identifier)
+        current_data = await self._retrieve_subscription_data(identifier)
+        current = self._subscription(current_data, datetime.now(UTC))
         if current.current_period_start is None or current.current_period_end is None:
             raise PublicAPIError("billing_plan_change_unavailable", "The renewal period could not be confirmed.", 409)
-        schedule = await self._request(
-            "POST",
-            "/v1/subscription_schedules",
-            form=[("from_subscription", identifier)],
-            idempotency_key=f"{idempotency_key}:schedule",
-        )
+        schedule_identifier = self._subscription_schedule_identifier(current_data)
+        if schedule_identifier is None:
+            schedule = await self._request(
+                "POST",
+                "/v1/subscription_schedules",
+                form=[("from_subscription", identifier)],
+                idempotency_key=f"{idempotency_key}:schedule",
+            )
+            schedule_identifier = _required_string(schedule, "id")
         await self._request(
             "POST",
-            f"/v1/subscription_schedules/{_required_string(schedule, 'id')}",
+            f"/v1/subscription_schedules/{schedule_identifier}",
             form=[
                 ("end_behavior", "release"),
                 ("phases[0][start_date]", str(int(current.current_period_start.timestamp()))),
@@ -569,6 +715,29 @@ class StripeTestBillingProvider:
             idempotency_key=f"{idempotency_key}:phases",
         )
         return current
+
+    async def cancel_scheduled_plan_change(
+        self, identifier: str, *, idempotency_key: str
+    ) -> ProviderSubscriptionSnapshot:
+        current_data = await self._retrieve_subscription_data(identifier)
+        _require_stripe_test_object(current_data)
+        schedule_identifier = self._subscription_schedule_identifier(current_data)
+        if schedule_identifier is not None:
+            await self._request(
+                "POST",
+                f"/v1/subscription_schedules/{schedule_identifier}/release",
+                idempotency_key=f"{idempotency_key}:release-schedule",
+            )
+            current_data = await self._retrieve_subscription_data(identifier)
+        return self._subscription(current_data, datetime.now(UTC))
+
+    async def reconcile_plan_change(self, identifier: str) -> ProviderPlanChangeResult:
+        data = await self._retrieve_subscription_data(identifier)
+        observed_at = datetime.now(UTC)
+        snapshot = self._subscription(data, observed_at)
+        latest_invoice = data.get("latest_invoice")
+        invoice = await self.retrieve_invoice(latest_invoice) if isinstance(latest_invoice, str) else None
+        return ProviderPlanChangeResult(subscription=snapshot, invoice=invoice)
 
     async def create_portal(self, customer_identifier: str, *, idempotency_key: str) -> str:
         data = await self._request(

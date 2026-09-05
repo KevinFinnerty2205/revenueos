@@ -31,6 +31,7 @@ from revenueos.billing_contracts import (
 from revenueos.billing_provider import (
     BillingProvider,
     ProviderInvoiceSnapshot,
+    ProviderPlanChangeResult,
     ProviderPriceReference,
     ProviderSubscriptionSnapshot,
     VerifiedBillingEvent,
@@ -66,6 +67,9 @@ def _amount_text(value: Decimal) -> str:
 
 def _fingerprint(value: dict[str, object]) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+_PLAN_RANK: dict[PlanCode, int] = {"core": 0, "growth": 1, "complete": 2, "enterprise": 3}
 
 
 class BillingPriceMapper:
@@ -169,7 +173,24 @@ class BillingService:
         if existing is not None:
             self._require_same_fingerprint(existing, fingerprint)
             if existing.hosted_url is not None and existing.provider_object_id is not None:
-                return self._checkout_response(existing, request.plan_code, request.billing_interval, amount)
+                checkout = await self.provider.retrieve_checkout(existing.provider_object_id)
+                if checkout.status == "expired":
+                    existing.status = "failed"
+                    existing.safe_error_code = "billing_checkout_expired"
+                    existing.completed_at = _aware(self._now())
+                    await self._commit(organisation_id)
+                    raise PublicAPIError(
+                        "billing_checkout_expired",
+                        "That hosted checkout has expired. Start a new checkout with a new retry key.",
+                        409,
+                    )
+                return self._checkout_response(
+                    existing,
+                    request.plan_code,
+                    request.billing_interval,
+                    amount,
+                    status="confirmation_pending" if checkout.status == "complete" else "redirect_ready",
+                )
         unresolved = await self.session.scalar(
             select(BillingOperation)
             .where(
@@ -183,7 +204,7 @@ class BillingService:
         if unresolved is not None:
             raise PublicAPIError(
                 "billing_checkout_reconciliation_required",
-                "A previous checkout has an unknown outcome. Retry that checkout or check status before starting another.",
+                "A previous checkout is still open or awaiting reconciliation. Retry that checkout or check status before starting another.",
                 409,
             )
         current = await self.repository.subscription(organisation_id, lock=True)
@@ -231,9 +252,10 @@ class BillingService:
             hosted_url = self._safe_hosted_url(checkout.hosted_url)
             operation.provider_object_id = checkout.identifier
             operation.hosted_url = hosted_url
-            operation.status = "succeeded"
+            # The hosted session exists, but payment is unresolved until the verified completion event.
+            operation.status = "pending"
             operation.safe_error_code = None
-            operation.completed_at = _aware(self._now())
+            operation.completed_at = None
             await self._commit(organisation_id)
             return self._checkout_response(operation, request.plan_code, request.billing_interval, amount)
         except PublicAPIError as exc:
@@ -316,25 +338,36 @@ class BillingService:
                 "subscription_id": str(subscription.id),
                 "plan_code": request.plan_code,
                 "billing_interval": request.billing_interval,
-                "timing": "next_renewal",
             }
         )
         existing = await self.repository.operation(organisation_id, "plan_change", request.idempotency_key, lock=True)
         if existing is not None:
             self._require_same_fingerprint(existing, fingerprint)
-            return HostedActionResponse(
-                operation_id=existing.id,
-                hosted_url=None,
-                status="confirmation_pending" if existing.status != "succeeded" else "succeeded",
-                message="The plan change is scheduled for the next renewal. No immediate proration is applied.",
-            )
-        if subscription.status not in {"active", "past_due", "unpaid"} or subscription.cancel_at_period_end:
+            if existing.status == "succeeded":
+                return self._plan_change_response(existing, confirmed=True)
+            if existing.status == "failed":
+                raise PublicAPIError(
+                    "billing_operation_failed",
+                    "That billing operation was rejected. Start a new request with a new retry key.",
+                    409,
+                )
+        if subscription.status != "active" or subscription.cancel_at_period_end:
             raise PublicAPIError(
                 "billing_plan_change_unavailable",
-                "The plan cannot be changed in its current state. Reverse any scheduled cancellation first.",
+                "Plan changes require an active paid subscription. Resolve payment attention or reverse any scheduled cancellation first.",
                 409,
             )
-        operation = self._operation(
+        current_plan = await self.session.get(CommercialPlanVersion, subscription.plan_version_id)
+        if current_plan is None:
+            raise PublicAPIError("billing_projection_invalid", "Billing information is temporarily unavailable.", 503)
+        current_plan_code = cast(PlanCode, current_plan.code)
+        is_higher_tier = _PLAN_RANK[request.plan_code] > _PLAN_RANK[current_plan_code]
+        cancels_pending_change = (
+            current_plan_code == request.plan_code
+            and subscription.billing_interval == request.billing_interval
+            and subscription.pending_plan_version_id is not None
+        )
+        operation = existing or self._operation(
             organisation_id,
             user_id,
             "plan_change",
@@ -344,30 +377,93 @@ class BillingService:
             billing_interval=request.billing_interval,
             amount=amount,
         )
-        self.session.add(operation)
-        await self.session.flush()
+        if existing is None:
+            self.session.add(operation)
+            await self.session.flush()
+        account = await self.repository.account(organisation_id, self.provider.name, self.provider.mode)
+        if account is None:
+            raise PublicAPIError("billing_not_configured", "Billing is not configured for this organisation.", 409)
+        provider_key = f"plan-change:{organisation_id}:{request.idempotency_key}"
         try:
-            snapshot = await self.provider.schedule_plan_change(
-                subscription.provider_subscription_id,
-                price=self._provider_price(plan, request.billing_interval),
-                idempotency_key=f"plan-change:{organisation_id}:{request.idempotency_key}",
-            )
-            account = await self.repository.account(organisation_id, self.provider.name, self.provider.mode)
-            if account is None or snapshot.customer_identifier != account.provider_customer_id:
-                raise PublicAPIError("billing_customer_mismatch", "Subscription ownership could not be verified.", 409)
-            self._verify_subscription_customer(subscription, snapshot)
-            subscription.pending_plan_version_id = plan.id
-            subscription.pending_billing_interval = request.billing_interval
-            subscription.lock_version += 1
+            if existing is not None and not cancels_pending_change:
+                reconciled = await self.provider.reconcile_plan_change(subscription.provider_subscription_id)
+                self._verify_plan_change_ownership(account, subscription, reconciled.subscription)
+                mapped = self.prices.reverse(reconciled.subscription.price_identifier)
+                if (
+                    mapped == (request.plan_code, request.billing_interval)
+                    and reconciled.subscription.status == "active"
+                    and (not is_higher_tier or reconciled.invoice is not None)
+                ):
+                    await self._apply_plan_change_result(
+                        organisation_id,
+                        account,
+                        subscription,
+                        reconciled,
+                        event_identifier=f"operation:{operation.id}:reconcile",
+                    )
+                    subscription.pending_plan_version_id = None
+                    subscription.pending_billing_interval = None
+                    operation.status = "succeeded"
+                    operation.safe_error_code = None
+                    operation.completed_at = _aware(self._now())
+                    await self._commit(organisation_id)
+                    return self._plan_change_response(operation, confirmed=True)
+
+            if current_plan_code == request.plan_code and subscription.billing_interval == request.billing_interval:
+                if subscription.pending_plan_version_id is None:
+                    raise PublicAPIError(
+                        "billing_plan_unchanged", "The selected plan and billing interval are already active.", 409
+                    )
+                snapshot = await self.provider.cancel_scheduled_plan_change(
+                    subscription.provider_subscription_id,
+                    idempotency_key=provider_key,
+                )
+                self._verify_plan_change_ownership(account, subscription, snapshot)
+                subscription.pending_plan_version_id = None
+                subscription.pending_billing_interval = None
+                subscription.lock_version += 1
+            elif is_higher_tier:
+                result = await self.provider.apply_plan_upgrade(
+                    subscription.provider_subscription_id,
+                    price=self._provider_price(plan, request.billing_interval),
+                    idempotency_key=provider_key,
+                )
+                self._verify_plan_change_ownership(account, subscription, result.subscription)
+                mapped = self.prices.reverse(result.subscription.price_identifier)
+                if (
+                    mapped != (request.plan_code, request.billing_interval)
+                    or result.subscription.status != "active"
+                    or result.invoice is None
+                ):
+                    operation.status = "unknown"
+                    operation.safe_error_code = "billing_upgrade_confirmation_pending"
+                    operation.completed_at = _aware(self._now())
+                    await self._commit(organisation_id)
+                    return self._plan_change_response(operation, confirmed=False)
+                await self._apply_plan_change_result(
+                    organisation_id,
+                    account,
+                    subscription,
+                    result,
+                    event_identifier=f"operation:{operation.id}:upgrade",
+                )
+                subscription.pending_plan_version_id = None
+                subscription.pending_billing_interval = None
+            else:
+                snapshot = await self.provider.schedule_plan_change(
+                    subscription.provider_subscription_id,
+                    price=self._provider_price(plan, request.billing_interval),
+                    idempotency_key=provider_key,
+                )
+                self._verify_plan_change_ownership(account, subscription, snapshot)
+                subscription.pending_plan_version_id = plan.id
+                subscription.pending_billing_interval = request.billing_interval
+                subscription.lock_version += 1
             operation.status = "succeeded"
+            operation.safe_error_code = None
             operation.completed_at = _aware(self._now())
             await self._commit(organisation_id)
-            return HostedActionResponse(
-                operation_id=operation.id,
-                hosted_url=None,
-                status="succeeded",
-                message="The plan change is scheduled for the next renewal. No immediate proration is applied.",
-            )
+            return self._plan_change_response(operation, confirmed=True)
         except PublicAPIError as exc:
             await self._record_operation_failure(organisation_id, operation, exc)
             raise
@@ -450,7 +546,12 @@ class BillingService:
         if operation.plan_version_id != checkout_plan.id or operation.billing_interval != mapped[1]:
             return "reconciliation_required"
         verified = replace_event_subscription(event, checkout.subscription_identifier)
-        return await self._process_subscription_event(account, verified)
+        result = await self._process_subscription_event(account, verified)
+        if result == "processed":
+            operation.status = "succeeded"
+            operation.safe_error_code = None
+            operation.completed_at = _aware(self._now())
+        return result
 
     async def _process_subscription_event(
         self, account: BillingAccount, event: VerifiedBillingEvent
@@ -458,6 +559,14 @@ class BillingService:
         if event.subscription_identifier is None:
             return "reconciliation_required"
         snapshot = await self.provider.retrieve_subscription(event.subscription_identifier)
+        return await self._reconcile_subscription_snapshot(account, event, snapshot)
+
+    async def _reconcile_subscription_snapshot(
+        self,
+        account: BillingAccount,
+        event: VerifiedBillingEvent,
+        snapshot: ProviderSubscriptionSnapshot,
+    ) -> Literal["processed", "ignored_stale", "reconciliation_required"]:
         if snapshot.customer_identifier != account.provider_customer_id:
             return "reconciliation_required"
         mapped = self.prices.reverse(snapshot.price_identifier)
@@ -608,7 +717,7 @@ class BillingService:
             )
             return
         if (
-            billing_status == "cancelled"
+            billing_status in {"cancelled", "unpaid"}
             and state is not None
             and state.status == "active"
             and state.source == "billing_provider"
@@ -618,12 +727,12 @@ class BillingService:
                 organisation_id,
                 status="inactive",
                 actor_reference=f"billing:{self.provider.name}:{event_identifier}"[:200],
-                reason="Verified test-mode billing reconciliation confirmed the paid subscription ended.",
+                reason="Verified test-mode billing reconciliation confirmed paid commercial authority ended.",
                 expected_lock_version=state.lock_version,
                 source="billing_provider",
                 commit=False,
             )
-        # V1 past-due/unpaid/incomplete policy records attention without removing paid or trial data access.
+        # Provider-governed past-due recovery preserves access. Terminal unpaid/cancelled facts end paid authority only.
 
     async def _subscription_action(
         self,
@@ -641,20 +750,17 @@ class BillingService:
         existing = await self.repository.operation(organisation_id, action, request.idempotency_key, lock=True)
         if existing is not None:
             self._require_same_fingerprint(existing, fingerprint)
-            return HostedActionResponse(
-                operation_id=existing.id,
-                hosted_url=None,
-                status="succeeded" if existing.status == "succeeded" else "confirmation_pending",
-                message=(
-                    "Cancellation is scheduled. Access continues until the current paid period ends."
-                    if action == "cancel"
-                    else "Scheduled cancellation has been reversed."
-                ),
-            )
+            if existing.status == "succeeded":
+                return self._subscription_action_response(existing, action, confirmed=True)
+            if existing.status == "failed":
+                raise PublicAPIError(
+                    "billing_operation_failed",
+                    "That billing operation was rejected. Start a new request with a new retry key.",
+                    409,
+                )
         if action == "cancel" and subscription.status not in {
             "active",
             "past_due",
-            "unpaid",
             "cancel_at_period_end",
         }:
             raise PublicAPIError(
@@ -675,10 +781,29 @@ class BillingService:
                 "Only a scheduled cancellation can be reversed before the paid period ends.",
                 409,
             )
-        operation = self._operation(organisation_id, user_id, action, request.idempotency_key, fingerprint)
-        self.session.add(operation)
-        await self.session.flush()
+        operation = existing or self._operation(organisation_id, user_id, action, request.idempotency_key, fingerprint)
+        if existing is None:
+            self.session.add(operation)
+            await self.session.flush()
         try:
+            account = await self.repository.account(organisation_id, self.provider.name, self.provider.mode)
+            if account is None:
+                raise PublicAPIError("billing_not_configured", "Billing is not configured for this organisation.", 409)
+            if existing is not None:
+                reconciled = await self.provider.retrieve_subscription(subscription.provider_subscription_id)
+                self._verify_plan_change_ownership(account, subscription, reconciled)
+                confirmed = (
+                    reconciled.cancel_at_period_end
+                    if action == "cancel"
+                    else reconciled.status == "active" and not reconciled.cancel_at_period_end
+                )
+                if confirmed:
+                    self._apply_subscription_action_snapshot(subscription, reconciled)
+                    operation.status = "succeeded"
+                    operation.safe_error_code = None
+                    operation.completed_at = _aware(self._now())
+                    await self._commit(organisation_id)
+                    return self._subscription_action_response(operation, action, confirmed=True)
             if action == "cancel":
                 snapshot = await self.provider.cancel_at_period_end(
                     subscription.provider_subscription_id,
@@ -689,30 +814,111 @@ class BillingService:
                     subscription.provider_subscription_id,
                     idempotency_key=f"reactivate:{organisation_id}:{request.idempotency_key}",
                 )
-            account = await self.repository.account(organisation_id, self.provider.name, self.provider.mode)
-            if account is None or snapshot.customer_identifier != account.provider_customer_id:
-                raise PublicAPIError("billing_customer_mismatch", "Subscription ownership could not be verified.", 409)
-            self._verify_subscription_customer(subscription, snapshot)
-            subscription.status = snapshot.status
-            subscription.cancel_at_period_end = snapshot.cancel_at_period_end
-            subscription.provider_updated_at = snapshot.provider_updated_at
-            subscription.lock_version += 1
+            self._verify_plan_change_ownership(account, subscription, snapshot)
+            self._apply_subscription_action_snapshot(subscription, snapshot)
             operation.status = "succeeded"
+            operation.safe_error_code = None
             operation.completed_at = _aware(self._now())
             await self._commit(organisation_id)
-            return HostedActionResponse(
-                operation_id=operation.id,
-                hosted_url=None,
-                status="succeeded",
-                message=(
-                    "Cancellation is scheduled. Access continues until the current paid period ends."
-                    if action == "cancel"
-                    else "Scheduled cancellation has been reversed."
-                ),
-            )
+            return self._subscription_action_response(operation, action, confirmed=True)
         except PublicAPIError as exc:
             await self._record_operation_failure(organisation_id, operation, exc)
             raise
+
+    async def _apply_plan_change_result(
+        self,
+        organisation_id: UUID,
+        account: BillingAccount,
+        subscription: BillingSubscription,
+        result: ProviderPlanChangeResult,
+        *,
+        event_identifier: str,
+    ) -> tuple[PlanCode, BillingInterval]:
+        self._verify_plan_change_ownership(account, subscription, result.subscription)
+        mapped = self.prices.reverse(result.subscription.price_identifier)
+        if mapped is None:
+            raise PublicAPIError(
+                "billing_price_mapping_invalid", "The provider plan could not be safely reconciled.", 409
+            )
+        if result.invoice is not None and (
+            result.invoice.customer_identifier != account.provider_customer_id
+            or result.invoice.subscription_identifier != subscription.provider_subscription_id
+        ):
+            raise PublicAPIError(
+                "billing_invoice_ownership_mismatch", "The provider invoice could not be safely reconciled.", 409
+            )
+        event = VerifiedBillingEvent(
+            identifier=event_identifier,
+            event_type="billing.plan_change.reconciled",
+            organisation_id=organisation_id,
+            customer_identifier=account.provider_customer_id,
+            subscription_identifier=result.subscription.identifier,
+            invoice_identifier=result.invoice.identifier if result.invoice is not None else None,
+            object_identifier=result.subscription.identifier,
+            created_at=_aware(self._now()),
+        )
+        outcome = await self._reconcile_subscription_snapshot(account, event, result.subscription)
+        if outcome != "processed":
+            raise PublicAPIError(
+                "billing_plan_change_reconciliation_required",
+                "The provider plan change could not be safely confirmed.",
+                409,
+            )
+        if result.invoice is not None:
+            await self._upsert_invoice_async(organisation_id, subscription.id, result.invoice)
+        return mapped
+
+    @staticmethod
+    def _verify_plan_change_ownership(
+        account: BillingAccount,
+        subscription: BillingSubscription,
+        snapshot: ProviderSubscriptionSnapshot,
+    ) -> None:
+        if snapshot.customer_identifier != account.provider_customer_id:
+            raise PublicAPIError("billing_customer_mismatch", "Subscription ownership could not be verified.", 409)
+        BillingService._verify_subscription_customer(subscription, snapshot)
+
+    @staticmethod
+    def _apply_subscription_action_snapshot(
+        subscription: BillingSubscription, snapshot: ProviderSubscriptionSnapshot
+    ) -> None:
+        subscription.status = snapshot.status
+        subscription.cancel_at_period_end = snapshot.cancel_at_period_end
+        subscription.provider_updated_at = snapshot.provider_updated_at
+        subscription.lock_version += 1
+
+    @staticmethod
+    def _subscription_action_response(
+        operation: BillingOperation,
+        action: Literal["cancel", "reactivate"],
+        *,
+        confirmed: bool,
+    ) -> HostedActionResponse:
+        return HostedActionResponse(
+            operation_id=operation.id,
+            hosted_url=None,
+            status="succeeded" if confirmed else "confirmation_pending",
+            message=(
+                "Cancellation is scheduled. Access continues until the current paid period ends."
+                if action == "cancel"
+                else "Scheduled cancellation has been reversed."
+            ),
+        )
+
+    @staticmethod
+    def _plan_change_response(operation: BillingOperation, *, confirmed: bool) -> HostedActionResponse:
+        return HostedActionResponse(
+            operation_id=operation.id,
+            hosted_url=None,
+            status="succeeded" if confirmed else "confirmation_pending",
+            message=(
+                "Billing plan change confirmed. Higher-tier changes apply only after provider payment confirmation; "
+                "lower-tier and interval changes apply at renewal."
+                if confirmed
+                else "The provider has not confirmed the immediate upgrade. The existing commercial plan remains "
+                "authoritative; check billing status before retrying."
+            ),
+        )
 
     async def _ensure_account(self, organisation_id: UUID) -> BillingAccount:
         existing = await self.repository.account(organisation_id, self.provider.name, self.provider.mode)
@@ -849,8 +1055,20 @@ class BillingService:
     def _projection_message(account: BillingAccount | None, subscription: BillingSubscription | None) -> str:
         if account is None or subscription is None:
             return "Billing is not configured or is manually managed. No provider subscription is being represented."
-        if subscription.status in {"past_due", "unpaid", "incomplete", "unknown_reconciliation"}:
-            return "Payment needs attention. Existing data has not been deleted; use hosted billing management to resolve it."
+        if subscription.status == "past_due":
+            return (
+                "Payment recovery is in progress under the provider's bounded retry policy. Access and existing data "
+                "are preserved; use hosted billing management to resolve it."
+            )
+        if subscription.status == "unpaid":
+            return (
+                "Provider payment recovery has ended and paid functionality is inactive. Existing data is preserved; "
+                "use hosted billing management to resolve it."
+            )
+        if subscription.status in {"incomplete", "unknown_reconciliation"}:
+            return (
+                "Payment has not been confirmed. No new paid entitlement has been granted; existing data is preserved."
+            )
         if subscription.status == "cancel_at_period_end":
             return "Cancellation is scheduled. Paid access continues until the current period ends."
         if subscription.status == "cancelled":
@@ -929,12 +1147,14 @@ class BillingService:
         plan_code: PlanCode,
         interval: BillingInterval,
         amount: Decimal,
+        *,
+        status: Literal["redirect_ready", "confirmation_pending"] = "redirect_ready",
     ) -> CheckoutCreateResponse:
         assert operation.hosted_url is not None
         return CheckoutCreateResponse(
             operation_id=operation.id,
             checkout_url=operation.hosted_url,
-            status="redirect_ready",
+            status=status,
             plan_code=plan_code,
             billing_interval=interval,
             amount=_amount_text(amount),

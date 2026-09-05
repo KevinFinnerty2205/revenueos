@@ -23,11 +23,13 @@ from revenueos.billing_provider import (
     DeterministicBillingProvider,
     ProviderCheckout,
     ProviderInvoiceSnapshot,
+    ProviderPlanChangeResult,
     ProviderPriceReference,
+    ProviderSubscriptionSnapshot,
     StripeTestBillingProvider,
 )
 from revenueos.billing_services import BillingService
-from revenueos.commercial_contracts import PlanCode
+from revenueos.commercial_contracts import BillingInterval, PlanCode
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
@@ -74,6 +76,89 @@ class TimeoutOnceBillingProvider(DeterministicBillingProvider):
                 503,
             )
         return result
+
+
+class TimeoutOncePlanUpgradeProvider(DeterministicBillingProvider):
+    def __init__(self, settings: Settings) -> None:
+        super().__init__(settings)
+        self.timeout_once = True
+
+    async def apply_plan_upgrade(
+        self,
+        identifier: str,
+        *,
+        price: ProviderPriceReference,
+        idempotency_key: str,
+    ) -> ProviderPlanChangeResult:
+        result = await super().apply_plan_upgrade(
+            identifier,
+            price=price,
+            idempotency_key=idempotency_key,
+        )
+        if self.timeout_once:
+            self.timeout_once = False
+            raise PublicAPIError(
+                "billing_provider_unavailable",
+                "The provider applied the request but its response was lost.",
+                503,
+            )
+        return result
+
+
+class TimeoutOnceCancellationProvider(DeterministicBillingProvider):
+    def __init__(self, settings: Settings) -> None:
+        super().__init__(settings)
+        self.timeout_once = True
+
+    async def cancel_at_period_end(self, identifier: str, *, idempotency_key: str) -> ProviderSubscriptionSnapshot:
+        result = await super().cancel_at_period_end(identifier, idempotency_key=idempotency_key)
+        if self.timeout_once:
+            self.timeout_once = False
+            raise PublicAPIError(
+                "billing_provider_unavailable",
+                "The provider applied the request but its response was lost.",
+                503,
+            )
+        return result
+
+
+class TimeoutOnceScheduledPlanCancellationProvider(DeterministicBillingProvider):
+    def __init__(self, settings: Settings) -> None:
+        super().__init__(settings)
+        self.timeout_once = True
+
+    async def cancel_scheduled_plan_change(
+        self, identifier: str, *, idempotency_key: str
+    ) -> ProviderSubscriptionSnapshot:
+        result = await super().cancel_scheduled_plan_change(identifier, idempotency_key=idempotency_key)
+        if self.timeout_once:
+            self.timeout_once = False
+            raise PublicAPIError(
+                "billing_provider_unavailable",
+                "The provider removed the schedule but its response was lost.",
+                503,
+            )
+        return result
+
+
+class MismatchedUpgradeInvoiceProvider(DeterministicBillingProvider):
+    async def apply_plan_upgrade(
+        self,
+        identifier: str,
+        *,
+        price: ProviderPriceReference,
+        idempotency_key: str,
+    ) -> ProviderPlanChangeResult:
+        result = await super().apply_plan_upgrade(
+            identifier,
+            price=price,
+            idempotency_key=idempotency_key,
+        )
+        assert result.invoice is not None
+        return replace(
+            result,
+            invoice=replace(result.invoice, customer_identifier="cus_test_wrong_organisation"),
+        )
 
 
 def billing_settings() -> Settings:
@@ -144,17 +229,16 @@ def test_exact_checkout_catalogue_idempotency_and_server_authority() -> None:
                 assert enterprise.self_service_available is False
                 assert enterprise.amount is None
 
-                for (plan_code, interval), expected in exact.items():
-                    request = CheckoutCreateRequest(
-                        plan_code=plan_code,
-                        billing_interval=interval,
-                        idempotency_key=f"checkout-{plan_code}-{interval}-0001",
-                    )
-                    first = await service.create_checkout(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
-                    second = await service.create_checkout(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
-                    assert first == second
-                    assert first.amount == expected
-                    assert first.checkout_url.startswith("https://checkout.stripe.test/")
+                request = CheckoutCreateRequest(
+                    plan_code="core",
+                    billing_interval="annual",
+                    idempotency_key="checkout-core-annual-0001",
+                )
+                first = await service.create_checkout(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
+                second = await service.create_checkout(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
+                assert first == second
+                assert first.amount == exact[("core", "annual")]
+                assert first.checkout_url.startswith("https://checkout.stripe.test/")
 
                 assert (
                     await session.scalar(
@@ -165,8 +249,20 @@ def test_exact_checkout_catalogue_idempotency_and_server_authority() -> None:
                             BillingOperation.operation_type == "checkout",
                         )
                     )
-                    == 6
+                    == 1
                 )
+                stored_operation = await session.get(BillingOperation, first.operation_id)
+                assert stored_operation is not None and stored_operation.status == "pending"
+                with pytest.raises(PublicAPIError, match="previous checkout"):
+                    await service.create_checkout(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        CheckoutCreateRequest(
+                            plan_code="complete",
+                            billing_interval="monthly",
+                            idempotency_key="parallel-checkout-blocked-0001",
+                        ),
+                    )
                 with pytest.raises(PublicAPIError, match="Enterprise"):
                     await service.create_checkout(
                         PRIMARY_ORGANISATION_ID,
@@ -187,6 +283,52 @@ def test_exact_checkout_catalogue_idempotency_and_server_authority() -> None:
                             idempotency_key="checkout-core-annual-0001",
                         ),
                     )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("plan_code", "interval", "expected_amount"),
+    [
+        ("core", "monthly", "200.00"),
+        ("core", "annual", "2000.00"),
+        ("growth", "monthly", "350.00"),
+        ("growth", "annual", "3500.00"),
+        ("complete", "monthly", "500.00"),
+        ("complete", "annual", "5000.00"),
+    ],
+)
+def test_each_authorised_checkout_offer_uses_the_server_catalogue(
+    plan_code: PlanCode,
+    interval: BillingInterval,
+    expected_amount: str,
+) -> None:
+    async def scenario() -> None:
+        settings = billing_settings()
+        provider = DeterministicBillingProvider(settings)
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = BillingService(session, settings, provider)
+                checkout = await service.create_checkout(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    CheckoutCreateRequest(
+                        plan_code=plan_code,
+                        billing_interval=interval,
+                        idempotency_key=f"authorised-{plan_code}-{interval}-checkout-0001",
+                    ),
+                )
+                assert checkout.amount == expected_amount
+                operation = await session.get(BillingOperation, checkout.operation_id)
+                assert operation is not None and operation.provider_object_id is not None
+                provider_checkout = await provider.retrieve_checkout(operation.provider_object_id)
+                assert provider_checkout.subscription_identifier is not None
+                provider_subscription = await provider.retrieve_subscription(provider_checkout.subscription_identifier)
+                assert provider_subscription.price_identifier == f"price_test_{plan_code}_{interval}_aud"
         finally:
             await engine.dispose()
 
@@ -306,6 +448,40 @@ def test_verified_webhooks_trial_conversion_duplicates_failures_invoice_and_out_
                 commercial_state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
                 assert commercial_state is not None and commercial_state.status == "active"
 
+                provider.set_subscription_status(subscription_snapshot.identifier, "unpaid")
+                unpaid_payload, unpaid_signature = signed_event(
+                    event_id="evt_payment_terminal_unpaid_001",
+                    event_type="customer.subscription.updated",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=provider_checkout.customer_identifier,
+                    subscription_id=subscription_snapshot.identifier,
+                    object_id=subscription_snapshot.identifier,
+                    created=start + timedelta(days=22),
+                )
+                assert await service.process_webhook(unpaid_payload, unpaid_signature) == "processed"
+                unpaid_projection = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert unpaid_projection.subscription is not None
+                assert unpaid_projection.subscription.status == "unpaid"
+                assert "paid functionality is inactive" in unpaid_projection.message
+                unpaid_state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
+                assert unpaid_state is not None and unpaid_state.status == "inactive"
+                organisation = await session.get(Organisation, PRIMARY_ORGANISATION_ID)
+                assert organisation is not None and organisation.name == "Example Revenue Team"
+
+                provider.set_subscription_status(subscription_snapshot.identifier, "active")
+                recovered_payload, recovered_signature = signed_event(
+                    event_id="evt_payment_recovered_001",
+                    event_type="customer.subscription.updated",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=provider_checkout.customer_identifier,
+                    subscription_id=subscription_snapshot.identifier,
+                    object_id=subscription_snapshot.identifier,
+                    created=start + timedelta(days=23),
+                )
+                assert await service.process_webhook(recovered_payload, recovered_signature) == "processed"
+                recovered_state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
+                assert recovered_state is not None and recovered_state.status == "active"
+
                 provider.set_subscription_status(
                     subscription_snapshot.identifier,
                     "cancelled",
@@ -343,7 +519,7 @@ def test_verified_webhooks_trial_conversion_duplicates_failures_invoice_and_out_
                     .select_from(CommercialStateEvent)
                     .where(CommercialStateEvent.organisation_id == PRIMARY_ORGANISATION_ID)
                 )
-                assert commercial_effects == 3  # trial, paid activation, period-end cancellation
+                assert commercial_effects == 5  # trial, paid, terminal unpaid, recovery, period-end cancellation
         finally:
             await engine.dispose()
 
@@ -373,7 +549,7 @@ def test_unknown_checkout_outcome_retries_with_one_provider_session_and_no_entit
                     )
                 )
                 assert operation is not None and operation.status == "unknown"
-                with pytest.raises(PublicAPIError, match="unknown outcome"):
+                with pytest.raises(PublicAPIError, match="previous checkout"):
                     await service.create_checkout(
                         PRIMARY_ORGANISATION_ID,
                         PRIMARY_USER_ID,
@@ -485,10 +661,10 @@ def test_verified_paid_conversion_preserves_each_supported_organisation_state(
     asyncio.run(scenario())
 
 
-def test_cancel_reactivate_and_next_renewal_plan_change_are_idempotent() -> None:
+def test_cancel_reactivate_and_next_renewal_downgrade_are_idempotent() -> None:
     async def scenario() -> None:
         settings = billing_settings()
-        provider = DeterministicBillingProvider(settings)
+        provider = TimeoutOnceScheduledPlanCancellationProvider(settings)
         engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
         start = datetime(2033, 2, 1, tzinfo=UTC)
         try:
@@ -499,9 +675,9 @@ def test_cancel_reactivate_and_next_renewal_plan_change_are_idempotent() -> None
                     PRIMARY_ORGANISATION_ID,
                     PRIMARY_USER_ID,
                     CheckoutCreateRequest(
-                        plan_code="core",
+                        plan_code="complete",
                         billing_interval="monthly",
-                        idempotency_key="lifecycle-core-monthly-0001",
+                        idempotency_key="lifecycle-complete-monthly-0001",
                     ),
                 )
                 operation = await session.get(BillingOperation, checkout.operation_id)
@@ -554,8 +730,53 @@ def test_cancel_reactivate_and_next_renewal_plan_change_are_idempotent() -> None
                 assert first_change == second_change
                 scheduled = await service.projection(PRIMARY_ORGANISATION_ID)
                 assert scheduled.subscription is not None
-                assert scheduled.subscription.plan_code == "core"
+                assert scheduled.subscription.plan_code == "complete"
                 assert scheduled.subscription.pending_plan_code == "growth"
+
+                replacement = await service.change_plan(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    PlanChangeRequest(
+                        plan_code="core",
+                        billing_interval="monthly",
+                        idempotency_key="replace-scheduled-downgrade-0001",
+                    ),
+                )
+                assert replacement.status == "succeeded"
+                replaced = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert replaced.subscription is not None
+                assert replaced.subscription.pending_plan_code == "core"
+                assert provider.pending_price_changes[snapshot.identifier] == "price_test_core_monthly_aud"
+
+                keep_request = PlanChangeRequest(
+                    plan_code="complete",
+                    billing_interval="monthly",
+                    idempotency_key="cancel-scheduled-downgrade-0001",
+                )
+                with pytest.raises(PublicAPIError, match="response was lost"):
+                    await service.change_plan(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, keep_request)
+                unresolved = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert unresolved.subscription is not None
+                assert unresolved.subscription.pending_plan_code == "core"
+
+                kept = await service.change_plan(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, keep_request)
+                repeated_keep = await service.change_plan(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, keep_request)
+                assert kept.status == "succeeded"
+                assert repeated_keep == kept
+                assert snapshot.identifier not in provider.pending_price_changes
+                no_pending = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert no_pending.subscription is not None
+                assert no_pending.subscription.pending_plan_code is None
+
+                await service.change_plan(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    PlanChangeRequest(
+                        plan_code="growth",
+                        billing_interval="annual",
+                        idempotency_key="growth-next-renewal-0002",
+                    ),
+                )
 
                 provider.renew_with_scheduled_plan(
                     snapshot.identifier,
@@ -581,6 +802,275 @@ def test_cancel_reactivate_and_next_renewal_plan_change_are_idempotent() -> None
                 assert commercial_state is not None
                 plan = await session.get(CommercialPlanVersion, commercial_state.plan_version_id)
                 assert plan is not None and plan.code == "growth"
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_higher_tier_upgrade_is_immediate_with_provider_invoice_and_no_client_proration() -> None:
+    async def scenario() -> None:
+        settings = billing_settings()
+        provider = DeterministicBillingProvider(settings)
+        provider.next_upgrade_invoice_amount = Decimal("137.25")
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        start = datetime(2033, 5, 1, tzinfo=UTC)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = BillingService(session, settings, provider, now=lambda: start)
+                checkout = await service.create_checkout(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    CheckoutCreateRequest(
+                        plan_code="core",
+                        billing_interval="annual",
+                        idempotency_key="upgrade-source-core-annual-0001",
+                    ),
+                )
+                operation = await session.get(BillingOperation, checkout.operation_id)
+                assert operation is not None and operation.provider_object_id is not None
+                provider_checkout = await provider.retrieve_checkout(operation.provider_object_id)
+                snapshot = provider.complete_checkout(
+                    provider_checkout.identifier,
+                    period_start=start,
+                    period_end=start + timedelta(days=365),
+                )
+                payload, signature = signed_event(
+                    event_id="evt_upgrade_source_active_001",
+                    event_type="checkout.session.completed",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=snapshot.customer_identifier,
+                    subscription_id=snapshot.identifier,
+                    object_id=provider_checkout.identifier,
+                    created=start,
+                )
+                assert await service.process_webhook(payload, signature) == "processed"
+
+                request = PlanChangeRequest(
+                    plan_code="growth",
+                    billing_interval="monthly",
+                    idempotency_key="immediate-growth-upgrade-0001",
+                )
+                first = await service.change_plan(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
+                second = await service.change_plan(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
+                assert first == second
+                assert first.status == "succeeded"
+
+                upgraded = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert upgraded.subscription is not None
+                assert upgraded.subscription.plan_code == "growth"
+                assert upgraded.subscription.billing_interval == "monthly"
+                assert upgraded.subscription.pending_plan_code is None
+                assert len(upgraded.invoices) == 1
+                assert upgraded.invoices[0].amount_due == "137.25"
+                assert upgraded.invoices[0].amount_paid == "137.25"
+                assert snapshot.identifier not in provider.pending_price_changes
+                commercial_state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
+                assert commercial_state is not None and commercial_state.status == "active"
+                commercial_plan = await session.get(CommercialPlanVersion, commercial_state.plan_version_id)
+                assert commercial_plan is not None and commercial_plan.code == "growth"
+                effects_before_webhook = await session.scalar(
+                    select(func.count())
+                    .select_from(CommercialStateEvent)
+                    .where(CommercialStateEvent.organisation_id == PRIMARY_ORGANISATION_ID)
+                )
+                upgrade_payload, upgrade_signature = signed_event(
+                    event_id="evt_immediate_upgrade_duplicate_001",
+                    event_type="customer.subscription.updated",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=snapshot.customer_identifier,
+                    subscription_id=snapshot.identifier,
+                    object_id=snapshot.identifier,
+                    created=start + timedelta(seconds=1),
+                )
+                assert await service.process_webhook(upgrade_payload, upgrade_signature) == "processed"
+                assert await service.process_webhook(upgrade_payload, upgrade_signature) == "duplicate"
+                effects_after_webhook = await session.scalar(
+                    select(func.count())
+                    .select_from(CommercialStateEvent)
+                    .where(CommercialStateEvent.organisation_id == PRIMARY_ORGANISATION_ID)
+                )
+                assert effects_after_webhook == effects_before_webhook
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_upgrade_with_mismatched_provider_invoice_never_grants_entitlement() -> None:
+    async def scenario() -> None:
+        settings = billing_settings()
+        provider = MismatchedUpgradeInvoiceProvider(settings)
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        start = datetime(2033, 7, 1, tzinfo=UTC)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = BillingService(session, settings, provider, now=lambda: start)
+                checkout = await service.create_checkout(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    CheckoutCreateRequest(
+                        plan_code="core",
+                        billing_interval="monthly",
+                        idempotency_key="mismatched-invoice-source-0001",
+                    ),
+                )
+                operation = await session.get(BillingOperation, checkout.operation_id)
+                assert operation is not None and operation.provider_object_id is not None
+                provider_checkout = await provider.retrieve_checkout(operation.provider_object_id)
+                snapshot = provider.complete_checkout(
+                    provider_checkout.identifier,
+                    period_start=start,
+                    period_end=start + timedelta(days=31),
+                )
+                payload, signature = signed_event(
+                    event_id="evt_mismatched_invoice_source_001",
+                    event_type="checkout.session.completed",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=snapshot.customer_identifier,
+                    subscription_id=snapshot.identifier,
+                    object_id=provider_checkout.identifier,
+                    created=start,
+                )
+                await service.process_webhook(payload, signature)
+
+                with pytest.raises(PublicAPIError, match="invoice could not be safely reconciled"):
+                    await service.change_plan(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        PlanChangeRequest(
+                            plan_code="growth",
+                            billing_interval="monthly",
+                            idempotency_key="mismatched-upgrade-invoice-0001",
+                        ),
+                    )
+                projection = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert projection.subscription is not None
+                assert projection.subscription.plan_code == "core"
+                assert projection.invoices == []
+                commercial_state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
+                assert commercial_state is not None and commercial_state.status == "active"
+                commercial_plan = await session.get(CommercialPlanVersion, commercial_state.plan_version_id)
+                assert commercial_plan is not None and commercial_plan.code == "core"
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_lost_upgrade_response_reconciles_before_retrying() -> None:
+    async def upgrade_scenario() -> None:
+        settings = billing_settings()
+        provider = TimeoutOncePlanUpgradeProvider(settings)
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        start = datetime(2033, 8, 1, tzinfo=UTC)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = BillingService(session, settings, provider, now=lambda: start)
+                checkout = await service.create_checkout(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    CheckoutCreateRequest(
+                        plan_code="core",
+                        billing_interval="monthly",
+                        idempotency_key="lost-upgrade-source-0001",
+                    ),
+                )
+                operation = await session.get(BillingOperation, checkout.operation_id)
+                assert operation is not None and operation.provider_object_id is not None
+                provider_checkout = await provider.retrieve_checkout(operation.provider_object_id)
+                snapshot = provider.complete_checkout(
+                    provider_checkout.identifier,
+                    period_start=start,
+                    period_end=start + timedelta(days=31),
+                )
+                payload, signature = signed_event(
+                    event_id="evt_lost_upgrade_source_001",
+                    event_type="checkout.session.completed",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=snapshot.customer_identifier,
+                    subscription_id=snapshot.identifier,
+                    object_id=provider_checkout.identifier,
+                    created=start,
+                )
+                await service.process_webhook(payload, signature)
+                request = PlanChangeRequest(
+                    plan_code="growth",
+                    billing_interval="annual",
+                    idempotency_key="lost-upgrade-response-0001",
+                )
+                with pytest.raises(PublicAPIError, match="response was lost"):
+                    await service.change_plan(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
+                before_confirmation = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert before_confirmation.subscription is not None
+                assert before_confirmation.subscription.plan_code == "core"
+                state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
+                assert state is not None
+                old_plan = await session.get(CommercialPlanVersion, state.plan_version_id)
+                assert old_plan is not None and old_plan.code == "core"
+
+                reconciled = await service.change_plan(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
+                assert reconciled.status == "succeeded"
+                after_confirmation = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert after_confirmation.subscription is not None
+                assert after_confirmation.subscription.plan_code == "growth"
+                assert len(provider.plan_change_results) == 1
+        finally:
+            await engine.dispose()
+
+    asyncio.run(upgrade_scenario())
+
+
+def test_lost_cancellation_response_reconciles_before_retrying() -> None:
+    async def scenario() -> None:
+        settings = billing_settings()
+        provider = TimeoutOnceCancellationProvider(settings)
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        start = datetime(2033, 9, 1, tzinfo=UTC)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = BillingService(session, settings, provider, now=lambda: start)
+                checkout = await service.create_checkout(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    CheckoutCreateRequest(
+                        plan_code="core",
+                        billing_interval="monthly",
+                        idempotency_key="lost-cancel-source-0001",
+                    ),
+                )
+                operation = await session.get(BillingOperation, checkout.operation_id)
+                assert operation is not None and operation.provider_object_id is not None
+                provider_checkout = await provider.retrieve_checkout(operation.provider_object_id)
+                snapshot = provider.complete_checkout(
+                    provider_checkout.identifier,
+                    period_start=start,
+                    period_end=start + timedelta(days=30),
+                )
+                payload, signature = signed_event(
+                    event_id="evt_lost_cancel_source_001",
+                    event_type="checkout.session.completed",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=snapshot.customer_identifier,
+                    subscription_id=snapshot.identifier,
+                    object_id=provider_checkout.identifier,
+                    created=start,
+                )
+                await service.process_webhook(payload, signature)
+                request = BillingOperationRequest(idempotency_key="lost-cancel-response-0001")
+                with pytest.raises(PublicAPIError, match="response was lost"):
+                    await service.cancel(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
+                pending = await service.cancel(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, request)
+                assert pending.status == "succeeded"
+                projection = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert projection.subscription is not None
+                assert projection.subscription.cancel_at_period_end is True
+                assert projection.subscription.current_period_end is not None
+                assert projection.subscription.current_period_end.replace(tzinfo=UTC) == start + timedelta(days=30)
         finally:
             await engine.dispose()
 
@@ -851,3 +1341,117 @@ def test_stripe_test_adapter_pins_version_item_periods_and_signed_test_events() 
     ).hexdigest()
     with pytest.raises(PublicAPIError, match="outside the authorised test mode"):
         asyncio.run(provider.verify_webhook(live_payload, f"t={timestamp},v1={live_signature}"))
+
+
+def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_schedule() -> None:
+    async def scenario() -> None:
+        settings = Settings(
+            environment="test",
+            stripe_secret_key="sk_test_synthetic_never_sent_wo048",
+            billing_webhook_secret=WEBHOOK_SECRET,
+        )
+        provider = StripeTestBillingProvider(settings)
+        calls: list[tuple[str, str, list[tuple[str, str]], str | None]] = []
+        period_start = datetime(2034, 3, 1, tzinfo=UTC)
+        period_end = datetime(2034, 4, 1, tzinfo=UTC)
+
+        def subscription_data(price_identifier: str) -> dict[str, object]:
+            return {
+                "id": "sub_test_change_001",
+                "customer": "cus_test_change_001",
+                "livemode": False,
+                "status": "active",
+                "cancel_at_period_end": False,
+                "schedule": "sub_sched_test_001",
+                "items": {
+                    "data": [
+                        {
+                            "id": "si_test_001",
+                            "price": {"id": price_identifier},
+                            "current_period_start": int(period_start.timestamp()),
+                            "current_period_end": int(period_end.timestamp()),
+                        }
+                    ]
+                },
+            }
+
+        async def request(
+            method: str,
+            path: str,
+            *,
+            form: list[tuple[str, str]] | None = None,
+            idempotency_key: str | None = None,
+        ) -> dict[str, object]:
+            calls.append((method, path, form or [], idempotency_key))
+            if path.startswith("/v1/prices/"):
+                amount = 35000 if path.endswith("growth_monthly") else 20000
+                return {
+                    "id": path.rsplit("/", 1)[-1],
+                    "livemode": False,
+                    "active": True,
+                    "currency": "aud",
+                    "unit_amount": amount,
+                    "recurring": {"interval": "month", "interval_count": 1},
+                }
+            if method == "GET" and path == "/v1/subscriptions/sub_test_change_001":
+                return subscription_data("price_test_core_monthly")
+            if method == "POST" and path == "/v1/subscriptions/sub_test_change_001":
+                upgraded = subscription_data("price_test_growth_monthly")
+                upgraded["latest_invoice"] = {
+                    "id": "in_test_proration_001",
+                    "customer": "cus_test_change_001",
+                    "livemode": False,
+                    "created": int(period_start.timestamp()),
+                    "amount_due": 15750,
+                    "amount_paid": 15750,
+                    "amount_refunded": 0,
+                    "currency": "aud",
+                    "status": "paid",
+                    "parent": {"subscription_details": {"subscription": "sub_test_change_001"}},
+                    "hosted_invoice_url": "https://invoice.stripe.test/i/in_test_proration_001",
+                }
+                return upgraded
+            return {"id": "sub_sched_test_001", "livemode": False}
+
+        provider._request = request  # type: ignore[method-assign]
+        result = await provider.apply_plan_upgrade(
+            "sub_test_change_001",
+            price=ProviderPriceReference(
+                identifier="price_test_growth_monthly",
+                plan_code="growth",
+                billing_interval="monthly",
+                amount=Decimal("350.00"),
+            ),
+            idempotency_key="upgrade-provider-proration-0001",
+        )
+        assert result.subscription.price_identifier == "price_test_growth_monthly"
+        assert result.invoice is not None and result.invoice.amount_due == Decimal("157.50")
+        update_call = next(
+            call for call in calls if call[1] == "/v1/subscriptions/sub_test_change_001" and call[0] == "POST"
+        )
+        assert ("items[0][id]", "si_test_001") in update_call[2]
+        assert ("items[0][price]", "price_test_growth_monthly") in update_call[2]
+        assert ("proration_behavior", "always_invoice") in update_call[2]
+        assert ("payment_behavior", "pending_if_incomplete") in update_call[2]
+        assert update_call[3] == "upgrade-provider-proration-0001:upgrade"
+        assert any(call[1] == "/v1/subscription_schedules/sub_sched_test_001/release" for call in calls)
+
+        calls.clear()
+        await provider.schedule_plan_change(
+            "sub_test_change_001",
+            price=ProviderPriceReference(
+                identifier="price_test_core_monthly",
+                plan_code="core",
+                billing_interval="monthly",
+                amount=Decimal("200.00"),
+            ),
+            idempotency_key="scheduled-provider-downgrade-0001",
+        )
+        assert not any(call[1] == "/v1/subscription_schedules" for call in calls)
+        phase_call = next(
+            call for call in calls if call[0] == "POST" and call[1] == "/v1/subscription_schedules/sub_sched_test_001"
+        )
+        assert ("phases[1][items][0][price]", "price_test_core_monthly") in phase_call[2]
+        assert ("phases[1][proration_behavior]", "none") in phase_call[2]
+
+    asyncio.run(scenario())
