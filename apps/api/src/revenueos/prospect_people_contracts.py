@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
+from pydantic import model_validator
+
 from revenueos.contracts import APIModel
 from revenueos.domain import (
     ProspectBuyingRole,
@@ -24,6 +26,15 @@ from revenueos.prospect_contracts import (
 class PersonResearchRequest(APIModel):
     idempotency_key: IdempotencyKey | None = None
     credit_operation_id: UUID | None = None
+    credit_quote_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_credit_authorisation(self) -> PersonResearchRequest:
+        if self.credit_operation_id is not None and self.credit_quote_id is not None:
+            raise ValueError("Provide either a Credit operation or a Credit quote, not both.")
+        if self.credit_quote_id is not None and self.idempotency_key is None:
+            raise ValueError("A stable idempotency key is required when confirming a Credit quote.")
+        return self
 
 
 class RelevantFunctionResponse(APIModel):

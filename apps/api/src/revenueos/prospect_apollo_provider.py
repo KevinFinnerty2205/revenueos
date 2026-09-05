@@ -20,6 +20,7 @@ from revenueos.domain import (
     ProspectTrustState,
 )
 from revenueos.prospect_provider import (
+    GENERIC_BUSINESS_EMAIL_LOCAL_PARTS,
     CompanyCandidate,
     PersonCandidate,
     PersonTargetSnapshot,
@@ -61,10 +62,18 @@ class _ApolloOrganisationResponse(_ApolloModel):
     organization: _ApolloOrganisation | None = None
 
 
+class _ApolloPersonOrganisation(_ApolloModel):
+    id: str | None = Field(default=None, min_length=1, max_length=200)
+    name: str | None = Field(default=None, min_length=1, max_length=500)
+    primary_domain: str | None = None
+    website_url: str | None = None
+
+
 class _ApolloPerson(_ApolloModel):
     id: str = Field(min_length=1, max_length=200)
     first_name: str = Field(min_length=1, max_length=200)
-    last_name: str = Field(min_length=1, max_length=200)
+    last_name: str | None = Field(default=None, min_length=1, max_length=200)
+    last_name_obfuscated: str | None = Field(default=None, min_length=1, max_length=200)
     name: str | None = None
     title: str | None = None
     headline: str | None = None
@@ -74,6 +83,7 @@ class _ApolloPerson(_ApolloModel):
     linkedin_url: str | None = None
     email: str | None = None
     email_status: str | None = None
+    organization: _ApolloPersonOrganisation | None = None
 
 
 class _ApolloPeopleResponse(_ApolloModel):
@@ -173,8 +183,9 @@ class ApolloProspectProvider:
             raise self._schema_error() from exc
         if organisation is None:
             return ProviderResearchResult(
-                outcome="no_result", sources=(), observations=(), provider_units=0, successful_units=0
+                outcome="no_result", sources=(), observations=(), provider_units=1, successful_units=0
             )
+        self._require_company_identity(target, organisation)
         return self._company_result(organisation)
 
     async def discover_people(
@@ -191,17 +202,22 @@ class ApolloProspectProvider:
             "/api/v1/mixed_people/api_search",
             execution=execution,
             billable=False,
-            json_body={
-                "q_organization_domains": target.domain,
-                "page": 1,
-                "per_page": min(max(limit, 1), 100),
+            params={
+                "q_organization_domains_list[]": target.domain,
+                "page": "1",
+                "per_page": str(min(max(limit, 1), 100)),
             },
         )
         try:
             people = _ApolloPeopleResponse.model_validate(payload).people
         except ValidationError as exc:
-            raise self._schema_error() from exc
-        return tuple(self._person_candidate(target, person) for person in people[:limit])
+            raise self._schema_error(unknown=False) from exc
+        candidates: list[PersonCandidate] = []
+        for person in people[:limit]:
+            candidate = self._person_candidate(target, person)
+            if candidate is not None:
+                candidates.append(candidate)
+        return tuple(candidates)
 
     async def research_person(
         self,
@@ -216,11 +232,11 @@ class ApolloProspectProvider:
             "POST",
             "/api/v1/people/match",
             execution=execution,
-            json_body={
+            params={
                 "id": person.provider_person_id,
-                "organization_domain": target.domain,
-                "reveal_personal_emails": False,
-                "reveal_phone_number": False,
+                "domain": target.domain,
+                "reveal_personal_emails": "false",
+                "reveal_phone_number": "false",
             },
         )
         try:
@@ -240,6 +256,14 @@ class ApolloProspectProvider:
                 provider_units=0,
                 successful_units=0,
             )
+        if self._text(matched.id, 200) != person.provider_person_id:
+            raise ProspectProviderError(
+                "provider_person_identity_mismatch",
+                "The provider response identity requires reconciliation.",
+                retryable=False,
+                execution_state="unknown",
+            )
+        self._require_person_company_identity(target, matched)
         return self._person_result(target, matched)
 
     async def _request(
@@ -250,7 +274,6 @@ class ApolloProspectProvider:
         execution: ProviderExecutionContext | None,
         billable: bool = True,
         params: dict[str, str] | None = None,
-        json_body: dict[str, object] | None = None,
     ) -> object:
         if billable and execution is None:
             raise ProspectProviderError(
@@ -274,7 +297,6 @@ class ApolloProspectProvider:
                     method,
                     path,
                     params=params,
-                    json=json_body,
                     headers=headers,
                 ) as response:
                     if response.status_code == 429 and attempt == 0:
@@ -290,6 +312,13 @@ class ApolloProspectProvider:
                             retry_after_seconds=self._bounded_retry_after(response.headers.get("Retry-After")),
                         )
                     if response.status_code >= 500:
+                        raise ProspectProviderError(
+                            "provider_outcome_unknown",
+                            "The provider outcome is unknown and requires reconciliation.",
+                            retryable=False,
+                            execution_state="unknown" if billable else "not_executed",
+                        )
+                    if response.status_code == 408:
                         raise ProspectProviderError(
                             "provider_outcome_unknown",
                             "The provider outcome is unknown and requires reconciliation.",
@@ -320,7 +349,7 @@ class ApolloProspectProvider:
                                 retryable=False,
                                 execution_state="unknown" if billable else "not_executed",
                             )
-            except httpx.ConnectError as exc:
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
                 raise ProspectProviderError(
                     "provider_connection_failed",
                     "Prospect research is temporarily unavailable.",
@@ -370,14 +399,29 @@ class ApolloProspectProvider:
             successful_units=1,
         )
 
-    def _person_candidate(self, target: ResearchTargetSnapshot, person: _ApolloPerson) -> PersonCandidate:
+    def _person_candidate(
+        self,
+        target: ResearchTargetSnapshot,
+        person: _ApolloPerson,
+    ) -> PersonCandidate | None:
+        organisation_name = person.organization.name if person.organization is not None else None
+        # The domain search filter can match previous employment. Apollo's search
+        # response identifies the current employer by name, so discard results that
+        # cannot be tied back to the already domain-validated company target.
+        if not organisation_name or self._text(organisation_name, 200).casefold() != target.name.casefold():
+            return None
+        last_name = person.last_name or person.last_name_obfuscated
+        if last_name is None:
+            raise self._schema_error(unknown=False)
         title = self._text(person.title or person.headline or "Professional role not supplied", 200)
-        display_name = self._text(person.name or f"{person.first_name} {person.last_name}", 200)
+        clean_first_name = self._text(person.first_name, 100)
+        clean_last_name = self._text(last_name, 100)
+        display_name = self._text(person.name or f"{clean_first_name} {clean_last_name}", 200)
         return PersonCandidate(
             person_id=self._text(person.id, 200),
             display_name=display_name,
-            first_name=self._text(person.first_name, 100),
-            last_name=self._text(person.last_name, 100),
+            first_name=clean_first_name,
+            last_name=clean_last_name,
             current_role=title,
             current_company=target.name,
             public_professional_location=self._join_location(person.city, person.state, person.country),
@@ -386,14 +430,20 @@ class ApolloProspectProvider:
             why_may_matter=f"This {title} role may be relevant to the buying group; validate with the customer.",
             discovery_source="structured_provider",
             provider_attribution="Apollo structured professional data",
-            identity_state="supported",
+            identity_state="ambiguous" if person.last_name is None else "supported",
             employment_state=ProspectPersonEmploymentState.CURRENT,
         )
 
     def _person_result(self, target: ResearchTargetSnapshot, person: _ApolloPerson) -> ProviderPersonResearchResult:
         now = datetime.now(UTC)
+        if person.last_name is None or person.organization is None or person.organization.name is None:
+            raise self._schema_error()
+        first_name = self._text(person.first_name, 100)
+        last_name = self._text(person.last_name, 100)
+        display_name = self._text(person.name or f"{first_name} {last_name}", 200)
+        current_company = self._text(person.organization.name, 200)
         title = self._text(person.title or person.headline or "Professional role not supplied", 200)
-        source = self._source(person.id, f"Apollo professional record for {person.first_name} {person.last_name}")
+        source = self._source(person.id, f"Apollo professional record for {first_name} {last_name}")
         observations = (
             self._observation(
                 "current_role",
@@ -415,7 +465,12 @@ class ApolloProspectProvider:
         buying_role = self._buying_role(title)
         contact_points: list[ProviderContactPoint] = []
         email = (person.email or "").strip().casefold()
-        if email.endswith(f"@{target.domain}") and person.email_status not in {"unavailable", "guessed"}:
+        email_local_part = email.partition("@")[0]
+        if (
+            email.endswith(f"@{target.domain}")
+            and email_local_part not in GENERIC_BUSINESS_EMAIL_LOCAL_PARTS
+            and person.email_status not in {"unavailable", "guessed"}
+        ):
             contact_points.append(
                 ProviderContactPoint(
                     point_type=ProspectContactPointType.BUSINESS_EMAIL,
@@ -442,6 +497,11 @@ class ApolloProspectProvider:
             )
         return ProviderPersonResearchResult(
             outcome="completed",
+            first_name=first_name,
+            last_name=last_name,
+            display_name=display_name,
+            current_company=current_company,
+            identity_state="supported",
             employment_state=ProspectPersonEmploymentState.CURRENT,
             current_role=title,
             why_may_matter=f"This {title} role may be relevant to the buying group; validate with the customer.",
@@ -459,6 +519,44 @@ class ApolloProspectProvider:
             provider_units=1,
             successful_units=1,
         )
+
+    @staticmethod
+    def _require_company_identity(target: ResearchTargetSnapshot, organisation: _ApolloOrganisation) -> None:
+        reported_domains: set[str] = set()
+        for value in (organisation.primary_domain, organisation.website_url):
+            if not value:
+                continue
+            try:
+                reported_domains.add(normalise_company_website(value).domain)
+            except Exception:
+                continue
+        if target.domain not in reported_domains:
+            raise ProspectProviderError(
+                "provider_company_identity_mismatch",
+                "The provider response identity requires reconciliation.",
+                retryable=False,
+                execution_state="unknown",
+            )
+
+    @staticmethod
+    def _require_person_company_identity(target: ResearchTargetSnapshot, person: _ApolloPerson) -> None:
+        organisation = person.organization
+        reported_domains: set[str] = set()
+        if organisation is not None:
+            for value in (organisation.primary_domain, organisation.website_url):
+                if not value:
+                    continue
+                try:
+                    reported_domains.add(normalise_company_website(value).domain)
+                except Exception:
+                    continue
+        if target.domain not in reported_domains:
+            raise ProspectProviderError(
+                "provider_person_company_mismatch",
+                "The provider response employment requires reconciliation.",
+                retryable=False,
+                execution_state="unknown",
+            )
 
     @staticmethod
     def _source(record_id: str, title: str) -> ProviderResearchSource:
@@ -488,7 +586,7 @@ class ApolloProspectProvider:
         return ProviderResearchObservation(
             observation_key=key,
             category=category,
-            statement=ApolloProspectProvider._text(value, 1_500),
+            statement=ApolloProspectProvider._text(value, 600),
             trust_state=ProspectTrustState.PROVIDER_SUPPLIED,
             relevance="normal",
             observed_at=now,

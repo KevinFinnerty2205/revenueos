@@ -13,10 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from revenueos.beta_maintenance import _export_payload, run_retention
 from revenueos.config import Settings
 from revenueos.domain import ProspectTrustState
+from revenueos.errors import PublicAPIError
 from revenueos.models import (
     ActionProposal,
     Contact,
     ContactFieldSource,
+    CreditOperation,
     Evidence,
     MethodologyProjection,
     Opportunity,
@@ -27,6 +29,7 @@ from revenueos.models import (
     RevenueBrainSnapshot,
 )
 from revenueos.prospect_contracts import ResearchCreateRequest
+from revenueos.prospect_people_contracts import PersonResearchRequest
 from revenueos.prospect_people_services import ProspectPeopleService
 from revenueos.prospect_provider import (
     DeterministicMockProspectProvider,
@@ -44,6 +47,7 @@ from revenueos.prospect_worker import ProspectWorkerService
 from revenueos.tenant import TenantContext
 
 from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, SECONDARY_ORGANISATION_ID, TEST_DB_URL
+from .test_credits import grant_test_purchase, prepared_service
 
 Scenario = Callable[[async_sessionmaker[AsyncSession]], Awaitable[None]]
 
@@ -231,6 +235,61 @@ def test_explicit_person_promotion_preserves_field_trust_and_mutates_only_contac
             assert email_source.verified_at is None
 
     _run(assert_sources)
+
+
+@pytest.mark.parametrize("latest_status", ["unknown", "no_result"])
+def test_latest_unknown_or_no_result_blocks_person_promotion(
+    client: TestClient,
+    latest_status: str,
+) -> None:
+    target_id, company_id = _prepare_company(client)
+    assert company_id is not None
+    person_id = _discover_and_research_jane(client, target_id)
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        async with session_factory() as session:
+            current = await session.scalar(
+                select(ProspectResearchRun).where(
+                    ProspectResearchRun.organisation_id == PRIMARY_ORGANISATION_ID,
+                    ProspectResearchRun.person_id == UUID(person_id),
+                )
+            )
+            assert current is not None
+            created_at = current.created_at + timedelta(seconds=1)
+            session.add(
+                ProspectResearchRun(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    target_id=current.target_id,
+                    person_id=UUID(person_id),
+                    requested_by_user_id=PRIMARY_USER_ID,
+                    refresh_of_run_id=current.id,
+                    status=latest_status,
+                    provider_key=current.provider_key,
+                    provider_version=current.provider_version,
+                    provider_mode=current.provider_mode,
+                    provider_outcome=latest_status,
+                    schema_version=current.schema_version,
+                    request_fingerprint="f" * 64,
+                    idempotency_key=f"blocked-person-promotion:{latest_status}:{uuid4()}",
+                    max_attempts=3,
+                    completed_at=created_at,
+                    created_at=created_at,
+                    updated_at=created_at,
+                )
+            )
+            await session.commit()
+
+    _run(scenario)
+    brief = client.get(f"/api/v1/prospect/people/{person_id}")
+    assert brief.status_code == 200
+    assert brief.json()["status"] == latest_status
+    assert brief.json()["person"]["researchStatus"] == latest_status
+    promotion = client.post(
+        f"/api/v1/prospect/people/{person_id}/promote",
+        json={"confirmed": True},
+    )
+    assert promotion.status_code == 409
+    assert promotion.json()["code"] == "person_research_not_promotable"
 
 
 def test_duplicate_contact_requires_review_and_can_attach_without_overwrite(client: TestClient) -> None:
@@ -559,6 +618,19 @@ def test_person_provider_validation_rejects_sensitive_context_and_inferred_email
     with pytest.raises(ProspectResultValidationError, match="company domain"):
         validate_person_research_result(non_company_email, company_domain=target.domain)
 
+    generic_email = result.model_copy(
+        update={
+            "contact_points": tuple(
+                point.model_copy(update={"value": f"info@{target.domain}"})
+                if point.point_type.value == "business_email"
+                else point
+                for point in result.contact_points
+            )
+        }
+    )
+    with pytest.raises(ProspectResultValidationError, match="shared business mailbox"):
+        validate_person_research_result(generic_email, company_domain=target.domain)
+
 
 def test_person_repository_queries_and_relations_are_tenant_scoped(client: TestClient) -> None:
     target_id, _ = _prepare_company(client, promote=False)
@@ -658,5 +730,229 @@ def test_external_people_discovery_obeys_provider_kill_switch() -> None:
                 )
             assert getattr(caught.value, "code", None) == "prospect_provider_unavailable"
             assert provider.calls == 0
+
+    _run(scenario)
+
+
+def test_external_people_discovery_rechecks_database_kill_switches() -> None:
+    class ExternalProvider(DeterministicMockProspectProvider):
+        provider_key = "apollo"
+        provider_version = "apollo-contract-fixture-v1"
+        mode = "external"
+        capability_key = "apollo:prospect_research"
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        async def discover_people(
+            self,
+            target: ResearchTargetSnapshot,
+            *,
+            limit: int,
+            execution: object | None = None,
+        ) -> tuple[object, ...]:
+            del target, limit, execution
+            self.calls += 1
+            return ()
+
+    external_settings = _settings(
+        feature_credits_enabled=True,
+        prospect_research_provider_name="apollo",
+        feature_prospect_external_provider_enabled=True,
+        prospect_provider_approved=True,
+        prospect_provider_terms_approved=True,
+        prospect_provider_privacy_approved=True,
+        prospect_provider_production_credit_prices_approved=True,
+        credits_margin_floor_basis_points=5_000,
+        credits_margin_policy_reference="owner-test-margin-policy",
+        prospect_provider_health_reference="authorised-test-health-check",
+        prospect_provider_cost_model_reference="apollo-test-cost-model",
+        prospect_provider_cost_micros_per_credit=100_000,
+        apollo_api_key="test-only-apollo-key",
+    )
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        from revenueos.database import set_tenant_database_context
+
+        tenant = TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin")
+        async with session_factory() as session:
+            company_brief = await ProspectService(session, tenant, _settings()).create_research(
+                ResearchCreateRequest(
+                    candidate_id="northstar-facilities-group",
+                    idempotency_key=f"database-switch-company:{uuid4()}",
+                )
+            )
+        assert await ProspectWorkerService(session_factory, _settings()).run_once("database-switch-company") is True
+        async with session_factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            credits = await prepared_service(session)
+            await credits.set_execution_control(
+                scope="provider_capability",
+                key="apollo:prospect_research",
+                enabled=False,
+                actor_reference="wo-050-review-test",
+                reason="Verify the provider capability kill switch blocks zero-Credit discovery.",
+            )
+        provider = ExternalProvider()
+        async with session_factory() as session:
+            with pytest.raises(Exception) as caught:
+                await ProspectPeopleService(
+                    session,
+                    tenant,
+                    external_settings,
+                    provider=provider,
+                ).discover_people(company_brief.target.id)
+            assert getattr(caught.value, "code", None) == "prospect_execution_disabled"
+            assert provider.calls == 0
+
+    _run(scenario)
+
+
+def test_unused_person_credit_reservations_are_released_and_idempotency_is_bound(
+    client: TestClient,
+) -> None:
+    class ExternalProvider(DeterministicMockProspectProvider):
+        provider_key = "apollo"
+        provider_version = "apollo-contract-fixture-v1"
+        mode = "external"
+        capability_key = "apollo:prospect_research"
+
+    settings = _settings(
+        feature_credits_enabled=True,
+        prospect_research_provider_name="apollo",
+        feature_prospect_external_provider_enabled=True,
+        prospect_provider_approved=True,
+        prospect_provider_terms_approved=True,
+        prospect_provider_privacy_approved=True,
+        prospect_provider_production_credit_prices_approved=True,
+        credits_margin_floor_basis_points=5_000,
+        credits_margin_policy_reference="owner-test-margin-policy",
+        prospect_provider_health_reference="authorised-test-health-check",
+        prospect_provider_cost_model_reference="apollo-test-cost-model",
+        prospect_provider_cost_micros_per_credit=100_000,
+        apollo_api_key="test-only-apollo-key",
+    )
+    target_id, _ = _prepare_company(client)
+    operations = []
+    confirmed_quote = None
+
+    async def prepare(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        nonlocal confirmed_quote
+        from revenueos.database import set_tenant_database_context
+
+        async with session_factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            credits = await prepared_service(session)
+            await grant_test_purchase(session, credits, key="wo050-unused-person-reservations")
+            for index in range(3):
+                quote = await credits.create_quote(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    action_code="PROSPECT_PERSON_RESEARCH",
+                    quantity=1,
+                )
+                operations.append(
+                    await credits.reserve(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        quote_id=quote.quote_id,
+                        idempotency_key=f"wo050-unused-person-reservation-{index}",
+                    )
+                )
+            confirmed_quote = await credits.create_quote(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                action_code="PROSPECT_PERSON_RESEARCH",
+                quantity=1,
+            )
+
+    _run(prepare)
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        tenant = TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin")
+        async with session_factory() as session:
+            discovery = await ProspectPeopleService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).discover_people(UUID(target_id))
+            person = next(item for item in discovery.people if item.display_name == "Jane Smith")
+            second_person = next(item for item in discovery.people if item.display_name == "John Brown")
+
+        initial_key = "wo050-bound-person-request"
+        async with session_factory() as session:
+            initial = await ProspectPeopleService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).research_person(
+                person.id,
+                PersonResearchRequest(
+                    idempotency_key=initial_key,
+                    credit_operation_id=operations[0].operation_id,
+                ),
+            )
+        async with session_factory() as session:
+            repeated = await ProspectPeopleService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).research_person(
+                person.id,
+                PersonResearchRequest(
+                    idempotency_key="wo050-fresh-person-request",
+                    credit_operation_id=operations[1].operation_id,
+                ),
+            )
+            assert repeated.latest_run is not None
+            assert repeated.latest_run.id == initial.latest_run.id  # type: ignore[union-attr]
+        async with session_factory() as session:
+            released = await session.get(CreditOperation, operations[1].operation_id)
+            assert released is not None and released.status == "released"
+
+        assert await ProspectWorkerService(
+            session_factory,
+            settings,
+            provider=ExternalProvider(),
+        ).run_once("wo050-bound-person-worker")
+        assert confirmed_quote is not None
+        confirmed_key = "wo050-confirmed-person-quote"
+        async with session_factory() as session:
+            confirmed = await ProspectPeopleService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).research_person(
+                second_person.id,
+                PersonResearchRequest(
+                    idempotency_key=confirmed_key,
+                    credit_quote_id=confirmed_quote.quote_id,
+                ),
+            )
+            assert confirmed.latest_run is not None
+            assert confirmed.latest_run.credit_operation_id is not None
+        async with session_factory() as session:
+            with pytest.raises(PublicAPIError) as caught:
+                await ProspectPeopleService(
+                    session,
+                    tenant,
+                    settings,
+                    provider=ExternalProvider(),
+                ).refresh_person(
+                    person.id,
+                    PersonResearchRequest(
+                        idempotency_key=initial_key,
+                        credit_operation_id=operations[2].operation_id,
+                    ),
+                )
+            assert caught.value.code == "research_idempotency_conflict"
+        async with session_factory() as session:
+            released = await session.get(CreditOperation, operations[2].operation_id)
+            assert released is not None and released.status == "released"
 
     _run(scenario)

@@ -1,6 +1,6 @@
 # Oryntela Prospect provider economics
 
-- **As at:** 5 September 2026
+- **As at:** 6 September 2026
 - **Provider candidate:** Apollo
 - **Production Credit action prices:** none
 - **Production Credit packs:** none
@@ -33,8 +33,12 @@ and margin floor.
 - Entitlement, organisation policy, daily/provider-cost caps and global, action and
   provider kill switches are rechecked immediately before execution.
 - Successful units settle using the pinned price; unused reservation is released.
-- A documented no-result with zero successful units settles/release according to the
-  pinned successful-unit price. Production charging basis must be disclosed before use.
+- A documented no-result with zero successful units settles/releases according to the
+  pinned action price. If the signed Apollo agreement charges company enrichment per
+  request even when no record is returned, the approved production price must use the
+  existing `requested_unit` basis and say so in the customer-visible pricing notice
+  before confirmation. A `successful_unit` price would release the reservation for a
+  no-result and is unsuitable for that cost basis.
 - Definite rejection/non-execution releases. Timeout, server ambiguity, malformed
   billable result or worker loss after execution becomes unknown and remains reserved.
 - Unknown outcomes do not retry. Existing WO-049 reconciliation settles once when

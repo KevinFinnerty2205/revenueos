@@ -126,7 +126,17 @@ class ProspectWorkerService:
                     if run.credit_operation_id is not None
                     else None
                 )
-                if operation is not None and operation.status == "executing":
+                if (
+                    operation is not None
+                    and operation.status == "settled"
+                    and run.provider_outcome in {"completed", "partial", "no_result"}
+                ):
+                    run.status = run.provider_outcome
+                    run.completed_at = operation.completed_at or now
+                    run.last_error_code = None
+                    run.last_error_message_safe = None
+                    self._clear_ownership(run)
+                elif operation is not None and operation.status == "executing":
                     operation.status = "unknown"
                     operation.outcome = "unknown"
                     operation.outcome_recorded_at = now
@@ -264,12 +274,28 @@ class ProspectWorkerService:
                 try:
                     await self._settle_external_execution(claim, result)
                 except Exception:
-                    await self._mark_credit_unknown(claim)
-                    await self._mark_run_unknown(
-                        claim,
-                        "credit_settlement_unknown",
-                        "The provider result was received but Credit settlement requires reconciliation.",
-                    )
+                    if await self._mark_credit_unknown(claim):
+                        try:
+                            await self._finalize_external_run(claim)
+                        except Exception:
+                            logger.exception(
+                                "prospect_run_finalization_deferred",
+                                extra=self._log_context(claim),
+                            )
+                    else:
+                        await self._mark_run_unknown(
+                            claim,
+                            "credit_settlement_unknown",
+                            "The provider result was received but Credit settlement requires reconciliation.",
+                        )
+                    return
+                try:
+                    await self._finalize_external_run(claim)
+                except Exception:
+                    # Settlement is already durable and idempotent. Keep the run
+                    # leased in synthesizing so stale-run recovery can finalise it
+                    # without repeating the provider request.
+                    logger.exception("prospect_run_finalization_deferred", extra=self._log_context(claim))
         except ProspectProviderError as exc:
             if claim.credit_operation_id is not None:
                 if exc.execution_state == "unknown" or external_started and exc.code == "provider_schema_invalid":
@@ -448,6 +474,17 @@ class ProspectWorkerService:
                         )
                     )
                 trust_counts[provider_observation.trust_state.value] += 1
+            if not isinstance(result, ProviderPersonResearchResult):
+                company_name = next(
+                    (
+                        observation.statement
+                        for observation in result.observations
+                        if observation.observation_key == "company_name"
+                    ),
+                    None,
+                )
+                if company_name is not None:
+                    target.name = company_name[:200]
             await self._add_selling_profile_relevance(
                 session,
                 run,
@@ -507,10 +544,20 @@ class ProspectWorkerService:
                         )
                     )
                 person.current_role = result.current_role
+                if result.first_name is not None:
+                    person.first_name = result.first_name
+                if result.last_name is not None:
+                    person.last_name = result.last_name
+                if result.display_name is not None:
+                    person.display_name = result.display_name
+                if result.current_company is not None:
+                    person.current_company = result.current_company
+                if result.identity_state is not None:
+                    person.identity_state = result.identity_state
                 person.employment_state = result.employment_state.value
                 person.why_may_matter = result.why_may_matter
                 person.updated_at = now
-            run.status = result.outcome
+            run.status = "synthesizing" if self._provider.mode == "external" else result.outcome
             run.provider_outcome = result.outcome
             run.provider_units = result.provider_units
             run.successful_units = result.successful_units
@@ -522,14 +569,15 @@ class ProspectWorkerService:
             run.provider_cost_currency = (
                 self._settings.prospect_provider_cost_currency if self._provider.mode == "external" else None
             )
-            run.completed_at = now
+            run.completed_at = None if self._provider.mode == "external" else now
             run.source_fingerprint = hashlib.sha256(
                 "\x1f".join(sorted(source.content_fingerprint for source in result.sources)).encode()
             ).hexdigest()
-            self._clear_ownership(run)
+            if self._provider.mode != "external":
+                self._clear_ownership(run)
             target.updated_at = now
         logger.info(
-            "prospect_run_completed",
+            "prospect_provider_result_persisted" if self._provider.mode == "external" else "prospect_run_completed",
             extra={
                 **self._log_context(claim),
                 "status": result.outcome,
@@ -546,6 +594,34 @@ class ProspectWorkerService:
                     else 0
                 ),
             },
+        )
+
+    async def _finalize_external_run(self, claim: ClaimedProspectRun) -> None:
+        now = self._clock()
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, claim.organisation_id)
+            run = await ProspectWorkerRepository(session).lock_owned(
+                claim.organisation_id,
+                claim.run_id,
+                claim.worker_id,
+                owned_at=now,
+            )
+            if run is None or run.provider_outcome not in {"completed", "partial", "no_result"}:
+                raise RuntimeError("External Prospect run could not be finalised from its provider outcome.")
+            operation = await session.scalar(
+                select(CreditOperation).where(
+                    CreditOperation.organisation_id == claim.organisation_id,
+                    CreditOperation.id == claim.credit_operation_id,
+                )
+            )
+            if operation is None or operation.status != "settled":
+                raise RuntimeError("External Prospect run cannot finalise before Credit settlement.")
+            run.status = run.provider_outcome
+            run.completed_at = operation.completed_at or now
+            self._clear_ownership(run)
+        logger.info(
+            "prospect_run_completed",
+            extra={**self._log_context(claim), "status": run.provider_outcome},
         )
 
     async def _start_external_execution(self, claim: ClaimedProspectRun) -> ProviderExecutionContext:
@@ -610,9 +686,9 @@ class ProspectWorkerService:
                 reason=(reason.strip() or "Provider execution did not occur.")[:500],
             )
 
-    async def _mark_credit_unknown(self, claim: ClaimedProspectRun) -> None:
+    async def _mark_credit_unknown(self, claim: ClaimedProspectRun) -> bool:
         if claim.credit_operation_id is None:
-            return
+            return False
         async with self._session_factory() as session:
             await set_tenant_database_context(session, claim.organisation_id)
             operation = await session.scalar(
@@ -621,10 +697,13 @@ class ProspectWorkerService:
                     CreditOperation.id == claim.credit_operation_id,
                 )
             )
+            if operation is not None and operation.status == "settled":
+                return True
             if operation is not None and operation.status == "executing":
                 await CreditService(session, self._settings).mark_unknown(
                     claim.organisation_id, claim.credit_operation_id
                 )
+            return False
 
     async def _mark_run_unknown(self, claim: ClaimedProspectRun, code: str, safe_message: str) -> None:
         now = self._clock()

@@ -1,6 +1,6 @@
 # Prospect live-provider qualification
 
-- **Reviewed:** 5 September 2026
+- **Reviewed:** 6 September 2026
 - **Engineering candidate:** Apollo
 - **Production selection:** unresolved pending a written external-product/data licence and quote
 - **Status:** production-capable adapter; **not activated**
@@ -31,8 +31,8 @@ downstream-display rights at sustainable economics, qualify People Data Labs nex
 | API access | API key; most endpoints available to accounts; affected free endpoints require an account registered with a work email | No account created and no terms accepted by Codex |
 | Company discovery | Organisation search; 1 Apollo credit per page, up to 100 results | Not called; known domains are prepared locally to avoid hidden spend |
 | Company research | Organisation enrichment by domain/name/site; 1 Apollo credit per organisation | Implemented behind confirmed Oryntela Credit operation |
-| People discovery | People API Search; 0 Apollo credits; no email/phone returned | Implemented, bounded to the existing person-discovery limit |
-| Person research | People enrichment/match; 1–9 Apollo credits depending on returned data | Implemented with personal-email and phone reveal explicitly off |
+| People discovery | People API Search; 0 Apollo credits; no email/phone returned; organisation-domain search may include current or previous employment and currently returns an obfuscated surname | Implemented with documented query parameters, bounded to the existing limit, current-organisation filtering and ambiguous staging identity |
+| Person research | People enrichment/match; 1–9 Apollo credits depending on returned data | Implemented with personal-email and phone reveal explicitly off; requested ID and current-company domain must match before identity is accepted |
 | Business email | May be returned by person enrichment; provider status is not Oryntela verification | Stored only when it matches the company domain, labelled provider-supplied |
 | Phone/mobile | Mobile adds 8 credits in base enrichment; waterfall may be materially higher | Not requested, mapped or activated |
 | Recent professional posts | No approved API capability established | Unavailable; no LinkedIn scraping or credential use |
@@ -43,6 +43,9 @@ downstream-display rights at sustainable economics, qualify People Data Labs nex
 The adapter persists only an allow-list of business fields. Full payloads, personal
 emails, phone arrays, credentials and raw provider errors are not stored or logged.
 Provider IDs remain provenance/deduplication references, never canonical identities.
+Shared generic inboxes are not treated as person contact points. Discovery identity is
+staging data until a domain-bound person match supplies the full identity; neither
+stage overwrites a canonical Contact without deliberate promotion/review.
 
 ## Licensing, privacy and retention
 
@@ -86,6 +89,8 @@ preferred fallback qualification, not an activated provider.
 - [Apollo organisation search](https://docs.apollo.io/reference/organization-search)
 - [Apollo organisation enrichment](https://docs.apollo.io/reference/organization-enrichment)
 - [Apollo People API Search](https://docs.apollo.io/reference/people-api-search)
+- [Apollo People Search filters](https://docs.apollo.io/docs/find-people-using-filters)
+- [Apollo people enrichment guide](https://docs.apollo.io/docs/enrich-people-data)
 - [Apollo rate limits](https://docs.apollo.io/reference/rate-limits)
 - [Apollo pricing/product-use restriction](https://www.apollo.io/pricing)
 - [Apollo API terms](https://www.apollo.io/terms/api)

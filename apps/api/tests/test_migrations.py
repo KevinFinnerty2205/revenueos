@@ -133,6 +133,10 @@ def test_live_prospect_provider_migration_schema_and_cycle(tmp_path: Path, monke
         assert provider_columns.isdisjoint(columns)
 
     command.upgrade(configuration, "head")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    target_id = str(uuid.uuid4())
+    run_id = str(uuid.uuid4())
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
             "0055_live_prospect_provider",
@@ -145,11 +149,41 @@ def test_live_prospect_provider_migration_schema_and_cycle(tmp_path: Path, monke
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'prospect_research_runs'"
         ).fetchone()
         assert table_sql is not None and "uq_prospect_runs_credit_operation" in table_sql[0]
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Migration organisation', ?)",
+            (organisation_id, f"migration-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Migration user')",
+            (user_id, f"migration-{user_id}", f"{user_id}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.execute(
+            "INSERT INTO prospect_research_targets "
+            "(id, organisation_id, provider_key, provider_candidate_id, name, normalized_domain, "
+            "website_url, provider_attribution) VALUES (?, ?, 'fixture', 'fixture:migration', "
+            "'Migration target', 'migration.example', 'https://migration.example', 'Migration fixture')",
+            (target_id, organisation_id),
+        )
+        connection.execute(
+            "INSERT INTO prospect_research_runs "
+            "(id, organisation_id, target_id, requested_by_user_id, status, provider_key, provider_version, "
+            "schema_version, request_fingerprint, idempotency_key, provider_mode, provider_outcome) "
+            "VALUES (?, ?, ?, ?, 'unknown', 'fixture', 'v1', 1, ?, 'migration-unknown', 'external', 'unknown')",
+            (run_id, organisation_id, target_id, user_id, "a" * 64),
+        )
+        connection.commit()
 
     command.downgrade(configuration, "0054_credits_variable_cost")
     with connect(database_path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(prospect_research_runs)")}
         assert provider_columns.isdisjoint(columns)
+        assert connection.execute("SELECT status FROM prospect_research_runs WHERE id = ?", (run_id,)).fetchone() == (
+            "failed",
+        )
 
     command.upgrade(configuration, "head")
 

@@ -35,6 +35,7 @@ const availability = {
   state: "available",
   enabled: true,
   canManage: true,
+  executionMode: "demo",
   message: "RevenueOS Prospect is available for this organisation.",
 };
 
@@ -435,6 +436,8 @@ describe("RevenueOS Prospect experience", () => {
           resultLimit: 15,
           message: "Find relevant people when you are ready.",
         });
+      if (url.endsWith("/prospect/availability"))
+        return jsonResponse(availability);
       if (url.endsWith("/research/target-1/refresh"))
         return jsonResponse(refreshed, 202);
       if (url.endsWith("/research/target-1/promote"))
@@ -494,6 +497,173 @@ describe("RevenueOS Prospect experience", () => {
     expect(
       screen.getByText(/No opportunity or contact was created/i),
     ).toBeVisible();
+  });
+
+  it("quotes and confirms a metered company action before the server reserves it", async () => {
+    const candidate = {
+      candidateId: "domain:northstar-facilities.example",
+      name: "northstar-facilities.example",
+      domain: "northstar-facilities.example",
+      websiteUrl: "https://northstar-facilities.example/",
+      location: null,
+      industry: null,
+      providerAttribution: "Website supplied by the seller",
+    };
+    const meteredAvailability = { ...availability, executionMode: "credits" };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/prospect/availability"))
+        return jsonResponse(meteredAvailability);
+      if (url.endsWith("/prospect/research") && !init?.method)
+        return jsonResponse({ items: [] });
+      if (url.endsWith("/prospect/target-markets"))
+        return jsonResponse({ items: [], activeLimit: 10, canCreate: true });
+      if (url.includes("/prospect/companies/search"))
+        return jsonResponse({
+          items: [candidate],
+          query: candidate.domain,
+          ambiguous: false,
+        });
+      if (url.endsWith("/credits/quotes"))
+        return jsonResponse(
+          {
+            quoteId: "quote-1",
+            actionPriceVersionId: "price-1",
+            actionCode: "PROSPECT_COMPANY_RESEARCH",
+            actionName: "Prospect company research",
+            quantity: 1,
+            creditCostPerUnit: 5,
+            maximumCreditCost: 5,
+            currentBalance: 20,
+            sufficientBalance: true,
+            expiresAt: "2026-09-06T12:00:00Z",
+            pricingNotice: "Confirmed test fixture price.",
+          },
+          201,
+        );
+      if (url.endsWith("/prospect/research") && init?.method === "POST")
+        return jsonResponse(researchBrief(), 202);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProspectFind />);
+    await screen.findByText("Which company are you looking for?");
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search company name or website" }),
+      { target: { value: candidate.domain } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search companies" }));
+    const trigger = await screen.findByRole("button", {
+      name: "Research company",
+    });
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("heading", { name: "Confirm Credit spend" }),
+    ).toHaveFocus();
+    expect(within(dialog).getByText("5 Credits")).toBeVisible();
+    expect(within(dialog).getByText("20 Credits")).toBeVisible();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Confirm 5 Credits" }),
+    );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/find/target-1"),
+    );
+
+    const researchCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/prospect/research") && init?.method === "POST",
+    );
+    expect(researchCall).toBeDefined();
+    expect(JSON.parse(String(researchCall?.[1]?.body))).toMatchObject({
+      candidateId: candidate.candidateId,
+      creditQuoteId: "quote-1",
+    });
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/credits/reservations"),
+      ),
+    ).toBe(false);
+  });
+
+  it("blocks provider execution when the Credit quote shows an insufficient balance", async () => {
+    const insufficientAvailability = {
+      ...availability,
+      executionMode: "credits",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/prospect/availability"))
+        return jsonResponse(insufficientAvailability);
+      if (url.endsWith("/prospect/research"))
+        return jsonResponse({ items: [] });
+      if (url.endsWith("/prospect/target-markets"))
+        return jsonResponse({ items: [], activeLimit: 10, canCreate: true });
+      if (url.includes("/prospect/companies/search"))
+        return jsonResponse({
+          items: [
+            {
+              candidateId: "domain:example.com",
+              name: "example.com",
+              domain: "example.com",
+              websiteUrl: "https://example.com/",
+              location: null,
+              industry: null,
+              providerAttribution: "Website supplied by the seller",
+            },
+          ],
+          query: "example.com",
+          ambiguous: false,
+        });
+      if (url.endsWith("/credits/quotes"))
+        return jsonResponse(
+          {
+            quoteId: "quote-insufficient",
+            actionPriceVersionId: "price-1",
+            actionCode: "PROSPECT_COMPANY_RESEARCH",
+            actionName: "Prospect company research",
+            quantity: 1,
+            creditCostPerUnit: 5,
+            maximumCreditCost: 5,
+            currentBalance: 0,
+            sufficientBalance: false,
+            expiresAt: "2026-09-06T12:00:00Z",
+            pricingNotice: "Confirmed test fixture price.",
+          },
+          201,
+        );
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProspectFind />);
+    await screen.findByText("Which company are you looking for?");
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search company name or website" }),
+      { target: { value: "example.com" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search companies" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Research company" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Insufficient Credits")).toBeVisible();
+    expect(
+      within(dialog).getByText(/No provider request will be made/i),
+    ).toBeVisible();
+    expect(
+      within(dialog).queryByRole("button", { name: /Confirm/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/prospect/research") &&
+          init?.method === "POST",
+      ),
+    ).toBe(false);
   });
 
   it("keeps public research visibly separate on the canonical Account", async () => {
@@ -672,9 +842,17 @@ describe("RevenueOS Prospect experience", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mark relevant" }));
     expect(await screen.findByText("Hypothesis — Relevant")).toBeVisible();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add to Sales as Contact" }),
-    );
+    const promotionTrigger = screen.getByRole("button", {
+      name: "Add to Sales as Contact",
+    });
+    fireEvent.click(promotionTrigger);
+    expect(
+      screen.getByRole("heading", { name: "Add Jane Smith to Sales?" }),
+    ).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(promotionTrigger).toHaveFocus();
+    fireEvent.click(promotionTrigger);
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Possible existing Contact")).toBeVisible();
     expect(
@@ -697,6 +875,63 @@ describe("RevenueOS Prospect experience", () => {
       existingContactId: "contact-1",
     });
   });
+
+  it.each(["unknown", "no_result"] as const)(
+    "does not offer person promotion for a latest %s outcome",
+    async (status) => {
+      const ready = personBrief();
+      const latestRun = {
+        ...ready.latestRun,
+        id: `latest-${status}`,
+        status,
+        providerOutcome: status,
+      };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          jsonResponse({
+            ...ready,
+            person: { ...ready.person, researchStatus: status },
+            status,
+            statusMessage:
+              status === "unknown"
+                ? "The provider outcome is unknown."
+                : "No reliable professional result was returned.",
+            latestRun,
+            history: [latestRun, ready.currentRun],
+          }),
+        ),
+      );
+
+      render(<ProspectPersonResearchView personId="person-1" />);
+
+      expect(
+        await screen.findByText(status === "unknown" ? "Unknown" : "No result"),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Add to Sales as Contact" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: "Why this person may matter" }),
+      ).not.toBeInTheDocument();
+      if (status === "unknown") {
+        expect(
+          screen.getByRole("heading", {
+            name: "Reconciling provider outcome",
+          }),
+        ).toBeVisible();
+        expect(
+          screen.queryByRole("button", { name: "Refresh research" }),
+        ).not.toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByRole("heading", {
+            name: "No reliable professional result",
+          }),
+        ).toBeVisible();
+      }
+    },
+  );
 
   it("keeps promoted Contact research visibly separate from customer truth", async () => {
     vi.stubGlobal(

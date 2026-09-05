@@ -3302,6 +3302,7 @@ export interface ProspectAvailability {
   state: ProspectAvailabilityState;
   enabled: boolean;
   canManage: boolean;
+  executionMode: "demo" | "credits" | "unavailable";
   message: string;
 }
 

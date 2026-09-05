@@ -3,7 +3,12 @@ from __future__ import annotations
 import re
 
 from revenueos.domain import ProspectContactPointType, ProspectSourceAuthority, ProspectTrustState
-from revenueos.prospect_provider import PersonCandidate, ProviderPersonResearchResult, ProviderResearchResult
+from revenueos.prospect_provider import (
+    GENERIC_BUSINESS_EMAIL_LOCAL_PARTS,
+    PersonCandidate,
+    ProviderPersonResearchResult,
+    ProviderResearchResult,
+)
 from revenueos.prospect_url_security import canonicalize_public_https_url
 
 VERIFIED_AUTHORITIES = frozenset(
@@ -160,6 +165,13 @@ def validate_person_research_result(
     validate_research_result(result)
     if result.outcome == "no_result":
         return
+    for value in (
+        result.first_name or "",
+        result.last_name or "",
+        result.display_name or "",
+        result.current_company or "",
+    ):
+        _reject_prohibited_person_content(value)
     _reject_prohibited_person_content(result.current_role)
     _reject_prohibited_person_content(result.why_may_matter)
     if not any(marker in result.why_may_matter.casefold() for marker in INFERENCE_MARKERS):
@@ -250,7 +262,12 @@ def validate_person_research_result(
         if contact.point_type == ProspectContactPointType.BUSINESS_EMAIL:
             if "@" not in normalised_value:
                 raise ProspectResultValidationError("invalid_business_email", "A business email was malformed.")
-            domain = normalised_value.rsplit("@", 1)[1]
+            local_part, domain = normalised_value.rsplit("@", 1)
+            if local_part in GENERIC_BUSINESS_EMAIL_LOCAL_PARTS:
+                raise ProspectResultValidationError(
+                    "generic_business_email",
+                    "A shared business mailbox cannot identify the researched professional.",
+                )
             if domain in PUBLIC_MAILBOX_DOMAINS:
                 raise ProspectResultValidationError(
                     "personal_email_not_supported",

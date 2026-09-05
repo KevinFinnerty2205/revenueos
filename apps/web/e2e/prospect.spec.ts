@@ -5,6 +5,7 @@ const availability = {
   state: "available",
   enabled: true,
   canManage: true,
+  executionMode: "demo",
   message: "RevenueOS Prospect is available for this organisation.",
 };
 

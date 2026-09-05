@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
+from revenueos.credit_repositories import CreditRepository
+from revenueos.credit_services import CreditService
 from revenueos.crm_history import crm_creation_changes
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
@@ -132,6 +134,7 @@ class ProspectPeopleService:
         await self.repository.lock_organisation(self.tenant.organisation_id)
         await self._reserve_discovery_usage()
         try:
+            await self._require_external_discovery_controls()
             candidates = await self.provider.discover_people(
                 self._target_snapshot(target),
                 limit=self.settings.private_beta_max_prospect_people_per_discovery,
@@ -208,6 +211,11 @@ class ProspectPeopleService:
         person = await self._ready_person(person_id, for_update=True)
         active = await self.repository.active_person_run(self.tenant.organisation_id, person.id)
         if active is not None:
+            await self._release_unused_credit_operation(
+                request.credit_operation_id,
+                existing_run=active,
+                reason="No provider execution occurred because person research is already in progress.",
+            )
             await self.repository.commit()
             return await self.get_person_research(person.id)
         fresh = await self.repository.fresh_person_run(
@@ -216,6 +224,11 @@ class ProspectPeopleService:
             fresh_after=datetime.now(UTC) - timedelta(days=self.settings.private_beta_prospect_fresh_days),
         )
         if fresh is not None:
+            await self._release_unused_credit_operation(
+                request.credit_operation_id,
+                existing_run=fresh,
+                reason="No provider execution occurred because current person research is still fresh.",
+            )
             await self.repository.commit()
             return await self.get_person_research(person.id)
         default_key = self._fingerprint(
@@ -226,11 +239,17 @@ class ProspectPeopleService:
             self.provider.provider_key,
             self.provider.provider_version,
         )
+        key = request.idempotency_key or default_key
+        credit_operation_id = await self._credit_operation_for_quote(
+            request.credit_operation_id,
+            request.credit_quote_id,
+            key,
+        )
         await self._queue_person_run(
             person,
-            request.idempotency_key or default_key,
+            key,
             refresh_of_run_id=None,
-            credit_operation_id=request.credit_operation_id,
+            credit_operation_id=credit_operation_id,
         )
         return await self.get_person_research(person.id)
 
@@ -239,15 +258,25 @@ class ProspectPeopleService:
         person = await self._ready_person(person_id, for_update=True)
         active = await self.repository.active_person_run(self.tenant.organisation_id, person.id)
         if active is not None:
+            await self._release_unused_credit_operation(
+                request.credit_operation_id,
+                existing_run=active,
+                reason="No provider execution occurred because person research is already in progress.",
+            )
             await self.repository.commit()
             return await self.get_person_research(person.id)
         current = await self.repository.current_person_run(self.tenant.organisation_id, person.id)
         raw_key = request.idempotency_key or f"refresh:{uuid.uuid4()}"
+        credit_operation_id = await self._credit_operation_for_quote(
+            request.credit_operation_id,
+            request.credit_quote_id,
+            raw_key,
+        )
         await self._queue_person_run(
             person,
             raw_key,
             refresh_of_run_id=current.id if current else None,
-            credit_operation_id=request.credit_operation_id,
+            credit_operation_id=credit_operation_id,
         )
         return await self.get_person_research(person.id)
 
@@ -425,6 +454,13 @@ class ProspectPeopleService:
         current = await self.repository.current_person_run(self.tenant.organisation_id, person.id)
         if current is None:
             raise PublicAPIError("person_research_not_ready", "Complete person research before adding to Sales.", 409)
+        runs = await self.repository.runs_for_person(self.tenant.organisation_id, person.id)
+        if runs and runs[0].status in {"unknown", "no_result"}:
+            raise PublicAPIError(
+                "person_research_not_promotable",
+                "Resolve or refresh the latest person research result before adding it to Sales.",
+                409,
+            )
         points = await self.repository.contact_points_for_run(
             self.tenant.organisation_id,
             current.id,
@@ -592,20 +628,40 @@ class ProspectPeopleService:
         idempotency_key = self._person_idempotency_key(person.id, raw_idempotency_key)
         duplicate = next((run for run in existing_runs if run.idempotency_key == idempotency_key), None)
         if duplicate is not None:
+            if (
+                duplicate.requested_by_user_id != self.tenant.user_id
+                or duplicate.credit_operation_id != credit_operation_id
+            ):
+                await self._release_unused_credit_operation(
+                    credit_operation_id,
+                    existing_run=None,
+                    reason="No provider execution occurred because the research idempotency key was already used.",
+                )
+                raise PublicAPIError(
+                    "research_idempotency_conflict",
+                    "That research request key is already bound to a different request.",
+                    409,
+                )
             await self.repository.commit()
             return duplicate
+        operation = await self._required_credit_operation(credit_operation_id)
         await self.repository.lock_organisation(self.tenant.organisation_id)
         if await self.repository.active_run_count(self.tenant.organisation_id) >= (
             self.settings.private_beta_max_concurrent_prospect_research
         ):
             await self.repository.rollback()
+            await set_tenant_database_context(self.session, self.tenant.organisation_id)
+            await self._release_unused_credit_operation(
+                operation.id if operation is not None else None,
+                existing_run=None,
+                reason="No provider execution occurred because the person research concurrency limit was reached.",
+            )
             raise PublicAPIError(
                 "prospect_concurrency_limit",
                 "This organisation already has the maximum number of Prospect research runs in progress.",
                 429,
             )
         try:
-            operation = await self._required_credit_operation(credit_operation_id)
             selling_profile = await SellingProfileRepository(self.session).current(self.tenant.organisation_id)
             await self._reserve_research_usage()
             now = datetime.now(UTC)
@@ -641,6 +697,12 @@ class ProspectPeopleService:
             await self.repository.commit()
         except PublicAPIError:
             await self.repository.rollback()
+            await set_tenant_database_context(self.session, self.tenant.organisation_id)
+            await self._release_unused_credit_operation(
+                operation.id if operation is not None else None,
+                existing_run=None,
+                reason="No provider execution occurred because the person research request was rejected.",
+            )
             raise
         except IntegrityError as exc:
             await self.repository.rollback()
@@ -648,8 +710,36 @@ class ProspectPeopleService:
             concurrent = await self.repository.runs_for_person(self.tenant.organisation_id, person.id)
             duplicate = next((item for item in concurrent if item.idempotency_key == idempotency_key), None)
             if duplicate is None:
+                await self._release_unused_credit_operation(
+                    operation.id if operation is not None else None,
+                    existing_run=None,
+                    reason="No provider execution occurred because the person research request conflicted.",
+                )
                 raise PublicAPIError("research_conflict", "The person research request conflicted.", 409) from exc
+            if (
+                duplicate.requested_by_user_id != self.tenant.user_id
+                or duplicate.credit_operation_id != credit_operation_id
+            ):
+                await self._release_unused_credit_operation(
+                    operation.id if operation is not None else None,
+                    existing_run=None,
+                    reason="No provider execution occurred because the research idempotency key was already used.",
+                )
+                raise PublicAPIError(
+                    "research_idempotency_conflict",
+                    "That research request key is already bound to a different request.",
+                    409,
+                ) from exc
             return duplicate
+        except Exception:
+            await self.repository.rollback()
+            await set_tenant_database_context(self.session, self.tenant.organisation_id)
+            await self._release_unused_credit_operation(
+                operation.id if operation is not None else None,
+                existing_run=None,
+                reason="No provider execution occurred because the person research request could not be queued.",
+            )
+            raise
         logger.info(
             "person_research_queued",
             extra={
@@ -662,6 +752,92 @@ class ProspectPeopleService:
             },
         )
         return run
+
+    async def _release_unused_credit_operation(
+        self,
+        operation_id: UUID | None,
+        *,
+        existing_run: ProspectResearchRun | None,
+        reason: str,
+    ) -> None:
+        if operation_id is None:
+            return
+        if self.provider.mode == "deterministic":
+            raise PublicAPIError(
+                "credit_operation_not_required",
+                "The clearly labelled demo provider does not consume Credits.",
+                409,
+            )
+        operation = await self.session.scalar(
+            select(CreditOperation).where(
+                CreditOperation.organisation_id == self.tenant.organisation_id,
+                CreditOperation.id == operation_id,
+            )
+        )
+        if (
+            operation is None
+            or operation.requested_by_user_id != self.tenant.user_id
+            or operation.action_code != "PROSPECT_PERSON_RESEARCH"
+            or operation.quantity != 1
+        ):
+            raise PublicAPIError(
+                "credit_operation_invalid",
+                "That Credit reservation cannot authorise this Prospect action.",
+                409,
+            )
+        if (
+            existing_run is not None
+            and existing_run.requested_by_user_id == self.tenant.user_id
+            and existing_run.credit_operation_id == operation.id
+        ):
+            return
+        linked_run = await self.session.scalar(
+            select(ProspectResearchRun).where(
+                ProspectResearchRun.organisation_id == self.tenant.organisation_id,
+                ProspectResearchRun.credit_operation_id == operation.id,
+            )
+        )
+        if linked_run is not None:
+            raise PublicAPIError(
+                "credit_operation_invalid",
+                "That Credit reservation is already bound to another Prospect action.",
+                409,
+            )
+        if operation.status == "released":
+            return
+        if operation.status != "reserved":
+            raise PublicAPIError(
+                "credit_operation_invalid",
+                "That Credit reservation cannot authorise this Prospect action.",
+                409,
+            )
+        await CreditService(self.session, self.settings).release(
+            self.tenant.organisation_id,
+            operation.id,
+            idempotency_key=f"prospect-unused:{operation.id}",
+            reason=reason,
+        )
+
+    async def _require_external_discovery_controls(self) -> None:
+        if self.provider.mode != "external":
+            return
+        credit_repository = CreditRepository(self.session)
+        policy = await credit_repository.policy(self.tenant.organisation_id)
+        controls = (
+            await credit_repository.control("global", "metered_actions"),
+            await credit_repository.control("action", "PROSPECT_PERSON_RESEARCH"),
+            await credit_repository.control("provider_capability", self.provider.capability_key),
+        )
+        if (
+            policy is None
+            or not policy.metered_actions_enabled
+            or any(control is None or not control.enabled for control in controls)
+        ):
+            raise PublicAPIError(
+                "prospect_execution_disabled",
+                "Professional research is temporarily unavailable.",
+                503,
+            )
 
     async def _required_credit_operation(self, operation_id: UUID | None) -> CreditOperation | None:
         if self.provider.mode == "deterministic":
@@ -703,6 +879,34 @@ class ProspectPeopleService:
                 409,
             )
         return operation
+
+    async def _credit_operation_for_quote(
+        self,
+        operation_id: UUID | None,
+        quote_id: UUID | None,
+        idempotency_key: str,
+    ) -> UUID | None:
+        if quote_id is None:
+            return operation_id
+        if operation_id is not None:
+            raise PublicAPIError(
+                "credit_authorisation_ambiguous",
+                "Provide one Credit authorisation for this Prospect action.",
+                422,
+            )
+        if self.provider.mode == "deterministic":
+            raise PublicAPIError(
+                "credit_operation_not_required",
+                "The clearly labelled demo provider does not consume Credits.",
+                409,
+            )
+        operation = await CreditService(self.session, self.settings).reserve(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            quote_id=quote_id,
+            idempotency_key=f"prospect-person:{hashlib.sha256(idempotency_key.encode()).hexdigest()}",
+        )
+        return operation.operation_id
 
     async def _reserve_discovery_usage(self) -> None:
         await self._reserve_counter(
@@ -800,6 +1004,10 @@ class ProspectPeopleService:
             research_status = "pending"
         elif latest.status in ("fetching", "synthesizing"):
             research_status = "researching"
+        elif latest.status == "unknown":
+            research_status = "unknown"
+        elif latest.status == "no_result":
+            research_status = "no_result"
         elif latest.status == "failed" and current is None:
             research_status = "failed"
         elif current is not None and current.status == "partial":
@@ -983,6 +1191,9 @@ class ProspectPeopleService:
                 "sourceCount": len(sources),
                 "observationCount": len(observations),
                 "errorCode": run.last_error_code,
+                "providerOutcome": run.provider_outcome,
+                "creditOperationId": run.credit_operation_id,
+                "sellingProfileRevisionId": run.selling_profile_revision_id,
             }
         )
 
@@ -1018,7 +1229,7 @@ class ProspectPeopleService:
             )
         if latest.status == "unknown":
             return "unknown", "The provider outcome is unknown. Credits remain reserved while it is reconciled."
-        if latest.status == "no_result" and current is None:
+        if latest.status == "no_result":
             return "no_result", "No reliable professional result was returned. No unsupported details were created."
         if latest.status == "failed" and current is None:
             return "failed", "RevenueOS couldn’t find enough reliable professional information about this person."

@@ -6,22 +6,34 @@ configuration still prohibits Credits and therefore cannot enable paid Prospect 
 
 ## Flow
 
-`quote → confirm/reserve → queue Prospect run → recheck policy and kill switches → mark executing → provider call → validate/map → persist provenance → settle/release`
+`server quote → customer confirm → idempotent reserve → queue and bind → recheck policy and kill switches → mark executing → provider call → validate/map → persist provenance → settle/release → finalise`
 
-The generic WO-049 quote and reservation API supplies confirmation. An external
-company run must reference a reserved `PROSPECT_COMPANY_RESEARCH` operation owned by
-the same organisation and requester; a person run requires
-`PROSPECT_PERSON_RESEARCH`. A composite tenant foreign key and one-run-per-operation
-constraint preserve the link. Search by a seller-supplied domain is local and creates
-no hidden Apollo search spend.
+The Prospect action UI obtains a server-owned WO-049 quote and shows the action,
+quantity, maximum Credit cost, balance and pinned pricing notice before confirmation.
+Confirmation sends the quote plus a stable idempotency key to the Prospect endpoint;
+the server idempotently reserves the quote and then binds the resulting operation to
+the new run. If queueing is rejected before execution, the unused reservation is
+released. An external company run requires
+`PROSPECT_COMPANY_RESEARCH`; a person run requires `PROSPECT_PERSON_RESEARCH`. A
+composite tenant foreign key and one-run-per-operation constraint preserve the link.
+Unrelated, stale or requester-mismatched reservations cannot be consumed, and an
+unused supplied reservation is released if freshness, concurrency or idempotency
+prevents a new run. Search by a seller-supplied domain is local and creates no hidden
+Apollo search spend.
 
 The adapter implements organisation enrichment, zero-Credit people search and person
 match with personal email and phone reveal off. It uses a fixed official HTTPS origin,
 bounded timeouts/body size, one bounded 429 retry and allow-listed strict response
-models. Unknown fields are ignored; missing/changed required fields fail visibly. Raw
-payloads and provider errors never cross the adapter. A stable Oryntela request ID is
-sent as correlation metadata; Apollo does not document request idempotency, so an
-ambiguous response is not retried.
+models. The current Apollo POST endpoints receive documented query parameters rather
+than a JSON body. People Search's obfuscated surname is retained as ambiguous staging
+identity only; a person match must return the requested provider ID and the target
+company's domain before full identity or current-employment fields are accepted.
+Company enrichment must likewise match the requested domain. A People Search hit for
+a previous employer is discarded unless its current organisation matches the target.
+Unknown fields are ignored; missing/changed required fields fail visibly. Raw payloads
+and provider errors never cross the adapter. A stable Oryntela request ID is sent as
+correlation metadata; Apollo does not document request idempotency, so an ambiguous
+response is not retried.
 
 ## Outcomes and recovery
 
@@ -33,6 +45,10 @@ ambiguous response is not retried.
   `unknown`; no automatic retry.
 - stale worker lease before execution: safe retry under the same reservation.
 - stale lease after `executing`: both records become `unknown` for reconciliation.
+- a validated external result persists before settlement. If the worker stops after
+  settlement, recovery finalises that persisted result without another provider call;
+  if it stops before the outcome is knowable, recovery uses `unknown` rather than a
+  blind retry.
 
 The existing WO-049 reconciliation service is authoritative. In-flight reconciliation
 remains allowed after a kill switch is disabled; new execution does not.
@@ -48,8 +64,10 @@ Apollo fields map only to existing company/person sources, observations, roles a
 business contact candidates. Structured provider data is `provider_supplied`, never
 `verified`. The provider attribution page is used when there is no inspectable source;
 record IDs never fabricate URLs. Business email is retained only for the researched
-company domain. Phone is discarded. Existing contactability, suppression, promotion,
-merge, export and deletion boundaries remain authoritative.
+company domain and generic shared mailboxes such as `info@`, `sales@` and `support@`
+are rejected in both adapter mapping and provider-neutral validation. Phone is
+discarded. Existing contactability, suppression, promotion, merge, export and deletion
+boundaries remain authoritative.
 
 Only the approved Selling Profile present when a run is queued is pinned. Draft and
 retired profiles are ignored. The profile is never sent as provider instructions.
@@ -69,6 +87,8 @@ The administrator projection reports `UNCONFIGURED`, `READY`, `DEGRADED` or
 - a current provider-health reference from an authorised zero-cost check;
 - a versioned provider cost model;
 - production Credit action-price approval and owner margin policy;
+- for Apollo company enrichment, requested-unit charging with an explicit no-result
+  pricing notice so a provider-charged miss cannot become hidden Oryntela-funded usage;
 - bounded organisation exposure/provider-cost caps and enabled global/action/provider
   controls both in readiness and again at execution.
 
@@ -79,9 +99,11 @@ to the signed retention/licensing terms.
 
 ## Test boundary
 
-CI uses synthetic minimal fixtures and never calls Apollo. Tests cover mapping,
-unknown extra fields, missing schema, no result, timeout, bounded rate limiting,
-oversized response, safe errors, email/phone minimisation, no-Credit denial, success
-settlement, unknown reservation retention, tenant ownership through composite keys,
-approved-profile pinning and inert prompt-like provider text. The TEST action prices
-remain visibly non-production and no live cost is recorded.
+CI uses synthetic minimal fixtures and never calls Apollo. Tests cover exact request
+shape, entity/domain/current-employment matching, obfuscated discovery identity,
+mapping, unknown extra fields, missing schema, no result, timeout, bounded rate
+limiting, oversized response, safe errors, email/phone minimisation, quote/reserve/run
+binding, insufficient-Credit denial, partial settlement, unused reservation release,
+unknown reservation retention, worker interruption recovery, tenant ownership through
+composite keys, approved-profile pinning and inert prompt-like provider text. The TEST
+action prices remain visibly non-production and no live cost is recorded.

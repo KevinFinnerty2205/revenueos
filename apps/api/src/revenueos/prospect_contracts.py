@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import StringConstraints
+from pydantic import StringConstraints, model_validator
 
 from revenueos.contracts import APIModel
 from revenueos.domain import (
@@ -25,6 +25,7 @@ class ProspectAvailabilityResponse(APIModel):
     state: Literal["available", "read_only", "temporarily_unavailable", "not_in_plan"]
     enabled: bool
     can_manage: bool
+    execution_mode: Literal["demo", "credits", "unavailable"]
     message: str
 
 
@@ -68,11 +69,29 @@ class ResearchCreateRequest(APIModel):
     candidate_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
     idempotency_key: IdempotencyKey | None = None
     credit_operation_id: UUID | None = None
+    credit_quote_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_credit_authorisation(self) -> ResearchCreateRequest:
+        if self.credit_operation_id is not None and self.credit_quote_id is not None:
+            raise ValueError("Provide either a Credit operation or a Credit quote, not both.")
+        if self.credit_quote_id is not None and self.idempotency_key is None:
+            raise ValueError("A stable idempotency key is required when confirming a Credit quote.")
+        return self
 
 
 class ResearchRefreshRequest(APIModel):
     idempotency_key: IdempotencyKey | None = None
     credit_operation_id: UUID | None = None
+    credit_quote_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_credit_authorisation(self) -> ResearchRefreshRequest:
+        if self.credit_operation_id is not None and self.credit_quote_id is not None:
+            raise ValueError("Provide either a Credit operation or a Credit quote, not both.")
+        if self.credit_quote_id is not None and self.idempotency_key is None:
+            raise ValueError("A stable idempotency key is required when confirming a Credit quote.")
+        return self
 
 
 class ResearchTargetResponse(APIModel):

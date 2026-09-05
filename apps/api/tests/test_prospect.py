@@ -29,11 +29,12 @@ from revenueos.models import (
     ProspectResearchTarget,
     RevenueBrainSnapshot,
 )
-from revenueos.prospect_contracts import ProspectEntitlementUpdate
+from revenueos.prospect_contracts import ProspectEntitlementUpdate, ResearchCreateRequest, ResearchRefreshRequest
 from revenueos.prospect_provider import (
     CompanyCandidate,
     DeterministicMockProspectProvider,
     ProspectProviderError,
+    ProviderPersonResearchResult,
     ProviderResearchObservation,
     ProviderResearchResult,
     ProviderResearchSource,
@@ -50,7 +51,7 @@ from revenueos.prospect_url_security import (
     validate_resolved_public_addresses,
 )
 from revenueos.prospect_validation import ProspectResultValidationError, validate_research_result
-from revenueos.prospect_worker import ProspectWorkerService
+from revenueos.prospect_worker import ClaimedProspectRun, ProspectWorkerService
 from revenueos.tenant import TenantContext
 
 from .conftest import (
@@ -78,6 +79,24 @@ def _settings(**values: object) -> Settings:
     }
     configuration.update(values)
     return Settings(**configuration)  # type: ignore[arg-type]
+
+
+def _external_settings() -> Settings:
+    return _settings(
+        feature_credits_enabled=True,
+        prospect_research_provider_name="apollo",
+        feature_prospect_external_provider_enabled=True,
+        prospect_provider_approved=True,
+        prospect_provider_terms_approved=True,
+        prospect_provider_privacy_approved=True,
+        prospect_provider_production_credit_prices_approved=True,
+        credits_margin_floor_basis_points=5_000,
+        credits_margin_policy_reference="owner-test-margin-policy",
+        prospect_provider_health_reference="authorised-test-health-check",
+        prospect_provider_cost_model_reference="apollo-test-cost-model",
+        prospect_provider_cost_micros_per_credit=100_000,
+        apollo_api_key="test-only-apollo-key",
+    )
 
 
 def _run(scenario: Scenario) -> None:
@@ -138,6 +157,7 @@ def test_flag_and_entitlement_fail_closed_and_plan_is_support_managed(client: Te
         "state": "available",
         "enabled": True,
         "canManage": True,
+        "executionMode": "demo",
         "message": "RevenueOS Prospect is available for this organisation.",
     }
 
@@ -181,6 +201,9 @@ def test_external_provider_cannot_queue_without_reserved_credits() -> None:
         tenant = TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin")
         async with session_factory() as session:
             disabled_service = ProspectService(session, tenant, _settings(), provider=ExternalProvider())
+            unavailable = await disabled_service.availability()
+            assert unavailable.enabled is False
+            assert unavailable.execution_mode == "unavailable"
             with pytest.raises(PublicAPIError) as disabled:
                 await disabled_service.create_research(
                     _create_request("northstar-facilities-group", "external:disabled")
@@ -219,6 +242,60 @@ def test_external_provider_cannot_queue_without_reserved_credits() -> None:
                 .where(ProspectResearchRun.organisation_id == PRIMARY_ORGANISATION_ID)
             )
             assert count == 0
+
+    _run(scenario)
+
+
+def test_confirmed_quote_is_reserved_and_bound_to_company_run_idempotently() -> None:
+    class ExternalProvider(DeterministicMockProspectProvider):
+        provider_key = "apollo"
+        provider_version = "apollo-contract-fixture-v1"
+        mode = "external"
+        capability_key = "apollo:prospect_research"
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        from revenueos.database import set_tenant_database_context
+
+        settings = _external_settings()
+        tenant = TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin")
+        async with session_factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            credits = await prepared_service(session)
+            await grant_test_purchase(session, credits, key="wo050-confirmed-quote")
+            quote = await credits.create_quote(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                action_code="PROSPECT_COMPANY_RESEARCH",
+                quantity=1,
+            )
+
+        request = ResearchCreateRequest(
+            candidate_id="northstar-facilities-group",
+            idempotency_key="wo050-confirmed-company-quote",
+            credit_quote_id=quote.quote_id,
+        )
+        async with session_factory() as session:
+            first = await ProspectService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).create_research(request)
+        assert first.latest_run is not None
+        operation_id = first.latest_run.credit_operation_id
+        assert operation_id is not None
+
+        async with session_factory() as session:
+            repeated = await ProspectService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).create_research(request)
+            operation = await session.get(CreditOperation, operation_id)
+            assert repeated.latest_run is not None
+            assert repeated.latest_run.id == first.latest_run.id
+            assert operation is not None and operation.status == "reserved"
 
     _run(scenario)
 
@@ -464,6 +541,264 @@ def test_external_provider_settles_success_and_preserves_unknown_reservation() -
 
     from revenueos.database import set_tenant_database_context
     from revenueos.prospect_contracts import ResearchCreateRequest
+
+    _run(scenario)
+
+
+def test_unused_external_credit_reservations_are_released_and_idempotency_is_bound() -> None:
+    class ExternalProvider(DeterministicMockProspectProvider):
+        provider_key = "apollo"
+        provider_version = "apollo-contract-fixture-v1"
+        mode = "external"
+        capability_key = "apollo:prospect_research"
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        from revenueos.database import set_tenant_database_context
+
+        settings = _external_settings()
+        tenant = TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin")
+        operations = []
+        async with session_factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            credits = await prepared_service(session)
+            await grant_test_purchase(session, credits, key="wo050-unused-reservations")
+            for index in range(3):
+                quote = await credits.create_quote(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    action_code="PROSPECT_COMPANY_RESEARCH",
+                    quantity=1,
+                )
+                operations.append(
+                    await credits.reserve(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        quote_id=quote.quote_id,
+                        idempotency_key=f"wo050-unused-reservation-{index}",
+                    )
+                )
+        initial_key = "wo050-bound-company-request"
+        async with session_factory() as session:
+            initial = await ProspectService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).create_research(
+                ResearchCreateRequest(
+                    candidate_id="northstar-facilities-group",
+                    idempotency_key=initial_key,
+                    credit_operation_id=operations[0].operation_id,
+                )
+            )
+        async with session_factory() as session:
+            repeated = await ProspectService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).create_research(
+                ResearchCreateRequest(
+                    candidate_id="northstar-facilities-group",
+                    idempotency_key="wo050-fresh-request",
+                    credit_operation_id=operations[1].operation_id,
+                )
+            )
+            assert repeated.latest_run is not None
+            assert repeated.latest_run.id == initial.latest_run.id  # type: ignore[union-attr]
+        async with session_factory() as session:
+            released = await session.get(CreditOperation, operations[1].operation_id)
+            assert released is not None and released.status == "released"
+
+        assert await ProspectWorkerService(
+            session_factory,
+            settings,
+            provider=ExternalProvider(),
+        ).run_once("wo050-bound-worker")
+        async with session_factory() as session:
+            with pytest.raises(PublicAPIError) as caught:
+                await ProspectService(
+                    session,
+                    tenant,
+                    settings,
+                    provider=ExternalProvider(),
+                ).refresh_research(
+                    initial.target.id,
+                    ResearchRefreshRequest(
+                        idempotency_key=initial_key,
+                        credit_operation_id=operations[2].operation_id,
+                    ),
+                )
+            assert caught.value.code == "research_idempotency_conflict"
+        async with session_factory() as session:
+            released = await session.get(CreditOperation, operations[2].operation_id)
+            assert released is not None and released.status == "released"
+
+    _run(scenario)
+
+
+def test_external_worker_crash_recovery_never_repeats_an_uncertain_provider_request() -> None:
+    class SimulatedWorkerCrash(BaseException):
+        pass
+
+    class ExternalProvider(DeterministicMockProspectProvider):
+        provider_key = "apollo"
+        provider_version = "apollo-contract-fixture-v1"
+        mode = "external"
+        capability_key = "apollo:prospect_research"
+
+    class CrashBeforeSettlementWorker(ProspectWorkerService):
+        async def _settle_external_execution(
+            self,
+            claim: ClaimedProspectRun,
+            result: ProviderResearchResult | ProviderPersonResearchResult,
+        ) -> None:
+            del claim, result
+            raise SimulatedWorkerCrash
+
+    class CrashAfterSettlementWorker(ProspectWorkerService):
+        async def _finalize_external_run(self, claim: ClaimedProspectRun) -> None:
+            del claim
+            raise SimulatedWorkerCrash
+
+    class SettlementResponseLostWorker(ProspectWorkerService):
+        async def _settle_external_execution(
+            self,
+            claim: ClaimedProspectRun,
+            result: ProviderResearchResult | ProviderPersonResearchResult,
+        ) -> None:
+            await super()._settle_external_execution(claim, result)
+            raise RuntimeError("simulated response loss after durable settlement")
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        from revenueos.database import set_tenant_database_context
+
+        settings = _external_settings()
+        tenant = TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin")
+        clock = [datetime.now(UTC)]
+        operations = []
+        async with session_factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            credits = await prepared_service(session)
+            await grant_test_purchase(session, credits, key="wo050-crash-recovery")
+            for index in range(3):
+                quote = await credits.create_quote(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    action_code="PROSPECT_COMPANY_RESEARCH",
+                    quantity=1,
+                )
+                operations.append(
+                    await credits.reserve(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        quote_id=quote.quote_id,
+                        idempotency_key=f"wo050-crash-reservation-{index}",
+                    )
+                )
+
+        async with session_factory() as session:
+            first = await ProspectService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).create_research(
+                ResearchCreateRequest(
+                    candidate_id="northstar-facilities-group",
+                    idempotency_key="wo050-crash-before-settlement",
+                    credit_operation_id=operations[0].operation_id,
+                )
+            )
+        crashing = CrashBeforeSettlementWorker(
+            session_factory,
+            settings,
+            provider=ExternalProvider(),
+            clock=lambda: clock[0],
+        )
+        with pytest.raises(SimulatedWorkerCrash):
+            await crashing.run_once("wo050-crash-before-settlement-worker")
+        async with session_factory() as session:
+            run = await session.get(ProspectResearchRun, first.latest_run.id)  # type: ignore[union-attr]
+            operation = await session.get(CreditOperation, operations[0].operation_id)
+            assert run is not None and run.status == "synthesizing"
+            assert run.provider_outcome == "completed"
+            assert operation is not None and operation.status == "executing"
+        clock[0] += timedelta(seconds=settings.worker_lease_duration_seconds + 1)
+        recovery = ProspectWorkerService(
+            session_factory,
+            settings,
+            provider=ExternalProvider(),
+            clock=lambda: clock[0],
+        )
+        assert await recovery.recover_stale_runs(PRIMARY_ORGANISATION_ID) == 1
+        async with session_factory() as session:
+            run = await session.get(ProspectResearchRun, first.latest_run.id)  # type: ignore[union-attr]
+            operation = await session.get(CreditOperation, operations[0].operation_id)
+            assert run is not None and run.status == "unknown"
+            assert run.attempt_count == 1
+            assert operation is not None and operation.status == "unknown"
+
+        async with session_factory() as session:
+            second = await ProspectService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).create_research(
+                ResearchCreateRequest(
+                    candidate_id="harbourline-logistics",
+                    idempotency_key="wo050-crash-after-settlement",
+                    credit_operation_id=operations[1].operation_id,
+                )
+            )
+        crashing_after_settlement = CrashAfterSettlementWorker(
+            session_factory,
+            settings,
+            provider=ExternalProvider(),
+            clock=lambda: clock[0],
+        )
+        with pytest.raises(SimulatedWorkerCrash):
+            await crashing_after_settlement.run_once("wo050-crash-after-settlement-worker")
+        async with session_factory() as session:
+            run = await session.get(ProspectResearchRun, second.latest_run.id)  # type: ignore[union-attr]
+            operation = await session.get(CreditOperation, operations[1].operation_id)
+            assert run is not None and run.status == "synthesizing"
+            assert run.provider_outcome == "partial"
+            assert operation is not None and operation.status == "settled"
+        clock[0] += timedelta(seconds=settings.worker_lease_duration_seconds + 1)
+        assert await recovery.recover_stale_runs(PRIMARY_ORGANISATION_ID) == 1
+        async with session_factory() as session:
+            run = await session.get(ProspectResearchRun, second.latest_run.id)  # type: ignore[union-attr]
+            operation = await session.get(CreditOperation, operations[1].operation_id)
+            assert run is not None and run.status == "partial"
+            assert run.attempt_count == 1
+            assert operation is not None and operation.status == "settled"
+
+        async with session_factory() as session:
+            third = await ProspectService(
+                session,
+                tenant,
+                settings,
+                provider=ExternalProvider(),
+            ).create_research(
+                ResearchCreateRequest(
+                    candidate_id="northstar-software",
+                    idempotency_key="wo050-settlement-response-lost",
+                    credit_operation_id=operations[2].operation_id,
+                )
+            )
+        assert await SettlementResponseLostWorker(
+            session_factory,
+            settings,
+            provider=ExternalProvider(),
+            clock=lambda: clock[0],
+        ).run_once("wo050-settlement-response-lost-worker")
+        async with session_factory() as session:
+            run = await session.get(ProspectResearchRun, third.latest_run.id)  # type: ignore[union-attr]
+            operation = await session.get(CreditOperation, operations[2].operation_id)
+            assert run is not None and run.status == "completed"
+            assert operation is not None and operation.status == "settled"
 
     _run(scenario)
 
@@ -721,6 +1056,59 @@ def test_promotion_is_explicit_idempotent_and_cannot_mutate_customer_truth(clien
     assert research_link.json()["targetId"] == target_id
     assert client.delete(f"/api/v1/prospect/research/{target_id}").status_code == 204
     assert client.get(f"/api/v1/companies/{company_id}").status_code == 200
+
+
+@pytest.mark.parametrize("latest_status", ["unknown", "no_result"])
+def test_latest_unknown_or_no_result_blocks_company_promotion(
+    client: TestClient,
+    latest_status: str,
+) -> None:
+    target_id = str(_start_research(client)["target"]["id"])
+    _complete_one_run()
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        async with session_factory() as session:
+            current = await session.scalar(
+                select(ProspectResearchRun).where(
+                    ProspectResearchRun.organisation_id == PRIMARY_ORGANISATION_ID,
+                    ProspectResearchRun.target_id == UUID(target_id),
+                    ProspectResearchRun.person_id.is_(None),
+                )
+            )
+            assert current is not None
+            created_at = current.created_at + timedelta(seconds=1)
+            session.add(
+                ProspectResearchRun(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    target_id=UUID(target_id),
+                    requested_by_user_id=PRIMARY_USER_ID,
+                    refresh_of_run_id=current.id,
+                    status=latest_status,
+                    provider_key=current.provider_key,
+                    provider_version=current.provider_version,
+                    provider_mode=current.provider_mode,
+                    provider_outcome=latest_status,
+                    schema_version=current.schema_version,
+                    request_fingerprint="f" * 64,
+                    idempotency_key=f"blocked-promotion:{latest_status}:{uuid4()}",
+                    max_attempts=3,
+                    completed_at=created_at,
+                    created_at=created_at,
+                    updated_at=created_at,
+                )
+            )
+            await session.commit()
+
+    _run(scenario)
+    brief = client.get(f"/api/v1/prospect/research/{target_id}")
+    assert brief.status_code == 200
+    assert brief.json()["status"] == latest_status
+    promotion = client.post(
+        f"/api/v1/prospect/research/{target_id}/promote",
+        json={"confirmed": True},
+    )
+    assert promotion.status_code == 409
+    assert promotion.json()["code"] == "research_not_promotable"
 
 
 def _customer_truth_counts() -> dict[str, int]:

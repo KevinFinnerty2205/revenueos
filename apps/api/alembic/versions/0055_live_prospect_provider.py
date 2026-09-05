@@ -73,6 +73,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # The predecessor constraint has no representation for these provider
+    # outcomes. Preserve the row and downgrade it to the predecessor's safe
+    # terminal state before recreating that constraint.
+    op.execute(sa.text("UPDATE prospect_research_runs SET status = 'failed' WHERE status IN ('no_result', 'unknown')"))
     with op.batch_alter_table("prospect_research_runs") as batch:
         batch.drop_index("ix_prospect_runs_org_provider_outcome")
         batch.drop_constraint("uq_prospect_runs_credit_operation", type_="unique")

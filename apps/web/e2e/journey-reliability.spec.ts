@@ -1467,6 +1467,7 @@ async function routeFlagship(page: Page) {
         state: "available",
         enabled: true,
         canManage: true,
+        executionMode: path.includes("prospect") ? "demo" : undefined,
         canUploadTemplates: true,
         canCreatePresentations: true,
         message: "This synthetic module is available.",

@@ -39,6 +39,27 @@ ProspectSourceType = Literal[
     "company_contact_page",
 ]
 
+# Shared fail-closed protection for addresses that identify a mailbox or team,
+# not the researched professional. These must never be promoted as a person's
+# contact detail even when an external provider labels the address verified.
+GENERIC_BUSINESS_EMAIL_LOCAL_PARTS = frozenset(
+    {
+        "admin",
+        "billing",
+        "careers",
+        "contact",
+        "enquiries",
+        "hello",
+        "info",
+        "marketing",
+        "office",
+        "privacy",
+        "sales",
+        "security",
+        "support",
+    }
+)
+
 
 class ProspectProviderError(Exception):
     def __init__(
@@ -165,6 +186,11 @@ class ProviderContactPoint(ProviderModel):
 
 class ProviderPersonResearchResult(ProviderModel):
     outcome: Literal["completed", "partial", "no_result"]
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    current_company: str | None = Field(default=None, min_length=1, max_length=200)
+    identity_state: Literal["supported", "ambiguous"] | None = None
     employment_state: ProspectPersonEmploymentState
     current_role: str = Field(min_length=1, max_length=200)
     why_may_matter: str = Field(min_length=1, max_length=600)
