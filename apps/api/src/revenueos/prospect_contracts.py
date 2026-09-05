@@ -28,6 +28,22 @@ class ProspectAvailabilityResponse(APIModel):
     message: str
 
 
+class ProspectProviderReadinessResponse(APIModel):
+    candidate_provider: Literal["apollo"] = "apollo"
+    adapter_state: Literal["UNCONFIGURED", "READY", "DEGRADED", "DISABLED"]
+    production_capable: Literal[True] = True
+    production_active: Literal[False] = False
+    external_execution_enabled: bool
+    credential_configured: bool
+    production_credit_prices_available: bool
+    production_credit_packs_available: Literal[False] = False
+    auto_top_up: Literal[False] = False
+    recent_professional_posts_available: Literal[False] = False
+    phone_reveal_enabled: Literal[False] = False
+    blockers: list[str]
+    message: str
+
+
 class ProspectEntitlementUpdate(APIModel):
     enabled: bool
 
@@ -51,10 +67,12 @@ class CompanySearchResponse(APIModel):
 class ResearchCreateRequest(APIModel):
     candidate_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
     idempotency_key: IdempotencyKey | None = None
+    credit_operation_id: UUID | None = None
 
 
 class ResearchRefreshRequest(APIModel):
     idempotency_key: IdempotencyKey | None = None
+    credit_operation_id: UUID | None = None
 
 
 class ResearchTargetResponse(APIModel):
@@ -81,6 +99,9 @@ class ResearchRunSummary(APIModel):
     source_count: int = 0
     observation_count: int = 0
     error_code: str | None = None
+    provider_outcome: str | None = None
+    credit_operation_id: UUID | None = None
+    selling_profile_revision_id: UUID | None = None
 
 
 class ResearchSourceResponse(APIModel):
@@ -123,7 +144,7 @@ class ExistingCompanyMatchResponse(APIModel):
 
 class ResearchBriefResponse(APIModel):
     target: ResearchTargetResponse
-    status: Literal["not_started", "pending", "researching", "ready", "partial", "failed"]
+    status: Literal["not_started", "pending", "researching", "ready", "partial", "no_result", "unknown", "failed"]
     status_message: str
     current_run: ResearchRunSummary | None
     latest_run: ResearchRunSummary | None
@@ -136,7 +157,7 @@ class ResearchBriefResponse(APIModel):
 
 class RecentResearchItem(APIModel):
     target: ResearchTargetResponse
-    status: Literal["not_started", "pending", "researching", "ready", "partial", "failed"]
+    status: Literal["not_started", "pending", "researching", "ready", "partial", "no_result", "unknown", "failed"]
     updated_at: datetime
 
 

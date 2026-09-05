@@ -21,6 +21,8 @@ const statusLabels: Record<ProspectResearchStatus, string> = {
   researching: "Researching company…",
   ready: "Research ready",
   partial: "Research incomplete",
+  no_result: "No results",
+  unknown: "Reconciling provider outcome",
   failed: "Couldn’t complete research",
 };
 

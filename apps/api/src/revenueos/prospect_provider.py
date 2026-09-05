@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +16,9 @@ from revenueos.domain import (
     ProspectTrustState,
 )
 from revenueos.prospect_url_security import canonicalize_public_https_url
+
+if TYPE_CHECKING:
+    from revenueos.config import Settings
 
 ProspectSourceType = Literal[
     "official_website",
@@ -37,15 +41,31 @@ ProspectSourceType = Literal[
 
 
 class ProspectProviderError(Exception):
-    def __init__(self, code: str, safe_message: str, *, retryable: bool) -> None:
+    def __init__(
+        self,
+        code: str,
+        safe_message: str,
+        *,
+        retryable: bool,
+        execution_state: Literal["not_executed", "unknown"] = "not_executed",
+        retry_after_seconds: int | None = None,
+    ) -> None:
         super().__init__(safe_message)
         self.code = code
         self.safe_message = safe_message
         self.retryable = retryable
+        self.execution_state = execution_state
+        self.retry_after_seconds = retry_after_seconds
 
 
 class ProviderModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class ProviderExecutionContext(ProviderModel):
+    operation_id: UUID
+    provider_request_id: str = Field(min_length=8, max_length=255)
+    idempotency_key: str = Field(min_length=8, max_length=200)
 
 
 class CompanyCandidate(ProviderModel):
@@ -91,9 +111,11 @@ class ProviderResearchObservation(ProviderModel):
 
 
 class ProviderResearchResult(ProviderModel):
-    outcome: Literal["completed", "partial"]
-    sources: tuple[ProviderResearchSource, ...] = Field(min_length=1, max_length=8)
-    observations: tuple[ProviderResearchObservation, ...] = Field(min_length=1, max_length=30)
+    outcome: Literal["completed", "partial", "no_result"]
+    sources: tuple[ProviderResearchSource, ...] = Field(max_length=8)
+    observations: tuple[ProviderResearchObservation, ...] = Field(max_length=30)
+    provider_units: int = Field(default=1, ge=0, le=100)
+    successful_units: int = Field(default=1, ge=0, le=100)
 
 
 class PersonCandidate(ProviderModel):
@@ -142,14 +164,16 @@ class ProviderContactPoint(ProviderModel):
 
 
 class ProviderPersonResearchResult(ProviderModel):
-    outcome: Literal["completed", "partial"]
+    outcome: Literal["completed", "partial", "no_result"]
     employment_state: ProspectPersonEmploymentState
     current_role: str = Field(min_length=1, max_length=200)
     why_may_matter: str = Field(min_length=1, max_length=600)
-    sources: tuple[ProviderResearchSource, ...] = Field(min_length=1, max_length=12)
-    observations: tuple[ProviderResearchObservation, ...] = Field(min_length=1, max_length=30)
+    sources: tuple[ProviderResearchSource, ...] = Field(max_length=12)
+    observations: tuple[ProviderResearchObservation, ...] = Field(max_length=30)
     buying_roles: tuple[ProviderBuyingRoleHypothesis, ...] = Field(max_length=6)
     contact_points: tuple[ProviderContactPoint, ...] = Field(max_length=4)
+    provider_units: int = Field(default=1, ge=0, le=100)
+    successful_units: int = Field(default=1, ge=0, le=100)
 
 
 class ProspectResearchProvider(Protocol):
@@ -158,6 +182,14 @@ class ProspectResearchProvider(Protocol):
 
     @property
     def provider_version(self) -> str: ...
+
+    @property
+    def mode(self) -> Literal["deterministic", "external"]: ...
+
+    @property
+    def capability_key(self) -> str: ...
+
+    async def aclose(self) -> None: ...
 
     async def search(self, query: str, *, limit: int) -> tuple[CompanyCandidate, ...]: ...
 
@@ -168,6 +200,7 @@ class ProspectResearchProvider(Protocol):
         target: ResearchTargetSnapshot,
         *,
         run_sequence: int,
+        execution: ProviderExecutionContext | None = None,
     ) -> ProviderResearchResult: ...
 
     async def discover_people(
@@ -175,6 +208,7 @@ class ProspectResearchProvider(Protocol):
         target: ResearchTargetSnapshot,
         *,
         limit: int,
+        execution: ProviderExecutionContext | None = None,
     ) -> tuple[PersonCandidate, ...]: ...
 
     async def research_person(
@@ -183,6 +217,7 @@ class ProspectResearchProvider(Protocol):
         person: PersonTargetSnapshot,
         *,
         run_sequence: int,
+        execution: ProviderExecutionContext | None = None,
     ) -> ProviderPersonResearchResult: ...
 
 
@@ -191,6 +226,8 @@ class DeterministicMockProspectProvider:
 
     provider_key = "mock"
     provider_version = "mock-company-research-v1"
+    mode: Literal["deterministic"] = "deterministic"
+    capability_key = "prospect_deterministic_demo"
 
     def __init__(self) -> None:
         self._candidates = (
@@ -268,6 +305,9 @@ class DeterministicMockProspectProvider:
             ),
         )
 
+    async def aclose(self) -> None:
+        return None
+
     async def search(self, query: str, *, limit: int) -> tuple[CompanyCandidate, ...]:
         normalised = query.casefold().strip()
         matches = tuple(
@@ -285,7 +325,9 @@ class DeterministicMockProspectProvider:
         target: ResearchTargetSnapshot,
         *,
         run_sequence: int,
+        execution: ProviderExecutionContext | None = None,
     ) -> ProviderResearchResult:
+        del execution
         if target.provider_candidate_id == "northstar-facilities-group":
             return self._northstar_result(refresh=run_sequence > 1)
         if target.provider_candidate_id == "harbourline-logistics":
@@ -304,7 +346,9 @@ class DeterministicMockProspectProvider:
         target: ResearchTargetSnapshot,
         *,
         limit: int,
+        execution: ProviderExecutionContext | None = None,
     ) -> tuple[PersonCandidate, ...]:
+        del execution
         if target.provider_candidate_id != "northstar-facilities-group":
             return ()
         people = (
@@ -361,7 +405,9 @@ class DeterministicMockProspectProvider:
         person: PersonTargetSnapshot,
         *,
         run_sequence: int,
+        execution: ProviderExecutionContext | None = None,
     ) -> ProviderPersonResearchResult:
+        del execution
         if target.provider_candidate_id != "northstar-facilities-group":
             raise ProspectProviderError(
                 "person_unavailable",
@@ -875,7 +921,13 @@ class DeterministicMockProspectProvider:
         )
 
 
-def create_prospect_provider(name: str) -> ProspectResearchProvider:
+def create_prospect_provider(name: str, settings: Settings | None = None) -> ProspectResearchProvider:
     if name == "mock":
         return DeterministicMockProspectProvider()
+    if name == "apollo":
+        if settings is None:
+            raise ValueError("Apollo Prospect provider configuration is required.")
+        from revenueos.prospect_apollo_provider import ApolloProspectProvider
+
+        return ApolloProspectProvider(settings)
     raise ValueError("The configured Prospect research provider is not supported.")

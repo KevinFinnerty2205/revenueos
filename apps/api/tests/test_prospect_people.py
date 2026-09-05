@@ -312,7 +312,7 @@ def test_export_includes_licensed_person_research_without_provider_person_ids(cl
             exported.update(await _export_payload(session, PRIMARY_ORGANISATION_ID, _settings()))
 
     _run(scenario)
-    assert exported["exportVersion"] == 33
+    assert exported["exportVersion"] == 34
     people = exported["prospectPeople"]
     assert isinstance(people, list) and people[0]["display_name"] == "Jane Smith"
     assert "provider_person_id" not in repr(people)
@@ -616,5 +616,47 @@ def test_people_discovery_quota_is_separate_and_atomic() -> None:
             with pytest.raises(Exception) as caught:
                 await service.discover_people(target_id)
             assert getattr(caught.value, "code", None) == "user_people_discovery_limit"
+
+    _run(scenario)
+
+
+def test_external_people_discovery_obeys_provider_kill_switch() -> None:
+    class ExternalProvider(DeterministicMockProspectProvider):
+        mode = "external"
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        async def discover_people(
+            self,
+            target: ResearchTargetSnapshot,
+            *,
+            limit: int,
+            execution: object | None = None,
+        ) -> tuple[object, ...]:
+            del target, limit, execution
+            self.calls += 1
+            return ()
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        settings = _settings()
+        tenant = TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin")
+        async with session_factory() as session:
+            company_brief = await ProspectService(session, tenant, settings).create_research(
+                ResearchCreateRequest(
+                    candidate_id="northstar-facilities-group",
+                    idempotency_key=f"provider-switch-company:{uuid4()}",
+                )
+            )
+        assert await ProspectWorkerService(session_factory, settings).run_once("provider-switch-company") is True
+        provider = ExternalProvider()
+        async with session_factory() as session:
+            with pytest.raises(Exception) as caught:
+                await ProspectPeopleService(session, tenant, settings, provider=provider).discover_people(
+                    company_brief.target.id
+                )
+            assert getattr(caught.value, "code", None) == "prospect_provider_unavailable"
+            assert provider.calls == 0
 
     _run(scenario)

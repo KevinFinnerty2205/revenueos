@@ -567,6 +567,10 @@ test("flagship account research path is sourced, refreshable and explicitly prom
         });
         return;
       }
+      if (path.endsWith(`/research/${target.id}/people`) && method === "GET") {
+        await route.fulfill({ json: peopleDiscovery(false) });
+        return;
+      }
       await route.fulfill({ status: 404, json: { message: "Not found" } });
     },
   );
@@ -648,6 +652,12 @@ test("flagship account research path is sourced, refreshable and explicitly prom
       .scrollIntoViewIfNeeded();
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-026-source-disclosure-desktop.png",
+    });
+  }
+  if (process.env.CAPTURE_WO_050_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-050-prospect-company-desktop.png",
+      fullPage: true,
     });
   }
 
@@ -869,6 +879,12 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
       fullPage: true,
     });
   }
+  if (process.env.CAPTURE_WO_050_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-050-prospect-person-desktop.png",
+      fullPage: true,
+    });
+  }
 
   await page.getByRole("button", { name: "Mark relevant" }).click();
   await expect(page.getByText("Hypothesis — Relevant")).toBeVisible();
@@ -888,6 +904,12 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
   if (process.env.CAPTURE_WO_027_SCREENSHOTS === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-027-person-research-mobile.png",
+      fullPage: true,
+    });
+  }
+  if (process.env.CAPTURE_WO_050_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-050-prospect-person-mobile-390.png",
       fullPage: true,
     });
   }
@@ -1068,6 +1090,12 @@ test("Find and the concise brief remain usable on mobile without changing mobile
   if (process.env.CAPTURE_WO_026_SCREENSHOTS === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-026-research-brief-mobile.png",
+      fullPage: true,
+    });
+  }
+  if (process.env.CAPTURE_WO_050_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-050-prospect-company-mobile-390.png",
       fullPage: true,
     });
   }

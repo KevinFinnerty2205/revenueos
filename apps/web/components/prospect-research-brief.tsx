@@ -333,6 +333,8 @@ export function ProspectResearchBriefView({
               </Link>
             ) : !isProcessing &&
               brief.status !== "failed" &&
+              brief.status !== "no_result" &&
+              brief.status !== "unknown" &&
               brief.status !== "not_started" ? (
               <button
                 ref={promotionTrigger}
@@ -343,7 +345,9 @@ export function ProspectResearchBriefView({
                 Add to Sales
               </button>
             ) : null}
-            {!isProcessing && brief.status !== "failed" ? (
+            {!isProcessing &&
+            brief.status !== "failed" &&
+            brief.status !== "unknown" ? (
               <button
                 type="button"
                 className="secondary-button"
@@ -456,6 +460,30 @@ export function ProspectResearchBriefView({
               Check company website ↗
             </a>
           </div>
+        </section>
+      ) : brief.status === "unknown" ? (
+        <section
+          className="rounded-3xl border border-amber-200 bg-amber-50 p-7"
+          aria-live="polite"
+        >
+          <h2 className="text-xl font-semibold text-amber-950">
+            Reconciling provider outcome
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-900">
+            The provider outcome is uncertain. Reserved Credits remain held and
+            RevenueOS will not retry or charge again until the operation is
+            reconciled.
+          </p>
+        </section>
+      ) : brief.status === "no_result" ? (
+        <section className="rounded-3xl border border-slate-200 bg-slate-50 p-7">
+          <h2 className="text-xl font-semibold text-slate-950">
+            No reliable results
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-700">
+            No supported company facts were returned, so no research was
+            promoted into Sales or treated as customer Evidence.
+          </p>
         </section>
       ) : (
         <>
@@ -640,6 +668,8 @@ function ResearchStatus({ brief }: { brief: ProspectResearchBrief }) {
     researching: ["Researching company…", "bg-teal-50 text-teal-950"],
     ready: ["Research ready", "bg-emerald-50 text-emerald-950"],
     partial: ["Research incomplete", "bg-amber-50 text-amber-950"],
+    no_result: ["No reliable results", "bg-slate-100 text-slate-800"],
+    unknown: ["Reconciling outcome", "bg-amber-50 text-amber-950"],
     failed: ["Couldn’t complete research", "bg-rose-50 text-rose-950"],
   }[brief.status];
   return (

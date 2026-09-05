@@ -187,6 +187,29 @@ const creditsProjection = {
     "Credits cover meaningful metered external services. Ordinary Oryntela software use is not metered. Test catalogue values are not customer pricing.",
 };
 
+const prospectProviderReadiness = {
+  candidateProvider: "apollo",
+  adapterState: "UNCONFIGURED",
+  productionCapable: true,
+  productionActive: false,
+  externalExecutionEnabled: false,
+  credentialConfigured: false,
+  productionCreditPricesAvailable: false,
+  productionCreditPacksAvailable: false,
+  autoTopUp: false,
+  recentProfessionalPostsAvailable: false,
+  phoneRevealEnabled: false,
+  blockers: [
+    "Provider credentials are not configured.",
+    "Product-use licensing is not approved.",
+    "Production Credit action prices are not approved.",
+    "The production margin floor is not owner-approved.",
+    "External provider execution is disabled by the server kill switch.",
+  ],
+  message:
+    "The live Prospect adapter is installed but cannot execute until every commercial, licensing, privacy and Credit gate is approved.",
+};
+
 async function routeSettingsBase(page: Page) {
   await page.route(`${apiOrigin}/api/v1/**`, async (route) => {
     await route.fulfill({
@@ -246,6 +269,32 @@ async function routeSettings(page: Page) {
       body: JSON.stringify(creditsProjection),
     });
   });
+  await page.route(
+    `${apiOrigin}/api/v1/prospect/availability`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          moduleKey: "prospect",
+          state: "available",
+          enabled: true,
+          canManage: true,
+          message: "RevenueOS Prospect is available for this organisation.",
+        }),
+      });
+    },
+  );
+  await page.route(
+    `${apiOrigin}/api/v1/prospect/admin/provider-readiness`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(prospectProviderReadiness),
+      });
+    },
+  );
 }
 
 test("commercial settings are clear, keyboard reachable and responsive", async ({
@@ -348,6 +397,40 @@ test("Credits settings are clear, bounded and responsive", async ({ page }) => {
   await expect(credits.getByText("1,000", { exact: true })).toBeVisible();
   await credits.screenshot({
     path: "../../docs/07-sprints/assets/wo-049-credits-settings-mobile.png",
+  });
+});
+
+test("Prospect live-provider readiness is clear and responsive", async ({
+  page,
+}) => {
+  await routeSettings(page);
+  await page.goto("/settings");
+
+  const prospect = page.getByRole("region", { name: "RevenueOS Prospect" });
+  await expect(prospect).toBeVisible();
+  await expect(prospect.getByText("Live research readiness")).toBeVisible();
+  await expect(prospect.getByText("Not active")).toBeVisible();
+  const requirements = prospect.getByText("Review activation requirements");
+  await requirements.focus();
+  await expect(requirements).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(
+    prospect.getByText("Product-use licensing is not approved."),
+  ).toBeVisible();
+  await expect(
+    prospect.getByText(/No production Credit prices/i),
+  ).toBeVisible();
+  await prospect.screenshot({
+    path: "../../docs/07-sprints/assets/wo-050-prospect-provider-readiness-desktop.png",
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await prospect.scrollIntoViewIfNeeded();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  await prospect.screenshot({
+    path: "../../docs/07-sprints/assets/wo-050-prospect-provider-readiness-mobile-390.png",
   });
 });
 

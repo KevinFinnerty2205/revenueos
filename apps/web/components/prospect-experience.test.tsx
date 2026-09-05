@@ -38,6 +38,25 @@ const availability = {
   message: "RevenueOS Prospect is available for this organisation.",
 };
 
+const providerReadiness = {
+  candidateProvider: "apollo",
+  adapterState: "UNCONFIGURED",
+  productionCapable: true,
+  productionActive: false,
+  externalExecutionEnabled: false,
+  credentialConfigured: false,
+  productionCreditPricesAvailable: false,
+  productionCreditPacksAvailable: false,
+  autoTopUp: false,
+  recentProfessionalPostsAvailable: false,
+  phoneRevealEnabled: false,
+  blockers: [
+    "Provider credentials are not configured.",
+    "Product-use licensing is not approved.",
+  ],
+  message: "The live Prospect adapter is installed but cannot execute yet.",
+};
+
 const target = {
   id: "target-1",
   name: "Northstar Facilities Group",
@@ -499,6 +518,68 @@ describe("RevenueOS Prospect experience", () => {
     );
   });
 
+  it.each([
+    [
+      "unknown",
+      "Reconciling provider outcome",
+      /Reserved Credits remain held/i,
+    ],
+    [
+      "no_result",
+      "No reliable results",
+      /no research was promoted into Sales/i,
+    ],
+  ] as const)(
+    "renders the %s provider outcome safely",
+    async (status, heading, message) => {
+      const ready = researchBrief();
+      const latestRun = { ...ready.latestRun, status, providerOutcome: status };
+      const body = {
+        ...ready,
+        status,
+        statusMessage:
+          status === "unknown"
+            ? "The provider outcome is unknown."
+            : "No reliable result was returned.",
+        currentRun: null,
+        latestRun,
+        observations: [],
+        sources: [],
+        history: [latestRun],
+      };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: RequestInfo | URL) =>
+          String(input).endsWith("/research/target-1/people")
+            ? jsonResponse({
+                companyTargetId: "target-1",
+                functions: [],
+                people: [],
+                gaps: [],
+                resultLimit: 15,
+                message: "No people research available.",
+              })
+            : jsonResponse(body),
+        ),
+      );
+
+      render(<ProspectResearchBriefView targetId="target-1" />);
+
+      expect(
+        await screen.findByRole("heading", { name: heading }),
+      ).toBeVisible();
+      expect(screen.getByText(message)).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Add to Sales" }),
+      ).not.toBeInTheDocument();
+      if (status === "unknown") {
+        expect(
+          screen.queryByRole("button", { name: "Refresh research" }),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
+
   it("discovers a bounded company-scoped set of people without social-profile imagery", async () => {
     const empty = {
       companyTargetId: "target-1",
@@ -675,6 +756,7 @@ describe("RevenueOS Prospect experience", () => {
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(() => jsonResponse(availability))
+      .mockImplementationOnce(() => jsonResponse(providerReadiness))
       .mockImplementationOnce(() =>
         jsonResponse({ ...availability, state: "not_in_plan", enabled: false }),
       );
@@ -682,10 +764,12 @@ describe("RevenueOS Prospect experience", () => {
     render(<ProspectModuleSettings />);
     const toggle = await screen.findByRole("switch", { name: "Enabled" });
     expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(await screen.findByText("Live research readiness")).toBeVisible();
+    expect(screen.getByText("Not active")).toBeVisible();
     fireEvent.click(toggle);
     expect(
       await screen.findByRole("switch", { name: "Disabled" }),
     ).toHaveAttribute("aria-checked", "false");
-    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "PATCH" });
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: "PATCH" });
   });
 });

@@ -14,7 +14,7 @@ AIProviderName = Literal["mock", "openai"]
 TranscriptionProviderName = Literal["mock", "openai"]
 VisualProviderName = Literal["mock", "openai"]
 EvidenceExtractionProviderName = Literal["mock", "openai"]
-ProspectResearchProviderName = Literal["mock"]
+ProspectResearchProviderName = Literal["mock", "apollo"]
 VisualStorageBackend = Literal["local", "s3_compatible"]
 BillingProviderName = Literal["deterministic", "stripe"]
 
@@ -49,6 +49,20 @@ class Settings(BaseSettings):
     credits_quote_ttl_seconds: int = Field(default=600, ge=60, le=3_600)
     credits_margin_floor_basis_points: int | None = Field(default=None, ge=1, le=9_999)
     credits_margin_policy_reference: str | None = Field(default=None, min_length=3, max_length=200)
+    feature_prospect_external_provider_enabled: bool = False
+    prospect_provider_approved: bool = False
+    prospect_provider_terms_approved: bool = False
+    prospect_provider_privacy_approved: bool = False
+    prospect_provider_production_credit_prices_approved: bool = False
+    prospect_provider_health_reference: str | None = Field(default=None, min_length=3, max_length=200)
+    prospect_provider_cost_model_reference: str | None = Field(default=None, min_length=3, max_length=200)
+    prospect_provider_cost_micros_per_credit: int | None = Field(default=None, ge=1, le=1_000_000_000)
+    prospect_provider_cost_currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    apollo_api_key: SecretStr | None = None
+    apollo_api_base_url: str = "https://api.apollo.io"
+    apollo_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    apollo_read_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
+    apollo_max_response_bytes: int = Field(default=1_000_000, ge=10_000, le=5_000_000)
     billing_provider_name: BillingProviderName = "deterministic"
     billing_mode: Literal["test"] = "test"
     billing_webhook_secret: SecretStr = Field(
@@ -385,6 +399,9 @@ class Settings(BaseSettings):
         "stripe_price_complete_monthly",
         "stripe_price_complete_annual",
         "credits_margin_policy_reference",
+        "prospect_provider_health_reference",
+        "prospect_provider_cost_model_reference",
+        "apollo_api_key",
         mode="before",
     )
     @classmethod
@@ -460,6 +477,33 @@ class Settings(BaseSettings):
                     raise ValueError("Stripe test billing requires all six price_ identifiers.")
                 if self.stripe_api_base_url != "https://api.stripe.com":
                     raise ValueError("Stripe billing must use the official HTTPS API endpoint.")
+        if self.prospect_research_provider_name == "apollo":
+            if self.apollo_api_base_url != "https://api.apollo.io":
+                raise ValueError("Apollo Prospect research must use the official HTTPS API endpoint.")
+            if self.feature_prospect_external_provider_enabled:
+                required_approvals = (
+                    self.prospect_provider_approved,
+                    self.prospect_provider_terms_approved,
+                    self.prospect_provider_privacy_approved,
+                    self.prospect_provider_production_credit_prices_approved,
+                )
+                if self.apollo_api_key is None or not all(required_approvals):
+                    raise ValueError(
+                        "External Prospect execution requires credentials and all provider, terms, privacy and "
+                        "production-pricing approvals."
+                    )
+                if (
+                    not self.feature_credits_enabled
+                    or self.credits_margin_floor_basis_points is None
+                    or self.credits_margin_policy_reference is None
+                    or self.prospect_provider_health_reference is None
+                    or self.prospect_provider_cost_model_reference is None
+                    or self.prospect_provider_cost_micros_per_credit is None
+                ):
+                    raise ValueError(
+                        "External Prospect execution requires enabled Credits, an approved margin floor, a current "
+                        "provider health reference and a versioned provider cost model."
+                    )
         if self.private_beta_real_data_enabled:
             if self.environment != "production":
                 raise ValueError("Real-data private beta mode is permitted only in production.")
@@ -695,6 +739,7 @@ class Settings(BaseSettings):
 
         return {
             "credits": self.feature_credits_enabled,
+            "prospectExternalProvider": self.feature_prospect_external_provider_enabled,
             "openaiProvider": self.feature_openai_provider_enabled,
             "revenueBrain": self.feature_revenue_brain_enabled,
             "opportunityWorkspace": self.feature_opportunity_workspace_enabled,

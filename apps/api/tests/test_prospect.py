@@ -20,6 +20,7 @@ from revenueos.models import (
     ActionProposal,
     Company,
     Contact,
+    CreditOperation,
     Evidence,
     MethodologyProjection,
     Opportunity,
@@ -36,6 +37,7 @@ from revenueos.prospect_provider import (
     ProviderResearchObservation,
     ProviderResearchResult,
     ProviderResearchSource,
+    ResearchTargetSnapshot,
 )
 from revenueos.prospect_repositories import ProspectRepository
 from revenueos.prospect_services import ProspectService
@@ -55,9 +57,11 @@ from .conftest import (
     PRIMARY_ORGANISATION_ID,
     PRIMARY_USER_ID,
     SECONDARY_ORGANISATION_ID,
+    SECONDARY_USER_ID,
     TEST_DB_URL,
     set_test_commercial_plan,
 )
+from .test_credits import grant_test_purchase, prepared_service
 
 Scenario = Callable[[async_sessionmaker[AsyncSession]], Awaitable[None]]
 
@@ -148,6 +152,371 @@ def test_flag_and_entitlement_fail_closed_and_plan_is_support_managed(client: Te
 
     set_test_commercial_plan("complete")
     assert client.get("/api/v1/prospect/availability").json()["enabled"] is True
+
+
+def test_provider_readiness_reports_every_inactive_production_gate(client: TestClient) -> None:
+    response = client.get("/api/v1/prospect/admin/provider-readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["candidateProvider"] == "apollo"
+    assert body["adapterState"] == "UNCONFIGURED"
+    assert body["productionCapable"] is True
+    assert body["productionActive"] is False
+    assert body["externalExecutionEnabled"] is False
+    assert body["productionCreditPricesAvailable"] is False
+    assert body["productionCreditPacksAvailable"] is False
+    assert body["autoTopUp"] is False
+    assert body["phoneRevealEnabled"] is False
+    assert any("licensing" in blocker for blocker in body["blockers"])
+    assert any("health" in blocker for blocker in body["blockers"])
+    assert any("provider-cost caps" in blocker for blocker in body["blockers"])
+
+
+def test_external_provider_cannot_queue_without_reserved_credits() -> None:
+    class ExternalProvider(DeterministicMockProspectProvider):
+        mode = "external"
+        capability_key = "fixture:prospect_research"
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        tenant = TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin")
+        async with session_factory() as session:
+            disabled_service = ProspectService(session, tenant, _settings(), provider=ExternalProvider())
+            with pytest.raises(PublicAPIError) as disabled:
+                await disabled_service.create_research(
+                    _create_request("northstar-facilities-group", "external:disabled")
+                )
+            assert disabled.value.code == "prospect_provider_unavailable"
+            await session.rollback()
+        async with session_factory() as session:
+            service = ProspectService(
+                session,
+                tenant,
+                _settings(
+                    feature_credits_enabled=True,
+                    prospect_research_provider_name="apollo",
+                    feature_prospect_external_provider_enabled=True,
+                    prospect_provider_approved=True,
+                    prospect_provider_terms_approved=True,
+                    prospect_provider_privacy_approved=True,
+                    prospect_provider_production_credit_prices_approved=True,
+                    credits_margin_floor_basis_points=5_000,
+                    credits_margin_policy_reference="owner-test-margin-policy",
+                    prospect_provider_health_reference="authorised-test-health-check",
+                    prospect_provider_cost_model_reference="apollo-test-cost-model",
+                    prospect_provider_cost_micros_per_credit=100_000,
+                    apollo_api_key="test-only-apollo-key",
+                ),
+                provider=ExternalProvider(),
+            )
+            with pytest.raises(PublicAPIError) as caught:
+                await service.create_research(_create_request("northstar-facilities-group", "external:no-credit"))
+            assert caught.value.code == "credit_operation_required"
+            await session.rollback()
+        async with session_factory() as session:
+            count = await session.scalar(
+                select(func.count())
+                .select_from(ProspectResearchRun)
+                .where(ProspectResearchRun.organisation_id == PRIMARY_ORGANISATION_ID)
+            )
+            assert count == 0
+
+    _run(scenario)
+
+
+def test_external_provider_settles_success_and_preserves_unknown_reservation() -> None:
+    class ExternalProvider(DeterministicMockProspectProvider):
+        provider_key = "apollo"
+        provider_version = "apollo-contract-fixture-v1"
+        mode = "external"
+        capability_key = "apollo:prospect_research"
+
+    class UnknownProvider(ExternalProvider):
+        async def research(
+            self,
+            target: ResearchTargetSnapshot,
+            *,
+            run_sequence: int,
+            execution: object | None = None,
+        ) -> ProviderResearchResult:
+            del target, run_sequence, execution
+            raise ProspectProviderError(
+                "provider_outcome_unknown",
+                "The provider outcome is unknown and requires reconciliation.",
+                retryable=False,
+                execution_state="unknown",
+            )
+
+    class NoResultProvider(ExternalProvider):
+        async def research(
+            self,
+            target: ResearchTargetSnapshot,
+            *,
+            run_sequence: int,
+            execution: object | None = None,
+        ) -> ProviderResearchResult:
+            del target, run_sequence, execution
+            return ProviderResearchResult(
+                outcome="no_result",
+                sources=(),
+                observations=(),
+                provider_units=0,
+                successful_units=0,
+            )
+
+    settings = _settings(
+        feature_credits_enabled=True,
+        prospect_research_provider_name="apollo",
+        feature_prospect_external_provider_enabled=True,
+        prospect_provider_approved=True,
+        prospect_provider_terms_approved=True,
+        prospect_provider_privacy_approved=True,
+        prospect_provider_production_credit_prices_approved=True,
+        credits_margin_floor_basis_points=5_000,
+        credits_margin_policy_reference="owner-test-margin-policy",
+        prospect_provider_health_reference="authorised-test-health-check",
+        prospect_provider_cost_model_reference="apollo-test-cost-model",
+        prospect_provider_cost_micros_per_credit=100_000,
+        apollo_api_key="test-only-apollo-key",
+    )
+
+    async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
+        tenant = TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin")
+        async with session_factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            credits = await prepared_service(session)
+            await grant_test_purchase(session, credits, key="wo050-worker-success")
+            forged_quote = await credits.create_quote(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                action_code="PROSPECT_COMPANY_RESEARCH",
+                quantity=2,
+            )
+            forged_operation = await credits.reserve(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                quote_id=forged_quote.quote_id,
+                idempotency_key="wo050-worker-forged-quantity",
+            )
+            quote = await credits.create_quote(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                action_code="PROSPECT_COMPANY_RESEARCH",
+                quantity=1,
+            )
+            operation = await credits.reserve(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                quote_id=quote.quote_id,
+                idempotency_key="wo050-worker-success-reserve",
+            )
+        async with session_factory() as session:
+            cross_tenant_service = ProspectService(
+                session,
+                TenantContext(SECONDARY_ORGANISATION_ID, SECONDARY_USER_ID, "admin"),
+                settings,
+                provider=ExternalProvider(),
+            )
+            with pytest.raises(PublicAPIError) as cross_tenant:
+                await cross_tenant_service.create_research(
+                    ResearchCreateRequest(
+                        candidate_id="northstar-facilities-group",
+                        idempotency_key="wo050-worker-cross-tenant-credit",
+                        credit_operation_id=operation.operation_id,
+                    )
+                )
+            assert cross_tenant.value.code == "credit_operation_invalid"
+        async with session_factory() as session:
+            service = ProspectService(session, tenant, settings, provider=ExternalProvider())
+            with pytest.raises(PublicAPIError) as forged:
+                await service.create_research(
+                    ResearchCreateRequest(
+                        candidate_id="harbourline-logistics",
+                        idempotency_key="wo050-worker-forged-quantity-run",
+                        credit_operation_id=forged_operation.operation_id,
+                    )
+                )
+            assert forged.value.code == "credit_operation_invalid"
+        async with session_factory() as session:
+            service = ProspectService(session, tenant, settings, provider=ExternalProvider())
+            await service.create_research(
+                ResearchCreateRequest(
+                    candidate_id="northstar-facilities-group",
+                    idempotency_key="wo050-worker-success-run",
+                    credit_operation_id=operation.operation_id,
+                )
+            )
+        assert await ProspectWorkerService(session_factory, settings, provider=ExternalProvider()).run_once(
+            "wo050-success-worker"
+        )
+        async with session_factory() as session:
+            completed = await session.scalar(
+                select(ProspectResearchRun).where(
+                    ProspectResearchRun.organisation_id == PRIMARY_ORGANISATION_ID,
+                    ProspectResearchRun.credit_operation_id == operation.operation_id,
+                )
+            )
+            settled = await session.scalar(
+                select(CreditOperation).where(
+                    CreditOperation.organisation_id == PRIMARY_ORGANISATION_ID,
+                    CreditOperation.id == operation.operation_id,
+                )
+            )
+            assert completed is not None and completed.status == "completed"
+            assert completed.provider_outcome == "completed"
+            assert completed.provider_request_id == f"prospect:{completed.id}"
+            assert settled is not None and settled.status == "settled"
+            assert settled.outcome == "success"
+
+        async with session_factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            credits = await prepared_service(session)
+            quote = await credits.create_quote(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                action_code="PROSPECT_COMPANY_RESEARCH",
+                quantity=1,
+            )
+            unknown_operation = await credits.reserve(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                quote_id=quote.quote_id,
+                idempotency_key="wo050-worker-unknown-reserve",
+            )
+        async with session_factory() as session:
+            service = ProspectService(session, tenant, settings, provider=UnknownProvider())
+            await service.create_research(
+                ResearchCreateRequest(
+                    candidate_id="northstar-software",
+                    idempotency_key="wo050-worker-unknown-run",
+                    credit_operation_id=unknown_operation.operation_id,
+                )
+            )
+        assert await ProspectWorkerService(session_factory, settings, provider=UnknownProvider()).run_once(
+            "wo050-unknown-worker"
+        )
+        async with session_factory() as session:
+            unknown_run = await session.scalar(
+                select(ProspectResearchRun).where(
+                    ProspectResearchRun.organisation_id == PRIMARY_ORGANISATION_ID,
+                    ProspectResearchRun.credit_operation_id == unknown_operation.operation_id,
+                )
+            )
+            unknown_credit = await session.scalar(
+                select(CreditOperation).where(
+                    CreditOperation.organisation_id == PRIMARY_ORGANISATION_ID,
+                    CreditOperation.id == unknown_operation.operation_id,
+                )
+            )
+            assert unknown_run is not None and unknown_run.status == "unknown"
+            assert unknown_run.attempt_count == 1
+            assert unknown_credit is not None and unknown_credit.status == "unknown"
+            assert unknown_credit.reserved_credits > 0
+            assert unknown_credit.settled_credits == 0
+            assert unknown_credit.released_credits == 0
+
+        async with session_factory() as session:
+            await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+            credits = await prepared_service(session)
+            quote = await credits.create_quote(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                action_code="PROSPECT_COMPANY_RESEARCH",
+                quantity=1,
+            )
+            no_result_operation = await credits.reserve(
+                PRIMARY_ORGANISATION_ID,
+                PRIMARY_USER_ID,
+                quote_id=quote.quote_id,
+                idempotency_key="wo050-worker-no-result-reserve",
+            )
+        async with session_factory() as session:
+            service = ProspectService(session, tenant, settings, provider=NoResultProvider())
+            await service.create_research(
+                ResearchCreateRequest(
+                    candidate_id="harbour-health-network",
+                    idempotency_key="wo050-worker-no-result-run",
+                    credit_operation_id=no_result_operation.operation_id,
+                )
+            )
+        assert await ProspectWorkerService(session_factory, settings, provider=NoResultProvider()).run_once(
+            "wo050-no-result-worker"
+        )
+        async with session_factory() as session:
+            no_result_run = await session.scalar(
+                select(ProspectResearchRun).where(
+                    ProspectResearchRun.organisation_id == PRIMARY_ORGANISATION_ID,
+                    ProspectResearchRun.credit_operation_id == no_result_operation.operation_id,
+                )
+            )
+            no_result_credit = await session.scalar(
+                select(CreditOperation).where(
+                    CreditOperation.organisation_id == PRIMARY_ORGANISATION_ID,
+                    CreditOperation.id == no_result_operation.operation_id,
+                )
+            )
+            assert no_result_run is not None and no_result_run.status == "no_result"
+            assert no_result_run.provider_units == 0
+            assert no_result_run.successful_units == 0
+            assert no_result_credit is not None and no_result_credit.status == "settled"
+            assert no_result_credit.settled_credits == 0
+            assert no_result_credit.released_credits == no_result_credit.reserved_credits
+            assert no_result_credit.provider_cost_micros == 0
+
+    from revenueos.database import set_tenant_database_context
+    from revenueos.prospect_contracts import ResearchCreateRequest
+
+    _run(scenario)
+
+
+def test_only_approved_selling_profile_is_pinned_and_adds_labelled_relevance(client: TestClient) -> None:
+    content = {
+        "companyDescription": "We support relationship-led sales teams.",
+        "offerings": [
+            {
+                "name": "Sales Brain",
+                "description": "A reviewed sales workspace.",
+                "whoNormallyBuys": ["Sales leaders"],
+                "problemsSolved": ["Scattered context"],
+                "intendedOutcomes": ["Clear follow-through"],
+                "differentiators": [],
+                "competitorsAlternatives": [],
+                "approvedProof": [],
+                "approvedClaims": [],
+            }
+        ],
+    }
+    draft = client.post(
+        "/api/v1/selling-profile/revisions",
+        json={"idempotencyKey": "wo050-profile-draft", "content": content},
+    )
+    assert draft.status_code == 201
+    first = _start_research(client)
+    approved = client.post(
+        f"/api/v1/selling-profile/revisions/{draft.json()['draft']['id']}/approve",
+        json={"expectedLockVersion": draft.json()["draft"]["lockVersion"]},
+    )
+    assert approved.status_code == 200
+    _complete_one_run()
+    first_result = client.get(f"/api/v1/prospect/research/{first['target']['id']}").json()
+    assert first_result["latestRun"]["sellingProfileRevisionId"] is None
+    assert not any(
+        item["observationKey"].startswith("potential_relevance_profile_") for item in first_result["observations"]
+    )
+
+    refreshed = client.post(
+        f"/api/v1/prospect/research/{first['target']['id']}/refresh",
+        json={"idempotencyKey": "wo050-profile-approved"},
+    )
+    assert refreshed.status_code == 202
+    _complete_one_run()
+    result = client.get(f"/api/v1/prospect/research/{first['target']['id']}").json()
+    relevance = [
+        item for item in result["observations"] if item["observationKey"].startswith("potential_relevance_profile_")
+    ]
+    assert result["latestRun"]["sellingProfileRevisionId"] == approved.json()["current"]["id"]
+    assert len(relevance) == 1
+    assert relevance[0]["trustState"] == "inferred"
+    assert "not customer Evidence" in relevance[0]["statement"]
 
 
 def test_production_mock_provider_fails_closed_for_access_and_worker(client: TestClient) -> None:
@@ -652,12 +1021,17 @@ def test_authorised_export_contains_safe_research_schema_without_raw_pages(clien
     async def scenario(session_factory: async_sessionmaker[AsyncSession]) -> None:
         async with session_factory() as session:
             payload = await _export_payload(session, PRIMARY_ORGANISATION_ID, _settings())
-        assert payload["exportVersion"] == EXPORT_VERSION == 33
+        assert payload["exportVersion"] == EXPORT_VERSION == 34
         assert len(payload["prospectTargets"]) == 1  # type: ignore[arg-type]
         assert len(payload["prospectRuns"]) == 1  # type: ignore[arg-type]
         assert len(payload["prospectSources"]) >= 1  # type: ignore[arg-type]
         assert len(payload["prospectObservations"]) >= 1  # type: ignore[arg-type]
         assert len(payload["prospectObservationSources"]) >= 1  # type: ignore[arg-type]
+        exported_run = payload["prospectRuns"][0]  # type: ignore[index]
+        assert exported_run["provider_mode"] == "deterministic"  # type: ignore[index]
+        assert exported_run["provider_outcome"] == "completed"  # type: ignore[index]
+        assert exported_run["provider_units"] == 1  # type: ignore[index]
+        assert exported_run["successful_units"] == 1  # type: ignore[index]
         keys = {
             key
             for collection_name in (

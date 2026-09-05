@@ -232,6 +232,7 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
         "/api/v1/evidence/accounts/{company_id}/brain",
         "/api/v1/prospect/availability",
         "/api/v1/prospect/admin/entitlement",
+        "/api/v1/prospect/admin/provider-readiness",
         "/api/v1/prospect/discovery/capabilities",
         "/api/v1/prospect/target-markets",
         "/api/v1/prospect/target-markets/{target_market_id}",

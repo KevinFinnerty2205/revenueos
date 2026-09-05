@@ -13,8 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from revenueos.ai_worker_services import calculate_retry_delay_seconds
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
+from revenueos.credit_services import CreditService
 from revenueos.database import set_tenant_database_context
+from revenueos.errors import PublicAPIError
 from revenueos.models import (
+    CreditOperation,
     ProspectBuyingRoleHypothesis,
     ProspectBuyingRoleSource,
     ProspectContactPoint,
@@ -22,11 +25,13 @@ from revenueos.models import (
     ProspectResearchObservationSource,
     ProspectResearchRun,
     ProspectResearchSource,
+    SellingProfileRevision,
 )
 from revenueos.prospect_provider import (
     PersonTargetSnapshot,
     ProspectProviderError,
     ProspectResearchProvider,
+    ProviderExecutionContext,
     ProviderPersonResearchResult,
     ProviderResearchResult,
     ResearchTargetSnapshot,
@@ -39,6 +44,7 @@ from revenueos.prospect_validation import (
     validate_person_research_result,
     validate_research_result,
 )
+from revenueos.selling_profile_contracts import SellingProfileContent
 
 logger = logging.getLogger("revenueos.prospect_worker")
 Clock = Callable[[], datetime]
@@ -55,6 +61,9 @@ class ClaimedProspectRun:
     requested_by_user_id: UUID
     provider_key: str
     provider_version: str
+    credit_operation_id: UUID | None
+    provider_request_id: str | None
+    selling_profile_revision_id: UUID | None
     attempt_count: int
     max_attempts: int
     worker_id: str
@@ -76,8 +85,11 @@ class ProspectWorkerService:
     ) -> None:
         self._session_factory = session_factory
         self._settings = settings
-        self._provider = provider or create_prospect_provider(settings.prospect_research_provider_name)
+        self._provider = provider or create_prospect_provider(settings.prospect_research_provider_name, settings)
         self._clock = clock or (lambda: datetime.now(UTC))
+
+    async def aclose(self) -> None:
+        await self._provider.aclose()
 
     async def run_once(self, worker_id: str) -> bool:
         processed = False
@@ -104,7 +116,27 @@ class ProspectWorkerService:
                 limit=STALE_BATCH_LIMIT,
             )
             for run in runs:
-                if run.attempt_count >= run.max_attempts:
+                operation = (
+                    await session.scalar(
+                        select(CreditOperation).where(
+                            CreditOperation.organisation_id == organisation_id,
+                            CreditOperation.id == run.credit_operation_id,
+                        )
+                    )
+                    if run.credit_operation_id is not None
+                    else None
+                )
+                if operation is not None and operation.status == "executing":
+                    operation.status = "unknown"
+                    operation.outcome = "unknown"
+                    operation.outcome_recorded_at = now
+                    run.status = "unknown"
+                    run.provider_outcome = "unknown"
+                    run.completed_at = now
+                    run.last_error_code = "worker_lease_expired_unknown"
+                    run.last_error_message_safe = "The provider outcome requires reconciliation."
+                    self._clear_ownership(run)
+                elif run.attempt_count >= run.max_attempts:
                     self._fail(run, now, "worker_lease_expired", "Company research could not be completed.")
                 else:
                     self._schedule_retry(run, now)
@@ -153,6 +185,8 @@ class ProspectWorkerService:
             run.lease_expires_at = now + timedelta(seconds=self._settings.worker_lease_duration_seconds)
             run.last_error_code = None
             run.last_error_message_safe = None
+            if run.provider_mode == "external" and run.provider_request_id is None:
+                run.provider_request_id = f"prospect:{run.id}"
             claim = ClaimedProspectRun(
                 organisation_id=run.organisation_id,
                 run_id=run.id,
@@ -161,6 +195,9 @@ class ProspectWorkerService:
                 requested_by_user_id=run.requested_by_user_id,
                 provider_key=run.provider_key,
                 provider_version=run.provider_version,
+                credit_operation_id=run.credit_operation_id,
+                provider_request_id=run.provider_request_id,
+                selling_profile_revision_id=run.selling_profile_revision_id,
                 attempt_count=run.attempt_count,
                 max_attempts=run.max_attempts,
                 worker_id=clean_worker_id,
@@ -191,6 +228,8 @@ class ProspectWorkerService:
         return claim
 
     async def execute_claimed_run(self, claim: ClaimedProspectRun) -> None:
+        execution: ProviderExecutionContext | None = None
+        external_started = False
         try:
             await self._validate_execution_policy(claim)
             if (claim.provider_key, claim.provider_version) != (
@@ -202,10 +241,14 @@ class ProspectWorkerService:
                     "The configured company research provider no longer matches the queued run.",
                     retryable=False,
                 )
+            if self._provider.mode == "external":
+                execution = await self._start_external_execution(claim)
+                external_started = True
             if claim.person is None:
                 result: ProviderResearchResult | ProviderPersonResearchResult = await self._provider.research(
                     claim.target,
                     run_sequence=claim.run_sequence,
+                    execution=execution,
                 )
                 validate_research_result(result)
             else:
@@ -213,32 +256,77 @@ class ProspectWorkerService:
                     claim.target,
                     claim.person,
                     run_sequence=claim.run_sequence,
+                    execution=execution,
                 )
                 validate_person_research_result(result, company_domain=claim.target.domain)
             await self._complete(claim, result)
+            if execution is not None:
+                try:
+                    await self._settle_external_execution(claim, result)
+                except Exception:
+                    await self._mark_credit_unknown(claim)
+                    await self._mark_run_unknown(
+                        claim,
+                        "credit_settlement_unknown",
+                        "The provider result was received but Credit settlement requires reconciliation.",
+                    )
         except ProspectProviderError as exc:
-            await self._record_failure(claim, exc.code, exc.safe_message, retryable=exc.retryable)
+            if claim.credit_operation_id is not None:
+                if exc.execution_state == "unknown" or external_started and exc.code == "provider_schema_invalid":
+                    await self._mark_credit_unknown(claim)
+                    await self._mark_run_unknown(claim, exc.code, exc.safe_message)
+                else:
+                    await self._release_external_execution(claim, exc.safe_message)
+                    await self._record_failure(claim, exc.code, exc.safe_message, retryable=False)
+            else:
+                await self._record_failure(claim, exc.code, exc.safe_message, retryable=exc.retryable)
         except ProspectResultValidationError as exc:
-            await self._record_failure(
-                claim,
-                exc.code,
-                "Prospect research did not pass source and citation validation.",
-                retryable=False,
-            )
+            if claim.credit_operation_id is not None and external_started:
+                await self._mark_credit_unknown(claim)
+                await self._mark_run_unknown(
+                    claim,
+                    exc.code,
+                    "The provider result failed validation and requires reconciliation.",
+                )
+            else:
+                await self._record_failure(
+                    claim,
+                    exc.code,
+                    "Prospect research did not pass source and citation validation.",
+                    retryable=False,
+                )
         except PublicUrlSafetyError as exc:
-            await self._record_failure(
-                claim,
-                exc.code,
-                "Prospect research included a blocked public URL.",
-                retryable=False,
-            )
+            if claim.credit_operation_id is not None and external_started:
+                await self._mark_credit_unknown(claim)
+                await self._mark_run_unknown(
+                    claim,
+                    exc.code,
+                    "The provider result included a blocked public URL and requires reconciliation.",
+                )
+            else:
+                await self._record_failure(
+                    claim,
+                    exc.code,
+                    "Prospect research included a blocked public URL.",
+                    retryable=False,
+                )
         except Exception:
-            await self._record_failure(
-                claim,
-                "research_processing_failed",
-                "Prospect research could not be completed.",
-                retryable=False,
-            )
+            if claim.credit_operation_id is not None and external_started:
+                await self._mark_credit_unknown(claim)
+                await self._mark_run_unknown(
+                    claim,
+                    "provider_outcome_unknown",
+                    "The provider outcome is unknown and requires reconciliation.",
+                )
+            else:
+                if claim.credit_operation_id is not None:
+                    await self._release_external_execution(claim, "Provider execution did not begin.")
+                await self._record_failure(
+                    claim,
+                    "research_processing_failed",
+                    "Prospect research could not be completed.",
+                    retryable=False,
+                )
 
     async def _validate_execution_policy(self, claim: ClaimedProspectRun) -> None:
         async with self._session_factory() as session, session.begin():
@@ -247,9 +335,13 @@ class ProspectWorkerService:
             provider_unavailable = (
                 self._settings.environment == "production" and self._settings.prospect_research_provider_name == "mock"
             )
+            external_unavailable = self._provider.mode == "external" and not (
+                self._settings.feature_prospect_external_provider_enabled and self._settings.feature_credits_enabled
+            )
             if (
                 not self._settings.feature_prospect_enabled
                 or provider_unavailable
+                or external_unavailable
                 or await CommercialService(session, self._settings).module_access(claim.organisation_id, "prospect")
                 != "write"
             ):
@@ -281,13 +373,28 @@ class ProspectWorkerService:
                 owned_at=now,
             )
             if run is None:
-                return
+                raise ProspectProviderError(
+                    "provider_result_persistence_unknown",
+                    "The provider result requires reconciliation.",
+                    retryable=False,
+                    execution_state="unknown",
+                )
             target = await repository.target(claim.organisation_id, claim.target_id)
             if target is None:
-                return
+                raise ProspectProviderError(
+                    "provider_result_target_unavailable",
+                    "The provider result requires reconciliation.",
+                    retryable=False,
+                    execution_state="unknown",
+                )
             person = await repository.person(claim.organisation_id, claim.person_id) if claim.person_id else None
             if claim.person_id is not None and person is None:
-                return
+                raise ProspectProviderError(
+                    "provider_result_person_unavailable",
+                    "The provider result requires reconciliation.",
+                    retryable=False,
+                    execution_state="unknown",
+                )
             sources_by_key: dict[str, ProspectResearchSource] = {}
             for provider_source in result.sources:
                 canonical = canonicalize_public_https_url(provider_source.url)
@@ -341,9 +448,16 @@ class ProspectWorkerService:
                         )
                     )
                 trust_counts[provider_observation.trust_state.value] += 1
+            await self._add_selling_profile_relevance(
+                session,
+                run,
+                target.name,
+                sources_by_key,
+                trust_counts,
+                generated_at=now,
+            )
             if isinstance(result, ProviderPersonResearchResult):
-                if person is None:
-                    return
+                assert person is not None
                 for provider_hypothesis in result.buying_roles:
                     hypothesis = ProspectBuyingRoleHypothesis(
                         id=uuid4(),
@@ -397,6 +511,17 @@ class ProspectWorkerService:
                 person.why_may_matter = result.why_may_matter
                 person.updated_at = now
             run.status = result.outcome
+            run.provider_outcome = result.outcome
+            run.provider_units = result.provider_units
+            run.successful_units = result.successful_units
+            run.provider_cost_micros = (
+                result.provider_units * (self._settings.prospect_provider_cost_micros_per_credit or 0)
+                if self._provider.mode == "external"
+                else 0
+            )
+            run.provider_cost_currency = (
+                self._settings.prospect_provider_cost_currency if self._provider.mode == "external" else None
+            )
             run.completed_at = now
             run.source_fingerprint = hashlib.sha256(
                 "\x1f".join(sorted(source.content_fingerprint for source in result.sources)).encode()
@@ -422,6 +547,162 @@ class ProspectWorkerService:
                 ),
             },
         )
+
+    async def _start_external_execution(self, claim: ClaimedProspectRun) -> ProviderExecutionContext:
+        if claim.credit_operation_id is None or claim.provider_request_id is None:
+            raise ProspectProviderError(
+                "credit_operation_required",
+                "A confirmed Credit reservation is required before provider research.",
+                retryable=False,
+            )
+        async with self._session_factory() as session:
+            await set_tenant_database_context(session, claim.organisation_id)
+            await CreditService(session, self._settings).mark_executing(
+                claim.organisation_id,
+                claim.credit_operation_id,
+                provider_request_id=claim.provider_request_id,
+                provider_capability=self._provider.capability_key,
+            )
+        return ProviderExecutionContext(
+            operation_id=claim.credit_operation_id,
+            provider_request_id=claim.provider_request_id,
+            idempotency_key=f"prospect:{claim.run_id}",
+        )
+
+    async def _settle_external_execution(
+        self,
+        claim: ClaimedProspectRun,
+        result: ProviderResearchResult | ProviderPersonResearchResult,
+    ) -> None:
+        if claim.credit_operation_id is None:
+            return
+        unit_cost = self._settings.prospect_provider_cost_micros_per_credit
+        if unit_cost is None:
+            raise PublicAPIError("credit_provider_cost_unknown", "Provider cost requires reconciliation.", 409)
+        async with self._session_factory() as session:
+            await set_tenant_database_context(session, claim.organisation_id)
+            await CreditService(session, self._settings).settle(
+                claim.organisation_id,
+                claim.credit_operation_id,
+                successful_units=result.successful_units,
+                provider_cost_micros=result.provider_units * unit_cost,
+                provider_cost_currency=self._settings.prospect_provider_cost_currency,
+                idempotency_key=f"prospect-settle:{claim.run_id}",
+            )
+
+    async def _release_external_execution(self, claim: ClaimedProspectRun, reason: str) -> None:
+        if claim.credit_operation_id is None:
+            return
+        async with self._session_factory() as session:
+            await set_tenant_database_context(session, claim.organisation_id)
+            operation = await session.scalar(
+                select(CreditOperation).where(
+                    CreditOperation.organisation_id == claim.organisation_id,
+                    CreditOperation.id == claim.credit_operation_id,
+                )
+            )
+            if operation is None or operation.status in {"released", "settled", "unknown"}:
+                return
+            await CreditService(session, self._settings).release(
+                claim.organisation_id,
+                claim.credit_operation_id,
+                idempotency_key=f"prospect-release:{claim.run_id}",
+                reason=(reason.strip() or "Provider execution did not occur.")[:500],
+            )
+
+    async def _mark_credit_unknown(self, claim: ClaimedProspectRun) -> None:
+        if claim.credit_operation_id is None:
+            return
+        async with self._session_factory() as session:
+            await set_tenant_database_context(session, claim.organisation_id)
+            operation = await session.scalar(
+                select(CreditOperation).where(
+                    CreditOperation.organisation_id == claim.organisation_id,
+                    CreditOperation.id == claim.credit_operation_id,
+                )
+            )
+            if operation is not None and operation.status == "executing":
+                await CreditService(session, self._settings).mark_unknown(
+                    claim.organisation_id, claim.credit_operation_id
+                )
+
+    async def _mark_run_unknown(self, claim: ClaimedProspectRun, code: str, safe_message: str) -> None:
+        now = self._clock()
+        async with self._session_factory() as session, session.begin():
+            await set_tenant_database_context(session, claim.organisation_id)
+            run = await session.scalar(
+                select(ProspectResearchRun)
+                .where(
+                    ProspectResearchRun.organisation_id == claim.organisation_id,
+                    ProspectResearchRun.id == claim.run_id,
+                )
+                .with_for_update()
+            )
+            if run is None:
+                return
+            run.status = "unknown"
+            run.provider_outcome = "unknown"
+            run.completed_at = now
+            run.last_error_code = code
+            run.last_error_message_safe = safe_message[:500]
+            self._clear_ownership(run)
+
+    async def _add_selling_profile_relevance(
+        self,
+        session: AsyncSession,
+        run: ProspectResearchRun,
+        target_name: str,
+        sources_by_key: dict[str, ProspectResearchSource],
+        trust_counts: dict[str, int],
+        *,
+        generated_at: datetime,
+    ) -> None:
+        if run.selling_profile_revision_id is None or not sources_by_key:
+            return
+        revision = await session.scalar(
+            select(SellingProfileRevision).where(
+                SellingProfileRevision.organisation_id == run.organisation_id,
+                SellingProfileRevision.id == run.selling_profile_revision_id,
+                SellingProfileRevision.state.in_(("approved", "superseded")),
+            )
+        )
+        if revision is None:
+            return
+        try:
+            profile = SellingProfileContent.model_validate(revision.content_json)
+        except ValueError:
+            return
+        offering = profile.offerings[0]
+        source = next(iter(sources_by_key.values()))
+        observation = ProspectResearchObservation(
+            id=uuid4(),
+            organisation_id=run.organisation_id,
+            run_id=run.id,
+            target_id=run.target_id,
+            observation_key=f"potential_relevance_profile_{revision.revision_number}",
+            category="potential_fit",
+            statement=(
+                f"{target_name} may be relevant to {offering.name}; this is an Oryntela inference based on the "
+                "approved Selling Profile and provider-supplied business context, not customer Evidence."
+            )[:1500],
+            trust_state="inferred",
+            relevance="normal",
+            observed_at=None,
+            freshness="time_sensitive",
+            status="current",
+            generated_at=generated_at,
+        )
+        session.add(observation)
+        await session.flush()
+        session.add(
+            ProspectResearchObservationSource(
+                organisation_id=run.organisation_id,
+                observation_id=observation.id,
+                source_id=source.id,
+                run_id=run.id,
+            )
+        )
+        trust_counts["inferred"] += 1
 
     async def _record_failure(
         self,

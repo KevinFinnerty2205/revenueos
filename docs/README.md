@@ -153,6 +153,10 @@ This is the canonical product and engineering documentation index. Documents dis
 142. [Billing and subscription operations](03-engineering/billing-subscription-operations.md) — provider boundary, lifecycle, security, retention and pre-live decisions
 143. [WO-049: Credits & Variable-Cost Controls](07-sprints/wo-049-credits-variable-cost-controls.md) — TEST-only ledger, lots, reservations, reconciliation, economics and exposure controls
 144. [Credits and variable-cost controls](03-engineering/credits-variable-cost-controls.md) — canonical Credit lifecycle, provider boundary, security, export and production-activation rules
+145. [WO-050: Live Prospect Provider](07-sprints/wo-050-live-prospect-provider.md) — production-capable Apollo adapter, Credit execution boundary and honest inactive readiness
+146. [Live Prospect provider architecture](03-engineering/live-prospect-provider.md) — provider contract, outcomes, provenance, Selling Profile and reconciliation rules
+147. [Prospect live-provider qualification](05-integrations/prospect-live-provider-qualification.md) — Apollo recommendation, alternatives, Australian suitability, licensing/privacy and activation blockers
+148. [Prospect provider economics](04-commercial/oryntela-prospect-provider-economics.md) — provider units, unknown custom cost and unapproved 50/60/70% scenarios
 
 ## First design-partner launch package
 

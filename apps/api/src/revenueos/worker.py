@@ -112,19 +112,23 @@ async def run_worker(settings: Settings | None = None) -> None:
         except NotImplementedError:
             pass
 
+    prospect_service = ProspectWorkerService(session_factory, resolved_settings)
     worker = AIWorker(
         AIWorkerService(session_factory, resolved_settings),
         resolved_settings,
         recording_service=RecordingWorkerService(session_factory, resolved_settings),
         execution_service=ActionExecutionWorkerService(session_factory, resolved_settings),
-        prospect_service=ProspectWorkerService(session_factory, resolved_settings),
+        prospect_service=prospect_service,
         campaign_service=CampaignWorkerService(session_factory, resolved_settings),
         create_service=CreateWorkerService(session_factory, resolved_settings),
     )
     try:
         await worker.run(stop)
     finally:
-        await engine.dispose()
+        try:
+            await prospect_service.aclose()
+        finally:
+            await engine.dispose()
 
 
 def main() -> None:

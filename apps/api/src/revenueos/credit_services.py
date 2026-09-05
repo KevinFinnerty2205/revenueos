@@ -50,10 +50,14 @@ from revenueos.models import (
 MAX_CREDITS = 9_000_000_000_000
 TEST_PACK_ID = UUID("00000000-0000-4000-9000-000000000049")
 TEST_PRICE_ID = UUID("00000000-0000-4000-9000-000000000149")
+TEST_PERSON_PRICE_ID = UUID("00000000-0000-4000-9000-000000000150")
 TEST_GLOBAL_CONTROL_ID = UUID("00000000-0000-4000-9000-000000000249")
 TEST_ACTION_CONTROL_ID = UUID("00000000-0000-4000-9000-000000000349")
 TEST_PROVIDER_CONTROL_ID = UUID("00000000-0000-4000-9000-000000000449")
+TEST_PERSON_ACTION_CONTROL_ID = UUID("00000000-0000-4000-9000-000000000350")
+TEST_APOLLO_PROVIDER_CONTROL_ID = UUID("00000000-0000-4000-9000-000000000450")
 TEST_ACTION_CODE = "PROSPECT_COMPANY_RESEARCH"
+TEST_PERSON_ACTION_CODE = "PROSPECT_PERSON_RESEARCH"
 TEST_PROVIDER_CAPABILITY = "deterministic:company_research"
 TEST_PRICING_NOTICE = "TEST ONLY / NOT CUSTOMER PRICING"
 
@@ -197,10 +201,46 @@ class CreditService:
                     created_by_actor="wo-049-deterministic-catalogue",
                 )
             )
+        if await self.session.get(CreditActionPriceVersion, TEST_PERSON_PRICE_ID) is None:
+            margin = self.validate_margin(1_000_000, 400_000, 1_000)
+            self.session.add(
+                CreditActionPriceVersion(
+                    id=TEST_PERSON_PRICE_ID,
+                    action_code=TEST_PERSON_ACTION_CODE,
+                    display_name="Research this professional",
+                    required_module_code="prospect",
+                    version=1,
+                    credit_charge_per_unit=5,
+                    customer_charge_basis="successful_unit",
+                    max_units_per_operation=40,
+                    customer_revenue_micros_per_unit=1_000_000,
+                    customer_currency="AUD",
+                    cost_basis="successful_unit",
+                    provider_cost_minor_units=20,
+                    provider_currency="USD",
+                    provider_minor_units_per_major=100,
+                    fx_rate_to_aud=Decimal("1.50000000"),
+                    fx_source="deterministic test assumption",
+                    fx_observed_at=now,
+                    other_variable_cost_micros=50_000,
+                    expected_variable_cost_micros_per_unit=350_000,
+                    maximum_variable_cost_micros_per_unit=400_000,
+                    gross_margin_basis_points=margin.gross_margin_basis_points,
+                    approved_margin_floor_basis_points=1_000,
+                    owner_approval_reference=None,
+                    environment="test",
+                    status="test_active",
+                    pricing_note=TEST_PRICING_NOTICE,
+                    effective_from=now,
+                    created_by_actor="wo-050-deterministic-catalogue",
+                )
+            )
         controls = (
             (TEST_GLOBAL_CONTROL_ID, "global", "metered_actions"),
             (TEST_ACTION_CONTROL_ID, "action", TEST_ACTION_CODE),
             (TEST_PROVIDER_CONTROL_ID, "provider_capability", TEST_PROVIDER_CAPABILITY),
+            (TEST_PERSON_ACTION_CONTROL_ID, "action", TEST_PERSON_ACTION_CODE),
+            (TEST_APOLLO_PROVIDER_CONTROL_ID, "provider_capability", "apollo:prospect_research"),
         )
         for control_id, scope, key in controls:
             if await self.session.get(CreditExecutionControl, control_id) is None:

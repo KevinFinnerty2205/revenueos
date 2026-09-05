@@ -557,7 +557,7 @@ def test_export_excludes_internal_fingerprints_and_meeting_deletion_removes_live
         return payload, meeting_id
 
     payload, meeting_id = asyncio.run(export_and_meeting_id())
-    assert payload["exportVersion"] == 33
+    assert payload["exportVersion"] == 34
     live_sessions = payload["liveInteractionSessions"]
     signals = payload["provisionalSignals"]
     assert isinstance(live_sessions, list) and len(live_sessions) == 1

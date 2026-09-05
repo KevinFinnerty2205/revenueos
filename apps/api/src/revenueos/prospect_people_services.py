@@ -9,7 +9,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +23,7 @@ from revenueos.errors import PublicAPIError
 from revenueos.models import (
     Contact,
     ContactFieldSource,
+    CreditOperation,
     ProspectContactPoint,
     ProspectPerson,
     ProspectResearchRun,
@@ -61,12 +62,13 @@ from revenueos.prospect_provider import (
 from revenueos.prospect_repositories import ACTIVE_RUN_STATUSES, USABLE_RUN_STATUSES, ProspectRepository
 from revenueos.prospect_url_security import PublicUrlSafetyError, canonicalize_public_https_url
 from revenueos.prospect_validation import validate_person_candidate
+from revenueos.selling_profile_repositories import SellingProfileRepository
 from revenueos.tenant import TenantContext
 
 logger = logging.getLogger("revenueos.prospect_people")
 PERSON_RESEARCH_SCHEMA_VERSION = 1
 PERSON_HISTORY_LIMIT = 10
-CustomerResearchStatus = Literal["pending", "researching", "ready", "partial", "failed"]
+CustomerResearchStatus = Literal["pending", "researching", "ready", "partial", "no_result", "unknown", "failed"]
 
 RELEVANT_FUNCTIONS = (
     RelevantFunctionResponse(
@@ -110,7 +112,7 @@ class ProspectPeopleService:
         self.tenant = tenant
         self.settings = settings
         self.repository = ProspectRepository(session)
-        self.provider = provider or create_prospect_provider(settings.prospect_research_provider_name)
+        self.provider = provider or create_prospect_provider(settings.prospect_research_provider_name, settings)
 
     async def list_people(self, target_id: UUID) -> PersonDiscoveryResponse:
         await self._require_entitled(write=False)
@@ -120,6 +122,12 @@ class ProspectPeopleService:
 
     async def discover_people(self, target_id: UUID) -> PersonDiscoveryResponse:
         await self._require_entitled()
+        if self.provider.mode == "external" and not self.settings.feature_prospect_external_provider_enabled:
+            raise PublicAPIError(
+                "prospect_provider_unavailable",
+                "Professional research is temporarily unavailable.",
+                503,
+            )
         target = await self._ready_company_target(target_id)
         await self.repository.lock_organisation(self.tenant.organisation_id)
         await self._reserve_discovery_usage()
@@ -218,7 +226,12 @@ class ProspectPeopleService:
             self.provider.provider_key,
             self.provider.provider_version,
         )
-        await self._queue_person_run(person, request.idempotency_key or default_key, refresh_of_run_id=None)
+        await self._queue_person_run(
+            person,
+            request.idempotency_key or default_key,
+            refresh_of_run_id=None,
+            credit_operation_id=request.credit_operation_id,
+        )
         return await self.get_person_research(person.id)
 
     async def refresh_person(self, person_id: UUID, request: PersonResearchRequest) -> PersonResearchBriefResponse:
@@ -230,7 +243,12 @@ class ProspectPeopleService:
             return await self.get_person_research(person.id)
         current = await self.repository.current_person_run(self.tenant.organisation_id, person.id)
         raw_key = request.idempotency_key or f"refresh:{uuid.uuid4()}"
-        await self._queue_person_run(person, raw_key, refresh_of_run_id=current.id if current else None)
+        await self._queue_person_run(
+            person,
+            raw_key,
+            refresh_of_run_id=current.id if current else None,
+            credit_operation_id=request.credit_operation_id,
+        )
         return await self.get_person_research(person.id)
 
     async def get_person_research(self, person_id: UUID) -> PersonResearchBriefResponse:
@@ -568,6 +586,7 @@ class ProspectPeopleService:
         raw_idempotency_key: str,
         *,
         refresh_of_run_id: UUID | None,
+        credit_operation_id: UUID | None,
     ) -> ProspectResearchRun:
         existing_runs = await self.repository.runs_for_person(self.tenant.organisation_id, person.id)
         idempotency_key = self._person_idempotency_key(person.id, raw_idempotency_key)
@@ -586,6 +605,8 @@ class ProspectPeopleService:
                 429,
             )
         try:
+            operation = await self._required_credit_operation(credit_operation_id)
+            selling_profile = await SellingProfileRepository(self.session).current(self.tenant.organisation_id)
             await self._reserve_research_usage()
             now = datetime.now(UTC)
             run = ProspectResearchRun(
@@ -594,9 +615,12 @@ class ProspectPeopleService:
                 person_id=person.id,
                 requested_by_user_id=self.tenant.user_id,
                 refresh_of_run_id=refresh_of_run_id,
+                credit_operation_id=operation.id if operation is not None else None,
+                selling_profile_revision_id=selling_profile.id if selling_profile is not None else None,
                 status="pending",
                 provider_key=self.provider.provider_key,
                 provider_version=self.provider.provider_version,
+                provider_mode=self.provider.mode,
                 schema_version=PERSON_RESEARCH_SCHEMA_VERSION,
                 request_fingerprint=self._fingerprint(
                     str(self.tenant.organisation_id),
@@ -638,6 +662,47 @@ class ProspectPeopleService:
             },
         )
         return run
+
+    async def _required_credit_operation(self, operation_id: UUID | None) -> CreditOperation | None:
+        if self.provider.mode == "deterministic":
+            if operation_id is not None:
+                raise PublicAPIError(
+                    "credit_operation_not_required",
+                    "The clearly labelled demo provider does not consume Credits.",
+                    409,
+                )
+            return None
+        if not self.settings.feature_prospect_external_provider_enabled:
+            raise PublicAPIError(
+                "prospect_provider_unavailable",
+                "Provider-backed professional research is not enabled.",
+                503,
+            )
+        if operation_id is None:
+            raise PublicAPIError(
+                "credit_operation_required",
+                "Review the Credit quote and confirm the reservation before starting research.",
+                409,
+            )
+        operation = await self.session.scalar(
+            select(CreditOperation).where(
+                CreditOperation.organisation_id == self.tenant.organisation_id,
+                CreditOperation.id == operation_id,
+            )
+        )
+        if (
+            operation is None
+            or operation.requested_by_user_id != self.tenant.user_id
+            or operation.action_code != "PROSPECT_PERSON_RESEARCH"
+            or operation.quantity != 1
+            or operation.status != "reserved"
+        ):
+            raise PublicAPIError(
+                "credit_operation_invalid",
+                "That Credit reservation cannot authorise this Prospect action.",
+                409,
+            )
+        return operation
 
     async def _reserve_discovery_usage(self) -> None:
         await self._reserve_counter(
@@ -951,6 +1016,10 @@ class ProspectPeopleService:
                 "pending" if latest.status == "pending" else "researching",
                 "RevenueOS is checking bounded, permitted professional sources.",
             )
+        if latest.status == "unknown":
+            return "unknown", "The provider outcome is unknown. Credits remain reserved while it is reconciled."
+        if latest.status == "no_result" and current is None:
+            return "no_result", "No reliable professional result was returned. No unsupported details were created."
         if latest.status == "failed" and current is None:
             return "failed", "RevenueOS couldn’t find enough reliable professional information about this person."
         if latest.status == "failed" and current is not None:

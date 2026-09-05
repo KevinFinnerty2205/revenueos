@@ -56,6 +56,22 @@ class ProspectResultValidationError(ValueError):
 
 
 def validate_research_result(result: ProviderResearchResult | ProviderPersonResearchResult) -> None:
+    if result.successful_units > result.provider_units:
+        raise ProspectResultValidationError(
+            "invalid_provider_units", "Successful provider units exceeded reported billable units."
+        )
+    if result.outcome == "no_result":
+        if result.sources or result.observations or result.successful_units != 0:
+            raise ProspectResultValidationError(
+                "invalid_no_result",
+                "A no-result provider response cannot contain asserted research or successful units.",
+            )
+        return
+    if not result.sources or not result.observations or result.successful_units == 0:
+        raise ProspectResultValidationError(
+            "empty_provider_result",
+            "A completed or partial result requires sourced observations and at least one successful unit.",
+        )
     source_by_key = {source.source_key: source for source in result.sources}
     if len(source_by_key) != len(result.sources):
         raise ProspectResultValidationError("duplicate_source", "The provider returned duplicate source identifiers.")
@@ -142,6 +158,8 @@ def validate_person_research_result(
     company_domain: str | None = None,
 ) -> None:
     validate_research_result(result)
+    if result.outcome == "no_result":
+        return
     _reject_prohibited_person_content(result.current_role)
     _reject_prohibited_person_content(result.why_may_matter)
     if not any(marker in result.why_may_matter.casefold() for marker in INFERENCE_MARKERS):

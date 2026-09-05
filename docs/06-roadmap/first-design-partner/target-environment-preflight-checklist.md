@@ -56,7 +56,7 @@ revenueos-operations production-preflight > preflight.json
 jq -e '.status == "ready"' preflight.json
 ```
 
-The command proves migration `0054_credits_variable_cost`, non-superuser/non-`BYPASSRLS`
+The command proves migration `0055_live_prospect_provider`, non-superuser/non-`BYPASSRLS`
 runtime role, transaction-local tenant reset, private object write/read/delete,
 owner-only durable export storage, real-data mode and configured approval/support
 references. It does not prove Clerk dashboard policy, managed backups, monitoring,

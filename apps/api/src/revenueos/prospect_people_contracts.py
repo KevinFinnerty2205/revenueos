@@ -23,6 +23,7 @@ from revenueos.prospect_contracts import (
 
 class PersonResearchRequest(APIModel):
     idempotency_key: IdempotencyKey | None = None
+    credit_operation_id: UUID | None = None
 
 
 class RelevantFunctionResponse(APIModel):
@@ -44,7 +45,9 @@ class ProspectPersonResponse(APIModel):
     provider_attribution: str
     identity_state: Literal["supported", "ambiguous"]
     employment_state: ProspectPersonEmploymentState
-    research_status: Literal["not_started", "pending", "researching", "ready", "partial", "failed"]
+    research_status: Literal[
+        "not_started", "pending", "researching", "ready", "partial", "no_result", "unknown", "failed"
+    ]
     promoted_contact_id: UUID | None
     promoted_at: datetime | None
     created_at: datetime
@@ -106,7 +109,7 @@ class ExistingContactMatchResponse(APIModel):
 
 class PersonResearchBriefResponse(APIModel):
     person: ProspectPersonResponse
-    status: Literal["pending", "researching", "ready", "partial", "failed"]
+    status: Literal["pending", "researching", "ready", "partial", "no_result", "unknown", "failed"]
     status_message: str
     current_run: ResearchRunSummary | None
     latest_run: ResearchRunSummary | None

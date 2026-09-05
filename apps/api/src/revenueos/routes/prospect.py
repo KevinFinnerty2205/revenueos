@@ -10,6 +10,7 @@ from revenueos.prospect_contracts import (
     PromotionResponse,
     ProspectAvailabilityResponse,
     ProspectEntitlementUpdate,
+    ProspectProviderReadinessResponse,
     RecentResearchResponse,
     ResearchBriefResponse,
     ResearchCreateRequest,
@@ -56,6 +57,11 @@ TargetMarketService = Annotated[
 @router.get("/availability", response_model=ProspectAvailabilityResponse)
 async def availability(service: Service) -> ProspectAvailabilityResponse:
     return await service.availability()
+
+
+@router.get("/admin/provider-readiness", response_model=ProspectProviderReadinessResponse)
+async def provider_readiness(service: Service) -> ProspectProviderReadinessResponse:
+    return await service.provider_readiness()
 
 
 @router.patch("/admin/entitlement", response_model=ProspectAvailabilityResponse)

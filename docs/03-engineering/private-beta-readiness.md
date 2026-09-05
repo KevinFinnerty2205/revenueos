@@ -4,7 +4,7 @@
 > in the [WO-039A record](../07-sprints/wo-039a-end-to-end-journey-reliability.md).
 > WO-039B Create trust/security is implemented and documented in the
 > [WO-039B record](../07-sprints/wo-039b-create-trust-security.md). WO-039C real-data
-> operations is complete at repository level through `0054_credits_variable_cost`.
+> operations is complete at repository level through `0055_live_prospect_provider`.
 > The [named first-partner launch gate](../06-roadmap/first-design-partner/first-design-partner-launch-gate.md)
 > still requires exact target, owner/legal and partner evidence before production
 > customer data.
@@ -240,7 +240,7 @@ privacy, migration/RLS and rollout evidence is approved.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  current Alembic head (`0054_credits_variable_cost`), identity configuration, selected
+  current Alembic head (`0055_live_prospect_provider`), identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.
