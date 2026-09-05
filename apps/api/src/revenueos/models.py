@@ -579,6 +579,9 @@ class BillingOperation(TimestampMixin, Base):
     plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("commercial_plan_versions.id", ondelete="RESTRICT")
     )
+    credit_pack_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("credit_pack_versions.id", ondelete="RESTRICT")
+    )
     billing_interval: Mapped[str | None] = mapped_column(String(12))
     amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     currency: Mapped[str | None] = mapped_column(String(3))
@@ -613,6 +616,484 @@ class BillingProviderEventReceipt(Base):
     result: Mapped[str] = mapped_column(String(32), nullable=False)
     safe_detail_code: Mapped[str | None] = mapped_column(String(100))
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CreditPackVersion(Base):
+    __tablename__ = "credit_pack_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_credit_packs_version"),
+        CheckConstraint("credit_quantity > 0", name="ck_credit_packs_quantity"),
+        CheckConstraint("price_minor_units > 0", name="ck_credit_packs_price"),
+        CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)",
+            name="ck_credit_packs_currency",
+        ),
+        CheckConstraint("environment IN ('test', 'production')", name="ck_credit_packs_environment"),
+        CheckConstraint(
+            "status IN ('draft', 'test_active', 'production_active', 'retired')",
+            name="ck_credit_packs_status",
+        ),
+        CheckConstraint(
+            "(status <> 'test_active' OR environment = 'test') AND "
+            "(status <> 'production_active' OR environment = 'production')",
+            name="ck_credit_packs_activation",
+        ),
+        UniqueConstraint("pack_code", "version", name="uq_credit_packs_code_version"),
+        Index("ix_credit_packs_environment_status", "environment", "status", "pack_code"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pack_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    credit_quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    price_minor_units: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="AUD", server_default="AUD")
+    environment: Mapped[str] = mapped_column(String(12), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    pricing_note: Mapped[str] = mapped_column(String(240), nullable=False)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by_actor: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CreditActionPriceVersion(Base):
+    __tablename__ = "credit_action_price_versions"
+    __table_args__ = (
+        CheckConstraint("version > 0", name="ck_credit_prices_version"),
+        CheckConstraint("credit_charge_per_unit > 0", name="ck_credit_prices_charge"),
+        CheckConstraint("max_units_per_operation > 0", name="ck_credit_prices_max_units"),
+        CheckConstraint(
+            "customer_revenue_micros_per_unit > 0 AND expected_variable_cost_micros_per_unit >= 0 "
+            "AND maximum_variable_cost_micros_per_unit >= expected_variable_cost_micros_per_unit",
+            name="ck_credit_prices_economics",
+        ),
+        CheckConstraint("customer_currency = 'AUD'", name="ck_credit_prices_currency"),
+        CheckConstraint("environment IN ('test', 'production')", name="ck_credit_prices_environment"),
+        CheckConstraint(
+            "status IN ('draft', 'test_active', 'production_active', 'retired')",
+            name="ck_credit_prices_status",
+        ),
+        CheckConstraint(
+            "cost_basis IN ('fixed_operation', 'successful_unit', 'provider_unit', 'message_segment', 'minute')",
+            name="ck_credit_prices_cost_basis",
+        ),
+        CheckConstraint(
+            "customer_charge_basis IN ('successful_unit', 'requested_unit')",
+            name="ck_credit_prices_customer_charge_basis",
+        ),
+        CheckConstraint(
+            "provider_cost_minor_units >= 0 AND provider_currency <> '' "
+            "AND provider_minor_units_per_major > 0 AND provider_minor_units_per_major <= 1000000 "
+            "AND other_variable_cost_micros >= 0",
+            name="ck_credit_prices_provider_cost",
+        ),
+        CheckConstraint(
+            "fx_rate_to_aud > 0 AND fx_source <> ''",
+            name="ck_credit_prices_fx",
+        ),
+        CheckConstraint(
+            "gross_margin_basis_points > -100000 AND gross_margin_basis_points <= 10000",
+            name="ck_credit_prices_margin",
+        ),
+        CheckConstraint(
+            "(status <> 'test_active' OR environment = 'test') AND "
+            "(status <> 'production_active' OR (environment = 'production' "
+            "AND approved_margin_floor_basis_points IS NOT NULL "
+            "AND owner_approval_reference IS NOT NULL "
+            "AND customer_revenue_micros_per_unit > maximum_variable_cost_micros_per_unit "
+            "AND gross_margin_basis_points >= approved_margin_floor_basis_points))",
+            name="ck_credit_prices_activation",
+        ),
+        CheckConstraint(
+            "approved_margin_floor_basis_points IS NULL OR approved_margin_floor_basis_points BETWEEN 1 AND 9999",
+            name="ck_credit_prices_margin_floor",
+        ),
+        UniqueConstraint("action_code", "version", name="uq_credit_prices_code_version"),
+        Index("ix_credit_prices_environment_status", "environment", "status", "action_code"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    action_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(140), nullable=False)
+    required_module_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    credit_charge_per_unit: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    customer_charge_basis: Mapped[str] = mapped_column(String(24), nullable=False)
+    max_units_per_operation: Mapped[int] = mapped_column(Integer, nullable=False)
+    customer_revenue_micros_per_unit: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    customer_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="AUD", server_default="AUD")
+    cost_basis: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_cost_minor_units: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    provider_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    provider_minor_units_per_major: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100"
+    )
+    fx_rate_to_aud: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
+    fx_source: Mapped[str] = mapped_column(String(120), nullable=False)
+    fx_observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    other_variable_cost_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    expected_variable_cost_micros_per_unit: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    maximum_variable_cost_micros_per_unit: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    gross_margin_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    approved_margin_floor_basis_points: Mapped[int | None] = mapped_column(Integer)
+    owner_approval_reference: Mapped[str | None] = mapped_column(String(200))
+    environment: Mapped[str] = mapped_column(String(12), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    pricing_note: Mapped[str] = mapped_column(String(240), nullable=False)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by_actor: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CreditExecutionControl(TimestampMixin, Base):
+    __tablename__ = "credit_execution_controls"
+    __table_args__ = (
+        CheckConstraint(
+            "control_scope IN ('global', 'action', 'provider_capability')", name="ck_credit_controls_scope"
+        ),
+        CheckConstraint("control_key <> ''", name="ck_credit_controls_key"),
+        UniqueConstraint("control_scope", "control_key", name="uq_credit_controls_scope_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    control_scope: Mapped[str] = mapped_column(String(28), nullable=False)
+    control_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    actor_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
+class CreditControlEvent(Base):
+    __tablename__ = "credit_control_events"
+    __table_args__ = (
+        CheckConstraint(
+            "control_scope IN ('global', 'action', 'provider_capability')", name="ck_credit_control_events_scope"
+        ),
+        CheckConstraint("control_key <> ''", name="ck_credit_control_events_key"),
+        Index("ix_credit_control_events_created", "control_scope", "control_key", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    control_scope: Mapped[str] = mapped_column(String(28), nullable=False)
+    control_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    actor_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class OrganisationCreditBalance(TimestampMixin, Base):
+    __tablename__ = "organisation_credit_balances"
+    __table_args__ = (
+        CheckConstraint(
+            "purchased_available >= 0 AND promotional_available >= 0 "
+            "AND purchased_reserved >= 0 AND promotional_reserved >= 0",
+            name="ck_credit_balances_non_negative",
+        ),
+        CheckConstraint("lock_version > 0", name="ck_credit_balances_lock"),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), primary_key=True
+    )
+    purchased_available: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    promotional_available: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    purchased_reserved: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    promotional_reserved: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    lock_version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1, server_default="1")
+
+
+class CreditOrganisationPolicy(TimestampMixin, Base):
+    __tablename__ = "credit_organisation_policies"
+    __table_args__ = (
+        CheckConstraint(
+            "max_credits_per_operation > 0 AND max_credits_per_day > 0 "
+            "AND max_provider_cost_micros_per_day > 0 AND max_operations_per_minute > 0",
+            name="ck_credit_policies_positive",
+        ),
+        CheckConstraint(
+            "trial_max_credits_per_day IS NULL OR trial_max_credits_per_day > 0",
+            name="ck_credit_policies_trial",
+        ),
+    )
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), primary_key=True
+    )
+    metered_actions_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    max_credits_per_operation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    max_credits_per_day: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    max_provider_cost_micros_per_day: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    trial_max_credits_per_day: Mapped[int | None] = mapped_column(BigInteger)
+    max_operations_per_minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    actor_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
+class CreditLot(TimestampMixin, Base):
+    __tablename__ = "credit_lots"
+    __table_args__ = (
+        CheckConstraint("credit_type IN ('purchased', 'promotional')", name="ck_credit_lots_type"),
+        CheckConstraint(
+            "original_credits > 0 AND available_credits >= 0 AND reserved_credits >= 0 "
+            "AND consumed_credits >= 0 AND available_credits + reserved_credits + consumed_credits <= original_credits",
+            name="ck_credit_lots_amounts",
+        ),
+        CheckConstraint(
+            "original_revenue_micros >= 0 AND remaining_revenue_micros >= 0 "
+            "AND remaining_revenue_micros <= original_revenue_micros",
+            name="ck_credit_lots_revenue",
+        ),
+        CheckConstraint(
+            "credit_type = 'purchased' OR original_revenue_micros = 0", name="ck_credit_lots_promo_revenue"
+        ),
+        CheckConstraint(
+            "NOT trial_grant OR (credit_type = 'promotional' AND expires_at IS NOT NULL)",
+            name="ck_credit_lots_trial_grant",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "billing_operation_id"],
+            ["billing_operations.organisation_id", "billing_operations.id"],
+            name="fk_credit_lots_billing_operation",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "source_reference", name="uq_credit_lots_source"),
+        UniqueConstraint("organisation_id", "id", name="uq_credit_lots_org_id"),
+        Index(
+            "uq_credit_lots_org_trial_grant",
+            "organisation_id",
+            unique=True,
+            postgresql_where=text("trial_grant"),
+            sqlite_where=text("trial_grant = 1"),
+        ),
+        Index("ix_credit_lots_consumption", "organisation_id", "credit_type", "expires_at", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
+    )
+    credit_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    original_credits: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    available_credits: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reserved_credits: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    consumed_credits: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    original_revenue_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    remaining_revenue_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trial_grant: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    pack_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("credit_pack_versions.id", ondelete="RESTRICT")
+    )
+    billing_operation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    grant_actor_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    grant_reason: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
+class CreditQuote(Base):
+    __tablename__ = "credit_quotes"
+    __table_args__ = (
+        CheckConstraint("quantity > 0 AND required_credits > 0", name="ck_credit_quotes_amounts"),
+        CheckConstraint("status IN ('open', 'reserved', 'expired')", name="ck_credit_quotes_status"),
+        CheckConstraint("length(quote_fingerprint) = 64", name="ck_credit_quotes_fingerprint"),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_credit_quotes_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_credit_quotes_org_id"),
+        Index("ix_credit_quotes_org_expires", "organisation_id", "expires_at", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action_price_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("credit_action_price_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    action_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    required_credits: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    maximum_provider_cost_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    quote_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open", server_default="open")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CreditOperation(TimestampMixin, Base):
+    __tablename__ = "credit_operations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('reserved', 'executing', 'unknown', 'settled', 'released')",
+            name="ck_credit_operations_status",
+        ),
+        CheckConstraint(
+            "outcome IN ('pending', 'success', 'partial', 'failure', 'unknown', 'reconciled_success', "
+            "'reconciled_failure')",
+            name="ck_credit_operations_outcome",
+        ),
+        CheckConstraint(
+            "reserved_credits > 0 AND settled_credits >= 0 AND released_credits >= 0 "
+            "AND settled_credits + released_credits <= reserved_credits AND successful_units >= 0",
+            name="ck_credit_operations_amounts",
+        ),
+        CheckConstraint(
+            "customer_revenue_micros >= 0 AND provider_cost_micros >= 0", name="ck_credit_operations_costs"
+        ),
+        CheckConstraint("length(request_fingerprint) = 64", name="ck_credit_operations_fingerprint"),
+        ForeignKeyConstraint(
+            ["organisation_id", "requested_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_credit_operations_requester",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "quote_id"],
+            ["credit_quotes.organisation_id", "credit_quotes.id"],
+            name="fk_credit_operations_quote",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "idempotency_key", name="uq_credit_operations_key"),
+        UniqueConstraint("organisation_id", "id", name="uq_credit_operations_org_id"),
+        UniqueConstraint("organisation_id", "quote_id", name="uq_credit_operations_quote"),
+        Index("ix_credit_operations_org_created", "organisation_id", "created_at", "id"),
+        Index("ix_credit_operations_org_status", "organisation_id", "status", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
+    )
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    quote_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action_price_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("credit_action_price_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    action_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", server_default="pending")
+    reserved_credits: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    settled_credits: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    released_credits: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    successful_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    customer_revenue_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    provider_cost_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    provider_cost_currency: Mapped[str | None] = mapped_column(String(3))
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    execution_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outcome_recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CreditReservationAllocation(Base):
+    __tablename__ = "credit_reservation_allocations"
+    __table_args__ = (
+        CheckConstraint(
+            "allocation_order > 0 AND reserved_credits > 0 AND consumed_credits >= 0 AND released_credits >= 0 "
+            "AND consumed_credits + released_credits <= reserved_credits",
+            name="ck_credit_allocations_amounts",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "operation_id"],
+            ["credit_operations.organisation_id", "credit_operations.id"],
+            name="fk_credit_allocations_operation",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "lot_id"],
+            ["credit_lots.organisation_id", "credit_lots.id"],
+            name="fk_credit_allocations_lot",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "operation_id", "lot_id", name="uq_credit_allocations_lot"),
+        UniqueConstraint("organisation_id", "operation_id", "allocation_order", name="uq_credit_allocations_order"),
+        UniqueConstraint("organisation_id", "id", name="uq_credit_allocations_org_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
+    )
+    operation_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    lot_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    allocation_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    reserved_credits: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    consumed_credits: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    released_credits: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CreditLedgerEntry(Base):
+    __tablename__ = "credit_ledger_entries"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('purchase', 'promotional_grant', 'reservation', 'consumption', 'release', "
+            "'refund', 'correction', 'expiry')",
+            name="ck_credit_ledger_type",
+        ),
+        CheckConstraint("credit_type IN ('purchased', 'promotional')", name="ck_credit_ledger_credit_type"),
+        CheckConstraint(
+            "purchased_available_delta <> 0 OR promotional_available_delta <> 0 OR reserved_delta <> 0",
+            name="ck_credit_ledger_non_zero",
+        ),
+        CheckConstraint("customer_revenue_micros >= 0 AND provider_cost_micros >= 0", name="ck_credit_ledger_costs"),
+        CheckConstraint("length(request_fingerprint) = 64", name="ck_credit_ledger_fingerprint"),
+        ForeignKeyConstraint(
+            ["organisation_id", "lot_id"],
+            ["credit_lots.organisation_id", "credit_lots.id"],
+            name="fk_credit_ledger_lot",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "operation_id"],
+            ["credit_operations.organisation_id", "credit_operations.id"],
+            name="fk_credit_ledger_operation",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "referenced_entry_id"],
+            ["credit_ledger_entries.organisation_id", "credit_ledger_entries.id"],
+            name="fk_credit_ledger_reference",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "idempotency_key", name="uq_credit_ledger_key"),
+        UniqueConstraint("organisation_id", "id", name="uq_credit_ledger_org_id"),
+        Index("ix_credit_ledger_org_created", "organisation_id", "created_at", "id"),
+        Index("ix_credit_ledger_org_operation", "organisation_id", "operation_id", "event_type"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    credit_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    purchased_available_delta: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    promotional_available_delta: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    reserved_delta: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    lot_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    operation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    referenced_entry_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    action_code: Mapped[str | None] = mapped_column(String(100))
+    quantity: Mapped[int | None] = mapped_column(Integer)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    customer_revenue_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    provider_cost_micros: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class SellingProfile(TimestampMixin, Base):

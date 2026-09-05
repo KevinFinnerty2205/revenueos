@@ -40,6 +40,7 @@ class ProviderCheckout:
     subscription_identifier: str | None
     hosted_url: str
     status: Literal["open", "complete", "expired"]
+    payment_status: Literal["paid", "unpaid", "no_payment_required"] | None = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,10 @@ class VerifiedBillingEvent:
     invoice_identifier: str | None
     object_identifier: str | None
     created_at: datetime
+    amount_minor_units: int | None = None
+    currency: str | None = None
+    credit_pack_version_id: UUID | None = None
+    payment_status: Literal["paid", "unpaid", "no_payment_required"] | None = None
 
 
 class BillingProvider(Protocol):
@@ -357,6 +362,23 @@ class DeterministicBillingProvider:
                 invoice_identifier=cast(str | None, body.get("invoice_id")),
                 object_identifier=cast(str | None, body.get("object_id")),
                 created_at=created_at,
+                amount_minor_units=(
+                    cast(int, body.get("amount_minor_units"))
+                    if isinstance(body.get("amount_minor_units"), int)
+                    and not isinstance(body.get("amount_minor_units"), bool)
+                    else None
+                ),
+                currency=cast(str | None, body.get("currency")),
+                credit_pack_version_id=(
+                    UUID(cast(str, body["credit_pack_version_id"]))
+                    if isinstance(body.get("credit_pack_version_id"), str)
+                    else None
+                ),
+                payment_status=(
+                    cast(Literal["paid", "unpaid", "no_payment_required"], body.get("payment_status"))
+                    if body.get("payment_status") in {"paid", "unpaid", "no_payment_required"}
+                    else None
+                ),
             )
         except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
             raise PublicAPIError("billing_webhook_invalid", "Webhook content is invalid.", 400) from exc
@@ -536,6 +558,11 @@ class StripeTestBillingProvider:
             subscription_identifier=subscription if isinstance(subscription, str) else None,
             hosted_url=_required_string(data, "url"),
             status=cast(Literal["open", "complete", "expired"], data.get("status", "open")),
+            payment_status=(
+                cast(Literal["paid", "unpaid", "no_payment_required"], data.get("payment_status"))
+                if data.get("payment_status") in {"paid", "unpaid", "no_payment_required"}
+                else None
+            ),
         )
 
     async def retrieve_checkout(self, identifier: str) -> ProviderCheckout:
@@ -548,6 +575,11 @@ class StripeTestBillingProvider:
             subscription_identifier=subscription if isinstance(subscription, str) else None,
             hosted_url=cast(str, data.get("url") or self.settings.billing_success_url),
             status=cast(Literal["open", "complete", "expired"], data.get("status", "open")),
+            payment_status=(
+                cast(Literal["paid", "unpaid", "no_payment_required"], data.get("payment_status"))
+                if data.get("payment_status") in {"paid", "unpaid", "no_payment_required"}
+                else None
+            ),
         )
 
     async def retrieve_subscription(self, identifier: str) -> ProviderSubscriptionSnapshot:
@@ -812,6 +844,22 @@ class StripeTestBillingProvider:
                 invoice_identifier=invoice_identifier,
                 object_identifier=_required_string(obj, "id"),
                 created_at=_aware_from_timestamp(event.get("created")) or datetime.now(UTC),
+                amount_minor_units=(
+                    cast(int, obj.get("amount_total"))
+                    if isinstance(obj.get("amount_total"), int) and not isinstance(obj.get("amount_total"), bool)
+                    else None
+                ),
+                currency=(cast(str, obj.get("currency")).upper() if isinstance(obj.get("currency"), str) else None),
+                credit_pack_version_id=(
+                    UUID(cast(str, metadata["oryntela_credit_pack_version_id"]))
+                    if isinstance(metadata, dict) and isinstance(metadata.get("oryntela_credit_pack_version_id"), str)
+                    else None
+                ),
+                payment_status=(
+                    cast(Literal["paid", "unpaid", "no_payment_required"], obj.get("payment_status"))
+                    if obj.get("payment_status") in {"paid", "unpaid", "no_payment_required"}
+                    else None
+                ),
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise PublicAPIError("billing_webhook_invalid", "Webhook content is invalid.", 400) from exc

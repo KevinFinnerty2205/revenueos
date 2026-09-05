@@ -2,7 +2,7 @@
 
 ## Enable a design-partner organisation
 
-1. Confirm deployment head is `0053_billing_subscriptions`, `API_FEATURE_NATIVE_CRM_ENABLED=true` and `API_FEATURE_NATIVE_PIPELINE_ENABLED=true`.
+1. Confirm deployment head is `0054_credits_variable_cost`, `API_FEATURE_NATIVE_CRM_ENABLED=true` and `API_FEATURE_NATIVE_PIPELINE_ENABLED=true`.
 2. Confirm the organisation has active Core commercial access using the reviewed commercial operator workflow.
 3. In Settings → CRM, explicitly choose RevenueOS. Connected HubSpot additionally requires the commercial CRM connector entitlement.
 4. Create one synthetic Account, Contact and Opportunity; confirm owner, record overview, history, archive/restore, strong duplicate handling and a real default Pipeline assignment/event.

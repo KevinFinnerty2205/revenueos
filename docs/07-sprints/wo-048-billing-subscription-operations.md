@@ -82,7 +82,9 @@ Live billing, real charges, customer data, public launch, general refunds, appro
 GST/tax policy, dunning/collections and production Stripe operations are not
 implemented or activated. The Credit billing operation is a reserved boundary only:
 there is no Credit price, pack, balance, ledger, grant, expiry, refund or usage.
-WO-049 and all later work orders remain unstarted. Spend is AUD $0.
+At the WO-048 handoff, WO-049 and later work orders were unstarted. WO-049 now
+implements its separately authorised TEST-only Credits successor scope. Spend for
+WO-048 remained AUD $0.
 
 See [Billing and subscription operations](../03-engineering/billing-subscription-operations.md)
 and [Commercial authority](../03-engineering/commercial-authority.md).

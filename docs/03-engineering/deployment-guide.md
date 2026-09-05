@@ -8,12 +8,13 @@ and operating boundary for the current web, API, worker and PostgreSQL
 components; it is not production-data approval.
 
 WO-039C adds a conditional supervised real-data path through current Alembic head
-`0053_billing_subscriptions`; it is not blanket approval. Before any named partner,
+`0054_credits_variable_cost`; it is not blanket approval. Before any named partner,
 run the [real-data production preflight and lifecycle runbook](real-data-operations.md)
 and satisfy its Clerk, runtime-role/RLS, encrypted backup/restore, support, legal,
 provider and feature-profile gates. Unsupervised and commercial beta remain blocked.
-WO-048 billing must remain disabled in production; its Stripe adapter is test-mode
-only and does not authorise a provider account, live key, webhook or payment.
+WO-048 billing and WO-049 Credits must remain disabled in production. Their Stripe
+and metered-provider adapters are test-mode only and do not authorise a provider
+account, live key, webhook, payment, production Credit pack or real sale.
 
 ## Process topology
 

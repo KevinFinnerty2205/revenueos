@@ -488,10 +488,10 @@ export function BillingSubscriptionSettings() {
       </div>
 
       <p className="mt-5 text-xs leading-5 text-slate-500">
-        Enterprise uses a contact and manual commercial process. Credit
-        balances, packs, grants and usage are not implemented. GST presentation
-        and provider tax settings require owner/accounting approval before live
-        billing.
+        Enterprise uses a contact and manual commercial process. Production
+        Credit packs and purchases are not available; the Credits section below
+        is TEST-only infrastructure. GST presentation and provider tax settings
+        require owner/accounting approval before live billing.
       </p>
     </section>
   );

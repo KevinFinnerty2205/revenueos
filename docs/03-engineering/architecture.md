@@ -567,7 +567,7 @@ datastore, vector index, provider call or schema migration. The web exposes it t
 the existing Search route and contextual workspace links. See
 [ADR 0036](../08-decisions/0036-ephemeral-deterministic-ask-revenueos.md).
 
-## WO-047 commercial authority and WO-048 test billing
+## WO-047 commercial authority, WO-048 test billing and WO-049 Credits
 
 Migration `0052_commercial_plans_trial` adds immutable global plan versions,
 tenant-owned commercial state and immutable tenant commercial events inside the
@@ -588,11 +588,23 @@ the deterministic provider is the CI path and an unactivated Stripe test adapter
 the first external implementation. Verified current-provider reconciliation feeds
 facts into `CommercialService`, while the commercial domain remains entitlement
 authority. It stays in the existing API/web/PostgreSQL modular monolith with no new
-service, broker or datastore. Export v32 includes safe projections and offboarding
-fails closed on unresolved accounting retention. There is no live billing, Credit
-ledger or public signup. See [Commercial authority](commercial-authority.md),
+service, broker or datastore. Export v33 includes safe billing and Credit projections;
+offboarding fails closed on unresolved accounting retention. There is no live billing
+or public signup. See [Commercial authority](commercial-authority.md),
 [Billing operations](billing-subscription-operations.md) and
 [ADR 0069](../08-decisions/0069-versioned-commercial-authority.md).
+
+WO-049 migration `0054_credits_variable_cost` adds immutable TEST pack/action-price
+catalogues, tenant Credit lots, a locked non-negative balance projection, append-only
+ledger, server-owned quotes and reservation/settlement/reconciliation operations.
+Purchased Credits require an exact verified WO-048 TEST billing event; promotional
+and trial grants stay distinct. Integer/micros money arithmetic, margin validation,
+exposure caps and global/action/provider-capability controls bound future variable
+cost. Seven tenant tables use forced RLS and composite tenant relationships. Export
+v33 includes safe Credit history while deletion fails closed pending an approved
+accounting-retention treatment. Production prices, packs, margin floor, providers,
+live Stripe and real sales do not exist. See
+[Credits and variable-cost controls](credits-variable-cost-controls.md).
 
 ## WO-026 Prospect Account Research extension
 

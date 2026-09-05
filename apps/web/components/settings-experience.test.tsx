@@ -8,6 +8,9 @@ vi.mock("@/components/beta-admin", () => ({
 vi.mock("@/components/commercial-plan-settings", () => ({
   CommercialPlanSettings: () => <section>Commercial plan controls</section>,
 }));
+vi.mock("@/components/credits-settings", () => ({
+  CreditsSettings: () => <section>Credit controls</section>,
+}));
 vi.mock("@/components/sales-methodology-settings", () => ({
   SalesMethodologySettings: () => <section>Methodology controls</section>,
 }));
@@ -86,6 +89,7 @@ describe("SettingsExperience", () => {
       screen.getByText("Company and selling profile controls"),
     ).toBeVisible();
     expect(screen.getByText("Commercial plan controls")).toBeVisible();
+    expect(screen.getByText("Credit controls")).toBeVisible();
     expect(screen.getByText("CRM controls")).toBeVisible();
     expect(screen.getByText("Pipeline controls")).toBeVisible();
     expect(screen.getByText("Administrator controls")).toBeVisible();

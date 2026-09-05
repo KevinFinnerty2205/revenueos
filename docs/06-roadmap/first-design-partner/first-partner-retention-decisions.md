@@ -19,6 +19,7 @@ launch-environment windows that remain owner-controlled.
 | CRM import source file | Preview/metadata is bounded; raw CSV is not stored as a durable object | Keep |
 | Create/private file lifecycle | Deleted through authorised organisation/file workflows and reconciled with private storage | Keep; Create is off unless separately approved |
 | Organisation offboarding | Disable access, optional authorised export, exact-confirmation deletion, row/object/grant verification; immutable backups age out | Keep |
+| Billing and Credit transaction history | Exportable, append-only/restrictively retained; organisation deletion fails closed | **Pre-live accounting/legal treatment still requires owner approval; do not infer a period from ordinary content retention** |
 | RPO/RTO starting objectives | RPO 24 hours and RTO one business day, measured in target proof; not contractual SLAs | Keep |
 
 The 90-day setting is not a promise that every record is automatically hard-deleted

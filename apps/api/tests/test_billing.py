@@ -1168,7 +1168,7 @@ def test_billing_export_is_safe_and_offboarding_refuses_blind_history_deletion()
                     ),
                 )
                 exported = await _export_payload(session, PRIMARY_ORGANISATION_ID, settings)
-                assert exported["exportVersion"] == EXPORT_VERSION == 32
+                assert exported["exportVersion"] == EXPORT_VERSION == 33
                 billing = exported["billing"]
                 assert isinstance(billing, dict)
                 encoded = json.dumps(billing, default=str)

@@ -39,7 +39,8 @@ Nothing in this table is permission to advertise a price, accept payment, start 
 - **External providers:** focused integration architecture may exist, but no broad connector, live mailbox, SMS, research, voice or recording claim is authorised.
 - **Launch:** the documented state is waiting for target-environment proof. WO-040 is not authorised by this consolidation.
 - **Brand:** public Oryntela identity is selected; technical RevenueOS names remain intentional until separate approval.
-- **Commercial authority:** WO-047 server-side plan, trial, seat, downgrade and audit enforcement is built; payment and Credits are not.
+- **Commercial authority:** WO-047 plan/trial enforcement, WO-048 TEST billing and
+  WO-049 TEST-only Credits controls are built; live payment and production Credits are not.
 
 ## Decisions made
 

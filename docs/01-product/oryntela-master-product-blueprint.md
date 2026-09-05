@@ -221,9 +221,11 @@ material third-party variable-cost operations such as paid enrichment, verificat
 SMS, telephony or expensive external generation. Normal Core use and customer-mailbox
 email sending without material Oryntela unit cost should not feel metered. Credits
 must never go negative, auto-top-up by default or double-charge a retry, and must
-produce positive gross margin. WO-048 reserves an idempotent payment-operation type
-only; no Credit value, product, pack, purchase route, balance, ledger, grant, expiry
-or consumption is approved or built.
+produce positive gross margin. WO-048 reserves an idempotent payment-operation type.
+WO-049 implements the provider-neutral ledger, balance, quote/reservation,
+settlement/reconciliation and TEST-only purchase machinery needed to validate that
+safety model. It activates no production Credit price or pack, live billing sale, or
+metered external provider.
 
 ## Future opportunities
 

@@ -45,6 +45,10 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("API_DATABASE_URL", "DATABASE_URL"),
     )
     feature_billing_enabled: bool = False
+    feature_credits_enabled: bool = False
+    credits_quote_ttl_seconds: int = Field(default=600, ge=60, le=3_600)
+    credits_margin_floor_basis_points: int | None = Field(default=None, ge=1, le=9_999)
+    credits_margin_policy_reference: str | None = Field(default=None, min_length=3, max_length=200)
     billing_provider_name: BillingProviderName = "deterministic"
     billing_mode: Literal["test"] = "test"
     billing_webhook_secret: SecretStr = Field(
@@ -380,6 +384,7 @@ class Settings(BaseSettings):
         "stripe_price_growth_annual",
         "stripe_price_complete_monthly",
         "stripe_price_complete_annual",
+        "credits_margin_policy_reference",
         mode="before",
     )
     @classmethod
@@ -430,6 +435,8 @@ class Settings(BaseSettings):
                 raise ValueError("Production allowed hosts must be explicit.")
             if self.feature_billing_enabled or self.billing_provider_name == "stripe":
                 raise ValueError("Live billing is not authorised; billing providers are test-mode only.")
+            if self.feature_credits_enabled:
+                raise ValueError("Production Credit execution is not authorised; production prices are absent.")
             if self.stripe_secret_key is not None:
                 raise ValueError("Stripe credentials are prohibited in production until live billing is authorised.")
         if self.stripe_secret_key is not None:
@@ -687,6 +694,7 @@ class Settings(BaseSettings):
         """Return the complete, product-safe server-authoritative flag set."""
 
         return {
+            "credits": self.feature_credits_enabled,
             "openaiProvider": self.feature_openai_provider_enabled,
             "revenueBrain": self.feature_revenue_brain_enabled,
             "opportunityWorkspace": self.feature_opportunity_workspace_enabled,

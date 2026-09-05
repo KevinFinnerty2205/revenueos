@@ -1,8 +1,9 @@
 # Oryntela Credits commercial model
 
-- **Status:** **OWNER-APPROVED CONCEPT; VALUES AND IMPLEMENTATION UNDECIDED**
-- **Consolidated:** 4 September 2026
-- **Boundary:** WO-048 reserves a billing-operation type only; no balance, ledger, priced purchase, grant or provider activation exists
+- **Status:** **WO-049 INFRASTRUCTURE IMPLEMENTED; PRODUCTION VALUES UNDECIDED**
+- **Consolidated:** 5 September 2026
+- **Boundary:** provider-neutral mechanics exist in TEST mode; no production price,
+  pack, provider, live Stripe payment or real Credit sale exists
 
 ## Purpose
 
@@ -62,25 +63,52 @@ price of AUD $1.00 would produce 75% gross margin. That is a margin calculation,
 recommendation for a Credit value or operation price. A 300% markup on AUD $0.25 is
 not the same statement as 75% margin.
 
-## Required future safety
+## Implemented infrastructure
 
-- prepaid authoritative organisation balance; never negative;
-- immutable tenant-scoped ledger and idempotent reservation/settlement/refund;
+WO-049 implements the commercial safety mechanics without deciding the commercial
+values:
+
+- integer, organisation-owned purchased and promotional balances backed by lots;
+- an append-only transaction ledger and independently reconcilable balance projection;
+- server-owned versioned action prices and Credit-pack catalogue records;
+- quote, reservation-before-execution, full/partial/zero settlement, release and
+  explicit unknown-outcome reconciliation;
+- verified TEST billing purchase grants, bounded trial promotional grants, expiry,
+  referenced refunds and actor/reason/reference corrections;
+- exact provider-cost, FX, customer-revenue and basis-point margin calculation;
+- per-operation, daily, provider-cost, trial and rate exposure limits;
+- global, action and provider-capability emergency controls;
+- forced tenant RLS, cross-tenant relationship constraints and retry-safe
+  idempotency; and
+- admin balance/activity UI plus safe organisation export history.
+
+The deterministic catalogue contains a 100-Credit AUD $20 test pack and a synthetic
+5-Credit research action solely to validate the system. Every surfaced value is
+labelled `TEST ONLY / NOT CUSTOMER PRICING`, and purchase is disabled. These figures
+must not be quoted or inferred as Oryntela pricing.
+
+## Safety rules retained for production activation
+
+- prepaid authoritative organisation balance; never negative (implemented);
+- immutable tenant-scoped ledger and idempotent reservation/settlement/refund
+  (implemented);
 - no double charge under user, worker, network or provider retry;
 - atomic purchase and balance update with safe unknown-payment handling;
 - explicit roles, purchase limits and separately approved auto-top-up if ever offered;
 - reservation expiry/cancellation and partial-batch reconciliation;
 - provider receipt and unknown-outcome policy;
-- versioned Credit price and provider-cost basis;
-- promotional Credits distinguishable from purchased Credits;
-- organisation/provider/trial exposure caps and abuse controls; and
-- export, chargeback, support-dispute and accounting operations.
+- versioned Credit price and provider-cost basis (implemented structurally; production
+  values absent);
+- promotional Credits distinguishable from purchased Credits (implemented);
+- organisation/provider/trial exposure caps and abuse controls (implemented); and
+- export and support-dispute history (implemented), with chargeback policy and legal/
+  accounting retention still requiring owner decisions.
 
 Credits do not override provider rate limits, availability, permission, suppression,
 legal constraints or customer contactability. Queued paid work must revalidate all of
 them when execution begins.
 
-## Open decisions
+## Undecided production prices and policies
 
 - value of one Credit;
 - action catalogue and per-action price/max price;
@@ -93,6 +121,7 @@ them when execution begins.
 - billing provider, stored-value/legal/accounting treatment; and
 - provider-specific cost, margin and loss caps.
 
-No Credit-domain implementation may begin until billing/entitlement authority is defined and the
+No production Credit catalogue or provider-backed operation may activate until the
 [variable-cost safety gate](../03-engineering/oryntela-variable-cost-safety-gate.md)
-passes for the first operation.
+passes for that operation and the owner approves its exact economics. WO-049 is an
+infrastructure implementation, not that approval.
