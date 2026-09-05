@@ -16,6 +16,7 @@ VisualProviderName = Literal["mock", "openai"]
 EvidenceExtractionProviderName = Literal["mock", "openai"]
 ProspectResearchProviderName = Literal["mock"]
 VisualStorageBackend = Literal["local", "s3_compatible"]
+BillingProviderName = Literal["deterministic", "stripe"]
 
 
 class Settings(BaseSettings):
@@ -43,6 +44,28 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("API_DATABASE_URL", "DATABASE_URL"),
     )
+    feature_billing_enabled: bool = False
+    billing_provider_name: BillingProviderName = "deterministic"
+    billing_mode: Literal["test"] = "test"
+    billing_webhook_secret: SecretStr = Field(
+        default=SecretStr("local-development-billing-webhook-key"),
+        min_length=24,
+    )
+    billing_success_url: str = "http://localhost:3000/billing/success"
+    billing_cancel_url: str = "http://localhost:3000/settings"
+    billing_portal_return_url: str = "http://localhost:3000/settings"
+    stripe_secret_key: SecretStr | None = None
+    stripe_api_base_url: str = "https://api.stripe.com"
+    stripe_api_version: Literal["2026-02-25.clover"] = "2026-02-25.clover"
+    stripe_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    stripe_read_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
+    stripe_webhook_tolerance_seconds: int = Field(default=300, ge=30, le=900)
+    stripe_price_core_monthly: str | None = Field(default=None, min_length=7, max_length=255)
+    stripe_price_core_annual: str | None = Field(default=None, min_length=7, max_length=255)
+    stripe_price_growth_monthly: str | None = Field(default=None, min_length=7, max_length=255)
+    stripe_price_growth_annual: str | None = Field(default=None, min_length=7, max_length=255)
+    stripe_price_complete_monthly: str | None = Field(default=None, min_length=7, max_length=255)
+    stripe_price_complete_annual: str | None = Field(default=None, min_length=7, max_length=255)
     clerk_jwks_url: str | None = None
     clerk_issuer: str | None = None
     clerk_audience: str | None = None
@@ -350,6 +373,13 @@ class Settings(BaseSettings):
         "visual_s3_region",
         "visual_s3_access_key_id",
         "visual_s3_secret_access_key",
+        "stripe_secret_key",
+        "stripe_price_core_monthly",
+        "stripe_price_core_annual",
+        "stripe_price_growth_monthly",
+        "stripe_price_growth_annual",
+        "stripe_price_complete_monthly",
+        "stripe_price_complete_annual",
         mode="before",
     )
     @classmethod
@@ -398,6 +428,31 @@ class Settings(BaseSettings):
                 )
             ):
                 raise ValueError("Production allowed hosts must be explicit.")
+            if self.feature_billing_enabled or self.billing_provider_name == "stripe":
+                raise ValueError("Live billing is not authorised; billing providers are test-mode only.")
+            if self.stripe_secret_key is not None:
+                raise ValueError("Stripe credentials are prohibited in production until live billing is authorised.")
+        if self.stripe_secret_key is not None:
+            stripe_key = self.stripe_secret_key.get_secret_value()
+            if stripe_key.startswith("sk_live_"):
+                raise ValueError("Live Stripe credentials are prohibited.")
+            if not stripe_key.startswith("sk_test_"):
+                raise ValueError("Stripe test mode requires an sk_test_ secret key.")
+        if self.feature_billing_enabled:
+            if not self._is_safe_billing_return_url(self.billing_success_url):
+                raise ValueError("Billing success URL must use HTTPS or an exact localhost HTTP origin.")
+            if not self._is_safe_billing_return_url(self.billing_cancel_url):
+                raise ValueError("Billing cancel URL must use HTTPS or an exact localhost HTTP origin.")
+            if not self._is_safe_billing_return_url(self.billing_portal_return_url):
+                raise ValueError("Billing portal return URL must use HTTPS or an exact localhost HTTP origin.")
+            if self.billing_provider_name == "stripe":
+                if self.stripe_secret_key is None:
+                    raise ValueError("Stripe test billing requires API_STRIPE_SECRET_KEY.")
+                price_ids = self.stripe_price_identifiers
+                if any(value is None or not value.startswith("price_") for value in price_ids.values()):
+                    raise ValueError("Stripe test billing requires all six price_ identifiers.")
+                if self.stripe_api_base_url != "https://api.stripe.com":
+                    raise ValueError("Stripe billing must use the official HTTPS API endpoint.")
         if self.private_beta_real_data_enabled:
             if self.environment != "production":
                 raise ValueError("Real-data private beta mode is permitted only in production.")
@@ -554,6 +609,27 @@ class Settings(BaseSettings):
             and hostname not in {"localhost", "127.0.0.1", "::1"}
             and not hostname.endswith(".localhost")
         )
+
+    @staticmethod
+    def _is_safe_billing_return_url(value: str) -> bool:
+        parsed = urlsplit(value)
+        hostname = (parsed.hostname or "").casefold()
+        if parsed.username or parsed.password or parsed.fragment or not hostname:
+            return False
+        if parsed.scheme == "https":
+            return True
+        return parsed.scheme == "http" and hostname in {"localhost", "127.0.0.1", "::1"}
+
+    @property
+    def stripe_price_identifiers(self) -> dict[tuple[str, str], str | None]:
+        return {
+            ("core", "monthly"): self.stripe_price_core_monthly,
+            ("core", "annual"): self.stripe_price_core_annual,
+            ("growth", "monthly"): self.stripe_price_growth_monthly,
+            ("growth", "annual"): self.stripe_price_growth_annual,
+            ("complete", "monthly"): self.stripe_price_complete_monthly,
+            ("complete", "annual"): self.stripe_price_complete_annual,
+        }
 
     @property
     def _mock_customer_content_features_enabled(self) -> bool:

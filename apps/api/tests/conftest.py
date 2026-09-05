@@ -32,6 +32,11 @@ from revenueos.models import (
     BetaDataRequest,
     BetaFeedback,
     BetaSystemEvent,
+    BillingAccount,
+    BillingInvoiceProjection,
+    BillingOperation,
+    BillingProviderEventReceipt,
+    BillingSubscription,
     CandidateEvidence,
     CaptureSession,
     CommercialStateEvent,
@@ -419,6 +424,11 @@ def clean_business_entities() -> Iterator[None]:
         async with session_factory() as session:
             await session.execute(update(RecordingSession).values(transcript_version_id=None))
             for model in (
+                BillingProviderEventReceipt,
+                BillingInvoiceProjection,
+                BillingSubscription,
+                BillingOperation,
+                BillingAccount,
                 CommercialStateEvent,
                 BetaFeedback,
                 BetaSystemEvent,

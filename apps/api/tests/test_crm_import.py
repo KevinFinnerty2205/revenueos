@@ -196,7 +196,7 @@ def test_account_csv_preview_confirm_is_conservative_idempotent_and_content_free
         return export
 
     exported = asyncio.run(export_metadata())
-    assert exported["exportVersion"] == 31
+    assert exported["exportVersion"] == 32
     assert len(exported["crmImportBatches"]) == 1  # type: ignore[arg-type]
     assert len(exported["crmImportRows"]) == 4  # type: ignore[arg-type]
     assert "not retained" not in json.dumps(exported, default=str)

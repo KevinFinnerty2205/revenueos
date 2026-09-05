@@ -1,8 +1,8 @@
 # Commercial authority
 
-- **Status:** Implemented by WO-047
+- **Status:** Implemented by WO-047; test billing facts added by WO-048
 - **Migration:** `0052_commercial_plans_trial`
-- **Billing:** Not implemented
+- **Billing:** Provider-neutral architecture and test mode implemented by WO-048; live disabled
 - **Credits:** Not implemented
 
 ## Authoritative catalogue
@@ -36,9 +36,11 @@ no public add-on price.
   the effective plan, entitled and readable modules, seat count/limit, trial dates,
   actor, reason and state version.
 
-Plan contents never come from the browser. The only public commercial route is
-`GET /api/v1/commercial`; it returns the active organisation's safe projection to an
-active administrator. There is no plan/trial mutation HTTP endpoint.
+Plan contents never come from the browser. `GET /api/v1/commercial` returns the
+active organisation's safe projection to an active administrator. There is no
+plan/trial mutation HTTP endpoint. The separate admin-only billing routes accept
+only a plan code and interval, validate them against this catalogue and let verified
+billing facts call this authority; billing never calculates entitlements itself.
 
 ## Trial and state transitions
 
@@ -139,12 +141,22 @@ transaction-local tenant context. The runtime role must not bypass RLS. Plan row
 commercial history have database immutability triggers; the approved organisation
 deletion maintenance setting is the only event-deletion exception.
 
-Export schema v31 includes the current plan snapshot, commercial history and module
-entitlements. Approved organisation deletion removes the tenant commercial rows; a
-downgrade or expiry never does. Logs and events contain commercial metadata, not
-customer content, tokens, payment data or provider payloads.
+Export schema v32 includes the current plan snapshot, commercial history, module
+entitlements and safe billing projections. Billing records may require statutory
+retention, so organisation deletion now refuses to remove an organisation with a
+billing account until an approved accounting retention/disposal procedure exists. A
+downgrade, expiry or payment event never deletes customer data. Logs and events
+contain commercial metadata, not customer content, tokens, card data or provider
+payloads.
 
-There is no Stripe/customer/subscription mapping, checkout, webhook, card, invoice,
-tax, proration, refund or payment-failure flow. There is no Credits ledger, allowance,
-pack, expiry or top-up. Future billing must consume this authority through a separate
-approved adapter rather than duplicating it.
+WO-048 test billing consumes this authority through a separate provider adapter.
+Verified active subscription facts can assign a paid plan with source
+`billing_provider`; provider-only status cannot grant modules. Past-due status is the
+provider-governed payment-recovery state and preserves current access without
+inventing a separate grace duration. Verified terminal unpaid/cancelled status makes
+a billing-provider-managed commercial state inactive without deletion. Scheduled
+cancellation keeps paid access through the current period. A higher-tier plan is
+assigned only after provider confirmation; lower-tier assignment occurs only at the
+verified renewal event and uses the existing non-destructive downgrade path. There
+is no live billing, final tax/refund policy, Credits ledger, allowance, pack, expiry
+or top-up. See [Billing and subscription operations](billing-subscription-operations.md).

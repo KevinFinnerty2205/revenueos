@@ -567,7 +567,7 @@ datastore, vector index, provider call or schema migration. The web exposes it t
 the existing Search route and contextual workspace links. See
 [ADR 0036](../08-decisions/0036-ephemeral-deterministic-ask-revenueos.md).
 
-## WO-047 commercial authority
+## WO-047 commercial authority and WO-048 test billing
 
 Migration `0052_commercial_plans_trial` adds immutable global plan versions,
 tenant-owned commercial state and immutable tenant commercial events inside the
@@ -577,11 +577,21 @@ provenance. `CommercialService` owns plan translation, one-time trial/grace
 boundaries, active-seat limits, optimistic operator changes and safe downgrade;
 business services and workers consume that authority.
 
-The web adds only an administrator read model. Support mutation remains an explicit
-CLI operation. Forced RLS protects tenant commercial rows, database triggers protect
-catalogue/history immutability and export v31/approved deletion cover the lifecycle.
-No service, broker, datastore, payment provider, Credits ledger or public signup was
-added. See [Commercial authority](commercial-authority.md) and
+WO-047 added an administrator read model and kept commercial support mutation behind
+explicit CLI operations. Forced RLS protects tenant commercial rows and database
+triggers protect catalogue/history immutability.
+
+WO-048 migration `0053_billing_subscriptions` adds tenant-owned billing accounts,
+subscriptions, safe invoice projections, idempotent operations and immutable
+provider-event receipts. A provider-neutral service consumes the WO-047 catalogue;
+the deterministic provider is the CI path and an unactivated Stripe test adapter is
+the first external implementation. Verified current-provider reconciliation feeds
+facts into `CommercialService`, while the commercial domain remains entitlement
+authority. It stays in the existing API/web/PostgreSQL modular monolith with no new
+service, broker or datastore. Export v32 includes safe projections and offboarding
+fails closed on unresolved accounting retention. There is no live billing, Credit
+ledger or public signup. See [Commercial authority](commercial-authority.md),
+[Billing operations](billing-subscription-operations.md) and
 [ADR 0069](../08-decisions/0069-versioned-commercial-authority.md).
 
 ## WO-026 Prospect Account Research extension

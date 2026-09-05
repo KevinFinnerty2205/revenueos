@@ -373,6 +373,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "organisation_module_entitlements",
         "organisation_commercial_states",
         "commercial_state_events",
+        "billing_accounts",
+        "billing_subscriptions",
+        "billing_invoice_projections",
+        "billing_operations",
+        "billing_provider_event_receipts",
         "selling_profiles",
         "selling_profile_revisions",
         "prospect_usage_counters",
@@ -608,6 +613,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "selling_profile_id": uuid.uuid4(),
                 "selling_profile_revision_id": uuid.uuid4(),
                 "commercial_event_id": uuid.uuid4(),
+                "billing_account_id": uuid.uuid4(),
+                "billing_subscription_id": uuid.uuid4(),
+                "billing_invoice_id": uuid.uuid4(),
+                "billing_operation_id": uuid.uuid4(),
+                "billing_receipt_id": uuid.uuid4(),
             }
         )
 
@@ -665,6 +675,104 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO billing_accounts
+                                (id, organisation_id, provider, provider_mode,
+                                 provider_customer_id, status)
+                            VALUES
+                                (:billing_account_id, :organisation_id,
+                                 'deterministic', 'test', :billing_customer_id,
+                                 'active')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "billing_customer_id": f"cus_test_rls_{tenant['organisation_id']}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO billing_subscriptions
+                                (id, organisation_id, billing_account_id,
+                                 provider_subscription_id, plan_version_id,
+                                 billing_interval, amount, currency, status,
+                                 current_period_start, current_period_end,
+                                 cancel_at_period_end, provider_updated_at,
+                                 last_provider_event_id, lock_version)
+                            SELECT :billing_subscription_id, :organisation_id,
+                                   :billing_account_id, :billing_subscription_provider_id,
+                                   id, 'monthly', 200.00, 'AUD', 'active',
+                                   now(), now() + interval '1 month', false,
+                                   now(), :billing_event_provider_id, 1
+                            FROM commercial_plan_versions
+                            WHERE code = 'core' AND version = 1
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "billing_subscription_provider_id": f"sub_test_rls_{tenant['organisation_id']}",
+                            "billing_event_provider_id": f"evt_test_rls_{tenant['organisation_id']}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO billing_invoice_projections
+                                (id, organisation_id, subscription_id,
+                                 provider_invoice_id, invoice_date, amount_due,
+                                 amount_paid, currency, status,
+                                 provider_updated_at)
+                            VALUES
+                                (:billing_invoice_id, :organisation_id,
+                                 :billing_subscription_id, :billing_invoice_provider_id,
+                                 now(), 200.00, 200.00, 'AUD', 'paid', now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "billing_invoice_provider_id": f"in_test_rls_{tenant['organisation_id']}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO billing_operations
+                                (id, organisation_id, requested_by_user_id,
+                                 operation_type, idempotency_key,
+                                 request_fingerprint, status, currency)
+                            VALUES
+                                (:billing_operation_id, :organisation_id,
+                                 :user_id, 'portal', :billing_operation_key,
+                                 :billing_fingerprint, 'succeeded', NULL)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "billing_operation_key": f"rls-billing-operation-{tenant['organisation_id']}",
+                            "billing_fingerprint": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO billing_provider_event_receipts
+                                (id, organisation_id, provider, provider_mode,
+                                 provider_event_id, event_type,
+                                 provider_created_at, result)
+                            VALUES
+                                (:billing_receipt_id, :organisation_id,
+                                 'deterministic', 'test', :billing_receipt_provider_id,
+                                 'invoice.paid', now(), 'processed')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "billing_receipt_provider_id": f"evt_receipt_rls_{tenant['organisation_id']}",
+                        },
                     )
                     await connection.execute(
                         text(
@@ -3277,6 +3385,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'organisation_module_entitlements',
                                     'organisation_commercial_states',
                                     'commercial_state_events',
+                                    'billing_accounts',
+                                    'billing_subscriptions',
+                                    'billing_invoice_projections',
+                                    'billing_operations',
+                                    'billing_provider_event_receipts',
                                     'selling_profiles',
                                     'selling_profile_revisions',
                                     'prospect_usage_counters',
@@ -3923,6 +4036,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 )
                 await connection.execute(
                     text(
+                        "ALTER TABLE billing_provider_event_receipts "
+                        "DISABLE TRIGGER billing_provider_event_receipts_immutable"
+                    )
+                )
+                await connection.execute(
+                    text(
                         "UPDATE recording_sessions SET transcript_version_id = NULL "
                         "WHERE organisation_id IN (:organisation_a, :organisation_b)"
                     ),
@@ -3984,6 +4103,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "prospect_people",
                     "prospect_research_targets",
                     "prospect_usage_counters",
+                    "billing_provider_event_receipts",
+                    "billing_operations",
+                    "billing_invoice_projections",
+                    "billing_subscriptions",
+                    "billing_accounts",
                     "commercial_state_events",
                     "organisation_commercial_states",
                     "organisation_module_entitlements",
@@ -4073,6 +4197,12 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     text(
                         "ALTER TABLE revenue_brain_interaction_snapshots "
                         "ENABLE TRIGGER revenue_brain_interaction_snapshots_immutable"
+                    )
+                )
+                await connection.execute(
+                    text(
+                        "ALTER TABLE billing_provider_event_receipts "
+                        "ENABLE TRIGGER billing_provider_event_receipts_immutable"
                     )
                 )
                 await connection.execute(

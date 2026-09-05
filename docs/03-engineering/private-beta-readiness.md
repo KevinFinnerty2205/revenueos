@@ -4,7 +4,7 @@
 > in the [WO-039A record](../07-sprints/wo-039a-end-to-end-journey-reliability.md).
 > WO-039B Create trust/security is implemented and documented in the
 > [WO-039B record](../07-sprints/wo-039b-create-trust-security.md). WO-039C real-data
-> operations is complete at repository level through `0052_commercial_plans_trial`.
+> operations is complete at repository level through `0053_billing_subscriptions`.
 > The [named first-partner launch gate](../06-roadmap/first-design-partner/first-design-partner-launch-gate.md)
 > still requires exact target, owner/legal and partner evidence before production
 > customer data.
@@ -14,7 +14,7 @@ WO-018 adds a 512 KiB online transcript-import ceiling and server-authoritative
 `ONLINE_MEETING_NATIVE_INTEGRATION` and `ONLINE_MEETING_AUTO_INGEST` flags. Capture
 and deliberate import default on locally; native and auto-ingestion default off.
 Recording bytes, transcription minutes/requests and AI generation limits are
-reused—there is no billing or native-fetch quota.
+reused—WO-048 test billing does not meter this path and there is no native-fetch quota.
 
 ## Status and boundary
 
@@ -240,7 +240,7 @@ privacy, migration/RLS and rollout evidence is approved.
 
 - `GET /health/live` proves the process can serve a request.
 - `GET /health/ready` performs fast, bounded checks for database connectivity,
-  current Alembic head (`0052_commercial_plans_trial`), identity configuration, selected
+  current Alembic head (`0053_billing_subscriptions`), identity configuration, selected
   provider configuration and worker timing configuration. It never calls
   OpenAI.
 - Legacy `/health` and `/ready` aliases remain available.

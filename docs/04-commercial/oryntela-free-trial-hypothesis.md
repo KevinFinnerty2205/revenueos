@@ -2,7 +2,7 @@
 
 - **Status:** Commercial authority implemented by WO-047; public self-service not approved
 - **Consolidated:** 4 September 2026
-- **Billing:** Not implemented
+- **Billing:** Test-mode architecture implemented by WO-048; live billing not activated
 
 ## Implemented authority
 

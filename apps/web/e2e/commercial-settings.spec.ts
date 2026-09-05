@@ -64,6 +64,73 @@ const commercialProjection = {
     "Your 14-day trial is active. No payment method is required and you will not be charged automatically.",
 };
 
+const billingProjection = {
+  configured: false,
+  provider: "deterministic",
+  mode: "test",
+  legalEntityName: "Management Services Australia Pty. Ltd.",
+  legalEntityAbn: "15 113 119 556",
+  subscription: null,
+  invoices: [],
+  checkoutOptions: [
+    ["core", "Core", "monthly", "200.00", 5, "AUD $200 billed monthly."],
+    [
+      "core",
+      "Core",
+      "annual",
+      "2000.00",
+      5,
+      "AUD $2,000 billed annually as an annual prepayment.",
+    ],
+    ["growth", "Growth", "monthly", "350.00", 10, "AUD $350 billed monthly."],
+    [
+      "growth",
+      "Growth",
+      "annual",
+      "3500.00",
+      10,
+      "AUD $3,500 billed annually as an annual prepayment.",
+    ],
+    [
+      "complete",
+      "Complete",
+      "monthly",
+      "500.00",
+      15,
+      "AUD $500 billed monthly.",
+    ],
+    [
+      "complete",
+      "Complete",
+      "annual",
+      "5000.00",
+      15,
+      "AUD $5,000 billed annually as an annual prepayment.",
+    ],
+  ].map(
+    ([
+      planCode,
+      displayName,
+      billingInterval,
+      amount,
+      includedUserLimit,
+      paymentStatement,
+    ]) => ({
+      planCode,
+      displayName,
+      billingInterval,
+      amount,
+      currency: "AUD",
+      includedUserLimit,
+      selfServiceAvailable: true,
+      paymentStatement,
+    }),
+  ),
+  portalAvailable: false,
+  message:
+    "Billing is not configured or is manually managed. No provider subscription is being represented.",
+};
+
 async function routeSettingsBase(page: Page) {
   await page.route(`${apiOrigin}/api/v1/**`, async (route) => {
     await route.fulfill({
@@ -109,6 +176,13 @@ async function routeSettings(page: Page) {
       body: JSON.stringify(commercialProjection),
     });
   });
+  await page.route(`${apiOrigin}/api/v1/billing`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(billingProjection),
+    });
+  });
 }
 
 test("commercial settings are clear, keyboard reachable and responsive", async ({
@@ -127,7 +201,7 @@ test("commercial settings are clear, keyboard reachable and responsive", async (
     plan.getByText(/operational provider is not available yet/i),
   ).toBeVisible();
   await expect(
-    plan.getByText(/payment, invoice or Credit balances/i),
+    plan.getByText(/server-authoritative plan and entitlement view/i),
   ).toBeVisible();
   await plan.screenshot({
     path: "../../docs/07-sprints/assets/wo-047-commercial-settings-desktop.png",
@@ -143,6 +217,41 @@ test("commercial settings are clear, keyboard reachable and responsive", async (
   ).toBeVisible();
   await plan.screenshot({
     path: "../../docs/07-sprints/assets/wo-047-commercial-settings-mobile.png",
+  });
+});
+
+test("test billing checkout preparation is keyboard reachable and responsive", async ({
+  page,
+}) => {
+  await routeSettings(page);
+  await page.goto("/settings");
+
+  const billing = page.getByRole("region", { name: "Subscription & invoices" });
+  await expect(billing).toBeVisible();
+  await expect(
+    billing.getByText(/deterministic · test mode only/i),
+  ).toBeVisible();
+  await expect(billing.getByText(/Billing not configured/i)).toBeVisible();
+  const annual = billing.getByRole("radio", { name: /Core · annual/i });
+  await annual.focus();
+  await expect(annual).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(billing.getByText("Review before continuing")).toBeVisible();
+  await expect(billing.getByText(/annual prepayment/i).last()).toBeVisible();
+  await billing.screenshot({
+    path: "../../docs/07-sprints/assets/wo-048-billing-settings-desktop.png",
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await billing.scrollIntoViewIfNeeded();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  await expect(
+    billing.getByRole("button", { name: "Prepare secure checkout" }),
+  ).toBeVisible();
+  await billing.screenshot({
+    path: "../../docs/07-sprints/assets/wo-048-billing-settings-mobile.png",
   });
 });
 

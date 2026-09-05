@@ -2,8 +2,9 @@
 
 > **Oryntela consolidation — 4 September 2026:** Oryntela is the selected public
 > brand direction; RevenueOS remains the technical product/repository name. WO-047
-> implements this V1 package as internal commercial authority only. It does not
-> authorise public pricing, billing or launch.
+> implements this V1 package as internal commercial authority. WO-048 adds a
+> test-only billing architecture over it; neither work order authorises public
+> pricing, live payments or launch.
 
 - **Status:** V1 server authority implemented; customer validation still required
 - **Principle:** Core is a coherent operating loop; modules extend it without making
@@ -18,9 +19,9 @@
 | Complete   | AUD 500 | AUD 5,000 | 15                 | Growth + Create + external CRM connectors    |
 | Enterprise | Custom  | Custom | operator-approved      | Complete + specifically contracted needs     |
 
-These amounts are immutable V1 internal catalogue data, not a checkout, invoice or
-public offer. Enterprise does not imply SSO, SCIM, residency, custom SLA or any other
-unbuilt feature.
+These amounts are immutable V1 internal catalogue data and the server authority for
+the WO-048 test checkout mapping; they are not an approved public offer. Enterprise
+does not imply SSO, SCIM, residency, custom SLA or any other unbuilt feature.
 
 ## Core boundary
 
@@ -59,19 +60,24 @@ and never deletes content or users. Trial provides Complete-profile access for 1
 days and then 30 days read/export grace, with no card or automatic charge.
 
 Ordinary sellers see calm contextual explanations, not plan internals or prices.
-Organisation admins may inspect the current plan/status/users/modules in Settings but
-cannot mutate it. Approved support operators use the reviewed commercial workflow.
+Organisation admins may inspect the current plan/status/users/modules in Settings.
+In test mode they can explicitly prepare hosted checkout and request bounded
+subscription operations; only verified provider facts change commercial access.
+Approved support operators retain the reviewed commercial workflow.
 
 ## Open commercial decisions
 
 - willingness-to-pay and publication approval;
 - add-on and extra-user prices;
-- GST/tax, terms, cancellation, proration and discount authority;
-- billing provider and payment-failure reconciliation;
+- GST/tax presentation, tax-invoice wording, terms, discounts and refund authority;
+- live billing/provider activation, exact retry/dunning configuration and production
+  reconciliation proof;
+- production validation of the approved immediate higher-tier upgrade with
+  provider-calculated proration and next-renewal downgrade policy;
 - public-trial signup, abuse and conversion controls;
 - Credits unit, allowance, pack, expiry, refund and provider economics; and
 - any individually contracted Enterprise requirement.
 
 See [Oryntela packaging](../04-commercial/oryntela-packaging-hypothesis.md),
 [Commercial authority](../03-engineering/commercial-authority.md) and
-[ADR 0069](../08-decisions/0069-versioned-commercial-authority.md).
+[Billing operations](../03-engineering/billing-subscription-operations.md).

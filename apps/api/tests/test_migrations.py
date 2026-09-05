@@ -214,7 +214,90 @@ def test_personalized_outreach_migration_schema_guards_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
+        )
+
+
+def test_billing_migration_is_tenant_scoped_retained_and_reversible(tmp_path: Path, monkeypatch: object) -> None:
+    database_path = tmp_path / "billing-migration.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")  # type: ignore[attr-defined]
+    configuration = Config("alembic.ini")
+    command.upgrade(configuration, "0052_commercial_plans_trial")
+    organisation_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    account_id = str(uuid.uuid4())
+    operation_id = str(uuid.uuid4())
+    receipt_id = str(uuid.uuid4())
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            "INSERT INTO organisations (id, name, slug) VALUES (?, 'Billing migration', ?)",
+            (organisation_id, f"billing-{organisation_id[:8]}"),
+        )
+        connection.execute(
+            "INSERT INTO users (id, external_auth_id, email, display_name) VALUES (?, ?, ?, 'Owner')",
+            (user_id, f"user-{user_id}", f"{user_id[:8]}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO organisation_memberships (organisation_id, user_id, role) VALUES (?, ?, 'admin')",
+            (organisation_id, user_id),
+        )
+        connection.commit()
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert {
+            "billing_accounts",
+            "billing_subscriptions",
+            "billing_invoice_projections",
+            "billing_operations",
+            "billing_provider_event_receipts",
+        }.issubset(tables)
+        connection.execute(
+            "INSERT INTO billing_accounts "
+            "(id, organisation_id, provider, provider_mode, provider_customer_id, status) "
+            "VALUES (?, ?, 'deterministic', 'test', 'cus_test_migration', 'active')",
+            (account_id, organisation_id),
+        )
+        connection.execute(
+            "INSERT INTO billing_operations "
+            "(id, organisation_id, requested_by_user_id, operation_type, idempotency_key, request_fingerprint, status) "
+            "VALUES (?, ?, ?, 'portal', 'migration-idempotency-0001', ?, 'succeeded')",
+            (operation_id, organisation_id, user_id, "0" * 64),
+        )
+        connection.execute(
+            "INSERT INTO billing_provider_event_receipts "
+            "(id, organisation_id, provider, provider_mode, provider_event_id, event_type, "
+            "provider_created_at, result) VALUES (?, ?, 'deterministic', 'test', 'evt_migration_001', "
+            "'customer.subscription.updated', ?, 'processed')",
+            (receipt_id, organisation_id, "2032-01-01T00:00:00+00:00"),
+        )
+        connection.commit()
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                "UPDATE billing_provider_event_receipts SET result = 'ignored_stale' WHERE id = ?",
+                (receipt_id,),
+            )
+        connection.rollback()
+        with pytest.raises(IntegrityError):
+            connection.execute("DELETE FROM organisations WHERE id = ?", (organisation_id,))
+        connection.rollback()
+
+    command.downgrade(configuration, "0052_commercial_plans_trial")
+    with connect(database_path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert not {name for name in tables if name.startswith("billing_")}
+        source_constraint = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'organisation_commercial_states'"
+        ).fetchone()
+        assert source_constraint is not None and "billing_provider" not in source_constraint[0]
+
+    command.upgrade(configuration, "head")
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0053_billing_subscriptions",
         )
 
 
@@ -256,7 +339,7 @@ def test_native_crm_migration_downgrades_and_reupgrades(tmp_path: Path, monkeypa
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -403,7 +486,7 @@ def test_campaign_sequence_migration_schema_immutability_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -437,7 +520,7 @@ def test_event_intelligence_migration_schema_and_cycle(
         interaction_columns = {row[1] for row in connection.execute("PRAGMA table_info(interactions)")}
         assert "event_id" in interaction_columns
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
     command.downgrade(configuration, "0039_campaign_sequences")
@@ -459,7 +542,7 @@ def test_event_intelligence_migration_schema_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -536,7 +619,7 @@ def test_prospect_research_migration_schema_backfill_and_cycle(
             (company_id,),
         ).fetchone() == ("example.com",)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
         run_columns = {row[1] for row in connection.execute("PRAGMA table_info(prospect_research_runs)")}
@@ -573,7 +656,7 @@ def test_prospect_research_migration_schema_backfill_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
     command.downgrade(configuration, "0034_crm_sync")
@@ -586,7 +669,7 @@ def test_prospect_research_migration_schema_backfill_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -667,7 +750,7 @@ def test_integration_execution_migration_indexes_guards_and_cycle(
         }
         assert {"external_account_id", "external_account_name", "granted_scopes_json"}.issubset(connection_columns)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
     command.downgrade(configuration, "0033_sales_methodology")
@@ -703,7 +786,7 @@ def test_integration_execution_migration_indexes_guards_and_cycle(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -790,7 +873,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "methodology_reviews",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
         opportunity_columns = {
             row[1]: row[3] for row in connection.execute("PRAGMA table_info(opportunities)").fetchall()
@@ -1535,7 +1618,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
         connection.execute(
             """
@@ -1589,7 +1672,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
         connection.execute(
             """
@@ -1635,7 +1718,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
         }
         assert {"worker_id", "heartbeat_at"}.issubset(job_columns_after_worker_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
     command.downgrade(configuration, "0004_ai_database_foundation")
@@ -1651,7 +1734,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
     command.downgrade(configuration, "0003_meeting_domain")
@@ -1689,7 +1772,7 @@ def test_migrations_upgrade_downgrade_and_reupgrade_ai_worker_queue(
             "opportunity_audit_events",
         }.issubset(tables_after_reupgrade)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
     command.downgrade(configuration, "0002_core_business_entities")
@@ -1756,7 +1839,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             "revenue_brain_insights",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
     command.downgrade(configuration, "0018_revenue_brain")
@@ -1776,7 +1859,7 @@ def test_revenue_brain_reasoning_is_the_single_head_after_snapshots(
             row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -1812,7 +1895,7 @@ def test_sales_analytics_index_migration_is_reversible(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -1924,7 +2007,7 @@ def test_sales_targets_migration_is_reversible_and_enforces_active_identity(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -2041,7 +2124,7 @@ def test_transparent_forecast_migration_is_reversible_and_enforces_period_identi
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -2172,7 +2255,7 @@ def test_manager_intelligence_migration_is_additive_and_reversible(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -2185,7 +2268,8 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     monkeypatch.setenv("DATABASE_URL", database_url)  # type: ignore[attr-defined]
     configuration = Config("alembic.ini")
     script = ScriptDirectory.from_config(configuration)
-    assert [revision.revision for revision in script.walk_revisions()][:21] == [
+    assert [revision.revision for revision in script.walk_revisions()][:22] == [
+        "0053_billing_subscriptions",
         "0052_commercial_plans_trial",
         "0051_selling_profile",
         "0050_real_data_operations",
@@ -2208,7 +2292,7 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
         "0033_sales_methodology",
         "0032_integration_execution",
     ]
-    assert script.get_heads() == ["0052_commercial_plans_trial"]
+    assert script.get_heads() == ["0053_billing_subscriptions"]
     command.upgrade(configuration, "0020_private_beta_readiness")
 
     organisation_a = uuid.uuid4()
@@ -2318,7 +2402,7 @@ def test_interaction_migration_backfills_multiple_tenants_and_reupgrades_determi
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
         assert {row[0]: row[1] for row in connection.execute("SELECT id, interaction_id FROM meetings")} == expected
         assert connection.execute("SELECT count(*) FROM interactions").fetchone() == (3,)
@@ -2434,7 +2518,7 @@ def test_pre_interaction_brief_migration_is_immutable_and_reupgrades_cleanly(
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM pre_interaction_briefs").fetchone() == (0,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -2564,7 +2648,7 @@ def test_visual_evidence_migration_review_guard_and_downgrade_reupgrade(
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM visual_assets").fetchone() == (0,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -2632,7 +2716,7 @@ def test_recording_transcription_migration_backfills_history_and_reupgrades_clea
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
         assert connection.execute("SELECT transcript_id, version, raw_text FROM transcript_versions").fetchone() == (
             transcript_id,
@@ -2662,7 +2746,7 @@ def test_recording_transcription_migration_backfills_history_and_reupgrades_clea
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM transcript_versions").fetchone() == (1,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -2743,7 +2827,7 @@ def test_face_to_face_companion_marker_migration_is_immutable_and_reupgrades_cle
     with connect(database_path) as connection:
         assert connection.execute("SELECT count(*) FROM interaction_markers").fetchone() == (0,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -2897,7 +2981,7 @@ def test_postgresql_worker_migration_downgrade_and_reupgrade() -> None:
                 if expected_present:
                     assert {"worker_id", "heartbeat_at"}.issubset(columns)
                     assert function_present is True
-                    assert version == "0052_commercial_plans_trial"
+                    assert version == "0053_billing_subscriptions"
                 else:
                     assert not {"worker_id", "heartbeat_at"} & columns
                     assert function_present is False
@@ -2941,7 +3025,7 @@ def test_create_studio_migration_downgrades_and_reupgrades(tmp_path: Path, monke
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert create_tables.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
         template_version_columns = {
             row[1]: row for row in connection.execute("PRAGMA table_info(create_template_versions)").fetchall()
@@ -2980,7 +3064,7 @@ def test_create_studio_migration_downgrades_and_reupgrades(tmp_path: Path, monke
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -3006,7 +3090,7 @@ def test_roi_business_case_migration_downgrades_and_reupgrades(tmp_path: Path, m
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert roi_tables.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
         model_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(create_value_model_versions)").fetchall()
@@ -3027,7 +3111,7 @@ def test_roi_business_case_migration_downgrades_and_reupgrades(tmp_path: Path, m
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -3183,7 +3267,7 @@ def test_real_data_operations_migration_is_reversible_and_history_is_immutable(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -3298,7 +3382,7 @@ def test_selling_profile_migration_is_tenant_safe_versioned_and_reversible(
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
 
 
@@ -3350,7 +3434,7 @@ def test_commercial_migration_seeds_versions_backfills_add_ons_and_is_reversible
     with connect(database_path) as connection:
         connection.execute("PRAGMA foreign_keys=ON")
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
         catalogue = connection.execute(
             "SELECT code, monthly_price_amount, annual_price_amount, currency, included_user_limit, modules_json "
@@ -3444,5 +3528,5 @@ def test_commercial_migration_seeds_versions_backfills_add_ons_and_is_reversible
     command.upgrade(configuration, "head")
     with connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0052_commercial_plans_trial",
+            "0053_billing_subscriptions",
         )
