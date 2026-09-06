@@ -300,6 +300,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "event_encounters",
         "event_campaign_links",
         "integration_connections",
+        "provider_outbound_operations",
+        "provider_replies",
+        "provider_calendar_events",
+        "provider_sync_states",
         "execution_previews",
         "action_executions",
         "action_execution_attempts",
@@ -625,6 +629,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "billing_invoice_id": uuid.uuid4(),
                 "billing_operation_id": uuid.uuid4(),
                 "billing_receipt_id": uuid.uuid4(),
+                "microsoft_connection_id": uuid.uuid4(),
+                "provider_outbound_operation_id": uuid.uuid4(),
+                "provider_reply_id": uuid.uuid4(),
+                "provider_calendar_event_id": uuid.uuid4(),
+                "provider_sync_state_id": uuid.uuid4(),
             }
         )
 
@@ -1736,6 +1745,32 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     await connection.execute(
                         text(
                             """
+                            INSERT INTO integration_connections
+                                (id, organisation_id, connector_key,
+                                 connection_status, created_by_user_id,
+                                 credential_reference, capability_state_json,
+                                 external_account_id, external_account_name,
+                                 external_account_email, external_tenant_id,
+                                 granted_scopes_json)
+                            VALUES
+                                (:microsoft_connection_id, :organisation_id,
+                                 'microsoft_365', 'active', :user_id, NULL,
+                                 '["send_email","reconcile_email","read_calendar"]'::json,
+                                 :microsoft_account_id, :microsoft_account_name,
+                                 :email, :microsoft_tenant_id,
+                                 '["Mail.Send","Mail.Read","Calendars.ReadBasic"]'::json)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "microsoft_account_id": f"microsoft-{suffix.lower()}",
+                            "microsoft_account_name": f"RLS Microsoft {suffix}",
+                            "microsoft_tenant_id": str(uuid.uuid4()),
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
                             INSERT INTO oauth_connection_states
                                 (id, organisation_id, user_id, connector_key,
                                  state_hash, redirect_uri, expires_at)
@@ -1992,6 +2027,96 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             VALUES
                                 (:action_audit_event_id, :organisation_id, :action_id,
                                  :user_id, 'proposed', 1, '{}'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO provider_outbound_operations
+                                (id, organisation_id, connection_id, action_id,
+                                 provider_key, idempotency_key, state,
+                                 sender_email, recipient_email, submitted_at)
+                            VALUES
+                                (:provider_outbound_operation_id, :organisation_id,
+                                 :microsoft_connection_id, :action_id,
+                                 'microsoft_365', :provider_key_hash, 'reconciled',
+                                 :email, :recipient_email, now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "provider_key_hash": suffix.lower() * 64,
+                            "recipient_email": f"customer-{suffix.lower()}@example.com",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO provider_replies
+                                (id, organisation_id, connection_id,
+                                 outbound_operation_id, provider_key,
+                                 provider_message_id, sender_email,
+                                 recipient_emails_json, subject, body_text,
+                                 kind, match_state, contact_id, company_id,
+                                 opportunity_id, received_at)
+                            VALUES
+                                (:provider_reply_id, :organisation_id,
+                                 :microsoft_connection_id,
+                                 :provider_outbound_operation_id,
+                                 'microsoft_365', :provider_reply_message_id,
+                                 :recipient_email, :provider_reply_recipients,
+                                 'Synthetic reply', 'Synthetic reply body',
+                                 'reply', 'matched', :contact_id, :company_id,
+                                 :opportunity_id, now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "provider_reply_message_id": f"microsoft-reply-{suffix.lower()}",
+                            "recipient_email": f"customer-{suffix.lower()}@example.com",
+                            "provider_reply_recipients": f'["{identity_parameters["email"]}"]',
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO provider_calendar_events
+                                (id, organisation_id, connection_id, provider_key,
+                                 provider_event_id, title, start_at, end_at,
+                                 provider_timezone, attendee_emails_json,
+                                 sensitivity, state, match_state, contact_id,
+                                 company_id, opportunity_id, interaction_id,
+                                 provider_last_modified_at, last_synced_at)
+                            VALUES
+                                (:provider_calendar_event_id, :organisation_id,
+                                 :microsoft_connection_id, 'microsoft_365',
+                                 :provider_event_id, 'Synthetic customer meeting',
+                                 now() + interval '1 day', now() + interval '2 days',
+                                 'UTC', :provider_reply_recipients, 'normal',
+                                 'active', 'matched', :contact_id, :company_id,
+                                 :opportunity_id, :interaction_id, now(), now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "provider_event_id": f"microsoft-event-{suffix.lower()}",
+                            "provider_reply_recipients": f'["{identity_parameters["email"]}"]',
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO provider_sync_states
+                                (id, organisation_id, connection_id, provider_key,
+                                 resource_kind, window_start_at, window_end_at,
+                                 last_successful_sync_at)
+                            VALUES
+                                (:provider_sync_state_id, :organisation_id,
+                                 :microsoft_connection_id, 'microsoft_365',
+                                 'calendar', now() - interval '14 days',
+                                 now() + interval '90 days', now())
                             """
                         ),
                         identity_parameters,
@@ -3319,6 +3444,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'event_encounters',
                                     'event_campaign_links',
                                     'integration_connections',
+                                    'provider_outbound_operations',
+                                    'provider_replies',
+                                    'provider_calendar_events',
+                                    'provider_sync_states',
                                     'execution_previews',
                                     'action_executions',
                                     'action_execution_attempts',
@@ -3476,7 +3605,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "credit_ledger_entries",
                 }
                 expected_tenant_a_counts = {
-                    table: (0 if table in empty_wo022_tables else 2 if table == "revenue_brain_snapshots" else 1)
+                    table: (
+                        0
+                        if table in empty_wo022_tables
+                        else 2
+                        if table in {"revenue_brain_snapshots", "integration_connections"}
+                        else 1
+                    )
                     for table in tenant_tables
                 }
                 assert tenant_a_counts == expected_tenant_a_counts
@@ -4020,6 +4155,82 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             "organisation_id": tenant_b["organisation_id"],
                         },
                     ),
+                    (
+                        """
+                        INSERT INTO provider_outbound_operations
+                            (id, organisation_id, connection_id, action_id,
+                             provider_key, idempotency_key, state,
+                             sender_email, recipient_email)
+                        VALUES
+                            (:id, :organisation_id, :connection_id, :action_id,
+                             'microsoft_365', :idempotency_key, 'accepted',
+                             'seller@example.com', 'recipient@example.com')
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "connection_id": tenant_b["microsoft_connection_id"],
+                            "action_id": tenant_b["action_id"],
+                            "idempotency_key": "z" * 64,
+                        },
+                    ),
+                    (
+                        """
+                        INSERT INTO provider_replies
+                            (id, organisation_id, connection_id,
+                             outbound_operation_id, provider_key,
+                             provider_message_id, sender_email,
+                             recipient_emails_json, subject, body_text,
+                             kind, match_state, received_at)
+                        VALUES
+                            (:id, :organisation_id, :connection_id,
+                             :outbound_operation_id, 'microsoft_365',
+                             'cross-tenant-reply', 'recipient@example.com',
+                             '[]'::json, 'Reply', 'Body', 'reply',
+                             'review_required', now())
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "connection_id": tenant_b["microsoft_connection_id"],
+                            "outbound_operation_id": tenant_b["provider_outbound_operation_id"],
+                        },
+                    ),
+                    (
+                        """
+                        INSERT INTO provider_calendar_events
+                            (id, organisation_id, connection_id, provider_key,
+                             provider_event_id, title, start_at, end_at,
+                             provider_timezone, attendee_emails_json,
+                             sensitivity, state, match_state, last_synced_at)
+                        VALUES
+                            (:id, :organisation_id, :connection_id,
+                             'microsoft_365', 'cross-tenant-event', 'Meeting',
+                             now(), now() + interval '1 hour', 'UTC', '[]'::json,
+                             'normal', 'active', 'unmatched', now())
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "connection_id": tenant_b["microsoft_connection_id"],
+                        },
+                    ),
+                    (
+                        """
+                        INSERT INTO provider_sync_states
+                            (id, organisation_id, connection_id, provider_key,
+                             resource_kind, window_start_at, window_end_at)
+                        VALUES
+                            (:id, :organisation_id, :connection_id,
+                             'microsoft_365', 'mail_inbox',
+                             now() - interval '1 day', now())
+                        """,
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "connection_id": tenant_b["microsoft_connection_id"],
+                        },
+                    ),
                 )
                 for statement, parameters in cross_tenant_inserts:
                     transaction = await connection.begin()
@@ -4137,6 +4348,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "crm_stage_mappings",
                     "crm_field_mappings",
                     "crm_entity_mappings",
+                    "provider_replies",
+                    "provider_calendar_events",
+                    "provider_sync_states",
+                    "provider_outbound_operations",
                     "encrypted_connector_credentials",
                     "oauth_connection_states",
                     "integration_connections",

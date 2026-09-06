@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.models import (
@@ -423,17 +423,21 @@ class OutreachRepository:
         self,
         organisation_id: UUID,
         user_id: UUID,
+        *,
+        microsoft_enabled: bool = False,
     ) -> IntegrationConnection | None:
+        connector_keys = ("microsoft_365", "mock_email") if microsoft_enabled else ("mock_email",)
         return cast(
             IntegrationConnection | None,
             await self.session.scalar(
                 select(IntegrationConnection)
                 .where(
                     IntegrationConnection.organisation_id == organisation_id,
-                    IntegrationConnection.connector_key == "mock_email",
+                    IntegrationConnection.connector_key.in_(connector_keys),
                     IntegrationConnection.connection_status == "active",
                     IntegrationConnection.created_by_user_id == user_id,
                 )
+                .order_by(case((IntegrationConnection.connector_key == "microsoft_365", 0), else_=1))
                 .limit(1)
             ),
         )

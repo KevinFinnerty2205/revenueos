@@ -4889,7 +4889,7 @@ class EngageCampaignEnrollment(TimestampMixin, Base):
             name="ck_engage_campaign_enrollments_outcome",
         ),
         CheckConstraint(
-            "outcome_provenance IS NULL OR outcome_provenance = 'seller_reported'",
+            "outcome_provenance IS NULL OR outcome_provenance IN ('seller_reported', 'provider')",
             name="ck_engage_campaign_enrollments_provenance",
         ),
         ForeignKeyConstraint(
@@ -5313,7 +5313,7 @@ class IntegrationConnection(TimestampMixin, Base):
     __tablename__ = "integration_connections"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot')",
+            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot', 'microsoft_365')",
             name="ck_integration_connections_key",
         ),
         CheckConstraint(
@@ -5333,10 +5333,22 @@ class IntegrationConnection(TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("organisation_id", "id", name="uq_integration_connections_org_id"),
-        UniqueConstraint(
+        Index(
+            "uq_integration_connections_org_key_non_microsoft",
             "organisation_id",
             "connector_key",
-            name="uq_integration_connections_org_key",
+            unique=True,
+            postgresql_where=text("connector_key <> 'microsoft_365'"),
+            sqlite_where=text("connector_key <> 'microsoft_365'"),
+        ),
+        Index(
+            "uq_integration_connections_org_microsoft_owner",
+            "organisation_id",
+            "connector_key",
+            "created_by_user_id",
+            unique=True,
+            postgresql_where=text("connector_key = 'microsoft_365' AND connection_status <> 'revoked'"),
+            sqlite_where=text("connector_key = 'microsoft_365' AND connection_status <> 'revoked'"),
         ),
         Index(
             "ix_integration_connections_org_status",
@@ -5363,6 +5375,8 @@ class IntegrationConnection(TimestampMixin, Base):
     capability_state_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
     external_account_id: Mapped[str | None] = mapped_column(String(128))
     external_account_name: Mapped[str | None] = mapped_column(String(200))
+    external_account_email: Mapped[str | None] = mapped_column(String(320))
+    external_tenant_id: Mapped[str | None] = mapped_column(String(128))
     granted_scopes_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
     metadata_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
@@ -5370,7 +5384,10 @@ class IntegrationConnection(TimestampMixin, Base):
 class OAuthConnectionState(Base):
     __tablename__ = "oauth_connection_states"
     __table_args__ = (
-        CheckConstraint("connector_key = 'hubspot'", name="ck_oauth_connection_states_connector"),
+        CheckConstraint(
+            "connector_key IN ('hubspot', 'microsoft_365')",
+            name="ck_oauth_connection_states_connector",
+        ),
         CheckConstraint("length(state_hash) = 64", name="ck_oauth_connection_states_hash"),
         CheckConstraint("length(trim(redirect_uri)) > 0", name="ck_oauth_connection_states_redirect"),
         ForeignKeyConstraint(
@@ -5394,13 +5411,19 @@ class OAuthConnectionState(Base):
     redirect_uri: Mapped[str] = mapped_column(String(2048), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pkce_verifier_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary)
+    pkce_nonce: Mapped[bytes | None] = mapped_column(LargeBinary(12))
+    oidc_nonce_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class EncryptedConnectorCredential(TimestampMixin, Base):
     __tablename__ = "encrypted_connector_credentials"
     __table_args__ = (
-        CheckConstraint("connector_key = 'hubspot'", name="ck_encrypted_connector_credentials_connector"),
+        CheckConstraint(
+            "connector_key IN ('hubspot', 'microsoft_365')",
+            name="ck_encrypted_connector_credentials_connector",
+        ),
         CheckConstraint("length(nonce) = 12", name="ck_encrypted_connector_credentials_nonce"),
         CheckConstraint("key_version > 0", name="ck_encrypted_connector_credentials_key_version"),
         ForeignKeyConstraint(
@@ -5422,6 +5445,266 @@ class EncryptedConnectorCredential(TimestampMixin, Base):
     encrypted_payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     nonce: Mapped[bytes] = mapped_column(LargeBinary(12), nullable=False)
     key_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class ProviderOutboundOperation(TimestampMixin, Base):
+    """Provider-neutral receipt for one immutable approved outbound email operation."""
+
+    __tablename__ = "provider_outbound_operations"
+    __table_args__ = (
+        CheckConstraint("provider_key = 'microsoft_365'", name="ck_provider_outbound_operations_provider"),
+        CheckConstraint(
+            "state IN ('queued', 'submitting', 'accepted', 'reconciled', 'unknown', 'failed')",
+            name="ck_provider_outbound_operations_state",
+        ),
+        CheckConstraint("length(idempotency_key) = 64", name="ck_provider_outbound_operations_idempotency"),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_provider_outbound_operations_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "action_id"],
+            ["action_proposals.organisation_id", "action_proposals.id"],
+            name="fk_provider_outbound_operations_action",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_provider_outbound_operations_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "connection_id",
+            "idempotency_key",
+            name="uq_provider_outbound_operations_idempotency",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "connection_id",
+            "provider_message_id",
+            name="uq_provider_outbound_operations_provider_message",
+        ),
+        Index(
+            "ix_provider_outbound_operations_org_state",
+            "organisation_id",
+            "connection_id",
+            "state",
+            "submitted_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    sender_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    recipient_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255))
+    internet_message_id: Mapped[str | None] = mapped_column(String(998))
+    conversation_id: Mapped[str | None] = mapped_column(String(255))
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    safe_failure_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class ProviderReply(TimestampMixin, Base):
+    """A bounded inbound communication retained only when correlated to Oryntela outreach."""
+
+    __tablename__ = "provider_replies"
+    __table_args__ = (
+        CheckConstraint("provider_key = 'microsoft_365'", name="ck_provider_replies_provider"),
+        CheckConstraint("kind IN ('reply', 'automatic_reply', 'ndr')", name="ck_provider_replies_kind"),
+        CheckConstraint(
+            "match_state IN ('matched', 'review_required')",
+            name="ck_provider_replies_match_state",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_provider_replies_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "outbound_operation_id"],
+            ["provider_outbound_operations.organisation_id", "provider_outbound_operations.id"],
+            name="fk_provider_replies_outbound",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_provider_replies_contact",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_provider_replies_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_provider_replies_opportunity",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_provider_replies_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "connection_id",
+            "provider_message_id",
+            name="uq_provider_replies_provider_message",
+        ),
+        Index("ix_provider_replies_org_received", "organisation_id", "received_at"),
+        Index("ix_provider_replies_org_outbound", "organisation_id", "outbound_operation_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    outbound_operation_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    internet_message_id: Mapped[str | None] = mapped_column(String(998))
+    conversation_id: Mapped[str | None] = mapped_column(String(255))
+    sender_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    recipient_emails_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    body_text: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    match_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProviderCalendarEvent(TimestampMixin, Base):
+    """Allow-listed calendar context; provider payloads and event bodies are never persisted."""
+
+    __tablename__ = "provider_calendar_events"
+    __table_args__ = (
+        CheckConstraint("provider_key = 'microsoft_365'", name="ck_provider_calendar_events_provider"),
+        CheckConstraint("state IN ('active', 'cancelled', 'deleted')", name="ck_provider_calendar_events_state"),
+        CheckConstraint(
+            "match_state IN ('unmatched', 'matched', 'review_required', 'internal', 'private')",
+            name="ck_provider_calendar_events_match_state",
+        ),
+        CheckConstraint("end_at > start_at", name="ck_provider_calendar_events_time"),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_provider_calendar_events_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "contact_id"],
+            ["contacts.organisation_id", "contacts.id"],
+            name="fk_provider_calendar_events_contact",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "company_id"],
+            ["companies.organisation_id", "companies.id"],
+            name="fk_provider_calendar_events_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_provider_calendar_events_opportunity",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "interaction_id"],
+            ["interactions.organisation_id", "interactions.id"],
+            name="fk_provider_calendar_events_interaction",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_provider_calendar_events_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "connection_id",
+            "provider_event_id",
+            name="uq_provider_calendar_events_provider_event",
+        ),
+        Index("ix_provider_calendar_events_org_start", "organisation_id", "start_at", "state"),
+        Index("ix_provider_calendar_events_org_interaction", "organisation_id", "interaction_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    i_cal_uid: Mapped[str | None] = mapped_column(String(255))
+    series_master_id: Mapped[str | None] = mapped_column(String(255))
+    change_key: Mapped[str | None] = mapped_column(String(255))
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    provider_timezone: Mapped[str] = mapped_column(String(100), nullable=False)
+    organiser_email: Mapped[str | None] = mapped_column(String(320))
+    attendee_emails_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    location: Mapped[str | None] = mapped_column(String(500))
+    online_meeting_url: Mapped[str | None] = mapped_column(String(2048))
+    sensitivity: Mapped[str] = mapped_column(String(24), nullable=False, default="normal", server_default="normal")
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    match_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    company_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    interaction_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    provider_last_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProviderSyncState(TimestampMixin, Base):
+    __tablename__ = "provider_sync_states"
+    __table_args__ = (
+        CheckConstraint("provider_key = 'microsoft_365'", name="ck_provider_sync_states_provider"),
+        CheckConstraint(
+            "resource_kind IN ('mail_inbox', 'mail_sent', 'calendar')",
+            name="ck_provider_sync_states_resource",
+        ),
+        CheckConstraint("consecutive_failures >= 0", name="ck_provider_sync_states_failures"),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_provider_sync_states_connection",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_provider_sync_states_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "connection_id",
+            "resource_kind",
+            name="uq_provider_sync_states_resource",
+        ),
+        Index("ix_provider_sync_states_org_health", "organisation_id", "last_error_category"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    resource_kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    delta_link: Mapped[str | None] = mapped_column(Text)
+    window_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_successful_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_category: Mapped[str | None] = mapped_column(String(80))
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
 
 class CRMEntityMapping(TimestampMixin, Base):
@@ -5998,7 +6281,7 @@ class ActionExecution(TimestampMixin, Base):
     __tablename__ = "action_executions"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot')",
+            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot', 'microsoft_365')",
             name="ck_action_executions_connector",
         ),
         CheckConstraint(
@@ -6155,7 +6438,8 @@ class IntegrationAuditEvent(Base):
             "'connection_reauthorisation_required', 'mapping_created', 'mapping_changed', 'mapping_removed', "
             "'field_mapping_changed', 'stage_mapping_changed', "
             "'execution_preview_created', 'execution_confirmed', 'execution_started', "
-            "'execution_succeeded', 'execution_failed', 'execution_unknown_state', 'execution_reconciled')",
+            "'execution_succeeded', 'execution_failed', 'execution_unknown_state', 'execution_reconciled', "
+            "'provider_sync_completed')",
             name="ck_integration_audit_events_type",
         ),
         CheckConstraint("duration_ms IS NULL OR duration_ms >= 0", name="ck_integration_audit_events_duration"),

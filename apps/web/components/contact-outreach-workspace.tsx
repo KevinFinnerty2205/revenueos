@@ -188,10 +188,11 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
       const options = await apiRequest<ActionExecutionOptionListResponse>(
         `/api/v1/actions/${outreach.actionId}/execution-options`,
       );
-      const option = options.items[0];
+      const option =
+        options.items.find((item) => !item.simulationOnly) ?? options.items[0];
       if (!option) {
         throw new Error(
-          "No sender-bound mailbox is available. Production mailbox sending is not enabled in this release.",
+          "Connect your work email to send through Oryntela. Open Settings to connect Microsoft 365.",
         );
       }
       const result = await apiRequest<ExecutionPreview>(
@@ -587,12 +588,22 @@ function OutreachEditor({
   if (preview && emailPreview) {
     return (
       <section className="form-card" aria-labelledby="send-preview-title">
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+        <div
+          className={`rounded-xl border p-4 ${
+            preview.simulationOnly
+              ? "border-amber-300 bg-amber-50 text-amber-950"
+              : "border-teal-300 bg-teal-50 text-teal-950"
+          }`}
+        >
           <p className="text-xs font-bold uppercase tracking-[0.15em]">
-            Simulation only
+            {preview.simulationOnly
+              ? "Simulation only"
+              : "Microsoft 365 · live send"}
           </p>
           <p className="mt-1 text-sm">
-            No external email will be sent by this connection.
+            {preview.simulationOnly
+              ? "No external email will be sent by this connection."
+              : "Confirming will queue this exact email for your connected work mailbox."}
           </p>
         </div>
         <h2 id="send-preview-title" className="form-legend mt-5">
@@ -643,7 +654,11 @@ function OutreachEditor({
               disabled={busy !== null}
               onClick={onConfirm}
             >
-              {busy === "send" ? "Submitting…" : "Run email simulation"}
+              {busy === "send"
+                ? "Submitting…"
+                : preview.simulationOnly
+                  ? "Run email simulation"
+                  : "Approve and send"}
             </button>
             <button
               type="button"

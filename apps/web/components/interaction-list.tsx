@@ -12,6 +12,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { MicrosoftCalendarContext } from "@/components/microsoft-calendar-context";
 import {
   formatInteractionDate,
   interactionStatuses,
@@ -129,6 +130,10 @@ export function InteractionList() {
           Create interaction
         </Link>
       </header>
+
+      {!loading && !error && result ? (
+        <MicrosoftCalendarContext interactions={result.items} />
+      ) : null}
 
       <form
         role="search"

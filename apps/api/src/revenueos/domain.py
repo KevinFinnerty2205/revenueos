@@ -383,10 +383,13 @@ class ConnectorKey(StrEnum):
     MOCK_CRM = "mock_crm"
     MOCK_TASK = "mock_task"
     HUBSPOT = "hubspot"
+    MICROSOFT_365 = "microsoft_365"
 
 
 class ConnectorCapability(StrEnum):
     SEND_EMAIL = "send_email"
+    RECONCILE_EMAIL = "reconcile_email"
+    READ_CALENDAR = "read_calendar"
     CREATE_CALENDAR_EVENT = "create_calendar_event"
     UPDATE_OPPORTUNITY = "update_opportunity"
     UPDATE_CONTACT = "update_contact"

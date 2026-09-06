@@ -2904,7 +2904,12 @@ export interface ActionGenerationResponse {
 }
 
 export type ConnectorKey =
-  "mock_email" | "mock_calendar" | "mock_crm" | "mock_task" | "hubspot";
+  | "mock_email"
+  | "mock_calendar"
+  | "mock_crm"
+  | "mock_task"
+  | "hubspot"
+  | "microsoft_365";
 export type ConnectorCapability =
   | "send_email"
   | "create_calendar_event"
@@ -2913,7 +2918,9 @@ export type ConnectorCapability =
   | "create_activity"
   | "create_task"
   | "post_internal_message"
-  | "upload_or_share_document";
+  | "upload_or_share_document"
+  | "reconcile_email"
+  | "read_calendar";
 export type ConnectionStatus =
   "active" | "reauthorisation_required" | "revoked";
 export type ExecutionStatus =
@@ -2929,7 +2936,7 @@ export type ExecutionStatus =
 export interface ConnectorDefinition {
   connectorKey: ConnectorKey;
   displayName: string;
-  providerFamily: "mock" | "crm";
+  providerFamily: "mock" | "crm" | "mailbox_calendar";
   supportedCapabilities: ConnectorCapability[];
   authenticationType: "mock_local" | "oauth2_authorisation_code";
   executionRiskClasses: ActionRiskClass[];
@@ -2958,6 +2965,8 @@ export interface OrganisationConnection {
   revokedAt: string | null;
   externalAccountId: string | null;
   externalAccountName: string | null;
+  externalAccountEmail?: string | null;
+  externalTenantId?: string | null;
   grantedScopes: string[];
   metadataVersion: number;
   executionMode: "simulation" | "live";
@@ -2968,6 +2977,51 @@ export interface OrganisationConnection {
 
 export interface ConnectionListResponse {
   items: OrganisationConnection[];
+  total: number;
+}
+
+export interface MicrosoftSyncResource {
+  resourceKind: "mail_sent" | "mail_inbox" | "calendar";
+  processed: number;
+  retained: number;
+  state: "healthy" | "degraded";
+  safeMessage: string;
+}
+
+export interface MicrosoftSyncResponse {
+  connectionId: string;
+  syncedAt: string;
+  resources: MicrosoftSyncResource[];
+}
+
+export interface MicrosoftSyncStatus {
+  connectionId: string;
+  lastSuccessfulSyncAt: string | null;
+  lastErrorCategory: string | null;
+  state: "not_started" | "healthy" | "degraded";
+}
+
+export interface MicrosoftCalendarEvent {
+  id: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  providerTimezone: string;
+  attendeeEmails: string[];
+  location: string | null;
+  onlineMeetingUrl: string | null;
+  sensitivity: string;
+  state: "active" | "cancelled" | "deleted";
+  matchState: "unmatched" | "matched" | "review_required" | "internal" | "private";
+  contactId: string | null;
+  companyId: string | null;
+  opportunityId: string | null;
+  interactionId: string | null;
+  lastSyncedAt: string;
+}
+
+export interface MicrosoftCalendarEventListResponse {
+  items: MicrosoftCalendarEvent[];
   total: number;
 }
 
@@ -3463,7 +3517,7 @@ export interface ContactOutreachWorkspace {
   permissionStatus: "assessed_by_organisation_policy" | "not_assessed";
   contactability: Contactability;
   policyConfigured: boolean;
-  productionMailboxAvailable: false;
+  productionMailboxAvailable: boolean;
   simulationAvailable: boolean;
   history: OutreachHistoryItem[];
 }
@@ -3561,7 +3615,7 @@ export interface CampaignListResponse {
   total: number;
   canCreate: boolean;
   simulationOnly: boolean;
-  productionMailboxAvailable: false;
+  productionMailboxAvailable: boolean;
 }
 
 export interface Campaign {
@@ -3593,7 +3647,7 @@ export interface Campaign {
   canLaunch: boolean;
   campaignAutoSendAllowed: boolean;
   simulationOnly: boolean;
-  productionMailboxAvailable: false;
+  productionMailboxAvailable: boolean;
   launchWarning: string | null;
   needsAttentionReason: string | null;
   launchedAt: string | null;

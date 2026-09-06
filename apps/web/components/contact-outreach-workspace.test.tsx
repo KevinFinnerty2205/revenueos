@@ -256,6 +256,120 @@ describe("ContactOutreachWorkspace", () => {
     ).not.toHaveLength(0);
   });
 
+  it("prefers a connected Microsoft mailbox over the local simulator", async () => {
+    let selectedConnectionId: string | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/engage/contacts/contact-1") && !init?.method) {
+        return jsonResponse({
+          ...workspace,
+          productionMailboxAvailable: true,
+          history: [
+            {
+              id: "outreach-1",
+              purpose: "request_meeting",
+              subject: "Reviewed Microsoft outreach",
+              status: "approved",
+              simulationOnly: false,
+              createdAt: "2026-08-26T01:00:00Z",
+              completedAt: null,
+            },
+          ],
+        });
+      }
+      if (url.endsWith("/api/v1/engage/outreach/outreach-1")) {
+        return jsonResponse(
+          outreach({
+            state: "approved",
+            approvedVersion: 1,
+            version: {
+              ...outreach().version,
+              subject: "Reviewed Microsoft outreach",
+            },
+          }),
+        );
+      }
+      if (url.endsWith("/api/v1/actions/action-1/execution-options")) {
+        return jsonResponse({
+          items: [
+            {
+              connectionId: "connection-simulation",
+              connectorKey: "mock_email",
+              connectorDisplayName: "Mock Email",
+              capability: "send_email",
+              riskClass: "external_customer_facing",
+              executionMode: "simulation",
+              simulationOnly: true,
+            },
+            {
+              connectionId: "connection-microsoft",
+              connectorKey: "microsoft_365",
+              connectorDisplayName: "Microsoft 365",
+              capability: "send_email",
+              riskClass: "external_customer_facing",
+              executionMode: "live",
+              simulationOnly: false,
+            },
+          ],
+          total: 2,
+        });
+      }
+      if (
+        url.endsWith("/api/v1/engage/outreach/outreach-1/execution-preview")
+      ) {
+        selectedConnectionId = JSON.parse(String(init?.body)).connectionId;
+        return jsonResponse({
+          id: "preview-live",
+          actionProposalId: "action-1",
+          actionVersion: 1,
+          connectionId: "connection-microsoft",
+          connectorKey: "microsoft_365",
+          connectorDisplayName: "Microsoft 365",
+          capability: "send_email",
+          riskClass: "external_customer_facing",
+          executionMode: "live",
+          simulationOnly: false,
+          readiness: "ready",
+          summary: "Review the email before live send.",
+          confirmationLabel: "Send email",
+          previewFingerprint: "b".repeat(64),
+          content: {
+            kind: "email",
+            senderName: "Alex Morgan",
+            senderEmail: "alex.morgan@example.test",
+            recipientName: "Jane Smith",
+            recipient: "jane.smith@northstar-facilities.example",
+            subject: "Reviewed Microsoft outreach",
+            body: "Exact reviewed body",
+            action: "send_email",
+          },
+          expiresAt: "2026-08-26T01:10:00Z",
+          createdAt: "2026-08-26T01:00:00Z",
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<ContactOutreachWorkspace contactId="contact-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Reviewed Microsoft outreach",
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Review before send" }),
+    );
+
+    expect(await screen.findByText("Microsoft 365 · live send")).toBeVisible();
+    expect(
+      screen.getByText("Alex Morgan <alex.morgan@example.test>"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Approve and send" }),
+    ).toBeEnabled();
+    expect(selectedConnectionId).toBe("connection-microsoft");
+  });
+
   it("shows a contextual not-in-plan state without a dead control", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       jsonResponse({

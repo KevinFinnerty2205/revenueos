@@ -92,6 +92,7 @@ from revenueos.models import (
     OrganisationModuleEntitlement,
     PreInteractionBrief,
     ProspectTargetMarket,
+    ProviderSyncState,
     ProvisionalSignal,
     RecordingSession,
     RevenueBrainSourceSnapshot,
@@ -227,7 +228,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0055_live_prospect_provider"
+    assert EXPECTED_MIGRATION_HEAD == "0056_microsoft_365_sales"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -1013,6 +1014,7 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
     target_organisation_id = uuid.uuid4()
     target_company_id = uuid.uuid4()
     target_connection_id = uuid.uuid4()
+    target_provider_sync_state_id = uuid.uuid4()
     target_integration_audit_id = uuid.uuid4()
     target_provisioning_event_id = uuid.uuid4()
     target_import_batch_id = uuid.uuid4()
@@ -1066,12 +1068,41 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
                 IntegrationConnection(
                     id=target_connection_id,
                     organisation_id=target_organisation_id,
-                    connector_key="mock_email",
+                    connector_key="microsoft_365",
                     connection_status="active",
                     created_by_user_id=PRIMARY_USER_ID,
                     connected_at=now,
                     last_verified_at=now,
-                    capability_state_json=["send_email"],
+                    capability_state_json=["send_email", "reconcile_email", "read_calendar"],
+                    external_account_id="microsoft-deletion-user",
+                    external_account_name="Deletion Seller",
+                    external_account_email="deletion.seller@example.test",
+                    external_tenant_id="11111111-2222-4333-8444-555555555555",
+                    granted_scopes_json=[
+                        "Calendars.ReadBasic",
+                        "Mail.Read",
+                        "Mail.Send",
+                        "User.Read",
+                        "offline_access",
+                        "openid",
+                    ],
+                )
+            )
+            session.add(
+                ProviderSyncState(
+                    id=target_provider_sync_state_id,
+                    organisation_id=target_organisation_id,
+                    connection_id=target_connection_id,
+                    provider_key="microsoft_365",
+                    resource_kind="calendar",
+                    delta_link="https://graph.microsoft.com/v1.0/me/calendarView/delta?$deltatoken=synthetic",
+                    window_start_at=now - timedelta(days=1),
+                    window_end_at=now + timedelta(days=30),
+                    last_successful_sync_at=now,
+                    last_error_category=None,
+                    consecutive_failures=0,
+                    created_at=now,
+                    updated_at=now,
                 )
             )
             session.add(
@@ -1082,7 +1113,7 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
                     event_type="connection_created",
                     subject_type="connection",
                     subject_id=target_connection_id,
-                    connector_key="mock_email",
+                    connector_key="microsoft_365",
                     created_at=now,
                 )
             )
@@ -1173,6 +1204,7 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
             assert await session.get(Organisation, target_organisation_id) is None
             assert await session.get(Company, target_company_id) is None
             assert await session.get(IntegrationConnection, target_connection_id) is None
+            assert await session.get(ProviderSyncState, target_provider_sync_state_id) is None
             assert await session.get(IntegrationAuditEvent, target_integration_audit_id) is None
             assert await session.get(OperatorProvisioningEvent, target_provisioning_event_id) is None
             assert await session.get(CRMImportBatch, target_import_batch_id) is None

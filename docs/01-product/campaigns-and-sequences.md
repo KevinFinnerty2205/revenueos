@@ -83,8 +83,9 @@ grouping work.
 
 ## Known limitations
 
-Production Gmail/Microsoft mailbox delivery and inbound reply detection remain
-deferred. There is no Inbox, LinkedIn messaging, cold calling,
+WO-040 provides inactive production-capable Microsoft mailbox delivery and strongly
+correlated reply detection; Gmail and production activation remain deferred. There is
+no general Inbox, LinkedIn messaging, cold calling,
 multi-sender/domain rotation, warm-up/evasion tooling, autonomous SDR or generic
 marketing automation. WO-031 Events may hand off only explicitly selected canonical
 Contacts with an Event/stage link; no raw attendee or self-expanding audience is

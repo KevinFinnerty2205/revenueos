@@ -51,6 +51,8 @@ from revenueos.models import (
     ProspectDiscoveryCandidate,
     ProspectPerson,
     ProspectResearchTarget,
+    ProviderCalendarEvent,
+    ProviderReply,
     RevenueBrainInsight,
     RevenueBrainInteractionSnapshot,
     RevenueBrainSnapshot,
@@ -384,6 +386,8 @@ class CRMMergeService:
                 (PreInteractionBrief, PreInteractionBrief.company_id),
                 (DocumentSource, DocumentSource.company_id),
                 (EmailSource, EmailSource.company_id),
+                (ProviderReply, ProviderReply.company_id),
+                (ProviderCalendarEvent, ProviderCalendarEvent.company_id),
                 (RevenueBrainSourceSnapshot, RevenueBrainSourceSnapshot.company_id),
                 (RevenueBrainInteractionSnapshot, RevenueBrainInteractionSnapshot.company_id),
                 (RevenueBrainSnapshot, RevenueBrainSnapshot.company_id),
@@ -401,6 +405,8 @@ class CRMMergeService:
                 (OutreachMessage, OutreachMessage.contact_id),
                 (EmailSource, EmailSource.sender_contact_id),
                 (ContactFieldSource, ContactFieldSource.contact_id),
+                (ProviderReply, ProviderReply.contact_id),
+                (ProviderCalendarEvent, ProviderCalendarEvent.contact_id),
             )
         if entity_type == "account":
             for account_model, account_column in account_relationships:

@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from revenueos.models import EncryptedConnectorCredential
+from revenueos.models import EncryptedConnectorCredential, IntegrationConnection
 
 
 @dataclass(frozen=True)
@@ -37,6 +37,13 @@ class CredentialStore(Protocol):
     ) -> str: ...
 
     async def get(
+        self,
+        organisation_id: UUID,
+        connection_id: UUID,
+        credential_reference: str,
+    ) -> ConnectorCredential: ...
+
+    async def get_for_update(
         self,
         organisation_id: UUID,
         connection_id: UUID,
@@ -83,11 +90,19 @@ class EncryptedDatabaseCredentialStore:
         )
         now = datetime.now(UTC)
         if record is None:
+            connection = await self._session.scalar(
+                select(IntegrationConnection).where(
+                    IntegrationConnection.organisation_id == organisation_id,
+                    IntegrationConnection.id == connection_id,
+                )
+            )
+            if connection is None or connection.connector_key not in {"hubspot", "microsoft_365"}:
+                raise ValueError("Connector credential owner is unavailable.")
             record = EncryptedConnectorCredential(
                 id=uuid.uuid4(),
                 organisation_id=organisation_id,
                 connection_id=connection_id,
-                connector_key="hubspot",
+                connector_key=connection.connector_key,
                 encrypted_payload=b"pending",
                 nonce=b"0" * 12,
                 key_version=1,
@@ -111,7 +126,7 @@ class EncryptedDatabaseCredentialStore:
         record.encrypted_payload = AESGCM(self._key).encrypt(
             nonce,
             payload,
-            self._associated_data(organisation_id, connection_id, record.id),
+            self._associated_data(record.connector_key, organisation_id, connection_id, record.id),
         )
         record.updated_at = now
         await self._session.flush()
@@ -123,24 +138,43 @@ class EncryptedDatabaseCredentialStore:
         connection_id: UUID,
         credential_reference: str,
     ) -> ConnectorCredential:
+        return await self._get(organisation_id, connection_id, credential_reference, for_update=False)
+
+    async def get_for_update(
+        self,
+        organisation_id: UUID,
+        connection_id: UUID,
+        credential_reference: str,
+    ) -> ConnectorCredential:
+        return await self._get(organisation_id, connection_id, credential_reference, for_update=True)
+
+    async def _get(
+        self,
+        organisation_id: UUID,
+        connection_id: UUID,
+        credential_reference: str,
+        *,
+        for_update: bool,
+    ) -> ConnectorCredential:
         try:
             credential_id = UUID(credential_reference)
         except ValueError as exc:
             raise ValueError("Connector credential reference is invalid.") from exc
-        record = await self._session.scalar(
-            select(EncryptedConnectorCredential).where(
-                EncryptedConnectorCredential.organisation_id == organisation_id,
-                EncryptedConnectorCredential.connection_id == connection_id,
-                EncryptedConnectorCredential.id == credential_id,
-            )
+        statement = select(EncryptedConnectorCredential).where(
+            EncryptedConnectorCredential.organisation_id == organisation_id,
+            EncryptedConnectorCredential.connection_id == connection_id,
+            EncryptedConnectorCredential.id == credential_id,
         )
+        if for_update:
+            statement = statement.with_for_update()
+        record = await self._session.scalar(statement)
         if record is None:
             raise ValueError("Connector credential is unavailable.")
         try:
             decrypted = AESGCM(self._key).decrypt(
                 record.nonce,
                 record.encrypted_payload,
-                self._associated_data(organisation_id, connection_id, record.id),
+                self._associated_data(record.connector_key, organisation_id, connection_id, record.id),
             )
             payload = json.loads(decrypted)
             if not isinstance(payload, dict):
@@ -191,9 +225,50 @@ class EncryptedDatabaseCredentialStore:
         if record is not None:
             await self._session.delete(record)
 
+    def encrypt_oauth_state_secret(
+        self,
+        organisation_id: UUID,
+        state_id: UUID,
+        value: str,
+    ) -> tuple[bytes, bytes]:
+        nonce = os.urandom(12)
+        encrypted = AESGCM(self._key).encrypt(
+            nonce,
+            value.encode("utf-8"),
+            f"revenueos:oauth-state:{organisation_id}:{state_id}:v1".encode(),
+        )
+        return nonce, encrypted
+
+    def decrypt_oauth_state_secret(
+        self,
+        organisation_id: UUID,
+        state_id: UUID,
+        nonce: bytes | None,
+        encrypted: bytes | None,
+    ) -> str:
+        if nonce is None or encrypted is None or len(nonce) != 12:
+            raise ValueError("OAuth state secret is unavailable.")
+        try:
+            return (
+                AESGCM(self._key)
+                .decrypt(
+                    nonce,
+                    encrypted,
+                    f"revenueos:oauth-state:{organisation_id}:{state_id}:v1".encode(),
+                )
+                .decode("utf-8")
+            )
+        except (InvalidTag, UnicodeDecodeError) as exc:
+            raise ValueError("OAuth state secret is unavailable.") from exc
+
     @staticmethod
-    def _associated_data(organisation_id: UUID, connection_id: UUID, credential_id: UUID) -> bytes:
-        return f"revenueos:hubspot:{organisation_id}:{connection_id}:{credential_id}:v1".encode()
+    def _associated_data(
+        connector_key: str,
+        organisation_id: UUID,
+        connection_id: UUID,
+        credential_id: UUID,
+    ) -> bytes:
+        return f"revenueos:{connector_key}:{organisation_id}:{connection_id}:{credential_id}:v1".encode()
 
 
 class MockCredentialStore:
@@ -216,6 +291,14 @@ class MockCredentialStore:
     ) -> ConnectorCredential:
         del organisation_id, connection_id, credential_reference
         raise ValueError("Mock connectors do not store credentials.")
+
+    async def get_for_update(
+        self,
+        organisation_id: UUID,
+        connection_id: UUID,
+        credential_reference: str,
+    ) -> ConnectorCredential:
+        return await self.get(organisation_id, connection_id, credential_reference)
 
     async def revoke(
         self,

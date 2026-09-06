@@ -216,8 +216,9 @@ export function EngageSettings() {
               {busy === "policy" ? "Saving policy…" : "Save Engage policy"}
             </button>
             <p className="text-xs leading-5 text-slate-500">
-              Production Gmail and Microsoft mailbox adapters are not enabled.
-              Local/test email execution is clearly labelled simulation only.
+              Microsoft 365 sending is available only when the deployment is
+              approved and the seller has connected their work account.
+              Local/test email execution remains simulation only.
             </p>
           </div>
           {policy ? (

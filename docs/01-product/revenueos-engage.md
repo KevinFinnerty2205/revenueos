@@ -5,10 +5,11 @@
 > [Oryntela master product blueprint](oryntela-master-product-blueprint.md) retains
 > supervised review and provider-readiness gates.
 
-- **Status:** WO-029 outreach, WO-030 campaigns and WO-031 Events implemented as an entitled add-on
+- **Status:** WO-029 outreach, WO-030 campaigns, WO-031 Events and the inactive
+  production-capable WO-040 Microsoft mailbox path are implemented
 - **Purpose:** Turn target accounts into conversations
 - **Checkpoint 2:** Keep Engage and proceed to Create; external sending remains
-  unavailable until one production mailbox and its operating gates exist. See
+  unavailable until the Microsoft adapter's production activation gates are proven. See
   [Prospect and Engage readiness](prospect-engage-readiness.md).
 
 ## Product outcome
@@ -33,15 +34,17 @@ policy-gated bounded auto-send modes, local send windows, pause/resume/stop, act
 Opportunity/collision/suppression controls and seller-reported outcomes. See the
 [Campaign guide](campaigns-and-sequences.md).
 
-Production mailbox sending is not enabled. Gmail and Microsoft Graph were evaluated
-and deliberately deferred; no mailbox OAuth, unsubscribe route, bounce/reply event,
-tracking or delivery claim exists. See the
+Production mailbox sending is not enabled. WO-040 adds a fail-closed Microsoft Graph
+adapter for seller-bound reviewed sends, Sent Items outcome reconciliation, strongly
+correlated replies/NDRs and bounded calendar context. It does not claim delivery,
+auto-detect free-text opt-outs, ingest unrelated mail, add tracking or activate a real
+mailbox. Gmail remains deferred. See the
 [WO-029 guide](personalised-outreach.md) and
-[provider evaluation](../05-integrations/mailbox-provider-evaluation.md).
+[Microsoft integration architecture](../03-engineering/microsoft-365-sales-integration.md).
 
 ## Future capabilities, not implemented
 
-- automatic reply/provider analytics only after a supported mailbox path exists.
+- broader reply/deliverability analytics only after production evidence supports it.
 
 ## Outreach contract
 

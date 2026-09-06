@@ -8,10 +8,12 @@ import type {
   CRMFieldMapping,
   CRMStageConfiguration,
   IntegrationCatalogResponse,
+  MicrosoftSyncResponse,
+  MicrosoftSyncStatus,
   OAuthStartResponse,
   OrganisationConnection,
 } from "@revenueos/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 
@@ -47,6 +49,23 @@ export function IntegrationSettings() {
   const [busy, setBusy] = useState<ConnectorKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [microsoftConsent, setMicrosoftConsent] = useState(false);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<MicrosoftSyncStatus | null>(
+    null,
+  );
+  const microsoftTriggerRef = useRef<HTMLButtonElement>(null);
+  const disconnectTriggerRef = useRef<HTMLButtonElement>(null);
+
+  function closeMicrosoftConsent() {
+    setMicrosoftConsent(false);
+    window.requestAnimationFrame(() => microsoftTriggerRef.current?.focus());
+  }
+
+  function closeDisconnectConfirmation() {
+    setDisconnecting(null);
+    window.requestAnimationFrame(() => disconnectTriggerRef.current?.focus());
+  }
 
   async function load(signal?: AbortSignal) {
     const [definitions, connectionList] = await Promise.all([
@@ -86,14 +105,48 @@ export function IntegrationSettings() {
     return () => controller.abort();
   }, []);
 
-  async function connect(definition: ConnectorDefinition) {
+  useEffect(() => {
+    const connection = connections.find(
+      (item) =>
+        item.connectorKey === "microsoft_365" &&
+        item.connectionStatus !== "revoked",
+    );
+    if (!connection) return;
+    const controller = new AbortController();
+    apiRequest<MicrosoftSyncStatus>(
+      `/api/v1/integrations/microsoft/connections/${connection.id}/sync-status`,
+      { signal: controller.signal },
+    )
+      .then(setSyncStatus)
+      .catch(() => setSyncStatus(null));
+    return () => controller.abort();
+  }, [connections]);
+
+  async function connect(
+    definition: ConnectorDefinition,
+    microsoftConsentConfirmed = false,
+  ) {
+    if (
+      definition.connectorKey === "microsoft_365" &&
+      !microsoftConsentConfirmed
+    ) {
+      setMicrosoftConsent(true);
+      setError(null);
+      setMessage(null);
+      return;
+    }
     setBusy(definition.connectorKey);
     setError(null);
     setMessage(null);
     try {
-      if (definition.connectorKey === "hubspot") {
+      if (
+        definition.connectorKey === "hubspot" ||
+        definition.connectorKey === "microsoft_365"
+      ) {
         const result = await apiRequest<OAuthStartResponse>(
-          "/api/v1/integrations/hubspot/oauth/start",
+          definition.connectorKey === "microsoft_365"
+            ? "/api/v1/integrations/microsoft/oauth/start"
+            : "/api/v1/integrations/hubspot/oauth/start",
           { method: "POST" },
         );
         window.location.assign(result.authorisationUrl);
@@ -107,6 +160,7 @@ export function IntegrationSettings() {
         },
       );
       await load();
+      setDisconnecting(null);
       setMessage(
         "Simulation connector enabled. It cannot contact an external system.",
       );
@@ -159,13 +213,55 @@ export function IntegrationSettings() {
       setMessage(
         connection.simulationOnly
           ? "Simulation connector disconnected. Pending previews and queued simulations were invalidated."
-          : "HubSpot disconnected. Provider revocation was attempted, local credentials were deleted, and pending work was cancelled.",
+          : connection.connectorKey === "microsoft_365"
+            ? "Microsoft 365 disconnected. Future email sending and calendar synchronisation have stopped; bounded historical Oryntela records remain under retention policy."
+            : "HubSpot disconnected. Provider revocation was attempted, local credentials were deleted, and pending work was cancelled.",
       );
     } catch (reason: unknown) {
       setError(
         reason instanceof Error
           ? reason.message
           : "The connection could not be disconnected.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function syncMicrosoft(connection: OrganisationConnection) {
+    setBusy(connection.connectorKey);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await apiRequest<MicrosoftSyncResponse>(
+        `/api/v1/integrations/microsoft/connections/${connection.id}/sync`,
+        { method: "POST" },
+      );
+      setSyncStatus({
+        connectionId: connection.id,
+        lastSuccessfulSyncAt: result.syncedAt,
+        lastErrorCategory: result.resources.some(
+          (resource) => resource.state === "degraded",
+        )
+          ? "microsoft_sync_degraded"
+          : null,
+        state: result.resources.some(
+          (resource) => resource.state === "degraded",
+        )
+          ? "degraded"
+          : "healthy",
+      });
+      setMessage(
+        result.resources.some((resource) => resource.state === "degraded")
+          ? "Microsoft synchronisation is delayed. Existing Oryntela records remain available."
+          : "Microsoft email and calendar changes were synchronised.",
+      );
+      await load();
+    } catch (reason: unknown) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Microsoft 365 could not be synchronised.",
       );
     } finally {
       setBusy(null);
@@ -181,21 +277,26 @@ export function IntegrationSettings() {
         Integrations
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-        HubSpot can apply only the field update or interaction summary that a
-        user reviews and confirms. RevenueOS never sends a raw transcript and
-        does not run autonomous CRM writes. Development mock connectors remain
-        clearly labelled simulations.
+        Connect the work systems you choose. Oryntela sends customer email only
+        after the required review and approval, keeps mailbox access bounded to
+        Oryntela-managed conversations, and never sends a raw transcript.
       </p>
 
       {catalog.length ? (
         <ul className="mt-5 grid gap-4 sm:grid-cols-2">
           {catalog.map((definition) => {
-            const connection = connections.find(
+            const matchingConnections = connections.filter(
               (item) => item.connectorKey === definition.connectorKey,
             );
+            const connection =
+              matchingConnections.find(
+                (item) => item.connectionStatus !== "revoked",
+              ) ?? matchingConnections.at(-1);
             const active = connection?.connectionStatus === "active";
             const needsAuth =
               connection?.connectionStatus === "reauthorisation_required";
+            const currentSyncStatus =
+              syncStatus?.connectionId === connection?.id ? syncStatus : null;
             return (
               <li
                 key={definition.connectorKey}
@@ -215,18 +316,57 @@ export function IntegrationSettings() {
                     </p>
                   </div>
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                    {active
-                      ? "Connected"
-                      : needsAuth
-                        ? "Reconnect required"
-                        : "Not connected"}
+                    {!definition.available
+                      ? "Setup required"
+                      : active
+                        ? "Connected"
+                        : needsAuth
+                          ? "Reconnect required"
+                          : "Not connected"}
                   </span>
                 </div>
-                <p className="mt-3 text-sm text-slate-600">
-                  Capabilities:{" "}
-                  {definition.supportedCapabilities.map(humanise).join(", ")}
-                </p>
-                {connection?.externalAccountName ? (
+                {definition.connectorKey === "microsoft_365" ? (
+                  <p className="mt-3 text-sm leading-6 text-slate-600">
+                    Connect your Microsoft work account to use Outlook email and
+                    calendar with Oryntela.
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-600">
+                    Capabilities:{" "}
+                    {definition.supportedCapabilities.map(humanise).join(", ")}
+                  </p>
+                )}
+                {connection?.connectorKey === "microsoft_365" &&
+                connection.externalAccountEmail ? (
+                  <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+                    <p>
+                      Connected as:{" "}
+                      <strong className="break-all">
+                        {connection.externalAccountEmail}
+                      </strong>
+                    </p>
+                    <p className="mt-2">
+                      Email: {needsAuth ? "Reconnect required" : "Connected"}
+                    </p>
+                    <p>
+                      Replies: {needsAuth ? "Reconnect required" : "Connected"}
+                    </p>
+                    <p>
+                      Calendar: {needsAuth ? "Reconnect required" : "Connected"}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Last sync:{" "}
+                      {currentSyncStatus?.lastSuccessfulSyncAt
+                        ? new Date(
+                            currentSyncStatus.lastSuccessfulSyncAt,
+                          ).toLocaleString("en-AU")
+                        : "Not yet synchronised"}
+                      {currentSyncStatus?.state === "degraded"
+                        ? " · Delayed"
+                        : ""}
+                    </p>
+                  </div>
+                ) : connection?.externalAccountName ? (
                   <p className="mt-2 text-sm text-slate-600">
                     Account: {connection.externalAccountName} (
                     {connection.externalAccountId})
@@ -243,25 +383,57 @@ export function IntegrationSettings() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   {active && connection ? (
                     <>
+                      {connection.connectorKey === "microsoft_365" ? (
+                        <>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={busy === definition.connectorKey}
+                            onClick={() => void syncMicrosoft(connection)}
+                          >
+                            Sync now
+                          </button>
+                          <button
+                            ref={microsoftTriggerRef}
+                            type="button"
+                            className="secondary-button"
+                            disabled={busy === definition.connectorKey}
+                            onClick={() => setMicrosoftConsent(true)}
+                          >
+                            Reconnect
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={busy === definition.connectorKey}
+                          onClick={() => void testConnection(connection)}
+                        >
+                          Test connection
+                        </button>
+                      )}
                       <button
+                        ref={
+                          connection.connectorKey === "microsoft_365"
+                            ? disconnectTriggerRef
+                            : undefined
+                        }
                         type="button"
                         className="secondary-button"
                         disabled={busy === definition.connectorKey}
-                        onClick={() => void testConnection(connection)}
-                      >
-                        Test connection
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        disabled={busy === definition.connectorKey}
-                        onClick={() => void revoke(connection)}
+                        onClick={() => setDisconnecting(connection.id)}
                       >
                         Disconnect
                       </button>
                     </>
                   ) : (
                     <button
+                      ref={
+                        definition.connectorKey === "microsoft_365"
+                          ? microsoftTriggerRef
+                          : undefined
+                      }
                       type="button"
                       className="primary-button"
                       disabled={
@@ -270,14 +442,117 @@ export function IntegrationSettings() {
                       }
                       onClick={() => void connect(definition)}
                     >
-                      {needsAuth
-                        ? "Reconnect"
-                        : definition.simulationOnly
-                          ? "Connect simulation"
-                          : "Connect HubSpot"}
+                      {!definition.available
+                        ? "Setup required"
+                        : needsAuth
+                          ? "Reconnect"
+                          : definition.simulationOnly
+                            ? "Connect simulation"
+                            : definition.connectorKey === "microsoft_365"
+                              ? "Connect Microsoft 365"
+                              : "Connect HubSpot"}
                     </button>
                   )}
                 </div>
+                {definition.connectorKey === "microsoft_365" &&
+                microsoftConsent ? (
+                  <div
+                    className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4"
+                    role="group"
+                    aria-labelledby="microsoft-permissions-title"
+                  >
+                    <p
+                      id="microsoft-permissions-title"
+                      className="font-bold text-slate-950"
+                    >
+                      Before you continue
+                    </p>
+                    <dl className="mt-3 space-y-3 text-sm text-slate-700">
+                      <div>
+                        <dt className="font-bold">Email</dt>
+                        <dd>
+                          Send emails you have reviewed and approved through
+                          your connected work mailbox.
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold">Replies</dt>
+                        <dd>
+                          Microsoft grants mail read access because its narrower
+                          permission cannot provide reply content. Oryntela
+                          scans only bounded Inbox and Sent Items metadata for
+                          emails tied to Oryntela sends, then reads the subject
+                          and body only for one strongly matched reply.
+                          Unrelated mail is not stored.
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold">Calendar</dt>
+                        <dd>
+                          Read basic work-calendar details so Oryntela can help
+                          you prepare for customer meetings. Event bodies and
+                          attachments are not requested.
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={busy === definition.connectorKey}
+                        onClick={() => {
+                          setMicrosoftConsent(false);
+                          void connect(definition, true);
+                        }}
+                      >
+                        Continue to Microsoft
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={closeMicrosoftConsent}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {connection && disconnecting === connection.id ? (
+                  <div
+                    className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4"
+                    role="group"
+                    aria-labelledby={`disconnect-${connection.id}-title`}
+                  >
+                    <p
+                      id={`disconnect-${connection.id}-title`}
+                      className="font-bold text-slate-950"
+                    >
+                      Disconnect {definition.displayName}?
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-700">
+                      {connection.connectorKey === "microsoft_365"
+                        ? "Disconnecting Microsoft 365 will stop future Oryntela email sending and calendar synchronisation for this account. Historical Oryntela records will remain according to retention policy."
+                        : "Disconnecting will cancel pending provider work and invalidate existing previews."}
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={busy === definition.connectorKey}
+                        onClick={() => void revoke(connection)}
+                      >
+                        Confirm disconnect
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={closeDisconnectConfirmation}
+                      >
+                        Keep connected
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {active && connection?.connectorKey === "hubspot" ? (
                   <HubSpotMappingSettings
                     connection={connection}

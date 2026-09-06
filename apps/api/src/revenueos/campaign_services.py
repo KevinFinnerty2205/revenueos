@@ -73,6 +73,11 @@ class CampaignService:
 
     async def list_campaigns(self) -> CampaignListResponse:
         self._require_feature()
+        mailbox = await self.repository.active_email_connection_for_user(
+            self.tenant.organisation_id,
+            self.tenant.user_id,
+            microsoft_enabled=self.settings.feature_microsoft_365_enabled,
+        )
         items: list[CampaignListItemResponse] = []
         for record in await self.repository.campaigns(self.tenant.organisation_id):
             if not self.tenant.can_manage() and record.campaign.owner_user_id != self.tenant.user_id:
@@ -98,7 +103,8 @@ class CampaignService:
             items=items,
             total=len(items),
             can_create=await self._entitled(),
-            simulation_only=self.settings.environment != "production",
+            simulation_only=mailbox is None or mailbox.connector_key == "mock_email",
+            production_mailbox_available=bool(mailbox is not None and mailbox.connector_key == "microsoft_365"),
         )
 
     async def create(self, request: CampaignCreateRequest) -> CampaignResponse:
@@ -626,6 +632,11 @@ class CampaignService:
         can_manage = self.tenant.can_manage() or campaign.owner_user_id == self.tenant.user_id
         auto = version.approval_mode == CampaignApprovalMode.APPROVED_CAMPAIGN_AUTO_SEND.value
         event_link = await self.repository.event_campaign_link(self.tenant.organisation_id, campaign.id)
+        mailbox = await self.repository.active_email_connection_for_user(
+            self.tenant.organisation_id,
+            version.sender_user_id,
+            microsoft_enabled=self.settings.feature_microsoft_365_enabled,
+        )
         return CampaignResponse(
             id=campaign.id,
             version_id=version.id,
@@ -684,9 +695,16 @@ class CampaignService:
                 and any(item.eligible for item in audience)
             ),
             campaign_auto_send_allowed=bool(policy and policy.campaign_auto_send_allowed),
-            simulation_only=self.settings.environment != "production",
+            simulation_only=mailbox is None or mailbox.connector_key == "mock_email",
+            production_mailbox_available=bool(mailbox is not None and mailbox.connector_key == "microsoft_365"),
             launch_warning=(
-                "RevenueOS will prepare and simulate future approved sequence steps automatically when all safety checks pass."
+                (
+                    "RevenueOS will prepare and send future approved sequence steps through the connected "
+                    "Microsoft mailbox when every safety check passes."
+                    if mailbox is not None and mailbox.connector_key == "microsoft_365"
+                    else "RevenueOS will prepare and simulate future approved sequence steps automatically "
+                    "when all safety checks pass."
+                )
                 if auto
                 else None
             ),
@@ -724,7 +742,7 @@ class CampaignService:
             next_scheduled_at=enrollment.next_scheduled_at,
             stop_reason=enrollment.stop_reason,
             outcome=CampaignOutcome(enrollment.outcome) if enrollment.outcome else None,
-            outcome_provenance=cast(Literal["seller_reported"] | None, enrollment.outcome_provenance),
+            outcome_provenance=cast(Literal["seller_reported", "provider"] | None, enrollment.outcome_provenance),
             steps=[
                 CampaignEnrollmentStepResponse(
                     id=step.id,

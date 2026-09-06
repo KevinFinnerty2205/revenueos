@@ -161,7 +161,7 @@ class ContactOutreachWorkspaceResponse(APIModel):
     permission_status: Literal["assessed_by_organisation_policy", "not_assessed"]
     contactability: ContactabilityResponse
     policy_configured: bool
-    production_mailbox_available: Literal[False] = False
+    production_mailbox_available: bool = False
     simulation_available: bool
     history: list[OutreachHistoryItem]
 

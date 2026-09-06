@@ -11,6 +11,7 @@ from revenueos.integration_services import (
     IntegrationService,
     membership_is_active,
 )
+from revenueos.microsoft_services import MicrosoftSyncService
 from revenueos.tenant import TenantContext, get_tenant_context
 
 
@@ -34,3 +35,14 @@ async def get_action_execution_service(
     if not await membership_is_active(session, tenant):
         raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
     yield ActionExecutionService(session, tenant, settings)
+
+
+async def get_microsoft_sync_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[MicrosoftSyncService]:
+    await set_tenant_database_context(session, tenant.organisation_id)
+    if not await membership_is_active(session, tenant):
+        raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
+    yield MicrosoftSyncService(session, tenant, settings)

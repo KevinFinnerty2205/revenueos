@@ -61,6 +61,24 @@ class IntegrationRepository:
             statement = statement.with_for_update()
         return cast(IntegrationConnection | None, await self.session.scalar(statement))
 
+    async def connection_by_key_for_user(
+        self,
+        organisation_id: UUID,
+        connector_key: str,
+        user_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> IntegrationConnection | None:
+        statement = select(IntegrationConnection).where(
+            IntegrationConnection.organisation_id == organisation_id,
+            IntegrationConnection.connector_key == connector_key,
+            IntegrationConnection.created_by_user_id == user_id,
+            IntegrationConnection.connection_status != "revoked",
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return cast(IntegrationConnection | None, await self.session.scalar(statement))
+
     async def connection(
         self,
         organisation_id: UUID,

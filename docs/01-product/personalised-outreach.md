@@ -118,8 +118,9 @@ reconciliation are deferred with production sending.
 
 ## Current limitations and handoff
 
-WO-029 has no Gmail/Microsoft OAuth, live sending, delivered/read semantics, inbound
-reply sync, unsubscribe route, bulk recipient import, LinkedIn/call automation,
+WO-029 itself has no provider OAuth. WO-040 adds inactive Microsoft OAuth, reviewed
+send and strongly correlated replies without delivered/read semantics. Gmail, an
+unsubscribe route, bulk recipient import, LinkedIn/call automation,
 tracking, predictive send time or arbitrary recipient address. HubSpot logging is not
 performed: seller outreach stays inside RevenueOS until a separately reviewed
 CRM-activity contract exists.

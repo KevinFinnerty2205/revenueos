@@ -156,7 +156,7 @@ class CampaignListResponse(APIModel):
     total: int
     can_create: bool
     simulation_only: bool
-    production_mailbox_available: Literal[False] = False
+    production_mailbox_available: bool = False
 
 
 class CampaignResponse(APIModel):
@@ -188,7 +188,7 @@ class CampaignResponse(APIModel):
     can_launch: bool
     campaign_auto_send_allowed: bool
     simulation_only: bool
-    production_mailbox_available: Literal[False] = False
+    production_mailbox_available: bool = False
     launch_warning: str | None
     needs_attention_reason: str | None
     launched_at: datetime | None
@@ -221,7 +221,7 @@ class CampaignEnrollmentResponse(APIModel):
     next_scheduled_at: datetime | None
     stop_reason: str | None
     outcome: CampaignOutcome | None
-    outcome_provenance: Literal["seller_reported"] | None
+    outcome_provenance: Literal["seller_reported", "provider"] | None
     steps: list[CampaignEnrollmentStepResponse]
     current_outreach: OutreachResponse | None
     created_at: datetime

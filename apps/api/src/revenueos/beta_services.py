@@ -7,7 +7,7 @@ from typing import Literal, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -33,7 +33,9 @@ from revenueos.commercial_services import refresh_seat_limit_status, require_sea
 from revenueos.config import Settings
 from revenueos.contracts import OrganisationSummary, UserSummary
 from revenueos.database import set_tenant_database_context
+from revenueos.domain import ConnectorKey
 from revenueos.errors import PublicAPIError
+from revenueos.integration_repositories import IntegrationRepository
 from revenueos.models import (
     AIUsageCounter,
     Base,
@@ -41,6 +43,9 @@ from revenueos.models import (
     BetaFeedback,
     BetaSystemEvent,
     DataNoticeAcknowledgement,
+    EncryptedConnectorCredential,
+    IntegrationAuditEvent,
+    IntegrationConnection,
     Meeting,
     OnboardingProgress,
     Opportunity,
@@ -418,6 +423,61 @@ class BetaService:
                 )
             )
             now = datetime.now(UTC)
+            connections = list(
+                (
+                    await self.session.scalars(
+                        select(IntegrationConnection)
+                        .where(
+                            IntegrationConnection.organisation_id == self.tenant.organisation_id,
+                            IntegrationConnection.created_by_user_id == user_id,
+                            IntegrationConnection.connector_key == ConnectorKey.MICROSOFT_365.value,
+                            IntegrationConnection.connection_status != "revoked",
+                        )
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            repository = IntegrationRepository(self.session)
+            for connection in connections:
+                await self.session.execute(
+                    delete(EncryptedConnectorCredential).where(
+                        EncryptedConnectorCredential.organisation_id == self.tenant.organisation_id,
+                        EncryptedConnectorCredential.connection_id == connection.id,
+                    )
+                )
+                connection.credential_reference = None
+                connection.connection_status = "revoked"
+                connection.capability_state_json = []
+                connection.revoked_at = now
+                connection.metadata_version += 1
+                await repository.invalidate_connection_previews(
+                    self.tenant.organisation_id,
+                    connection.id,
+                    now,
+                )
+                await repository.cancel_queued_executions(
+                    self.tenant.organisation_id,
+                    connection.id,
+                    now,
+                )
+                self.session.add(
+                    IntegrationAuditEvent(
+                        id=uuid.uuid4(),
+                        organisation_id=self.tenant.organisation_id,
+                        actor_user_id=self.tenant.user_id,
+                        event_type="connection_revoked",
+                        subject_type="connection",
+                        subject_id=connection.id,
+                        connector_key=connection.connector_key,
+                        capability=None,
+                        risk_class=None,
+                        attempt_count=None,
+                        safe_failure_code="membership_disabled",
+                        external_result_id=None,
+                        duration_ms=None,
+                        created_at=now,
+                    )
+                )
             for target in owned_targets.all():
                 try:
                     local_today = now.astimezone(ZoneInfo(target.timezone)).date()

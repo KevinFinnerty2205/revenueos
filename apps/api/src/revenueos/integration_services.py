@@ -103,13 +103,16 @@ from revenueos.models import (
     OAuthConnectionState,
     Opportunity,
     OrganisationMembership,
+    ProviderOutboundOperation,
     User,
 )
-from revenueos.outreach_services import validate_personalized_outreach_action
+from revenueos.outreach_repositories import OutreachRepository
+from revenueos.outreach_services import evaluate_contactability, validate_personalized_outreach_action
 from revenueos.tenant import TenantContext
 
 if TYPE_CHECKING:
     from revenueos.hubspot_connector import HubSpotClient
+    from revenueos.microsoft_graph import MicrosoftGraphClient
 
 logger = logging.getLogger("revenueos.integrations")
 
@@ -117,7 +120,7 @@ logger = logging.getLogger("revenueos.integrations")
 def _commercial_module_for_connector(connector_key: str) -> ModuleCode:
     if connector_key in {ConnectorKey.HUBSPOT.value, ConnectorKey.MOCK_CRM.value}:
         return "crm"
-    if connector_key == ConnectorKey.MOCK_EMAIL.value:
+    if connector_key in {ConnectorKey.MOCK_EMAIL.value, ConnectorKey.MICROSOFT_365.value}:
         return "engage"
     return "core"
 
@@ -144,13 +147,23 @@ class IntegrationService:
         self.repository = IntegrationRepository(session)
         self.credential_store = credential_store or self._credential_store()
         self.hubspot_client: HubSpotClient | None = None
+        self.microsoft_client: MicrosoftGraphClient | None = None
         live_executor: ActionExecutor | None = None
+        live_executors: tuple[ActionExecutor, ...] = ()
         if settings.feature_hubspot_crm_enabled:
             from revenueos.hubspot_connector import HubSpotClient, HubSpotCRMExecutor
 
             self.hubspot_client = HubSpotClient(settings, self.credential_store)
             live_executor = HubSpotCRMExecutor(self.hubspot_client)
-        self.executors = executors or ActionExecutorRegistry(live_executor=live_executor)
+        if settings.feature_microsoft_365_enabled:
+            from revenueos.microsoft_graph import MicrosoftEmailExecutor, MicrosoftGraphClient
+
+            self.microsoft_client = MicrosoftGraphClient(settings, self.credential_store)
+            live_executors = (MicrosoftEmailExecutor(session, self.microsoft_client),)
+        self.executors = executors or ActionExecutorRegistry(
+            live_executor=live_executor,
+            live_executors=live_executors,
+        )
 
     def catalog(self) -> IntegrationCatalogResponse:
         self._require_integrations()
@@ -161,6 +174,7 @@ class IntegrationService:
             for definition in CONNECTOR_DEFINITIONS.values()
             if (definition.simulation_only and mock_available)
             or (definition.connector_key == ConnectorKey.HUBSPOT and hubspot_available)
+            or definition.connector_key == ConnectorKey.MICROSOFT_365
         ]
         return IntegrationCatalogResponse(
             connectors=[
@@ -173,13 +187,19 @@ class IntegrationService:
                     execution_risk_classes=list(definition.risk_classes),
                     configuration_schema_version=1,
                     execution_mode=definition.execution_mode,
-                    available=True,
+                    available=(
+                        self.settings.feature_microsoft_365_enabled
+                        if definition.connector_key == ConnectorKey.MICROSOFT_365
+                        else True
+                    ),
                     simulation_only=definition.simulation_only,
                 )
                 for definition in definitions
             ],
-            execution_mode="mixed" if hubspot_available else "simulation",
-            external_actions_enabled=hubspot_available,
+            execution_mode=(
+                "mixed" if hubspot_available or self.settings.feature_microsoft_365_enabled else "simulation"
+            ),
+            external_actions_enabled=hubspot_available or self.settings.feature_microsoft_365_enabled,
         )
 
     async def list_connections(self) -> ConnectionListResponse:
@@ -190,6 +210,10 @@ class IntegrationService:
             for item in records
             if (item.connector_key.startswith("mock_") and self._mock_connectors_available())
             or (item.connector_key == ConnectorKey.HUBSPOT.value and self.settings.feature_hubspot_crm_enabled)
+            or (
+                item.connector_key == ConnectorKey.MICROSOFT_365.value
+                and (self.tenant.can_manage() or item.created_by_user_id == self.tenant.user_id)
+            )
         ]
         return ConnectionListResponse(items=[self._connection_response(item) for item in visible], total=len(visible))
 
@@ -252,10 +276,19 @@ class IntegrationService:
         return self._connection_response(await self._require_connection(connection.id))
 
     async def test_connection(self, connection_id: UUID) -> ConnectionHealthResponse:
-        self._require_admin()
         self._require_integrations()
         connection = await self._require_connection(connection_id, for_update=True)
-        await self._require_connector_entitlement(connection.connector_key)
+        if connection.connector_key != ConnectorKey.MICROSOFT_365.value:
+            self._require_admin()
+        elif connection.created_by_user_id != self.tenant.user_id and not self.tenant.can_manage():
+            raise PublicAPIError("forbidden", "You cannot test another seller's mailbox.", 403)
+        if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+            await CommercialService(self.session, self.settings).require_module_write(
+                self.tenant.organisation_id,
+                "core",
+            )
+        else:
+            await self._require_connector_entitlement(connection.connector_key)
         self._require_connector_available(connection.connector_key)
         self._require_active_connection(connection)
         checked_at = datetime.now(UTC)
@@ -265,11 +298,14 @@ class IntegrationService:
                 self._connection_context(connection)
             )
         except ExecutionFailure as exc:
-            if connection.connector_key == ConnectorKey.HUBSPOT.value:
+            if connection.connector_key in {
+                ConnectorKey.HUBSPOT.value,
+                ConnectorKey.MICROSOFT_365.value,
+            }:
                 connection.connection_status = ConnectionStatus.REAUTHORISATION_REQUIRED.value
                 connection.metadata_version += 1
                 self._add_audit(connection, "connection_reauthorisation_required", checked_at)
-                await self._commit("The HubSpot connection state could not be updated.")
+                await self._commit("The connection state could not be updated.")
             raise PublicAPIError(exc.code, exc.safe_message, 409) from exc
         connection.last_verified_at = checked_at
         connection.metadata_version += 1
@@ -284,14 +320,21 @@ class IntegrationService:
             safe_message=(
                 "Simulation connection verified. No external request was made."
                 if definition.simulation_only
-                else "HubSpot authorisation and account identity were verified."
+                else (
+                    "Microsoft mailbox and calendar authorisation were verified."
+                    if connection.connector_key == ConnectorKey.MICROSOFT_365.value
+                    else "HubSpot authorisation and account identity were verified."
+                )
             ),
         )
 
     async def revoke_connection(self, connection_id: UUID) -> OrganisationConnectionResponse:
-        self._require_admin()
         self._require_integrations()
         connection = await self._require_connection(connection_id, for_update=True)
+        if connection.connector_key != ConnectorKey.MICROSOFT_365.value:
+            self._require_admin()
+        elif connection.created_by_user_id != self.tenant.user_id and not self.tenant.can_manage():
+            raise PublicAPIError("forbidden", "You cannot disconnect another seller's mailbox.", 403)
         self._require_connector_available(connection.connector_key)
         if connection.connection_status == ConnectionStatus.REVOKED.value:
             return self._connection_response(connection)
@@ -363,6 +406,196 @@ class IntegrationService:
             authorisation_url=client.authorisation_url(state),
             expires_at=now + timedelta(seconds=self.settings.hubspot_oauth_state_ttl_seconds),
         )
+
+    async def start_microsoft_oauth(self) -> OAuthStartResponse:
+        self._require_integrations()
+        await CommercialService(self.session, self.settings).require_module_write(
+            self.tenant.organisation_id,
+            "core",
+        )
+        client = self._require_microsoft()
+        store = self._require_encrypted_credential_store()
+        state_value = secrets.token_urlsafe(48)
+        verifier = secrets.token_urlsafe(64)
+        challenge = hashlib.sha256(verifier.encode()).digest()
+        import base64
+
+        challenge_value = base64.urlsafe_b64encode(challenge).rstrip(b"=").decode("ascii")
+        nonce_value = secrets.token_urlsafe(32)
+        state_id = uuid.uuid4()
+        pkce_nonce, encrypted_verifier = store.encrypt_oauth_state_secret(
+            self.tenant.organisation_id,
+            state_id,
+            verifier,
+        )
+        now = datetime.now(UTC)
+        assert self.settings.microsoft_oauth_redirect_uri is not None
+        self.repository.add(
+            OAuthConnectionState(
+                id=state_id,
+                organisation_id=self.tenant.organisation_id,
+                user_id=self.tenant.user_id,
+                connector_key=ConnectorKey.MICROSOFT_365.value,
+                state_hash=hashlib.sha256(state_value.encode()).hexdigest(),
+                redirect_uri=self.settings.microsoft_oauth_redirect_uri,
+                expires_at=now + timedelta(seconds=self.settings.microsoft_oauth_state_ttl_seconds),
+                consumed_at=None,
+                pkce_verifier_encrypted=encrypted_verifier,
+                pkce_nonce=pkce_nonce,
+                oidc_nonce_hash=hashlib.sha256(nonce_value.encode()).hexdigest(),
+                created_at=now,
+            )
+        )
+        await self._commit("The Microsoft authorisation flow could not be started.")
+        return OAuthStartResponse(
+            authorisation_url=client.authorisation_url(state_value, challenge_value, nonce_value),
+            expires_at=now + timedelta(seconds=self.settings.microsoft_oauth_state_ttl_seconds),
+        )
+
+    async def complete_microsoft_oauth(
+        self,
+        request: OAuthCallbackRequest,
+    ) -> OrganisationConnectionResponse:
+        self._require_integrations()
+        await CommercialService(self.session, self.settings).require_module_write(
+            self.tenant.organisation_id,
+            "core",
+        )
+        client = self._require_microsoft()
+        store = self._require_encrypted_credential_store()
+        now = datetime.now(UTC)
+        state = await self.repository.oauth_state_by_hash(
+            self.tenant.organisation_id,
+            hashlib.sha256(request.state.encode()).hexdigest(),
+            for_update=True,
+        )
+        if state is None or state.connector_key != ConnectorKey.MICROSOFT_365.value:
+            raise PublicAPIError("oauth_state_invalid", "This Microsoft authorisation request is invalid.", 400)
+        if state.user_id != self.tenant.user_id:
+            raise PublicAPIError("oauth_state_invalid", "This Microsoft authorisation request is invalid.", 400)
+        if state.consumed_at is not None:
+            raise PublicAPIError("oauth_state_replayed", "This Microsoft authorisation request was already used.", 409)
+        if self._as_utc(state.expires_at) <= now:
+            raise PublicAPIError("oauth_state_expired", "This Microsoft authorisation request has expired.", 409)
+        if state.redirect_uri != self.settings.microsoft_oauth_redirect_uri:
+            raise PublicAPIError("oauth_redirect_mismatch", "This Microsoft authorisation request is invalid.", 400)
+        state.consumed_at = now
+        if request.provider_error is not None:
+            await self._commit("The Microsoft authorisation result could not be recorded.")
+            if request.provider_error == "admin_consent_required":
+                raise PublicAPIError(
+                    "microsoft_admin_approval_required",
+                    "Your Microsoft administrator needs to approve Oryntela before this connection can be completed.",
+                    409,
+                )
+            raise PublicAPIError(
+                "oauth_authorisation_declined",
+                "Microsoft authorisation was not completed. No connection was created.",
+                400,
+            )
+        assert request.code is not None
+        if state.oidc_nonce_hash is None:
+            raise PublicAPIError("oauth_state_invalid", "This Microsoft authorisation request is invalid.", 400)
+        try:
+            verifier = store.decrypt_oauth_state_secret(
+                self.tenant.organisation_id,
+                state.id,
+                state.pkce_nonce,
+                state.pkce_verifier_encrypted,
+            )
+            result = await client.exchange_code(request.code, verifier, state.oidc_nonce_hash)
+        except ValueError as exc:
+            await self._commit("The Microsoft authorisation state could not be recorded.")
+            raise PublicAPIError(
+                "oauth_state_invalid", "This Microsoft authorisation request is invalid.", 400
+            ) from exc
+        except Exception as exc:
+            from revenueos.microsoft_graph import MicrosoftAPIError
+
+            await self._commit("The Microsoft authorisation result could not be recorded.")
+            if isinstance(exc, MicrosoftAPIError):
+                messages = {
+                    "microsoft_work_account_required": "Connect a Microsoft work or school account.",
+                    "provider_scope_incomplete": "Microsoft did not grant every permission required for email and calendar.",
+                }
+                raise PublicAPIError(
+                    exc.code,
+                    messages.get(
+                        exc.code, "Microsoft authorisation could not be verified. Start the connection again."
+                    ),
+                    409,
+                ) from exc
+            raise
+        connection = await self.repository.connection_by_key_for_user(
+            self.tenant.organisation_id,
+            ConnectorKey.MICROSOFT_365.value,
+            self.tenant.user_id,
+            for_update=True,
+        )
+        if (
+            connection is not None
+            and connection.connection_status != ConnectionStatus.REVOKED.value
+            and (
+                connection.external_account_id != result.profile.id or connection.external_tenant_id != result.tenant_id
+            )
+        ):
+            await self._commit("The rejected Microsoft authorisation could not be recorded.")
+            raise PublicAPIError(
+                "connection_account_changed",
+                "Disconnect the existing Microsoft account before connecting a different account.",
+                409,
+            )
+        event_type = "connection_created"
+        if connection is None:
+            connection = IntegrationConnection(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                connector_key=ConnectorKey.MICROSOFT_365.value,
+                connection_status=ConnectionStatus.ACTIVE.value,
+                created_by_user_id=self.tenant.user_id,
+                connected_at=now,
+                last_verified_at=now,
+                revoked_at=None,
+                credential_reference=None,
+                capability_state_json=[
+                    item.value for item in CONNECTOR_DEFINITIONS[ConnectorKey.MICROSOFT_365].capabilities
+                ],
+                external_account_id=result.profile.id,
+                external_account_name=result.profile.display_name,
+                external_account_email=result.profile.email,
+                external_tenant_id=result.tenant_id,
+                granted_scopes_json=list(result.credential.scopes),
+                metadata_version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            self.repository.add(connection)
+            await self.repository.flush()
+        else:
+            event_type = "connection_tested"
+            connection.connection_status = ConnectionStatus.ACTIVE.value
+            connection.connected_at = now
+            connection.last_verified_at = now
+            connection.revoked_at = None
+            connection.capability_state_json = [
+                item.value for item in CONNECTOR_DEFINITIONS[ConnectorKey.MICROSOFT_365].capabilities
+            ]
+            connection.external_account_id = result.profile.id
+            connection.external_account_name = result.profile.display_name
+            connection.external_account_email = result.profile.email
+            connection.external_tenant_id = result.tenant_id
+            connection.granted_scopes_json = list(result.credential.scopes)
+            connection.metadata_version += 1
+        connection.credential_reference = await store.put(
+            self.tenant.organisation_id,
+            connection.id,
+            result.credential,
+        )
+        state.pkce_verifier_encrypted = None
+        state.pkce_nonce = None
+        self._add_audit(connection, event_type, now)
+        await self._commit("The Microsoft connection could not be saved.")
+        return self._connection_response(await self._require_connection(connection.id))
 
     async def complete_hubspot_oauth(
         self,
@@ -786,10 +1019,10 @@ class IntegrationService:
         )
 
     def _credential_store(self) -> CredentialStore:
-        if not self.settings.feature_hubspot_crm_enabled:
+        if not (self.settings.feature_hubspot_crm_enabled or self.settings.feature_microsoft_365_enabled):
             return MockCredentialStore()
         if self.settings.connector_credential_master_key is None:
-            raise RuntimeError("HubSpot credential storage is not configured.")
+            raise RuntimeError("Connector credential storage is not configured.")
         return EncryptedDatabaseCredentialStore(
             self.session,
             self.settings.connector_credential_master_key.get_secret_value(),
@@ -800,6 +1033,25 @@ class IntegrationService:
         if not self.settings.feature_hubspot_crm_enabled or self.hubspot_client is None:
             raise PublicAPIError("feature_unavailable", "HubSpot CRM sync is not enabled.", 404)
         return self.hubspot_client
+
+    def _require_microsoft(self) -> MicrosoftGraphClient:
+        self._require_integrations()
+        if not self.settings.feature_microsoft_365_enabled or self.microsoft_client is None:
+            raise PublicAPIError(
+                "microsoft_setup_required",
+                "Microsoft 365 is not configured yet.",
+                409,
+            )
+        return self.microsoft_client
+
+    def _require_encrypted_credential_store(self) -> EncryptedDatabaseCredentialStore:
+        if not isinstance(self.credential_store, EncryptedDatabaseCredentialStore):
+            raise PublicAPIError(
+                "microsoft_setup_required",
+                "Microsoft 365 encrypted credential storage is not configured.",
+                409,
+            )
+        return self.credential_store
 
     async def _require_hubspot_connection(self, connection_id: UUID) -> IntegrationConnection:
         self._require_hubspot()
@@ -816,6 +1068,9 @@ class IntegrationService:
         if connector_key.startswith("mock_"):
             self._require_mock_connectors()
             return
+        if connector_key == ConnectorKey.MICROSOFT_365.value:
+            self._require_microsoft()
+            return
         raise PublicAPIError("connector_unavailable", "The selected connector is unavailable.", 404)
 
     @staticmethod
@@ -826,6 +1081,9 @@ class IntegrationService:
             connection_id=connection.id,
             credential_reference=connection.credential_reference,
             execution_mode=definition.execution_mode,
+            external_account_id=connection.external_account_id,
+            external_account_email=connection.external_account_email,
+            external_tenant_id=connection.external_tenant_id,
         )
 
     async def _require_local_entity(self, entity_type: str, entity_id: UUID) -> None:
@@ -998,6 +1256,12 @@ class IntegrationService:
     @staticmethod
     def _require_active_connection(connection: IntegrationConnection) -> None:
         if connection.connection_status == ConnectionStatus.REAUTHORISATION_REQUIRED.value:
+            if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+                raise PublicAPIError(
+                    "connection_reauthorisation_required",
+                    "Microsoft 365 needs to be reconnected.",
+                    409,
+                )
             raise PublicAPIError(
                 "connection_reauthorisation_required",
                 "Reconnect HubSpot before using CRM sync.",
@@ -1034,6 +1298,8 @@ class IntegrationService:
             revoked_at=connection.revoked_at,
             external_account_id=connection.external_account_id,
             external_account_name=connection.external_account_name,
+            external_account_email=connection.external_account_email,
+            external_tenant_id=connection.external_tenant_id,
             granted_scopes=list(connection.granted_scopes_json),
             metadata_version=connection.metadata_version,
             execution_mode=definition.execution_mode,
@@ -1100,11 +1366,19 @@ class ActionExecutionService:
         self.action_repository = ActionRepository(session)
         self.credential_store = credential_store or self._credential_store()
         live_executor: ActionExecutor | None = None
+        live_executors: tuple[ActionExecutor, ...] = ()
         if settings.feature_hubspot_crm_enabled:
             from revenueos.hubspot_connector import HubSpotClient, HubSpotCRMExecutor
 
             live_executor = HubSpotCRMExecutor(HubSpotClient(settings, self.credential_store))
-        self.executors = executors or ActionExecutorRegistry(live_executor=live_executor)
+        if settings.feature_microsoft_365_enabled:
+            from revenueos.microsoft_graph import MicrosoftEmailExecutor, MicrosoftGraphClient
+
+            live_executors = (MicrosoftEmailExecutor(session, MicrosoftGraphClient(settings, self.credential_store)),)
+        self.executors = executors or ActionExecutorRegistry(
+            live_executor=live_executor,
+            live_executors=live_executors,
+        )
 
     async def preview(self, action_id: UUID, connection_id: UUID) -> ExecutionPreviewResponse:
         self._require_execution_features()
@@ -1113,6 +1387,7 @@ class ActionExecutionService:
         await self._require_connection_entitlement(connection)
         action = await self._action_input(action_record)
         self._require_outreach_mailbox_binding(action, connection)
+        await self._require_microsoft_email_send_safety(action, connection)
         action = await self._bind_external_target(action, connection)
         capability = self._capability(action.action_type)
         executor = self._executor(connection, capability, action.risk_class)
@@ -1169,6 +1444,7 @@ class ActionExecutionService:
             try:
                 await self._require_connection_entitlement(connection)
                 self._require_outreach_mailbox_binding(action, connection)
+                await self._require_microsoft_email_send_safety(action, connection)
                 self._executor(connection, capability, action.risk_class)
             except PublicAPIError:
                 continue
@@ -1220,6 +1496,7 @@ class ActionExecutionService:
         await self._require_connection_entitlement(connection)
         action = await self._action_input(action_record)
         self._require_outreach_mailbox_binding(action, connection)
+        await self._require_microsoft_email_send_safety(action, connection)
         action = await self._bind_external_target(action, connection)
         capability = self._capability(action.action_type)
         if capability.value != preview.capability:
@@ -1291,6 +1568,25 @@ class ActionExecutionService:
         preview.confirmed_by_user_id = self.tenant.user_id
         preview.confirmed_at = now
         self.repository.add(execution)
+        if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+            payload = cast(FollowUpEmailPayload | PersonalizedOutreachPayload, action.payload)
+            assert payload.recipient_email is not None
+            assert connection.external_account_email is not None
+            self.session.add(
+                ProviderOutboundOperation(
+                    id=uuid.uuid4(),
+                    organisation_id=self.tenant.organisation_id,
+                    connection_id=connection.id,
+                    action_id=action.action_id,
+                    provider_key=ConnectorKey.MICROSOFT_365.value,
+                    idempotency_key=idempotency_key,
+                    state="queued",
+                    sender_email=connection.external_account_email,
+                    recipient_email=payload.recipient_email,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
         self._add_execution_audit(
             event_type="execution_confirmed",
             subject_type="execution",
@@ -1381,13 +1677,36 @@ class ActionExecutionService:
             connection_id=connection.id,
             credential_reference=connection.credential_reference,
             execution_mode="live",
+            external_account_id=connection.external_account_id,
+            external_account_email=connection.external_account_email,
+            external_tenant_id=connection.external_tenant_id,
         )
         now = datetime.now(UTC)
         external_result_id: str | None = None
         applied = False
         safe_to_retry = False
         try:
-            if isinstance(action.payload, LogInteractionPayload):
+            if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+                operation = await self.session.scalar(
+                    select(ProviderOutboundOperation)
+                    .where(
+                        ProviderOutboundOperation.organisation_id == self.tenant.organisation_id,
+                        ProviderOutboundOperation.connection_id == connection.id,
+                        ProviderOutboundOperation.action_id == execution.action_id,
+                        ProviderOutboundOperation.idempotency_key == execution.idempotency_key,
+                    )
+                    .with_for_update()
+                )
+                if operation is None or operation.state != "reconciled" or operation.provider_message_id is None:
+                    raise PublicAPIError(
+                        "microsoft_send_reconciliation_pending",
+                        "Microsoft has not provided strong evidence that this email was sent. "
+                        "RevenueOS will keep the outcome unknown and will not resend it.",
+                        409,
+                    )
+                applied = True
+                external_result_id = operation.provider_message_id
+            elif isinstance(action.payload, LogInteractionPayload):
                 from revenueos.hubspot_connector import HubSpotCRMExecutor
 
                 if not isinstance(executor, HubSpotCRMExecutor):
@@ -1449,7 +1768,7 @@ class ActionExecutionService:
             risk_class=action.risk_class,
             created_at=now,
         )
-        await self._commit("The HubSpot execution could not be reconciled.")
+        await self._commit("The execution could not be reconciled.")
         refreshed = await self.repository.execution(self.tenant.organisation_id, execution.id)
         assert refreshed is not None
         return self._execution_response(refreshed)
@@ -1461,6 +1780,7 @@ class ActionExecutionService:
             and self.settings.feature_action_layer_enabled
             and (
                 self.settings.feature_hubspot_crm_enabled
+                or self.settings.feature_microsoft_365_enabled
                 or (self.settings.feature_mock_connectors_enabled and self.settings.environment != "production")
             )
         ):
@@ -1473,10 +1793,10 @@ class ActionExecutionService:
         )
 
     def _credential_store(self) -> CredentialStore:
-        if not self.settings.feature_hubspot_crm_enabled:
+        if not (self.settings.feature_hubspot_crm_enabled or self.settings.feature_microsoft_365_enabled):
             return MockCredentialStore()
         if self.settings.connector_credential_master_key is None:
-            raise RuntimeError("HubSpot credential storage is not configured.")
+            raise RuntimeError("Connector credential storage is not configured.")
         return EncryptedDatabaseCredentialStore(
             self.session,
             self.settings.connector_credential_master_key.get_secret_value(),
@@ -1802,24 +2122,87 @@ class ActionExecutionService:
         action: ApprovedActionInput,
         connection: IntegrationConnection,
     ) -> None:
-        if not isinstance(action.payload, PersonalizedOutreachPayload):
+        if not isinstance(action.payload, (FollowUpEmailPayload, PersonalizedOutreachPayload)):
+            return
+        if connection.connector_key not in {
+            ConnectorKey.MICROSOFT_365.value,
+            ConnectorKey.MOCK_EMAIL.value,
+        }:
+            return
+        if connection.created_by_user_id != self.tenant.user_id:
+            raise PublicAPIError(
+                "mailbox_owner_mismatch",
+                "Select your own connected mailbox.",
+                409,
+            )
+        if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+            if not self.settings.feature_microsoft_365_enabled or not connection.external_account_email:
+                raise PublicAPIError(
+                    "connection_reauthorisation_required",
+                    "Reconnect Microsoft 365 to continue sending.",
+                    409,
+                )
+            if isinstance(action.payload, PersonalizedOutreachPayload) and (
+                action.payload.sender_user_id != self.tenant.user_id
+                or action.payload.sender_email.casefold() != connection.external_account_email.casefold()
+            ):
+                raise PublicAPIError(
+                    "sender_identity_mismatch",
+                    "The approved From address must match your connected Microsoft mailbox.",
+                    409,
+                )
             return
         if self.settings.environment == "production":
             raise PublicAPIError(
                 "production_mailbox_unavailable",
-                "Production mailbox sending is not available in this release.",
+                "A production Microsoft 365 mailbox connection is required.",
                 409,
             )
-        if (
-            connection.connector_key != ConnectorKey.MOCK_EMAIL.value
-            or connection.created_by_user_id != action.payload.sender_user_id
-            or action.payload.sender_user_id != self.tenant.user_id
+        if connection.connector_key != ConnectorKey.MOCK_EMAIL.value or (
+            isinstance(action.payload, PersonalizedOutreachPayload)
+            and action.payload.sender_user_id != self.tenant.user_id
         ):
             raise PublicAPIError(
                 "mailbox_owner_mismatch",
                 "Select the sender's own email simulation connection.",
                 409,
             )
+
+    async def _require_microsoft_email_send_safety(
+        self,
+        action: ApprovedActionInput,
+        connection: IntegrationConnection,
+    ) -> None:
+        if connection.connector_key != ConnectorKey.MICROSOFT_365.value or not isinstance(
+            action.payload,
+            FollowUpEmailPayload,
+        ):
+            return
+        payload = action.payload
+        if payload.recipient_contact_id is None or payload.recipient_email is None:
+            raise PublicAPIError(
+                "unsupported_recipient",
+                "Select the exact canonical Contact recipient before sending.",
+                409,
+            )
+        contact = await self.session.scalar(
+            select(Contact).where(
+                Contact.organisation_id == self.tenant.organisation_id,
+                Contact.id == payload.recipient_contact_id,
+            )
+        )
+        if contact is None or contact.email is None or contact.email.casefold() != payload.recipient_email.casefold():
+            raise PublicAPIError("unsupported_recipient", "The approved Contact recipient is unavailable.", 409)
+        contactability = await evaluate_contactability(
+            OutreachRepository(self.session),
+            self.tenant,
+            self.settings,
+            contact,
+            action_id=action.action_id,
+            sender_user_id=self.tenant.user_id,
+        )
+        if not contactability.allowed:
+            raise PublicAPIError(contactability.state.value, contactability.reason, 409)
 
     def _executor(
         self,
@@ -1870,6 +2253,9 @@ class ActionExecutionService:
                         connection_id=connection.id,
                         credential_reference=connection.credential_reference,
                         execution_mode="live",
+                        external_account_id=connection.external_account_id,
+                        external_account_email=connection.external_account_email,
+                        external_tenant_id=connection.external_tenant_id,
                     ),
                 )
             except ExecutionFailure as exc:
@@ -1972,6 +2358,9 @@ class ActionExecutionService:
             ConnectorCapability.CREATE_TASK: "Create task",
         }[capability]
         live_summary = {
+            ConnectorCapability.SEND_EMAIL: (
+                "Send this reviewed email through the connected Microsoft 365 work mailbox."
+            ),
             ConnectorCapability.UPDATE_OPPORTUNITY: "Apply this reviewed field update to the linked HubSpot deal.",
             ConnectorCapability.UPDATE_CONTACT: "Apply this reviewed field update to the linked HubSpot contact.",
             ConnectorCapability.CREATE_ACTIVITY: (
@@ -2024,18 +2413,35 @@ class ActionExecutionService:
             ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
         }[status]
         if execution.execution_mode == "live":
-            safe_message = {
-                ExecutionStatus.QUEUED: "HubSpot update queued. No external change has occurred yet.",
-                ExecutionStatus.EXECUTING: "RevenueOS is applying the reviewed HubSpot action.",
-                ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
-                ExecutionStatus.FAILED_RETRYABLE: "HubSpot did not apply the action; a bounded retry is safe.",
-                ExecutionStatus.FAILED_PERMANENT: "The HubSpot action stopped safely and will not be retried.",
-                ExecutionStatus.CANCELLED: "The HubSpot action was cancelled before execution.",
-                ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
-                    "The HubSpot outcome is unknown. RevenueOS will not retry without reconciliation."
-                ),
-                ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
-            }[status]
+            if execution.connector_key == ConnectorKey.MICROSOFT_365.value:
+                safe_message = {
+                    ExecutionStatus.QUEUED: "Microsoft email queued. No external send has occurred yet.",
+                    ExecutionStatus.EXECUTING: "RevenueOS is submitting the reviewed email to Microsoft.",
+                    ExecutionStatus.SUCCEEDED: (
+                        "Microsoft accepted the reviewed email for processing. Delivery is not guaranteed."
+                    ),
+                    ExecutionStatus.FAILED_RETRYABLE: ("Microsoft did not accept the email; a bounded retry is safe."),
+                    ExecutionStatus.FAILED_PERMANENT: ("The Microsoft email stopped safely and will not be retried."),
+                    ExecutionStatus.CANCELLED: "The Microsoft email was cancelled before submission.",
+                    ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
+                        "The Microsoft send outcome is unknown. RevenueOS will not resend without "
+                        "strong Sent Items evidence."
+                    ),
+                    ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
+                }[status]
+            else:
+                safe_message = {
+                    ExecutionStatus.QUEUED: "HubSpot update queued. No external change has occurred yet.",
+                    ExecutionStatus.EXECUTING: "RevenueOS is applying the reviewed HubSpot action.",
+                    ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
+                    ExecutionStatus.FAILED_RETRYABLE: "HubSpot did not apply the action; a bounded retry is safe.",
+                    ExecutionStatus.FAILED_PERMANENT: "The HubSpot action stopped safely and will not be retried.",
+                    ExecutionStatus.CANCELLED: "The HubSpot action was cancelled before execution.",
+                    ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
+                        "The HubSpot outcome is unknown. RevenueOS will not retry without reconciliation."
+                    ),
+                    ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
+                }[status]
         return ActionExecutionResponse(
             id=execution.id,
             action_proposal_id=execution.action_id,

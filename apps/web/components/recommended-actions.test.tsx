@@ -426,4 +426,115 @@ describe("RecommendedActions", () => {
     expect(await screen.findByText("HubSpot update complete")).toBeVisible();
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
+
+  it("labels an unknown Microsoft send without HubSpot or delivery claims", async () => {
+    const approved = action({
+      status: "approved",
+      approvedVersion: 1,
+      approvedAt: "2026-09-06T01:00:00Z",
+      proposedPayload: {
+        kind: "follow_up_email",
+        draftArtifactId: "artifact-1",
+        recipientContactId: "contact-1",
+        recipientEmail: "jordan@example.com",
+        recipientConfirmed: true,
+        subject: "Reviewed follow-up",
+        body: "Hello Jordan,\n\nThis is the reviewed message.",
+      },
+    });
+    const unknown = {
+      id: "execution-microsoft-1",
+      actionProposalId: approved.id,
+      actionVersion: 1,
+      connectionId: "microsoft-connection-1",
+      connectorKey: "microsoft_365",
+      connectorDisplayName: "Microsoft 365",
+      capability: "send_email",
+      riskClass: "external_customer_facing",
+      executionStatus: "unknown_external_state",
+      executionMode: "live",
+      simulationOnly: false,
+      confirmedByUserId: "user-1",
+      confirmedAt: "2026-09-06T01:02:00Z",
+      startedAt: "2026-09-06T01:02:01Z",
+      completedAt: null,
+      failedAt: "2026-09-06T01:02:16Z",
+      safeFailureCode: "microsoft_send_outcome_unknown",
+      externalResultId: null,
+      attemptCount: 1,
+      retryable: false,
+      safeMessage:
+        "The Microsoft send outcome is unknown. RevenueOS will not resend without strong Sent Items evidence.",
+      createdAt: "2026-09-06T01:02:00Z",
+      updatedAt: "2026-09-06T01:02:16Z",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          items: [
+            {
+              connectionId: "microsoft-connection-1",
+              connectorKey: "microsoft_365",
+              connectorDisplayName: "Microsoft 365",
+              capability: "send_email",
+              riskClass: "external_customer_facing",
+              executionMode: "live",
+              simulationOnly: false,
+            },
+          ],
+          total: 1,
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          id: "preview-microsoft-1",
+          actionProposalId: approved.id,
+          actionVersion: 1,
+          connectionId: "microsoft-connection-1",
+          connectorKey: "microsoft_365",
+          connectorDisplayName: "Microsoft 365",
+          capability: "send_email",
+          riskClass: "external_customer_facing",
+          executionMode: "live",
+          simulationOnly: false,
+          readiness: "ready",
+          summary:
+            "Send this reviewed email through the connected Microsoft 365 work mailbox.",
+          confirmationLabel: "Send email",
+          previewFingerprint: "f".repeat(64),
+          content: {
+            kind: "email",
+            senderName: "Alex Morgan",
+            senderEmail: "alex@example.test",
+            recipientName: "Jordan Lee",
+            recipient: "jordan@example.com",
+            subject: "Reviewed follow-up",
+            body: "Hello Jordan,\n\nThis is the reviewed message.",
+            action: "send_email",
+          },
+          expiresAt: "2026-09-06T01:12:00Z",
+          createdAt: "2026-09-06T01:02:00Z",
+        }),
+      )
+      .mockResolvedValueOnce(response({ items: [], total: 0 }))
+      .mockResolvedValueOnce(response(unknown));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ActionExecutionPanel action={approved} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Review execution" }));
+    expect(
+      await screen.findByText(
+        "Live Microsoft 365 action — review exact values before confirming",
+      ),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Send email" }));
+    expect(
+      await screen.findByText("Microsoft email needs attention"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Reconcile Microsoft 365 outcome" }),
+    ).toBeVisible();
+    expect(screen.queryByText(/HubSpot/u)).toBeNull();
+  });
 });
