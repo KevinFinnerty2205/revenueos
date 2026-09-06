@@ -6,10 +6,11 @@
 > supervised review and provider-readiness gates.
 
 - **Status:** WO-029 outreach, WO-030 campaigns, WO-031 Events and the inactive
-  production-capable WO-040 Microsoft mailbox path are implemented
+  production-capable WO-040 Microsoft and WO-041 Google Workspace mailbox paths are
+  implemented
 - **Purpose:** Turn target accounts into conversations
 - **Checkpoint 2:** Keep Engage and proceed to Create; external sending remains
-  unavailable until the Microsoft adapter's production activation gates are proven. See
+  unavailable until a mailbox adapter's production activation gates are proven. See
   [Prospect and Engage readiness](prospect-engage-readiness.md).
 
 ## Product outcome
@@ -34,13 +35,13 @@ policy-gated bounded auto-send modes, local send windows, pause/resume/stop, act
 Opportunity/collision/suppression controls and seller-reported outcomes. See the
 [Campaign guide](campaigns-and-sequences.md).
 
-Production mailbox sending is not enabled. WO-040 adds a fail-closed Microsoft Graph
-adapter for seller-bound reviewed sends, Sent Items outcome reconciliation, strongly
-correlated replies/NDRs and bounded calendar context. It does not claim delivery,
-auto-detect free-text opt-outs, ingest unrelated mail, add tracking or activate a real
-mailbox. Gmail remains deferred. See the
+Production mailbox sending is not enabled. WO-040/041 add fail-closed Microsoft Graph
+and Google Workspace adapters for seller-bound reviewed sends, sent-mail outcome
+reconciliation, strongly correlated replies/NDRs and bounded calendar context. They do
+not claim delivery, auto-detect free-text opt-outs, ingest unrelated mail, add tracking
+or activate a real mailbox. See the
 [WO-029 guide](personalised-outreach.md) and
-[Microsoft integration architecture](../03-engineering/microsoft-365-sales-integration.md).
+[Google Workspace integration architecture](../03-engineering/google-workspace-sales-integration.md).
 
 ## Future capabilities, not implemented
 

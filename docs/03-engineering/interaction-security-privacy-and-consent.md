@@ -132,6 +132,13 @@ document/email merely because an AI artefact references it. Revocation, shared-l
 changes and source deletion make dependent evidence ineligible and trigger
 reconciliation. Connected systems remain authoritative for their records.
 
+WO-040/041 implement bounded Microsoft and Google mailbox/calendar context, not a
+general email evidence importer. Reply bodies are fetched only after strong correlation
+to an Oryntela-managed send. Calendar uses bounded provider deltas/tokens; private
+events are redacted and an explicit existing-Interaction link never proves attendance
+or creates Evidence. See the
+[Google Workspace privacy boundary](google-workspace-sales-integration.md).
+
 ## Tenant isolation
 
 - derive organisation only from verified auth/session context;

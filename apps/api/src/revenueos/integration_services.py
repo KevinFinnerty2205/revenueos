@@ -111,6 +111,7 @@ from revenueos.outreach_services import evaluate_contactability, validate_person
 from revenueos.tenant import TenantContext
 
 if TYPE_CHECKING:
+    from revenueos.google_workspace import GoogleWorkspaceClient
     from revenueos.hubspot_connector import HubSpotClient
     from revenueos.microsoft_graph import MicrosoftGraphClient
 
@@ -120,7 +121,11 @@ logger = logging.getLogger("revenueos.integrations")
 def _commercial_module_for_connector(connector_key: str) -> ModuleCode:
     if connector_key in {ConnectorKey.HUBSPOT.value, ConnectorKey.MOCK_CRM.value}:
         return "crm"
-    if connector_key in {ConnectorKey.MOCK_EMAIL.value, ConnectorKey.MICROSOFT_365.value}:
+    if connector_key in {
+        ConnectorKey.MOCK_EMAIL.value,
+        ConnectorKey.MICROSOFT_365.value,
+        ConnectorKey.GOOGLE_WORKSPACE.value,
+    }:
         return "engage"
     return "core"
 
@@ -148,8 +153,9 @@ class IntegrationService:
         self.credential_store = credential_store or self._credential_store()
         self.hubspot_client: HubSpotClient | None = None
         self.microsoft_client: MicrosoftGraphClient | None = None
+        self.google_client: GoogleWorkspaceClient | None = None
         live_executor: ActionExecutor | None = None
-        live_executors: tuple[ActionExecutor, ...] = ()
+        live_executors: list[ActionExecutor] = []
         if settings.feature_hubspot_crm_enabled:
             from revenueos.hubspot_connector import HubSpotClient, HubSpotCRMExecutor
 
@@ -159,10 +165,15 @@ class IntegrationService:
             from revenueos.microsoft_graph import MicrosoftEmailExecutor, MicrosoftGraphClient
 
             self.microsoft_client = MicrosoftGraphClient(settings, self.credential_store)
-            live_executors = (MicrosoftEmailExecutor(session, self.microsoft_client),)
+            live_executors.append(MicrosoftEmailExecutor(session, self.microsoft_client))
+        if settings.feature_google_workspace_enabled:
+            from revenueos.google_workspace import GoogleEmailExecutor, GoogleWorkspaceClient
+
+            self.google_client = GoogleWorkspaceClient(settings, self.credential_store)
+            live_executors.append(GoogleEmailExecutor(session, self.google_client))
         self.executors = executors or ActionExecutorRegistry(
             live_executor=live_executor,
-            live_executors=live_executors,
+            live_executors=tuple(live_executors),
         )
 
     def catalog(self) -> IntegrationCatalogResponse:
@@ -174,7 +185,7 @@ class IntegrationService:
             for definition in CONNECTOR_DEFINITIONS.values()
             if (definition.simulation_only and mock_available)
             or (definition.connector_key == ConnectorKey.HUBSPOT and hubspot_available)
-            or definition.connector_key == ConnectorKey.MICROSOFT_365
+            or definition.connector_key in {ConnectorKey.MICROSOFT_365, ConnectorKey.GOOGLE_WORKSPACE}
         ]
         return IntegrationCatalogResponse(
             connectors=[
@@ -190,16 +201,28 @@ class IntegrationService:
                     available=(
                         self.settings.feature_microsoft_365_enabled
                         if definition.connector_key == ConnectorKey.MICROSOFT_365
-                        else True
+                        else (
+                            self.settings.feature_google_workspace_enabled
+                            if definition.connector_key == ConnectorKey.GOOGLE_WORKSPACE
+                            else True
+                        )
                     ),
                     simulation_only=definition.simulation_only,
                 )
                 for definition in definitions
             ],
             execution_mode=(
-                "mixed" if hubspot_available or self.settings.feature_microsoft_365_enabled else "simulation"
+                "mixed"
+                if hubspot_available
+                or self.settings.feature_microsoft_365_enabled
+                or self.settings.feature_google_workspace_enabled
+                else "simulation"
             ),
-            external_actions_enabled=hubspot_available or self.settings.feature_microsoft_365_enabled,
+            external_actions_enabled=(
+                hubspot_available
+                or self.settings.feature_microsoft_365_enabled
+                or self.settings.feature_google_workspace_enabled
+            ),
         )
 
     async def list_connections(self) -> ConnectionListResponse:
@@ -214,6 +237,10 @@ class IntegrationService:
                 item.connector_key == ConnectorKey.MICROSOFT_365.value
                 and (self.tenant.can_manage() or item.created_by_user_id == self.tenant.user_id)
             )
+            or (
+                item.connector_key == ConnectorKey.GOOGLE_WORKSPACE.value
+                and (self.tenant.can_manage() or item.created_by_user_id == self.tenant.user_id)
+            )
         ]
         return ConnectionListResponse(items=[self._connection_response(item) for item in visible], total=len(visible))
 
@@ -225,10 +252,14 @@ class IntegrationService:
 
     async def create_connection(self, request: ConnectionCreateRequest) -> OrganisationConnectionResponse:
         self._require_admin()
-        if request.connector_key == ConnectorKey.HUBSPOT:
+        if request.connector_key in {
+            ConnectorKey.HUBSPOT,
+            ConnectorKey.MICROSOFT_365,
+            ConnectorKey.GOOGLE_WORKSPACE,
+        }:
             raise PublicAPIError(
                 "oauth_required",
-                "Start the HubSpot authorisation flow to create this connection.",
+                "Start the provider authorisation flow to create this connection.",
                 409,
             )
         await self._require_connector_entitlement(request.connector_key.value)
@@ -278,11 +309,15 @@ class IntegrationService:
     async def test_connection(self, connection_id: UUID) -> ConnectionHealthResponse:
         self._require_integrations()
         connection = await self._require_connection(connection_id, for_update=True)
-        if connection.connector_key != ConnectorKey.MICROSOFT_365.value:
+        mailbox_keys = {
+            ConnectorKey.MICROSOFT_365.value,
+            ConnectorKey.GOOGLE_WORKSPACE.value,
+        }
+        if connection.connector_key not in mailbox_keys:
             self._require_admin()
         elif connection.created_by_user_id != self.tenant.user_id and not self.tenant.can_manage():
             raise PublicAPIError("forbidden", "You cannot test another seller's mailbox.", 403)
-        if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+        if connection.connector_key in mailbox_keys:
             await CommercialService(self.session, self.settings).require_module_write(
                 self.tenant.organisation_id,
                 "core",
@@ -301,6 +336,7 @@ class IntegrationService:
             if connection.connector_key in {
                 ConnectorKey.HUBSPOT.value,
                 ConnectorKey.MICROSOFT_365.value,
+                ConnectorKey.GOOGLE_WORKSPACE.value,
             }:
                 connection.connection_status = ConnectionStatus.REAUTHORISATION_REQUIRED.value
                 connection.metadata_version += 1
@@ -321,8 +357,8 @@ class IntegrationService:
                 "Simulation connection verified. No external request was made."
                 if definition.simulation_only
                 else (
-                    "Microsoft mailbox and calendar authorisation were verified."
-                    if connection.connector_key == ConnectorKey.MICROSOFT_365.value
+                    f"{definition.display_name} mailbox and calendar authorisation were verified."
+                    if connection.connector_key in mailbox_keys
                     else "HubSpot authorisation and account identity were verified."
                 )
             ),
@@ -331,7 +367,11 @@ class IntegrationService:
     async def revoke_connection(self, connection_id: UUID) -> OrganisationConnectionResponse:
         self._require_integrations()
         connection = await self._require_connection(connection_id, for_update=True)
-        if connection.connector_key != ConnectorKey.MICROSOFT_365.value:
+        mailbox_keys = {
+            ConnectorKey.MICROSOFT_365.value,
+            ConnectorKey.GOOGLE_WORKSPACE.value,
+        }
+        if connection.connector_key not in mailbox_keys:
             self._require_admin()
         elif connection.created_by_user_id != self.tenant.user_id and not self.tenant.can_manage():
             raise PublicAPIError("forbidden", "You cannot disconnect another seller's mailbox.", 403)
@@ -352,6 +392,22 @@ class IntegrationService:
                     await self.hubspot_client.revoke(credential)
                 except (ValueError, HubSpotAPIError):
                     # Provider revocation is best effort; local credential deletion always wins.
+                    logger.warning(
+                        "connection_provider_revocation_failed",
+                        extra=self._connection_log_context(connection),
+                    )
+            if connection.connector_key == ConnectorKey.GOOGLE_WORKSPACE.value and self.google_client is not None:
+                from revenueos.google_workspace import GoogleAPIError
+
+                try:
+                    credential = await self.credential_store.get(
+                        self.tenant.organisation_id,
+                        connection.id,
+                        connection.credential_reference,
+                    )
+                    await self.google_client.revoke(credential)
+                except (ValueError, GoogleAPIError):
+                    # Google revocation is best effort; local deletion and queued-work cancellation always win.
                     logger.warning(
                         "connection_provider_revocation_failed",
                         extra=self._connection_log_context(connection),
@@ -413,6 +469,7 @@ class IntegrationService:
             self.tenant.organisation_id,
             "core",
         )
+        await self._require_primary_mailbox_available(ConnectorKey.MICROSOFT_365)
         client = self._require_microsoft()
         store = self._require_encrypted_credential_store()
         state_value = secrets.token_urlsafe(48)
@@ -526,6 +583,7 @@ class IntegrationService:
                     409,
                 ) from exc
             raise
+        await self._require_primary_mailbox_available(ConnectorKey.MICROSOFT_365)
         connection = await self.repository.connection_by_key_for_user(
             self.tenant.organisation_id,
             ConnectorKey.MICROSOFT_365.value,
@@ -595,6 +653,205 @@ class IntegrationService:
         state.pkce_nonce = None
         self._add_audit(connection, event_type, now)
         await self._commit("The Microsoft connection could not be saved.")
+        return self._connection_response(await self._require_connection(connection.id))
+
+    async def start_google_oauth(self) -> OAuthStartResponse:
+        self._require_integrations()
+        await CommercialService(self.session, self.settings).require_module_write(
+            self.tenant.organisation_id,
+            "core",
+        )
+        await self._require_primary_mailbox_available(ConnectorKey.GOOGLE_WORKSPACE)
+        client = self._require_google()
+        store = self._require_encrypted_credential_store()
+        state_value = secrets.token_urlsafe(48)
+        verifier = secrets.token_urlsafe(64)
+        challenge = hashlib.sha256(verifier.encode()).digest()
+        import base64
+
+        challenge_value = base64.urlsafe_b64encode(challenge).rstrip(b"=").decode("ascii")
+        nonce_value = secrets.token_urlsafe(32)
+        state_id = uuid.uuid4()
+        pkce_nonce, encrypted_verifier = store.encrypt_oauth_state_secret(
+            self.tenant.organisation_id,
+            state_id,
+            verifier,
+        )
+        now = datetime.now(UTC)
+        assert self.settings.google_oauth_redirect_uri is not None
+        self.repository.add(
+            OAuthConnectionState(
+                id=state_id,
+                organisation_id=self.tenant.organisation_id,
+                user_id=self.tenant.user_id,
+                connector_key=ConnectorKey.GOOGLE_WORKSPACE.value,
+                state_hash=hashlib.sha256(state_value.encode()).hexdigest(),
+                redirect_uri=self.settings.google_oauth_redirect_uri,
+                expires_at=now + timedelta(seconds=self.settings.google_oauth_state_ttl_seconds),
+                consumed_at=None,
+                pkce_verifier_encrypted=encrypted_verifier,
+                pkce_nonce=pkce_nonce,
+                oidc_nonce_hash=hashlib.sha256(nonce_value.encode()).hexdigest(),
+                created_at=now,
+            )
+        )
+        await self._commit("The Google authorisation flow could not be started.")
+        return OAuthStartResponse(
+            authorisation_url=client.authorisation_url(state_value, challenge_value, nonce_value),
+            expires_at=now + timedelta(seconds=self.settings.google_oauth_state_ttl_seconds),
+        )
+
+    async def complete_google_oauth(
+        self,
+        request: OAuthCallbackRequest,
+    ) -> OrganisationConnectionResponse:
+        self._require_integrations()
+        await CommercialService(self.session, self.settings).require_module_write(
+            self.tenant.organisation_id,
+            "core",
+        )
+        client = self._require_google()
+        store = self._require_encrypted_credential_store()
+        now = datetime.now(UTC)
+        state = await self.repository.oauth_state_by_hash(
+            self.tenant.organisation_id,
+            hashlib.sha256(request.state.encode()).hexdigest(),
+            for_update=True,
+        )
+        if state is None or state.connector_key != ConnectorKey.GOOGLE_WORKSPACE.value:
+            raise PublicAPIError("oauth_state_invalid", "This Google authorisation request is invalid.", 400)
+        if state.user_id != self.tenant.user_id:
+            raise PublicAPIError("oauth_state_invalid", "This Google authorisation request is invalid.", 400)
+        if state.consumed_at is not None:
+            raise PublicAPIError("oauth_state_replayed", "This Google authorisation request was already used.", 409)
+        if self._as_utc(state.expires_at) <= now:
+            raise PublicAPIError("oauth_state_expired", "This Google authorisation request has expired.", 409)
+        if state.redirect_uri != self.settings.google_oauth_redirect_uri:
+            raise PublicAPIError("oauth_redirect_mismatch", "This Google authorisation request is invalid.", 400)
+        state.consumed_at = now
+        if request.provider_error is not None:
+            await self._commit("The Google authorisation result could not be recorded.")
+            if request.provider_error in {"admin_policy_enforced", "org_internal"}:
+                raise PublicAPIError(
+                    "google_admin_approval_required",
+                    "Your Google Workspace administrator must allow Oryntela before this connection can be completed.",
+                    409,
+                )
+            raise PublicAPIError(
+                "oauth_authorisation_declined",
+                "Google authorisation was not completed. No connection was created.",
+                400,
+            )
+        assert request.code is not None
+        if state.oidc_nonce_hash is None:
+            raise PublicAPIError("oauth_state_invalid", "This Google authorisation request is invalid.", 400)
+        try:
+            verifier = store.decrypt_oauth_state_secret(
+                self.tenant.organisation_id,
+                state.id,
+                state.pkce_nonce,
+                state.pkce_verifier_encrypted,
+            )
+            result = await client.exchange_code(request.code, verifier, state.oidc_nonce_hash)
+        except ValueError as exc:
+            await self._commit("The Google authorisation state could not be recorded.")
+            raise PublicAPIError("oauth_state_invalid", "This Google authorisation request is invalid.", 400) from exc
+        except Exception as exc:
+            from revenueos.google_workspace import GoogleAPIError
+
+            await self._commit("The Google authorisation result could not be recorded.")
+            if isinstance(exc, GoogleAPIError):
+                messages = {
+                    "google_workspace_account_required": "Connect a managed Google Workspace account.",
+                    "provider_scope_incomplete": "Google did not grant every permission required for email and calendar.",
+                    "provider_refresh_token_missing": (
+                        "Google did not return offline access. Remove the existing Oryntela grant and connect again."
+                    ),
+                }
+                raise PublicAPIError(
+                    exc.code,
+                    messages.get(exc.code, "Google authorisation could not be verified. Start the connection again."),
+                    409,
+                ) from exc
+            raise
+        await self._require_primary_mailbox_available(ConnectorKey.GOOGLE_WORKSPACE)
+        connection = await self.repository.connection_by_key_for_user(
+            self.tenant.organisation_id,
+            ConnectorKey.GOOGLE_WORKSPACE.value,
+            self.tenant.user_id,
+            for_update=True,
+        )
+        if (
+            connection is not None
+            and connection.connection_status != ConnectionStatus.REVOKED.value
+            and (
+                connection.external_account_id != result.profile.sub
+                or connection.external_tenant_id != result.profile.hd
+            )
+        ):
+            try:
+                await client.revoke(result.credential)
+            except Exception:
+                logger.warning(
+                    "connection_rejected_credential_revocation_failed",
+                    extra=self._connection_log_context(connection),
+                )
+            await self._commit("The rejected Google authorisation could not be recorded.")
+            raise PublicAPIError(
+                "connection_account_changed",
+                "Disconnect the existing Google account before connecting a different account.",
+                409,
+            )
+        event_type = "connection_created"
+        if connection is None:
+            connection = IntegrationConnection(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                connector_key=ConnectorKey.GOOGLE_WORKSPACE.value,
+                connection_status=ConnectionStatus.ACTIVE.value,
+                created_by_user_id=self.tenant.user_id,
+                connected_at=now,
+                last_verified_at=now,
+                revoked_at=None,
+                credential_reference=None,
+                capability_state_json=[
+                    item.value for item in CONNECTOR_DEFINITIONS[ConnectorKey.GOOGLE_WORKSPACE].capabilities
+                ],
+                external_account_id=result.profile.sub,
+                external_account_name=result.profile.name,
+                external_account_email=result.profile.email,
+                external_tenant_id=result.profile.hd,
+                granted_scopes_json=list(result.credential.scopes),
+                metadata_version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            self.repository.add(connection)
+            await self.repository.flush()
+        else:
+            event_type = "connection_tested"
+            connection.connection_status = ConnectionStatus.ACTIVE.value
+            connection.connected_at = now
+            connection.last_verified_at = now
+            connection.revoked_at = None
+            connection.capability_state_json = [
+                item.value for item in CONNECTOR_DEFINITIONS[ConnectorKey.GOOGLE_WORKSPACE].capabilities
+            ]
+            connection.external_account_id = result.profile.sub
+            connection.external_account_name = result.profile.name
+            connection.external_account_email = result.profile.email
+            connection.external_tenant_id = result.profile.hd
+            connection.granted_scopes_json = list(result.credential.scopes)
+            connection.metadata_version += 1
+        connection.credential_reference = await store.put(
+            self.tenant.organisation_id,
+            connection.id,
+            result.credential,
+        )
+        state.pkce_verifier_encrypted = None
+        state.pkce_nonce = None
+        self._add_audit(connection, event_type, now)
+        await self._commit("The Google Workspace connection could not be saved.")
         return self._connection_response(await self._require_connection(connection.id))
 
     async def complete_hubspot_oauth(
@@ -1019,7 +1276,11 @@ class IntegrationService:
         )
 
     def _credential_store(self) -> CredentialStore:
-        if not (self.settings.feature_hubspot_crm_enabled or self.settings.feature_microsoft_365_enabled):
+        if not (
+            self.settings.feature_hubspot_crm_enabled
+            or self.settings.feature_microsoft_365_enabled
+            or self.settings.feature_google_workspace_enabled
+        ):
             return MockCredentialStore()
         if self.settings.connector_credential_master_key is None:
             raise RuntimeError("Connector credential storage is not configured.")
@@ -1044,11 +1305,21 @@ class IntegrationService:
             )
         return self.microsoft_client
 
+    def _require_google(self) -> GoogleWorkspaceClient:
+        self._require_integrations()
+        if not self.settings.feature_google_workspace_enabled or self.google_client is None:
+            raise PublicAPIError(
+                "google_setup_required",
+                "Google Workspace is not configured yet.",
+                409,
+            )
+        return self.google_client
+
     def _require_encrypted_credential_store(self) -> EncryptedDatabaseCredentialStore:
         if not isinstance(self.credential_store, EncryptedDatabaseCredentialStore):
             raise PublicAPIError(
-                "microsoft_setup_required",
-                "Microsoft 365 encrypted credential storage is not configured.",
+                "provider_setup_required",
+                "Encrypted provider credential storage is not configured.",
                 409,
             )
         return self.credential_store
@@ -1071,7 +1342,30 @@ class IntegrationService:
         if connector_key == ConnectorKey.MICROSOFT_365.value:
             self._require_microsoft()
             return
+        if connector_key == ConnectorKey.GOOGLE_WORKSPACE.value:
+            self._require_google()
+            return
         raise PublicAPIError("connector_unavailable", "The selected connector is unavailable.", 404)
+
+    async def _require_primary_mailbox_available(self, requested: ConnectorKey) -> None:
+        existing = await self.session.scalar(
+            select(IntegrationConnection).where(
+                IntegrationConnection.organisation_id == self.tenant.organisation_id,
+                IntegrationConnection.created_by_user_id == self.tenant.user_id,
+                IntegrationConnection.connector_key.in_(
+                    (ConnectorKey.MICROSOFT_365.value, ConnectorKey.GOOGLE_WORKSPACE.value)
+                ),
+                IntegrationConnection.connector_key != requested.value,
+                IntegrationConnection.connection_status != ConnectionStatus.REVOKED.value,
+            )
+        )
+        if existing is not None:
+            definition = CONNECTOR_DEFINITIONS[ConnectorKey(existing.connector_key)]
+            raise PublicAPIError(
+                "primary_mailbox_already_connected",
+                f"Disconnect {definition.display_name} before connecting another primary work mailbox.",
+                409,
+            )
 
     @staticmethod
     def _connection_context(connection: IntegrationConnection) -> ExecutorConnectionContext:
@@ -1256,10 +1550,14 @@ class IntegrationService:
     @staticmethod
     def _require_active_connection(connection: IntegrationConnection) -> None:
         if connection.connection_status == ConnectionStatus.REAUTHORISATION_REQUIRED.value:
-            if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+            if connection.connector_key in {
+                ConnectorKey.MICROSOFT_365.value,
+                ConnectorKey.GOOGLE_WORKSPACE.value,
+            }:
+                definition = CONNECTOR_DEFINITIONS[ConnectorKey(connection.connector_key)]
                 raise PublicAPIError(
                     "connection_reauthorisation_required",
-                    "Microsoft 365 needs to be reconnected.",
+                    f"{definition.display_name} needs to be reconnected.",
                     409,
                 )
             raise PublicAPIError(
@@ -1366,7 +1664,7 @@ class ActionExecutionService:
         self.action_repository = ActionRepository(session)
         self.credential_store = credential_store or self._credential_store()
         live_executor: ActionExecutor | None = None
-        live_executors: tuple[ActionExecutor, ...] = ()
+        live_executors: list[ActionExecutor] = []
         if settings.feature_hubspot_crm_enabled:
             from revenueos.hubspot_connector import HubSpotClient, HubSpotCRMExecutor
 
@@ -1374,10 +1672,16 @@ class ActionExecutionService:
         if settings.feature_microsoft_365_enabled:
             from revenueos.microsoft_graph import MicrosoftEmailExecutor, MicrosoftGraphClient
 
-            live_executors = (MicrosoftEmailExecutor(session, MicrosoftGraphClient(settings, self.credential_store)),)
+            live_executors.append(
+                MicrosoftEmailExecutor(session, MicrosoftGraphClient(settings, self.credential_store))
+            )
+        if settings.feature_google_workspace_enabled:
+            from revenueos.google_workspace import GoogleEmailExecutor, GoogleWorkspaceClient
+
+            live_executors.append(GoogleEmailExecutor(session, GoogleWorkspaceClient(settings, self.credential_store)))
         self.executors = executors or ActionExecutorRegistry(
             live_executor=live_executor,
-            live_executors=live_executors,
+            live_executors=tuple(live_executors),
         )
 
     async def preview(self, action_id: UUID, connection_id: UUID) -> ExecutionPreviewResponse:
@@ -1387,7 +1691,7 @@ class ActionExecutionService:
         await self._require_connection_entitlement(connection)
         action = await self._action_input(action_record)
         self._require_outreach_mailbox_binding(action, connection)
-        await self._require_microsoft_email_send_safety(action, connection)
+        await self._require_mailbox_email_send_safety(action, connection)
         action = await self._bind_external_target(action, connection)
         capability = self._capability(action.action_type)
         executor = self._executor(connection, capability, action.risk_class)
@@ -1444,7 +1748,7 @@ class ActionExecutionService:
             try:
                 await self._require_connection_entitlement(connection)
                 self._require_outreach_mailbox_binding(action, connection)
-                await self._require_microsoft_email_send_safety(action, connection)
+                await self._require_mailbox_email_send_safety(action, connection)
                 self._executor(connection, capability, action.risk_class)
             except PublicAPIError:
                 continue
@@ -1496,7 +1800,7 @@ class ActionExecutionService:
         await self._require_connection_entitlement(connection)
         action = await self._action_input(action_record)
         self._require_outreach_mailbox_binding(action, connection)
-        await self._require_microsoft_email_send_safety(action, connection)
+        await self._require_mailbox_email_send_safety(action, connection)
         action = await self._bind_external_target(action, connection)
         capability = self._capability(action.action_type)
         if capability.value != preview.capability:
@@ -1568,7 +1872,10 @@ class ActionExecutionService:
         preview.confirmed_by_user_id = self.tenant.user_id
         preview.confirmed_at = now
         self.repository.add(execution)
-        if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+        if connection.connector_key in {
+            ConnectorKey.MICROSOFT_365.value,
+            ConnectorKey.GOOGLE_WORKSPACE.value,
+        }:
             payload = cast(FollowUpEmailPayload | PersonalizedOutreachPayload, action.payload)
             assert payload.recipient_email is not None
             assert connection.external_account_email is not None
@@ -1578,7 +1885,7 @@ class ActionExecutionService:
                     organisation_id=self.tenant.organisation_id,
                     connection_id=connection.id,
                     action_id=action.action_id,
-                    provider_key=ConnectorKey.MICROSOFT_365.value,
+                    provider_key=connection.connector_key,
                     idempotency_key=idempotency_key,
                     state="queued",
                     sender_email=connection.external_account_email,
@@ -1686,7 +1993,10 @@ class ActionExecutionService:
         applied = False
         safe_to_retry = False
         try:
-            if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+            if connection.connector_key in {
+                ConnectorKey.MICROSOFT_365.value,
+                ConnectorKey.GOOGLE_WORKSPACE.value,
+            }:
                 operation = await self.session.scalar(
                     select(ProviderOutboundOperation)
                     .where(
@@ -1698,10 +2008,13 @@ class ActionExecutionService:
                     .with_for_update()
                 )
                 if operation is None or operation.state != "reconciled" or operation.provider_message_id is None:
+                    provider_prefix = (
+                        "microsoft" if connection.connector_key == ConnectorKey.MICROSOFT_365.value else "google"
+                    )
                     raise PublicAPIError(
-                        "microsoft_send_reconciliation_pending",
-                        "Microsoft has not provided strong evidence that this email was sent. "
-                        "RevenueOS will keep the outcome unknown and will not resend it.",
+                        f"{provider_prefix}_send_reconciliation_pending",
+                        "The mailbox provider has not supplied strong evidence that this email was sent. "
+                        "Oryntela will keep the outcome unknown and will not resend it.",
                         409,
                     )
                 applied = True
@@ -1781,6 +2094,7 @@ class ActionExecutionService:
             and (
                 self.settings.feature_hubspot_crm_enabled
                 or self.settings.feature_microsoft_365_enabled
+                or self.settings.feature_google_workspace_enabled
                 or (self.settings.feature_mock_connectors_enabled and self.settings.environment != "production")
             )
         ):
@@ -1793,7 +2107,11 @@ class ActionExecutionService:
         )
 
     def _credential_store(self) -> CredentialStore:
-        if not (self.settings.feature_hubspot_crm_enabled or self.settings.feature_microsoft_365_enabled):
+        if not (
+            self.settings.feature_hubspot_crm_enabled
+            or self.settings.feature_microsoft_365_enabled
+            or self.settings.feature_google_workspace_enabled
+        ):
             return MockCredentialStore()
         if self.settings.connector_credential_master_key is None:
             raise RuntimeError("Connector credential storage is not configured.")
@@ -2126,6 +2444,7 @@ class ActionExecutionService:
             return
         if connection.connector_key not in {
             ConnectorKey.MICROSOFT_365.value,
+            ConnectorKey.GOOGLE_WORKSPACE.value,
             ConnectorKey.MOCK_EMAIL.value,
         }:
             return
@@ -2135,11 +2454,20 @@ class ActionExecutionService:
                 "Select your own connected mailbox.",
                 409,
             )
-        if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
-            if not self.settings.feature_microsoft_365_enabled or not connection.external_account_email:
+        if connection.connector_key in {
+            ConnectorKey.MICROSOFT_365.value,
+            ConnectorKey.GOOGLE_WORKSPACE.value,
+        }:
+            provider_enabled = (
+                self.settings.feature_microsoft_365_enabled
+                if connection.connector_key == ConnectorKey.MICROSOFT_365.value
+                else self.settings.feature_google_workspace_enabled
+            )
+            definition = CONNECTOR_DEFINITIONS[ConnectorKey(connection.connector_key)]
+            if not provider_enabled or not connection.external_account_email:
                 raise PublicAPIError(
                     "connection_reauthorisation_required",
-                    "Reconnect Microsoft 365 to continue sending.",
+                    f"Reconnect {definition.display_name} to continue sending.",
                     409,
                 )
             if isinstance(action.payload, PersonalizedOutreachPayload) and (
@@ -2148,14 +2476,14 @@ class ActionExecutionService:
             ):
                 raise PublicAPIError(
                     "sender_identity_mismatch",
-                    "The approved From address must match your connected Microsoft mailbox.",
+                    f"The approved From address must match your connected {definition.display_name} mailbox.",
                     409,
                 )
             return
         if self.settings.environment == "production":
             raise PublicAPIError(
                 "production_mailbox_unavailable",
-                "A production Microsoft 365 mailbox connection is required.",
+                "A production work mailbox connection is required.",
                 409,
             )
         if connection.connector_key != ConnectorKey.MOCK_EMAIL.value or (
@@ -2168,12 +2496,15 @@ class ActionExecutionService:
                 409,
             )
 
-    async def _require_microsoft_email_send_safety(
+    async def _require_mailbox_email_send_safety(
         self,
         action: ApprovedActionInput,
         connection: IntegrationConnection,
     ) -> None:
-        if connection.connector_key != ConnectorKey.MICROSOFT_365.value or not isinstance(
+        if connection.connector_key not in {
+            ConnectorKey.MICROSOFT_365.value,
+            ConnectorKey.GOOGLE_WORKSPACE.value,
+        } or not isinstance(
             action.payload,
             FollowUpEmailPayload,
         ):
@@ -2359,7 +2690,7 @@ class ActionExecutionService:
         }[capability]
         live_summary = {
             ConnectorCapability.SEND_EMAIL: (
-                "Send this reviewed email through the connected Microsoft 365 work mailbox."
+                f"Send this reviewed email through the connected {definition.display_name} work mailbox."
             ),
             ConnectorCapability.UPDATE_OPPORTUNITY: "Apply this reviewed field update to the linked HubSpot deal.",
             ConnectorCapability.UPDATE_CONTACT: "Apply this reviewed field update to the linked HubSpot contact.",
@@ -2413,22 +2744,46 @@ class ActionExecutionService:
             ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
         }[status]
         if execution.execution_mode == "live":
-            if execution.connector_key == ConnectorKey.MICROSOFT_365.value:
-                safe_message = {
-                    ExecutionStatus.QUEUED: "Microsoft email queued. No external send has occurred yet.",
-                    ExecutionStatus.EXECUTING: "RevenueOS is submitting the reviewed email to Microsoft.",
-                    ExecutionStatus.SUCCEEDED: (
-                        "Microsoft accepted the reviewed email for processing. Delivery is not guaranteed."
-                    ),
-                    ExecutionStatus.FAILED_RETRYABLE: ("Microsoft did not accept the email; a bounded retry is safe."),
-                    ExecutionStatus.FAILED_PERMANENT: ("The Microsoft email stopped safely and will not be retried."),
-                    ExecutionStatus.CANCELLED: "The Microsoft email was cancelled before submission.",
-                    ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
-                        "The Microsoft send outcome is unknown. RevenueOS will not resend without "
-                        "strong Sent Items evidence."
-                    ),
-                    ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
-                }[status]
+            if execution.connector_key in {
+                ConnectorKey.MICROSOFT_365.value,
+                ConnectorKey.GOOGLE_WORKSPACE.value,
+            }:
+                if execution.connector_key == ConnectorKey.MICROSOFT_365.value:
+                    safe_message = {
+                        ExecutionStatus.QUEUED: "Microsoft email queued. No external send has occurred yet.",
+                        ExecutionStatus.EXECUTING: "RevenueOS is submitting the reviewed email to Microsoft.",
+                        ExecutionStatus.SUCCEEDED: (
+                            "Microsoft accepted the reviewed email for processing. Delivery is not guaranteed."
+                        ),
+                        ExecutionStatus.FAILED_RETRYABLE: (
+                            "Microsoft did not accept the email; a bounded retry is safe."
+                        ),
+                        ExecutionStatus.FAILED_PERMANENT: (
+                            "The Microsoft email stopped safely and will not be retried."
+                        ),
+                        ExecutionStatus.CANCELLED: "The Microsoft email was cancelled before submission.",
+                        ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
+                            "The Microsoft send outcome is unknown. RevenueOS will not resend without "
+                            "strong Sent Items evidence."
+                        ),
+                        ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
+                    }[status]
+                else:
+                    safe_message = {
+                        ExecutionStatus.QUEUED: "Google Workspace email queued. No external send has occurred yet.",
+                        ExecutionStatus.EXECUTING: "Oryntela is submitting the reviewed email to Gmail.",
+                        ExecutionStatus.SUCCEEDED: (
+                            "Gmail accepted the reviewed email for processing. Delivery is not guaranteed."
+                        ),
+                        ExecutionStatus.FAILED_RETRYABLE: ("Gmail did not accept the email; a bounded retry is safe."),
+                        ExecutionStatus.FAILED_PERMANENT: ("The Gmail email stopped safely and will not be retried."),
+                        ExecutionStatus.CANCELLED: "The Gmail email was cancelled before submission.",
+                        ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
+                            "The Gmail send outcome is unknown. Oryntela will not resend without strong "
+                            "provider evidence."
+                        ),
+                        ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
+                    }[status]
             else:
                 safe_message = {
                     ExecutionStatus.QUEUED: "HubSpot update queued. No external change has occurred yet.",

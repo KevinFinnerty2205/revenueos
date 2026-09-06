@@ -267,11 +267,15 @@ function executionStatus(execution: ActionExecution) {
   const liveLabel =
     execution.connectorKey === "microsoft_365"
       ? "Microsoft email"
-      : "HubSpot action";
+      : execution.connectorKey === "google_workspace"
+        ? "Google Workspace email"
+        : "HubSpot action";
   if (status === "succeeded")
     return execution.connectorKey === "microsoft_365"
       ? "Microsoft email accepted"
-      : "HubSpot update complete";
+      : execution.connectorKey === "google_workspace"
+        ? "Google Workspace email accepted"
+        : "HubSpot update complete";
   if (status === "simulated_success") return "Simulation complete";
   if (
     status === "failed_retryable" ||

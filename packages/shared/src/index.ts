@@ -2909,7 +2909,8 @@ export type ConnectorKey =
   | "mock_crm"
   | "mock_task"
   | "hubspot"
-  | "microsoft_365";
+  | "microsoft_365"
+  | "google_workspace";
 export type ConnectorCapability =
   | "send_email"
   | "create_calendar_event"
@@ -2980,7 +2981,7 @@ export interface ConnectionListResponse {
   total: number;
 }
 
-export interface MicrosoftSyncResource {
+export interface ProviderSyncResource {
   resourceKind: "mail_sent" | "mail_inbox" | "calendar";
   processed: number;
   retained: number;
@@ -2988,20 +2989,20 @@ export interface MicrosoftSyncResource {
   safeMessage: string;
 }
 
-export interface MicrosoftSyncResponse {
+export interface ProviderSyncResponse {
   connectionId: string;
   syncedAt: string;
-  resources: MicrosoftSyncResource[];
+  resources: ProviderSyncResource[];
 }
 
-export interface MicrosoftSyncStatus {
+export interface ProviderSyncStatus {
   connectionId: string;
   lastSuccessfulSyncAt: string | null;
   lastErrorCategory: string | null;
   state: "not_started" | "healthy" | "degraded";
 }
 
-export interface MicrosoftCalendarEvent {
+export interface ProviderCalendarEvent {
   id: string;
   title: string;
   startAt: string;
@@ -3020,10 +3021,16 @@ export interface MicrosoftCalendarEvent {
   lastSyncedAt: string;
 }
 
-export interface MicrosoftCalendarEventListResponse {
-  items: MicrosoftCalendarEvent[];
+export interface ProviderCalendarEventListResponse {
+  items: ProviderCalendarEvent[];
   total: number;
 }
+
+export type MicrosoftSyncResource = ProviderSyncResource;
+export type MicrosoftSyncResponse = ProviderSyncResponse;
+export type MicrosoftSyncStatus = ProviderSyncStatus;
+export type MicrosoftCalendarEvent = ProviderCalendarEvent;
+export type MicrosoftCalendarEventListResponse = ProviderCalendarEventListResponse;
 
 export interface ActionExecutionOption {
   connectionId: string;

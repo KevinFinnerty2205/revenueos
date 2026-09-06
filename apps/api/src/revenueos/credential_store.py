@@ -96,7 +96,11 @@ class EncryptedDatabaseCredentialStore:
                     IntegrationConnection.id == connection_id,
                 )
             )
-            if connection is None or connection.connector_key not in {"hubspot", "microsoft_365"}:
+            if connection is None or connection.connector_key not in {
+                "hubspot",
+                "microsoft_365",
+                "google_workspace",
+            }:
                 raise ValueError("Connector credential owner is unavailable.")
             record = EncryptedConnectorCredential(
                 id=uuid.uuid4(),

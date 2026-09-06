@@ -2,60 +2,99 @@
 
 import type {
   Interaction,
-  MicrosoftCalendarEvent,
-  MicrosoftCalendarEventListResponse,
+  ProviderCalendarEvent,
+  ProviderCalendarEventListResponse,
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 
-export function MicrosoftCalendarContext({
+interface CalendarItem extends ProviderCalendarEvent {
+  provider: "microsoft" | "google";
+  providerName: "Microsoft 365" | "Google Workspace";
+}
+
+function eventKey(event: CalendarItem): string {
+  return `${event.provider}:${event.id}`;
+}
+
+export function ProviderCalendarContext({
   interactions,
 }: {
   interactions: Interaction[];
 }) {
-  const [events, setEvents] = useState<MicrosoftCalendarEvent[]>([]);
+  const [events, setEvents] = useState<CalendarItem[]>([]);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    apiRequest<MicrosoftCalendarEventListResponse>(
-      "/api/v1/integrations/microsoft/calendar/events?limit=4",
-      { signal: controller.signal },
-    )
-      .then((result) => setEvents(result.items))
+    Promise.allSettled([
+      apiRequest<ProviderCalendarEventListResponse>(
+        "/api/v1/integrations/microsoft/calendar/events?limit=4",
+        { signal: controller.signal },
+      ).then((result) =>
+        result.items.map((item) => ({
+          ...item,
+          provider: "microsoft" as const,
+          providerName: "Microsoft 365" as const,
+        })),
+      ),
+      apiRequest<ProviderCalendarEventListResponse>(
+        "/api/v1/integrations/google/calendar/events?limit=4",
+        { signal: controller.signal },
+      ).then((result) =>
+        result.items.map((item) => ({
+          ...item,
+          provider: "google" as const,
+          providerName: "Google Workspace" as const,
+        })),
+      ),
+    ])
+      .then((results) => {
+        const availableEvents: CalendarItem[] = [];
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            availableEvents.push(...result.value);
+          }
+        }
+        setEvents(availableEvents);
+      })
       .catch(() => setEvents([]));
     return () => controller.abort();
   }, []);
 
-  async function linkEvent(event: MicrosoftCalendarEvent) {
-    const interactionId = selected[event.id];
+  async function linkEvent(event: CalendarItem) {
+    const interactionId = selected[eventKey(event)];
     if (!interactionId) return;
     await updateInteraction(event, interactionId);
   }
 
-  async function unlinkEvent(event: MicrosoftCalendarEvent) {
+  async function unlinkEvent(event: CalendarItem) {
     await updateInteraction(event, null);
   }
 
   async function updateInteraction(
-    event: MicrosoftCalendarEvent,
+    event: CalendarItem,
     interactionId: string | null,
   ) {
-    setBusy(event.id);
+    setBusy(eventKey(event));
     setError(null);
     try {
-      const updated = await apiRequest<MicrosoftCalendarEvent>(
-        `/api/v1/integrations/microsoft/calendar/events/${event.id}/interaction`,
+      const updated = await apiRequest<ProviderCalendarEvent>(
+        `/api/v1/integrations/${event.provider}/calendar/events/${event.id}/interaction`,
         {
           method: "PUT",
           body: JSON.stringify({ interactionId }),
         },
       );
       setEvents((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
+        current.map((item) =>
+          item.provider === event.provider && item.id === updated.id
+            ? { ...item, ...updated }
+            : item,
+        ),
       );
     } catch (reason: unknown) {
       setError(
@@ -73,18 +112,18 @@ export function MicrosoftCalendarContext({
   return (
     <section
       className="mb-7 rounded-2xl border border-teal-200 bg-teal-50/60 p-5"
-      aria-labelledby="microsoft-calendar-title"
+      aria-labelledby="provider-calendar-title"
     >
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
-        Microsoft Calendar
+        Work calendar
       </p>
-      <h2 id="microsoft-calendar-title" className="mt-2 text-xl font-semibold">
+      <h2 id="provider-calendar-title" className="mt-2 text-xl font-semibold">
         Upcoming meetings
       </h2>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         {events.map((event) => (
           <article
-            key={event.id}
+            key={eventKey(event)}
             className="rounded-xl border border-teal-100 bg-white p-4"
           >
             <p className="text-xs font-bold uppercase tracking-wide text-teal-800">
@@ -93,6 +132,7 @@ export function MicrosoftCalendarContext({
                 timeStyle: "short",
               })}
             </p>
+            <p className="mt-1 text-xs text-slate-500">{event.providerName}</p>
             <h3 className="mt-2 font-bold text-slate-950">{event.title}</h3>
             <p className="mt-1 text-sm text-slate-600">
               {event.location ?? "Location not supplied"}
@@ -111,7 +151,7 @@ export function MicrosoftCalendarContext({
                 <button
                   type="button"
                   className="text-sm font-bold text-slate-600 underline-offset-4 hover:underline"
-                  disabled={busy === event.id}
+                  disabled={busy === eventKey(event)}
                   onClick={() => void unlinkEvent(event)}
                 >
                   Unlink
@@ -123,17 +163,20 @@ export function MicrosoftCalendarContext({
               </p>
             ) : interactions.length ? (
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <label className="sr-only" htmlFor={`interaction-${event.id}`}>
+                <label
+                  className="sr-only"
+                  htmlFor={`interaction-${event.provider}-${event.id}`}
+                >
                   Link {event.title} to an interaction
                 </label>
                 <select
-                  id={`interaction-${event.id}`}
+                  id={`interaction-${event.provider}-${event.id}`}
                   className="form-control min-w-0 flex-1"
-                  value={selected[event.id] ?? ""}
+                  value={selected[eventKey(event)] ?? ""}
                   onChange={(change) =>
                     setSelected((current) => ({
                       ...current,
-                      [event.id]: change.target.value,
+                      [eventKey(event)]: change.target.value,
                     }))
                   }
                 >
@@ -147,7 +190,9 @@ export function MicrosoftCalendarContext({
                 <button
                   type="button"
                   className="secondary-button"
-                  disabled={!selected[event.id] || busy === event.id}
+                  disabled={
+                    !selected[eventKey(event)] || busy === eventKey(event)
+                  }
                   onClick={() => void linkEvent(event)}
                 >
                   Link
@@ -165,3 +210,5 @@ export function MicrosoftCalendarContext({
     </section>
   );
 }
+
+export const MicrosoftCalendarContext = ProviderCalendarContext;

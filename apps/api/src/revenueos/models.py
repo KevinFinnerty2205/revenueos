@@ -5313,7 +5313,8 @@ class IntegrationConnection(TimestampMixin, Base):
     __tablename__ = "integration_connections"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot', 'microsoft_365')",
+            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot', "
+            "'microsoft_365', 'google_workspace')",
             name="ck_integration_connections_key",
         ),
         CheckConstraint(
@@ -5334,21 +5335,24 @@ class IntegrationConnection(TimestampMixin, Base):
         ),
         UniqueConstraint("organisation_id", "id", name="uq_integration_connections_org_id"),
         Index(
-            "uq_integration_connections_org_key_non_microsoft",
+            "uq_integration_connections_org_key_non_mailbox",
             "organisation_id",
             "connector_key",
             unique=True,
-            postgresql_where=text("connector_key <> 'microsoft_365'"),
-            sqlite_where=text("connector_key <> 'microsoft_365'"),
+            postgresql_where=text("connector_key NOT IN ('microsoft_365', 'google_workspace')"),
+            sqlite_where=text("connector_key NOT IN ('microsoft_365', 'google_workspace')"),
         ),
         Index(
-            "uq_integration_connections_org_microsoft_owner",
+            "uq_integration_connections_org_mailbox_owner",
             "organisation_id",
-            "connector_key",
             "created_by_user_id",
             unique=True,
-            postgresql_where=text("connector_key = 'microsoft_365' AND connection_status <> 'revoked'"),
-            sqlite_where=text("connector_key = 'microsoft_365' AND connection_status <> 'revoked'"),
+            postgresql_where=text(
+                "connector_key IN ('microsoft_365', 'google_workspace') AND connection_status <> 'revoked'"
+            ),
+            sqlite_where=text(
+                "connector_key IN ('microsoft_365', 'google_workspace') AND connection_status <> 'revoked'"
+            ),
         ),
         Index(
             "ix_integration_connections_org_status",
@@ -5385,7 +5389,7 @@ class OAuthConnectionState(Base):
     __tablename__ = "oauth_connection_states"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('hubspot', 'microsoft_365')",
+            "connector_key IN ('hubspot', 'microsoft_365', 'google_workspace')",
             name="ck_oauth_connection_states_connector",
         ),
         CheckConstraint("length(state_hash) = 64", name="ck_oauth_connection_states_hash"),
@@ -5421,7 +5425,7 @@ class EncryptedConnectorCredential(TimestampMixin, Base):
     __tablename__ = "encrypted_connector_credentials"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('hubspot', 'microsoft_365')",
+            "connector_key IN ('hubspot', 'microsoft_365', 'google_workspace')",
             name="ck_encrypted_connector_credentials_connector",
         ),
         CheckConstraint("length(nonce) = 12", name="ck_encrypted_connector_credentials_nonce"),
@@ -5452,7 +5456,10 @@ class ProviderOutboundOperation(TimestampMixin, Base):
 
     __tablename__ = "provider_outbound_operations"
     __table_args__ = (
-        CheckConstraint("provider_key = 'microsoft_365'", name="ck_provider_outbound_operations_provider"),
+        CheckConstraint(
+            "provider_key IN ('microsoft_365', 'google_workspace')",
+            name="ck_provider_outbound_operations_provider",
+        ),
         CheckConstraint(
             "state IN ('queued', 'submitting', 'accepted', 'reconciled', 'unknown', 'failed')",
             name="ck_provider_outbound_operations_state",
@@ -5516,7 +5523,10 @@ class ProviderReply(TimestampMixin, Base):
 
     __tablename__ = "provider_replies"
     __table_args__ = (
-        CheckConstraint("provider_key = 'microsoft_365'", name="ck_provider_replies_provider"),
+        CheckConstraint(
+            "provider_key IN ('microsoft_365', 'google_workspace')",
+            name="ck_provider_replies_provider",
+        ),
         CheckConstraint("kind IN ('reply', 'automatic_reply', 'ndr')", name="ck_provider_replies_kind"),
         CheckConstraint(
             "match_state IN ('matched', 'review_required')",
@@ -5590,7 +5600,10 @@ class ProviderCalendarEvent(TimestampMixin, Base):
 
     __tablename__ = "provider_calendar_events"
     __table_args__ = (
-        CheckConstraint("provider_key = 'microsoft_365'", name="ck_provider_calendar_events_provider"),
+        CheckConstraint(
+            "provider_key IN ('microsoft_365', 'google_workspace')",
+            name="ck_provider_calendar_events_provider",
+        ),
         CheckConstraint("state IN ('active', 'cancelled', 'deleted')", name="ck_provider_calendar_events_state"),
         CheckConstraint(
             "match_state IN ('unmatched', 'matched', 'review_required', 'internal', 'private')",
@@ -5670,7 +5683,10 @@ class ProviderCalendarEvent(TimestampMixin, Base):
 class ProviderSyncState(TimestampMixin, Base):
     __tablename__ = "provider_sync_states"
     __table_args__ = (
-        CheckConstraint("provider_key = 'microsoft_365'", name="ck_provider_sync_states_provider"),
+        CheckConstraint(
+            "provider_key IN ('microsoft_365', 'google_workspace')",
+            name="ck_provider_sync_states_provider",
+        ),
         CheckConstraint(
             "resource_kind IN ('mail_inbox', 'mail_sent', 'calendar')",
             name="ck_provider_sync_states_resource",
@@ -6281,7 +6297,8 @@ class ActionExecution(TimestampMixin, Base):
     __tablename__ = "action_executions"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot', 'microsoft_365')",
+            "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot', "
+            "'microsoft_365', 'google_workspace')",
             name="ck_action_executions_connector",
         ),
         CheckConstraint(

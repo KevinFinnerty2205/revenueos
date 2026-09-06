@@ -1119,6 +1119,7 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(EngageCampaign).where(EngageCampaign.organisation_id == organisation_id))
         await _attempt_hubspot_revocation(session, settings, organisation_id)
+        await _attempt_google_revocation(session, settings, organisation_id)
         await session.execute(
             delete(IntegrationAuditEvent).where(IntegrationAuditEvent.organisation_id == organisation_id)
         )
@@ -1425,6 +1426,65 @@ async def _attempt_hubspot_revocation(
         except (HubSpotAPIError, ValueError):
             logger.warning(
                 "organisation_deletion_hubspot_revocation_failed",
+                extra={
+                    "organisation_id": str(organisation_id),
+                    "connection_id": str(connection.id),
+                },
+            )
+
+
+async def _attempt_google_revocation(
+    session: AsyncSession,
+    settings: Settings,
+    organisation_id: UUID,
+) -> None:
+    """Best-effort Google consent revocation before local credential deletion."""
+    connections = list(
+        (
+            await session.scalars(
+                select(IntegrationConnection).where(
+                    IntegrationConnection.organisation_id == organisation_id,
+                    IntegrationConnection.connector_key == "google_workspace",
+                    IntegrationConnection.credential_reference.is_not(None),
+                )
+            )
+        ).all()
+    )
+    if not connections:
+        return
+    if not all(
+        (
+            settings.google_client_id,
+            settings.google_client_secret,
+            settings.connector_credential_master_key,
+        )
+    ):
+        logger.warning(
+            "organisation_deletion_google_revocation_unavailable",
+            extra={"organisation_id": str(organisation_id), "connection_count": len(connections)},
+        )
+        return
+    from revenueos.credential_store import EncryptedDatabaseCredentialStore
+    from revenueos.google_workspace import GoogleAPIError, GoogleWorkspaceClient
+
+    assert settings.connector_credential_master_key is not None
+    store = EncryptedDatabaseCredentialStore(
+        session,
+        settings.connector_credential_master_key.get_secret_value(),
+    )
+    client = GoogleWorkspaceClient(settings, store)
+    for connection in connections:
+        assert connection.credential_reference is not None
+        try:
+            credential = await store.get(
+                organisation_id,
+                connection.id,
+                connection.credential_reference,
+            )
+            await client.revoke(credential)
+        except (GoogleAPIError, ValueError):
+            logger.warning(
+                "organisation_deletion_google_revocation_failed",
                 extra={
                     "organisation_id": str(organisation_id),
                     "connection_id": str(connection.id),

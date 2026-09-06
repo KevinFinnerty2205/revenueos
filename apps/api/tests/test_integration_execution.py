@@ -199,6 +199,7 @@ def test_connection_registry_is_server_authoritative_and_admin_controlled(
         "mock_crm",
         "mock_task",
         "microsoft_365",
+        "google_workspace",
     }
     assert catalog.json()["executionMode"] == "simulation"
     assert catalog.json()["externalActionsEnabled"] is False
@@ -644,7 +645,7 @@ def test_preview_rejects_disabled_unapproved_unsupported_and_incomplete_actions(
     settings.feature_integrations_enabled = True
     settings.feature_mock_connectors_enabled = False
     connectors = client.get("/api/v1/integrations").json()["connectors"]
-    assert [item["connectorKey"] for item in connectors] == ["microsoft_365"]
+    assert [item["connectorKey"] for item in connectors] == ["microsoft_365", "google_workspace"]
     assert connectors[0]["available"] is False
     assert client.get("/api/v1/integrations/connections").json()["items"] == []
     settings.feature_mock_connectors_enabled = True

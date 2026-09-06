@@ -192,7 +192,7 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
         options.items.find((item) => !item.simulationOnly) ?? options.items[0];
       if (!option) {
         throw new Error(
-          "Connect your work email to send through Oryntela. Open Settings to connect Microsoft 365.",
+          "Connect your work email to send through Oryntela. Open Settings to connect Microsoft 365 or Google Workspace.",
         );
       }
       const result = await apiRequest<ExecutionPreview>(
@@ -598,7 +598,7 @@ function OutreachEditor({
           <p className="text-xs font-bold uppercase tracking-[0.15em]">
             {preview.simulationOnly
               ? "Simulation only"
-              : "Microsoft 365 · live send"}
+              : `${preview.connectorDisplayName} · live send`}
           </p>
           <p className="mt-1 text-sm">
             {preview.simulationOnly

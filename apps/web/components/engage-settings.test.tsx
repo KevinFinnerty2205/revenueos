@@ -72,7 +72,7 @@ it("saves approved seller context and conservative outreach controls", async () 
   });
   expect(
     screen.getByText(
-      /Microsoft 365 sending is available only when the deployment is approved/u,
+      /Microsoft 365 or Google Workspace sending is available only when the deployment is approved/u,
     ),
   ).toBeInTheDocument();
 });

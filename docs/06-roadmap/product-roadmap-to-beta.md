@@ -671,12 +671,22 @@ unknown-outcome/Sent Items reconciliation, relevant replies and bounded Calendar
 context linked explicitly to existing Interactions. It is production-capable but not
 production-active. Owner-managed Entra registration, Microsoft/customer-admin consent,
 provider/privacy approval, production secrets, monitoring and an authorised synthetic
-smoke test remain gates. WO-041 has not started.
+smoke test remain gates.
+
+WO-041 is implemented through migration `0057_google_workspace_sales`: it reuses the
+provider-neutral mailbox/calendar foundation for managed Google Workspace OAuth,
+reviewed Gmail sending, unknown-outcome/Sent reconciliation, strongly correlated
+replies and bounded Google Calendar context linked explicitly to existing Interactions.
+It is production-capable but not production-active. Owner-created Google project/OAuth
+client, domain/consent configuration, sensitive/restricted-scope verification, the
+expected restricted-scope security assessment unless Google grants an exception,
+provider/privacy approval, production secrets, monitoring and an authorised synthetic
+smoke test remain gates.
 
 The authorised sequence after WO-050 remains:
 
 1. WO-040 — Microsoft 365 Sales Integration — **implemented; engineering review passed**
-2. WO-041 — Google Workspace Sales Integration — **not started**
+2. WO-041 — Google Workspace Sales Integration — **implemented; awaiting engineering review**
 3. WO-042 — Production CRM Connectors
 4. WO-043 — Simple Opportunity Deal Room
 5. WO-044 — Reviewed Closed-Won Handover

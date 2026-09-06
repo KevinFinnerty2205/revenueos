@@ -165,10 +165,10 @@ adds an explicit immutable audience and one-to-four-step Campaign orchestration 
 those same one-to-one primitives, with review-per-send by default and bounded
 campaign-level auto-send only after separate organisation policy and launch
 confirmation. Execution remains deterministic simulation outside production;
-WO-040 now provides a production-capable but inactive Microsoft Graph path for
-reviewed seller-mailbox sends, strongly correlated replies and bounded Calendar
-context. Production activation and Gmail remain deferred; no provider acceptance is
-presented as recipient delivery.
+WO-040/041 now provide production-capable but inactive Microsoft Graph and Google
+Workspace paths for reviewed seller-mailbox sends, strongly correlated replies and
+bounded Calendar context. Production activation remains separately gated; no provider
+acceptance is presented as recipient delivery.
 See [Personalised one-to-one outreach](personalised-outreach.md) and
 [Campaigns & Sequences](campaigns-and-sequences.md).
 
