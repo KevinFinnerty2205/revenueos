@@ -2,7 +2,7 @@
 
 - **Branch:** `codex/wo-041-google-workspace-sales-integration`
 - **Baseline:** `71d38384429f3dc18c1914720782957221e2c194`
-- **Status:** implemented; awaiting engineering review
+- **Status:** implemented and engineering-reviewed
 - **Migration:** `0057_google_workspace_sales`
 - **Provider:** Gmail API plus Google Calendar API; production-capable and not
   production-active
@@ -19,15 +19,18 @@ existing Engage approval, suppression, scheduling, commercial entitlement, worke
 encrypted credential and tenant isolation boundaries.
 
 The implementation requests only identity, `gmail.send`, `gmail.readonly` and
-`calendar.events.readonly`. The UI explains that Google's restricted read scope is
+`calendar.events.owned.readonly`. The UI explains that Google's restricted read scope is
 technically broader than Oryntela's bounded processing. No unrelated body, full
 mailbox, attachment, event description, private-event detail, raw payload, token or
-sync cursor reaches a customer surface or log.
+sync cursor reaches a customer surface or log. Calendar uses a partial-response field
+mask so event descriptions and attachments are not returned by Google.
 
 ## Safety properties
 
 - Workspace hosted-domain identity, signed OIDC nonce/audience/issuer, tenant/user
-  state binding, PKCE, exact redirect and callback replay controls fail closed.
+  state binding, PKCE, exact redirect and callback replay controls fail closed. The
+  PKCE/state lifecycle is shared with Microsoft; provider identity and token rules
+  remain adapter-specific.
 - One Microsoft or Google primary non-revoked mailbox is allowed per seller. Provider
   switches require disconnect and cannot reroute queued sends.
 - Sender is the connected primary mailbox; aliases/delegation are deferred rather
@@ -71,13 +74,17 @@ rate limiting, unknown send handling, execute-time suppression, member offboardi
 reply body minimisation/correlation/deduplication, Calendar privacy/recurrence/
 cancellation/stale updates and explicit Interaction linkage. Generic Action/Campaign,
 retention/deletion and PostgreSQL RLS suites cover shared provider-neutral behaviour.
+Engineering review additionally narrowed Calendar authority to the seller-owned-event
+scope, excluded descriptions/attachments at the Google response boundary, made
+disappearing Gmail items cursor-safe, bounded reply-operation lookup, redacted deleted
+event tombstones and shared the Microsoft/Google PKCE-state lifecycle.
 
 Visual QA used the real Settings route with synthetic API fixtures. Desktop review
-covered the connected card and the explicit consent disclosure; the 390 px review
-covered reauthorisation, focus handling and zero horizontal overflow.
+covered the connected card; the current consent copy, accessible dialog and focus
+return were rechecked in component tests. The 390 px review covered reauthorisation,
+focus handling and zero horizontal overflow.
 
 - [Connected desktop state](assets/wo-041-google-connected-desktop.png)
-- [Consent disclosure on desktop](assets/wo-041-google-consent-desktop.png)
 - [Reauthorisation at 390 px](assets/wo-041-google-reauthorisation-390.png)
 
 Final local validation:
@@ -86,7 +93,7 @@ Final local validation:
 - Vitest: 265 passed;
 - Playwright: 73 passed;
 - API format, Ruff, strict mypy and package build: passed;
-- pytest: 1,221 passed and seven PostgreSQL-only cases skipped in the ordinary
+- pytest: 1,222 passed and seven PostgreSQL-only cases skipped in the ordinary
   environment;
 - fresh disposable PostgreSQL zero-to-head, drift check, downgrade/re-upgrade and
   the explicit PostgreSQL selection: passed (eight tests, 31 deselected);

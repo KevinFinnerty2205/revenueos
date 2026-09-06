@@ -43,6 +43,11 @@ and a consumer account all fail closed. Reauthorising an active connection must
 return the same Google subject and Workspace domain; another account requires an
 explicit disconnect first.
 
+Microsoft and Google share the same provider-neutral PKCE/state creation and callback
+state-validation helpers. Provider-specific authorisation URLs, signed identity/token
+validation, account policy, error mapping and credential revocation remain in their
+respective adapters.
+
 Only one non-revoked Microsoft 365 **or** Google Workspace primary mailbox is allowed
 per organisation/user. This removes default-sender ambiguity. Switching requires
 disconnect then connect; queued executions and receipts remain bound to their original
@@ -67,7 +72,7 @@ is normally available.
 | `profile` | Show the connected seller safely | Retain bounded display name | Basic profile name | Non-sensitive identity | User; admin policy may restrict | Included in consent-screen/brand review as applicable |
 | `https://www.googleapis.com/auth/gmail.send` | Submit the seller-reviewed message | Send one plain-text message as the authenticated primary mailbox | Approved recipient, subject, body and Oryntela correlation headers | **Sensitive** | User; Workspace admin can restrict/allow apps | Sensitive-scope OAuth verification before external production use unless a documented exception applies |
 | `https://www.googleapis.com/auth/gmail.readonly` | Gmail has no narrower scope that supplies strongly correlated reply bodies | Scan bounded Inbox/Sent metadata; fetch one body only after a unique Oryntela-managed match | Technically permits read-only Gmail access; actual processing is bounded headers/IDs and one matched reply body | **Restricted** | User plus possible Workspace admin app trust | Restricted-scope verification; because server-side systems transmit/store restricted data, an approved restricted-scope security assessment is expected unless Google confirms an exception |
-| `https://www.googleapis.com/auth/calendar.events.readonly` | Read useful event fields without write authority | Bounded primary-calendar context and incremental event reconciliation | Read-only event time, visibility, organiser/attendees, location and safe conference URL when returned | **Sensitive** | User; Workspace admin can restrict/allow | Sensitive-scope OAuth verification before external production use unless a documented exception applies |
+| `https://www.googleapis.com/auth/calendar.events.owned.readonly` | Read useful event fields on calendars owned by the authenticated seller without write authority | Bounded primary-calendar context and incremental event reconciliation | Read-only event time, visibility, organiser/attendees, location and safe conference URL when returned from the seller-owned primary calendar | **Sensitive** | User; Workspace admin can restrict/allow | Sensitive-scope OAuth verification before external production use unless a documented exception applies |
 
 The **Google technical permission** granted by `gmail.readonly` is broader than
 **Oryntela actual data processing**. Oryntela does not ingest a mailbox: the first
@@ -77,7 +82,7 @@ after sender/recipient plus RFC Message-ID/reference or Gmail thread evidence yi
 exactly one known outbound operation.
 
 No Gmail modify, settings, labels, drafts, Contacts/People, Directory, Drive,
-Calendar write or broad Calendar scope is requested. Offline refresh is requested by
+Calendar write or all-calendar event scope is requested. Offline refresh is requested by
 the OAuth protocol parameter rather than a separate Google scope.
 
 ## Gmail send and durable receipt
@@ -118,6 +123,9 @@ is limited to 30 days, 50 items per page and 10 pages. Later passes request only
 `messageAdded` history for the exact label. Duplicate IDs are collapsed. Expired
 history IDs (404/410) reset that resource once to the same bounded lookback; an
 unlimited full scan never occurs. Spam and Trash are not scanned.
+Messages deleted between list/history and the bounded metadata or matched-body read
+are skipped while the valid resource cursor advances, so one disappearing item cannot
+trap synchronisation on the same history batch.
 
 An inbound message is retained only when:
 
@@ -155,8 +163,9 @@ and Google, including if their raw IDs happen to collide.
 For a private/confidential event, Oryntela retains only **Private event**, time,
 timezone, privacy/state and the minimum provider ID/last-modified value required for
 safe reconciliation. It clears attendee, organiser, location, conference URL, iCal
-UID, series ID, etag and Interaction link. Event descriptions and attachments are
-never requested for another workflow or persisted. An allow-listed HTTPS Google Meet
+UID, series ID, etag and Interaction link. A Calendar partial-response field mask
+excludes event descriptions and attachments from the provider response, so they are
+never requested or persisted. An allow-listed HTTPS Google Meet
 URL may be retained for a non-private event; this does not add Meet calling, recording
 or transcription.
 

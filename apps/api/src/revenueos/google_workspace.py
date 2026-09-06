@@ -38,7 +38,7 @@ from revenueos.models import ProviderOutboundOperation
 
 GOOGLE_GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 GOOGLE_GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
-GOOGLE_CALENDAR_READ_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly"
+GOOGLE_CALENDAR_READ_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned.readonly"
 GOOGLE_SCOPES = (
     "openid",
     "email",

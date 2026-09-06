@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import logging
 import secrets
 import uuid
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
 from typing import TYPE_CHECKING, Literal, NoReturn, cast
@@ -463,20 +465,25 @@ class IntegrationService:
             expires_at=now + timedelta(seconds=self.settings.hubspot_oauth_state_ttl_seconds),
         )
 
-    async def start_microsoft_oauth(self) -> OAuthStartResponse:
+    async def _start_mailbox_oauth(
+        self,
+        *,
+        connector_key: ConnectorKey,
+        redirect_uri: str,
+        state_ttl_seconds: int,
+        provider_name: str,
+        authorisation_url: Callable[[str, str, str], str],
+    ) -> OAuthStartResponse:
         self._require_integrations()
         await CommercialService(self.session, self.settings).require_module_write(
             self.tenant.organisation_id,
             "core",
         )
-        await self._require_primary_mailbox_available(ConnectorKey.MICROSOFT_365)
-        client = self._require_microsoft()
+        await self._require_primary_mailbox_available(connector_key)
         store = self._require_encrypted_credential_store()
         state_value = secrets.token_urlsafe(48)
         verifier = secrets.token_urlsafe(64)
         challenge = hashlib.sha256(verifier.encode()).digest()
-        import base64
-
         challenge_value = base64.urlsafe_b64encode(challenge).rstrip(b"=").decode("ascii")
         nonce_value = secrets.token_urlsafe(32)
         state_id = uuid.uuid4()
@@ -486,16 +493,16 @@ class IntegrationService:
             verifier,
         )
         now = datetime.now(UTC)
-        assert self.settings.microsoft_oauth_redirect_uri is not None
+        expires_at = now + timedelta(seconds=state_ttl_seconds)
         self.repository.add(
             OAuthConnectionState(
                 id=state_id,
                 organisation_id=self.tenant.organisation_id,
                 user_id=self.tenant.user_id,
-                connector_key=ConnectorKey.MICROSOFT_365.value,
+                connector_key=connector_key.value,
                 state_hash=hashlib.sha256(state_value.encode()).hexdigest(),
-                redirect_uri=self.settings.microsoft_oauth_redirect_uri,
-                expires_at=now + timedelta(seconds=self.settings.microsoft_oauth_state_ttl_seconds),
+                redirect_uri=redirect_uri,
+                expires_at=expires_at,
                 consumed_at=None,
                 pkce_verifier_encrypted=encrypted_verifier,
                 pkce_nonce=pkce_nonce,
@@ -503,10 +510,55 @@ class IntegrationService:
                 created_at=now,
             )
         )
-        await self._commit("The Microsoft authorisation flow could not be started.")
+        await self._commit(f"The {provider_name} authorisation flow could not be started.")
         return OAuthStartResponse(
-            authorisation_url=client.authorisation_url(state_value, challenge_value, nonce_value),
-            expires_at=now + timedelta(seconds=self.settings.microsoft_oauth_state_ttl_seconds),
+            authorisation_url=authorisation_url(state_value, challenge_value, nonce_value),
+            expires_at=expires_at,
+        )
+
+    async def _consume_mailbox_oauth_state(
+        self,
+        request: OAuthCallbackRequest,
+        *,
+        connector_key: ConnectorKey,
+        redirect_uri: str,
+        provider_name: str,
+    ) -> tuple[OAuthConnectionState, datetime]:
+        now = datetime.now(UTC)
+        state = await self.repository.oauth_state_by_hash(
+            self.tenant.organisation_id,
+            hashlib.sha256(request.state.encode()).hexdigest(),
+            for_update=True,
+        )
+        invalid_message = f"This {provider_name} authorisation request is invalid."
+        if state is None or state.connector_key != connector_key.value or state.user_id != self.tenant.user_id:
+            raise PublicAPIError("oauth_state_invalid", invalid_message, 400)
+        if state.consumed_at is not None:
+            raise PublicAPIError(
+                "oauth_state_replayed",
+                f"This {provider_name} authorisation request was already used.",
+                409,
+            )
+        if self._as_utc(state.expires_at) <= now:
+            raise PublicAPIError(
+                "oauth_state_expired",
+                f"This {provider_name} authorisation request has expired.",
+                409,
+            )
+        if state.redirect_uri != redirect_uri:
+            raise PublicAPIError("oauth_redirect_mismatch", invalid_message, 400)
+        state.consumed_at = now
+        return state, now
+
+    async def start_microsoft_oauth(self) -> OAuthStartResponse:
+        client = self._require_microsoft()
+        assert self.settings.microsoft_oauth_redirect_uri is not None
+        return await self._start_mailbox_oauth(
+            connector_key=ConnectorKey.MICROSOFT_365,
+            redirect_uri=self.settings.microsoft_oauth_redirect_uri,
+            state_ttl_seconds=self.settings.microsoft_oauth_state_ttl_seconds,
+            provider_name="Microsoft",
+            authorisation_url=client.authorisation_url,
         )
 
     async def complete_microsoft_oauth(
@@ -520,23 +572,13 @@ class IntegrationService:
         )
         client = self._require_microsoft()
         store = self._require_encrypted_credential_store()
-        now = datetime.now(UTC)
-        state = await self.repository.oauth_state_by_hash(
-            self.tenant.organisation_id,
-            hashlib.sha256(request.state.encode()).hexdigest(),
-            for_update=True,
+        assert self.settings.microsoft_oauth_redirect_uri is not None
+        state, now = await self._consume_mailbox_oauth_state(
+            request,
+            connector_key=ConnectorKey.MICROSOFT_365,
+            redirect_uri=self.settings.microsoft_oauth_redirect_uri,
+            provider_name="Microsoft",
         )
-        if state is None or state.connector_key != ConnectorKey.MICROSOFT_365.value:
-            raise PublicAPIError("oauth_state_invalid", "This Microsoft authorisation request is invalid.", 400)
-        if state.user_id != self.tenant.user_id:
-            raise PublicAPIError("oauth_state_invalid", "This Microsoft authorisation request is invalid.", 400)
-        if state.consumed_at is not None:
-            raise PublicAPIError("oauth_state_replayed", "This Microsoft authorisation request was already used.", 409)
-        if self._as_utc(state.expires_at) <= now:
-            raise PublicAPIError("oauth_state_expired", "This Microsoft authorisation request has expired.", 409)
-        if state.redirect_uri != self.settings.microsoft_oauth_redirect_uri:
-            raise PublicAPIError("oauth_redirect_mismatch", "This Microsoft authorisation request is invalid.", 400)
-        state.consumed_at = now
         if request.provider_error is not None:
             await self._commit("The Microsoft authorisation result could not be recorded.")
             if request.provider_error == "admin_consent_required":
@@ -656,49 +698,14 @@ class IntegrationService:
         return self._connection_response(await self._require_connection(connection.id))
 
     async def start_google_oauth(self) -> OAuthStartResponse:
-        self._require_integrations()
-        await CommercialService(self.session, self.settings).require_module_write(
-            self.tenant.organisation_id,
-            "core",
-        )
-        await self._require_primary_mailbox_available(ConnectorKey.GOOGLE_WORKSPACE)
         client = self._require_google()
-        store = self._require_encrypted_credential_store()
-        state_value = secrets.token_urlsafe(48)
-        verifier = secrets.token_urlsafe(64)
-        challenge = hashlib.sha256(verifier.encode()).digest()
-        import base64
-
-        challenge_value = base64.urlsafe_b64encode(challenge).rstrip(b"=").decode("ascii")
-        nonce_value = secrets.token_urlsafe(32)
-        state_id = uuid.uuid4()
-        pkce_nonce, encrypted_verifier = store.encrypt_oauth_state_secret(
-            self.tenant.organisation_id,
-            state_id,
-            verifier,
-        )
-        now = datetime.now(UTC)
         assert self.settings.google_oauth_redirect_uri is not None
-        self.repository.add(
-            OAuthConnectionState(
-                id=state_id,
-                organisation_id=self.tenant.organisation_id,
-                user_id=self.tenant.user_id,
-                connector_key=ConnectorKey.GOOGLE_WORKSPACE.value,
-                state_hash=hashlib.sha256(state_value.encode()).hexdigest(),
-                redirect_uri=self.settings.google_oauth_redirect_uri,
-                expires_at=now + timedelta(seconds=self.settings.google_oauth_state_ttl_seconds),
-                consumed_at=None,
-                pkce_verifier_encrypted=encrypted_verifier,
-                pkce_nonce=pkce_nonce,
-                oidc_nonce_hash=hashlib.sha256(nonce_value.encode()).hexdigest(),
-                created_at=now,
-            )
-        )
-        await self._commit("The Google authorisation flow could not be started.")
-        return OAuthStartResponse(
-            authorisation_url=client.authorisation_url(state_value, challenge_value, nonce_value),
-            expires_at=now + timedelta(seconds=self.settings.google_oauth_state_ttl_seconds),
+        return await self._start_mailbox_oauth(
+            connector_key=ConnectorKey.GOOGLE_WORKSPACE,
+            redirect_uri=self.settings.google_oauth_redirect_uri,
+            state_ttl_seconds=self.settings.google_oauth_state_ttl_seconds,
+            provider_name="Google",
+            authorisation_url=client.authorisation_url,
         )
 
     async def complete_google_oauth(
@@ -712,23 +719,13 @@ class IntegrationService:
         )
         client = self._require_google()
         store = self._require_encrypted_credential_store()
-        now = datetime.now(UTC)
-        state = await self.repository.oauth_state_by_hash(
-            self.tenant.organisation_id,
-            hashlib.sha256(request.state.encode()).hexdigest(),
-            for_update=True,
+        assert self.settings.google_oauth_redirect_uri is not None
+        state, now = await self._consume_mailbox_oauth_state(
+            request,
+            connector_key=ConnectorKey.GOOGLE_WORKSPACE,
+            redirect_uri=self.settings.google_oauth_redirect_uri,
+            provider_name="Google",
         )
-        if state is None or state.connector_key != ConnectorKey.GOOGLE_WORKSPACE.value:
-            raise PublicAPIError("oauth_state_invalid", "This Google authorisation request is invalid.", 400)
-        if state.user_id != self.tenant.user_id:
-            raise PublicAPIError("oauth_state_invalid", "This Google authorisation request is invalid.", 400)
-        if state.consumed_at is not None:
-            raise PublicAPIError("oauth_state_replayed", "This Google authorisation request was already used.", 409)
-        if self._as_utc(state.expires_at) <= now:
-            raise PublicAPIError("oauth_state_expired", "This Google authorisation request has expired.", 409)
-        if state.redirect_uri != self.settings.google_oauth_redirect_uri:
-            raise PublicAPIError("oauth_redirect_mismatch", "This Google authorisation request is invalid.", 400)
-        state.consumed_at = now
         if request.provider_error is not None:
             await self._commit("The Google authorisation result could not be recorded.")
             if request.provider_error in {"admin_policy_enforced", "org_internal"}:

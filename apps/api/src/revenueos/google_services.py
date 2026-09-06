@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
@@ -57,6 +58,12 @@ _PAGE_SIZE = "50"
 _MAX_REPLY_BODY = 10_000
 _MAX_MIME_PARTS = 50
 _MAX_MIME_DEPTH = 8
+_CALENDAR_FIELDS = (
+    "nextPageToken,nextSyncToken,"
+    "items(id,status,updated,visibility,summary,start,end,organizer(email),"
+    "attendees(email),location,hangoutLink,iCalUID,recurringEventId,etag)"
+)
+_RFC_MESSAGE_ID = re.compile(r"<[^<>\s]{1,996}>")
 
 
 class _HTMLTextExtractor(HTMLParser):
@@ -338,14 +345,22 @@ class GoogleSyncService:
             message_ids, cursor = await self._mail_message_ids(context, state, resource_kind)
         items: list[dict[str, object]] = []
         for message_id in message_ids[: _MAX_PAGES * int(_PAGE_SIZE)]:
-            item = await self.client.google_json(
-                context,
-                gmail_message_url(self.settings, message_id),
-                # Omitting metadataHeaders asks Gmail for metadata only with all
-                # headers. This keeps bodies out of the broad scan and avoids a
-                # non-standard indexed encoding for the repeated query field.
-                params={"format": "metadata"},
-            )
+            try:
+                item = await self.client.google_json(
+                    context,
+                    gmail_message_url(self.settings, message_id),
+                    # Omitting metadataHeaders asks Gmail for metadata only with all
+                    # headers. This keeps bodies out of the broad scan and avoids a
+                    # non-standard indexed encoding for the repeated query field.
+                    params={"format": "metadata"},
+                )
+            except GoogleAPIError as exc:
+                # A message can disappear between list/history and its metadata GET.
+                # The resource cursor remains valid, so skip only that item rather
+                # than trapping the resource on the same history page forever.
+                if exc.code == "provider_cursor_expired":
+                    continue
+                raise
             items.append(item)
         return items, cursor
 
@@ -445,6 +460,7 @@ class GoogleSyncService:
         items: list[dict[str, object]] = []
         for _ in range(_MAX_PAGES):
             params = {
+                "fields": _CALENDAR_FIELDS,
                 "maxResults": _PAGE_SIZE,
                 "singleEvents": "true",
                 "showDeleted": "true",
@@ -543,18 +559,25 @@ class GoogleSyncService:
         in_reply_to = self._header(item, "in-reply-to")
         references = self._header(item, "references") or ""
         kind = self._reply_kind(item, sender)
+        referenced_message_ids = self._referenced_message_ids(in_reply_to, references)
+        candidate_clauses: list[ColumnElement[bool]] = []
+        if referenced_message_ids:
+            candidate_clauses.append(ProviderOutboundOperation.internet_message_id.in_(sorted(referenced_message_ids)))
+        if kind != "ndr" and conversation_id is not None:
+            candidate_clauses.append(ProviderOutboundOperation.conversation_id == conversation_id)
+        if not candidate_clauses:
+            return 0
         operations = list(
             (
                 await self.session.scalars(
-                    select(ProviderOutboundOperation).where(
+                    select(ProviderOutboundOperation)
+                    .where(
                         ProviderOutboundOperation.organisation_id == self.tenant.organisation_id,
                         ProviderOutboundOperation.connection_id == connection.id,
                         ProviderOutboundOperation.state.in_(("accepted", "reconciled", "unknown")),
-                        or_(
-                            ProviderOutboundOperation.internet_message_id.is_not(None),
-                            ProviderOutboundOperation.conversation_id.is_not(None),
-                        ),
+                        or_(*candidate_clauses),
                     )
+                    .limit(2)
                 )
             ).all()
         )
@@ -563,10 +586,7 @@ class GoogleSyncService:
             for operation in operations
             if (sender == operation.recipient_email.casefold() or kind == "ndr")
             and (
-                (
-                    operation.internet_message_id is not None
-                    and (operation.internet_message_id == in_reply_to or operation.internet_message_id in references)
-                )
+                (operation.internet_message_id is not None and operation.internet_message_id in referenced_message_ids)
                 or (
                     kind != "ndr"
                     and operation.conversation_id is not None
@@ -586,11 +606,19 @@ class GoogleSyncService:
         if received_at is None:
             return 0
         # Body content is fetched only after one strong Oryntela-managed correlation.
-        body_payload = await self.client.google_json(
-            self._context(connection),
-            gmail_message_url(self.settings, provider_id),
-            params={"format": "full"},
-        )
+        try:
+            body_payload = await self.client.google_json(
+                self._context(connection),
+                gmail_message_url(self.settings, provider_id),
+                params={"format": "full"},
+            )
+        except GoogleAPIError as exc:
+            # A reply can be deleted after the metadata scan but before the
+            # deliberately narrow body fetch. Advancing the valid history cursor
+            # is safer than repeatedly degrading on an item that no longer exists.
+            if exc.code == "provider_cursor_expired":
+                return 0
+            raise
         subject = self._header(body_payload, "subject") or "(No subject)"
         self.session.add(
             ProviderReply(
@@ -640,13 +668,28 @@ class GoogleSyncService:
             .with_for_update()
         )
         status = self._string(item.get("status"), 24)
+        modified_at = self._datetime(item.get("updated"))
         if status == "cancelled" and item.get("start") is None:
             if existing is not None:
                 existing.state = "deleted"
+                existing.i_cal_uid = None
+                existing.series_master_id = None
+                existing.change_key = None
+                existing.title = "Deleted event"
+                existing.organiser_email = None
+                existing.attendee_emails_json = []
+                existing.location = None
+                existing.online_meeting_url = None
+                existing.sensitivity = "default"
+                existing.match_state = "unmatched"
+                existing.contact_id = None
+                existing.company_id = None
+                existing.opportunity_id = None
+                existing.interaction_id = None
+                existing.provider_last_modified_at = modified_at
                 existing.last_synced_at = now
                 return 1
             return 0
-        modified_at = self._datetime(item.get("updated"))
         if (
             existing is not None
             and modified_at is not None
@@ -715,6 +758,14 @@ class GoogleSyncService:
             if private:
                 existing.interaction_id = None
         return 1
+
+    @staticmethod
+    def _referenced_message_ids(in_reply_to: str | None, references: str) -> set[str]:
+        values: set[str] = set()
+        for header in (in_reply_to, references):
+            if header is not None:
+                values.update(_RFC_MESSAGE_ID.findall(header))
+        return values
 
     async def _calendar_context(
         self,

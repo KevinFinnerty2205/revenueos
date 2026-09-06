@@ -545,18 +545,19 @@ export function IntegrationSettings() {
                           {definition.connectorKey === "microsoft_365"
                             ? "Microsoft grants mail read access because its narrower metadata permission cannot provide reply content."
                             : "Google grants restricted Gmail read-only access because Gmail does not offer a narrower scope that can provide strongly correlated reply content."}{" "}
-                          Oryntela scans only bounded Inbox and Sent Items
-                          metadata for emails tied to Oryntela sends, then reads
-                          the subject and body only for one strongly matched
-                          reply. Unrelated mail is not stored.
+                          Oryntela scans a bounded window of Inbox and Sent
+                          message metadata to identify emails tied to Oryntela
+                          sends, then reads the subject and body only for one
+                          strongly matched reply. Unrelated mail content is not
+                          read or stored.
                         </dd>
                       </div>
                       <div>
                         <dt className="font-bold">Calendar</dt>
                         <dd>
-                          Read work-calendar event details so Oryntela can help
-                          you prepare for customer meetings. Event bodies and
-                          attachments are not requested.
+                          Read event details from your primary work calendar so
+                          Oryntela can help you prepare for customer meetings.
+                          Event bodies and attachments are not requested.
                         </dd>
                       </div>
                     </dl>

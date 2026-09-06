@@ -681,6 +681,62 @@ def test_google_refresh_rate_limit_and_ambiguous_write_are_bounded() -> None:
     assert authorisations == ["Bearer refreshed-google-access"]
 
 
+def test_google_forced_refresh_reuses_token_rotated_by_another_worker() -> None:
+    old_credential = _credential()
+    refreshed_credential = ConnectorCredential(
+        access_token="concurrently-refreshed-google-access",
+        refresh_token="concurrently-refreshed-google-refresh",
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        scopes=tuple(sorted(GOOGLE_SCOPES)),
+        external_account_id=old_credential.external_account_id,
+    )
+
+    class ConcurrentCredentialStore(_StaticCredentialStore):
+        async def get_for_update(
+            self,
+            organisation_id: uuid.UUID,
+            connection_id: uuid.UUID,
+            credential_reference: str,
+        ) -> ConnectorCredential:
+            del organisation_id, connection_id, credential_reference
+            self.credential = refreshed_credential
+            return self.credential
+
+    requests: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(str(request.url))
+        assert request.url.host == "gmail.googleapis.com"
+        if request.headers.get("Authorization") == "Bearer google-test-access":
+            return httpx.Response(401)
+        assert request.headers.get("Authorization") == "Bearer concurrently-refreshed-google-access"
+        return httpx.Response(200, json={"messages": []})
+
+    async def run() -> None:
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url="sqlite+aiosqlite://",
+            google_client_id="google-test-client-id",
+            google_client_secret=SecretStr("google-test-secret"),
+            google_oauth_redirect_uri="http://localhost/callback",
+        )
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            google = GoogleWorkspaceClient(
+                settings,
+                cast(CredentialStore, ConcurrentCredentialStore(old_credential)),
+                http_client=http_client,
+            )
+            await google.google_json(
+                _context(),
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+            )
+
+    asyncio.run(run())
+    assert len(requests) == 2
+
+
 def test_google_scheduled_send_binds_provider_receipt_and_rechecks_suppression(
     app: FastAPI,
     client: TestClient,
@@ -800,9 +856,20 @@ class _DeterministicGoogle:
             self.calendar_calls += 1
             if self.calendar_calls == 1:
                 assert params is not None
-                assert set(params) == {"maxResults", "singleEvents", "showDeleted", "timeMin", "timeMax"}
+                assert set(params) == {
+                    "fields",
+                    "maxResults",
+                    "singleEvents",
+                    "showDeleted",
+                    "timeMin",
+                    "timeMax",
+                }
+                assert "description" not in params["fields"]
+                assert "attachments" not in params["fields"]
                 return {"items": self._calendar_items(), "nextSyncToken": "calendar-sync-1"}
             assert params is not None and params.get("syncToken") == f"calendar-sync-{self.calendar_calls - 1}"
+            assert "description" not in params["fields"]
+            assert "attachments" not in params["fields"]
             return {
                 "items": [
                     {
@@ -825,7 +892,15 @@ class _DeterministicGoogle:
             return {"history": [], "historyId": "101"}
         if url.endswith("/messages"):
             assert params is not None and params["q"] == "newer_than:30d"
+            if params["labelIds"] == "SENT":
+                return {"messages": [{"id": "deleted-between-list-and-get"}]}
             return {"messages": []}
+        if url.endswith("/messages/deleted-between-list-and-get"):
+            assert params == {"format": "metadata"}
+            raise GoogleAPIError("provider_cursor_expired", status_code=404)
+        if url.endswith("/messages/deleted-before-body-read"):
+            assert params == {"format": "full"}
+            raise GoogleAPIError("provider_cursor_expired", status_code=404)
         self.full_message_reads.append(url)
         return {
             "id": url.rsplit("/", 1)[-1],
@@ -998,6 +1073,14 @@ def test_google_calendar_sync_is_incremental_idempotent_private_safe_and_recurre
             assert recurring.series_master_id == "series-master-1"
             assert service._aware(recurring.start_at) > now + timedelta(days=4)
             assert cancelled.state == "deleted"
+            assert cancelled.title == "Deleted event"
+            assert cancelled.organiser_email is None
+            assert cancelled.attendee_emails_json == []
+            assert cancelled.series_master_id is None
+            assert cancelled.contact_id is None
+            assert cancelled.company_id is None
+            assert cancelled.opportunity_id is None
+            assert cancelled.interaction_id is None
             assert internal.match_state == "internal"
             assert customer.contact_id is not None
             assert customer.company_id == uuid.UUID(cast(str, company["id"]))
@@ -1147,6 +1230,11 @@ def test_google_reply_reconciliation_fetches_body_only_after_strong_match_and_de
                 "Jordan Lee <jordan@example.com>",
                 in_reply_to="<oryntela-outbound@example.test>",
             )
+            deleted_before_body_read = _gmail_message(
+                "deleted-before-body-read",
+                "Jordan Lee <jordan@example.com>",
+                in_reply_to="<oryntela-outbound@example.test>",
+            )
             automatic = _gmail_message(
                 "automatic-reply",
                 "jordan@example.com",
@@ -1159,6 +1247,8 @@ def test_google_reply_reconciliation_fetches_body_only_after_strong_match_and_de
                 references="<oryntela-outbound@example.test>",
             )
             assert await service._retain_reply(connection, unrelated, now) == 0
+            assert google.full_message_reads == []
+            assert await service._retain_reply(connection, deleted_before_body_read, now) == 0
             assert google.full_message_reads == []
             assert await service._retain_reply(connection, direct, now) == 1
             assert await service._retain_reply(connection, automatic, now) == 1

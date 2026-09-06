@@ -157,7 +157,7 @@ const googleConnection = {
   grantedScopes: [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/calendar.events.readonly",
+    "https://www.googleapis.com/auth/calendar.events.owned.readonly",
   ],
   executionMode: "live",
   simulationOnly: false,
@@ -308,7 +308,9 @@ describe("IntegrationSettings", () => {
     expect(
       screen.getByText(/Microsoft grants mail read access/i),
     ).toBeVisible();
-    expect(screen.getByText(/Unrelated mail is not stored/i)).toBeVisible();
+    expect(
+      screen.getByText(/Unrelated mail content is not read or stored/i),
+    ).toBeVisible();
     expect(screen.getByText(/Event bodies and attachments/i)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
@@ -348,6 +350,12 @@ describe("IntegrationSettings", () => {
     expect(
       screen.getByText(/Google grants restricted Gmail read-only access/i),
     ).toBeVisible();
+    expect(
+      screen.getByText(
+        /scans a bounded window of Inbox and Sent message metadata/i,
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(/your primary work calendar/i)).toBeVisible();
     expect(screen.queryByText(/gmail\.readonly/i)).toBeNull();
     await waitFor(() =>
       expect(screen.getByText("Before you continue")).toHaveFocus(),

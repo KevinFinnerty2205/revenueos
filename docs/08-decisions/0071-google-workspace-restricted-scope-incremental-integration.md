@@ -1,6 +1,6 @@
 # ADR 0071: use seller-delegated Google Workspace OAuth and bounded incremental reconciliation
 
-- **Status:** Accepted for WO-041; awaiting engineering review
+- **Status:** Accepted for WO-041; engineering reviewed
 - **Date:** 2026-09-06
 
 ## Context
@@ -16,15 +16,16 @@ before production infrastructure exists.
 
 Use confidential web-server OAuth with PKCE and signed OIDC validation, managed
 Workspace accounts only, one Microsoft-or-Google primary mailbox per Oryntela seller,
-`gmail.send`, `gmail.readonly` and `calendar.events.readonly`, and the existing
+`gmail.send`, `gmail.readonly` and `calendar.events.owned.readonly`, and the existing
 encrypted credential/provider-neutral receipt/reply/event/sync tables.
 
 Bound actual Gmail processing below the technical permission: 30-day metadata-only
 Inbox/Sent initial scans, Gmail History thereafter, and a full body fetch only after
 one strong operation correlation. Use a 14-day-past/90-day-future primary Calendar
-window with sync tokens. Poll through the durable worker every five minutes rather
-than adding push infrastructure. Private event detail, inbound attachments and raw
-payloads are discarded. Ambiguous sends stay unknown and are not blindly retried.
+window with sync tokens and a partial-response mask that excludes descriptions and
+attachments. Poll through the durable worker every five minutes rather than adding
+push infrastructure. Private event detail, inbound attachments and raw payloads are
+discarded. Ambiguous sends stay unknown and are not blindly retried.
 
 ## Alternatives rejected
 
