@@ -129,7 +129,7 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The HubSpot outcome could not be reconciled.",
+          : "The provider outcome could not be reconciled.",
       );
     } finally {
       setBusy(false);
@@ -170,7 +170,7 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
         >
           {preview.simulationOnly
             ? "Simulation — no external action will occur"
-            : "Live HubSpot action — review exact values before confirming"}
+            : `Live ${preview.connectorDisplayName} action — review exact values before confirming`}
         </p>
         <h4 className="mt-2 font-bold text-slate-950">
           {preview.connectorDisplayName}
@@ -206,8 +206,10 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
             </p>
             {execution.externalResultId ? (
               <p className="mt-2 break-all text-xs text-slate-500">
-                {execution.simulationOnly ? "Mock" : "HubSpot"} result ID:{" "}
-                {execution.externalResultId}
+                {execution.simulationOnly
+                  ? "Mock"
+                  : execution.connectorDisplayName}{" "}
+                result ID: {execution.externalResultId}
               </p>
             ) : null}
             {execution.executionStatus === "queued" ||
@@ -230,7 +232,7 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
                 disabled={busy}
                 onClick={() => void reconcileExecution()}
               >
-                Reconcile HubSpot outcome
+                Reconcile {execution.connectorDisplayName} outcome
               </button>
             ) : null}
           </div>
@@ -262,7 +264,14 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
 
 function executionStatus(execution: ActionExecution) {
   const status = execution.executionStatus;
-  if (status === "succeeded") return "HubSpot update complete";
+  const liveLabel =
+    execution.connectorKey === "microsoft_365"
+      ? "Microsoft email"
+      : "HubSpot action";
+  if (status === "succeeded")
+    return execution.connectorKey === "microsoft_365"
+      ? "Microsoft email accepted"
+      : "HubSpot update complete";
   if (status === "simulated_success") return "Simulation complete";
   if (
     status === "failed_retryable" ||
@@ -271,15 +280,15 @@ function executionStatus(execution: ActionExecution) {
   ) {
     return execution.simulationOnly
       ? "Simulation needs attention"
-      : "HubSpot action needs attention";
+      : `${liveLabel} needs attention`;
   }
   if (status === "cancelled")
     return execution.simulationOnly
       ? "Simulation cancelled"
-      : "HubSpot action cancelled";
+      : `${liveLabel} cancelled`;
   return execution.simulationOnly
     ? "Simulation in progress"
-    : "HubSpot action in progress";
+    : `${liveLabel} in progress`;
 }
 
 function PreviewContent({ content }: { content: ExecutionPreviewContent }) {

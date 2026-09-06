@@ -675,7 +675,7 @@ smoke test remain gates. WO-041 has not started.
 
 The authorised sequence after WO-050 remains:
 
-1. WO-040 — Microsoft 365 Sales Integration — **implemented; awaiting engineering review**
+1. WO-040 — Microsoft 365 Sales Integration — **implemented; engineering review passed**
 2. WO-041 — Google Workspace Sales Integration — **not started**
 3. WO-042 — Production CRM Connectors
 4. WO-043 — Simple Opportunity Deal Room

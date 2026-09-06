@@ -260,9 +260,58 @@ describe("IntegrationSettings", () => {
     expect(screen.queryByText(/Mail\.Read/)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
-    expect(screen.getByText("Before you continue")).toBeVisible();
+    const permissionGroup = screen.getByRole("group", {
+      name: "Before you continue",
+    });
+    expect(permissionGroup).toBeVisible();
     expect(screen.getByText(/reviewed and approved/i)).toBeVisible();
+    expect(
+      screen.getByText(/Microsoft grants mail read access/i),
+    ).toBeVisible();
+    expect(screen.getByText(/Unrelated mail is not stored/i)).toBeVisible();
     expect(screen.getByText(/Event bodies and attachments/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Reconnect" })).toHaveFocus(),
+    );
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns keyboard focus after cancelling Microsoft disconnect", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(microsoftCatalog))
+      .mockResolvedValueOnce(
+        response({
+          items: [{ ...microsoftConnection, connectionStatus: "active" }],
+          total: 1,
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          connectionId: "microsoft-connection-1",
+          lastSuccessfulSyncAt: "2026-09-06T01:00:00Z",
+          lastErrorCategory: null,
+          state: "healthy",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<IntegrationSettings />);
+    const reconnect = await screen.findByRole("button", {
+      name: "Reconnect",
+    });
+    fireEvent.click(reconnect);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(reconnect).toHaveFocus());
+    const disconnect = await screen.findByRole("button", {
+      name: "Disconnect",
+    });
+    fireEvent.click(disconnect);
+    expect(
+      screen.getByRole("group", { name: "Disconnect Microsoft 365?" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Keep connected" }));
+    await waitFor(() => expect(disconnect).toHaveFocus());
   });
 });

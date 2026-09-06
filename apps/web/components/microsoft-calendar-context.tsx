@@ -33,6 +33,17 @@ export function MicrosoftCalendarContext({
   async function linkEvent(event: MicrosoftCalendarEvent) {
     const interactionId = selected[event.id];
     if (!interactionId) return;
+    await updateInteraction(event, interactionId);
+  }
+
+  async function unlinkEvent(event: MicrosoftCalendarEvent) {
+    await updateInteraction(event, null);
+  }
+
+  async function updateInteraction(
+    event: MicrosoftCalendarEvent,
+    interactionId: string | null,
+  ) {
     setBusy(event.id);
     setError(null);
     try {
@@ -90,12 +101,26 @@ export function MicrosoftCalendarContext({
                 : ""}
             </p>
             {event.interactionId ? (
-              <Link
-                className="mt-3 inline-flex text-sm font-bold text-teal-800 hover:underline"
-                href={`/interactions/${event.interactionId}#preparation`}
-              >
-                Prepare →
-              </Link>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Link
+                  className="inline-flex text-sm font-bold text-teal-800 hover:underline"
+                  href={`/interactions/${event.interactionId}#preparation`}
+                >
+                  Prepare →
+                </Link>
+                <button
+                  type="button"
+                  className="text-sm font-bold text-slate-600 underline-offset-4 hover:underline"
+                  disabled={busy === event.id}
+                  onClick={() => void unlinkEvent(event)}
+                >
+                  Unlink
+                </button>
+              </div>
+            ) : event.matchState === "private" ? (
+              <p className="mt-3 text-sm text-slate-600">
+                Private events cannot be linked to an interaction.
+              </p>
             ) : interactions.length ? (
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <label className="sr-only" htmlFor={`interaction-${event.id}`}>

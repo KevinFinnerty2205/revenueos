@@ -210,7 +210,7 @@ class MicrosoftSyncService:
     async def link_interaction(
         self,
         event_id: UUID,
-        interaction_id: UUID,
+        interaction_id: UUID | None,
     ) -> MicrosoftCalendarEventResponse:
         self._require_feature()
         await CommercialService(self.session, self.settings).require_module_write(
@@ -234,6 +234,22 @@ class MicrosoftSyncService:
         )
         if event is None:
             raise PublicAPIError("calendar_event_not_found", "The Microsoft calendar event was not found.", 404)
+        if interaction_id is None:
+            event.interaction_id = None
+            await self._commit("The calendar event link could not be removed.")
+            return self._calendar_response(event)
+        if event.match_state == "private":
+            raise PublicAPIError(
+                "microsoft_private_calendar_event_not_linkable",
+                "Private Microsoft calendar events cannot be linked to an Interaction.",
+                409,
+            )
+        if event.state != "active":
+            raise PublicAPIError(
+                "microsoft_calendar_event_not_active",
+                "Only active Microsoft calendar events can be linked to an Interaction.",
+                409,
+            )
         interaction = await self.session.scalar(
             select(Interaction).where(
                 Interaction.organisation_id == self.tenant.organisation_id,
@@ -368,7 +384,7 @@ class MicrosoftSyncService:
             f"/me/mailFolders/{folder}/messages/delta",
             {
                 "$select": (
-                    "id,internetMessageId,conversationId,from,toRecipients,subject,"
+                    "id,internetMessageId,conversationId,from,toRecipients,"
                     "receivedDateTime,sentDateTime,internetMessageHeaders"
                 ),
                 "$filter": f"receivedDateTime ge {start}",
@@ -475,7 +491,8 @@ class MicrosoftSyncService:
                     and (operation.internet_message_id == in_reply_to or operation.internet_message_id in references)
                 )
                 or (
-                    operation.conversation_id is not None
+                    kind != "ndr"
+                    and operation.conversation_id is not None
                     and conversation_id is not None
                     and operation.conversation_id == conversation_id
                 )
@@ -494,7 +511,7 @@ class MicrosoftSyncService:
         body_payload = await self.client.graph_json(
             self._context(connection),
             f"/me/messages/{quote(provider_id, safe='')}",
-            params={"$select": "body"},
+            params={"$select": "subject,body"},
             headers={"Prefer": 'outlook.body-content-type="text"'},
         )
         self.session.add(
@@ -509,7 +526,7 @@ class MicrosoftSyncService:
                 conversation_id=conversation_id,
                 sender_email=sender,
                 recipient_emails_json=sorted(self._message_addresses(item.get("toRecipients"))),
-                subject=self._string(item.get("subject"), 500) or "(No subject)",
+                subject=self._string(body_payload.get("subject"), 500) or "(No subject)",
                 body_text=self._body_text(body_payload.get("body")),
                 kind=kind,
                 match_state="matched" if opportunity_id is not None else "review_required",
@@ -574,9 +591,9 @@ class MicrosoftSyncService:
         if private:
             match_state, contact, company_id, opportunity_id = "private", None, None, None
         values: dict[str, object] = {
-            "i_cal_uid": self._string(item.get("iCalUId"), 255),
-            "series_master_id": self._string(item.get("seriesMasterId"), 255),
-            "change_key": self._string(item.get("changeKey"), 255),
+            "i_cal_uid": None if private else self._string(item.get("iCalUId"), 255),
+            "series_master_id": None if private else self._string(item.get("seriesMasterId"), 255),
+            "change_key": None if private else self._string(item.get("changeKey"), 255),
             "title": "Private event" if private else (self._string(item.get("subject"), 500) or "Calendar event"),
             "start_at": start,
             "end_at": end,
@@ -611,6 +628,8 @@ class MicrosoftSyncService:
         else:
             for key, value in values.items():
                 setattr(existing, key, value)
+            if private:
+                existing.interaction_id = None
         return 1
 
     async def _calendar_context(

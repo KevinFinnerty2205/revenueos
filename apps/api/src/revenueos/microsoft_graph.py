@@ -53,12 +53,14 @@ class MicrosoftAPIError(Exception):
         retryable: bool = False,
         uncertain: bool = False,
         retry_after_seconds: int | None = None,
+        status_code: int | None = None,
     ) -> None:
         super().__init__(code)
         self.code = code
         self.retryable = retryable
         self.uncertain = uncertain
         self.retry_after_seconds = retry_after_seconds
+        self.status_code = status_code
 
 
 class _StrictModel(BaseModel):
@@ -296,9 +298,9 @@ class MicrosoftGraphClient:
                 expected_status=expected_status,
             )
         except MicrosoftAPIError as exc:
-            if exc.code != "connection_reauthorisation_required":
+            if exc.code != "connection_reauthorisation_required" or exc.status_code != 401:
                 raise
-        credential = await self._refresh(context)
+        credential = await self._refresh(context, rejected_access_token=credential.access_token)
         return await self._request(
             method,
             self._graph_url(path_or_url),
@@ -310,7 +312,12 @@ class MicrosoftGraphClient:
             expected_status=expected_status,
         )
 
-    async def _refresh(self, context: ExecutorConnectionContext) -> ConnectorCredential:
+    async def _refresh(
+        self,
+        context: ExecutorConnectionContext,
+        *,
+        rejected_access_token: str | None = None,
+    ) -> ConnectorCredential:
         assert context.credential_reference is not None
         try:
             credential = await self.credential_store.get_for_update(
@@ -320,7 +327,11 @@ class MicrosoftGraphClient:
             )
         except ValueError as exc:
             raise MicrosoftAPIError("connection_reauthorisation_required") from exc
-        if credential.expires_at.astimezone(UTC) > datetime.now(UTC) + timedelta(seconds=60):
+        if rejected_access_token is not None and credential.access_token != rejected_access_token:
+            return credential
+        if rejected_access_token is None and credential.expires_at.astimezone(UTC) > datetime.now(UTC) + timedelta(
+            seconds=60
+        ):
             return credential
         assert self.settings.microsoft_client_id is not None
         assert self.settings.microsoft_client_secret is not None
@@ -337,12 +348,17 @@ class MicrosoftGraphClient:
             )
             token = self._parse(_TokenResponse, response)
         except MicrosoftAPIError as exc:
+            if exc.retryable:
+                raise
             raise MicrosoftAPIError("connection_reauthorisation_required") from exc
+        scopes = tuple(sorted(set(token.scope.split())))
+        if not MICROSOFT_GRAPH_SCOPES.issubset(scopes):
+            raise MicrosoftAPIError("connection_reauthorisation_required")
         refreshed = ConnectorCredential(
             access_token=token.access_token,
             refresh_token=token.refresh_token or credential.refresh_token,
             expires_at=datetime.now(UTC) + timedelta(seconds=token.expires_in),
-            scopes=tuple(sorted(set(token.scope.split()))),
+            scopes=scopes,
             external_account_id=credential.external_account_id,
         )
         await self.credential_store.put(context.organisation_id, context.connection_id, refreshed)
@@ -463,7 +479,7 @@ class MicrosoftGraphClient:
         if len(response.content) > self.settings.microsoft_max_response_bytes:
             raise MicrosoftAPIError("provider_response_too_large", uncertain=write)
         if response.status_code in {401, 403}:
-            raise MicrosoftAPIError("connection_reauthorisation_required")
+            raise MicrosoftAPIError("connection_reauthorisation_required", status_code=response.status_code)
         if response.status_code == 429:
             retry_after = response.headers.get("Retry-After", "").strip()
             seconds = int(retry_after) if retry_after.isdigit() else None

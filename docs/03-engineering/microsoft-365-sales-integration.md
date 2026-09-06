@@ -61,20 +61,25 @@ enterprise-app consent or sessions in Microsoft administration.
 All permissions are delegated. There are no application permissions or tenant-wide
 mailbox grants.
 
-| Scope | Why | Oryntela use | Data accessed | Delegated/application | Admin consent | Customer explanation |
-| --- | --- | --- | --- | --- | --- | --- |
-| `openid` | Bind the callback to a signed Microsoft identity | Validate issuer, audience, nonce, account and tenant | OIDC identity claims | Delegated identity scope | Normally no; tenant policy may require approval | Verify which work account is being connected |
-| `offline_access` | Server schedules and reconciliation outlive the browser session | Obtain and safely rotate a refresh token | Refresh authority for the granted scopes | Delegated identity scope | Normally no; tenant policy may require approval | Keep the connection working until it is disconnected or revoked |
-| `User.Read` | Establish the exact connected seller and mailbox address | Read `/me` ID, display name, mail and user principal name | Minimal connected-user profile | Delegated | Normally no; tenant policy may require approval | Show and verify the connected work account |
-| `Mail.Send` | Execute an immutable reviewed email | POST `/me/sendMail` as the connected seller | Approved recipient, subject and plain-text body | Delegated | Normally no; tenant policy may require approval | Send emails the seller reviewed and approved |
-| `Mail.Read` | `Mail.ReadBasic` excludes message bodies needed for relevant reply content | Reconcile Oryntela-tagged Sent Items and strongly correlated replies/NDRs in Inbox | Message/thread IDs, headers, sender/recipients, subject and only retained relevant reply text | Delegated | Normally no; tenant policy may require approval | Identify replies to Oryntela-managed email so sales records stay current |
-| `Calendars.ReadBasic` | Read useful event metadata without bodies, attachments or extensions | Bounded primary-calendar delta and meeting context | Basic event time, title, sensitivity, organiser/attendees, location and structured online-meeting metadata where returned | Delegated | Normally no; tenant policy may require approval | Read relevant work-calendar events for meeting preparation |
+| Scope                 | Why                                                                        | Oryntela use                                                                       | Data accessed                                                                                                             | Delegated/application    | Admin consent                                   | Customer explanation                                                     |
+| --------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------ |
+| `openid`              | Bind the callback to a signed Microsoft identity                           | Validate issuer, audience, nonce, account and tenant                               | OIDC identity claims                                                                                                      | Delegated identity scope | Normally no; tenant policy may require approval | Verify which work account is being connected                             |
+| `offline_access`      | Server schedules and reconciliation outlive the browser session            | Obtain and safely rotate a refresh token                                           | Refresh authority for the granted scopes                                                                                  | Delegated identity scope | Normally no; tenant policy may require approval | Keep the connection working until it is disconnected or revoked          |
+| `User.Read`           | Establish the exact connected seller and mailbox address                   | Read `/me` ID, display name, mail and user principal name                          | Minimal connected-user profile                                                                                            | Delegated                | Normally no; tenant policy may require approval | Show and verify the connected work account                               |
+| `Mail.Send`           | Execute an immutable reviewed email                                        | POST `/me/sendMail` as the connected seller                                        | Approved recipient, subject and plain-text body                                                                           | Delegated                | Normally no; tenant policy may require approval | Send emails the seller reviewed and approved                             |
+| `Mail.Read`           | `Mail.ReadBasic` excludes message bodies needed for relevant reply content | Reconcile Oryntela-tagged Sent Items and strongly correlated replies/NDRs in Inbox | Message/thread IDs, headers, sender/recipients and timestamps; subject and reply text only for an exact matched message   | Delegated                | Normally no; tenant policy may require approval | Identify replies to Oryntela-managed email so sales records stay current |
+| `Calendars.ReadBasic` | Read useful event metadata without bodies, attachments or extensions       | Bounded primary-calendar delta and meeting context                                 | Basic event time, title, sensitivity, organiser/attendees, location and structured online-meeting metadata where returned | Delegated                | Normally no; tenant policy may require approval | Read relevant work-calendar events for meeting preparation               |
 
 Microsoft tenant policies can require an administrator even where a delegated
 permission is not administrator-consent-required by default. The callback and UI map
 that to **Microsoft administrator approval required**; Oryntela does not bypass it.
 `Mail.ReadWrite`, Contacts, Files, Directory, shared-mailbox and application scopes are
 not requested.
+
+The consent UI distinguishes Microsoft's broad technical `Mail.Read` grant from
+Oryntela's narrower data use: bounded Inbox/Sent Items metadata is inspected for known
+outbound relationships, unrelated mail is not stored, and subject/body content is
+requested only for one strongly correlated reply.
 
 ## Mail send, receipt and unknown outcomes
 
@@ -108,10 +113,11 @@ Inbox and Sent Items are independently synchronised by folder delta for a bounde
 links are accepted only for the fixed Graph HTTPS origin. Cursor expiry resets the
 bounded resource once. No full mailbox or historical import exists.
 
-The folder delta `$select` is metadata-only and excludes `body`. Oryntela requests the
-body of one specific provider message only after the metadata establishes exactly one
-strong Oryntela outbound-operation match. The second response remains size-bounded and
-only sanitised plain text up to 10,000 characters is retained.
+The folder delta `$select` is metadata-only and excludes both `subject` and `body`.
+Oryntela requests the subject and body of one specific provider message only after the
+metadata establishes exactly one strong Oryntela outbound-operation match. The second
+response remains size-bounded and only the bounded subject plus sanitised plain text up
+to 10,000 characters is retained.
 
 An inbound item is retained only when all of these hold:
 
@@ -119,7 +125,8 @@ An inbound item is retained only when all of these hold:
 - it has a unique strong link to an Oryntela outbound operation through Internet
   Message-ID/References or Microsoft conversation ID; and
 - a normal/automatic reply is from that operation's exact recipient, or an NDR is
-  identifiable as a postmaster/mailer-daemon response.
+  identifiable as a postmaster/mailer-daemon response with an exact outbound Internet
+  Message-ID reference (conversation membership alone is insufficient for an NDR).
 
 Unrelated mail, ambiguous matches, attachments and raw HTML are discarded. Retained
 HTML is converted to bounded plain text; scripts, styles, objects, iframes, SVG and
@@ -137,19 +144,23 @@ only the complete delta link required by Microsoft. Calendar delta does not supp
 `Calendars.ReadBasic` constrains provider access. Bodies, attachments and extensions
 are neither requested as additional scopes nor stored.
 
-Private events retain only the label **Private event**, time, timezone and state; no
-subject, organiser, attendees, location or join URL survives. HTTPS structured online
-meeting URLs may be retained as context, but there is no Teams calling, capture or
-transcription integration. Change key, iCal UID, series-master ID and provider modified
-time make instances, updates, cancellations, deletions, duplicates and stale/out-of-
-order data safe. The event row is updated in place.
+Private events retain only the label **Private event**, time, timezone, sensitivity,
+state and the minimum provider event/modified identifiers needed for idempotent delta
+updates; no subject, organiser, attendees, location, join URL, iCal UID, change key,
+series-master ID or Interaction link survives. HTTPS structured online meeting URLs may
+be retained for non-private context, but there is no Teams calling, capture or
+transcription integration. For non-private events, change key, iCal UID,
+series-master ID and provider modified time make instances, updates, cancellations,
+deletions, duplicates and stale/out-of-order data safe. The event row is updated in
+place.
 
 Matching uses the exact existing Contact email of one external attendee or organiser.
 It never creates a Contact, and events with multiple external addresses require
 review. One active Opportunity for that Contact's Account can be linked; zero or
 multiple candidates are unmatched/review-required. Same-domain events are internal.
-Linking to an existing, same-tenant, non-deleted Interaction is explicit. Calendar
-data never creates Evidence or an Interaction automatically.
+Linking to an existing, same-tenant, non-deleted Interaction is explicit, idempotent
+and explicitly removable. A later private transition removes the link. Calendar data
+never creates Evidence or an Interaction automatically.
 
 ## Polling, throttling and worker safety
 

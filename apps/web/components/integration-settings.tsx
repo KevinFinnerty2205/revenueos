@@ -13,7 +13,7 @@ import type {
   OAuthStartResponse,
   OrganisationConnection,
 } from "@revenueos/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 
@@ -54,6 +54,18 @@ export function IntegrationSettings() {
   const [syncStatus, setSyncStatus] = useState<MicrosoftSyncStatus | null>(
     null,
   );
+  const microsoftTriggerRef = useRef<HTMLButtonElement>(null);
+  const disconnectTriggerRef = useRef<HTMLButtonElement>(null);
+
+  function closeMicrosoftConsent() {
+    setMicrosoftConsent(false);
+    window.requestAnimationFrame(() => microsoftTriggerRef.current?.focus());
+  }
+
+  function closeDisconnectConfirmation() {
+    setDisconnecting(null);
+    window.requestAnimationFrame(() => disconnectTriggerRef.current?.focus());
+  }
 
   async function load(signal?: AbortSignal) {
     const [definitions, connectionList] = await Promise.all([
@@ -382,6 +394,7 @@ export function IntegrationSettings() {
                             Sync now
                           </button>
                           <button
+                            ref={microsoftTriggerRef}
                             type="button"
                             className="secondary-button"
                             disabled={busy === definition.connectorKey}
@@ -401,6 +414,11 @@ export function IntegrationSettings() {
                         </button>
                       )}
                       <button
+                        ref={
+                          connection.connectorKey === "microsoft_365"
+                            ? disconnectTriggerRef
+                            : undefined
+                        }
                         type="button"
                         className="secondary-button"
                         disabled={busy === definition.connectorKey}
@@ -411,6 +429,11 @@ export function IntegrationSettings() {
                     </>
                   ) : (
                     <button
+                      ref={
+                        definition.connectorKey === "microsoft_365"
+                          ? microsoftTriggerRef
+                          : undefined
+                      }
                       type="button"
                       className="primary-button"
                       disabled={
@@ -435,9 +458,13 @@ export function IntegrationSettings() {
                 microsoftConsent ? (
                   <div
                     className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4"
-                    aria-label="Microsoft 365 permissions"
+                    role="group"
+                    aria-labelledby="microsoft-permissions-title"
                   >
-                    <p className="font-bold text-slate-950">
+                    <p
+                      id="microsoft-permissions-title"
+                      className="font-bold text-slate-950"
+                    >
                       Before you continue
                     </p>
                     <dl className="mt-3 space-y-3 text-sm text-slate-700">
@@ -451,8 +478,12 @@ export function IntegrationSettings() {
                       <div>
                         <dt className="font-bold">Replies</dt>
                         <dd>
-                          Identify replies to Oryntela-managed email so your
-                          sales records remain current.
+                          Microsoft grants mail read access because its narrower
+                          permission cannot provide reply content. Oryntela
+                          scans only bounded Inbox and Sent Items metadata for
+                          emails tied to Oryntela sends, then reads the subject
+                          and body only for one strongly matched reply.
+                          Unrelated mail is not stored.
                         </dd>
                       </div>
                       <div>
@@ -479,7 +510,7 @@ export function IntegrationSettings() {
                       <button
                         type="button"
                         className="secondary-button"
-                        onClick={() => setMicrosoftConsent(false)}
+                        onClick={closeMicrosoftConsent}
                       >
                         Cancel
                       </button>
@@ -487,8 +518,15 @@ export function IntegrationSettings() {
                   </div>
                 ) : null}
                 {connection && disconnecting === connection.id ? (
-                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                    <p className="font-bold text-slate-950">
+                  <div
+                    className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4"
+                    role="group"
+                    aria-labelledby={`disconnect-${connection.id}-title`}
+                  >
+                    <p
+                      id={`disconnect-${connection.id}-title`}
+                      className="font-bold text-slate-950"
+                    >
                       Disconnect {definition.displayName}?
                     </p>
                     <p className="mt-2 text-sm leading-6 text-slate-700">
@@ -508,7 +546,7 @@ export function IntegrationSettings() {
                       <button
                         type="button"
                         className="secondary-button"
-                        onClick={() => setDisconnecting(null)}
+                        onClick={closeDisconnectConfirmation}
                       >
                         Keep connected
                       </button>

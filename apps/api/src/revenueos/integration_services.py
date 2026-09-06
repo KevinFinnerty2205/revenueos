@@ -1686,7 +1686,27 @@ class ActionExecutionService:
         applied = False
         safe_to_retry = False
         try:
-            if isinstance(action.payload, LogInteractionPayload):
+            if connection.connector_key == ConnectorKey.MICROSOFT_365.value:
+                operation = await self.session.scalar(
+                    select(ProviderOutboundOperation)
+                    .where(
+                        ProviderOutboundOperation.organisation_id == self.tenant.organisation_id,
+                        ProviderOutboundOperation.connection_id == connection.id,
+                        ProviderOutboundOperation.action_id == execution.action_id,
+                        ProviderOutboundOperation.idempotency_key == execution.idempotency_key,
+                    )
+                    .with_for_update()
+                )
+                if operation is None or operation.state != "reconciled" or operation.provider_message_id is None:
+                    raise PublicAPIError(
+                        "microsoft_send_reconciliation_pending",
+                        "Microsoft has not provided strong evidence that this email was sent. "
+                        "RevenueOS will keep the outcome unknown and will not resend it.",
+                        409,
+                    )
+                applied = True
+                external_result_id = operation.provider_message_id
+            elif isinstance(action.payload, LogInteractionPayload):
                 from revenueos.hubspot_connector import HubSpotCRMExecutor
 
                 if not isinstance(executor, HubSpotCRMExecutor):
@@ -1748,7 +1768,7 @@ class ActionExecutionService:
             risk_class=action.risk_class,
             created_at=now,
         )
-        await self._commit("The HubSpot execution could not be reconciled.")
+        await self._commit("The execution could not be reconciled.")
         refreshed = await self.repository.execution(self.tenant.organisation_id, execution.id)
         assert refreshed is not None
         return self._execution_response(refreshed)
@@ -2393,18 +2413,35 @@ class ActionExecutionService:
             ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
         }[status]
         if execution.execution_mode == "live":
-            safe_message = {
-                ExecutionStatus.QUEUED: "HubSpot update queued. No external change has occurred yet.",
-                ExecutionStatus.EXECUTING: "RevenueOS is applying the reviewed HubSpot action.",
-                ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
-                ExecutionStatus.FAILED_RETRYABLE: "HubSpot did not apply the action; a bounded retry is safe.",
-                ExecutionStatus.FAILED_PERMANENT: "The HubSpot action stopped safely and will not be retried.",
-                ExecutionStatus.CANCELLED: "The HubSpot action was cancelled before execution.",
-                ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
-                    "The HubSpot outcome is unknown. RevenueOS will not retry without reconciliation."
-                ),
-                ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
-            }[status]
+            if execution.connector_key == ConnectorKey.MICROSOFT_365.value:
+                safe_message = {
+                    ExecutionStatus.QUEUED: "Microsoft email queued. No external send has occurred yet.",
+                    ExecutionStatus.EXECUTING: "RevenueOS is submitting the reviewed email to Microsoft.",
+                    ExecutionStatus.SUCCEEDED: (
+                        "Microsoft accepted the reviewed email for processing. Delivery is not guaranteed."
+                    ),
+                    ExecutionStatus.FAILED_RETRYABLE: ("Microsoft did not accept the email; a bounded retry is safe."),
+                    ExecutionStatus.FAILED_PERMANENT: ("The Microsoft email stopped safely and will not be retried."),
+                    ExecutionStatus.CANCELLED: "The Microsoft email was cancelled before submission.",
+                    ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
+                        "The Microsoft send outcome is unknown. RevenueOS will not resend without "
+                        "strong Sent Items evidence."
+                    ),
+                    ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
+                }[status]
+            else:
+                safe_message = {
+                    ExecutionStatus.QUEUED: "HubSpot update queued. No external change has occurred yet.",
+                    ExecutionStatus.EXECUTING: "RevenueOS is applying the reviewed HubSpot action.",
+                    ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
+                    ExecutionStatus.FAILED_RETRYABLE: "HubSpot did not apply the action; a bounded retry is safe.",
+                    ExecutionStatus.FAILED_PERMANENT: "The HubSpot action stopped safely and will not be retried.",
+                    ExecutionStatus.CANCELLED: "The HubSpot action was cancelled before execution.",
+                    ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
+                        "The HubSpot outcome is unknown. RevenueOS will not retry without reconciliation."
+                    ),
+                    ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
+                }[status]
         return ActionExecutionResponse(
             id=execution.id,
             action_proposal_id=execution.action_id,

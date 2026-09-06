@@ -329,7 +329,7 @@ class MicrosoftCalendarEventListResponse(APIModel):
 
 
 class MicrosoftCalendarInteractionLinkRequest(StrictIntegrationModel):
-    interaction_id: UUID
+    interaction_id: UUID | None
 
 
 CRMObjectType = Literal["company", "contact", "deal"]

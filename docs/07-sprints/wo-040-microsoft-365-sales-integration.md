@@ -2,7 +2,7 @@
 
 - **Branch:** `codex/wo-040-microsoft-365-sales-integration`
 - **Baseline:** `ce12036403057ed3801d6b6dad892b5a82af4a80`
-- **Status:** implemented; awaiting engineering review
+- **Status:** implemented; engineering review passed
 - **Migration:** `0056_microsoft_365_sales`
 - **Provider:** Microsoft Graph production-capable adapter; not production-active
 - **Data/spend:** deterministic synthetic fixtures and official public documentation
@@ -65,12 +65,29 @@ Existing execution, scheduling, cancellation, member/commercial rechecks,
 suppression/contactability, Campaign and private-beta lifecycle suites remain
 authoritative and run in the full validation gate.
 
+The engineering review corrected seven WO-040 issues before merge: refresh-token
+failures now preserve transient/retryable classification and a Graph-rejected access
+token forces one row-locked refresh; unknown Microsoft sends cannot enter the generic
+retry path; mailbox delta no longer requests subjects before strong correlation;
+NDRs require an exact outbound Internet Message-ID reference rather than conversation
+membership alone;
+execution status and controls use Microsoft-specific accepted/unknown wording rather
+than HubSpot labels; consent/focus semantics now explain the broad technical
+`Mail.Read` grant and return keyboard focus after inline cancellation; and calendar
+links are now explicitly removable while private events cannot be linked and private
+transitions clear prior links and nonessential recurrence metadata. Regression
+coverage exercises signed OIDC nonce validation, exact PKCE/redirect exchange,
+production activation fail-closed behaviour, forced/concurrent refresh, strong
+Sent Items reconciliation, unrelated-mail/NDR/automatic-reply boundaries, calendar
+reschedule/cancellation/deletion/privacy transitions, provider-specific status copy
+and disclosure focus.
+
 ## UI evidence
 
-In-app browser validation covered Settings unconfigured, connected and
-needs-reauthorisation states plus the Engage sender and calendar-linked meeting
-states at desktop and 390 px. The retained synthetic evidence contains no real
-account or customer data:
+In-app browser validation covered Settings unconfigured, connecting/consent,
+connected, administrator-approval, needs-reauthorisation, degraded and disconnect
+states plus the Engage sender and calendar-linked meeting states at desktop and 390
+px. The retained synthetic evidence contains no real account or customer data:
 
 - [connected Microsoft settings](assets/wo-040/microsoft-settings-desktop.png)
 - [desktop live-send review](assets/wo-040/engage-live-send-desktop.png)
