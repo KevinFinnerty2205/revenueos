@@ -80,13 +80,18 @@ describe("CRMRecordLink", () => {
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
-    fireEvent.change(screen.getByLabelText("Search HubSpot deals"), {
-      target: { value: "Qantas" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("Search external CRM opportunities"),
+      {
+        target: { value: "Qantas" },
+      },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("Qantas Expansion")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Link" }));
-    expect(await screen.findByText("HubSpot deal ID: deal-42")).toBeVisible();
+    expect(
+      await screen.findByText("HubSpot opportunity ID: deal-42"),
+    ).toBeVisible();
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toEqual({
       connectionId: connection.id,

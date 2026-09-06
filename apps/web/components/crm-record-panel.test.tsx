@@ -112,6 +112,104 @@ describe("CRMRecordPanel", () => {
     expect(screen.queryByText("user-1")).not.toBeInTheDocument();
   });
 
+  it("previews, confirms and safely reconciles an unknown external CRM update", async () => {
+    const externalRecord = {
+      ...record,
+      mode: "external",
+      customFields: [],
+      history: [],
+      activity: [],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/v1/crm/records/account/account-1"))
+        return response(externalRecord);
+      if (url.endsWith("/api/v1/integrations/connections"))
+        return response({
+          items: [
+            {
+              id: "connection-1",
+              connectorKey: "hubspot",
+              displayName: "HubSpot",
+              connectionStatus: "active",
+            },
+          ],
+          total: 1,
+        });
+      if (url.endsWith("/crm/status"))
+        return response({
+          connectionId: "connection-1",
+          providerKey: "hubspot",
+          lifecycle: "ready",
+          healthStatus: "healthy",
+          connectorEnabled: true,
+          writebackEnabled: true,
+          mappingVersion: 2,
+          recordsSeen: 1,
+          recordsApplied: 1,
+          conflictCount: 0,
+          initialSyncStartedAt: "2026-09-06T01:00:00Z",
+          initialSyncCompletedAt: "2026-09-06T01:01:00Z",
+          lastSuccessfulSyncAt: "2026-09-06T01:01:00Z",
+          lastHealthCheckedAt: "2026-09-06T01:01:00Z",
+          lastSafeErrorCode: null,
+          cursors: [],
+          latestJob: null,
+        });
+      if (url.endsWith("/crm/writeback/preview"))
+        return response({
+          id: "preview-1",
+          connectionId: "connection-1",
+          entityType: "company",
+          entityId: "account-1",
+          operation: "update",
+          externalObjectId: "company-1",
+          changes: { industry: "Software" },
+          previewFingerprint: "f".repeat(64),
+          expiresAt: "2026-09-06T01:10:00Z",
+        });
+      if (url.endsWith("/crm/writeback/confirm"))
+        return response({
+          receiptId: "receipt-1",
+          status: "unknown",
+          externalObjectId: "company-1",
+          safeMessage: "The CRM outcome is unknown.",
+        });
+      if (url.endsWith("/receipts/receipt-1/reconcile"))
+        return response({
+          receiptId: "receipt-2",
+          status: "reconciled",
+          externalObjectId: "company-1",
+          safeMessage: "The CRM writeback was reconciled safely.",
+        });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("crypto", { randomUUID: () => "idempotency-1" });
+    render(<CRMRecordPanel entityType="account" entityId="account-1" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Preview HubSpot update" }),
+    );
+    expect(await screen.findByText("Software")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /authorise this one CRM update/u,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Update HubSpot" }));
+    expect(
+      await screen.findByText("The CRM outcome is unknown."),
+    ).toBeVisible();
+    expect(screen.getByText(/did not retry/u)).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reconcile HubSpot outcome" }),
+    );
+    expect(
+      await screen.findByText("The CRM writeback was reconciled safely."),
+    ).toBeVisible();
+  });
+
   it("saves a typed custom field with optimistic concurrency", async () => {
     const fetchMock = vi
       .fn()

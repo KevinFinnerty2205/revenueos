@@ -64,15 +64,22 @@ from revenueos.models import (
     CreditOperation,
     CreditOrganisationPolicy,
     CreditQuote,
+    CRMConflict,
+    CRMConnectionState,
     CRMCustomFieldDefinition,
     CRMCustomFieldValue,
     CRMEntityMapping,
     CRMFieldMapping,
     CRMImportBatch,
     CRMImportRow,
+    CRMOwnerMapping,
     CRMRecordChange,
     CRMRecordMerge,
     CRMStageMapping,
+    CRMSyncCursor,
+    CRMSyncJob,
+    CRMSyncReceipt,
+    CRMWritebackPreview,
     DataNoticeAcknowledgement,
     DebriefSession,
     DebriefTurn,
@@ -187,7 +194,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 34
+EXPORT_VERSION = 35
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1119,6 +1126,7 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(EngageCampaign).where(EngageCampaign.organisation_id == organisation_id))
         await _attempt_hubspot_revocation(session, settings, organisation_id)
+        await _attempt_salesforce_revocation(session, settings, organisation_id)
         await _attempt_google_revocation(session, settings, organisation_id)
         await session.execute(
             delete(IntegrationAuditEvent).where(IntegrationAuditEvent.organisation_id == organisation_id)
@@ -1136,6 +1144,13 @@ async def _delete_organisation_records(
             delete(ProviderCalendarEvent).where(ProviderCalendarEvent.organisation_id == organisation_id)
         )
         await session.execute(delete(ProviderSyncState).where(ProviderSyncState.organisation_id == organisation_id))
+        await session.execute(delete(CRMWritebackPreview).where(CRMWritebackPreview.organisation_id == organisation_id))
+        await session.execute(delete(CRMConflict).where(CRMConflict.organisation_id == organisation_id))
+        await session.execute(delete(CRMSyncReceipt).where(CRMSyncReceipt.organisation_id == organisation_id))
+        await session.execute(delete(CRMSyncJob).where(CRMSyncJob.organisation_id == organisation_id))
+        await session.execute(delete(CRMSyncCursor).where(CRMSyncCursor.organisation_id == organisation_id))
+        await session.execute(delete(CRMOwnerMapping).where(CRMOwnerMapping.organisation_id == organisation_id))
+        await session.execute(delete(CRMConnectionState).where(CRMConnectionState.organisation_id == organisation_id))
         await session.execute(delete(CRMStageMapping).where(CRMStageMapping.organisation_id == organisation_id))
         await session.execute(delete(CRMFieldMapping).where(CRMFieldMapping.organisation_id == organisation_id))
         await session.execute(delete(CRMEntityMapping).where(CRMEntityMapping.organisation_id == organisation_id))
@@ -1426,6 +1441,65 @@ async def _attempt_hubspot_revocation(
         except (HubSpotAPIError, ValueError):
             logger.warning(
                 "organisation_deletion_hubspot_revocation_failed",
+                extra={
+                    "organisation_id": str(organisation_id),
+                    "connection_id": str(connection.id),
+                },
+            )
+
+
+async def _attempt_salesforce_revocation(
+    session: AsyncSession,
+    settings: Settings,
+    organisation_id: UUID,
+) -> None:
+    """Best-effort Salesforce refresh-token revocation before local erasure."""
+    connections = list(
+        (
+            await session.scalars(
+                select(IntegrationConnection).where(
+                    IntegrationConnection.organisation_id == organisation_id,
+                    IntegrationConnection.connector_key == "salesforce",
+                    IntegrationConnection.credential_reference.is_not(None),
+                )
+            )
+        ).all()
+    )
+    if not connections:
+        return
+    if not all(
+        (
+            settings.salesforce_client_id,
+            settings.salesforce_client_secret,
+            settings.connector_credential_master_key,
+        )
+    ):
+        logger.warning(
+            "organisation_deletion_salesforce_revocation_unavailable",
+            extra={"organisation_id": str(organisation_id), "connection_count": len(connections)},
+        )
+        return
+    from revenueos.credential_store import EncryptedDatabaseCredentialStore
+    from revenueos.salesforce_connector import SalesforceAPIError, SalesforceClient
+
+    assert settings.connector_credential_master_key is not None
+    store = EncryptedDatabaseCredentialStore(
+        session,
+        settings.connector_credential_master_key.get_secret_value(),
+    )
+    client = SalesforceClient(settings, store)
+    for connection in connections:
+        assert connection.credential_reference is not None
+        try:
+            credential = await store.get(
+                organisation_id,
+                connection.id,
+                connection.credential_reference,
+            )
+            await client.revoke(credential)
+        except (SalesforceAPIError, ValueError):
+            logger.warning(
+                "organisation_deletion_salesforce_revocation_failed",
                 extra={
                     "organisation_id": str(organisation_id),
                     "connection_id": str(connection.id),
@@ -3315,6 +3389,36 @@ async def _export_payload(
         select(CRMStageMapping)
         .where(CRMStageMapping.organisation_id == organisation_id)
         .order_by(CRMStageMapping.connection_id, CRMStageMapping.revenueos_stage)
+    )
+    crm_connection_states = await rows(
+        select(CRMConnectionState)
+        .where(CRMConnectionState.organisation_id == organisation_id)
+        .order_by(CRMConnectionState.connection_id)
+    )
+    crm_owner_mappings = await rows(
+        select(CRMOwnerMapping)
+        .where(CRMOwnerMapping.organisation_id == organisation_id)
+        .order_by(CRMOwnerMapping.connection_id, CRMOwnerMapping.external_owner_id)
+    )
+    crm_sync_jobs = await rows(
+        select(CRMSyncJob)
+        .where(CRMSyncJob.organisation_id == organisation_id)
+        .order_by(CRMSyncJob.created_at, CRMSyncJob.id)
+    )
+    crm_sync_receipts = await rows(
+        select(CRMSyncReceipt)
+        .where(CRMSyncReceipt.organisation_id == organisation_id)
+        .order_by(CRMSyncReceipt.created_at, CRMSyncReceipt.id)
+    )
+    crm_conflicts = await rows(
+        select(CRMConflict)
+        .where(CRMConflict.organisation_id == organisation_id)
+        .order_by(CRMConflict.created_at, CRMConflict.id)
+    )
+    crm_writeback_previews = await rows(
+        select(CRMWritebackPreview)
+        .where(CRMWritebackPreview.organisation_id == organisation_id)
+        .order_by(CRMWritebackPreview.created_at, CRMWritebackPreview.id)
     )
     crm_settings = await rows(
         select(OrganisationCRMSetting).where(OrganisationCRMSetting.organisation_id == organisation_id)
@@ -5366,6 +5470,9 @@ async def _export_payload(
                     "last_synced_at",
                     "sync_state",
                     "created_by_user_id",
+                    "external_version",
+                    "authority_version",
+                    "archived_at",
                     "created_at",
                     "updated_at",
                 ),
@@ -5385,6 +5492,7 @@ async def _export_payload(
                     "authority",
                     "enabled",
                     "configured_by_user_id",
+                    "mapping_version",
                     "created_at",
                     "updated_at",
                 ),
@@ -5401,11 +5509,145 @@ async def _export_payload(
                     "external_pipeline_id",
                     "external_stage_id",
                     "configured_by_user_id",
+                    "mapping_version",
                     "created_at",
                     "updated_at",
                 ),
             )
             for item in crm_stage_mappings
+        ],
+        "crmConnectionStates": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "provider_key",
+                    "lifecycle",
+                    "health_status",
+                    "connector_enabled",
+                    "writeback_enabled",
+                    "mapping_version",
+                    "records_seen",
+                    "records_applied",
+                    "conflict_count",
+                    "initial_sync_started_at",
+                    "initial_sync_completed_at",
+                    "last_successful_sync_at",
+                    "last_health_checked_at",
+                    "last_safe_error_code",
+                    "configured_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_connection_states
+        ],
+        "crmOwnerMappings": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "provider_key",
+                    "external_owner_id",
+                    "external_owner_name",
+                    "external_owner_email",
+                    "user_id",
+                    "state",
+                    "configured_by_user_id",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_owner_mappings
+        ],
+        "crmSyncJobs": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "provider_key",
+                    "mode",
+                    "status",
+                    "requested_by_user_id",
+                    "attempt_count",
+                    "started_at",
+                    "completed_at",
+                    "safe_failure_code",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_sync_jobs
+        ],
+        "crmSyncReceipts": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "provider_key",
+                    "direction",
+                    "object_type",
+                    "operation",
+                    "status",
+                    "revenueos_entity_id",
+                    "external_object_id",
+                    "external_version",
+                    "field_keys_json",
+                    "safe_failure_code",
+                    "created_at",
+                ),
+            )
+            for item in crm_sync_receipts
+        ],
+        "crmConflicts": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "provider_key",
+                    "object_type",
+                    "revenueos_entity_id",
+                    "external_object_id",
+                    "field_key",
+                    "oryntela_value_json",
+                    "provider_value_json",
+                    "status",
+                    "resolution",
+                    "resolved_by_user_id",
+                    "resolved_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in crm_conflicts
+        ],
+        "crmWritebackPreviews": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "entity_type",
+                    "entity_id",
+                    "operation",
+                    "external_object_id",
+                    "external_version",
+                    "changes_json",
+                    "mapping_version",
+                    "expires_at",
+                    "confirmed_by_user_id",
+                    "confirmed_at",
+                    "receipt_id",
+                    "invalidated_at",
+                    "created_at",
+                ),
+            )
+            for item in crm_writeback_previews
         ],
         "crmSettings": [
             _columns(

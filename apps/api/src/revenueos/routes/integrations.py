@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
+from revenueos.crm_connector_services import CRMConnectorService
 from revenueos.google_services import GoogleSyncService
 from revenueos.integration_contracts import (
     ActionExecutionDetailResponse,
@@ -12,15 +13,31 @@ from revenueos.integration_contracts import (
     ConnectionCreateRequest,
     ConnectionHealthResponse,
     ConnectionListResponse,
+    CRMConflictListResponse,
+    CRMConflictResolutionRequest,
+    CRMConflictResponse,
+    CRMConnectionStatusResponse,
+    CRMConnectorSettingRequest,
     CRMEntityLinkRequest,
     CRMEntityMappingResponse,
     CRMFieldConfigurationResponse,
     CRMFieldMappingRequest,
     CRMFieldMappingResponse,
+    CRMMappingReviewRequest,
+    CRMOwnerMappingListResponse,
+    CRMOwnerMappingRequest,
+    CRMOwnerMappingResponse,
     CRMSearchResponse,
     CRMStageConfigurationResponse,
     CRMStageMappingRequest,
     CRMStageMappingResponse,
+    CRMSyncEnqueueRequest,
+    CRMSyncJobResponse,
+    CRMWritebackConfirmRequest,
+    CRMWritebackPreviewRequest,
+    CRMWritebackPreviewResponse,
+    CRMWritebackResultResponse,
+    CRMWritebackSettingRequest,
     ExecutionConfirmRequest,
     ExecutionPreviewRequest,
     ExecutionPreviewResponse,
@@ -43,6 +60,7 @@ from revenueos.integration_contracts import (
 )
 from revenueos.integration_dependencies import (
     get_action_execution_service,
+    get_crm_connector_service,
     get_google_sync_service,
     get_integration_service,
     get_microsoft_sync_service,
@@ -55,6 +73,7 @@ Integrations = Annotated[IntegrationService, Depends(get_integration_service)]
 Executions = Annotated[ActionExecutionService, Depends(get_action_execution_service)]
 MicrosoftSync = Annotated[MicrosoftSyncService, Depends(get_microsoft_sync_service)]
 GoogleSync = Annotated[GoogleSyncService, Depends(get_google_sync_service)]
+CRMConnectors = Annotated[CRMConnectorService, Depends(get_crm_connector_service)]
 
 
 @router.get("/integrations", response_model=IntegrationCatalogResponse)
@@ -128,6 +147,22 @@ async def complete_hubspot_oauth(
     service: Integrations,
 ) -> OrganisationConnectionResponse:
     return await service.complete_hubspot_oauth(request)
+
+
+@router.post("/integrations/salesforce/oauth/start", response_model=OAuthStartResponse)
+async def start_salesforce_oauth(service: Integrations) -> OAuthStartResponse:
+    return await service.start_salesforce_oauth()
+
+
+@router.post(
+    "/integrations/salesforce/oauth/callback",
+    response_model=OrganisationConnectionResponse,
+)
+async def complete_salesforce_oauth(
+    request: OAuthCallbackRequest,
+    service: Integrations,
+) -> OrganisationConnectionResponse:
+    return await service.complete_salesforce_oauth(request)
 
 
 @router.post("/integrations/microsoft/oauth/start", response_model=OAuthStartResponse)
@@ -363,6 +398,148 @@ async def set_crm_stage_mapping(
     service: Integrations,
 ) -> CRMStageMappingResponse:
     return await service.set_stage_mapping(connection_id, request)
+
+
+@router.get(
+    "/integrations/connections/{connection_id}/crm/status",
+    response_model=CRMConnectionStatusResponse,
+)
+async def crm_connection_status(
+    connection_id: UUID,
+    service: CRMConnectors,
+) -> CRMConnectionStatusResponse:
+    return await service.status(connection_id)
+
+
+@router.put(
+    "/integrations/connections/{connection_id}/crm/enabled",
+    response_model=CRMConnectionStatusResponse,
+)
+async def set_crm_connector_enabled(
+    connection_id: UUID,
+    request: CRMConnectorSettingRequest,
+    service: CRMConnectors,
+) -> CRMConnectionStatusResponse:
+    return await service.set_connector_enabled(connection_id, request)
+
+
+@router.post(
+    "/integrations/connections/{connection_id}/crm/sync",
+    response_model=CRMSyncJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def enqueue_crm_sync(
+    connection_id: UUID,
+    request: CRMSyncEnqueueRequest,
+    service: CRMConnectors,
+) -> CRMSyncJobResponse:
+    return await service.enqueue_sync(connection_id, request)
+
+
+@router.post(
+    "/integrations/connections/{connection_id}/crm/mappings/review",
+    response_model=CRMConnectionStatusResponse,
+)
+async def review_crm_mappings(
+    connection_id: UUID,
+    request: CRMMappingReviewRequest,
+    service: CRMConnectors,
+) -> CRMConnectionStatusResponse:
+    return await service.review_mappings(connection_id, request)
+
+
+@router.put(
+    "/integrations/connections/{connection_id}/crm/writeback",
+    response_model=CRMConnectionStatusResponse,
+)
+async def set_crm_writeback(
+    connection_id: UUID,
+    request: CRMWritebackSettingRequest,
+    service: CRMConnectors,
+) -> CRMConnectionStatusResponse:
+    return await service.set_writeback(connection_id, request)
+
+
+@router.get(
+    "/integrations/connections/{connection_id}/crm/owners",
+    response_model=CRMOwnerMappingListResponse,
+)
+async def list_crm_owners(
+    connection_id: UUID,
+    service: CRMConnectors,
+) -> CRMOwnerMappingListResponse:
+    return await service.list_owners(connection_id)
+
+
+@router.put(
+    "/integrations/connections/{connection_id}/crm/owners",
+    response_model=CRMOwnerMappingResponse,
+)
+async def set_crm_owner_mapping(
+    connection_id: UUID,
+    request: CRMOwnerMappingRequest,
+    service: CRMConnectors,
+) -> CRMOwnerMappingResponse:
+    return await service.set_owner_mapping(connection_id, request)
+
+
+@router.get(
+    "/integrations/connections/{connection_id}/crm/conflicts",
+    response_model=CRMConflictListResponse,
+)
+async def list_crm_conflicts(
+    connection_id: UUID,
+    service: CRMConnectors,
+) -> CRMConflictListResponse:
+    return await service.list_conflicts(connection_id)
+
+
+@router.post(
+    "/integrations/crm/conflicts/{conflict_id}/resolve",
+    response_model=CRMConflictResponse,
+)
+async def resolve_crm_conflict(
+    conflict_id: UUID,
+    request: CRMConflictResolutionRequest,
+    service: CRMConnectors,
+) -> CRMConflictResponse:
+    return await service.resolve_conflict(conflict_id, request)
+
+
+@router.post(
+    "/integrations/connections/{connection_id}/crm/writeback/preview",
+    response_model=CRMWritebackPreviewResponse,
+)
+async def preview_crm_writeback(
+    connection_id: UUID,
+    request: CRMWritebackPreviewRequest,
+    service: CRMConnectors,
+) -> CRMWritebackPreviewResponse:
+    return await service.preview_writeback(connection_id, request)
+
+
+@router.post(
+    "/integrations/connections/{connection_id}/crm/writeback/confirm",
+    response_model=CRMWritebackResultResponse,
+)
+async def confirm_crm_writeback(
+    connection_id: UUID,
+    request: CRMWritebackConfirmRequest,
+    service: CRMConnectors,
+) -> CRMWritebackResultResponse:
+    return await service.confirm_writeback(connection_id, request)
+
+
+@router.post(
+    "/integrations/connections/{connection_id}/crm/writeback/receipts/{receipt_id}/reconcile",
+    response_model=CRMWritebackResultResponse,
+)
+async def reconcile_crm_writeback(
+    connection_id: UUID,
+    receipt_id: UUID,
+    service: CRMConnectors,
+) -> CRMWritebackResultResponse:
+    return await service.reconcile_writeback(connection_id, receipt_id)
 
 
 @router.post(

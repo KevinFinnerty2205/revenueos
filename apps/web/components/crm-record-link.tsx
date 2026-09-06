@@ -28,18 +28,20 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
       const response = await apiRequest<ConnectionListResponse>(
         "/api/v1/integrations/connections",
       );
-      const hubspot = response.items.find(
+      const externalCrm = response.items.find(
         (item) =>
-          item.connectorKey === "hubspot" && item.connectionStatus === "active",
+          (item.connectorKey === "hubspot" ||
+            item.connectorKey === "salesforce") &&
+          item.connectionStatus === "active",
       );
-      if (!hubspot) {
+      if (!externalCrm) {
         throw new Error(
-          "Ask an administrator to connect HubSpot before linking this opportunity.",
+          "Ask an administrator to connect HubSpot or Salesforce before linking this opportunity.",
         );
       }
-      setConnection(hubspot);
+      setConnection(externalCrm);
       const current = await apiRequest<CRMEntityMapping | null>(
-        `/api/v1/integrations/connections/${hubspot.id}/crm/entities/opportunity/${opportunityId}`,
+        `/api/v1/integrations/connections/${externalCrm.id}/crm/entities/opportunity/${opportunityId}`,
       );
       setMapping(current);
       setLoaded(true);
@@ -47,7 +49,7 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The HubSpot link could not be loaded.",
+          : "The external CRM link could not be loaded.",
       );
     } finally {
       setBusy(false);
@@ -67,7 +69,7 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "HubSpot deals could not be searched.",
+          : "External CRM opportunities could not be searched.",
       );
     } finally {
       setBusy(false);
@@ -85,7 +87,7 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
           method: "PUT",
           body: JSON.stringify({
             connectionId: connection.id,
-            externalObjectType: "deal",
+            externalObjectType: result.externalObjectType,
             externalObjectId: result.externalObjectId,
           }),
         },
@@ -97,7 +99,7 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The HubSpot deal could not be linked.",
+          : "The external CRM opportunity could not be linked.",
       );
     } finally {
       setBusy(false);
@@ -118,7 +120,7 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The HubSpot deal link could not be removed.",
+          : "The external CRM opportunity link could not be removed.",
       );
     } finally {
       setBusy(false);
@@ -128,7 +130,7 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
   return (
     <section className="form-card" aria-labelledby="crm-record-link-title">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
-        HubSpot context
+        External CRM context
       </p>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -136,8 +138,8 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
             CRM record link
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Linking selects the exact HubSpot deal used for reviewed updates. It
-            does not import or overwrite data.
+            Linking selects the exact external CRM opportunity used for reviewed
+            updates. It does not silently overwrite data.
           </p>
         </div>
         {mapping ? (
@@ -158,7 +160,8 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
       ) : mapping ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-3">
           <p className="text-sm text-slate-700">
-            HubSpot deal ID: {mapping.externalObjectId}
+            {connection?.displayName ?? "External CRM"} opportunity ID:{" "}
+            {mapping.externalObjectId}
           </p>
           <button
             type="button"
@@ -174,16 +177,16 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <label
               className="sr-only"
-              htmlFor={`hubspot-deal-search-${opportunityId}`}
+              htmlFor={`crm-opportunity-search-${opportunityId}`}
             >
-              Search HubSpot deals
+              Search external CRM opportunities
             </label>
             <input
-              id={`hubspot-deal-search-${opportunityId}`}
+              id={`crm-opportunity-search-${opportunityId}`}
               className="text-input flex-1"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search HubSpot deals by name"
+              placeholder={`Search ${connection?.displayName ?? "external CRM"} opportunities by name`}
             />
             <button
               type="button"

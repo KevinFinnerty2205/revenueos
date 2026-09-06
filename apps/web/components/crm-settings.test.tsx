@@ -38,7 +38,7 @@ describe("CRMSettings", () => {
     render(<CRMSettings />);
 
     const nativeButton = await screen.findByRole("button", {
-      name: "Use RevenueOS as our CRM",
+      name: "Use Oryntela CRM",
     });
     expect(nativeButton).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox"));

@@ -837,7 +837,7 @@ class BusinessService:
 
     async def _guard_authoritative_fields(self, entity_type: str, fields: set[str]) -> None:
         setting = await self.crm_repository.setting(self.tenant.organisation_id)
-        connection = await self.crm_repository.active_hubspot_connection(self.tenant.organisation_id)
+        connection = await self.crm_repository.active_external_crm_connection(self.tenant.organisation_id)
         external = (setting is not None and setting.mode == "external") or (setting is None and connection is not None)
         if not external:
             return

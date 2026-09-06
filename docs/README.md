@@ -163,6 +163,11 @@ This is the canonical product and engineering documentation index. Documents dis
 152. [WO-041: Google Workspace Sales Integration](07-sprints/wo-041-google-workspace-sales-integration.md) — seller-bound Gmail/Calendar adapter; production-capable and inactive
 153. [Google Workspace sales integration architecture](03-engineering/google-workspace-sales-integration.md) — OAuth scopes, restricted-data boundary, send/reply/calendar reconciliation and activation gates
 154. [ADR 0071: Google Workspace incremental integration](08-decisions/0071-google-workspace-restricted-scope-incremental-integration.md) — Workspace-only OAuth, least privilege, bounded polling and one-primary-mailbox policy
+155. [WO-042: Production CRM Connectors](07-sprints/wo-042-production-crm-connectors.md) — HubSpot/Salesforce account, contact and opportunity sync; production-capable and inactive
+156. [Production CRM connector architecture](03-engineering/production-crm-connectors.md) — provider-neutral lifecycle, polling, reconciliation, security and activation gates
+    - [CRM field authority matrix](03-engineering/crm-authority-matrix.md) — exact bounded V1 field ownership
+157. [CRM provider research](05-integrations/crm-provider-research-2026-09-06.md) — dated HubSpot/Salesforce evidence and Dynamics defer decision
+158. [ADR 0072: Provider-neutral production CRM connectors](08-decisions/0072-provider-neutral-production-crm-connectors.md)
 
 ## First design-partner launch package
 
@@ -349,6 +354,8 @@ This is the canonical product and engineering documentation index. Documents dis
 - [AI worker and durable job queue](03-engineering/ai-worker-queue.md)
 - [AI provider abstraction](03-engineering/ai-provider-abstraction.md)
 - [OpenAI provider integration](03-engineering/openai-provider-integration.md)
+- [Production CRM connectors](03-engineering/production-crm-connectors.md)
+- [CRM field authority matrix](03-engineering/crm-authority-matrix.md)
 - [Prompt registry and structured output](03-engineering/prompt-registry-and-structured-output.md)
 - [Executive Summary intelligence](03-engineering/executive-summary-intelligence.md)
 - [Meeting Decisions intelligence](03-engineering/meeting-decisions-intelligence.md)
@@ -595,6 +602,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [CRM provider selection](05-integrations/crm-provider-selection.md)
 - [HubSpot connection and operations](05-integrations/hubspot-connection-guide.md)
 - [CRM administrator setup](05-integrations/crm-admin-setup.md)
+- [CRM provider research, 6 September 2026](05-integrations/crm-provider-research-2026-09-06.md)
 - [Prospect research provider boundary and deferred provider decision](05-integrations/prospect-research-provider-boundary.md)
 - [Company discovery provider evaluation](05-integrations/company-discovery-provider-evaluation.md)
 - [Mailbox provider evaluation](05-integrations/mailbox-provider-evaluation.md)
@@ -686,6 +694,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [WO-047: Commercial Plans, Entitlements & Trial](07-sprints/wo-047-commercial-plans-entitlements-trial.md)
 - [WO-048: Billing & Subscription Operations](07-sprints/wo-048-billing-subscription-operations.md)
 - [WO-049: Credits & Variable-Cost Controls](07-sprints/wo-049-credits-variable-cost-controls.md)
+- [WO-040: Microsoft 365 Sales Integration](07-sprints/wo-040-microsoft-365-sales-integration.md)
+- [WO-041: Google Workspace Sales Integration](07-sprints/wo-041-google-workspace-sales-integration.md)
+- [WO-042: Production CRM Connectors](07-sprints/wo-042-production-crm-connectors.md)
 
 ## 08 — Decision records
 
@@ -753,10 +764,18 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0054: Canonical records form the native CRM](08-decisions/0054-canonical-record-native-crm.md)
 - [ADR 0068: Versioned organisation-approved Company & Selling Profile](08-decisions/0068-versioned-company-selling-profile.md)
 - [ADR 0069: Versioned commercial authority without billing](08-decisions/0069-versioned-commercial-authority.md)
+- [ADR 0070: Seller-delegated Microsoft Graph with bounded delta reconciliation](08-decisions/0070-microsoft-delegated-delta-sales-integration.md)
+- [ADR 0071: Google Workspace incremental integration](08-decisions/0071-google-workspace-restricted-scope-incremental-integration.md)
+- [ADR 0072: Provider-neutral production CRM connectors](08-decisions/0072-provider-neutral-production-crm-connectors.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and WO-004A1/A2/B1/B2/B3/C1/C1A/C2/C3/C4/C5/C6/005/006A/006B/006C/006D/007/008A/008B/009/011/012/013/014/015/016/017/018/019/020/021/022/024/025/025A/025B/025C/026/027/028/029/030/031/032/033/034/035/036/037 are implemented. WO-010 is the completed product and architecture blueprint for this staged evolution. WO-022 remains the simulation foundation; WO-025C adds the first production-capable connector without relabelling mock connectors as live.
+Sprints 1–3 and the accepted work through WO-042, including WO-046–050 and the
+WO-039A/B/C gates, are implemented where their individual records say so. WO-010 and
+WO-023 are completed blueprints rather than runtime scope. WO-022 remains the
+simulation foundation; WO-025C added the first production-capable connector and
+WO-040/041/042 now add further production-capable adapters without relabelling them
+as production-active.
 WO-023 is a completed documentation blueprint for the broader end-to-end Sales
 OS. WO-024 implements Sales Methodology, WO-025 implements Daily and WO-025C
 implements one HubSpot CRM path. Checkpoint 1B authorised WO-026; WO-026/027/028 now
@@ -769,9 +788,10 @@ entitled, approved-template Create presentation slice. WO-033 adds bounded,
 deterministic Value Models and versioned Business Cases. WO-034 adds the canonical-record
 Native CRM Foundation without native Action execution or operational CSV. WO-035
 implements Native Pipeline, WO-036 implements deterministic Core Sales Insights and
-WO-037 implements explicit canonical Targets/KPI progress and WO-038 implements
-transparent seller ranges plus a separate historical baseline; WO-039–045 remain
-unauthorised.
+WO-037 implements explicit canonical Targets/KPI progress, WO-038 implements
+transparent seller ranges plus a separate historical baseline and WO-039 implements
+deal-centric Manager Intelligence. WO-040, WO-041 and WO-042 are implemented but
+inactive; WO-043–045 remain separately authorised future work.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting
@@ -789,10 +809,11 @@ text. WO-007 adds a tenant-safe Opportunity Workspace over the latest
 associated meeting's existing current-version artefacts. WO-008B adds
 deterministic, on-demand account and opportunity comparisons over immutable
 snapshots and their referenced artefacts. It performs no transcript read,
-extraction, provider call, prediction or forecast. There is no email/calendar send,
-autonomous external action, billing or mobile application. Ask RevenueOS and bounded
-HubSpot connection/mapping/review UI now exist, but no second CRM or general
-integration marketplace exists. The later WO-014/WO-015
+extraction, provider call, prediction or forecast. Production provider activation,
+autonomous external action and a native mobile application remain absent. Ask
+RevenueOS plus bounded HubSpot/Salesforce connection, sync, mapping, conflict and
+reviewed-writeback UI now exist, but no general integration marketplace exists. The
+later WO-014/WO-015
 binary-evidence paths are deliberately bounded to private visual assets and
 consent-gated audio; they are not general media storage. WO-009
 adds verified Clerk organisation sessions, versioned acknowledgement,
@@ -886,7 +907,19 @@ envelope encryption and never enter browser contracts, logs or exports. Each wri
 still requires an approved immutable Action and a second explicit confirmation;
 RevenueOS does not perform autonomous CRM writes or write raw transcripts. The
 connector is off by default and target-environment/customer launch approval remains
-separate. Salesforce, bulk import and full bidirectional sync remain future.
+separate. At the WO-025C boundary, Salesforce, bulk import and full bidirectional sync
+remained future; WO-042 supersedes only the first of those limitations.
+
+WO-042 supersedes the former provider-breadth limitation without changing the
+activation boundary. Migration `0058_production_crm_connectors` adds production-capable,
+feature-gated HubSpot and Salesforce account/contact/opportunity adapters, durable
+bounded initial and incremental polling, explicit field/stage/owner authority,
+conflict queues, immutable receipts and per-record reviewed writeback with read-only
+unknown-outcome reconciliation. Native CRM remains fully usable without either
+provider. No provider account, app, key, spend, customer-data smoke test or production
+activation was performed; those controls remain parked for WO-054. Dynamics, arbitrary
+custom fields/objects, notes/files, broad activity sync, webhooks/CDC and autonomous
+writeback remain deferred.
 
 WO-026 adds the separately entitled Prospect Find path for bounded company
 name/domain resolution, immutable sourced Account Research, controlled refresh and

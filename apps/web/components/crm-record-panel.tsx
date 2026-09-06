@@ -7,6 +7,7 @@ import type {
 } from "@revenueos/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { CRMExternalWritebackPanel } from "@/components/crm-external-writeback-panel";
 import { CRMMergePanel } from "@/components/crm-merge-panel";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
@@ -261,6 +262,16 @@ export function CRMRecordPanel({
       </section>
 
       <CRMMergePanel record={record} onMerged={load} />
+
+      {record.mode === "external" &&
+      record.canManage &&
+      !record.archivedAt &&
+      !record.mergedIntoEntityId ? (
+        <CRMExternalWritebackPanel
+          entityType={entityType}
+          entityId={entityId}
+        />
+      ) : null}
 
       <details className="form-card group">
         <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2">

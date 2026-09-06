@@ -24,6 +24,9 @@ class ConnectorCredential:
     expires_at: datetime
     scopes: tuple[str, ...]
     external_account_id: str
+    api_base_url: str | None = None
+    schema_version: str | None = None
+    schema_capabilities: tuple[str, ...] = ()
 
 
 class CredentialStore(Protocol):
@@ -98,6 +101,7 @@ class EncryptedDatabaseCredentialStore:
             )
             if connection is None or connection.connector_key not in {
                 "hubspot",
+                "salesforce",
                 "microsoft_365",
                 "google_workspace",
             }:
@@ -122,6 +126,9 @@ class EncryptedDatabaseCredentialStore:
                 "expiresAt": credential.expires_at.astimezone(UTC).isoformat(),
                 "scopes": list(credential.scopes),
                 "externalAccountId": credential.external_account_id,
+                "apiBaseUrl": credential.api_base_url,
+                "schemaVersion": credential.schema_version,
+                "schemaCapabilities": list(credential.schema_capabilities),
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -188,6 +195,9 @@ class EncryptedDatabaseCredentialStore:
             expires_at = datetime.fromisoformat(payload["expiresAt"])
             scopes = payload["scopes"]
             external_account_id = payload["externalAccountId"]
+            api_base_url = payload.get("apiBaseUrl")
+            schema_version = payload.get("schemaVersion")
+            schema_capabilities = payload.get("schemaCapabilities", [])
             if not (
                 isinstance(access_token, str)
                 and isinstance(refresh_token, str)
@@ -197,6 +207,10 @@ class EncryptedDatabaseCredentialStore:
                 and access_token
                 and refresh_token
                 and external_account_id
+                and (api_base_url is None or isinstance(api_base_url, str))
+                and (schema_version is None or isinstance(schema_version, str))
+                and isinstance(schema_capabilities, list)
+                and all(isinstance(item, str) for item in schema_capabilities)
             ):
                 raise ValueError
         except (InvalidTag, KeyError, TypeError, ValueError) as exc:
@@ -207,6 +221,9 @@ class EncryptedDatabaseCredentialStore:
             expires_at=expires_at,
             scopes=tuple(scopes),
             external_account_id=external_account_id,
+            api_base_url=api_base_url,
+            schema_version=schema_version,
+            schema_capabilities=tuple(schema_capabilities),
         )
 
     async def revoke(

@@ -251,6 +251,9 @@ class Settings(BaseSettings):
     feature_action_execution_enabled: bool = False
     feature_mock_connectors_enabled: bool = False
     feature_hubspot_crm_enabled: bool = False
+    hubspot_production_activation_approved: bool = False
+    feature_salesforce_crm_enabled: bool = False
+    salesforce_production_activation_approved: bool = False
     feature_microsoft_365_enabled: bool = False
     microsoft_production_activation_approved: bool = False
     feature_google_workspace_enabled: bool = False
@@ -288,6 +291,21 @@ class Settings(BaseSettings):
     hubspot_read_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     hubspot_write_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
     hubspot_oauth_state_ttl_seconds: int = Field(default=600, ge=120, le=1800)
+    hubspot_max_response_bytes: int = Field(default=1_000_000, ge=10_000, le=5_000_000)
+    salesforce_client_id: str | None = Field(default=None, min_length=8, max_length=255)
+    salesforce_client_secret: SecretStr | None = None
+    salesforce_oauth_redirect_uri: str | None = Field(default=None, max_length=2048)
+    salesforce_authorisation_base_url: str = "https://login.salesforce.com/services/oauth2/authorize"
+    salesforce_token_url: str = "https://login.salesforce.com/services/oauth2/token"
+    salesforce_revoke_url: str = "https://login.salesforce.com/services/oauth2/revoke"
+    salesforce_api_version: Literal["v67.0"] = "v67.0"
+    salesforce_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    salesforce_read_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    salesforce_write_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
+    salesforce_oauth_state_ttl_seconds: int = Field(default=600, ge=120, le=1800)
+    crm_sync_page_size: int = Field(default=100, ge=1, le=200)
+    crm_sync_interval_seconds: int = Field(default=300, ge=60, le=86_400)
+    crm_sync_max_response_bytes: int = Field(default=1_000_000, ge=10_000, le=5_000_000)
     microsoft_client_id: str | None = Field(default=None, min_length=8, max_length=255)
     microsoft_client_secret: SecretStr | None = None
     microsoft_oauth_redirect_uri: str | None = Field(default=None, max_length=2048)
@@ -667,12 +685,46 @@ class Settings(BaseSettings):
                     "HubSpot CRM requires client credentials, an exact redirect URI and an encryption master key."
                 )
             assert self.hubspot_oauth_redirect_uri is not None
-            if self.environment == "production" and not self.hubspot_oauth_redirect_uri.startswith("https://"):
-                raise ValueError("Production HubSpot OAuth requires an HTTPS redirect URI.")
+            if self.environment == "production":
+                if not self.hubspot_production_activation_approved:
+                    raise ValueError("Production HubSpot activation requires explicit owner approval.")
+                if not self.hubspot_oauth_redirect_uri.startswith("https://"):
+                    raise ValueError("Production HubSpot OAuth requires an HTTPS redirect URI.")
             if self.hubspot_api_base_url != "https://api.hubapi.com":
                 raise ValueError("HubSpot API host must use the official HTTPS endpoint.")
             if self.hubspot_authorisation_base_url != "https://app.hubspot.com/oauth/authorize":
                 raise ValueError("HubSpot authorisation must use the official HTTPS endpoint.")
+            assert self.connector_credential_master_key is not None
+            from revenueos.credential_store import EncryptedDatabaseCredentialStore
+
+            EncryptedDatabaseCredentialStore.decode_master_key(self.connector_credential_master_key.get_secret_value())
+        if self.feature_salesforce_crm_enabled:
+            if not (self.feature_integrations_enabled and self.feature_action_execution_enabled):
+                raise ValueError("Salesforce CRM requires Integrations and Action Execution feature flags.")
+            if not all(
+                (
+                    self.salesforce_client_id,
+                    self.salesforce_client_secret,
+                    self.salesforce_oauth_redirect_uri,
+                    self.connector_credential_master_key,
+                )
+            ):
+                raise ValueError(
+                    "Salesforce CRM requires client credentials, an exact redirect URI and an encryption master key."
+                )
+            assert self.salesforce_oauth_redirect_uri is not None
+            if self.environment == "production":
+                if not self.salesforce_production_activation_approved:
+                    raise ValueError("Production Salesforce activation requires explicit owner approval.")
+                if not self.salesforce_oauth_redirect_uri.startswith("https://"):
+                    raise ValueError("Production Salesforce OAuth requires an HTTPS redirect URI.")
+            official_salesforce_endpoints = {
+                self.salesforce_authorisation_base_url: "https://login.salesforce.com/services/oauth2/authorize",
+                self.salesforce_token_url: "https://login.salesforce.com/services/oauth2/token",
+                self.salesforce_revoke_url: "https://login.salesforce.com/services/oauth2/revoke",
+            }
+            if any(actual != expected for actual, expected in official_salesforce_endpoints.items()):
+                raise ValueError("Salesforce OAuth endpoints must use the allow-listed official HTTPS hosts.")
             assert self.connector_credential_master_key is not None
             from revenueos.credential_store import EncryptedDatabaseCredentialStore
 
@@ -877,6 +929,7 @@ class Settings(BaseSettings):
             "actionExecution": self.feature_action_execution_enabled,
             "mockConnectors": self.feature_mock_connectors_enabled,
             "hubspotCrm": self.feature_hubspot_crm_enabled,
+            "salesforceCrm": self.feature_salesforce_crm_enabled,
             "microsoft365": self.feature_microsoft_365_enabled,
             "googleWorkspace": self.feature_google_workspace_enabled,
             "nativeCrm": self.feature_native_crm_enabled,

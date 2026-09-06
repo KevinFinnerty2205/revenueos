@@ -28,6 +28,39 @@ const hubspotConnection = {
   updatedAt: "2026-08-24T01:00:00Z",
 };
 
+const salesforceConnection = {
+  ...hubspotConnection,
+  id: "salesforce-connection-1",
+  connectorKey: "salesforce",
+  displayName: "Salesforce",
+  supportedCapabilities: [
+    "sync_accounts",
+    "sync_contacts",
+    "sync_opportunities",
+    "create_account",
+    "create_contact",
+    "create_opportunity",
+    "update_account",
+    "update_contact",
+    "update_opportunity",
+  ],
+  capabilityState: [
+    "sync_accounts",
+    "sync_contacts",
+    "sync_opportunities",
+    "create_account",
+    "create_contact",
+    "create_opportunity",
+    "update_account",
+    "update_contact",
+    "update_opportunity",
+  ],
+  externalAccountId: "005000000000001",
+  externalAccountName: "Oryntela synthetic developer org",
+  externalTenantId: "00D000000000001",
+  grantedScopes: ["api", "openid", "refresh_token"],
+};
+
 const hubspotCatalog = {
   connectors: [
     {
@@ -40,6 +73,28 @@ const hubspotCatalog = {
         "create_activity",
       ],
       authenticationType: "oauth2_authorisation_code",
+      executionRiskClasses: ["data_mutation"],
+      configurationSchemaVersion: 1,
+      executionMode: "live",
+      available: true,
+      simulationOnly: false,
+    },
+    {
+      connectorKey: "salesforce",
+      displayName: "Salesforce",
+      providerFamily: "crm",
+      supportedCapabilities: [
+        "sync_accounts",
+        "sync_contacts",
+        "sync_opportunities",
+        "create_account",
+        "create_contact",
+        "create_opportunity",
+        "update_account",
+        "update_contact",
+        "update_opportunity",
+      ],
+      authenticationType: "oauth2_authorisation_code_pkce",
       executionRiskClasses: ["data_mutation"],
       configurationSchemaVersion: 1,
       executionMode: "live",
@@ -98,7 +153,8 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
   page,
 }) => {
   await routeShell(page, "admin");
-  let connected = false;
+  let connectedProvider: "hubspot" | "salesforce" | null = null;
+  let salesforceNeedsReauth = false;
   let amountMapped = false;
   let stageMapped = false;
   const externalRequests: string[] = [];
@@ -108,6 +164,33 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
       externalRequests.push(request.url());
     }
   });
+  await page.route(
+    "http://localhost:8000/api/v1/crm/availability",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          moduleKey: "crm",
+          state: "available",
+          enabled: true,
+          canManage: true,
+          mode: connectedProvider ? "external" : "native",
+          externalProvider: connectedProvider,
+          externalConnected: connectedProvider !== null,
+          customFieldsReadOnly: connectedProvider !== null,
+          message: connectedProvider
+            ? `${connectedProvider === "hubspot" ? "HubSpot" : "Salesforce"} controls mapped CRM fields. Oryntela intelligence remains separate.`
+            : "Oryntela Native CRM is ready.",
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/crm/custom-fields",
+    async (route) => route.fulfill({ json: [] }),
+  );
+  await page.route("http://localhost:8000/api/v1/pipelines", async (route) =>
+    route.fulfill({ json: [] }),
+  );
 
   await page.route("http://localhost:8000/api/v1/beta/admin", async (route) => {
     await route.fulfill({
@@ -174,8 +257,20 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
     async (route) => {
       await route.fulfill({
         json: {
-          items: connected ? [hubspotConnection] : [],
-          total: connected ? 1 : 0,
+          items:
+            connectedProvider === "hubspot"
+              ? [hubspotConnection]
+              : connectedProvider === "salesforce"
+                ? [
+                    {
+                      ...salesforceConnection,
+                      connectionStatus: salesforceNeedsReauth
+                        ? "reauthorisation_required"
+                        : "active",
+                    },
+                  ]
+                : [],
+          total: connectedProvider ? 1 : 0,
         },
       });
     },
@@ -199,8 +294,14 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
         code: "fixture-code",
         providerError: null,
       });
-      connected = true;
+      connectedProvider = "hubspot";
       await route.fulfill({ json: hubspotConnection });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/connections/hubspot-connection-1/crm/fields/company",
+    async (route) => {
+      await route.fulfill({ json: { properties: [], mappings: [] } });
     },
   );
   await page.route(
@@ -288,6 +389,101 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
     },
   );
   await page.route(
+    "http://localhost:8000/api/v1/integrations/connections/hubspot-connection-1/crm/status",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          connectionId: hubspotConnection.id,
+          providerKey: "hubspot",
+          lifecycle: "initial_sync",
+          healthStatus: "healthy",
+          connectorEnabled: true,
+          writebackEnabled: false,
+          mappingVersion: 3,
+          recordsSeen: 148,
+          recordsApplied: 145,
+          conflictCount: 1,
+          initialSyncStartedAt: "2026-08-24T01:00:00Z",
+          initialSyncCompletedAt: "2026-08-24T01:03:00Z",
+          lastSuccessfulSyncAt: null,
+          lastHealthCheckedAt: "2026-08-24T01:03:00Z",
+          lastSafeErrorCode: null,
+          cursors: [],
+          latestJob: {
+            id: "hubspot-initial-job",
+            mode: "initial",
+            status: "running",
+            attemptCount: 0,
+            startedAt: "2026-08-24T01:00:00Z",
+            completedAt: null,
+            safeFailureCode: null,
+          },
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/connections/hubspot-connection-1/crm/owners",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: "owner-map-1",
+              externalOwnerId: "hubspot-owner-1",
+              externalOwnerName: "Alex Morgan",
+              externalOwnerEmail: "alex@example.test",
+              userId: "user-1",
+              state: "mapped",
+            },
+          ],
+          total: 1,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/crm/members",
+    async (route) => {
+      await route.fulfill({
+        json: [
+          {
+            userId: "user-1",
+            displayName: "Alex Morgan",
+            email: "alex@example.test",
+            active: true,
+          },
+        ],
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/connections/hubspot-connection-1/crm/conflicts",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: "conflict-1",
+              connectionId: hubspotConnection.id,
+              objectType: "opportunity",
+              externalObjectId: "deal-1",
+              revenueosEntityId: opportunityId,
+              fieldKey: "stage",
+              oryntelaValue: "Discovery",
+              providerValue: "Contract sent",
+              status: "open",
+              resolution: null,
+              detectedAt: "2026-08-24T01:03:00Z",
+              resolvedAt: null,
+            },
+          ],
+          total: 1,
+        },
+      });
+    },
+  );
+  await page.route(
     "http://localhost:8000/api/v1/integrations/connections/hubspot-connection-1/test",
     async (route) => route.fulfill({ json: hubspotConnection }),
   );
@@ -295,8 +491,219 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
     "http://localhost:8000/api/v1/integrations/connections/hubspot-connection-1",
     async (route) => {
       expect(route.request().method()).toBe("DELETE");
-      connected = false;
+      connectedProvider = null;
       await route.fulfill({ status: 204, body: "" });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/salesforce/oauth/start",
+    async (route) => {
+      if (connectedProvider !== null) {
+        await route.fulfill({
+          status: 409,
+          json: {
+            code: "crm_provider_switch_required",
+            message:
+              "Disconnect the active CRM and review the provider switch before connecting Salesforce.",
+            requestId: "request-crm-switch",
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          authorisationUrl: `${webOrigin}/settings/integrations/salesforce/callback?code=salesforce-code&state=salesforce-state`,
+          expiresAt: "2026-08-24T01:10:00Z",
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/salesforce/oauth/callback",
+    async (route) => {
+      expect(route.request().postDataJSON()).toEqual({
+        state: "salesforce-state",
+        code: "salesforce-code",
+        providerError: null,
+      });
+      connectedProvider = "salesforce";
+      await route.fulfill({ json: salesforceConnection });
+    },
+  );
+  const salesforceFields = {
+    company: {
+      properties: [
+        {
+          entityType: "company",
+          externalPropertyName: "Name",
+          label: "Account name",
+          propertyType: "string",
+          options: [],
+          readOnly: false,
+        },
+      ],
+      mappings: [
+        {
+          id: "sf-account-name",
+          connectionId: salesforceConnection.id,
+          entityType: "company",
+          revenueosField: "name",
+          externalPropertyName: "Name",
+          externalPropertyType: "string",
+          authority: "crm_authoritative",
+          enabled: true,
+        },
+      ],
+    },
+    contact: {
+      properties: [
+        {
+          entityType: "contact",
+          externalPropertyName: "Email",
+          label: "Email",
+          propertyType: "email",
+          options: [],
+          readOnly: false,
+        },
+      ],
+      mappings: [
+        {
+          id: "sf-contact-email",
+          connectionId: salesforceConnection.id,
+          entityType: "contact",
+          revenueosField: "email",
+          externalPropertyName: "Email",
+          externalPropertyType: "email",
+          authority: "crm_authoritative",
+          enabled: true,
+        },
+      ],
+    },
+    opportunity: {
+      properties: [
+        {
+          entityType: "opportunity",
+          externalPropertyName: "StageName",
+          label: "Stage",
+          propertyType: "enumeration",
+          options: [{ value: "Proposal/Price Quote", label: "Proposal" }],
+          readOnly: false,
+        },
+      ],
+      mappings: [
+        {
+          id: "sf-opportunity-stage",
+          connectionId: salesforceConnection.id,
+          entityType: "opportunity",
+          revenueosField: "stage",
+          externalPropertyName: "StageName",
+          externalPropertyType: "enumeration",
+          authority: "crm_authoritative",
+          enabled: true,
+        },
+      ],
+    },
+  };
+  for (const entityType of ["company", "contact", "opportunity"] as const) {
+    await page.route(
+      `http://localhost:8000/api/v1/integrations/connections/salesforce-connection-1/crm/fields/${entityType}`,
+      async (route) => route.fulfill({ json: salesforceFields[entityType] }),
+    );
+  }
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/connections/salesforce-connection-1/crm/stages",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          availableStages: [
+            {
+              pipelineId: "standard",
+              pipelineLabel: "Salesforce pipeline",
+              stageId: "Proposal/Price Quote",
+              stageLabel: "Proposal",
+            },
+          ],
+          mappings: [
+            {
+              revenueosStage: "proposal",
+              externalPipelineId: "standard",
+              externalStageId: "Proposal/Price Quote",
+            },
+          ],
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/connections/salesforce-connection-1/crm/status",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          connectionId: salesforceConnection.id,
+          providerKey: "salesforce",
+          lifecycle: "needs_attention",
+          healthStatus: "degraded",
+          connectorEnabled: true,
+          writebackEnabled: false,
+          mappingVersion: 4,
+          recordsSeen: 620,
+          recordsApplied: 618,
+          conflictCount: 1,
+          initialSyncStartedAt: "2026-08-24T02:00:00Z",
+          initialSyncCompletedAt: "2026-08-24T02:09:00Z",
+          lastSuccessfulSyncAt: "2026-08-24T02:09:00Z",
+          lastHealthCheckedAt: "2026-08-24T02:09:00Z",
+          lastSafeErrorCode: "mapping_review_required",
+          cursors: [],
+          latestJob: null,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/connections/salesforce-connection-1/crm/owners",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: "sf-owner-map-1",
+              externalOwnerId: "005000000000002",
+              externalOwnerName: "Taylor Chen",
+              externalOwnerEmail: "taylor@example.test",
+              userId: null,
+              state: "unmapped",
+            },
+          ],
+          total: 1,
+        },
+      });
+    },
+  );
+  await page.route(
+    "http://localhost:8000/api/v1/integrations/connections/salesforce-connection-1/crm/conflicts",
+    async (route) => {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: "sf-conflict-1",
+              connectionId: salesforceConnection.id,
+              objectType: "opportunity",
+              externalObjectId: "006000000000001",
+              revenueosEntityId: opportunityId,
+              fieldKey: "stage",
+              oryntelaValue: "Evaluation",
+              providerValue: "Proposal/Price Quote",
+              status: "open",
+              resolution: null,
+              detectedAt: "2026-08-24T02:09:00Z",
+              resolvedAt: null,
+            },
+          ],
+          total: 1,
+        },
+      });
     },
   );
 
@@ -310,12 +717,12 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
   await page.getByRole("link", { name: "Return to settings" }).click();
 
   await expect(
-    integrations.getByText("Live — explicit review required"),
+    integrations.getByText("Live — explicit review required").first(),
   ).toBeVisible();
   await expect(integrations.getByText(/RevenueOS test account/)).toBeVisible();
-  await integrations.getByText("Advanced mapping settings").click();
+  await integrations.getByText("CRM sync, ownership and mappings").click();
   await integrations
-    .getByRole("button", { name: "Load HubSpot fields and stages" })
+    .getByRole("button", { name: "Load HubSpot configuration" })
     .click();
   await integrations
     .getByRole("combobox", { name: "Estimated Value" })
@@ -338,15 +745,107 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
       fullPage: true,
     });
   }
+  if (process.env.CAPTURE_WO_042_SCREENSHOTS === "1") {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await integrations.screenshot({
+      path: "../../docs/07-sprints/assets/wo-042/hubspot-settings-desktop.png",
+    });
+    await page.getByRole("region", { name: "CRM foundation" }).screenshot({
+      path: "../../docs/07-sprints/assets/wo-042/native-crm-choice-desktop.png",
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await integrations.screenshot({
+      path: "../../docs/07-sprints/assets/wo-042/hubspot-settings-mobile.png",
+    });
+    await page.getByRole("region", { name: "CRM foundation" }).screenshot({
+      path: "../../docs/07-sprints/assets/wo-042/native-crm-choice-mobile.png",
+    });
+  }
+
+  await integrations
+    .getByRole("button", { name: "Connect Salesforce" })
+    .click();
+  await expect(
+    integrations.getByText(
+      /Disconnect the active CRM and review the provider switch/i,
+    ),
+  ).toBeVisible();
 
   await integrations.getByRole("button", { name: "Disconnect" }).click();
   await integrations
     .getByRole("button", { name: "Confirm disconnect" })
     .click();
-  await expect(integrations.getByText("Not connected")).toBeVisible();
+  await expect(integrations.getByText("Not connected").first()).toBeVisible();
   await expect(
     integrations.getByText(/Provider revocation was attempted/i),
   ).toBeVisible();
+
+  await integrations
+    .getByRole("button", { name: "Connect Salesforce" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Connected read-only" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Oryntela synthetic developer org is connected/i),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Return to settings" }).click();
+  await expect(
+    integrations.getByText(/Oryntela synthetic developer org/),
+  ).toBeVisible();
+  await integrations.getByText("CRM sync, ownership and mappings").click();
+  await integrations
+    .getByRole("button", { name: "Load Salesforce configuration" })
+    .click();
+  await expect(integrations.getByText("Needs attention")).toBeVisible();
+  await expect(integrations.getByText("Taylor Chen")).toBeVisible();
+  await expect(
+    integrations.getByRole("button", {
+      name: "Use reviewed Salesforce value",
+    }),
+  ).toBeVisible();
+
+  if (process.env.CAPTURE_WO_042_SCREENSHOTS === "1") {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await integrations.screenshot({
+      path: "../../docs/07-sprints/assets/wo-042/salesforce-settings-desktop.png",
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await integrations.screenshot({
+      path: "../../docs/07-sprints/assets/wo-042/salesforce-settings-mobile.png",
+    });
+  }
+
+  salesforceNeedsReauth = true;
+  await page.reload();
+  await expect(integrations.getByText("Reconnect required")).toBeVisible();
+  await expect(
+    integrations.getByRole("button", { name: "Reconnect" }),
+  ).toBeVisible();
+  if (process.env.CAPTURE_WO_042_SCREENSHOTS === "1") {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await integrations.screenshot({
+      path: "../../docs/07-sprints/assets/wo-042/salesforce-reauthorisation-desktop.png",
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await integrations.screenshot({
+      path: "../../docs/07-sprints/assets/wo-042/salesforce-reauthorisation-mobile.png",
+    });
+  }
   expect(externalRequests).toEqual([]);
 });
 
@@ -663,7 +1162,9 @@ test("salesperson links and confirms an exact CRM update after stale-state revie
   await page.goto(`/opportunities/${opportunityId}`);
   const crmLink = page.getByRole("region", { name: "CRM record link" });
   await crmLink.getByRole("button", { name: "Connect to CRM record" }).click();
-  await expect(crmLink.getByText("HubSpot deal ID: deal-1")).toBeVisible();
+  await expect(
+    crmLink.getByText("HubSpot opportunity ID: deal-1"),
+  ).toBeVisible();
 
   const actions = page.getByRole("region", { name: "Next actions" });
   await actions.getByRole("button", { name: "Approve action" }).click();

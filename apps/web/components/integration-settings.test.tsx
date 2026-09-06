@@ -194,6 +194,7 @@ describe("IntegrationSettings", () => {
   });
 
   it("shows a live HubSpot connection and keeps typed mappings behind disclosure", async () => {
+    const accountFields = { properties: [], mappings: [] };
     const opportunityFields = {
       properties: [
         {
@@ -235,9 +236,34 @@ describe("IntegrationSettings", () => {
       .fn()
       .mockResolvedValueOnce(response(hubspotCatalog))
       .mockResolvedValueOnce(response({ items: [hubspotConnection], total: 1 }))
+      .mockResolvedValueOnce(response(accountFields))
       .mockResolvedValueOnce(response(opportunityFields))
       .mockResolvedValueOnce(response(contactFields))
-      .mockResolvedValueOnce(response(stages));
+      .mockResolvedValueOnce(response(stages))
+      .mockResolvedValueOnce(
+        response({
+          connectionId: hubspotConnection.id,
+          providerKey: "hubspot",
+          lifecycle: "mapping_required",
+          healthStatus: "healthy",
+          connectorEnabled: true,
+          writebackEnabled: false,
+          mappingVersion: 1,
+          recordsSeen: 3,
+          recordsApplied: 3,
+          conflictCount: 0,
+          initialSyncStartedAt: "2026-08-15T01:00:00Z",
+          initialSyncCompletedAt: "2026-08-15T01:01:00Z",
+          lastSuccessfulSyncAt: "2026-08-15T01:01:00Z",
+          lastHealthCheckedAt: "2026-08-15T01:01:00Z",
+          lastSafeErrorCode: null,
+          cursors: [],
+          latestJob: null,
+        }),
+      )
+      .mockResolvedValueOnce(response({ items: [], total: 0 }))
+      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response({ items: [], total: 0 }));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<IntegrationSettings />);
@@ -250,10 +276,10 @@ describe("IntegrationSettings", () => {
       screen.queryByRole("combobox", { name: "Estimated Value" }),
     ).toBeNull();
 
-    fireEvent.click(screen.getByText("Advanced mapping settings"));
+    fireEvent.click(screen.getByText("CRM sync, ownership and mappings"));
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Load HubSpot fields and stages",
+        name: "Load HubSpot configuration",
       }),
     );
     expect(
@@ -267,7 +293,7 @@ describe("IntegrationSettings", () => {
     expect(
       screen.getAllByText("Sales pipeline — Qualified").length,
     ).toBeGreaterThan(0);
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(10);
   });
 
   it("explains Microsoft access and shows reauthorisation without provider internals", async () => {

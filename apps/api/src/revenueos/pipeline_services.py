@@ -815,19 +815,19 @@ class PipelineService:
         setting = await self.repository.session.scalar(
             select(OrganisationCRMSetting).where(OrganisationCRMSetting.organisation_id == self.tenant.organisation_id)
         )
-        connected_hubspot = None
+        connected_external_crm = None
         if setting is None:
-            connected_hubspot = await self.repository.session.scalar(
+            connected_external_crm = await self.repository.session.scalar(
                 select(IntegrationConnection.id)
                 .where(
                     IntegrationConnection.organisation_id == self.tenant.organisation_id,
-                    IntegrationConnection.connector_key == "hubspot",
+                    IntegrationConnection.connector_key.in_(("hubspot", "salesforce")),
                     IntegrationConnection.connection_status.in_(("active", "reauthorisation_required")),
                 )
                 .limit(1)
             )
-        if (setting is not None and setting.mode == "external") or connected_hubspot is not None:
-            return False, True, "Stages are managed in HubSpot. Use the reviewed CRM update flow."
+        if (setting is not None and setting.mode == "external") or connected_external_crm is not None:
+            return False, True, "Stages are managed in the external CRM. Use the reviewed CRM update flow."
         return True, False, None
 
     async def _require_stage_change_authority(self) -> None:
@@ -836,7 +836,7 @@ class PipelineService:
             if external:
                 raise PublicAPIError(
                     "external_stage_authority",
-                    "This stage is managed in HubSpot. Use the reviewed CRM update flow.",
+                    "This stage is managed in the external CRM. Use the reviewed CRM update flow.",
                     409,
                 )
             raise PublicAPIError("native_pipeline_unavailable", "Pipeline changes are unavailable.", 503)

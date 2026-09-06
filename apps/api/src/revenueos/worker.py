@@ -9,6 +9,7 @@ from revenueos.ai_worker_services import AIWorkerService
 from revenueos.campaign_worker import CampaignWorkerService
 from revenueos.config import Settings, get_settings
 from revenueos.create_worker import CreateWorkerService
+from revenueos.crm_connector_worker import CRMConnectorWorkerService
 from revenueos.database import create_engine, create_session_factory
 from revenueos.google_worker import GoogleSyncWorkerService
 from revenueos.integration_worker import ActionExecutionWorkerService
@@ -33,6 +34,7 @@ class AIWorker:
         create_service: CreateWorkerService | None = None,
         microsoft_service: MicrosoftSyncWorkerService | None = None,
         google_service: GoogleSyncWorkerService | None = None,
+        crm_connector_service: CRMConnectorWorkerService | None = None,
         worker_id: str | None = None,
     ) -> None:
         self._service = service
@@ -44,6 +46,7 @@ class AIWorker:
         self._create_service = create_service
         self._microsoft_service = microsoft_service
         self._google_service = google_service
+        self._crm_connector_service = crm_connector_service
         resolved_worker_id = (worker_id or f"worker-{uuid.uuid4().hex}").strip()
         if not resolved_worker_id or len(resolved_worker_id) > 200:
             raise ValueError("Worker identity must contain 1 to 200 characters.")
@@ -85,6 +88,11 @@ class AIWorker:
         )
         microsoft_processed = await self._microsoft_service.run_once() if self._microsoft_service is not None else False
         google_processed = await self._google_service.run_once() if self._google_service is not None else False
+        crm_connector_processed = (
+            await self._crm_connector_service.run_once(self.worker_id)
+            if self._crm_connector_service is not None
+            else False
+        )
         organisations = await self._service.discover_eligible_organisations()
         processed = (
             prospect_processed
@@ -95,6 +103,7 @@ class AIWorker:
             or create_processed
             or microsoft_processed
             or google_processed
+            or crm_connector_processed
         )
         for organisation_id in organisations:
             cancelled = await self._service.cancel_pending_jobs(organisation_id)
@@ -133,6 +142,7 @@ async def run_worker(settings: Settings | None = None) -> None:
         create_service=CreateWorkerService(session_factory, resolved_settings),
         microsoft_service=MicrosoftSyncWorkerService(session_factory, resolved_settings),
         google_service=GoogleSyncWorkerService(session_factory, resolved_settings),
+        crm_connector_service=CRMConnectorWorkerService(session_factory, resolved_settings),
     )
     try:
         await worker.run(stop)
