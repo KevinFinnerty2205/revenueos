@@ -396,7 +396,9 @@ class CampaignWorkerService:
             return
         campaign_repository = CampaignRepository(session)
         connection = await campaign_repository.active_email_connection_for_user(
-            tenant.organisation_id, enrollment.sender_user_id
+            tenant.organisation_id,
+            enrollment.sender_user_id,
+            microsoft_enabled=self._settings.feature_microsoft_365_enabled,
         )
         if connection is None:
             campaign.state = CampaignState.NEEDS_ATTENTION.value
@@ -900,8 +902,10 @@ class CampaignWorkerService:
             and self._settings.feature_integrations_enabled
             and self._settings.feature_action_execution_enabled
             and self._settings.feature_action_layer_enabled
-            and self._settings.environment != "production"
-            and self._settings.feature_mock_connectors_enabled
+            and (
+                self._settings.feature_microsoft_365_enabled
+                or (self._settings.environment != "production" and self._settings.feature_mock_connectors_enabled)
+            )
         )
 
     @staticmethod

@@ -31,7 +31,7 @@ class StrictIntegrationModel(APIModel):
 class ConnectorDefinitionResponse(APIModel):
     connector_key: ConnectorKey
     display_name: str
-    provider_family: Literal["mock", "crm"]
+    provider_family: Literal["mock", "crm", "mailbox_calendar"]
     supported_capabilities: list[ConnectorCapability]
     authentication_type: Literal["mock_local", "oauth2_authorisation_code"]
     execution_risk_classes: list[ActionRiskClass]
@@ -64,6 +64,8 @@ class OrganisationConnectionResponse(APIModel):
     revoked_at: datetime | None
     external_account_id: str | None
     external_account_name: str | None
+    external_account_email: str | None
+    external_tenant_id: str | None
     granted_scopes: list[str]
     metadata_version: int
     execution_mode: Literal["simulation", "live"] = "simulation"
@@ -261,6 +263,73 @@ class OAuthCallbackRequest(StrictIntegrationModel):
         if (self.code is None) == (self.provider_error is None):
             raise ValueError("Supply exactly one OAuth callback outcome.")
         return self
+
+
+class MicrosoftSyncResourceResponse(APIModel):
+    resource_kind: Literal["mail_sent", "mail_inbox", "calendar"]
+    processed: int
+    retained: int
+    state: Literal["healthy", "degraded"]
+    safe_message: str
+
+
+class MicrosoftSyncResponse(APIModel):
+    connection_id: UUID
+    synced_at: datetime
+    resources: list[MicrosoftSyncResourceResponse]
+
+
+class MicrosoftSyncStatusResponse(APIModel):
+    connection_id: UUID
+    last_successful_sync_at: datetime | None
+    last_error_category: str | None
+    state: Literal["not_started", "healthy", "degraded"]
+
+
+class MicrosoftReplyResponse(APIModel):
+    id: UUID
+    kind: Literal["reply", "automatic_reply", "ndr"]
+    match_state: Literal["matched", "review_required"]
+    sender_email: str
+    subject: str
+    body_text: str
+    contact_id: UUID | None
+    company_id: UUID | None
+    opportunity_id: UUID | None
+    received_at: datetime
+
+
+class MicrosoftReplyListResponse(APIModel):
+    items: list[MicrosoftReplyResponse]
+    total: int
+
+
+class MicrosoftCalendarEventResponse(APIModel):
+    id: UUID
+    title: str
+    start_at: datetime
+    end_at: datetime
+    provider_timezone: str
+    attendee_emails: list[str]
+    location: str | None
+    online_meeting_url: str | None
+    sensitivity: str
+    state: Literal["active", "cancelled", "deleted"]
+    match_state: Literal["unmatched", "matched", "review_required", "internal", "private"]
+    contact_id: UUID | None
+    company_id: UUID | None
+    opportunity_id: UUID | None
+    interaction_id: UUID | None
+    last_synced_at: datetime
+
+
+class MicrosoftCalendarEventListResponse(APIModel):
+    items: list[MicrosoftCalendarEventResponse]
+    total: int
+
+
+class MicrosoftCalendarInteractionLinkRequest(StrictIntegrationModel):
+    interaction_id: UUID
 
 
 CRMObjectType = Literal["company", "contact", "deal"]

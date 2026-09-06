@@ -40,6 +40,7 @@ portable backup unless the owner approves a different already-evaluated backup.
 | HubSpot                      | Future CRM connection                         | None in the first Native CRM profile | Not assessed for this launch | Separate partner evidence, provider/legal/security proof and work authority | **NOT USED; FLAG OFF**               |
 | Gmail / Google Workspace API | Future reviewed email delivery/reconciliation | None                                 | Not assessed for this launch | Separate work order and provider/legal/operational approval                 | **NOT USED; NO GMAIL WORK STARTED**  |
 | Apollo                       | Proposed company and professional Prospect enrichment after explicit seller action | Company domain/name; professional name, employer, role, location, provider ID and business email where returned; no transcript, customer Evidence, personal email or phone reveal | Apollo publishes a US contracting entity and global subprocessor/cross-border framework; no Australian data-residency commitment was established | Written external-product/data agreement; exact storage/export/removal/retention rights; current DPA/subprocessors/security evidence; Australian privacy and Spam Act professional review; owner provider/economics/spend approval | **PROPOSED / NOT ACTIVATED; ADAPTER ONLY; NO ACCOUNT, KEY, DATA OR REQUEST** |
+| Microsoft Graph / Microsoft 365 | Customer-connected reviewed Outlook sending, relevant reply reconciliation and bounded primary-calendar context | Connected-user identity; approved outbound mail; strongly correlated reply content/metadata; basic calendar event metadata; encrypted delegated credential material | Customer Microsoft tenant and Microsoft's applicable service locations; exact contracting, DPA, subprocessor and cross-border position is not approved by this register | Customer licence and mailbox authority; tenant consent/admin policy; owner provider/privacy/legal approval; Entra app registration, publisher, production secret and smoke-test evidence | **PROPOSED CUSTOMER-CONNECTED / NOT ACTIVATED; ADAPTER ONLY; NO ACCOUNT, MAILBOX, DATA OR REQUEST** |
 
 No live meeting, recording, transcription, visual AI, document/email evidence,
 payment/billing or external monitoring provider is part of the recommended
@@ -64,4 +65,5 @@ Reference sources:
 [Supabase regions](https://supabase.com/docs/guides/platform/regions), plus the
 [Apollo DPA](https://www.apollo.io/dpa),
 [Apollo API terms](https://www.apollo.io/terms/api) and
-[Apollo Trust Center](https://trust.apollo.io/).
+[Apollo Trust Center](https://trust.apollo.io/) and
+[Microsoft Graph documentation](https://learn.microsoft.com/en-us/graph/overview).

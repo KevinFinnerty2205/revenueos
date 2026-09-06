@@ -43,6 +43,8 @@ from revenueos.models import (
     OpportunityStageEvent,
     OutreachMessage,
     ProspectPerson,
+    ProviderCalendarEvent,
+    ProviderReply,
     Task,
 )
 from revenueos.pipeline_repositories import ensure_default_pipeline, initial_stage_for
@@ -328,6 +330,22 @@ class BusinessService:
             .values(contact_id=None)
         )
         await self.repository.session.execute(
+            update(ProviderReply)
+            .where(
+                ProviderReply.organisation_id == organisation_id,
+                ProviderReply.contact_id == contact.id,
+            )
+            .values(contact_id=None, match_state="review_required", updated_at=now)
+        )
+        await self.repository.session.execute(
+            update(ProviderCalendarEvent)
+            .where(
+                ProviderCalendarEvent.organisation_id == organisation_id,
+                ProviderCalendarEvent.contact_id == contact.id,
+            )
+            .values(contact_id=None, match_state="review_required", updated_at=now)
+        )
+        await self.repository.session.execute(
             update(ProspectPerson)
             .where(
                 ProspectPerson.organisation_id == organisation_id,
@@ -586,6 +604,23 @@ class BusinessService:
                     Evidence.id.in_(clarification_evidence_ids),
                 )
             )
+        now = datetime.now(UTC)
+        await self.repository.session.execute(
+            update(ProviderReply)
+            .where(
+                ProviderReply.organisation_id == self.tenant.organisation_id,
+                ProviderReply.opportunity_id == opportunity_id,
+            )
+            .values(opportunity_id=None, match_state="review_required", updated_at=now)
+        )
+        await self.repository.session.execute(
+            update(ProviderCalendarEvent)
+            .where(
+                ProviderCalendarEvent.organisation_id == self.tenant.organisation_id,
+                ProviderCalendarEvent.opportunity_id == opportunity_id,
+            )
+            .values(opportunity_id=None, match_state="review_required", updated_at=now)
+        )
         self.repository.add(
             self._opportunity_audit(
                 opportunity.id,

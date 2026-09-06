@@ -33,6 +33,7 @@ from revenueos.models import (
     MockConnectorObject,
     Organisation,
     OrganisationMembership,
+    ProviderOutboundOperation,
     User,
 )
 from revenueos.tenant import TenantContext
@@ -141,6 +142,12 @@ class ActionExecutionWorkerService:
                 execution.next_attempt_at = None
                 execution.worker_id = None
                 execution.lease_expires_at = None
+                await self._mark_microsoft_operation(
+                    session,
+                    execution,
+                    state="unknown",
+                    safe_failure_code="worker_lease_expired_unknown_outcome",
+                )
                 session.add(
                     ActionExecutionAttempt(
                         id=uuid.uuid4(),
@@ -213,12 +220,24 @@ class ActionExecutionWorkerService:
                 execution.failed_at = now
                 execution.safe_failure_code = "connection_revoked"
                 execution.next_attempt_at = None
+                await self._mark_microsoft_operation(
+                    session,
+                    execution,
+                    state="failed",
+                    safe_failure_code="connection_revoked",
+                )
                 return None
             if membership is None or membership.status != "active" or user is None or user.status != "active":
                 execution.execution_status = ExecutionStatus.FAILED_PERMANENT.value
                 execution.failed_at = now
                 execution.safe_failure_code = "confirming_user_disabled"
                 execution.next_attempt_at = None
+                await self._mark_microsoft_operation(
+                    session,
+                    execution,
+                    state="failed",
+                    safe_failure_code="confirming_user_disabled",
+                )
                 return None
             execution.execution_status = ExecutionStatus.EXECUTING.value
             execution.attempt_count += 1
@@ -227,6 +246,27 @@ class ActionExecutionWorkerService:
             execution.next_attempt_at = None
             execution.worker_id = worker_id
             execution.lease_expires_at = lease_expires_at
+            if execution.connector_key == "microsoft_365":
+                operation = await session.scalar(
+                    select(ProviderOutboundOperation)
+                    .where(
+                        ProviderOutboundOperation.organisation_id == organisation_id,
+                        ProviderOutboundOperation.connection_id == execution.connection_id,
+                        ProviderOutboundOperation.idempotency_key == execution.idempotency_key,
+                    )
+                    .with_for_update()
+                )
+                if operation is None:
+                    execution.execution_status = ExecutionStatus.FAILED_PERMANENT.value
+                    execution.failed_at = now
+                    execution.safe_failure_code = "microsoft_operation_receipt_missing"
+                    execution.next_attempt_at = None
+                    execution.worker_id = None
+                    execution.lease_expires_at = None
+                    return None
+                if operation.state in {"queued", "failed"}:
+                    operation.state = "submitting"
+                    operation.safe_failure_code = None
             self._add_audit(session, execution, "execution_started", now)
             claimed = ClaimedExecution(organisation_id, execution.id, worker_id)
         logger.info("execution_started", extra={"worker_id": worker_id, "execution_id": str(claimed.execution_id)})
@@ -235,6 +275,7 @@ class ActionExecutionWorkerService:
     async def execute_claimed(self, claim: ClaimedExecution) -> None:
         started_clock = time.perf_counter()
         now = datetime.now(UTC)
+        microsoft_submission_started = False
         async with self._session_factory() as session, session.begin():
             await set_tenant_database_context(session, claim.organisation_id)
             repository = IntegrationRepository(session)
@@ -300,6 +341,8 @@ class ActionExecutionWorkerService:
                         "The approved Action version changed.",
                     )
                 action = await action_service._action_input(action_record)
+                action_service._require_outreach_mailbox_binding(action, record.connection)
+                await action_service._require_microsoft_email_send_safety(action, record.connection)
                 action = await action_service._bind_external_target(action, record.connection)
                 capability = ConnectorCapability(execution.capability)
                 executor = action_service._executor(record.connection, capability, action.risk_class)
@@ -309,6 +352,9 @@ class ActionExecutionWorkerService:
                     connection_id=execution.connection_id,
                     credential_reference=record.connection.credential_reference,
                     execution_mode=cast(Literal["simulation", "live"], execution.execution_mode),
+                    external_account_id=record.connection.external_account_id,
+                    external_account_email=record.connection.external_account_email,
+                    external_tenant_id=record.connection.external_tenant_id,
                 )
                 mock_object: MockConnectorObject | None = None
                 if execution.execution_mode == "simulation":
@@ -330,6 +376,8 @@ class ActionExecutionWorkerService:
                         mock_object.state_json.get("current_value") if mock_object is not None else None
                     )
                 else:
+                    if record.connection.connector_key == "microsoft_365":
+                        await executor.validate_connection(context)
                     current_external_state = await executor.current_external_state(action, context)
                     content = executor.preview_execution(action, current_external_state)
                     current_fingerprint = action_service._preview_fingerprint(
@@ -344,6 +392,7 @@ class ActionExecutionWorkerService:
                             "HubSpot changed since this preview. Review the latest values before updating CRM.",
                         )
                 if execution.execution_mode == "live":
+                    microsoft_submission_started = record.connection.connector_key == "microsoft_365"
                     result = await executor.execute(
                         action,
                         idempotency_key=execution.idempotency_key,
@@ -394,8 +443,20 @@ class ActionExecutionWorkerService:
                 if exc.code == "connection_reauthorisation_required":
                     record.connection.connection_status = "reauthorisation_required"
                     record.connection.metadata_version += 1
+                await self._mark_microsoft_operation(
+                    session,
+                    execution,
+                    state="unknown" if isinstance(exc, UnknownExternalStateFailure) else "failed",
+                    safe_failure_code=exc.code,
+                )
                 self._finish_failure(session, execution, exc, started_clock)
             except PublicAPIError as exc:
+                await self._mark_microsoft_operation(
+                    session,
+                    execution,
+                    state="failed",
+                    safe_failure_code=exc.code,
+                )
                 self._finish_failure(
                     session,
                     execution,
@@ -404,15 +465,50 @@ class ActionExecutionWorkerService:
                 )
             except Exception:
                 logger.exception("connector_executor_failed", extra=self._log_context(execution))
+                if microsoft_submission_started:
+                    await self._mark_microsoft_operation(
+                        session,
+                        execution,
+                        state="unknown",
+                        safe_failure_code="microsoft_send_outcome_unknown",
+                    )
                 self._finish_failure(
                     session,
                     execution,
-                    RetryableExecutionFailure(
+                    UnknownExternalStateFailure(
+                        "microsoft_send_outcome_unknown",
+                        "Microsoft may have accepted this email. RevenueOS will not send it again until reconciled.",
+                    )
+                    if microsoft_submission_started
+                    else RetryableExecutionFailure(
                         "connector_executor_unavailable",
                         "The connector executor was temporarily unavailable.",
                     ),
                     started_clock,
                 )
+
+    @staticmethod
+    async def _mark_microsoft_operation(
+        session: AsyncSession,
+        execution: ActionExecution,
+        *,
+        state: Literal["failed", "unknown"],
+        safe_failure_code: str,
+    ) -> None:
+        if execution.connector_key != "microsoft_365":
+            return
+        operation = await session.scalar(
+            select(ProviderOutboundOperation)
+            .where(
+                ProviderOutboundOperation.organisation_id == execution.organisation_id,
+                ProviderOutboundOperation.connection_id == execution.connection_id,
+                ProviderOutboundOperation.idempotency_key == execution.idempotency_key,
+            )
+            .with_for_update()
+        )
+        if operation is not None and operation.state in {"queued", "submitting"}:
+            operation.state = state
+            operation.safe_failure_code = safe_failure_code
 
     def _finish_success(
         self,
@@ -573,6 +669,7 @@ class ActionExecutionWorkerService:
             and self._settings.feature_action_layer_enabled
             and (
                 self._settings.feature_hubspot_crm_enabled
+                or self._settings.feature_microsoft_365_enabled
                 or (self._settings.environment != "production" and self._settings.feature_mock_connectors_enabled)
             )
         )

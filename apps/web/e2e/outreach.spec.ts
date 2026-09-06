@@ -725,7 +725,7 @@ test("keeps Engage administration bounded and explicit", async ({ page }) => {
   await expect(engage.getByLabel("Daily limit per sender")).toHaveValue("25");
   await expect(
     engage.getByText(
-      /Production Gmail and Microsoft mailbox adapters are not enabled/u,
+      /Microsoft 365 sending is available only when the deployment is approved/u,
     ),
   ).toBeVisible();
   if (process.env.WO029_SCREENSHOTS === "1") {

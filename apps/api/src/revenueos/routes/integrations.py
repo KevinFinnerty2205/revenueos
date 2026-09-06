@@ -24,6 +24,12 @@ from revenueos.integration_contracts import (
     ExecutionPreviewRequest,
     ExecutionPreviewResponse,
     IntegrationCatalogResponse,
+    MicrosoftCalendarEventListResponse,
+    MicrosoftCalendarEventResponse,
+    MicrosoftCalendarInteractionLinkRequest,
+    MicrosoftReplyListResponse,
+    MicrosoftSyncResponse,
+    MicrosoftSyncStatusResponse,
     OAuthCallbackRequest,
     OAuthStartResponse,
     OrganisationConnectionResponse,
@@ -31,12 +37,15 @@ from revenueos.integration_contracts import (
 from revenueos.integration_dependencies import (
     get_action_execution_service,
     get_integration_service,
+    get_microsoft_sync_service,
 )
 from revenueos.integration_services import ActionExecutionService, IntegrationService
+from revenueos.microsoft_services import MicrosoftSyncService
 
 router = APIRouter(prefix="/api/v1", tags=["integrations"])
 Integrations = Annotated[IntegrationService, Depends(get_integration_service)]
 Executions = Annotated[ActionExecutionService, Depends(get_action_execution_service)]
+MicrosoftSync = Annotated[MicrosoftSyncService, Depends(get_microsoft_sync_service)]
 
 
 @router.get("/integrations", response_model=IntegrationCatalogResponse)
@@ -110,6 +119,75 @@ async def complete_hubspot_oauth(
     service: Integrations,
 ) -> OrganisationConnectionResponse:
     return await service.complete_hubspot_oauth(request)
+
+
+@router.post("/integrations/microsoft/oauth/start", response_model=OAuthStartResponse)
+async def start_microsoft_oauth(service: Integrations) -> OAuthStartResponse:
+    return await service.start_microsoft_oauth()
+
+
+@router.post(
+    "/integrations/microsoft/oauth/callback",
+    response_model=OrganisationConnectionResponse,
+)
+async def complete_microsoft_oauth(
+    request: OAuthCallbackRequest,
+    service: Integrations,
+) -> OrganisationConnectionResponse:
+    return await service.complete_microsoft_oauth(request)
+
+
+@router.post(
+    "/integrations/microsoft/connections/{connection_id}/sync",
+    response_model=MicrosoftSyncResponse,
+)
+async def sync_microsoft_connection(
+    connection_id: UUID,
+    service: MicrosoftSync,
+) -> MicrosoftSyncResponse:
+    return await service.sync(connection_id)
+
+
+@router.get(
+    "/integrations/microsoft/connections/{connection_id}/sync-status",
+    response_model=MicrosoftSyncStatusResponse,
+)
+async def microsoft_sync_status(
+    connection_id: UUID,
+    service: MicrosoftSync,
+) -> MicrosoftSyncStatusResponse:
+    return await service.status(connection_id)
+
+
+@router.get("/integrations/microsoft/replies", response_model=MicrosoftReplyListResponse)
+async def list_microsoft_replies(
+    service: MicrosoftSync,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> MicrosoftReplyListResponse:
+    return await service.list_replies(limit=limit)
+
+
+@router.get(
+    "/integrations/microsoft/calendar/events",
+    response_model=MicrosoftCalendarEventListResponse,
+)
+async def list_microsoft_calendar_events(
+    service: MicrosoftSync,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> MicrosoftCalendarEventListResponse:
+    return await service.list_calendar_events(limit=limit)
+
+
+@router.put(
+    "/integrations/microsoft/calendar/events/{event_id}/interaction",
+    response_model=MicrosoftCalendarEventResponse,
+)
+async def link_microsoft_calendar_interaction(
+    event_id: UUID,
+    request: MicrosoftCalendarInteractionLinkRequest,
+    service: MicrosoftSync,
+) -> MicrosoftCalendarEventResponse:
+    return await service.link_interaction(event_id, request.interaction_id)
 
 
 @router.get("/integrations/connections/{connection_id}/crm/search", response_model=CRMSearchResponse)

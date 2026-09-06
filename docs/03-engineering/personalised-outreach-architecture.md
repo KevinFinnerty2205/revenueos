@@ -102,23 +102,22 @@ unsent executions/revoking connections. External email cannot be unsent.
 
 ## Execution, idempotency and delivery semantics
 
-WO-029 uses `mock_email` only when environment is not production. Production
-connection discovery and execution fail closed because no Gmail/Microsoft adapter is
-registered. The adapter input is the exact approved payload; requests provide only
-connection/preview IDs and confirmation.
+WO-029 retains `mock_email` only outside production. WO-040 registers Microsoft Graph
+behind the same boundary when explicitly configured and activated; otherwise
+production discovery/execution fails closed. The adapter input is the exact approved
+payload; requests provide only connection/preview IDs and confirmation.
 
 The existing Execution Foundation provides unique preview confirmation and action/
 revision/connection idempotency, attempt state, cancellation on revocation and safe
 result messages. Simulation produces a deterministic mock object and no network
-email. The model reserves `unknown_delivery_state`, but no reconciliation claim is
-made: a future live adapter must persist provider receipt/message ID, distinguish
-pre-acceptance retry from possible acceptance, honour `Retry-After`, and never blind
-retry an ambiguous outcome.
+email. Microsoft persists a provider-neutral operation before `sendMail`, honours
+bounded `Retry-After`, records ambiguous outcomes as unknown without blind retry and
+uses positive Sent Items evidence for reconciliation.
 
-There is no scheduling, tracking pixel, click redirect, open/click event, reply sync,
-delivery guarantee or automatic follow-up. `submitted`/`sent` will mean only the
-selected provider's documented acceptance semantics, not inbox delivery, unless an
-authoritative delivery event exists.
+Scheduling exists through the existing server worker and Microsoft reply sync can
+stop a Campaign. There is no tracking pixel, click redirect, open/click event,
+delivery guarantee or autonomous follow-up. `accepted` means only Microsoft accepted
+processing, not recipient delivery.
 
 ## Retention, export and deletion
 

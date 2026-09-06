@@ -340,6 +340,9 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
   }
 
   await integrations.getByRole("button", { name: "Disconnect" }).click();
+  await integrations
+    .getByRole("button", { name: "Confirm disconnect" })
+    .click();
   await expect(integrations.getByText("Not connected")).toBeVisible();
   await expect(
     integrations.getByText(/Provider revocation was attempted/i),

@@ -339,10 +339,22 @@ async def validate_personalized_outreach_action(
     sender = await repository.user(message.sender_user_id)
     if contact is None or sender is None:
         raise PublicAPIError("outreach_target_stale", "The outreach sender or recipient is unavailable.", 409)
+    email_connection = await repository.active_email_connection_for_user(
+        tenant.organisation_id,
+        message.sender_user_id,
+        microsoft_enabled=settings.feature_microsoft_365_enabled,
+    )
+    expected_sender_email = (
+        email_connection.external_account_email
+        if email_connection is not None
+        and email_connection.connector_key == "microsoft_365"
+        and email_connection.external_account_email
+        else sender.email
+    )
     if (
         contact.email is None
         or _normalise_address(contact.email) != _normalise_address(version.recipient_email)
-        or sender.email.casefold() != version.sender_email.casefold()
+        or expected_sender_email.casefold() != version.sender_email.casefold()
     ):
         raise PublicAPIError(
             "outreach_preview_stale",
@@ -470,9 +482,10 @@ class OutreachService:
             self._history_response(*item)
             for item in await self.repository.history(self.tenant.organisation_id, contact.id)
         ]
-        simulation_connection = await self.repository.active_email_connection_for_user(
+        email_connection = await self.repository.active_email_connection_for_user(
             self.tenant.organisation_id,
             self.tenant.user_id,
+            microsoft_enabled=self.settings.feature_microsoft_365_enabled,
         )
         return ContactOutreachWorkspaceResponse(
             availability=availability,
@@ -486,8 +499,14 @@ class OutreachService:
             permission_status=("assessed_by_organisation_policy" if policy and policy.configured else "not_assessed"),
             contactability=contactability.response(),
             policy_configured=bool(policy and policy.configured),
+            production_mailbox_available=(
+                email_connection is not None
+                and email_connection.connector_key == "microsoft_365"
+                and self.settings.feature_microsoft_365_enabled
+            ),
             simulation_available=(
-                simulation_connection is not None
+                email_connection is not None
+                and email_connection.connector_key == "mock_email"
                 and self.settings.environment != "production"
                 and self.settings.feature_mock_connectors_enabled
             ),
@@ -699,6 +718,18 @@ class OutreachService:
         additional_sources: tuple[AdditionalOutreachSource, ...] = (),
     ) -> OutreachRecord:
         trust = await self._sendable_trust(contact)
+        email_connection = await self.repository.active_email_connection_for_user(
+            self.tenant.organisation_id,
+            sender.id,
+            microsoft_enabled=self.settings.feature_microsoft_365_enabled,
+        )
+        sender_email = (
+            email_connection.external_account_email
+            if email_connection is not None
+            and email_connection.connector_key == "microsoft_365"
+            and email_connection.external_account_email
+            else sender.email
+        )
         now = datetime.now(UTC)
         outreach_id = uuid.uuid4()
         action_id = uuid.uuid4()
@@ -709,7 +740,7 @@ class OutreachService:
             outreach_version=1,
             sender_user_id=sender.id,
             sender_name=sender.display_name,
-            sender_email=sender.email,
+            sender_email=sender_email,
             recipient_contact_id=contact.id,
             recipient_name=f"{contact.first_name} {contact.last_name}",
             recipient_email=cast(str, contact.email),
@@ -765,7 +796,7 @@ class OutreachService:
             subject=subject,
             body=body,
             sender_name=sender.display_name,
-            sender_email=sender.email,
+            sender_email=sender_email,
             recipient_name=f"{contact.first_name} {contact.last_name}",
             recipient_email=cast(str, contact.email),
             recipient_trust=trust,

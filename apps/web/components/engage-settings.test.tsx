@@ -72,7 +72,7 @@ it("saves approved seller context and conservative outreach controls", async () 
   });
   expect(
     screen.getByText(
-      /Production Gmail and Microsoft mailbox adapters are not enabled/u,
+      /Microsoft 365 sending is available only when the deployment is approved/u,
     ),
   ).toBeInTheDocument();
 });

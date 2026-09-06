@@ -157,6 +157,9 @@ This is the canonical product and engineering documentation index. Documents dis
 146. [Live Prospect provider architecture](03-engineering/live-prospect-provider.md) — provider contract, outcomes, provenance, Selling Profile and reconciliation rules
 147. [Prospect live-provider qualification](05-integrations/prospect-live-provider-qualification.md) — Apollo recommendation, alternatives, Australian suitability, licensing/privacy and activation blockers
 148. [Prospect provider economics](04-commercial/oryntela-prospect-provider-economics.md) — provider units, unknown custom cost and unapproved 50/60/70% scenarios
+149. [WO-040: Microsoft 365 Sales Integration](07-sprints/wo-040-microsoft-365-sales-integration.md) — seller-bound Outlook mail/calendar adapter; production-capable and inactive
+150. [Microsoft 365 sales integration architecture](03-engineering/microsoft-365-sales-integration.md) — OAuth, scopes, send/reply/calendar reconciliation, privacy and activation gates
+151. [ADR 0070: Seller-delegated Microsoft Graph with bounded delta reconciliation](08-decisions/0070-microsoft-delegated-delta-sales-integration.md)
 
 ## First design-partner launch package
 

@@ -146,6 +146,10 @@ from revenueos.models import (
     ProspectTargetMarket,
     ProspectTargetMarketVersion,
     ProspectUsageCounter,
+    ProviderCalendarEvent,
+    ProviderOutboundOperation,
+    ProviderReply,
+    ProviderSyncState,
     ProvisionalSignal,
     RecordingChunk,
     RecordingConsent,
@@ -514,6 +518,32 @@ async def run_retention(
             ).all()
         )
         outreach_action_ids = list(dict.fromkeys([*terminal_campaign_action_ids, *standalone_outreach_action_ids]))
+        expired_reply_ids = list(
+            (
+                await session.scalars(
+                    select(ProviderReply.id)
+                    .where(
+                        ProviderReply.organisation_id == organisation_id,
+                        ProviderReply.received_at < cutoff,
+                    )
+                    .order_by(ProviderReply.received_at, ProviderReply.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
+        expired_calendar_event_ids = list(
+            (
+                await session.scalars(
+                    select(ProviderCalendarEvent.id)
+                    .where(
+                        ProviderCalendarEvent.organisation_id == organisation_id,
+                        ProviderCalendarEvent.end_at < cutoff,
+                    )
+                    .order_by(ProviderCalendarEvent.end_at, ProviderCalendarEvent.id)
+                    .limit(bounded_batch_size)
+                )
+            ).all()
+        )
         counts = await _meeting_deletion_counts(session, organisation_id, meeting_ids)
         interaction_counts = await _interaction_deletion_counts(session, organisation_id, interaction_ids)
         counts = _merge_counts(counts, interaction_counts)
@@ -541,6 +571,8 @@ async def run_retention(
         counts["engage_campaigns"] = len(terminal_campaign_ids)
         counts["sales_events"] = len(expired_event_ids)
         counts["outreach_messages"] = len(outreach_action_ids)
+        counts["microsoft_reply_records"] = len(expired_reply_ids)
+        counts["microsoft_calendar_events"] = len(expired_calendar_event_ids)
         expired_live_count = int(
             (
                 await session.scalar(
@@ -568,6 +600,8 @@ async def run_retention(
             and not terminal_campaign_ids
             and not expired_event_ids
             and not outreach_action_ids
+            and not expired_reply_ids
+            and not expired_calendar_event_ids
             and not expired_live_count
             and not expired_contact_point_ids
             and not expired_download_grant_ids
@@ -625,7 +659,39 @@ async def run_retention(
                 )
             )
             removed["engage_campaigns"] = len(terminal_campaign_ids)
+        if expired_reply_ids:
+            await session.execute(
+                delete(ProviderReply).where(
+                    ProviderReply.organisation_id == organisation_id,
+                    ProviderReply.id.in_(expired_reply_ids),
+                )
+            )
+            removed["microsoft_reply_records"] = len(expired_reply_ids)
+        if expired_calendar_event_ids:
+            await session.execute(
+                delete(ProviderCalendarEvent).where(
+                    ProviderCalendarEvent.organisation_id == organisation_id,
+                    ProviderCalendarEvent.id.in_(expired_calendar_event_ids),
+                )
+            )
+            removed["microsoft_calendar_events"] = len(expired_calendar_event_ids)
         if outreach_action_ids:
+            outbound_operation_ids = select(ProviderOutboundOperation.id).where(
+                ProviderOutboundOperation.organisation_id == organisation_id,
+                ProviderOutboundOperation.action_id.in_(outreach_action_ids),
+            )
+            await session.execute(
+                delete(ProviderReply).where(
+                    ProviderReply.organisation_id == organisation_id,
+                    ProviderReply.outbound_operation_id.in_(outbound_operation_ids),
+                )
+            )
+            await session.execute(
+                delete(ProviderOutboundOperation).where(
+                    ProviderOutboundOperation.organisation_id == organisation_id,
+                    ProviderOutboundOperation.action_id.in_(outreach_action_ids),
+                )
+            )
             await session.execute(
                 delete(ActionAuditEvent).where(
                     ActionAuditEvent.organisation_id == organisation_id,
@@ -1061,6 +1127,14 @@ async def _delete_organisation_records(
         )
         await session.execute(delete(ActionExecution).where(ActionExecution.organisation_id == organisation_id))
         await session.execute(delete(ExecutionPreview).where(ExecutionPreview.organisation_id == organisation_id))
+        await session.execute(delete(ProviderReply).where(ProviderReply.organisation_id == organisation_id))
+        await session.execute(
+            delete(ProviderOutboundOperation).where(ProviderOutboundOperation.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ProviderCalendarEvent).where(ProviderCalendarEvent.organisation_id == organisation_id)
+        )
+        await session.execute(delete(ProviderSyncState).where(ProviderSyncState.organisation_id == organisation_id))
         await session.execute(delete(CRMStageMapping).where(CRMStageMapping.organisation_id == organisation_id))
         await session.execute(delete(CRMFieldMapping).where(CRMFieldMapping.organisation_id == organisation_id))
         await session.execute(delete(CRMEntityMapping).where(CRMEntityMapping.organisation_id == organisation_id))
@@ -1819,6 +1893,19 @@ async def _interaction_deletion_counts_from_select(
             )
             or 0
         ),
+        "microsoft_calendar_links": int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ProviderCalendarEvent)
+                    .where(
+                        ProviderCalendarEvent.organisation_id == organisation_id,
+                        ProviderCalendarEvent.interaction_id.in_(interaction_ids),
+                    )
+                )
+            )
+            or 0
+        ),
         "online_meeting_metadata": int(
             (
                 await session.scalar(
@@ -2308,6 +2395,22 @@ async def _delete_interaction_batch(
         ActionProposal.organisation_id == organisation_id,
         ActionProposal.interaction_id.in_(interaction_ids),
     )
+    outbound_operation_ids = select(ProviderOutboundOperation.id).where(
+        ProviderOutboundOperation.organisation_id == organisation_id,
+        ProviderOutboundOperation.action_id.in_(action_ids),
+    )
+    await session.execute(
+        delete(ProviderReply).where(
+            ProviderReply.organisation_id == organisation_id,
+            ProviderReply.outbound_operation_id.in_(outbound_operation_ids),
+        )
+    )
+    await session.execute(
+        delete(ProviderOutboundOperation).where(
+            ProviderOutboundOperation.organisation_id == organisation_id,
+            ProviderOutboundOperation.action_id.in_(action_ids),
+        )
+    )
     await session.execute(
         delete(ActionAuditEvent).where(
             ActionAuditEvent.organisation_id == organisation_id,
@@ -2331,6 +2434,14 @@ async def _delete_interaction_batch(
             OnlineMeetingMetadata.organisation_id == organisation_id,
             OnlineMeetingMetadata.interaction_id.in_(interaction_ids),
         )
+    )
+    await session.execute(
+        update(ProviderCalendarEvent)
+        .where(
+            ProviderCalendarEvent.organisation_id == organisation_id,
+            ProviderCalendarEvent.interaction_id.in_(interaction_ids),
+        )
+        .values(interaction_id=None)
     )
     await session.execute(
         delete(Interaction).where(
@@ -3200,6 +3311,26 @@ async def _export_payload(
         select(IntegrationAuditEvent)
         .where(IntegrationAuditEvent.organisation_id == organisation_id)
         .order_by(IntegrationAuditEvent.created_at, IntegrationAuditEvent.id)
+    )
+    provider_outbound_operations = await rows(
+        select(ProviderOutboundOperation)
+        .where(ProviderOutboundOperation.organisation_id == organisation_id)
+        .order_by(ProviderOutboundOperation.created_at, ProviderOutboundOperation.id)
+    )
+    provider_replies = await rows(
+        select(ProviderReply)
+        .where(ProviderReply.organisation_id == organisation_id)
+        .order_by(ProviderReply.received_at, ProviderReply.id)
+    )
+    provider_calendar_events = await rows(
+        select(ProviderCalendarEvent)
+        .where(ProviderCalendarEvent.organisation_id == organisation_id)
+        .order_by(ProviderCalendarEvent.start_at, ProviderCalendarEvent.id)
+    )
+    provider_sync_states = await rows(
+        select(ProviderSyncState)
+        .where(ProviderSyncState.organisation_id == organisation_id)
+        .order_by(ProviderSyncState.connection_id, ProviderSyncState.resource_kind)
     )
     tasks = await rows(select(Task).where(Task.organisation_id == organisation_id).order_by(Task.id))
     meetings = await rows(select(Meeting).where(Meeting.organisation_id == organisation_id).order_by(Meeting.id))
@@ -5151,6 +5282,8 @@ async def _export_payload(
                     "capability_state_json",
                     "external_account_id",
                     "external_account_name",
+                    "external_account_email",
+                    "external_tenant_id",
                     "granted_scopes_json",
                     "metadata_version",
                     "created_at",
@@ -5417,6 +5550,108 @@ async def _export_payload(
                 ),
             )
             for item in integration_audits
+        ],
+        "providerOutboundOperations": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "action_id",
+                    "provider_key",
+                    "state",
+                    "sender_email",
+                    "recipient_email",
+                    "provider_message_id",
+                    "internet_message_id",
+                    "conversation_id",
+                    "submitted_at",
+                    "reconciled_at",
+                    "safe_failure_code",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in provider_outbound_operations
+        ],
+        "providerReplies": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "outbound_operation_id",
+                    "provider_key",
+                    "provider_message_id",
+                    "internet_message_id",
+                    "conversation_id",
+                    "sender_email",
+                    "recipient_emails_json",
+                    "subject",
+                    "body_text",
+                    "kind",
+                    "match_state",
+                    "contact_id",
+                    "company_id",
+                    "opportunity_id",
+                    "received_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in provider_replies
+        ],
+        "providerCalendarEvents": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "provider_key",
+                    "provider_event_id",
+                    "i_cal_uid",
+                    "series_master_id",
+                    "title",
+                    "start_at",
+                    "end_at",
+                    "provider_timezone",
+                    "organiser_email",
+                    "attendee_emails_json",
+                    "location",
+                    "online_meeting_url",
+                    "sensitivity",
+                    "state",
+                    "match_state",
+                    "contact_id",
+                    "company_id",
+                    "opportunity_id",
+                    "interaction_id",
+                    "provider_last_modified_at",
+                    "last_synced_at",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in provider_calendar_events
+        ],
+        "providerSyncStates": [
+            _columns(
+                item,
+                (
+                    "id",
+                    "connection_id",
+                    "provider_key",
+                    "resource_kind",
+                    "window_start_at",
+                    "window_end_at",
+                    "last_successful_sync_at",
+                    "last_error_category",
+                    "consecutive_failures",
+                    "created_at",
+                    "updated_at",
+                ),
+            )
+            for item in provider_sync_states
         ],
         "tasks": [
             _columns(

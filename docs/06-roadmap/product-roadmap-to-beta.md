@@ -665,10 +665,18 @@ Profile revision pinning, a dormant Apollo adapter and honest readiness UI. Apol
 not production-active. A written external-product/data agreement, exact custom cost,
 privacy approval, production Credit prices and owner margin floor remain required.
 
+WO-040 is implemented through migration `0056_microsoft_365_sales`: it adds a
+seller-delegated, work/school-only Microsoft Graph adapter for reviewed Outlook send,
+unknown-outcome/Sent Items reconciliation, relevant replies and bounded Calendar
+context linked explicitly to existing Interactions. It is production-capable but not
+production-active. Owner-managed Entra registration, Microsoft/customer-admin consent,
+provider/privacy approval, production secrets, monitoring and an authorised synthetic
+smoke test remain gates. WO-041 has not started.
+
 The authorised sequence after WO-050 remains:
 
-1. WO-040 — Microsoft 365 Sales Integration
-2. WO-041 — Google Workspace Sales Integration
+1. WO-040 — Microsoft 365 Sales Integration — **implemented; awaiting engineering review**
+2. WO-041 — Google Workspace Sales Integration — **not started**
 3. WO-042 — Production CRM Connectors
 4. WO-043 — Simple Opportunity Deal Room
 5. WO-044 — Reviewed Closed-Won Handover
@@ -722,11 +730,11 @@ Intelligence. WO-039 uses admin as an interim manager capability and adds no
 hierarchy, scoring, surveillance, AI coach or blended forecast.
 [Checkpoint 3](checkpoint-3-end-to-end-beta-readiness.md) selected Option 3: complete
 WO-039A journey reliability, WO-039B Create trust/security and WO-039C real-data
-operations/native onboarding before WO-040. Production provider activation,
+operations/native onboarding before WO-040. WO-040 is now implemented, but production provider activation,
 customer-data use, external Engage sending, auto-send and design-partner launch remain
 unauthorised. The first conditional provider recommendation is a narrow Gmail delivery
-slice from WO-041; Microsoft WO-040 and WO-042–044 breadth are deferred pending
-observed customer evidence.
+slice from WO-041; Microsoft production activation, WO-041 and WO-042–044 breadth are
+deferred pending owner approval and observed customer evidence.
 
 WO-039A is implemented as the existing-product reliability gate: the canonical
 seller journey, direct-route/recovery behaviour, cross-module revalidation, 390 px

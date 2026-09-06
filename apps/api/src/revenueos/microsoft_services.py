@@ -1,0 +1,1027 @@
+from __future__ import annotations
+
+import logging
+import re
+import uuid
+from datetime import UTC, datetime, timedelta
+from html.parser import HTMLParser
+from typing import Literal, cast
+from urllib.parse import quote, urlsplit
+from uuid import UUID
+
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from revenueos.commercial_services import CommercialService
+from revenueos.config import Settings
+from revenueos.credential_store import CredentialStore, EncryptedDatabaseCredentialStore
+from revenueos.domain import ConnectionStatus, ConnectorKey
+from revenueos.errors import PublicAPIError
+from revenueos.integration_contracts import (
+    MicrosoftCalendarEventListResponse,
+    MicrosoftCalendarEventResponse,
+    MicrosoftReplyListResponse,
+    MicrosoftReplyResponse,
+    MicrosoftSyncResourceResponse,
+    MicrosoftSyncResponse,
+    MicrosoftSyncStatusResponse,
+)
+from revenueos.integration_executors import ExecutorConnectionContext
+from revenueos.microsoft_graph import MicrosoftAPIError, MicrosoftGraphClient
+from revenueos.models import (
+    ActionExecution,
+    ActionProposal,
+    ActionProposalVersion,
+    Contact,
+    EngageCampaignEnrollment,
+    EngageEnrollmentStep,
+    IntegrationAuditEvent,
+    IntegrationConnection,
+    Interaction,
+    Opportunity,
+    OutreachMessage,
+    ProviderCalendarEvent,
+    ProviderOutboundOperation,
+    ProviderReply,
+    ProviderSyncState,
+)
+from revenueos.tenant import TenantContext
+
+logger = logging.getLogger("revenueos.microsoft_sync")
+_EMAIL = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
+_MAX_PAGES = 10
+_PAGE_SIZE = "50"
+_MAX_REPLY_BODY = 10_000
+
+
+class _HTMLTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del attrs
+        if tag.casefold() in {"script", "style", "svg", "iframe", "object"}:
+            self._ignored_depth += 1
+        elif tag.casefold() in {"br", "p", "div", "li", "tr"} and not self._ignored_depth:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.casefold() in {"script", "style", "svg", "iframe", "object"} and self._ignored_depth:
+            self._ignored_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._ignored_depth:
+            self.parts.append(data)
+
+
+class MicrosoftSyncService:
+    """Bounded, tenant-scoped reconciliation for Oryntela-related Microsoft data."""
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        tenant: TenantContext,
+        settings: Settings,
+        *,
+        credential_store: CredentialStore | None = None,
+        client: MicrosoftGraphClient | None = None,
+    ) -> None:
+        self.session = session
+        self.tenant = tenant
+        self.settings = settings
+        self.credential_store = credential_store or self._credential_store()
+        self.client = client or MicrosoftGraphClient(settings, self.credential_store)
+
+    async def sync(self, connection_id: UUID) -> MicrosoftSyncResponse:
+        self._require_feature()
+        commercial = CommercialService(self.session, self.settings)
+        await commercial.require_module_write(self.tenant.organisation_id, "core")
+        connection = await self._connection(connection_id, for_update=True)
+        now = datetime.now(UTC)
+        resources: list[MicrosoftSyncResourceResponse] = []
+        resources.append(await self._sync_resource(connection, "calendar", now))
+        if (
+            connection.connection_status == ConnectionStatus.ACTIVE.value
+            and await commercial.module_access(self.tenant.organisation_id, "engage", lock_for_write=True) == "write"
+        ):
+            resources.append(await self._sync_resource(connection, "mail_sent", now))
+            if connection.connection_status == ConnectionStatus.ACTIVE.value:
+                resources.append(await self._sync_resource(connection, "mail_inbox", now))
+        self.session.add(
+            IntegrationAuditEvent(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                actor_user_id=self.tenant.user_id,
+                event_type="provider_sync_completed",
+                subject_type="connection",
+                subject_id=connection.id,
+                connector_key=ConnectorKey.MICROSOFT_365.value,
+                capability=None,
+                risk_class=None,
+                attempt_count=None,
+                safe_failure_code=(
+                    "microsoft_sync_degraded" if any(item.state == "degraded" for item in resources) else None
+                ),
+                external_result_id=None,
+                duration_ms=None,
+                created_at=now,
+            )
+        )
+        await self._commit("Microsoft 365 synchronisation could not be saved.")
+        logger.info(
+            "microsoft_sync_completed",
+            extra={
+                "organisation_id": str(self.tenant.organisation_id),
+                "connection_id": str(connection.id),
+                "resource_count": len(resources),
+                "degraded": any(item.state == "degraded" for item in resources),
+            },
+        )
+        return MicrosoftSyncResponse(connection_id=connection.id, synced_at=now, resources=resources)
+
+    async def list_replies(self, *, limit: int = 50) -> MicrosoftReplyListResponse:
+        self._require_feature()
+        await self._require_module_read("engage")
+        connection_ids = await self._visible_connection_ids()
+        if not connection_ids:
+            return MicrosoftReplyListResponse(items=[], total=0)
+        values = await self.session.scalars(
+            select(ProviderReply)
+            .where(
+                ProviderReply.organisation_id == self.tenant.organisation_id,
+                ProviderReply.connection_id.in_(connection_ids),
+            )
+            .order_by(ProviderReply.received_at.desc(), ProviderReply.id)
+            .limit(limit)
+        )
+        items = [self._reply_response(item) for item in values.all()]
+        return MicrosoftReplyListResponse(items=items, total=len(items))
+
+    async def status(self, connection_id: UUID) -> MicrosoftSyncStatusResponse:
+        self._require_feature()
+        await self._require_module_read("core")
+        connection = await self._connection(
+            connection_id,
+            for_update=False,
+            allow_reauthorisation=True,
+        )
+        states = list(
+            (
+                await self.session.scalars(
+                    select(ProviderSyncState).where(
+                        ProviderSyncState.organisation_id == self.tenant.organisation_id,
+                        ProviderSyncState.connection_id == connection.id,
+                    )
+                )
+            ).all()
+        )
+        successes = [item.last_successful_sync_at for item in states if item.last_successful_sync_at]
+        errors = [item.last_error_category for item in states if item.last_error_category]
+        return MicrosoftSyncStatusResponse(
+            connection_id=connection.id,
+            last_successful_sync_at=max(successes) if successes else None,
+            last_error_category=errors[0] if errors else None,
+            state="degraded" if errors else ("healthy" if successes else "not_started"),
+        )
+
+    async def list_calendar_events(self, *, limit: int = 50) -> MicrosoftCalendarEventListResponse:
+        self._require_feature()
+        await self._require_module_read("core")
+        connection_ids = await self._visible_connection_ids()
+        if not connection_ids:
+            return MicrosoftCalendarEventListResponse(items=[], total=0)
+        values = await self.session.scalars(
+            select(ProviderCalendarEvent)
+            .where(
+                ProviderCalendarEvent.organisation_id == self.tenant.organisation_id,
+                ProviderCalendarEvent.connection_id.in_(connection_ids),
+                ProviderCalendarEvent.state == "active",
+                ProviderCalendarEvent.end_at >= datetime.now(UTC) - timedelta(days=1),
+            )
+            .order_by(ProviderCalendarEvent.start_at, ProviderCalendarEvent.id)
+            .limit(limit)
+        )
+        items = [self._calendar_response(item) for item in values.all()]
+        return MicrosoftCalendarEventListResponse(items=items, total=len(items))
+
+    async def link_interaction(
+        self,
+        event_id: UUID,
+        interaction_id: UUID,
+    ) -> MicrosoftCalendarEventResponse:
+        self._require_feature()
+        await CommercialService(self.session, self.settings).require_module_write(
+            self.tenant.organisation_id,
+            "core",
+        )
+        event = await self.session.scalar(
+            select(ProviderCalendarEvent)
+            .join(
+                IntegrationConnection,
+                (IntegrationConnection.organisation_id == ProviderCalendarEvent.organisation_id)
+                & (IntegrationConnection.id == ProviderCalendarEvent.connection_id),
+            )
+            .where(
+                ProviderCalendarEvent.organisation_id == self.tenant.organisation_id,
+                ProviderCalendarEvent.id == event_id,
+                IntegrationConnection.created_by_user_id == self.tenant.user_id,
+                IntegrationConnection.connector_key == ConnectorKey.MICROSOFT_365.value,
+            )
+            .with_for_update()
+        )
+        if event is None:
+            raise PublicAPIError("calendar_event_not_found", "The Microsoft calendar event was not found.", 404)
+        interaction = await self.session.scalar(
+            select(Interaction).where(
+                Interaction.organisation_id == self.tenant.organisation_id,
+                Interaction.id == interaction_id,
+                Interaction.deleted_at.is_(None),
+            )
+        )
+        if interaction is None:
+            raise PublicAPIError("interaction_not_found", "The requested Interaction was not found.", 404)
+        event.interaction_id = interaction.id
+        await self._commit("The calendar event could not be linked.")
+        return self._calendar_response(event)
+
+    async def _sync_resource(
+        self,
+        connection: IntegrationConnection,
+        resource_kind: Literal["mail_sent", "mail_inbox", "calendar"],
+        now: datetime,
+    ) -> MicrosoftSyncResourceResponse:
+        state = await self._sync_state(connection.id, resource_kind, now)
+        if resource_kind == "calendar":
+            self._roll_calendar_window(state, now)
+        context = self._context(connection)
+        try:
+            items, delta_link = await self._fetch_delta(context, state, resource_kind)
+            retained = 0
+            for item in items:
+                if resource_kind == "mail_sent":
+                    retained += await self._reconcile_sent(connection, item, now)
+                elif resource_kind == "mail_inbox":
+                    retained += await self._retain_reply(connection, item, now)
+                else:
+                    retained += await self._retain_calendar_event(connection, item, now)
+            if resource_kind == "calendar":
+                await self.session.execute(
+                    delete(ProviderCalendarEvent).where(
+                        ProviderCalendarEvent.organisation_id == self.tenant.organisation_id,
+                        ProviderCalendarEvent.connection_id == connection.id,
+                        ProviderCalendarEvent.end_at < state.window_start_at,
+                    )
+                )
+            state.delta_link = delta_link
+            state.last_successful_sync_at = now
+            state.last_error_category = None
+            state.consecutive_failures = 0
+            return MicrosoftSyncResourceResponse(
+                resource_kind=resource_kind,
+                processed=len(items),
+                retained=retained,
+                state="healthy",
+                safe_message="Microsoft changes were synchronised.",
+            )
+        except MicrosoftAPIError as exc:
+            state.last_error_category = exc.code
+            state.consecutive_failures += 1
+            if exc.code == "connection_reauthorisation_required":
+                connection.connection_status = ConnectionStatus.REAUTHORISATION_REQUIRED.value
+                connection.metadata_version += 1
+            return MicrosoftSyncResourceResponse(
+                resource_kind=resource_kind,
+                processed=0,
+                retained=0,
+                state="degraded",
+                safe_message=(
+                    "Microsoft 365 needs to be reconnected."
+                    if exc.code == "connection_reauthorisation_required"
+                    else "Microsoft synchronisation is temporarily delayed."
+                ),
+            )
+
+    async def _fetch_delta(
+        self,
+        context: ExecutorConnectionContext,
+        state: ProviderSyncState,
+        resource_kind: Literal["mail_sent", "mail_inbox", "calendar"],
+    ) -> tuple[list[dict[str, object]], str]:
+        path, params, headers = self._initial_request(state, resource_kind)
+        current = state.delta_link or path
+        first = True
+        items: list[dict[str, object]] = []
+        for _ in range(_MAX_PAGES):
+            try:
+                payload = await self.client.graph_json(
+                    context,
+                    current,
+                    params=params if first and state.delta_link is None else None,
+                    headers=headers,
+                )
+            except MicrosoftAPIError as exc:
+                if exc.code == "provider_cursor_expired" and state.delta_link is not None:
+                    state.delta_link = None
+                    current = path
+                    first = True
+                    items.clear()
+                    continue
+                raise
+            values = payload.get("value")
+            if not isinstance(values, list):
+                raise MicrosoftAPIError("provider_response_invalid")
+            for value in values:
+                if isinstance(value, dict):
+                    items.append(cast(dict[str, object], value))
+            next_link = payload.get("@odata.nextLink")
+            delta_link = payload.get("@odata.deltaLink")
+            if isinstance(next_link, str):
+                current = next_link
+                first = False
+                continue
+            if not isinstance(delta_link, str):
+                raise MicrosoftAPIError("provider_response_invalid")
+            return items, delta_link
+        raise MicrosoftAPIError("provider_sync_page_limit")
+
+    def _initial_request(
+        self,
+        state: ProviderSyncState,
+        resource_kind: Literal["mail_sent", "mail_inbox", "calendar"],
+    ) -> tuple[str, dict[str, str], dict[str, str] | None]:
+        start = self._iso(state.window_start_at)
+        end = self._iso(state.window_end_at)
+        if resource_kind == "calendar":
+            return (
+                "/me/calendarView/delta",
+                {
+                    "startDateTime": start,
+                    "endDateTime": end,
+                },
+                {"Prefer": f'outlook.timezone="UTC", odata.maxpagesize={_PAGE_SIZE}'},
+            )
+        folder = "sentitems" if resource_kind == "mail_sent" else "inbox"
+        return (
+            f"/me/mailFolders/{folder}/messages/delta",
+            {
+                "$select": (
+                    "id,internetMessageId,conversationId,from,toRecipients,subject,"
+                    "receivedDateTime,sentDateTime,internetMessageHeaders"
+                ),
+                "$filter": f"receivedDateTime ge {start}",
+                "$top": _PAGE_SIZE,
+            },
+            None,
+        )
+
+    async def _reconcile_sent(
+        self,
+        connection: IntegrationConnection,
+        item: dict[str, object],
+        now: datetime,
+    ) -> int:
+        provider_id = self._string(item.get("id"), 255)
+        operation_key = self._header(item, "x-oryntela-operation-id")
+        if provider_id is None or operation_key is None or len(operation_key) != 64:
+            return 0
+        operation = await self.session.scalar(
+            select(ProviderOutboundOperation)
+            .where(
+                ProviderOutboundOperation.organisation_id == self.tenant.organisation_id,
+                ProviderOutboundOperation.connection_id == connection.id,
+                ProviderOutboundOperation.idempotency_key == operation_key,
+            )
+            .with_for_update()
+        )
+        if operation is None:
+            return 0
+        sender = self._message_address(item.get("from"))
+        recipients = self._message_addresses(item.get("toRecipients"))
+        if sender != operation.sender_email.casefold() or operation.recipient_email.casefold() not in recipients:
+            return 0
+        operation.provider_message_id = provider_id
+        operation.internet_message_id = self._string(item.get("internetMessageId"), 998)
+        operation.conversation_id = self._string(item.get("conversationId"), 255)
+        operation.state = "reconciled"
+        operation.reconciled_at = now
+        operation.safe_failure_code = None
+        execution = await self.session.scalar(
+            select(ActionExecution).where(
+                ActionExecution.organisation_id == self.tenant.organisation_id,
+                ActionExecution.action_id == operation.action_id,
+                ActionExecution.idempotency_key == operation.idempotency_key,
+            )
+        )
+        if execution is not None and execution.execution_status == "unknown_external_state":
+            execution.execution_status = "succeeded"
+            execution.external_result_id = provider_id
+            execution.safe_failure_code = None
+            execution.completed_at = now
+        return 1
+
+    async def _retain_reply(
+        self,
+        connection: IntegrationConnection,
+        item: dict[str, object],
+        now: datetime,
+    ) -> int:
+        provider_id = self._string(item.get("id"), 255)
+        sender = self._message_address(item.get("from"))
+        if provider_id is None or sender is None:
+            return 0
+        connected_email = (connection.external_account_email or "").casefold()
+        recipients = self._message_addresses(item.get("toRecipients"))
+        if connected_email not in recipients:
+            return 0
+        duplicate = await self.session.scalar(
+            select(ProviderReply.id).where(
+                ProviderReply.organisation_id == self.tenant.organisation_id,
+                ProviderReply.connection_id == connection.id,
+                ProviderReply.provider_message_id == provider_id,
+            )
+        )
+        if duplicate is not None:
+            return 0
+        internet_message_id = self._string(item.get("internetMessageId"), 998)
+        conversation_id = self._string(item.get("conversationId"), 255)
+        in_reply_to = self._header(item, "in-reply-to")
+        references = self._header(item, "references") or ""
+        kind = self._reply_kind(item, sender)
+        operations = list(
+            (
+                await self.session.scalars(
+                    select(ProviderOutboundOperation).where(
+                        ProviderOutboundOperation.organisation_id == self.tenant.organisation_id,
+                        ProviderOutboundOperation.connection_id == connection.id,
+                        ProviderOutboundOperation.state.in_(("accepted", "reconciled", "unknown")),
+                        or_(
+                            ProviderOutboundOperation.internet_message_id.is_not(None),
+                            ProviderOutboundOperation.conversation_id.is_not(None),
+                        ),
+                    )
+                )
+            ).all()
+        )
+        matches = [
+            operation
+            for operation in operations
+            if (sender == operation.recipient_email.casefold() or kind == "ndr")
+            and (
+                (
+                    operation.internet_message_id is not None
+                    and (operation.internet_message_id == in_reply_to or operation.internet_message_id in references)
+                )
+                or (
+                    operation.conversation_id is not None
+                    and conversation_id is not None
+                    and operation.conversation_id == conversation_id
+                )
+            )
+        ]
+        if len(matches) != 1:
+            return 0
+        operation = matches[0]
+        contact, company_id, opportunity_id = await self._action_context(
+            operation.action_id,
+            operation.recipient_email.casefold(),
+        )
+        received_at = self._datetime(item.get("receivedDateTime"))
+        if received_at is None:
+            return 0
+        body_payload = await self.client.graph_json(
+            self._context(connection),
+            f"/me/messages/{quote(provider_id, safe='')}",
+            params={"$select": "body"},
+            headers={"Prefer": 'outlook.body-content-type="text"'},
+        )
+        self.session.add(
+            ProviderReply(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                connection_id=connection.id,
+                outbound_operation_id=operation.id,
+                provider_key=ConnectorKey.MICROSOFT_365.value,
+                provider_message_id=provider_id,
+                internet_message_id=internet_message_id,
+                conversation_id=conversation_id,
+                sender_email=sender,
+                recipient_emails_json=sorted(self._message_addresses(item.get("toRecipients"))),
+                subject=self._string(item.get("subject"), 500) or "(No subject)",
+                body_text=self._body_text(body_payload.get("body")),
+                kind=kind,
+                match_state="matched" if opportunity_id is not None else "review_required",
+                contact_id=contact.id if contact is not None else None,
+                company_id=company_id,
+                opportunity_id=opportunity_id,
+                received_at=received_at,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        if kind == "reply":
+            await self._stop_campaign(operation.action_id, now)
+        return 1
+
+    async def _retain_calendar_event(
+        self,
+        connection: IntegrationConnection,
+        item: dict[str, object],
+        now: datetime,
+    ) -> int:
+        provider_id = self._string(item.get("id"), 255)
+        if provider_id is None:
+            return 0
+        existing = await self.session.scalar(
+            select(ProviderCalendarEvent)
+            .where(
+                ProviderCalendarEvent.organisation_id == self.tenant.organisation_id,
+                ProviderCalendarEvent.connection_id == connection.id,
+                ProviderCalendarEvent.provider_event_id == provider_id,
+            )
+            .with_for_update()
+        )
+        removed = item.get("@removed")
+        if isinstance(removed, dict):
+            if existing is not None:
+                existing.state = "deleted"
+                existing.last_synced_at = now
+                return 1
+            return 0
+        modified_at = self._datetime(item.get("lastModifiedDateTime"))
+        if (
+            existing is not None
+            and modified_at is not None
+            and existing.provider_last_modified_at is not None
+            and self._aware(existing.provider_last_modified_at) >= modified_at
+        ):
+            return 0
+        start, timezone = self._event_datetime(item.get("start"))
+        end, _ = self._event_datetime(item.get("end"))
+        if start is None or end is None or end <= start:
+            return 0
+        sensitivity = (self._string(item.get("sensitivity"), 24) or "normal").casefold()
+        private = sensitivity == "private"
+        attendees = [] if private else sorted(self._attendee_addresses(item.get("attendees")))
+        organiser = None if private else self._message_address(item.get("organizer"))
+        match_state, contact, company_id, opportunity_id = await self._calendar_context(
+            connection.external_account_email or "",
+            attendees,
+            organiser,
+        )
+        if private:
+            match_state, contact, company_id, opportunity_id = "private", None, None, None
+        values: dict[str, object] = {
+            "i_cal_uid": self._string(item.get("iCalUId"), 255),
+            "series_master_id": self._string(item.get("seriesMasterId"), 255),
+            "change_key": self._string(item.get("changeKey"), 255),
+            "title": "Private event" if private else (self._string(item.get("subject"), 500) or "Calendar event"),
+            "start_at": start,
+            "end_at": end,
+            "provider_timezone": timezone,
+            "organiser_email": organiser,
+            "attendee_emails_json": attendees,
+            "location": None if private else self._location(item.get("location")),
+            "online_meeting_url": None if private else self._meeting_url(item.get("onlineMeeting")),
+            "sensitivity": sensitivity[:24],
+            "state": "cancelled" if item.get("isCancelled") is True else "active",
+            "match_state": match_state,
+            "contact_id": contact.id if contact is not None else None,
+            "company_id": company_id,
+            "opportunity_id": opportunity_id,
+            "provider_last_modified_at": modified_at,
+            "last_synced_at": now,
+        }
+        if existing is None:
+            self.session.add(
+                ProviderCalendarEvent(
+                    id=uuid.uuid4(),
+                    organisation_id=self.tenant.organisation_id,
+                    connection_id=connection.id,
+                    provider_key=ConnectorKey.MICROSOFT_365.value,
+                    provider_event_id=provider_id,
+                    interaction_id=None,
+                    created_at=now,
+                    updated_at=now,
+                    **values,
+                )
+            )
+        else:
+            for key, value in values.items():
+                setattr(existing, key, value)
+        return 1
+
+    async def _calendar_context(
+        self,
+        connected_email: str,
+        attendees: list[str],
+        organiser: str | None,
+    ) -> tuple[str, Contact | None, UUID | None, UUID | None]:
+        participant_addresses = set(attendees)
+        if organiser is not None:
+            participant_addresses.add(organiser)
+        external = sorted(email for email in participant_addresses if email != connected_email.casefold())
+        if external and all(self._domain(item) == self._domain(connected_email) for item in external):
+            return "internal", None, None, None
+        if len(external) != 1:
+            return ("review_required" if external else "unmatched"), None, None, None
+        contacts = list(
+            (
+                await self.session.scalars(
+                    select(Contact).where(
+                        Contact.organisation_id == self.tenant.organisation_id,
+                        Contact.archived_at.is_(None),
+                        func.lower(Contact.email).in_(external),
+                    )
+                )
+            ).all()
+        )
+        if len(contacts) != 1:
+            return ("review_required" if contacts or external else "unmatched"), None, None, None
+        contact = contacts[0]
+        opportunities = list(
+            (
+                await self.session.scalars(
+                    select(Opportunity).where(
+                        Opportunity.organisation_id == self.tenant.organisation_id,
+                        Opportunity.company_id == contact.company_id,
+                        Opportunity.status.in_(("open", "on_hold")),
+                        Opportunity.archived_at.is_(None),
+                    )
+                )
+            ).all()
+        )
+        if len(opportunities) == 1:
+            return "matched", contact, contact.company_id, opportunities[0].id
+        return "review_required", contact, contact.company_id, None
+
+    async def _action_context(
+        self,
+        action_id: UUID,
+        sender_email: str,
+    ) -> tuple[Contact | None, UUID | None, UUID | None]:
+        action = await self.session.scalar(
+            select(ActionProposal).where(
+                ActionProposal.organisation_id == self.tenant.organisation_id,
+                ActionProposal.id == action_id,
+            )
+        )
+        outreach = await self.session.scalar(
+            select(OutreachMessage).where(
+                OutreachMessage.organisation_id == self.tenant.organisation_id,
+                OutreachMessage.action_id == action_id,
+            )
+        )
+        contact_id = outreach.contact_id if outreach is not None else None
+        if contact_id is None and action is not None:
+            version = await self.session.scalar(
+                select(ActionProposalVersion).where(
+                    ActionProposalVersion.organisation_id == self.tenant.organisation_id,
+                    ActionProposalVersion.action_id == action.id,
+                    ActionProposalVersion.version == action.approved_version,
+                    ActionProposalVersion.target_entity_type == "contact",
+                )
+            )
+            contact_id = version.target_entity_id if version is not None else None
+        contact = None
+        if contact_id is not None:
+            contact = await self.session.scalar(
+                select(Contact).where(
+                    Contact.organisation_id == self.tenant.organisation_id,
+                    Contact.id == contact_id,
+                    func.lower(Contact.email) == sender_email,
+                )
+            )
+        opportunity_id = action.opportunity_id if action is not None else None
+        return contact, contact.company_id if contact is not None else None, opportunity_id
+
+    async def _stop_campaign(self, action_id: UUID, now: datetime) -> None:
+        enrollment = await self.session.scalar(
+            select(EngageCampaignEnrollment)
+            .join(
+                EngageEnrollmentStep,
+                (EngageEnrollmentStep.organisation_id == EngageCampaignEnrollment.organisation_id)
+                & (EngageEnrollmentStep.enrollment_id == EngageCampaignEnrollment.id),
+            )
+            .join(
+                OutreachMessage,
+                (OutreachMessage.organisation_id == EngageEnrollmentStep.organisation_id)
+                & (OutreachMessage.id == EngageEnrollmentStep.outreach_message_id),
+            )
+            .where(
+                EngageCampaignEnrollment.organisation_id == self.tenant.organisation_id,
+                OutreachMessage.action_id == action_id,
+            )
+            .with_for_update()
+        )
+        if enrollment is None or enrollment.state in {"stopped", "completed"}:
+            return
+        enrollment.state = "stopped"
+        enrollment.stop_reason = "provider_reply"
+        enrollment.outcome = "replied"
+        enrollment.outcome_provenance = "provider"
+        enrollment.outcome_reported_at = now
+        enrollment.next_scheduled_at = None
+
+    async def _sync_state(
+        self,
+        connection_id: UUID,
+        resource_kind: Literal["mail_sent", "mail_inbox", "calendar"],
+        now: datetime,
+    ) -> ProviderSyncState:
+        state = await self.session.scalar(
+            select(ProviderSyncState)
+            .where(
+                ProviderSyncState.organisation_id == self.tenant.organisation_id,
+                ProviderSyncState.connection_id == connection_id,
+                ProviderSyncState.resource_kind == resource_kind,
+            )
+            .with_for_update()
+        )
+        if state is not None:
+            return state
+        if resource_kind == "calendar":
+            start = now - timedelta(days=self.settings.microsoft_calendar_past_days)
+            end = now + timedelta(days=self.settings.microsoft_calendar_future_days)
+        else:
+            start = now - timedelta(days=self.settings.microsoft_mail_sync_lookback_days)
+            end = now
+        state = ProviderSyncState(
+            id=uuid.uuid4(),
+            organisation_id=self.tenant.organisation_id,
+            connection_id=connection_id,
+            provider_key=ConnectorKey.MICROSOFT_365.value,
+            resource_kind=resource_kind,
+            delta_link=None,
+            window_start_at=start,
+            window_end_at=end,
+            last_successful_sync_at=None,
+            last_error_category=None,
+            consecutive_failures=0,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(state)
+        await self.session.flush()
+        return state
+
+    def _roll_calendar_window(self, state: ProviderSyncState, now: datetime) -> None:
+        desired_end = now + timedelta(days=self.settings.microsoft_calendar_future_days)
+        if self._aware(state.window_end_at) >= desired_end - timedelta(days=1):
+            return
+        state.window_start_at = now - timedelta(days=self.settings.microsoft_calendar_past_days)
+        state.window_end_at = desired_end
+        state.delta_link = None
+
+    async def _connection(
+        self,
+        connection_id: UUID,
+        *,
+        for_update: bool,
+        allow_reauthorisation: bool = False,
+    ) -> IntegrationConnection:
+        statement = select(IntegrationConnection).where(
+            IntegrationConnection.organisation_id == self.tenant.organisation_id,
+            IntegrationConnection.id == connection_id,
+            IntegrationConnection.connector_key == ConnectorKey.MICROSOFT_365.value,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        connection = await self.session.scalar(statement)
+        if connection is None:
+            raise PublicAPIError("connection_not_found", "The Microsoft 365 connection was not found.", 404)
+        if connection.created_by_user_id != self.tenant.user_id:
+            raise PublicAPIError("forbidden", "You cannot synchronise another seller's Microsoft account.", 403)
+        if (
+            connection.connection_status == ConnectionStatus.REAUTHORISATION_REQUIRED.value
+            and not allow_reauthorisation
+        ):
+            raise PublicAPIError(
+                "connection_reauthorisation_required",
+                "Microsoft 365 needs to be reconnected.",
+                409,
+            )
+        if connection.connection_status != ConnectionStatus.ACTIVE.value and not (
+            allow_reauthorisation and connection.connection_status == ConnectionStatus.REAUTHORISATION_REQUIRED.value
+        ):
+            raise PublicAPIError("connection_revoked", "This Microsoft 365 connection is disconnected.", 409)
+        return connection
+
+    async def _visible_connection_ids(self) -> list[UUID]:
+        values = await self.session.scalars(
+            select(IntegrationConnection.id).where(
+                IntegrationConnection.organisation_id == self.tenant.organisation_id,
+                IntegrationConnection.connector_key == ConnectorKey.MICROSOFT_365.value,
+                IntegrationConnection.created_by_user_id == self.tenant.user_id,
+            )
+        )
+        return list(values.all())
+
+    @staticmethod
+    def _context(connection: IntegrationConnection) -> ExecutorConnectionContext:
+        return ExecutorConnectionContext(
+            organisation_id=connection.organisation_id,
+            connection_id=connection.id,
+            credential_reference=connection.credential_reference,
+            execution_mode="live",
+            external_account_id=connection.external_account_id,
+            external_account_email=connection.external_account_email,
+            external_tenant_id=connection.external_tenant_id,
+        )
+
+    def _credential_store(self) -> CredentialStore:
+        if self.settings.connector_credential_master_key is None:
+            raise RuntimeError("Connector credential storage is not configured.")
+        return EncryptedDatabaseCredentialStore(
+            self.session,
+            self.settings.connector_credential_master_key.get_secret_value(),
+        )
+
+    def _require_feature(self) -> None:
+        if not self.settings.feature_integrations_enabled or not self.settings.feature_microsoft_365_enabled:
+            raise PublicAPIError("feature_unavailable", "Microsoft 365 is not configured.", 404)
+
+    async def _require_module_read(self, module: Literal["core", "engage"]) -> None:
+        if (
+            await CommercialService(self.session, self.settings).module_access(
+                self.tenant.organisation_id,
+                module,
+            )
+            == "none"
+        ):
+            raise PublicAPIError(
+                f"{module}_not_in_plan",
+                "This Microsoft 365 history is unavailable under the organisation's current plan.",
+                403,
+            )
+
+    async def _commit(self, message: str) -> None:
+        try:
+            await self.session.flush()
+            await self.session.commit()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise PublicAPIError("integration_conflict", message, 409) from exc
+
+    @staticmethod
+    def _reply_response(item: ProviderReply) -> MicrosoftReplyResponse:
+        return MicrosoftReplyResponse(
+            id=item.id,
+            kind=cast(Literal["reply", "automatic_reply", "ndr"], item.kind),
+            match_state=cast(Literal["matched", "review_required"], item.match_state),
+            sender_email=item.sender_email,
+            subject=item.subject,
+            body_text=item.body_text,
+            contact_id=item.contact_id,
+            company_id=item.company_id,
+            opportunity_id=item.opportunity_id,
+            received_at=item.received_at,
+        )
+
+    @staticmethod
+    def _calendar_response(item: ProviderCalendarEvent) -> MicrosoftCalendarEventResponse:
+        return MicrosoftCalendarEventResponse(
+            id=item.id,
+            title=item.title,
+            start_at=item.start_at,
+            end_at=item.end_at,
+            provider_timezone=item.provider_timezone,
+            attendee_emails=list(item.attendee_emails_json),
+            location=item.location,
+            online_meeting_url=item.online_meeting_url,
+            sensitivity=item.sensitivity,
+            state=cast(Literal["active", "cancelled", "deleted"], item.state),
+            match_state=cast(
+                Literal["unmatched", "matched", "review_required", "internal", "private"],
+                item.match_state,
+            ),
+            contact_id=item.contact_id,
+            company_id=item.company_id,
+            opportunity_id=item.opportunity_id,
+            interaction_id=item.interaction_id,
+            last_synced_at=item.last_synced_at,
+        )
+
+    @staticmethod
+    def _string(value: object, maximum: int) -> str | None:
+        if not isinstance(value, str):
+            return None
+        clean = " ".join(value.split()).strip()
+        return clean[:maximum] if clean else None
+
+    @classmethod
+    def _message_address(cls, value: object) -> str | None:
+        if not isinstance(value, dict):
+            return None
+        email_address = value.get("emailAddress")
+        if not isinstance(email_address, dict):
+            return None
+        address = cls._string(email_address.get("address"), 320)
+        if address is None or not _EMAIL.fullmatch(address):
+            return None
+        return address.casefold()
+
+    @classmethod
+    def _message_addresses(cls, value: object) -> set[str]:
+        if not isinstance(value, list):
+            return set()
+        return {address for item in value if (address := cls._message_address(item)) is not None}
+
+    @classmethod
+    def _attendee_addresses(cls, value: object) -> set[str]:
+        if not isinstance(value, list):
+            return set()
+        addresses: set[str] = set()
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            address = cls._message_address(item)
+            if address is not None:
+                addresses.add(address)
+        return addresses
+
+    @classmethod
+    def _header(cls, item: dict[str, object], name: str) -> str | None:
+        headers = item.get("internetMessageHeaders")
+        if not isinstance(headers, list):
+            return None
+        for header in headers:
+            if not isinstance(header, dict):
+                continue
+            header_name = cls._string(header.get("name"), 200)
+            if header_name is not None and header_name.casefold() == name:
+                return cls._string(header.get("value"), 2000)
+        return None
+
+    @classmethod
+    def _body_text(cls, value: object) -> str:
+        if not isinstance(value, dict):
+            return ""
+        content = value.get("content")
+        if not isinstance(content, str):
+            return ""
+        content_type = str(value.get("contentType", "text")).casefold()
+        if content_type == "html":
+            parser = _HTMLTextExtractor()
+            parser.feed(content[:50_000])
+            content = "".join(parser.parts)
+        clean = "\n".join(line.strip() for line in content.splitlines() if line.strip())
+        return clean[:_MAX_REPLY_BODY]
+
+    @classmethod
+    def _reply_kind(cls, item: dict[str, object], sender: str) -> Literal["reply", "automatic_reply", "ndr"]:
+        auto_submitted = (cls._header(item, "auto-submitted") or "").casefold()
+        if sender.startswith(("postmaster@", "mailer-daemon@")):
+            return "ndr"
+        if auto_submitted and auto_submitted != "no":
+            return "automatic_reply"
+        return "reply"
+
+    @classmethod
+    def _event_datetime(cls, value: object) -> tuple[datetime | None, str]:
+        if not isinstance(value, dict):
+            return None, "UTC"
+        return cls._datetime(value.get("dateTime")), cls._string(value.get("timeZone"), 100) or "UTC"
+
+    @staticmethod
+    def _datetime(value: object) -> datetime | None:
+        if not isinstance(value, str) or len(value) > 64:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+    @classmethod
+    def _location(cls, value: object) -> str | None:
+        if not isinstance(value, dict):
+            return None
+        return cls._string(value.get("displayName"), 500)
+
+    @classmethod
+    def _meeting_url(cls, value: object) -> str | None:
+        if not isinstance(value, dict):
+            return None
+        url = cls._string(value.get("joinUrl"), 2048)
+        if url is None:
+            return None
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or parsed.hostname is None:
+            return None
+        return url
+
+    @staticmethod
+    def _domain(email: str) -> str:
+        return email.rpartition("@")[2].casefold()
+
+    @staticmethod
+    def _aware(value: datetime) -> datetime:
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+    @staticmethod
+    def _iso(value: datetime) -> str:
+        aware = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+        return aware.isoformat().replace("+00:00", "Z")

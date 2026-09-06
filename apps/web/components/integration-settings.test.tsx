@@ -87,6 +87,42 @@ const hubspotConnection = {
   simulationOnly: false,
 };
 
+const microsoftCatalog = {
+  connectors: [
+    {
+      connectorKey: "microsoft_365",
+      displayName: "Microsoft 365",
+      providerFamily: "mailbox_calendar",
+      supportedCapabilities: ["send_email", "reconcile_email", "read_calendar"],
+      authenticationType: "oauth2_authorisation_code",
+      executionRiskClasses: ["external_customer_facing"],
+      configurationSchemaVersion: 1,
+      executionMode: "live",
+      available: true,
+      simulationOnly: false,
+    },
+  ],
+  executionMode: "live",
+  externalActionsEnabled: true,
+};
+
+const microsoftConnection = {
+  ...connection,
+  id: "microsoft-connection-1",
+  connectorKey: "microsoft_365",
+  displayName: "Microsoft 365",
+  connectionStatus: "reauthorisation_required",
+  supportedCapabilities: ["send_email", "reconcile_email", "read_calendar"],
+  capabilityState: ["send_email", "reconcile_email", "read_calendar"],
+  externalAccountId: "microsoft-user-1",
+  externalAccountName: "Alex Morgan",
+  externalAccountEmail: "alex@example.test",
+  externalTenantId: "11111111-2222-4333-8444-555555555555",
+  grantedScopes: ["Mail.Send", "Mail.Read", "Calendars.ReadBasic"],
+  executionMode: "live",
+  simulationOnly: false,
+};
+
 describe("IntegrationSettings", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -192,5 +228,41 @@ describe("IntegrationSettings", () => {
       screen.getAllByText("Sales pipeline — Qualified").length,
     ).toBeGreaterThan(0);
     expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("explains Microsoft access and shows reauthorisation without provider internals", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(microsoftCatalog))
+      .mockResolvedValueOnce(
+        response({ items: [microsoftConnection], total: 1 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: "connection_reauthorisation_required",
+            message: "Microsoft 365 needs to be reconnected.",
+            requestId: "synthetic-request",
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<IntegrationSettings />);
+    expect(
+      (await screen.findAllByText("Reconnect required")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("alex@example.test")).toBeVisible();
+    expect(screen.getByText("Email: Reconnect required")).toBeVisible();
+    expect(screen.getByText("Calendar: Reconnect required")).toBeVisible();
+    expect(screen.queryByText(/11111111-2222/)).toBeNull();
+    expect(screen.queryByText(/Mail\.Read/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+    expect(screen.getByText("Before you continue")).toBeVisible();
+    expect(screen.getByText(/reviewed and approved/i)).toBeVisible();
+    expect(screen.getByText(/Event bodies and attachments/i)).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

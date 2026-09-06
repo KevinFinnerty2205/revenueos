@@ -58,6 +58,7 @@ const featureFlagLabels: Record<string, string> = {
   actionExecution: "Explicit Action execution",
   mockConnectors: "Mock simulation connectors",
   hubspotCrm: "HubSpot CRM sync",
+  microsoft365: "Microsoft 365 sales integration",
   dataExport: "Organisation data export",
   organisationDeletion: "Organisation deletion",
 };

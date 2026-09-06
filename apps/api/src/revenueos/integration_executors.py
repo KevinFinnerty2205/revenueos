@@ -35,7 +35,7 @@ class ConnectorDefinition:
     display_name: str
     capabilities: tuple[ConnectorCapability, ...]
     risk_classes: tuple[ActionRiskClass, ...]
-    provider_family: Literal["mock", "crm"] = "mock"
+    provider_family: Literal["mock", "crm", "mailbox_calendar"] = "mock"
     authentication_type: Literal["mock_local", "oauth2_authorisation_code"] = "mock_local"
     execution_mode: Literal["simulation", "live"] = "simulation"
     simulation_only: bool = True
@@ -80,6 +80,20 @@ CONNECTOR_DEFINITIONS: dict[ConnectorKey, ConnectorDefinition] = {
         execution_mode="live",
         simulation_only=False,
     ),
+    ConnectorKey.MICROSOFT_365: ConnectorDefinition(
+        connector_key=ConnectorKey.MICROSOFT_365,
+        display_name="Microsoft 365",
+        capabilities=(
+            ConnectorCapability.SEND_EMAIL,
+            ConnectorCapability.RECONCILE_EMAIL,
+            ConnectorCapability.READ_CALENDAR,
+        ),
+        risk_classes=(ActionRiskClass.EXTERNAL_CUSTOMER_FACING,),
+        provider_family="mailbox_calendar",
+        authentication_type="oauth2_authorisation_code",
+        execution_mode="live",
+        simulation_only=False,
+    ),
 }
 
 
@@ -107,6 +121,9 @@ class ExecutorConnectionContext:
     connection_id: UUID
     credential_reference: str | None
     execution_mode: Literal["simulation", "live"]
+    external_account_id: str | None = None
+    external_account_email: str | None = None
+    external_tenant_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -523,6 +540,7 @@ class ActionExecutorRegistry:
         executors: tuple[ActionExecutor, ...] | None = None,
         *,
         live_executor: ActionExecutor | None = None,
+        live_executors: tuple[ActionExecutor, ...] = (),
     ) -> None:
         selected = executors or (
             MockEmailExecutor(),
@@ -532,6 +550,7 @@ class ActionExecutorRegistry:
         )
         if live_executor is not None:
             selected = (*selected, live_executor)
+        selected = (*selected, *live_executors)
         self._executors = {item.definition.connector_key: item for item in selected}
 
     def get(self, connector_key: ConnectorKey) -> ActionExecutor:

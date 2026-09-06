@@ -1,5 +1,15 @@
 # Interaction domain architecture
 
+## WO-040 Microsoft Calendar linkage
+
+The provider-neutral Microsoft calendar projection can expose a bounded upcoming
+event inside existing Interaction workflows. Exact existing Contact identity may
+provide Account context; multiple active Opportunities require review. A user must
+explicitly link the event to an existing same-tenant Interaction. Calendar sync never
+creates an Interaction, Meeting, Evidence or customer record automatically, and a
+private event retains no subject, participants, location or join URL. See the
+[Microsoft 365 integration architecture](microsoft-365-sales-integration.md).
+
 ## WO-031 Event linkage
 
 Interaction now has an optional tenant-scoped `event_id`. A deliberate Event capture
