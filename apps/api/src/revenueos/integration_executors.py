@@ -94,6 +94,20 @@ CONNECTOR_DEFINITIONS: dict[ConnectorKey, ConnectorDefinition] = {
         execution_mode="live",
         simulation_only=False,
     ),
+    ConnectorKey.GOOGLE_WORKSPACE: ConnectorDefinition(
+        connector_key=ConnectorKey.GOOGLE_WORKSPACE,
+        display_name="Google Workspace",
+        capabilities=(
+            ConnectorCapability.SEND_EMAIL,
+            ConnectorCapability.RECONCILE_EMAIL,
+            ConnectorCapability.READ_CALENDAR,
+        ),
+        risk_classes=(ActionRiskClass.EXTERNAL_CUSTOMER_FACING,),
+        provider_family="mailbox_calendar",
+        authentication_type="oauth2_authorisation_code",
+        execution_mode="live",
+        simulation_only=False,
+    ),
 }
 
 

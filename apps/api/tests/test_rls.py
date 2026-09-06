@@ -1754,7 +1754,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  granted_scopes_json)
                             VALUES
                                 (:microsoft_connection_id, :organisation_id,
-                                 'microsoft_365', 'active', :user_id, NULL,
+                                 'google_workspace', 'active', :user_id, NULL,
                                  '["send_email","reconcile_email","read_calendar"]'::json,
                                  :microsoft_account_id, :microsoft_account_name,
                                  :email, :microsoft_tenant_id,
@@ -2041,7 +2041,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             VALUES
                                 (:provider_outbound_operation_id, :organisation_id,
                                  :microsoft_connection_id, :action_id,
-                                 'microsoft_365', :provider_key_hash, 'reconciled',
+                                 'google_workspace', :provider_key_hash, 'reconciled',
                                  :email, :recipient_email, now())
                             """
                         ),
@@ -2065,7 +2065,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                 (:provider_reply_id, :organisation_id,
                                  :microsoft_connection_id,
                                  :provider_outbound_operation_id,
-                                 'microsoft_365', :provider_reply_message_id,
+                                 'google_workspace', :provider_reply_message_id,
                                  :recipient_email, :provider_reply_recipients,
                                  'Synthetic reply', 'Synthetic reply body',
                                  'reply', 'matched', :contact_id, :company_id,
@@ -2091,7 +2091,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  provider_last_modified_at, last_synced_at)
                             VALUES
                                 (:provider_calendar_event_id, :organisation_id,
-                                 :microsoft_connection_id, 'microsoft_365',
+                                 :microsoft_connection_id, 'google_workspace',
                                  :provider_event_id, 'Synthetic customer meeting',
                                  now() + interval '1 day', now() + interval '2 days',
                                  'UTC', :provider_reply_recipients, 'normal',
@@ -2114,7 +2114,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  last_successful_sync_at)
                             VALUES
                                 (:provider_sync_state_id, :organisation_id,
-                                 :microsoft_connection_id, 'microsoft_365',
+                                 :microsoft_connection_id, 'google_workspace',
                                  'calendar', now() - interval '14 days',
                                  now() + interval '90 days', now())
                             """
@@ -4163,7 +4163,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                              sender_email, recipient_email)
                         VALUES
                             (:id, :organisation_id, :connection_id, :action_id,
-                             'microsoft_365', :idempotency_key, 'accepted',
+                             'google_workspace', :idempotency_key, 'accepted',
                              'seller@example.com', 'recipient@example.com')
                         """,
                         {
@@ -4184,7 +4184,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                              kind, match_state, received_at)
                         VALUES
                             (:id, :organisation_id, :connection_id,
-                             :outbound_operation_id, 'microsoft_365',
+                             :outbound_operation_id, 'google_workspace',
                              'cross-tenant-reply', 'recipient@example.com',
                              '[]'::json, 'Reply', 'Body', 'reply',
                              'review_required', now())
@@ -4205,7 +4205,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                              sensitivity, state, match_state, last_synced_at)
                         VALUES
                             (:id, :organisation_id, :connection_id,
-                             'microsoft_365', 'cross-tenant-event', 'Meeting',
+                             'google_workspace', 'cross-tenant-event', 'Meeting',
                              now(), now() + interval '1 hour', 'UTC', '[]'::json,
                              'normal', 'active', 'unmatched', now())
                         """,
@@ -4222,7 +4222,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                              resource_kind, window_start_at, window_end_at)
                         VALUES
                             (:id, :organisation_id, :connection_id,
-                             'microsoft_365', 'mail_inbox',
+                             'google_workspace', 'mail_inbox',
                              now() - interval '1 day', now())
                         """,
                         {

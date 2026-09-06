@@ -83,8 +83,9 @@ grouping work.
 
 ## Known limitations
 
-WO-040 provides inactive production-capable Microsoft mailbox delivery and strongly
-correlated reply detection; Gmail and production activation remain deferred. There is
+WO-040/041 provide inactive production-capable Microsoft and Google Workspace mailbox
+delivery and strongly correlated reply detection; production activation remains
+separately gated. There is
 no general Inbox, LinkedIn messaging, cold calling,
 multi-sender/domain rotation, warm-up/evasion tooling, autonomous SDR or generic
 marketing automation. WO-031 Events may hand off only explicitly selected canonical

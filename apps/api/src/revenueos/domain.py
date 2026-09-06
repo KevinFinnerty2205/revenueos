@@ -384,6 +384,7 @@ class ConnectorKey(StrEnum):
     MOCK_TASK = "mock_task"
     HUBSPOT = "hubspot"
     MICROSOFT_365 = "microsoft_365"
+    GOOGLE_WORKSPACE = "google_workspace"
 
 
 class ConnectorCapability(StrEnum):

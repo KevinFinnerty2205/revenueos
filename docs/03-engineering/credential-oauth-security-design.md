@@ -1,7 +1,9 @@
 # Credential and OAuth security design
 
 WO-022 defined the abstraction. WO-025C implements it for HubSpot with server-side
-OAuth and AES-256-GCM database envelopes. Mock connections still use no credential.
+OAuth and AES-256-GCM database envelopes. WO-040/041 reuse it for seller-bound
+Microsoft 365 and Google Workspace connections with encrypted PKCE state and
+row-locked refresh. Mock connections still use no credential.
 
 ## Boundary
 
@@ -21,6 +23,16 @@ only inside the adapter. A 32-byte environment master key is required; associate
 data binds every ciphertext to tenant, connection and credential ID. Refresh rotates
 the envelope and disconnect attempts provider revocation before local deletion.
 See [HubSpot OAuth security](crm-oauth-credential-security.md).
+
+## Mailbox providers
+
+Microsoft 365 and Google Workspace state is user/organisation bound, hashed,
+single-use and short-lived. PKCE verifiers are encrypted and erased after a successful
+callback; signed OIDC nonce/audience/issuer/account claims prevent callback account
+substitution. One non-revoked mailbox provider is allowed per organisation/user.
+Google supports best-effort provider revocation on disconnect and organisation
+erasure; local encrypted credential deletion always wins. See the
+[Google Workspace architecture](google-workspace-sales-integration.md).
 
 ## Requirements for any additional live connector
 

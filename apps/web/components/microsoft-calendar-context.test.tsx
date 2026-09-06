@@ -68,6 +68,9 @@ describe("MicrosoftCalendarContext", () => {
           jsonResponse({ ...linkedEvent, interactionId: null }),
         );
       }
+      if (String(input).includes("/integrations/google/")) {
+        return Promise.resolve(jsonResponse({ items: [], total: 0 }));
+      }
       return Promise.resolve(jsonResponse({ items: [linkedEvent], total: 1 }));
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -98,20 +101,24 @@ describe("MicrosoftCalendarContext", () => {
   it("does not offer relationship linkage for private events", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(() =>
+      vi.fn((input: RequestInfo | URL) =>
         Promise.resolve(
-          jsonResponse({
-            items: [
-              {
-                ...linkedEvent,
-                id: "private-event-1",
-                title: "Private event",
-                matchState: "private",
-                interactionId: null,
-              },
-            ],
-            total: 1,
-          }),
+          jsonResponse(
+            String(input).includes("/integrations/google/")
+              ? { items: [], total: 0 }
+              : {
+                  items: [
+                    {
+                      ...linkedEvent,
+                      id: "private-event-1",
+                      title: "Private event",
+                      matchState: "private",
+                      interactionId: null,
+                    },
+                  ],
+                  total: 1,
+                },
+          ),
         ),
       ),
     );

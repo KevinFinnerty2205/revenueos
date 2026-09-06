@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
+from revenueos.google_services import GoogleSyncService
 from revenueos.integration_contracts import (
     ActionExecutionDetailResponse,
     ActionExecutionListResponse,
@@ -33,9 +34,16 @@ from revenueos.integration_contracts import (
     OAuthCallbackRequest,
     OAuthStartResponse,
     OrganisationConnectionResponse,
+    ProviderCalendarEventListResponse,
+    ProviderCalendarEventResponse,
+    ProviderCalendarInteractionLinkRequest,
+    ProviderReplyListResponse,
+    ProviderSyncResponse,
+    ProviderSyncStatusResponse,
 )
 from revenueos.integration_dependencies import (
     get_action_execution_service,
+    get_google_sync_service,
     get_integration_service,
     get_microsoft_sync_service,
 )
@@ -46,6 +54,7 @@ router = APIRouter(prefix="/api/v1", tags=["integrations"])
 Integrations = Annotated[IntegrationService, Depends(get_integration_service)]
 Executions = Annotated[ActionExecutionService, Depends(get_action_execution_service)]
 MicrosoftSync = Annotated[MicrosoftSyncService, Depends(get_microsoft_sync_service)]
+GoogleSync = Annotated[GoogleSyncService, Depends(get_google_sync_service)]
 
 
 @router.get("/integrations", response_model=IntegrationCatalogResponse)
@@ -135,6 +144,75 @@ async def complete_microsoft_oauth(
     service: Integrations,
 ) -> OrganisationConnectionResponse:
     return await service.complete_microsoft_oauth(request)
+
+
+@router.post("/integrations/google/oauth/start", response_model=OAuthStartResponse)
+async def start_google_oauth(service: Integrations) -> OAuthStartResponse:
+    return await service.start_google_oauth()
+
+
+@router.post(
+    "/integrations/google/oauth/callback",
+    response_model=OrganisationConnectionResponse,
+)
+async def complete_google_oauth(
+    request: OAuthCallbackRequest,
+    service: Integrations,
+) -> OrganisationConnectionResponse:
+    return await service.complete_google_oauth(request)
+
+
+@router.post(
+    "/integrations/google/connections/{connection_id}/sync",
+    response_model=ProviderSyncResponse,
+)
+async def sync_google_connection(
+    connection_id: UUID,
+    service: GoogleSync,
+) -> ProviderSyncResponse:
+    return await service.sync(connection_id)
+
+
+@router.get(
+    "/integrations/google/connections/{connection_id}/sync-status",
+    response_model=ProviderSyncStatusResponse,
+)
+async def google_sync_status(
+    connection_id: UUID,
+    service: GoogleSync,
+) -> ProviderSyncStatusResponse:
+    return await service.status(connection_id)
+
+
+@router.get("/integrations/google/replies", response_model=ProviderReplyListResponse)
+async def list_google_replies(
+    service: GoogleSync,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> ProviderReplyListResponse:
+    return await service.list_replies(limit=limit)
+
+
+@router.get(
+    "/integrations/google/calendar/events",
+    response_model=ProviderCalendarEventListResponse,
+)
+async def list_google_calendar_events(
+    service: GoogleSync,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> ProviderCalendarEventListResponse:
+    return await service.list_calendar_events(limit=limit)
+
+
+@router.put(
+    "/integrations/google/calendar/events/{event_id}/interaction",
+    response_model=ProviderCalendarEventResponse,
+)
+async def link_google_calendar_interaction(
+    event_id: UUID,
+    request: ProviderCalendarInteractionLinkRequest,
+    service: GoogleSync,
+) -> ProviderCalendarEventResponse:
+    return await service.link_interaction(event_id, request.interaction_id)
 
 
 @router.post(

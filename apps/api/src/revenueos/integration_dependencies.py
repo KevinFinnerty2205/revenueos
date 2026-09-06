@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.config import Settings, get_settings
 from revenueos.database import get_db, set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.google_services import GoogleSyncService
 from revenueos.integration_services import (
     ActionExecutionService,
     IntegrationService,
@@ -46,3 +47,14 @@ async def get_microsoft_sync_service(
     if not await membership_is_active(session, tenant):
         raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
     yield MicrosoftSyncService(session, tenant, settings)
+
+
+async def get_google_sync_service(
+    session: AsyncSession = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+    settings: Settings = Depends(get_settings),
+) -> AsyncIterator[GoogleSyncService]:
+    await set_tenant_database_context(session, tenant.organisation_id)
+    if not await membership_is_active(session, tenant):
+        raise PublicAPIError("forbidden", "You do not have permission to perform this action.", 403)
+    yield GoogleSyncService(session, tenant, settings)

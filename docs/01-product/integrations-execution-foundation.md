@@ -1,7 +1,8 @@
 # Integrations and execution foundation
 
-**Status:** WO-022 simulation foundation, WO-025C feature-gated HubSpot live CRM and
-WO-040 inactive production-capable Microsoft mail/calendar.
+**Status:** WO-022 simulation foundation, WO-025C feature-gated HubSpot live CRM,
+WO-040 inactive production-capable Microsoft mail/calendar and WO-041 inactive
+production-capable Google Workspace mail/calendar.
 
 WO-022 lets an organisation administrator enable deterministic mock email,
 calendar, CRM and task connections. An active organisation member may then take
@@ -18,16 +19,16 @@ WO-029 adds one-to-one `personalized_outreach` Actions to the same Mock Email
 simulation path. It binds the sender to the authenticated user's connection and the
 recipient to a canonical Contact, shows the exact approved message and revalidates
 Engage entitlement, policy, suppression, address/version and membership at preview,
-confirmation and worker execution. WO-040 now supplies the fail-closed Microsoft
-adapter; Gmail remains deferred.
+confirmation and worker execution. WO-040/041 now supply fail-closed Microsoft and
+Google Workspace adapters through the same provider-neutral records.
 
 WO-030 creates per-recipient Campaign Outreach/Action records and integrates a
 leased due-step pass into the existing worker. Review mode stops before approval.
 Bounded auto-send may call the same approval, preview and confirmation services only
 under versioned administrator policy plus explicit immutable Campaign launch. The
 Action worker remains the sole adapter executor and unknown provider state halts the
-sequence. Mock Email remains the deterministic CI capability. Microsoft is the only
-real-mail adapter and production still fails closed until its activation gates pass.
+sequence. Mock Email remains the deterministic CI capability. Microsoft and Google
+Workspace are real-mail adapters; both fail closed until separate activation gates pass.
 
 ## User promise
 
@@ -36,10 +37,10 @@ real-mail adapter and production still fails closed until its activation gates p
   values, owner and due date come from the approved Action version.
 - Customer-facing email/calendar work, external data mutation and internal task
   creation retain their declared risk class through preview and execution.
-- Simulation views/results say that no external action occurred; Microsoft views use
-  accurate accepted/unknown/reconciled wording.
+- Simulation views/results say that no external action occurred; Microsoft and Google
+  views use accurate accepted/unknown/reconciled wording.
 - Retrying a confirmation cannot create a second logical side effect, and an
-  ambiguous Microsoft write is not resent.
+  ambiguous mailbox write is not resent.
 
 Administrators create, test and revoke connections. Members may see and use an
 active authorised connection but cannot manage it. Revocation invalidates open
@@ -64,8 +65,8 @@ currency rules plus execute-time external reads prevent unsafe overwrite. See
 
 ## Known limitations
 
-There is no Gmail, Google Workspace, Salesforce, Dynamics, Slack, Teams or external
-task-system connection. Microsoft Graph mail/calendar and HubSpot CRM adapters are
+There is no Salesforce, Dynamics, Slack, Teams or external task-system connection.
+Microsoft Graph, Google Workspace mail/calendar and HubSpot CRM adapters are
 production-capable but inactive and still require target/provider gates. There is no
 broad webhook/inbound sync, browser automation, autonomous execution or direct tool
 use by AI.

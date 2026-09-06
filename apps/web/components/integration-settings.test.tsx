@@ -123,6 +123,46 @@ const microsoftConnection = {
   simulationOnly: false,
 };
 
+const googleCatalog = {
+  connectors: [
+    {
+      connectorKey: "google_workspace",
+      displayName: "Google Workspace",
+      providerFamily: "mailbox_calendar",
+      supportedCapabilities: ["send_email", "reconcile_email", "read_calendar"],
+      authenticationType: "oauth2_authorisation_code",
+      executionRiskClasses: ["external_customer_facing"],
+      configurationSchemaVersion: 1,
+      executionMode: "live",
+      available: true,
+      simulationOnly: false,
+    },
+  ],
+  executionMode: "live",
+  externalActionsEnabled: true,
+};
+
+const googleConnection = {
+  ...connection,
+  id: "google-connection-1",
+  connectorKey: "google_workspace",
+  displayName: "Google Workspace",
+  connectionStatus: "active",
+  supportedCapabilities: ["send_email", "reconcile_email", "read_calendar"],
+  capabilityState: ["send_email", "reconcile_email", "read_calendar"],
+  externalAccountId: "google-user-1",
+  externalAccountName: "Alex Morgan",
+  externalAccountEmail: "alex@workspace.example",
+  externalTenantId: "workspace.example",
+  grantedScopes: [
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/calendar.events.owned.readonly",
+  ],
+  executionMode: "live",
+  simulationOnly: false,
+};
+
 describe("IntegrationSettings", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -260,7 +300,7 @@ describe("IntegrationSettings", () => {
     expect(screen.queryByText(/Mail\.Read/)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
-    const permissionGroup = screen.getByRole("group", {
+    const permissionGroup = screen.getByRole("dialog", {
       name: "Before you continue",
     });
     expect(permissionGroup).toBeVisible();
@@ -268,13 +308,60 @@ describe("IntegrationSettings", () => {
     expect(
       screen.getByText(/Microsoft grants mail read access/i),
     ).toBeVisible();
-    expect(screen.getByText(/Unrelated mail is not stored/i)).toBeVisible();
+    expect(
+      screen.getByText(/Unrelated mail content is not read or stored/i),
+    ).toBeVisible();
     expect(screen.getByText(/Event bodies and attachments/i)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Reconnect" })).toHaveFocus(),
     );
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("explains restricted Google reply access and exposes mailbox sync health", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(googleCatalog))
+      .mockResolvedValueOnce(response({ items: [googleConnection], total: 1 }))
+      .mockResolvedValueOnce(
+        response({
+          connectionId: "google-connection-1",
+          lastSuccessfulSyncAt: "2026-09-06T01:00:00Z",
+          lastErrorCategory: null,
+          state: "healthy",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<IntegrationSettings />);
+    expect(await screen.findByText("alex@workspace.example")).toBeVisible();
+    expect(screen.getByText("Replies: Connected")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByText(/Last sync:/)).toHaveTextContent("06/09/2026"),
+    );
+
+    const reconnect = screen.getByRole("button", { name: "Reconnect" });
+    fireEvent.click(reconnect);
+    const permissionDialog = screen.getByRole("dialog", {
+      name: "Before you continue",
+    });
+    expect(permissionDialog).toBeVisible();
+    expect(
+      screen.getByText(/Google grants restricted Gmail read-only access/i),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        /scans a bounded window of Inbox and Sent message metadata/i,
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(/your primary work calendar/i)).toBeVisible();
+    expect(screen.queryByText(/gmail\.readonly/i)).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByText("Before you continue")).toHaveFocus(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(reconnect).toHaveFocus());
   });
 
   it("returns keyboard focus after cancelling Microsoft disconnect", async () => {
@@ -309,7 +396,7 @@ describe("IntegrationSettings", () => {
     });
     fireEvent.click(disconnect);
     expect(
-      screen.getByRole("group", { name: "Disconnect Microsoft 365?" }),
+      screen.getByRole("dialog", { name: "Disconnect Microsoft 365?" }),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Keep connected" }));
     await waitFor(() => expect(disconnect).toHaveFocus());

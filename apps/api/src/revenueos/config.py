@@ -253,6 +253,8 @@ class Settings(BaseSettings):
     feature_hubspot_crm_enabled: bool = False
     feature_microsoft_365_enabled: bool = False
     microsoft_production_activation_approved: bool = False
+    feature_google_workspace_enabled: bool = False
+    google_workspace_production_activation_approved: bool = False
     feature_native_crm_enabled: bool = True
     feature_native_pipeline_enabled: bool = True
     feature_sales_analytics_enabled: bool = True
@@ -304,6 +306,24 @@ class Settings(BaseSettings):
     microsoft_calendar_future_days: int = Field(default=90, ge=1, le=365)
     microsoft_sync_interval_seconds: int = Field(default=300, ge=60, le=86_400)
     microsoft_max_response_bytes: int = Field(default=1_000_000, ge=10_000, le=5_000_000)
+    google_client_id: str | None = Field(default=None, min_length=8, max_length=255)
+    google_client_secret: SecretStr | None = None
+    google_oauth_redirect_uri: str | None = Field(default=None, max_length=2048)
+    google_authorisation_base_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
+    google_token_base_url: str = "https://oauth2.googleapis.com/token"
+    google_revoke_url: str = "https://oauth2.googleapis.com/revoke"
+    google_openid_configuration_url: str = "https://accounts.google.com/.well-known/openid-configuration"
+    google_gmail_base_url: str = "https://gmail.googleapis.com/gmail/v1"
+    google_calendar_base_url: str = "https://www.googleapis.com/calendar/v3"
+    google_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    google_read_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    google_write_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
+    google_oauth_state_ttl_seconds: int = Field(default=600, ge=120, le=1800)
+    google_mail_sync_lookback_days: int = Field(default=30, ge=1, le=90)
+    google_calendar_past_days: int = Field(default=14, ge=1, le=90)
+    google_calendar_future_days: int = Field(default=90, ge=1, le=365)
+    google_sync_interval_seconds: int = Field(default=300, ge=60, le=86_400)
+    google_max_response_bytes: int = Field(default=1_000_000, ge=10_000, le=5_000_000)
     connector_credential_master_key: SecretStr | None = None
     ai_provider_name: AIProviderName = Field(
         default="mock",
@@ -693,6 +713,40 @@ class Settings(BaseSettings):
             from revenueos.credential_store import EncryptedDatabaseCredentialStore
 
             EncryptedDatabaseCredentialStore.decode_master_key(self.connector_credential_master_key.get_secret_value())
+        if self.feature_google_workspace_enabled:
+            if not (self.feature_integrations_enabled and self.feature_action_execution_enabled):
+                raise ValueError("Google Workspace requires Integrations and Action Execution feature flags.")
+            if not all(
+                (
+                    self.google_client_id,
+                    self.google_client_secret,
+                    self.google_oauth_redirect_uri,
+                    self.connector_credential_master_key,
+                )
+            ):
+                raise ValueError(
+                    "Google Workspace requires client credentials, an exact redirect URI and an encryption master key."
+                )
+            assert self.google_oauth_redirect_uri is not None
+            if self.environment == "production":
+                if not self.google_workspace_production_activation_approved:
+                    raise ValueError("Production Google Workspace activation requires explicit owner approval.")
+                if not self.google_oauth_redirect_uri.startswith("https://"):
+                    raise ValueError("Production Google OAuth requires an HTTPS redirect URI.")
+            official_endpoints = {
+                self.google_authorisation_base_url: "https://accounts.google.com/o/oauth2/v2/auth",
+                self.google_token_base_url: "https://oauth2.googleapis.com/token",
+                self.google_revoke_url: "https://oauth2.googleapis.com/revoke",
+                self.google_openid_configuration_url: ("https://accounts.google.com/.well-known/openid-configuration"),
+                self.google_gmail_base_url: "https://gmail.googleapis.com/gmail/v1",
+                self.google_calendar_base_url: "https://www.googleapis.com/calendar/v3",
+            }
+            if any(actual != expected for actual, expected in official_endpoints.items()):
+                raise ValueError("Google endpoints must use the allow-listed official HTTPS hosts.")
+            assert self.connector_credential_master_key is not None
+            from revenueos.credential_store import EncryptedDatabaseCredentialStore
+
+            EncryptedDatabaseCredentialStore.decode_master_key(self.connector_credential_master_key.get_secret_value())
         return self
 
     @property
@@ -824,6 +878,7 @@ class Settings(BaseSettings):
             "mockConnectors": self.feature_mock_connectors_enabled,
             "hubspotCrm": self.feature_hubspot_crm_enabled,
             "microsoft365": self.feature_microsoft_365_enabled,
+            "googleWorkspace": self.feature_google_workspace_enabled,
             "nativeCrm": self.feature_native_crm_enabled,
             "nativePipeline": self.feature_native_pipeline_enabled,
             "salesAnalytics": self.feature_sales_analytics_enabled,

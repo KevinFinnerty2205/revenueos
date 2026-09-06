@@ -359,8 +359,17 @@ class CampaignRepository:
         user_id: UUID,
         *,
         microsoft_enabled: bool = False,
+        google_enabled: bool = False,
     ) -> IntegrationConnection | None:
-        connector_keys = ("microsoft_365", "mock_email") if microsoft_enabled else ("mock_email",)
+        connector_keys = tuple(
+            key
+            for key, enabled in (
+                ("microsoft_365", microsoft_enabled),
+                ("google_workspace", google_enabled),
+                ("mock_email", True),
+            )
+            if enabled
+        )
         return cast(
             IntegrationConnection | None,
             await self.session.scalar(
@@ -371,7 +380,7 @@ class CampaignRepository:
                     IntegrationConnection.connection_status == "active",
                     IntegrationConnection.created_by_user_id == user_id,
                 )
-                .order_by(case((IntegrationConnection.connector_key == "microsoft_365", 0), else_=1))
+                .order_by(case((IntegrationConnection.connector_key != "mock_email", 0), else_=1))
                 .limit(1)
             ),
         )

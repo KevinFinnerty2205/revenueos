@@ -1,7 +1,8 @@
 # Personalised one-to-one outreach
 
 - **Status:** implemented by WO-029 behind the `engage` organisation entitlement
-- **Channel:** email simulation outside production; no production mailbox provider
+- **Channel:** email simulation outside production; inactive production-capable
+  Microsoft 365 and Google Workspace adapters
 - **Boundary:** one canonical Contact, one sender and one reviewed message at a time
 
 ## Product promise
@@ -118,9 +119,9 @@ reconciliation are deferred with production sending.
 
 ## Current limitations and handoff
 
-WO-029 itself has no provider OAuth. WO-040 adds inactive Microsoft OAuth, reviewed
-send and strongly correlated replies without delivered/read semantics. Gmail, an
-unsubscribe route, bulk recipient import, LinkedIn/call automation,
+WO-029 itself has no provider OAuth. WO-040/041 add inactive Microsoft and Google
+Workspace OAuth, reviewed send and strongly correlated replies without delivered/read
+semantics. An unsubscribe route, bulk recipient import, LinkedIn/call automation,
 tracking, predictive send time or arbitrary recipient address. HubSpot logging is not
 performed: seller outreach stays inside RevenueOS until a separately reviewed
 CRM-activity contract exists.

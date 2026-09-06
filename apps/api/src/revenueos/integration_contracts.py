@@ -265,7 +265,7 @@ class OAuthCallbackRequest(StrictIntegrationModel):
         return self
 
 
-class MicrosoftSyncResourceResponse(APIModel):
+class ProviderSyncResourceResponse(APIModel):
     resource_kind: Literal["mail_sent", "mail_inbox", "calendar"]
     processed: int
     retained: int
@@ -273,20 +273,20 @@ class MicrosoftSyncResourceResponse(APIModel):
     safe_message: str
 
 
-class MicrosoftSyncResponse(APIModel):
+class ProviderSyncResponse(APIModel):
     connection_id: UUID
     synced_at: datetime
-    resources: list[MicrosoftSyncResourceResponse]
+    resources: list[ProviderSyncResourceResponse]
 
 
-class MicrosoftSyncStatusResponse(APIModel):
+class ProviderSyncStatusResponse(APIModel):
     connection_id: UUID
     last_successful_sync_at: datetime | None
     last_error_category: str | None
     state: Literal["not_started", "healthy", "degraded"]
 
 
-class MicrosoftReplyResponse(APIModel):
+class ProviderReplyResponse(APIModel):
     id: UUID
     kind: Literal["reply", "automatic_reply", "ndr"]
     match_state: Literal["matched", "review_required"]
@@ -299,12 +299,12 @@ class MicrosoftReplyResponse(APIModel):
     received_at: datetime
 
 
-class MicrosoftReplyListResponse(APIModel):
-    items: list[MicrosoftReplyResponse]
+class ProviderReplyListResponse(APIModel):
+    items: list[ProviderReplyResponse]
     total: int
 
 
-class MicrosoftCalendarEventResponse(APIModel):
+class ProviderCalendarEventResponse(APIModel):
     id: UUID
     title: str
     start_at: datetime
@@ -323,13 +323,25 @@ class MicrosoftCalendarEventResponse(APIModel):
     last_synced_at: datetime
 
 
-class MicrosoftCalendarEventListResponse(APIModel):
-    items: list[MicrosoftCalendarEventResponse]
+class ProviderCalendarEventListResponse(APIModel):
+    items: list[ProviderCalendarEventResponse]
     total: int
 
 
-class MicrosoftCalendarInteractionLinkRequest(StrictIntegrationModel):
+class ProviderCalendarInteractionLinkRequest(StrictIntegrationModel):
     interaction_id: UUID | None
+
+
+# Compatibility aliases for the WO-040 API and existing clients. New providers
+# use the provider-neutral names above; response shapes remain unchanged.
+MicrosoftSyncResourceResponse = ProviderSyncResourceResponse
+MicrosoftSyncResponse = ProviderSyncResponse
+MicrosoftSyncStatusResponse = ProviderSyncStatusResponse
+MicrosoftReplyResponse = ProviderReplyResponse
+MicrosoftReplyListResponse = ProviderReplyListResponse
+MicrosoftCalendarEventResponse = ProviderCalendarEventResponse
+MicrosoftCalendarEventListResponse = ProviderCalendarEventListResponse
+MicrosoftCalendarInteractionLinkRequest = ProviderCalendarInteractionLinkRequest
 
 
 CRMObjectType = Literal["company", "contact", "deal"]

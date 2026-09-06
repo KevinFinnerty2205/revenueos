@@ -160,6 +160,9 @@ This is the canonical product and engineering documentation index. Documents dis
 149. [WO-040: Microsoft 365 Sales Integration](07-sprints/wo-040-microsoft-365-sales-integration.md) — seller-bound Outlook mail/calendar adapter; production-capable and inactive
 150. [Microsoft 365 sales integration architecture](03-engineering/microsoft-365-sales-integration.md) — OAuth, scopes, send/reply/calendar reconciliation, privacy and activation gates
 151. [ADR 0070: Seller-delegated Microsoft Graph with bounded delta reconciliation](08-decisions/0070-microsoft-delegated-delta-sales-integration.md)
+152. [WO-041: Google Workspace Sales Integration](07-sprints/wo-041-google-workspace-sales-integration.md) — seller-bound Gmail/Calendar adapter; production-capable and inactive
+153. [Google Workspace sales integration architecture](03-engineering/google-workspace-sales-integration.md) — OAuth scopes, restricted-data boundary, send/reply/calendar reconciliation and activation gates
+154. [ADR 0071: Google Workspace incremental integration](08-decisions/0071-google-workspace-restricted-scope-incremental-integration.md) — Workspace-only OAuth, least privilege, bounded polling and one-primary-mailbox policy
 
 ## First design-partner launch package
 

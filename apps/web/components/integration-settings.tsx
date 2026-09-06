@@ -8,8 +8,8 @@ import type {
   CRMFieldMapping,
   CRMStageConfiguration,
   IntegrationCatalogResponse,
-  MicrosoftSyncResponse,
-  MicrosoftSyncStatus,
+  ProviderSyncResponse,
+  ProviderSyncStatus,
   OAuthStartResponse,
   OrganisationConnection,
 } from "@revenueos/shared";
@@ -49,17 +49,45 @@ export function IntegrationSettings() {
   const [busy, setBusy] = useState<ConnectorKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [microsoftConsent, setMicrosoftConsent] = useState(false);
-  const [disconnecting, setDisconnecting] = useState<string | null>(null);
-  const [syncStatus, setSyncStatus] = useState<MicrosoftSyncStatus | null>(
+  const [mailboxConsent, setMailboxConsent] = useState<ConnectorKey | null>(
     null,
   );
-  const microsoftTriggerRef = useRef<HTMLButtonElement>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<
+    Record<string, ProviderSyncStatus>
+  >({});
+  const mailboxTriggerRef = useRef<HTMLButtonElement>(null);
   const disconnectTriggerRef = useRef<HTMLButtonElement>(null);
+  const mailboxDialogTitleRef = useRef<HTMLParagraphElement>(null);
+  const disconnectDialogTitleRef = useRef<HTMLParagraphElement>(null);
 
-  function closeMicrosoftConsent() {
-    setMicrosoftConsent(false);
-    window.requestAnimationFrame(() => microsoftTriggerRef.current?.focus());
+  useEffect(() => {
+    if (!mailboxConsent) return;
+    window.requestAnimationFrame(() => mailboxDialogTitleRef.current?.focus());
+  }, [mailboxConsent]);
+
+  useEffect(() => {
+    if (!disconnecting) return;
+    window.requestAnimationFrame(() =>
+      disconnectDialogTitleRef.current?.focus(),
+    );
+  }, [disconnecting]);
+
+  function closeMailboxConsent() {
+    setMailboxConsent(null);
+    window.requestAnimationFrame(() => mailboxTriggerRef.current?.focus());
+  }
+
+  function openMailboxConsent(
+    connectorKey: ConnectorKey,
+    trigger?: HTMLButtonElement,
+  ) {
+    mailboxTriggerRef.current =
+      trigger ??
+      (document.activeElement instanceof HTMLButtonElement
+        ? document.activeElement
+        : null);
+    setMailboxConsent(connectorKey);
   }
 
   function closeDisconnectConfirmation() {
@@ -106,31 +134,46 @@ export function IntegrationSettings() {
   }, []);
 
   useEffect(() => {
-    const connection = connections.find(
+    const mailboxConnections = connections.filter(
       (item) =>
-        item.connectorKey === "microsoft_365" &&
+        (item.connectorKey === "microsoft_365" ||
+          item.connectorKey === "google_workspace") &&
         item.connectionStatus !== "revoked",
     );
-    if (!connection) return;
+    if (!mailboxConnections.length) return;
     const controller = new AbortController();
-    apiRequest<MicrosoftSyncStatus>(
-      `/api/v1/integrations/microsoft/connections/${connection.id}/sync-status`,
-      { signal: controller.signal },
+    Promise.all(
+      mailboxConnections.map(async (connection) => {
+        const provider =
+          connection.connectorKey === "google_workspace"
+            ? "google"
+            : "microsoft";
+        return apiRequest<ProviderSyncStatus>(
+          `/api/v1/integrations/${provider}/connections/${connection.id}/sync-status`,
+          { signal: controller.signal },
+        );
+      }),
     )
-      .then(setSyncStatus)
-      .catch(() => setSyncStatus(null));
+      .then((items) =>
+        setSyncStatus(
+          Object.fromEntries(items.map((item) => [item.connectionId, item])),
+        ),
+      )
+      .catch(() => setSyncStatus({}));
     return () => controller.abort();
   }, [connections]);
 
   async function connect(
     definition: ConnectorDefinition,
-    microsoftConsentConfirmed = false,
+    mailboxConsentConfirmed = false,
+    trigger?: HTMLButtonElement,
   ) {
     if (
-      definition.connectorKey === "microsoft_365" &&
-      !microsoftConsentConfirmed
+      (definition.connectorKey === "microsoft_365" ||
+        definition.connectorKey === "google_workspace") &&
+      !mailboxConsentConfirmed
     ) {
-      setMicrosoftConsent(true);
+      openMailboxConsent(definition.connectorKey, trigger);
       setError(null);
       setMessage(null);
       return;
@@ -141,11 +184,17 @@ export function IntegrationSettings() {
     try {
       if (
         definition.connectorKey === "hubspot" ||
-        definition.connectorKey === "microsoft_365"
+        definition.connectorKey === "microsoft_365" ||
+        definition.connectorKey === "google_workspace"
       ) {
+        const provider =
+          definition.connectorKey === "google_workspace"
+            ? "google"
+            : "microsoft";
         const result = await apiRequest<OAuthStartResponse>(
-          definition.connectorKey === "microsoft_365"
-            ? "/api/v1/integrations/microsoft/oauth/start"
+          definition.connectorKey === "microsoft_365" ||
+            definition.connectorKey === "google_workspace"
+            ? `/api/v1/integrations/${provider}/oauth/start`
             : "/api/v1/integrations/hubspot/oauth/start",
           { method: "POST" },
         );
@@ -188,7 +237,10 @@ export function IntegrationSettings() {
       setMessage(
         connection.simulationOnly
           ? "Simulation connection verified. No external request was made."
-          : "HubSpot authorisation and account identity were verified.",
+          : connection.connectorKey === "microsoft_365" ||
+              connection.connectorKey === "google_workspace"
+            ? `${connection.displayName} mailbox and calendar authorisation were verified.`
+            : "HubSpot authorisation and account identity were verified.",
       );
     } catch (reason: unknown) {
       setError(
@@ -213,8 +265,9 @@ export function IntegrationSettings() {
       setMessage(
         connection.simulationOnly
           ? "Simulation connector disconnected. Pending previews and queued simulations were invalidated."
-          : connection.connectorKey === "microsoft_365"
-            ? "Microsoft 365 disconnected. Future email sending and calendar synchronisation have stopped; bounded historical Oryntela records remain under retention policy."
+          : connection.connectorKey === "microsoft_365" ||
+              connection.connectorKey === "google_workspace"
+            ? `${connection.displayName} disconnected. Future email sending and calendar synchronisation have stopped; bounded historical Oryntela records remain under retention policy.`
             : "HubSpot disconnected. Provider revocation was attempted, local credentials were deleted, and pending work was cancelled.",
       );
     } catch (reason: unknown) {
@@ -228,40 +281,45 @@ export function IntegrationSettings() {
     }
   }
 
-  async function syncMicrosoft(connection: OrganisationConnection) {
+  async function syncMailbox(connection: OrganisationConnection) {
     setBusy(connection.connectorKey);
     setError(null);
     setMessage(null);
     try {
-      const result = await apiRequest<MicrosoftSyncResponse>(
-        `/api/v1/integrations/microsoft/connections/${connection.id}/sync`,
+      const provider =
+        connection.connectorKey === "google_workspace" ? "google" : "microsoft";
+      const result = await apiRequest<ProviderSyncResponse>(
+        `/api/v1/integrations/${provider}/connections/${connection.id}/sync`,
         { method: "POST" },
       );
-      setSyncStatus({
-        connectionId: connection.id,
-        lastSuccessfulSyncAt: result.syncedAt,
-        lastErrorCategory: result.resources.some(
-          (resource) => resource.state === "degraded",
-        )
-          ? "microsoft_sync_degraded"
-          : null,
-        state: result.resources.some(
-          (resource) => resource.state === "degraded",
-        )
-          ? "degraded"
-          : "healthy",
-      });
+      setSyncStatus((current) => ({
+        ...current,
+        [connection.id]: {
+          connectionId: connection.id,
+          lastSuccessfulSyncAt: result.syncedAt,
+          lastErrorCategory: result.resources.some(
+            (resource) => resource.state === "degraded",
+          )
+            ? `${provider}_sync_degraded`
+            : null,
+          state: result.resources.some(
+            (resource) => resource.state === "degraded",
+          )
+            ? "degraded"
+            : "healthy",
+        },
+      }));
       setMessage(
         result.resources.some((resource) => resource.state === "degraded")
-          ? "Microsoft synchronisation is delayed. Existing Oryntela records remain available."
-          : "Microsoft email and calendar changes were synchronised.",
+          ? `${connection.displayName} synchronisation is delayed. Existing Oryntela records remain available.`
+          : `${connection.displayName} email and calendar changes were synchronised.`,
       );
       await load();
     } catch (reason: unknown) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "Microsoft 365 could not be synchronised.",
+          : `${connection.displayName} could not be synchronised.`,
       );
     } finally {
       setBusy(null);
@@ -295,8 +353,12 @@ export function IntegrationSettings() {
             const active = connection?.connectionStatus === "active";
             const needsAuth =
               connection?.connectionStatus === "reauthorisation_required";
-            const currentSyncStatus =
-              syncStatus?.connectionId === connection?.id ? syncStatus : null;
+            const mailbox =
+              definition.connectorKey === "microsoft_365" ||
+              definition.connectorKey === "google_workspace";
+            const currentSyncStatus = connection
+              ? (syncStatus[connection.id] ?? null)
+              : null;
             return (
               <li
                 key={definition.connectorKey}
@@ -325,10 +387,10 @@ export function IntegrationSettings() {
                           : "Not connected"}
                   </span>
                 </div>
-                {definition.connectorKey === "microsoft_365" ? (
+                {mailbox ? (
                   <p className="mt-3 text-sm leading-6 text-slate-600">
-                    Connect your Microsoft work account to use Outlook email and
-                    calendar with Oryntela.
+                    Connect your {definition.displayName} work account to use
+                    email and calendar with Oryntela.
                   </p>
                 ) : (
                   <p className="mt-3 text-sm text-slate-600">
@@ -336,7 +398,9 @@ export function IntegrationSettings() {
                     {definition.supportedCapabilities.map(humanise).join(", ")}
                   </p>
                 )}
-                {connection?.connectorKey === "microsoft_365" &&
+                {connection &&
+                (connection.connectorKey === "microsoft_365" ||
+                  connection.connectorKey === "google_workspace") &&
                 connection.externalAccountEmail ? (
                   <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
                     <p>
@@ -383,22 +447,26 @@ export function IntegrationSettings() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   {active && connection ? (
                     <>
-                      {connection.connectorKey === "microsoft_365" ? (
+                      {mailbox ? (
                         <>
                           <button
                             type="button"
                             className="secondary-button"
                             disabled={busy === definition.connectorKey}
-                            onClick={() => void syncMicrosoft(connection)}
+                            onClick={() => void syncMailbox(connection)}
                           >
                             Sync now
                           </button>
                           <button
-                            ref={microsoftTriggerRef}
                             type="button"
                             className="secondary-button"
                             disabled={busy === definition.connectorKey}
-                            onClick={() => setMicrosoftConsent(true)}
+                            onClick={(event) =>
+                              openMailboxConsent(
+                                definition.connectorKey,
+                                event.currentTarget,
+                              )
+                            }
                           >
                             Reconnect
                           </button>
@@ -414,33 +482,28 @@ export function IntegrationSettings() {
                         </button>
                       )}
                       <button
-                        ref={
-                          connection.connectorKey === "microsoft_365"
-                            ? disconnectTriggerRef
-                            : undefined
-                        }
                         type="button"
                         className="secondary-button"
                         disabled={busy === definition.connectorKey}
-                        onClick={() => setDisconnecting(connection.id)}
+                        onClick={(event) => {
+                          disconnectTriggerRef.current = event.currentTarget;
+                          setDisconnecting(connection.id);
+                        }}
                       >
                         Disconnect
                       </button>
                     </>
                   ) : (
                     <button
-                      ref={
-                        definition.connectorKey === "microsoft_365"
-                          ? microsoftTriggerRef
-                          : undefined
-                      }
                       type="button"
                       className="primary-button"
                       disabled={
                         !definition.available ||
                         busy === definition.connectorKey
                       }
-                      onClick={() => void connect(definition)}
+                      onClick={(event) =>
+                        void connect(definition, false, event.currentTarget)
+                      }
                     >
                       {!definition.available
                         ? "Setup required"
@@ -448,21 +511,22 @@ export function IntegrationSettings() {
                           ? "Reconnect"
                           : definition.simulationOnly
                             ? "Connect simulation"
-                            : definition.connectorKey === "microsoft_365"
-                              ? "Connect Microsoft 365"
+                            : mailbox
+                              ? `Connect ${definition.displayName}`
                               : "Connect HubSpot"}
                     </button>
                   )}
                 </div>
-                {definition.connectorKey === "microsoft_365" &&
-                microsoftConsent ? (
+                {mailbox && mailboxConsent === definition.connectorKey ? (
                   <div
                     className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4"
-                    role="group"
-                    aria-labelledby="microsoft-permissions-title"
+                    role="dialog"
+                    aria-labelledby={`${definition.connectorKey}-permissions-title`}
                   >
                     <p
-                      id="microsoft-permissions-title"
+                      ref={mailboxDialogTitleRef}
+                      id={`${definition.connectorKey}-permissions-title`}
+                      tabIndex={-1}
                       className="font-bold text-slate-950"
                     >
                       Before you continue
@@ -478,20 +542,22 @@ export function IntegrationSettings() {
                       <div>
                         <dt className="font-bold">Replies</dt>
                         <dd>
-                          Microsoft grants mail read access because its narrower
-                          permission cannot provide reply content. Oryntela
-                          scans only bounded Inbox and Sent Items metadata for
-                          emails tied to Oryntela sends, then reads the subject
-                          and body only for one strongly matched reply.
-                          Unrelated mail is not stored.
+                          {definition.connectorKey === "microsoft_365"
+                            ? "Microsoft grants mail read access because its narrower metadata permission cannot provide reply content."
+                            : "Google grants restricted Gmail read-only access because Gmail does not offer a narrower scope that can provide strongly correlated reply content."}{" "}
+                          Oryntela scans a bounded window of Inbox and Sent
+                          message metadata to identify emails tied to Oryntela
+                          sends, then reads the subject and body only for one
+                          strongly matched reply. Unrelated mail content is not
+                          read or stored.
                         </dd>
                       </div>
                       <div>
                         <dt className="font-bold">Calendar</dt>
                         <dd>
-                          Read basic work-calendar details so Oryntela can help
-                          you prepare for customer meetings. Event bodies and
-                          attachments are not requested.
+                          Read event details from your primary work calendar so
+                          Oryntela can help you prepare for customer meetings.
+                          Event bodies and attachments are not requested.
                         </dd>
                       </div>
                     </dl>
@@ -501,16 +567,16 @@ export function IntegrationSettings() {
                         className="primary-button"
                         disabled={busy === definition.connectorKey}
                         onClick={() => {
-                          setMicrosoftConsent(false);
+                          setMailboxConsent(null);
                           void connect(definition, true);
                         }}
                       >
-                        Continue to Microsoft
+                        Continue to {definition.displayName}
                       </button>
                       <button
                         type="button"
                         className="secondary-button"
-                        onClick={closeMicrosoftConsent}
+                        onClick={closeMailboxConsent}
                       >
                         Cancel
                       </button>
@@ -520,18 +586,20 @@ export function IntegrationSettings() {
                 {connection && disconnecting === connection.id ? (
                   <div
                     className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4"
-                    role="group"
+                    role="dialog"
                     aria-labelledby={`disconnect-${connection.id}-title`}
                   >
                     <p
+                      ref={disconnectDialogTitleRef}
                       id={`disconnect-${connection.id}-title`}
+                      tabIndex={-1}
                       className="font-bold text-slate-950"
                     >
                       Disconnect {definition.displayName}?
                     </p>
                     <p className="mt-2 text-sm leading-6 text-slate-700">
-                      {connection.connectorKey === "microsoft_365"
-                        ? "Disconnecting Microsoft 365 will stop future Oryntela email sending and calendar synchronisation for this account. Historical Oryntela records will remain according to retention policy."
+                      {mailbox
+                        ? `Disconnecting ${definition.displayName} will stop future Oryntela email sending and calendar synchronisation for this account. Historical Oryntela records will remain according to retention policy.`
                         : "Disconnecting will cancel pending provider work and invalidate existing previews."}
                     </p>
                     <div className="mt-3 flex gap-2">

@@ -399,6 +399,7 @@ class CampaignWorkerService:
             tenant.organisation_id,
             enrollment.sender_user_id,
             microsoft_enabled=self._settings.feature_microsoft_365_enabled,
+            google_enabled=self._settings.feature_google_workspace_enabled,
         )
         if connection is None:
             campaign.state = CampaignState.NEEDS_ATTENTION.value
@@ -904,6 +905,7 @@ class CampaignWorkerService:
             and self._settings.feature_action_layer_enabled
             and (
                 self._settings.feature_microsoft_365_enabled
+                or self._settings.feature_google_workspace_enabled
                 or (self._settings.environment != "production" and self._settings.feature_mock_connectors_enabled)
             )
         )

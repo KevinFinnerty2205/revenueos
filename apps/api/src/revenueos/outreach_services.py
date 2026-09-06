@@ -343,11 +343,12 @@ async def validate_personalized_outreach_action(
         tenant.organisation_id,
         message.sender_user_id,
         microsoft_enabled=settings.feature_microsoft_365_enabled,
+        google_enabled=settings.feature_google_workspace_enabled,
     )
     expected_sender_email = (
         email_connection.external_account_email
         if email_connection is not None
-        and email_connection.connector_key == "microsoft_365"
+        and email_connection.connector_key in {"microsoft_365", "google_workspace"}
         and email_connection.external_account_email
         else sender.email
     )
@@ -486,6 +487,7 @@ class OutreachService:
             self.tenant.organisation_id,
             self.tenant.user_id,
             microsoft_enabled=self.settings.feature_microsoft_365_enabled,
+            google_enabled=self.settings.feature_google_workspace_enabled,
         )
         return ContactOutreachWorkspaceResponse(
             availability=availability,
@@ -501,8 +503,8 @@ class OutreachService:
             policy_configured=bool(policy and policy.configured),
             production_mailbox_available=(
                 email_connection is not None
-                and email_connection.connector_key == "microsoft_365"
-                and self.settings.feature_microsoft_365_enabled
+                and email_connection.connector_key in {"microsoft_365", "google_workspace"}
+                and (self.settings.feature_microsoft_365_enabled or self.settings.feature_google_workspace_enabled)
             ),
             simulation_available=(
                 email_connection is not None
@@ -722,11 +724,12 @@ class OutreachService:
             self.tenant.organisation_id,
             sender.id,
             microsoft_enabled=self.settings.feature_microsoft_365_enabled,
+            google_enabled=self.settings.feature_google_workspace_enabled,
         )
         sender_email = (
             email_connection.external_account_email
             if email_connection is not None
-            and email_connection.connector_key == "microsoft_365"
+            and email_connection.connector_key in {"microsoft_365", "google_workspace"}
             and email_connection.external_account_email
             else sender.email
         )

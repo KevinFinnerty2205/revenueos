@@ -430,7 +430,12 @@ class BetaService:
                         .where(
                             IntegrationConnection.organisation_id == self.tenant.organisation_id,
                             IntegrationConnection.created_by_user_id == user_id,
-                            IntegrationConnection.connector_key == ConnectorKey.MICROSOFT_365.value,
+                            IntegrationConnection.connector_key.in_(
+                                (
+                                    ConnectorKey.MICROSOFT_365.value,
+                                    ConnectorKey.GOOGLE_WORKSPACE.value,
+                                )
+                            ),
                             IntegrationConnection.connection_status != "revoked",
                         )
                         .with_for_update()

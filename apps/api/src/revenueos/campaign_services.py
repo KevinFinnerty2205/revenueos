@@ -77,6 +77,7 @@ class CampaignService:
             self.tenant.organisation_id,
             self.tenant.user_id,
             microsoft_enabled=self.settings.feature_microsoft_365_enabled,
+            google_enabled=self.settings.feature_google_workspace_enabled,
         )
         items: list[CampaignListItemResponse] = []
         for record in await self.repository.campaigns(self.tenant.organisation_id):
@@ -104,7 +105,9 @@ class CampaignService:
             total=len(items),
             can_create=await self._entitled(),
             simulation_only=mailbox is None or mailbox.connector_key == "mock_email",
-            production_mailbox_available=bool(mailbox is not None and mailbox.connector_key == "microsoft_365"),
+            production_mailbox_available=bool(
+                mailbox is not None and mailbox.connector_key in {"microsoft_365", "google_workspace"}
+            ),
         )
 
     async def create(self, request: CampaignCreateRequest) -> CampaignResponse:
@@ -636,6 +639,7 @@ class CampaignService:
             self.tenant.organisation_id,
             version.sender_user_id,
             microsoft_enabled=self.settings.feature_microsoft_365_enabled,
+            google_enabled=self.settings.feature_google_workspace_enabled,
         )
         return CampaignResponse(
             id=campaign.id,
@@ -696,12 +700,14 @@ class CampaignService:
             ),
             campaign_auto_send_allowed=bool(policy and policy.campaign_auto_send_allowed),
             simulation_only=mailbox is None or mailbox.connector_key == "mock_email",
-            production_mailbox_available=bool(mailbox is not None and mailbox.connector_key == "microsoft_365"),
+            production_mailbox_available=bool(
+                mailbox is not None and mailbox.connector_key in {"microsoft_365", "google_workspace"}
+            ),
             launch_warning=(
                 (
                     "RevenueOS will prepare and send future approved sequence steps through the connected "
-                    "Microsoft mailbox when every safety check passes."
-                    if mailbox is not None and mailbox.connector_key == "microsoft_365"
+                    "work mailbox when every safety check passes."
+                    if mailbox is not None and mailbox.connector_key in {"microsoft_365", "google_workspace"}
                     else "RevenueOS will prepare and simulate future approved sequence steps automatically "
                     "when all safety checks pass."
                 )
