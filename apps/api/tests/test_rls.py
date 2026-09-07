@@ -314,6 +314,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "crm_entity_mappings",
         "crm_field_mappings",
         "crm_stage_mappings",
+        "crm_connection_states",
+        "crm_owner_mappings",
+        "crm_sync_cursors",
+        "crm_sync_jobs",
+        "crm_sync_receipts",
+        "crm_conflicts",
+        "crm_writeback_previews",
         "organisation_crm_settings",
         "crm_custom_field_definitions",
         "crm_custom_field_values",
@@ -634,6 +641,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "provider_reply_id": uuid.uuid4(),
                 "provider_calendar_event_id": uuid.uuid4(),
                 "provider_sync_state_id": uuid.uuid4(),
+                "crm_connection_state_id": uuid.uuid4(),
+                "crm_owner_mapping_id": uuid.uuid4(),
+                "crm_sync_cursor_id": uuid.uuid4(),
+                "crm_sync_job_id": uuid.uuid4(),
+                "crm_sync_receipt_id": uuid.uuid4(),
+                "crm_conflict_id": uuid.uuid4(),
+                "crm_writeback_preview_id": uuid.uuid4(),
             }
         )
 
@@ -1847,6 +1861,155 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             """
                         ),
                         {**identity_parameters, "external_stage_id": f"stage-{suffix.lower()}"},
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_connection_states
+                                (id, organisation_id, connection_id, provider_key,
+                                 lifecycle, health_status, connector_enabled,
+                                 writeback_enabled, mapping_version, records_seen,
+                                 records_applied, conflict_count,
+                                 initial_sync_started_at, initial_sync_completed_at,
+                                 last_successful_sync_at, last_health_checked_at,
+                                 configured_by_user_id)
+                            VALUES
+                                (:crm_connection_state_id, :organisation_id,
+                                 :connection_id, 'hubspot', 'ready', 'healthy',
+                                 true, false, 1, 3, 3, 1, now(), now(), now(),
+                                 now(), :user_id)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_owner_mappings
+                                (id, organisation_id, connection_id, provider_key,
+                                 external_owner_id, external_owner_name,
+                                 external_owner_email, user_id, state,
+                                 configured_by_user_id)
+                            VALUES
+                                (:crm_owner_mapping_id, :organisation_id,
+                                 :connection_id, 'hubspot', :external_owner_id,
+                                 :display_name, :email, :user_id, 'mapped', :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "external_owner_id": f"owner-{suffix.lower()}",
+                            "display_name": f"RLS Owner {suffix}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_sync_cursors
+                                (id, organisation_id, connection_id, provider_key,
+                                 object_type, strategy, high_watermark_at,
+                                 page_count, record_count, completed_at)
+                            VALUES
+                                (:crm_sync_cursor_id, :organisation_id,
+                                 :connection_id, 'hubspot', 'account',
+                                 'incremental', now(), 1, 1, now())
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_sync_jobs
+                                (id, organisation_id, connection_id, provider_key,
+                                 mode, status, idempotency_key,
+                                 requested_by_user_id, attempt_count,
+                                 started_at, completed_at)
+                            VALUES
+                                (:crm_sync_job_id, :organisation_id,
+                                 :connection_id, 'hubspot', 'incremental',
+                                 'succeeded', :crm_sync_job_key, :user_id, 1,
+                                 now(), now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "crm_sync_job_key": suffix.lower() * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_sync_receipts
+                                (id, organisation_id, connection_id, provider_key,
+                                 direction, object_type, operation, status,
+                                 idempotency_key, revenueos_entity_id,
+                                 external_object_id, external_version,
+                                 field_keys_json)
+                            VALUES
+                                (:crm_sync_receipt_id, :organisation_id,
+                                 :connection_id, 'hubspot', 'inbound', 'account',
+                                 'update', 'applied', :crm_sync_receipt_key,
+                                 :company_id, :external_object_id, '1',
+                                 '["name"]'::json)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "crm_sync_receipt_key": suffix.upper() * 64,
+                            "external_object_id": f"company-{suffix.lower()}",
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_conflicts
+                                (id, organisation_id, connection_id, provider_key,
+                                 object_type, revenueos_entity_id,
+                                 external_object_id, field_key,
+                                 oryntela_value_json, provider_value_json,
+                                 oryntela_fingerprint, provider_fingerprint,
+                                 external_version, mapping_version, authority,
+                                 status)
+                            VALUES
+                                (:crm_conflict_id, :organisation_id,
+                                 :connection_id, 'hubspot', 'account',
+                                 :company_id, :external_object_id, 'name',
+                                 '"Oryntela"'::json, '"Provider"'::json,
+                                 :oryntela_fingerprint, :provider_fingerprint,
+                                 'provider-version-1', 1, 'review_before_sync',
+                                 'open')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "external_object_id": f"company-{suffix.lower()}",
+                            "oryntela_fingerprint": "1" * 64,
+                            "provider_fingerprint": "2" * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO crm_writeback_previews
+                                (id, organisation_id, connection_id, entity_type,
+                                 entity_id, operation, external_object_id,
+                                 external_version, changes_json,
+                                 preview_fingerprint, mapping_version, expires_at)
+                            VALUES
+                                (:crm_writeback_preview_id, :organisation_id,
+                                 :connection_id, 'company', :company_id, 'update',
+                                 :external_object_id, '1',
+                                 '{"name":"Proposed"}'::json,
+                                 :preview_fingerprint, 1,
+                                 now() + interval '10 minutes')
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "external_object_id": f"company-{suffix.lower()}",
+                            "preview_fingerprint": "3" * 64,
+                        },
                     )
                     await connection.execute(
                         text(
@@ -3458,6 +3621,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'crm_entity_mappings',
                                     'crm_field_mappings',
                                     'crm_stage_mappings',
+                                    'crm_connection_states',
+                                    'crm_owner_mappings',
+                                    'crm_sync_cursors',
+                                    'crm_sync_jobs',
+                                    'crm_sync_receipts',
+                                    'crm_conflicts',
+                                    'crm_writeback_previews',
                                     'organisation_crm_settings',
                                     'crm_custom_field_definitions',
                                     'crm_custom_field_values',
@@ -3810,6 +3980,35 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["crm_entity_mapping_id"]},
                 )
                 assert crm_mapping_update.rowcount == 0
+                crm_state_update = await connection.execute(
+                    text(
+                        """
+                        UPDATE crm_connection_states
+                        SET health_status = 'degraded'
+                        WHERE id = :id
+                        """
+                    ),
+                    {"id": tenant_b["crm_connection_state_id"]},
+                )
+                assert crm_state_update.rowcount == 0
+                crm_preview_delete = await connection.execute(
+                    text("DELETE FROM crm_writeback_previews WHERE id = :id"),
+                    {"id": tenant_b["crm_writeback_preview_id"]},
+                )
+                assert crm_preview_delete.rowcount == 0
+                immutable_crm_receipt = await connection.begin_nested()
+                with pytest.raises(DBAPIError, match="CRM sync receipts are immutable"):
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE crm_sync_receipts
+                            SET status = 'failed'
+                            WHERE id = :id
+                            """
+                        ),
+                        {"id": tenant_a["crm_sync_receipt_id"]},
+                    )
+                await immutable_crm_receipt.rollback()
                 methodology_definition_update = await connection.execute(
                     text("UPDATE methodology_definitions SET status = 'archived' WHERE id = :id"),
                     {"id": tenant_b["methodology_definition_id"]},
@@ -4345,6 +4544,13 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     "organisation_module_entitlements",
                     "selling_profile_revisions",
                     "selling_profiles",
+                    "crm_writeback_previews",
+                    "crm_conflicts",
+                    "crm_sync_receipts",
+                    "crm_sync_jobs",
+                    "crm_sync_cursors",
+                    "crm_owner_mappings",
+                    "crm_connection_states",
                     "crm_stage_mappings",
                     "crm_field_mappings",
                     "crm_entity_mappings",

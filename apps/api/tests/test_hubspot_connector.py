@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import json
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,8 @@ from revenueos.credential_store import (
     ConnectorCredential,
     EncryptedDatabaseCredentialStore,
 )
+from revenueos.crm_connector_services import CRMConnectorService
+from revenueos.crm_provider import CRMProviderRecord
 from revenueos.domain import ActionRiskClass
 from revenueos.hubspot_connector import (
     HUBSPOT_REQUIRED_SCOPES,
@@ -33,6 +36,7 @@ from revenueos.hubspot_connector import (
     HubSpotPipeline,
     HubSpotProperty,
     HubSpotRecord,
+    HubSpotSyncAdapter,
 )
 from revenueos.integration_executors import (
     ApprovedActionInput,
@@ -41,7 +45,20 @@ from revenueos.integration_executors import (
     PermanentExecutionFailure,
     UnknownExternalStateFailure,
 )
-from revenueos.models import EncryptedConnectorCredential, IntegrationConnection, OAuthConnectionState, User
+from revenueos.models import (
+    CRMConflict,
+    CRMConnectionState,
+    CRMEntityMapping,
+    CRMOwnerMapping,
+    CRMSyncJob,
+    CRMSyncReceipt,
+    EncryptedConnectorCredential,
+    IntegrationConnection,
+    OAuthConnectionState,
+    OrganisationMembership,
+    User,
+)
+from revenueos.tenant import TenantContext
 
 from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL
 from .test_business_api import create_company, create_contact, create_opportunity
@@ -51,6 +68,11 @@ from .test_meeting_api import secondary_user
 
 def _master_key() -> str:
     return base64.urlsafe_b64encode(b"k" * 32).decode().rstrip("=")
+
+
+def _value_fingerprint(value: object | None) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _enable_hubspot(app: FastAPI) -> Settings:
@@ -113,12 +135,50 @@ def test_hubspot_oauth_state_is_one_time_tenant_bound_and_tokens_are_not_returne
     assert "access-token" not in callback.text
     assert "refresh-token" not in callback.text
 
+    app.state.settings.feature_salesforce_crm_enabled = True
+    app.state.settings.salesforce_client_id = "salesforce-test-client"
+    app.state.settings.salesforce_client_secret = SecretStr("salesforce-test-secret")
+    app.state.settings.salesforce_oauth_redirect_uri = "http://localhost:3000/settings/integrations/salesforce/callback"
+    switch_blocked = client.post("/api/v1/integrations/salesforce/oauth/start")
+    assert switch_blocked.status_code == 409
+    assert switch_blocked.json()["code"] == "primary_crm_already_connected"
+
     replay = client.post(
         "/api/v1/integrations/hubspot/oauth/callback",
         json={"state": state, "code": "authorisation-code"},
     )
     assert replay.status_code == 409
     assert replay.json()["code"] == "oauth_state_replayed"
+
+    rejected_tenants: list[str] = []
+
+    async def revoke_duplicate_tenant(
+        self: HubSpotClient,
+        value: ConnectorCredential,
+    ) -> None:
+        del self
+        rejected_tenants.append(value.external_account_id)
+
+    monkeypatch.setattr(HubSpotClient, "revoke", revoke_duplicate_tenant)
+    app.dependency_overrides[get_current_user] = secondary_user
+    try:
+        duplicate_start = client.post("/api/v1/integrations/hubspot/oauth/start")
+        duplicate_state = parse_qs(urlparse(duplicate_start.json()["authorisationUrl"]).query)["state"][0]
+        duplicate_tenant = client.post(
+            "/api/v1/integrations/hubspot/oauth/callback",
+            json={"state": duplicate_state, "code": "authorisation-code"},
+        )
+        assert duplicate_tenant.status_code == 409
+        assert duplicate_tenant.json()["code"] == "provider_tenant_already_connected"
+        duplicate_replay = client.post(
+            "/api/v1/integrations/hubspot/oauth/callback",
+            json={"state": duplicate_state, "code": "authorisation-code"},
+        )
+        assert duplicate_replay.status_code == 409
+        assert duplicate_replay.json()["code"] == "oauth_state_replayed"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert rejected_tenants == ["1234567"]
 
     changed_credential = replace(
         credential,
@@ -172,6 +232,70 @@ def test_hubspot_oauth_state_is_one_time_tenant_bound_and_tokens_are_not_returne
         await engine.dispose()
 
     asyncio.run(verify_ciphertext())
+
+
+def test_hubspot_reconnect_cannot_reclaim_a_provider_tenant_now_used_by_another_org(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_hubspot(app)
+    credential = ConnectorCredential(
+        access_token="reconnect-access",
+        refresh_token="reconnect-refresh",
+        expires_at=datetime.now(UTC) + timedelta(minutes=30),
+        scopes=HUBSPOT_REQUIRED_SCOPES,
+        external_account_id="1234567",
+    )
+    revoked_accounts: list[str] = []
+
+    async def exchange_code(self: HubSpotClient, code: str) -> tuple[ConnectorCredential, str | None]:
+        del self, code
+        return credential, "Reconnect test account"
+
+    async def revoke(self: HubSpotClient, value: ConnectorCredential) -> None:
+        del self
+        revoked_accounts.append(value.external_account_id)
+
+    monkeypatch.setattr(HubSpotClient, "exchange_code", exchange_code)
+    monkeypatch.setattr(HubSpotClient, "revoke", revoke)
+
+    def connect_current_user() -> dict[str, object]:
+        started = client.post("/api/v1/integrations/hubspot/oauth/start")
+        assert started.status_code == 200, started.text
+        state = parse_qs(urlparse(started.json()["authorisationUrl"]).query)["state"][0]
+        completed = client.post(
+            "/api/v1/integrations/hubspot/oauth/callback",
+            json={"state": state, "code": "authorisation-code"},
+        )
+        assert completed.status_code == 200, completed.text
+        return completed.json()
+
+    primary = connect_current_user()
+    assert client.delete(f"/api/v1/integrations/connections/{primary['id']}").status_code == 200
+
+    app.dependency_overrides[get_current_user] = secondary_user
+    try:
+        secondary = connect_current_user()
+        assert secondary["connectionStatus"] == "active"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    reconnect_start = client.post("/api/v1/integrations/hubspot/oauth/start")
+    reconnect_state = parse_qs(urlparse(reconnect_start.json()["authorisationUrl"]).query)["state"][0]
+    rejected = client.post(
+        "/api/v1/integrations/hubspot/oauth/callback",
+        json={"state": reconnect_state, "code": "authorisation-code"},
+    )
+    assert rejected.status_code == 409
+    assert rejected.json()["code"] == "provider_tenant_already_connected"
+    replay = client.post(
+        "/api/v1/integrations/hubspot/oauth/callback",
+        json={"state": reconnect_state, "code": "authorisation-code"},
+    )
+    assert replay.status_code == 409
+    assert replay.json()["code"] == "oauth_state_replayed"
+    assert revoked_accounts == ["1234567", "1234567"]
 
 
 def test_encrypted_credential_store_rejects_cross_connection_and_tampering() -> None:
@@ -246,6 +370,9 @@ def test_hubspot_client_refreshes_then_reads_and_marks_write_timeout_uncertain()
             del organisation_id, connection_id, credential_reference
             return self.credential
 
+        async def get_for_update(self, organisation_id, connection_id, credential_reference):
+            return await self.get(organisation_id, connection_id, credential_reference)
+
         async def revoke(self, organisation_id, connection_id, credential_reference):
             del organisation_id, connection_id, credential_reference
 
@@ -316,6 +443,237 @@ def test_hubspot_client_refreshes_then_reads_and_marks_write_timeout_uncertain()
         ("GET", "/crm/objects/2026-03/deals/deal-1"),
         ("PATCH", "/crm/objects/2026-03/deals/deal-1"),
     ]
+
+
+def test_hubspot_incremental_relationships_use_one_bounded_batch_request() -> None:
+    class MemoryStore:
+        async def get(self, organisation_id, connection_id, credential_reference):
+            del organisation_id, connection_id, credential_reference
+            return ConnectorCredential(
+                access_token="access",
+                refresh_token="refresh",
+                expires_at=datetime.now(UTC) + timedelta(minutes=30),
+                scopes=HUBSPOT_REQUIRED_SCOPES,
+                external_account_id="123",
+            )
+
+        async def get_for_update(self, organisation_id, connection_id, credential_reference):
+            return await self.get(organisation_id, connection_id, credential_reference)
+
+    settings = Settings(
+        feature_integrations_enabled=True,
+        feature_action_execution_enabled=True,
+        feature_hubspot_crm_enabled=True,
+        hubspot_client_id="test-client-id",
+        hubspot_client_secret=SecretStr("test-client-secret"),
+        hubspot_oauth_redirect_uri="http://localhost:3000/settings/integrations/hubspot/callback",
+        connector_credential_master_key=SecretStr(_master_key()),
+    )
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/crm/objects/2026-03/contacts/search":
+            payload = json.loads(request.content)
+            assert payload["filterGroups"][0]["filters"][0] == {
+                "propertyName": "hs_lastmodifieddate",
+                "operator": "GTE",
+                "value": "1788220800000",
+            }
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "id": "contact-1",
+                            "properties": {"firstname": "Alex", "lastname": "Morgan"},
+                            "updatedAt": "2026-09-06T01:00:00Z",
+                        },
+                        {
+                            "id": "contact-2",
+                            "properties": {"firstname": "Taylor", "lastname": "Chen"},
+                            "updatedAt": "2026-09-06T01:01:00Z",
+                        },
+                    ],
+                    "total": 2,
+                },
+            )
+        assert request.url.path == "/crm/associations/2026-03/contacts/companies/batch/read"
+        assert request.read().decode().count('"id"') == 2
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "from": {"id": "contact-1"},
+                        "to": [
+                            {
+                                "toObjectId": 101,
+                                "associationTypes": [{"label": "Primary"}],
+                            }
+                        ],
+                    },
+                    {
+                        "from": {"id": "contact-2"},
+                        "to": [
+                            {
+                                "toObjectId": 202,
+                                "associationTypes": [{"label": "Primary"}],
+                            }
+                        ],
+                    },
+                ]
+            },
+        )
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            adapter = HubSpotSyncAdapter(HubSpotClient(settings, MemoryStore(), http_client=http_client))
+            page = await adapter.list_records(
+                _context(),
+                "contact",
+                cursor=None,
+                modified_after=datetime(2026, 9, 1, tzinfo=UTC),
+                limit=200,
+            )
+            assert [item.related_account_external_id for item in page.records] == ["101", "202"]
+            assert page.next_cursor == "archive:"
+
+    asyncio.run(scenario())
+    assert calls == [
+        "/crm/objects/2026-03/contacts/search",
+        "/crm/associations/2026-03/contacts/companies/batch/read",
+    ]
+
+
+def test_hubspot_incremental_sync_scans_archives_without_reapplying_old_deletions() -> None:
+    class MemoryStore:
+        async def get(self, organisation_id, connection_id, credential_reference):
+            del organisation_id, connection_id, credential_reference
+            return ConnectorCredential(
+                access_token="access",
+                refresh_token="refresh",
+                expires_at=datetime.now(UTC) + timedelta(minutes=30),
+                scopes=HUBSPOT_REQUIRED_SCOPES,
+                external_account_id="123",
+            )
+
+        async def get_for_update(self, organisation_id, connection_id, credential_reference):
+            return await self.get(organisation_id, connection_id, credential_reference)
+
+    settings = Settings(
+        feature_integrations_enabled=True,
+        feature_action_execution_enabled=True,
+        feature_hubspot_crm_enabled=True,
+        hubspot_client_id="test-client-id",
+        hubspot_client_secret=SecretStr("test-client-secret"),
+        hubspot_oauth_redirect_uri="http://localhost:3000/settings/integrations/hubspot/callback",
+        connector_credential_master_key=SecretStr(_master_key()),
+    )
+    calls: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path))
+        if request.method == "POST":
+            return httpx.Response(200, json={"results": [], "total": 0})
+        assert request.url.params["archived"] == "true"
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "old-archive",
+                        "properties": {"name": "Old archive"},
+                        "updatedAt": "2026-09-01T00:00:00Z",
+                        "archived": True,
+                    },
+                    {
+                        "id": "new-archive",
+                        "properties": {"name": "New archive"},
+                        "updatedAt": "2026-09-06T01:00:00Z",
+                        "archived": True,
+                    },
+                ],
+                "total": 2,
+            },
+        )
+
+    async def scenario() -> None:
+        modified_after = datetime(2026, 9, 5, tzinfo=UTC)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            adapter = HubSpotSyncAdapter(HubSpotClient(settings, MemoryStore(), http_client=http_client))
+            current = await adapter.list_records(
+                _context(),
+                "account",
+                cursor=None,
+                modified_after=modified_after,
+                limit=200,
+            )
+            assert current.records == ()
+            assert current.next_cursor == "archive:"
+            archived = await adapter.list_records(
+                _context(),
+                "account",
+                cursor=current.next_cursor,
+                modified_after=modified_after,
+                limit=200,
+            )
+            assert [item.external_object_id for item in archived.records] == ["new-archive"]
+            assert archived.records[0].archived is True
+            assert archived.next_cursor is None
+
+    asyncio.run(scenario())
+    assert calls == [
+        ("POST", "/crm/objects/2026-03/companies/search"),
+        ("GET", "/crm/objects/2026-03/companies"),
+    ]
+
+
+def test_hubspot_accepted_write_with_invalid_response_is_unknown_and_not_retryable() -> None:
+    class MemoryStore:
+        async def get(self, organisation_id, connection_id, credential_reference):
+            del organisation_id, connection_id, credential_reference
+            return ConnectorCredential(
+                access_token="access",
+                refresh_token="refresh",
+                expires_at=datetime.now(UTC) + timedelta(minutes=30),
+                scopes=HUBSPOT_REQUIRED_SCOPES,
+                external_account_id="123",
+            )
+
+        async def get_for_update(self, organisation_id, connection_id, credential_reference):
+            return await self.get(organisation_id, connection_id, credential_reference)
+
+    settings = Settings(
+        feature_integrations_enabled=True,
+        feature_action_execution_enabled=True,
+        feature_hubspot_crm_enabled=True,
+        hubspot_client_id="test-client-id",
+        hubspot_client_secret=SecretStr("test-client-secret"),
+        hubspot_oauth_redirect_uri="http://localhost:3000/settings/integrations/hubspot/callback",
+        connector_credential_master_key=SecretStr(_master_key()),
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method in {"POST", "PATCH"}
+        return httpx.Response(200, content=b"accepted-but-not-a-record")
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            client = HubSpotClient(settings, MemoryStore(), http_client=http_client)
+            with pytest.raises(HubSpotAPIError) as create_failure:
+                await client.create_record(_context(), "companies", {"name": "Example"})
+            assert create_failure.value.code == "provider_create_verification_unknown"
+            assert create_failure.value.uncertain is True
+            assert create_failure.value.external_object_id is None
+
+            with pytest.raises(HubSpotAPIError) as update_failure:
+                await client.update_record(_context(), "companies", "company-1", {"name": "Example"})
+            assert update_failure.value.code == "provider_update_verification_unknown"
+            assert update_failure.value.uncertain is True
+            assert update_failure.value.external_object_id == "company-1"
+
+    asyncio.run(scenario())
 
 
 def _context() -> ExecutorConnectionContext:
@@ -553,6 +911,9 @@ def test_hubspot_rate_limit_and_malformed_response_are_safe() -> None:
                 scopes=HUBSPOT_REQUIRED_SCOPES,
                 external_account_id="123",
             )
+
+        async def get_for_update(self, organisation_id, connection_id, credential_reference):
+            return await self.get(organisation_id, connection_id, credential_reference)
 
         async def put(self, organisation_id, connection_id, credential):
             del organisation_id, connection_id, credential
@@ -855,7 +1216,7 @@ def test_crm_mapping_is_explicit_tenant_scoped_typed_and_admin_governed(
             "externalStageId": "qualified",
         },
     )
-    assert stage_mapping.status_code == 200
+    assert stage_mapping.status_code == 200, stage_mapping.text
 
     member = replace(secondary_user(), role="member")
     app.dependency_overrides[get_current_user] = lambda: member
@@ -887,6 +1248,443 @@ def test_crm_mapping_is_explicit_tenant_scoped_typed_and_admin_governed(
     assert removed.status_code == 204
 
 
+def test_resolving_the_last_crm_conflict_sets_the_persisted_count_to_zero(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_hubspot(app)
+    connection = _connect_hubspot(client, monkeypatch)
+    company = create_company(client)
+    conflict_id = uuid.uuid4()
+
+    async def seed_conflict() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            now = datetime.now(UTC)
+            state = await session.scalar(
+                select(CRMConnectionState).where(CRMConnectionState.connection_id == uuid.UUID(str(connection["id"])))
+            )
+            assert state is not None
+            state.conflict_count = 1
+            session.add(
+                CRMConflict(
+                    id=conflict_id,
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    connection_id=uuid.UUID(str(connection["id"])),
+                    provider_key="hubspot",
+                    object_type="account",
+                    revenueos_entity_id=uuid.UUID(str(company["id"])),
+                    external_object_id="company-conflict-1",
+                    field_key="name",
+                    oryntela_value_json=company["name"],
+                    provider_value_json="Reviewed provider account",
+                    oryntela_fingerprint=_value_fingerprint(company["name"]),
+                    provider_fingerprint=_value_fingerprint("Reviewed provider account"),
+                    oryntela_version_at=now,
+                    external_version="provider-version-1",
+                    mapping_version=state.mapping_version,
+                    authority="review_before_sync",
+                    observed_at=now,
+                    status="open",
+                    resolution=None,
+                    resolved_value_json=None,
+                    resolved_fingerprint=None,
+                    resolved_by_user_id=None,
+                    resolved_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(seed_conflict())
+    resolved = client.post(
+        f"/api/v1/integrations/crm/conflicts/{conflict_id}/resolve",
+        json={"resolution": "provider", "confirmed": True},
+    )
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["status"] == "resolved"
+    assert resolved.json()["resolution"] == "provider"
+    assert resolved.json()["authority"] == "review_before_sync"
+    assert resolved.json()["externalVersion"] == "provider-version-1"
+    assert resolved.json()["oryntelaFingerprint"] == _value_fingerprint(company["name"])
+    assert resolved.json()["providerFingerprint"] == _value_fingerprint("Reviewed provider account")
+    assert resolved.json()["allowedResolutions"] == []
+    assert resolved.json()["resolvedValue"] == "Reviewed provider account"
+    assert len(resolved.json()["resolvedFingerprint"]) == 64
+    assert resolved.json()["resolvedByUserId"] == str(PRIMARY_USER_ID)
+    assert client.get(f"/api/v1/companies/{company['id']}").json()["name"] == "Reviewed provider account"
+    status = client.get(f"/api/v1/integrations/connections/{connection['id']}/crm/status")
+    assert status.status_code == 200
+    assert status.json()["conflictCount"] == 0
+
+
+def test_crm_conflict_resolutions_are_derived_from_field_authority(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_hubspot(app)
+    connection = _connect_hubspot(client, monkeypatch)
+    company = create_company(client)
+    name_conflict_id = uuid.uuid4()
+    domain_conflict_id = uuid.uuid4()
+    stale_conflict_id = uuid.uuid4()
+
+    async def seed_conflicts() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            now = datetime.now(UTC)
+            state = await session.scalar(
+                select(CRMConnectionState).where(CRMConnectionState.connection_id == uuid.UUID(str(connection["id"])))
+            )
+            assert state is not None
+            state.conflict_count = 3
+            common = {
+                "organisation_id": PRIMARY_ORGANISATION_ID,
+                "connection_id": uuid.UUID(str(connection["id"])),
+                "provider_key": "hubspot",
+                "object_type": "account",
+                "revenueos_entity_id": uuid.UUID(str(company["id"])),
+                "mapping_version": state.mapping_version,
+                "oryntela_version_at": now,
+                "observed_at": now,
+                "status": "open",
+                "resolution": None,
+                "resolved_value_json": None,
+                "resolved_fingerprint": None,
+                "resolved_by_user_id": None,
+                "resolved_at": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+            session.add_all(
+                [
+                    CRMConflict(
+                        id=name_conflict_id,
+                        external_object_id="authority-name-1",
+                        field_key="name",
+                        oryntela_value_json=company["name"],
+                        provider_value_json="Provider authority name",
+                        oryntela_fingerprint=_value_fingerprint(company["name"]),
+                        provider_fingerprint=_value_fingerprint("Provider authority name"),
+                        external_version="provider-name-version",
+                        authority="crm_authoritative",
+                        **common,
+                    ),
+                    CRMConflict(
+                        id=domain_conflict_id,
+                        external_object_id="authority-domain-1",
+                        field_key="domain",
+                        oryntela_value_json="acme-australia.example",
+                        provider_value_json="https://provider.example",
+                        oryntela_fingerprint=_value_fingerprint("acme-australia.example"),
+                        provider_fingerprint=_value_fingerprint("https://provider.example"),
+                        external_version="provider-domain-version",
+                        authority="revenueos_authoritative",
+                        **common,
+                    ),
+                    CRMConflict(
+                        id=stale_conflict_id,
+                        external_object_id="authority-industry-1",
+                        field_key="industry",
+                        oryntela_value_json="Software",
+                        provider_value_json="Technology",
+                        oryntela_fingerprint=_value_fingerprint("Software"),
+                        provider_fingerprint=_value_fingerprint("Technology"),
+                        external_version="provider-industry-version",
+                        authority="review_before_sync",
+                        **common,
+                    ),
+                ]
+            )
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(seed_conflicts())
+    listed = client.get(f"/api/v1/integrations/connections/{connection['id']}/crm/conflicts")
+    assert listed.status_code == 200, listed.text
+    allowed = {item["fieldKey"]: item["allowedResolutions"] for item in listed.json()["items"]}
+    assert allowed == {
+        "name": ["provider"],
+        "domain": ["oryntela"],
+        "industry": ["provider", "oryntela", "manual"],
+    }
+
+    invalid = client.post(
+        f"/api/v1/integrations/crm/conflicts/{name_conflict_id}/resolve",
+        json={"resolution": "oryntela", "confirmed": True},
+    )
+    assert invalid.status_code == 409
+    assert invalid.json()["code"] == "crm_conflict_resolution_not_allowed"
+    kept = client.post(
+        f"/api/v1/integrations/crm/conflicts/{domain_conflict_id}/resolve",
+        json={"resolution": "oryntela", "confirmed": True},
+    )
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["resolvedValue"] == "acme-australia.example"
+    assert len(kept.json()["resolvedFingerprint"]) == 64
+    applied = client.post(
+        f"/api/v1/integrations/crm/conflicts/{name_conflict_id}/resolve",
+        json={"resolution": "provider", "confirmed": True},
+    )
+    assert applied.status_code == 200, applied.text
+    assert client.get(f"/api/v1/companies/{company['id']}").json()["name"] == "Provider authority name"
+    changed = client.patch(f"/api/v1/companies/{company['id']}", json={"industry": "Professional services"})
+    assert changed.status_code == 200, changed.text
+    stale = client.post(
+        f"/api/v1/integrations/crm/conflicts/{stale_conflict_id}/resolve",
+        json={"resolution": "provider", "confirmed": True},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "crm_conflict_stale"
+    assert client.get(f"/api/v1/companies/{company['id']}").json()["industry"] == "Professional services"
+
+
+def test_out_of_order_provider_observation_cannot_overwrite_newer_canonical_state(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_hubspot(app)
+    connection = _connect_hubspot(client, monkeypatch)
+    company = create_company(client)
+
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            connection_row = await session.scalar(
+                select(IntegrationConnection).where(IntegrationConnection.id == uuid.UUID(str(connection["id"])))
+            )
+            state = await session.scalar(
+                select(CRMConnectionState).where(CRMConnectionState.connection_id == uuid.UUID(str(connection["id"])))
+            )
+            assert connection_row is not None and state is not None
+            newer = datetime(2026, 9, 7, 2, tzinfo=UTC)
+            mapping = CRMEntityMapping(
+                id=uuid.uuid4(),
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                connection_id=connection_row.id,
+                revenueos_entity_type="company",
+                revenueos_entity_id=uuid.UUID(str(company["id"])),
+                external_object_type="company",
+                external_object_id="company-out-of-order",
+                external_updated_at=newer,
+                last_synced_at=newer,
+                sync_state="active",
+                created_by_user_id=PRIMARY_USER_ID,
+                external_version="newer-version",
+                authority_version=state.mapping_version,
+                archived_at=None,
+                created_at=newer,
+                updated_at=newer,
+            )
+            session.add(mapping)
+            await session.commit()
+
+            service = CRMConnectorService(
+                session,
+                TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin"),
+                app.state.settings,
+                adapters={},
+            )
+            applied = await service._apply_inbound_record(
+                connection_row,
+                state,
+                CRMProviderRecord(
+                    object_type="account",
+                    external_object_id="company-out-of-order",
+                    fields={"name": "Stale provider name"},
+                    external_version="older-version",
+                    modified_at=newer - timedelta(minutes=1),
+                ),
+            )
+            assert applied is False
+            await session.commit()
+            receipt = await session.scalar(
+                select(CRMSyncReceipt).where(
+                    CRMSyncReceipt.connection_id == connection_row.id,
+                    CRMSyncReceipt.external_version == "older-version",
+                )
+            )
+            assert receipt is not None
+            assert receipt.operation == "observe"
+            assert receipt.status == "skipped"
+            assert receipt.safe_failure_code == "stale_provider_observation"
+        await engine.dispose()
+
+    asyncio.run(scenario())
+    assert client.get(f"/api/v1/companies/{company['id']}").json()["name"] == company["name"]
+
+
+def test_crm_disconnect_cancels_sync_and_leaves_native_records_usable(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_hubspot(app)
+    connection = _connect_hubspot(client, monkeypatch)
+    company = create_company(client)
+
+    disconnected = client.delete(f"/api/v1/integrations/connections/{connection['id']}")
+    assert disconnected.status_code == 200, disconnected.text
+    assert disconnected.json()["connectionStatus"] == "revoked"
+    assert client.get(f"/api/v1/companies/{company['id']}").json()["name"] == company["name"]
+
+    async def verify() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            state = await session.scalar(
+                select(CRMConnectionState).where(CRMConnectionState.connection_id == uuid.UUID(str(connection["id"])))
+            )
+            jobs = list(
+                (
+                    await session.scalars(
+                        select(CRMSyncJob).where(CRMSyncJob.connection_id == uuid.UUID(str(connection["id"])))
+                    )
+                ).all()
+            )
+            assert state is not None
+            assert state.lifecycle == "disabled"
+            assert state.connector_enabled is False
+            assert state.writeback_enabled is False
+            assert jobs and all(job.status == "cancelled" for job in jobs)
+        await engine.dispose()
+
+    asyncio.run(verify())
+
+
+def test_existing_contact_applies_server_owned_account_and_owner_mappings(
+    app: FastAPI,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_hubspot(app)
+    connection = _connect_hubspot(client, monkeypatch)
+    first_company = create_company(client)
+    second_company = create_company(client, name="Mapped account")
+    contact = create_contact(client, str(first_company["id"]))
+    mapped_owner_id = uuid.uuid4()
+
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            connection_row = await session.scalar(
+                select(IntegrationConnection).where(IntegrationConnection.id == uuid.UUID(str(connection["id"])))
+            )
+            state = await session.scalar(
+                select(CRMConnectionState).where(CRMConnectionState.connection_id == uuid.UUID(str(connection["id"])))
+            )
+            assert connection_row is not None and state is not None
+            now = datetime.now(UTC)
+            session.add(
+                User(
+                    id=mapped_owner_id,
+                    external_auth_id=f"mapped-owner-{mapped_owner_id}",
+                    email=f"mapped-owner-{mapped_owner_id}@example.test",
+                    display_name="Mapped Owner",
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await session.flush()
+            session.add(
+                OrganisationMembership(
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    user_id=mapped_owner_id,
+                    role="member",
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.add_all(
+                [
+                    CRMOwnerMapping(
+                        id=uuid.uuid4(),
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        connection_id=connection_row.id,
+                        provider_key="hubspot",
+                        external_owner_id="owner-rel-1",
+                        external_owner_name="Mapped Owner",
+                        external_owner_email=None,
+                        user_id=mapped_owner_id,
+                        state="mapped",
+                        configured_by_user_id=PRIMARY_USER_ID,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    CRMEntityMapping(
+                        id=uuid.uuid4(),
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        connection_id=connection_row.id,
+                        revenueos_entity_type="company",
+                        revenueos_entity_id=uuid.UUID(str(second_company["id"])),
+                        external_object_type="company",
+                        external_object_id="company-rel-2",
+                        external_updated_at=now,
+                        last_synced_at=now,
+                        sync_state="active",
+                        created_by_user_id=PRIMARY_USER_ID,
+                        external_version="account-version-1",
+                        authority_version=state.mapping_version,
+                        archived_at=None,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    CRMEntityMapping(
+                        id=uuid.uuid4(),
+                        organisation_id=PRIMARY_ORGANISATION_ID,
+                        connection_id=connection_row.id,
+                        revenueos_entity_type="contact",
+                        revenueos_entity_id=uuid.UUID(str(contact["id"])),
+                        external_object_type="contact",
+                        external_object_id="contact-rel-1",
+                        external_updated_at=now,
+                        last_synced_at=now + timedelta(seconds=1),
+                        sync_state="active",
+                        created_by_user_id=PRIMARY_USER_ID,
+                        external_version="contact-version-1",
+                        authority_version=state.mapping_version,
+                        archived_at=None,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                ]
+            )
+            await session.commit()
+            service = CRMConnectorService(
+                session,
+                TenantContext(PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, "admin"),
+                app.state.settings,
+                adapters={},
+            )
+            assert await service._apply_inbound_record(
+                connection_row,
+                state,
+                CRMProviderRecord(
+                    object_type="contact",
+                    external_object_id="contact-rel-1",
+                    fields={"account": None, "owner": "owner-rel-1"},
+                    external_version="contact-version-2",
+                    modified_at=now + timedelta(seconds=2),
+                    owner_external_id="owner-rel-1",
+                    related_account_external_id="company-rel-2",
+                ),
+            )
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(scenario())
+    updated = client.get(f"/api/v1/contacts/{contact['id']}")
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["companyId"] == second_company["id"]
+    assert updated.json()["ownerUserId"] == str(mapped_owner_id)
+
+
 def test_live_crm_action_reads_previews_confirms_updates_and_records_sync(
     app: FastAPI,
     client: TestClient,
@@ -896,23 +1694,34 @@ def test_live_crm_action_reads_previews_confirms_updates_and_records_sync(
     connection = _connect_hubspot(client, monkeypatch)
     company = create_company(client)
     opportunity = create_opportunity(client, str(company["id"]))
-    remote = {"amount": "100.00", "currency": "AUD", "updated_at": "2026-08-24T01:00:00Z"}
+    remote = {
+        "amount": "100.00",
+        "deal_currency_code": "AUD",
+        "hs_currency_code": "AUD",
+        "dealstage": "qualified",
+        "description": "Customer expansion programme.",
+        "updated_at": "2026-08-24T01:00:00Z",
+    }
+    uncertain_write = {"enabled": False}
 
     async def get_record(self, context, object_type, object_id, properties):
         del self, context, object_type, properties
         return HubSpotRecord(
             id=object_id,
-            properties={"amount": remote["amount"], "deal_currency_code": remote["currency"]},
+            properties={key: value for key, value in remote.items() if key != "updated_at"},
             updatedAt=remote["updated_at"],
         )
 
     async def update_record(self, context, object_type, object_id, properties):
         del self, context, object_type
-        remote["amount"] = properties["amount"]
+        remote.update(properties)
         remote["updated_at"] = "2026-08-24T01:05:00Z"
+        if uncertain_write["enabled"]:
+            uncertain_write["enabled"] = False
+            raise HubSpotAPIError("provider_timeout", uncertain=True)
         return HubSpotRecord(
             id=object_id,
-            properties={"amount": remote["amount"]},
+            properties={key: value for key, value in remote.items() if key != "updated_at"},
             updatedAt=remote["updated_at"],
         )
 
@@ -930,9 +1739,22 @@ def test_live_crm_action_reads_previews_confirms_updates_and_records_sync(
             )
         ]
 
+    async def pipelines(self, context):
+        del self, context
+        return [
+            HubSpotPipeline.model_validate(
+                {
+                    "id": "default",
+                    "label": "Sales pipeline",
+                    "stages": [{"id": "qualified", "label": "Qualified"}],
+                }
+            )
+        ]
+
     monkeypatch.setattr(HubSpotClient, "get_record", get_record)
     monkeypatch.setattr(HubSpotClient, "update_record", update_record)
     monkeypatch.setattr(HubSpotClient, "properties", properties)
+    monkeypatch.setattr(HubSpotClient, "pipelines", pipelines)
     linked = client.put(
         f"/api/v1/integrations/crm/entities/opportunity/{opportunity['id']}",
         json={
@@ -952,6 +1774,117 @@ def test_live_crm_action_reads_previews_confirms_updates_and_records_sync(
         },
     )
     assert mapped.status_code == 200
+    stage_mapping = client.put(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/stages",
+        json={
+            "revenueosStage": "proposal",
+            "externalPipelineId": "default",
+            "externalStageId": "qualified",
+        },
+    )
+    assert stage_mapping.status_code == 200, stage_mapping.text
+
+    async def finish_initial_sync() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            now = datetime.now(UTC)
+            await session.execute(
+                update(CRMConnectionState)
+                .where(CRMConnectionState.connection_id == uuid.UUID(str(connection["id"])))
+                .values(initial_sync_completed_at=now, last_successful_sync_at=now, lifecycle="mapping_required")
+            )
+            await session.execute(
+                update(CRMSyncJob)
+                .where(CRMSyncJob.connection_id == uuid.UUID(str(connection["id"])))
+                .values(status="succeeded", completed_at=now)
+            )
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(finish_initial_sync())
+    status = client.get(f"/api/v1/integrations/connections/{connection['id']}/crm/status")
+    assert status.status_code == 200
+    reviewed = client.post(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/mappings/review",
+        json={"mappingVersion": status.json()["mappingVersion"], "confirmed": True},
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    writeback = client.put(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/writeback",
+        json={"mappingVersion": reviewed.json()["mappingVersion"], "enabled": True, "confirmed": True},
+    )
+    assert writeback.status_code == 200, writeback.text
+
+    generic_preview = client.post(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/writeback/preview",
+        json={"entityType": "opportunity", "entityId": opportunity["id"]},
+    )
+    assert generic_preview.status_code == 200, generic_preview.text
+    uncertain_write["enabled"] = True
+    generic_confirm = client.post(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/writeback/confirm",
+        json={
+            "previewId": generic_preview.json()["id"],
+            "previewFingerprint": generic_preview.json()["previewFingerprint"],
+            "idempotencyKey": "generic-unknown-writeback",
+            "confirmed": True,
+        },
+    )
+    assert generic_confirm.status_code == 200, generic_confirm.text
+    assert generic_confirm.json()["status"] == "unknown"
+    reconciled = client.post(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/writeback/receipts/"
+        f"{generic_confirm.json()['receiptId']}/reconcile"
+    )
+    assert reconciled.status_code == 200, reconciled.text
+    assert reconciled.json()["status"] == "reconciled"
+    repeated_reconciliation = client.post(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/writeback/receipts/"
+        f"{generic_confirm.json()['receiptId']}/reconcile"
+    )
+    assert repeated_reconciliation.status_code == 200
+    assert repeated_reconciliation.json()["receiptId"] == reconciled.json()["receiptId"]
+    remote["amount"] = "100.00"
+    remote["updated_at"] = "2026-08-24T01:06:00Z"
+    second_preview = client.post(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/writeback/preview",
+        json={"entityType": "opportunity", "entityId": opportunity["id"]},
+    )
+    assert second_preview.status_code == 200, second_preview.text
+    reused_key = client.post(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/writeback/confirm",
+        json={
+            "previewId": second_preview.json()["id"],
+            "previewFingerprint": second_preview.json()["previewFingerprint"],
+            "idempotencyKey": "generic-unknown-writeback",
+            "confirmed": True,
+        },
+    )
+    assert reused_key.status_code == 409
+    assert reused_key.json()["code"] == "crm_idempotency_key_reused"
+    changed_local = client.patch(
+        f"/api/v1/opportunities/{opportunity['id']}",
+        json={"estimatedValue": "250.00", "currency": "AUD"},
+    )
+    assert changed_local.status_code == 200, changed_local.text
+    stale_local_preview = client.post(
+        f"/api/v1/integrations/connections/{connection['id']}/crm/writeback/confirm",
+        json={
+            "previewId": second_preview.json()["id"],
+            "previewFingerprint": second_preview.json()["previewFingerprint"],
+            "idempotencyKey": "stale-local-writeback-preview",
+            "confirmed": True,
+        },
+    )
+    assert stale_local_preview.status_code == 409
+    assert stale_local_preview.json()["code"] == "crm_preview_stale"
+    assert remote["amount"] == "100.00"
+    restored_local = client.patch(
+        f"/api/v1/opportunities/{opportunity['id']}",
+        json={"estimatedValue": opportunity["estimatedValue"], "currency": "AUD"},
+    )
+    assert restored_local.status_code == 200, restored_local.text
+
     action_id = _seed_approved_action(
         opportunity_id=str(opportunity["id"]),
         action_type="update_opportunity",

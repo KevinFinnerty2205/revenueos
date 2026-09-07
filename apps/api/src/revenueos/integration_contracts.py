@@ -344,7 +344,7 @@ MicrosoftCalendarEventListResponse = ProviderCalendarEventListResponse
 MicrosoftCalendarInteractionLinkRequest = ProviderCalendarInteractionLinkRequest
 
 
-CRMObjectType = Literal["company", "contact", "deal"]
+CRMObjectType = Literal["account", "company", "contact", "opportunity", "deal"]
 
 
 class CRMSearchResult(APIModel):
@@ -377,12 +377,15 @@ class CRMEntityMappingResponse(APIModel):
     external_updated_at: datetime | None
     last_synced_at: datetime | None
     sync_state: Literal["active", "external_missing"]
+    external_version: str | None
+    authority_version: int
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
 
 class CRMPropertyDefinition(APIModel):
-    entity_type: Literal["opportunity", "contact"]
+    entity_type: Literal["company", "opportunity", "contact"]
     external_property_name: str
     label: str
     property_type: Literal["string", "number", "date", "datetime", "enumeration"]
@@ -391,9 +394,13 @@ class CRMPropertyDefinition(APIModel):
 
 
 class CRMFieldMappingRequest(StrictIntegrationModel):
-    entity_type: Literal["opportunity", "contact"]
+    entity_type: Literal["company", "opportunity", "contact"]
     revenueos_field: Literal[
+        "name",
+        "domain",
+        "industry",
         "stage",
+        "currency",
         "expected_close_date",
         "estimated_value",
         "next_step",
@@ -401,21 +408,23 @@ class CRMFieldMappingRequest(StrictIntegrationModel):
         "first_name",
         "last_name",
         "email",
+        "phone",
         "job_title",
     ]
     external_property_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
-    authority: Literal["review_before_sync", "crm_authoritative"] = "review_before_sync"
+    authority: Literal["review_before_sync", "crm_authoritative", "revenueos_authoritative"] = "review_before_sync"
 
 
 class CRMFieldMappingResponse(APIModel):
     id: UUID
     connection_id: UUID
-    entity_type: Literal["opportunity", "contact"]
+    entity_type: Literal["company", "opportunity", "contact"]
     revenueos_field: str
     external_property_name: str
     external_property_type: Literal["string", "number", "date", "datetime", "enumeration"]
     authority: Literal["crm_authoritative", "revenueos_authoritative", "review_before_sync"]
     enabled: bool
+    mapping_version: int
 
 
 class CRMFieldConfigurationResponse(APIModel):
@@ -450,8 +459,171 @@ class CRMStageMappingResponse(APIModel):
     revenueos_stage: str
     external_pipeline_id: str
     external_stage_id: str
+    mapping_version: int
 
 
 class CRMStageConfigurationResponse(APIModel):
     available_stages: list[CRMStageDefinition]
     mappings: list[CRMStageMappingResponse]
+
+
+class CRMSyncCursorResponse(APIModel):
+    object_type: Literal["account", "contact", "opportunity"]
+    strategy: Literal["full", "incremental"]
+    page_count: int
+    record_count: int
+    high_watermark_at: datetime | None
+    completed_at: datetime | None
+
+
+class CRMSyncJobResponse(APIModel):
+    id: UUID
+    connection_id: UUID
+    provider_key: Literal["hubspot", "salesforce"]
+    mode: Literal["initial", "incremental", "reconcile"]
+    status: Literal["queued", "running", "paused", "succeeded", "degraded", "cancelled", "failed"]
+    attempt_count: int
+    safe_failure_code: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CRMConnectionStatusResponse(APIModel):
+    connection_id: UUID
+    provider_key: Literal["hubspot", "salesforce"]
+    lifecycle: Literal[
+        "connected_read_only",
+        "initial_sync",
+        "mapping_required",
+        "ready",
+        "needs_attention",
+        "disabled",
+    ]
+    health_status: Literal["unknown", "healthy", "degraded", "needs_reauth", "rate_limited", "unavailable"]
+    connector_enabled: bool
+    writeback_enabled: bool
+    mapping_version: int
+    records_seen: int
+    records_applied: int
+    conflict_count: int
+    initial_sync_started_at: datetime | None
+    initial_sync_completed_at: datetime | None
+    last_successful_sync_at: datetime | None
+    last_health_checked_at: datetime | None
+    last_safe_error_code: str | None
+    cursors: list[CRMSyncCursorResponse]
+    latest_job: CRMSyncJobResponse | None
+
+
+class CRMSyncEnqueueRequest(StrictIntegrationModel):
+    mode: Literal["incremental", "reconcile"] = "incremental"
+    idempotency_key: Annotated[str, StringConstraints(strip_whitespace=True, min_length=8, max_length=200)]
+
+
+class CRMMappingReviewRequest(StrictIntegrationModel):
+    mapping_version: int = Field(ge=1)
+    confirmed: Literal[True]
+
+
+class CRMWritebackSettingRequest(StrictIntegrationModel):
+    mapping_version: int = Field(ge=1)
+    enabled: bool
+    confirmed: Literal[True]
+
+
+class CRMConnectorSettingRequest(StrictIntegrationModel):
+    enabled: bool
+    confirmed: Literal[True]
+
+
+class CRMOwnerMappingRequest(StrictIntegrationModel):
+    external_owner_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    user_id: UUID | None
+
+
+class CRMOwnerMappingResponse(APIModel):
+    id: UUID
+    connection_id: UUID
+    provider_key: Literal["hubspot", "salesforce"]
+    external_owner_id: str
+    external_owner_name: str | None
+    external_owner_email: str | None
+    user_id: UUID | None
+    state: Literal["unmapped", "mapped", "inactive"]
+
+
+class CRMOwnerMappingListResponse(APIModel):
+    items: list[CRMOwnerMappingResponse]
+    total: int
+
+
+class CRMConflictResponse(APIModel):
+    id: UUID
+    connection_id: UUID
+    provider_key: Literal["hubspot", "salesforce"]
+    object_type: Literal["account", "contact", "opportunity"]
+    revenueos_entity_id: UUID | None
+    external_object_id: str
+    field_key: str
+    oryntela_value: object | None
+    provider_value: object | None
+    oryntela_fingerprint: str
+    provider_fingerprint: str
+    oryntela_version_at: datetime | None
+    external_version: str
+    mapping_version: int
+    authority: Literal["crm_authoritative", "revenueos_authoritative", "review_before_sync"]
+    observed_at: datetime
+    allowed_resolutions: list[Literal["provider", "oryntela", "manual"]]
+    status: Literal["open", "resolved", "ignored"]
+    resolution: Literal["provider", "oryntela", "manual"] | None
+    resolved_value: object | None
+    resolved_fingerprint: str | None
+    resolved_by_user_id: UUID | None
+    resolved_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CRMConflictListResponse(APIModel):
+    items: list[CRMConflictResponse]
+    total: int
+
+
+class CRMConflictResolutionRequest(StrictIntegrationModel):
+    resolution: Literal["provider", "oryntela", "manual"]
+    manual_value: object | None = None
+    confirmed: Literal[True]
+
+
+class CRMWritebackPreviewRequest(StrictIntegrationModel):
+    entity_type: Literal["company", "contact", "opportunity"]
+    entity_id: UUID
+
+
+class CRMWritebackPreviewResponse(APIModel):
+    id: UUID
+    connection_id: UUID
+    entity_type: Literal["company", "contact", "opportunity"]
+    entity_id: UUID
+    operation: Literal["create", "update"]
+    external_object_id: str | None
+    changes: dict[str, object | None]
+    preview_fingerprint: str
+    expires_at: datetime
+
+
+class CRMWritebackConfirmRequest(StrictIntegrationModel):
+    preview_id: UUID
+    preview_fingerprint: Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
+    idempotency_key: Annotated[str, StringConstraints(strip_whitespace=True, min_length=8, max_length=200)]
+    confirmed: Literal[True]
+
+
+class CRMWritebackResultResponse(APIModel):
+    receipt_id: UUID
+    status: Literal["applied", "reconciled", "unknown"]
+    external_object_id: str | None
+    safe_message: str

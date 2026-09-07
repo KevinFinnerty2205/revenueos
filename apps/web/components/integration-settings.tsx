@@ -4,8 +4,12 @@ import type {
   ConnectionListResponse,
   ConnectorDefinition,
   ConnectorKey,
+  CRMConflictList,
+  CRMConnectionStatus,
   CRMFieldConfiguration,
   CRMFieldMapping,
+  CRMMember,
+  CRMOwnerMappingList,
   CRMStageConfiguration,
   IntegrationCatalogResponse,
   ProviderSyncResponse,
@@ -18,17 +22,19 @@ import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 
 const OPPORTUNITY_FIELDS = [
+  "name",
   "stage",
-  "status",
   "expected_close_date",
   "estimated_value",
-  "next_step",
+  "currency",
   "description",
 ] as const;
+const ACCOUNT_FIELDS = ["name", "domain", "industry"] as const;
 const CONTACT_FIELDS = [
   "first_name",
   "last_name",
   "email",
+  "phone",
   "job_title",
 ] as const;
 const REVENUEOS_STAGES = [
@@ -184,18 +190,18 @@ export function IntegrationSettings() {
     try {
       if (
         definition.connectorKey === "hubspot" ||
+        definition.connectorKey === "salesforce" ||
         definition.connectorKey === "microsoft_365" ||
         definition.connectorKey === "google_workspace"
       ) {
         const provider =
           definition.connectorKey === "google_workspace"
             ? "google"
-            : "microsoft";
+            : definition.connectorKey === "microsoft_365"
+              ? "microsoft"
+              : definition.connectorKey;
         const result = await apiRequest<OAuthStartResponse>(
-          definition.connectorKey === "microsoft_365" ||
-            definition.connectorKey === "google_workspace"
-            ? `/api/v1/integrations/${provider}/oauth/start`
-            : "/api/v1/integrations/hubspot/oauth/start",
+          `/api/v1/integrations/${provider}/oauth/start`,
           { method: "POST" },
         );
         window.location.assign(result.authorisationUrl);
@@ -240,7 +246,7 @@ export function IntegrationSettings() {
           : connection.connectorKey === "microsoft_365" ||
               connection.connectorKey === "google_workspace"
             ? `${connection.displayName} mailbox and calendar authorisation were verified.`
-            : "HubSpot authorisation and account identity were verified.",
+            : `${connection.displayName} authorisation and account identity were verified.`,
       );
     } catch (reason: unknown) {
       setError(
@@ -268,7 +274,7 @@ export function IntegrationSettings() {
           : connection.connectorKey === "microsoft_365" ||
               connection.connectorKey === "google_workspace"
             ? `${connection.displayName} disconnected. Future email sending and calendar synchronisation have stopped; bounded historical Oryntela records remain under retention policy.`
-            : "HubSpot disconnected. Provider revocation was attempted, local credentials were deleted, and pending work was cancelled.",
+            : `${connection.displayName} disconnected. Provider revocation was attempted, local credentials were deleted, and pending work was cancelled.`,
       );
     } catch (reason: unknown) {
       setError(
@@ -513,7 +519,7 @@ export function IntegrationSettings() {
                             ? "Connect simulation"
                             : mailbox
                               ? `Connect ${definition.displayName}`
-                              : "Connect HubSpot"}
+                              : `Connect ${definition.displayName}`}
                     </button>
                   )}
                 </div>
@@ -621,8 +627,11 @@ export function IntegrationSettings() {
                     </div>
                   </div>
                 ) : null}
-                {active && connection?.connectorKey === "hubspot" ? (
-                  <HubSpotMappingSettings
+                {active &&
+                connection &&
+                (connection.connectorKey === "hubspot" ||
+                  connection.connectorKey === "salesforce") ? (
+                  <CRMMappingSettings
                     connection={connection}
                     onError={setError}
                     onMessage={setMessage}
@@ -651,7 +660,7 @@ export function IntegrationSettings() {
   );
 }
 
-function HubSpotMappingSettings({
+function CRMMappingSettings({
   connection,
   onError,
   onMessage,
@@ -660,38 +669,69 @@ function HubSpotMappingSettings({
   onError: (value: string | null) => void;
   onMessage: (value: string | null) => void;
 }) {
+  const providerName = connection.displayName;
+  const [account, setAccount] = useState<CRMFieldConfiguration | null>(null);
   const [opportunity, setOpportunity] = useState<CRMFieldConfiguration | null>(
     null,
   );
   const [contact, setContact] = useState<CRMFieldConfiguration | null>(null);
   const [stages, setStages] = useState<CRMStageConfiguration | null>(null);
+  const [status, setStatus] = useState<CRMConnectionStatus | null>(null);
+  const [owners, setOwners] = useState<CRMOwnerMappingList | null>(null);
+  const [members, setMembers] = useState<CRMMember[]>([]);
+  const [conflicts, setConflicts] = useState<CRMConflictList | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function loadMappings() {
     setLoading(true);
     onError(null);
     try {
-      const [opportunityResult, contactResult, stageResult] = await Promise.all(
-        [
-          apiRequest<CRMFieldConfiguration>(
-            `/api/v1/integrations/connections/${connection.id}/crm/fields/opportunity`,
-          ),
-          apiRequest<CRMFieldConfiguration>(
-            `/api/v1/integrations/connections/${connection.id}/crm/fields/contact`,
-          ),
-          apiRequest<CRMStageConfiguration>(
-            `/api/v1/integrations/connections/${connection.id}/crm/stages`,
-          ),
-        ],
-      );
+      const [
+        accountResult,
+        opportunityResult,
+        contactResult,
+        stageResult,
+        statusResult,
+        ownerResult,
+        memberResult,
+        conflictResult,
+      ] = await Promise.all([
+        apiRequest<CRMFieldConfiguration>(
+          `/api/v1/integrations/connections/${connection.id}/crm/fields/company`,
+        ),
+        apiRequest<CRMFieldConfiguration>(
+          `/api/v1/integrations/connections/${connection.id}/crm/fields/opportunity`,
+        ),
+        apiRequest<CRMFieldConfiguration>(
+          `/api/v1/integrations/connections/${connection.id}/crm/fields/contact`,
+        ),
+        apiRequest<CRMStageConfiguration>(
+          `/api/v1/integrations/connections/${connection.id}/crm/stages`,
+        ),
+        apiRequest<CRMConnectionStatus>(
+          `/api/v1/integrations/connections/${connection.id}/crm/status`,
+        ),
+        apiRequest<CRMOwnerMappingList>(
+          `/api/v1/integrations/connections/${connection.id}/crm/owners`,
+        ),
+        apiRequest<CRMMember[]>("/api/v1/crm/members"),
+        apiRequest<CRMConflictList>(
+          `/api/v1/integrations/connections/${connection.id}/crm/conflicts`,
+        ),
+      ]);
+      setAccount(accountResult);
       setOpportunity(opportunityResult);
       setContact(contactResult);
       setStages(stageResult);
+      setStatus(statusResult);
+      setOwners(ownerResult);
+      setMembers(memberResult);
+      setConflicts(conflictResult);
     } catch (reason: unknown) {
       onError(
         reason instanceof Error
           ? reason.message
-          : "HubSpot mapping settings could not be loaded.",
+          : `${providerName} mapping settings could not be loaded.`,
       );
     } finally {
       setLoading(false);
@@ -699,10 +739,11 @@ function HubSpotMappingSettings({
   }
 
   async function saveField(
-    entityType: "opportunity" | "contact",
+    entityType: "company" | "opportunity" | "contact",
     revenueosField: string,
     propertyName: string,
-    authority: "review_before_sync" | "crm_authoritative",
+    authority:
+      "review_before_sync" | "crm_authoritative" | "revenueos_authoritative",
   ) {
     onError(null);
     try {
@@ -719,7 +760,7 @@ function HubSpotMappingSettings({
         },
       );
       await loadMappings();
-      onMessage("HubSpot field authority and mapping saved.");
+      onMessage(`${providerName} field authority and mapping saved.`);
     } catch (reason: unknown) {
       onError(
         reason instanceof Error
@@ -746,7 +787,7 @@ function HubSpotMappingSettings({
         },
       );
       await loadMappings();
-      onMessage("HubSpot stage mapping saved.");
+      onMessage(`${providerName} stage mapping saved.`);
     } catch (reason: unknown) {
       onError(
         reason instanceof Error
@@ -756,12 +797,177 @@ function HubSpotMappingSettings({
     }
   }
 
+  async function enqueueSync(mode: "incremental" | "reconcile") {
+    onError(null);
+    try {
+      await apiRequest(
+        `/api/v1/integrations/connections/${connection.id}/crm/sync`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            mode,
+            idempotencyKey: crypto.randomUUID(),
+          }),
+        },
+      );
+      await loadMappings();
+      onMessage(`${providerName} synchronisation was queued.`);
+    } catch (reason: unknown) {
+      onError(
+        reason instanceof Error
+          ? reason.message
+          : `${providerName} synchronisation could not be queued.`,
+      );
+    }
+  }
+
+  async function setOwner(externalOwnerId: string, userId: string) {
+    onError(null);
+    try {
+      await apiRequest(
+        `/api/v1/integrations/connections/${connection.id}/crm/owners`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            externalOwnerId,
+            userId: userId || null,
+          }),
+        },
+      );
+      await loadMappings();
+      onMessage(`${providerName} owner mapping saved. Writeback remains off.`);
+    } catch (reason: unknown) {
+      onError(
+        reason instanceof Error
+          ? reason.message
+          : "The owner mapping could not be saved.",
+      );
+    }
+  }
+
+  async function reviewMappings() {
+    if (!status) return;
+    onError(null);
+    try {
+      await apiRequest(
+        `/api/v1/integrations/connections/${connection.id}/crm/mappings/review`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            mappingVersion: status.mappingVersion,
+            confirmed: true,
+          }),
+        },
+      );
+      await loadMappings();
+      onMessage("Mappings approved. CRM writeback is still off.");
+    } catch (reason: unknown) {
+      onError(
+        reason instanceof Error
+          ? reason.message
+          : "The mapping review could not be saved.",
+      );
+    }
+  }
+
+  async function setWriteback(enabled: boolean) {
+    if (!status) return;
+    onError(null);
+    try {
+      await apiRequest(
+        `/api/v1/integrations/connections/${connection.id}/crm/writeback`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            mappingVersion: status.mappingVersion,
+            enabled,
+            confirmed: true,
+          }),
+        },
+      );
+      await loadMappings();
+      onMessage(
+        enabled
+          ? "Reviewed CRM writeback enabled. Every write still requires a preview and confirmation."
+          : "CRM writeback disabled immediately.",
+      );
+    } catch (reason: unknown) {
+      onError(
+        reason instanceof Error
+          ? reason.message
+          : "CRM writeback could not be changed.",
+      );
+    }
+  }
+
+  async function setConnectorEnabled(enabled: boolean) {
+    onError(null);
+    try {
+      await apiRequest(
+        `/api/v1/integrations/connections/${connection.id}/crm/enabled`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ enabled, confirmed: true }),
+        },
+      );
+      await loadMappings();
+      onMessage(
+        enabled
+          ? `${providerName} sync enabled in read-only mapping mode.`
+          : `${providerName} sync and writeback stopped immediately.`,
+      );
+    } catch (reason: unknown) {
+      onError(
+        reason instanceof Error
+          ? reason.message
+          : "The CRM connector kill switch could not be changed.",
+      );
+    }
+  }
+
+  async function resolveConflict(
+    conflictId: string,
+    resolution: "provider" | "oryntela",
+  ) {
+    onError(null);
+    try {
+      await apiRequest(
+        `/api/v1/integrations/crm/conflicts/${conflictId}/resolve`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            resolution,
+            confirmed: true,
+          }),
+        },
+      );
+      await loadMappings();
+      onMessage(
+        resolution === "provider"
+          ? "The reviewed provider value was applied to Oryntela."
+          : "The current Oryntela value was kept.",
+      );
+    } catch (reason: unknown) {
+      onError(
+        reason instanceof Error
+          ? reason.message
+          : "The CRM conflict could not be resolved.",
+      );
+    }
+  }
+
   return (
     <details className="mt-4 border-t border-slate-100 pt-3">
       <summary className="cursor-pointer text-sm font-bold text-slate-800">
-        Advanced mapping settings
+        CRM sync, ownership and mappings
       </summary>
-      {!opportunity || !contact || !stages ? (
+      {!account ||
+      !opportunity ||
+      !contact ||
+      !stages ||
+      !status ||
+      !owners ||
+      !conflicts ? (
         <button
           type="button"
           className="secondary-button mt-3"
@@ -769,16 +975,112 @@ function HubSpotMappingSettings({
           onClick={() => void loadMappings()}
         >
           {loading
-            ? "Loading HubSpot fields…"
-            : "Load HubSpot fields and stages"}
+            ? `Loading ${providerName} configuration…`
+            : `Load ${providerName} configuration`}
         </button>
       ) : (
         <div className="mt-4 space-y-5">
+          <section
+            className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+            aria-labelledby={`crm-state-${connection.id}`}
+          >
+            <h4
+              id={`crm-state-${connection.id}`}
+              className="text-sm font-bold text-slate-950"
+            >
+              Connector state
+            </h4>
+            <dl className="mt-2 grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
+              <div>
+                <dt className="font-bold">Lifecycle</dt>
+                <dd>{humanise(status.lifecycle)}</dd>
+              </div>
+              <div>
+                <dt className="font-bold">Health</dt>
+                <dd>{humanise(status.healthStatus)}</dd>
+              </div>
+              <div>
+                <dt className="font-bold">Last successful sync</dt>
+                <dd>
+                  {status.lastSuccessfulSyncAt
+                    ? new Date(status.lastSuccessfulSyncAt).toLocaleString(
+                        "en-AU",
+                      )
+                    : "Not yet completed"}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-bold">Records</dt>
+                <dd>
+                  {status.recordsApplied} applied of {status.recordsSeen} seen
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-xs leading-5 text-slate-600">
+              Initial and incremental sync are read-only. Writeback is off by
+              default and every enabled write still requires a fresh preview and
+              explicit confirmation.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={
+                  !status.connectorEnabled ||
+                  Boolean(
+                    status.latestJob &&
+                    ["queued", "running", "paused"].includes(
+                      status.latestJob.status,
+                    ),
+                  )
+                }
+                onClick={() => void enqueueSync("incremental")}
+              >
+                Sync now
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  void setConnectorEnabled(!status.connectorEnabled)
+                }
+              >
+                {status.connectorEnabled
+                  ? "Stop all CRM sync"
+                  : "Enable read-only sync"}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!status.connectorEnabled}
+                onClick={() => void reviewMappings()}
+              >
+                Approve current mappings
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!status.connectorEnabled}
+                onClick={() => void setWriteback(!status.writebackEnabled)}
+              >
+                {status.writebackEnabled
+                  ? "Turn writeback off"
+                  : "Enable reviewed writeback"}
+              </button>
+            </div>
+          </section>
           <p className="text-xs leading-5 text-slate-600">
             Mapping is explicit. “Review before update” requires a fresh CRM
             read and final confirmation. “CRM is source of truth” blocks
-            RevenueOS writes for that field.
+            Oryntela writes for that field.
           </p>
+          <FieldMappingGroup
+            title="Account fields"
+            entityType="company"
+            fields={ACCOUNT_FIELDS}
+            configuration={account}
+            onSave={saveField}
+          />
           <FieldMappingGroup
             title="Opportunity fields"
             entityType="opportunity"
@@ -834,6 +1136,111 @@ function HubSpotMappingSettings({
               })}
             </div>
           </fieldset>
+          <fieldset>
+            <legend className="text-sm font-bold text-slate-900">
+              CRM owners
+            </legend>
+            <p className="mt-1 text-xs leading-5 text-slate-600">
+              Every active CRM owner must map to an active Oryntela member
+              before mappings can be approved.
+            </p>
+            <div className="mt-2 grid gap-2">
+              {owners.items.length ? (
+                owners.items.map((owner) => (
+                  <label
+                    key={owner.id}
+                    className="grid gap-1 text-xs font-bold text-slate-700"
+                  >
+                    {owner.externalOwnerName ??
+                      owner.externalOwnerEmail ??
+                      owner.externalOwnerId}
+                    <select
+                      className="text-input"
+                      value={owner.userId ?? ""}
+                      disabled={owner.state === "inactive"}
+                      onChange={(event) =>
+                        void setOwner(owner.externalOwnerId, event.target.value)
+                      }
+                    >
+                      <option value="">Not mapped</option>
+                      {members
+                        .filter((member) => member.active)
+                        .map((member) => (
+                          <option key={member.userId} value={member.userId}>
+                            {member.displayName}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                ))
+              ) : (
+                <p className="text-xs text-slate-600">
+                  Owners appear after the first account sync page.
+                </p>
+              )}
+            </div>
+          </fieldset>
+          <section aria-labelledby={`crm-conflicts-${connection.id}`}>
+            <h4
+              id={`crm-conflicts-${connection.id}`}
+              className="text-sm font-bold text-slate-900"
+            >
+              Conflicts (
+              {conflicts.items.filter((item) => item.status === "open").length})
+            </h4>
+            {conflicts.items.some((item) => item.status === "open") ? (
+              <ul className="mt-2 grid gap-2">
+                {conflicts.items
+                  .filter((item) => item.status === "open")
+                  .map((conflict) => (
+                    <li
+                      key={conflict.id}
+                      className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-slate-700"
+                    >
+                      <p className="font-bold text-slate-900">
+                        {humanise(conflict.objectType)} ·{" "}
+                        {humanise(conflict.fieldKey)}
+                      </p>
+                      <p className="mt-1 break-words">
+                        Oryntela: {String(conflict.oryntelaValue ?? "Empty")} ·{" "}
+                        {providerName}:{" "}
+                        {String(conflict.providerValue ?? "Empty")}
+                      </p>
+                      <p className="mt-1 text-slate-600">
+                        Authority: {humanise(conflict.authority)} · observed{" "}
+                        {new Date(conflict.observedAt).toLocaleString()}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {conflict.allowedResolutions.includes("provider") ? (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() =>
+                              void resolveConflict(conflict.id, "provider")
+                            }
+                          >
+                            Use reviewed {providerName} value
+                          </button>
+                        ) : null}
+                        {conflict.allowedResolutions.includes("oryntela") ? (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() =>
+                              void resolveConflict(conflict.id, "oryntela")
+                            }
+                          >
+                            Keep Oryntela value
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-slate-600">No open conflicts.</p>
+            )}
+          </section>
         </div>
       )}
     </details>
@@ -848,14 +1255,15 @@ function FieldMappingGroup({
   onSave,
 }: {
   title: string;
-  entityType: "opportunity" | "contact";
+  entityType: "company" | "opportunity" | "contact";
   fields: readonly string[];
   configuration: CRMFieldConfiguration;
   onSave: (
-    entityType: "opportunity" | "contact",
+    entityType: "company" | "opportunity" | "contact",
     revenueosField: string,
     propertyName: string,
-    authority: "review_before_sync" | "crm_authoritative",
+    authority:
+      "review_before_sync" | "crm_authoritative" | "revenueos_authoritative",
   ) => Promise<void>;
 }) {
   return (
@@ -904,7 +1312,9 @@ function FieldMappingGroup({
                   value={
                     current?.authority === "crm_authoritative"
                       ? "crm_authoritative"
-                      : "review_before_sync"
+                      : current?.authority === "revenueos_authoritative"
+                        ? "revenueos_authoritative"
+                        : "review_before_sync"
                   }
                   onChange={(event) => {
                     if (current)
@@ -913,7 +1323,9 @@ function FieldMappingGroup({
                         field,
                         current.externalPropertyName,
                         event.target.value as
-                          "review_before_sync" | "crm_authoritative",
+                          | "review_before_sync"
+                          | "crm_authoritative"
+                          | "revenueos_authoritative",
                       );
                   }}
                 >
@@ -922,6 +1334,9 @@ function FieldMappingGroup({
                   </option>
                   <option value="crm_authoritative">
                     CRM is source of truth
+                  </option>
+                  <option value="revenueos_authoritative">
+                    Oryntela is source of truth
                   </option>
                 </select>
               </label>

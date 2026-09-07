@@ -6,7 +6,7 @@ import json
 import logging
 import secrets
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
 from typing import TYPE_CHECKING, Literal, NoReturn, cast
@@ -37,6 +37,8 @@ from revenueos.credential_store import (
     EncryptedDatabaseCredentialStore,
     MockCredentialStore,
 )
+from revenueos.crm_provider import CRMObjectType as CanonicalCRMObjectType
+from revenueos.crm_provider import CRMProviderAdapter, CRMProviderError, rules_for
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import (
     ActionRiskClass,
@@ -95,15 +97,18 @@ from revenueos.models import (
     ActionExecution,
     Company,
     Contact,
+    CRMConnectionState,
     CRMEntityMapping,
     CRMFieldMapping,
     CRMStageMapping,
+    CRMSyncJob,
     ExecutionPreview,
     IntegrationAuditEvent,
     IntegrationConnection,
     Interaction,
     OAuthConnectionState,
     Opportunity,
+    Organisation,
     OrganisationMembership,
     ProviderOutboundOperation,
     User,
@@ -116,12 +121,17 @@ if TYPE_CHECKING:
     from revenueos.google_workspace import GoogleWorkspaceClient
     from revenueos.hubspot_connector import HubSpotClient
     from revenueos.microsoft_graph import MicrosoftGraphClient
+    from revenueos.salesforce_connector import SalesforceClient
 
 logger = logging.getLogger("revenueos.integrations")
 
 
 def _commercial_module_for_connector(connector_key: str) -> ModuleCode:
-    if connector_key in {ConnectorKey.HUBSPOT.value, ConnectorKey.MOCK_CRM.value}:
+    if connector_key in {
+        ConnectorKey.HUBSPOT.value,
+        ConnectorKey.SALESFORCE.value,
+        ConnectorKey.MOCK_CRM.value,
+    }:
         return "crm"
     if connector_key in {
         ConnectorKey.MOCK_EMAIL.value,
@@ -154,6 +164,7 @@ class IntegrationService:
         self.repository = IntegrationRepository(session)
         self.credential_store = credential_store or self._credential_store()
         self.hubspot_client: HubSpotClient | None = None
+        self.salesforce_client: SalesforceClient | None = None
         self.microsoft_client: MicrosoftGraphClient | None = None
         self.google_client: GoogleWorkspaceClient | None = None
         live_executor: ActionExecutor | None = None
@@ -163,6 +174,11 @@ class IntegrationService:
 
             self.hubspot_client = HubSpotClient(settings, self.credential_store)
             live_executor = HubSpotCRMExecutor(self.hubspot_client)
+        if settings.feature_salesforce_crm_enabled:
+            from revenueos.salesforce_connector import SalesforceClient, SalesforceCRMExecutor
+
+            self.salesforce_client = SalesforceClient(settings, self.credential_store)
+            live_executors.append(SalesforceCRMExecutor(self.salesforce_client))
         if settings.feature_microsoft_365_enabled:
             from revenueos.microsoft_graph import MicrosoftEmailExecutor, MicrosoftGraphClient
 
@@ -182,11 +198,13 @@ class IntegrationService:
         self._require_integrations()
         mock_available = self._mock_connectors_available()
         hubspot_available = self.settings.feature_hubspot_crm_enabled
+        salesforce_available = self.settings.feature_salesforce_crm_enabled
         definitions = [
             definition
             for definition in CONNECTOR_DEFINITIONS.values()
             if (definition.simulation_only and mock_available)
             or (definition.connector_key == ConnectorKey.HUBSPOT and hubspot_available)
+            or (definition.connector_key == ConnectorKey.SALESFORCE and salesforce_available)
             or definition.connector_key in {ConnectorKey.MICROSOFT_365, ConnectorKey.GOOGLE_WORKSPACE}
         ]
         return IntegrationCatalogResponse(
@@ -206,7 +224,7 @@ class IntegrationService:
                         else (
                             self.settings.feature_google_workspace_enabled
                             if definition.connector_key == ConnectorKey.GOOGLE_WORKSPACE
-                            else True
+                            else (salesforce_available if definition.connector_key == ConnectorKey.SALESFORCE else True)
                         )
                     ),
                     simulation_only=definition.simulation_only,
@@ -216,12 +234,14 @@ class IntegrationService:
             execution_mode=(
                 "mixed"
                 if hubspot_available
+                or salesforce_available
                 or self.settings.feature_microsoft_365_enabled
                 or self.settings.feature_google_workspace_enabled
                 else "simulation"
             ),
             external_actions_enabled=(
                 hubspot_available
+                or salesforce_available
                 or self.settings.feature_microsoft_365_enabled
                 or self.settings.feature_google_workspace_enabled
             ),
@@ -235,6 +255,7 @@ class IntegrationService:
             for item in records
             if (item.connector_key.startswith("mock_") and self._mock_connectors_available())
             or (item.connector_key == ConnectorKey.HUBSPOT.value and self.settings.feature_hubspot_crm_enabled)
+            or (item.connector_key == ConnectorKey.SALESFORCE.value and self.settings.feature_salesforce_crm_enabled)
             or (
                 item.connector_key == ConnectorKey.MICROSOFT_365.value
                 and (self.tenant.can_manage() or item.created_by_user_id == self.tenant.user_id)
@@ -256,6 +277,7 @@ class IntegrationService:
         self._require_admin()
         if request.connector_key in {
             ConnectorKey.HUBSPOT,
+            ConnectorKey.SALESFORCE,
             ConnectorKey.MICROSOFT_365,
             ConnectorKey.GOOGLE_WORKSPACE,
         }:
@@ -337,6 +359,7 @@ class IntegrationService:
         except ExecutionFailure as exc:
             if connection.connector_key in {
                 ConnectorKey.HUBSPOT.value,
+                ConnectorKey.SALESFORCE.value,
                 ConnectorKey.MICROSOFT_365.value,
                 ConnectorKey.GOOGLE_WORKSPACE.value,
             }:
@@ -361,7 +384,7 @@ class IntegrationService:
                 else (
                     f"{definition.display_name} mailbox and calendar authorisation were verified."
                     if connection.connector_key in mailbox_keys
-                    else "HubSpot authorisation and account identity were verified."
+                    else f"{definition.display_name} authorisation and account identity were verified."
                 )
             ),
         )
@@ -398,6 +421,21 @@ class IntegrationService:
                         "connection_provider_revocation_failed",
                         extra=self._connection_log_context(connection),
                     )
+            if connection.connector_key == ConnectorKey.SALESFORCE.value and self.salesforce_client is not None:
+                from revenueos.salesforce_connector import SalesforceAPIError
+
+                try:
+                    credential = await self.credential_store.get(
+                        self.tenant.organisation_id,
+                        connection.id,
+                        connection.credential_reference,
+                    )
+                    await self.salesforce_client.revoke(credential)
+                except (ValueError, SalesforceAPIError):
+                    logger.warning(
+                        "connection_provider_revocation_failed",
+                        extra=self._connection_log_context(connection),
+                    )
             if connection.connector_key == ConnectorKey.GOOGLE_WORKSPACE.value and self.google_client is not None:
                 from revenueos.google_workspace import GoogleAPIError
 
@@ -424,6 +462,32 @@ class IntegrationService:
         connection.capability_state_json = []
         connection.revoked_at = now
         connection.metadata_version += 1
+        crm_state = await self.session.scalar(
+            select(CRMConnectionState).where(
+                CRMConnectionState.organisation_id == self.tenant.organisation_id,
+                CRMConnectionState.connection_id == connection.id,
+            )
+        )
+        if crm_state is not None:
+            crm_state.connector_enabled = False
+            crm_state.writeback_enabled = False
+            crm_state.lifecycle = "disabled"
+            crm_state.health_status = "unavailable"
+            crm_jobs = (
+                await self.session.scalars(
+                    select(CRMSyncJob).where(
+                        CRMSyncJob.organisation_id == self.tenant.organisation_id,
+                        CRMSyncJob.connection_id == connection.id,
+                        CRMSyncJob.status.in_(("queued", "running", "paused")),
+                    )
+                )
+            ).all()
+            for job in crm_jobs:
+                job.status = "cancelled"
+                job.worker_id = None
+                job.lease_expires_at = None
+                job.completed_at = now
+                job.updated_at = now
         await self.repository.invalidate_connection_previews(
             self.tenant.organisation_id,
             connection.id,
@@ -443,6 +507,7 @@ class IntegrationService:
         self._require_admin()
         await self._require_crm_connector_write()
         client = self._require_hubspot()
+        await self._require_primary_external_crm_available(ConnectorKey.HUBSPOT)
         state = secrets.token_urlsafe(48)
         now = datetime.now(UTC)
         assert self.settings.hubspot_oauth_redirect_uri is not None
@@ -864,7 +929,7 @@ class IntegrationService:
             hashlib.sha256(request.state.encode()).hexdigest(),
             for_update=True,
         )
-        if state is None:
+        if state is None or state.connector_key != ConnectorKey.HUBSPOT.value:
             raise PublicAPIError("oauth_state_invalid", "This HubSpot authorisation request is invalid.", 400)
         if state.user_id != self.tenant.user_id:
             raise PublicAPIError("oauth_state_invalid", "This HubSpot authorisation request is invalid.", 400)
@@ -874,6 +939,7 @@ class IntegrationService:
             raise PublicAPIError("oauth_state_expired", "This HubSpot authorisation request has expired.", 409)
         if state.redirect_uri != self.settings.hubspot_oauth_redirect_uri:
             raise PublicAPIError("oauth_redirect_mismatch", "This HubSpot authorisation request is invalid.", 400)
+        oauth_state_id = state.id
         state.consumed_at = now
         if request.provider_error is not None:
             await self._commit("The HubSpot authorisation result could not be recorded.")
@@ -894,6 +960,7 @@ class IntegrationService:
                 "HubSpot authorisation could not be verified. Start the connection again.",
                 409,
             ) from exc
+        await self._require_primary_external_crm_available(ConnectorKey.HUBSPOT)
         connection = await self.repository.connection_by_key(
             self.tenant.organisation_id,
             ConnectorKey.HUBSPOT.value,
@@ -942,7 +1009,23 @@ class IntegrationService:
             )
             self.repository.add(connection)
             event_type = "connection_created"
-            await self.repository.flush()
+            try:
+                await self.repository.flush()
+            except IntegrityError as exc:
+                await self._preserve_consumed_oauth_state(
+                    oauth_state_id,
+                    ConnectorKey.HUBSPOT,
+                    now,
+                )
+                try:
+                    await client.revoke(credential)
+                except HubSpotAPIError:
+                    logger.warning("connection_rejected_credential_revocation_failed")
+                raise PublicAPIError(
+                    "provider_tenant_already_connected",
+                    "This HubSpot account is already connected to another Oryntela organisation.",
+                    409,
+                ) from exc
         else:
             connection.connection_status = ConnectionStatus.ACTIVE.value
             connection.created_by_user_id = self.tenant.user_id
@@ -957,13 +1040,240 @@ class IntegrationService:
             connection.granted_scopes_json = list(credential.scopes)
             connection.metadata_version += 1
             event_type = "connection_created"
+            try:
+                await self.repository.flush()
+            except IntegrityError as exc:
+                await self._preserve_consumed_oauth_state(
+                    oauth_state_id,
+                    ConnectorKey.HUBSPOT,
+                    now,
+                )
+                try:
+                    await client.revoke(credential)
+                except HubSpotAPIError:
+                    logger.warning("connection_rejected_credential_revocation_failed")
+                raise PublicAPIError(
+                    "provider_tenant_already_connected",
+                    "This HubSpot account is already connected to another Oryntela organisation.",
+                    409,
+                ) from exc
         connection.credential_reference = await self.credential_store.put(
             self.tenant.organisation_id,
             connection.id,
             credential,
         )
+        crm_state = await self._ensure_crm_connection_state(connection, now)
+        await self._seed_default_crm_field_mappings(connection, now)
+        await self._queue_initial_crm_sync(connection, crm_state, now)
         self._add_audit(connection, event_type, now)
         await self._commit("The HubSpot connection could not be saved.")
+        logger.info("connection_created", extra=self._connection_log_context(connection))
+        return self._connection_response(await self._require_connection(connection.id))
+
+    async def start_salesforce_oauth(self) -> OAuthStartResponse:
+        self._require_admin()
+        await self._require_crm_connector_write()
+        client = self._require_salesforce()
+        await self._require_primary_external_crm_available(ConnectorKey.SALESFORCE)
+        store = self._require_encrypted_credential_store()
+        state_value = secrets.token_urlsafe(48)
+        verifier = secrets.token_urlsafe(64)
+        challenge = hashlib.sha256(verifier.encode()).digest()
+        challenge_value = base64.urlsafe_b64encode(challenge).rstrip(b"=").decode("ascii")
+        state_id = uuid.uuid4()
+        pkce_nonce, encrypted_verifier = store.encrypt_oauth_state_secret(
+            self.tenant.organisation_id,
+            state_id,
+            verifier,
+        )
+        now = datetime.now(UTC)
+        expires_at = now + timedelta(seconds=self.settings.salesforce_oauth_state_ttl_seconds)
+        assert self.settings.salesforce_oauth_redirect_uri is not None
+        self.repository.add(
+            OAuthConnectionState(
+                id=state_id,
+                organisation_id=self.tenant.organisation_id,
+                user_id=self.tenant.user_id,
+                connector_key=ConnectorKey.SALESFORCE.value,
+                state_hash=hashlib.sha256(state_value.encode()).hexdigest(),
+                redirect_uri=self.settings.salesforce_oauth_redirect_uri,
+                expires_at=expires_at,
+                consumed_at=None,
+                pkce_verifier_encrypted=encrypted_verifier,
+                pkce_nonce=pkce_nonce,
+                oidc_nonce_hash=None,
+                created_at=now,
+            )
+        )
+        await self._commit("The Salesforce authorisation flow could not be started.")
+        return OAuthStartResponse(
+            authorisation_url=client.authorisation_url(state_value, challenge_value),
+            expires_at=expires_at,
+        )
+
+    async def complete_salesforce_oauth(
+        self,
+        request: OAuthCallbackRequest,
+    ) -> OrganisationConnectionResponse:
+        self._require_admin()
+        await self._require_crm_connector_write()
+        client = self._require_salesforce()
+        store = self._require_encrypted_credential_store()
+        assert self.settings.salesforce_oauth_redirect_uri is not None
+        state, now = await self._consume_mailbox_oauth_state(
+            request,
+            connector_key=ConnectorKey.SALESFORCE,
+            redirect_uri=self.settings.salesforce_oauth_redirect_uri,
+            provider_name="Salesforce",
+        )
+        oauth_state_id = state.id
+        if request.provider_error is not None:
+            await self._commit("The Salesforce authorisation result could not be recorded.")
+            raise PublicAPIError(
+                "oauth_authorisation_declined",
+                "Salesforce authorisation was not completed. No connection was created.",
+                400,
+            )
+        try:
+            verifier = store.decrypt_oauth_state_secret(
+                self.tenant.organisation_id,
+                state.id,
+                state.pkce_nonce,
+                state.pkce_verifier_encrypted,
+            )
+        except ValueError as exc:
+            await self._commit("The Salesforce authorisation state could not be recorded.")
+            raise PublicAPIError(
+                "oauth_state_invalid",
+                "This Salesforce authorisation request is invalid.",
+                400,
+            ) from exc
+        assert request.code is not None
+        from revenueos.salesforce_connector import SalesforceAPIError
+
+        try:
+            result = await client.exchange_code(request.code, verifier)
+        except SalesforceAPIError as exc:
+            await self._commit("The Salesforce authorisation result could not be recorded.")
+            messages = {
+                "missing_required_scope": "Salesforce did not grant the required API and offline permissions.",
+                "provider_signature_invalid": "Salesforce returned an unverifiable authorisation response.",
+                "provider_instance_url_invalid": "Salesforce returned an invalid organisation API address.",
+            }
+            raise PublicAPIError(
+                exc.code,
+                messages.get(exc.code, "Salesforce authorisation could not be verified. Start the connection again."),
+                409,
+            ) from exc
+        await self._require_primary_external_crm_available(ConnectorKey.SALESFORCE)
+        connection = await self.repository.connection_by_key(
+            self.tenant.organisation_id,
+            ConnectorKey.SALESFORCE.value,
+            for_update=True,
+        )
+        if (
+            connection is not None
+            and connection.external_tenant_id is not None
+            and connection.external_tenant_id != result.identity.organization_id
+        ):
+            try:
+                await client.revoke(result.credential)
+            except SalesforceAPIError:
+                logger.warning(
+                    "connection_rejected_credential_revocation_failed",
+                    extra=self._connection_log_context(connection),
+                )
+            await self._commit("The rejected Salesforce authorisation could not be recorded.")
+            raise PublicAPIError(
+                "connection_account_changed",
+                "Reconnect the same Salesforce organisation. Changing organisations requires a reviewed reset.",
+                409,
+            )
+        if connection is None:
+            connection = IntegrationConnection(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                connector_key=ConnectorKey.SALESFORCE.value,
+                connection_status=ConnectionStatus.ACTIVE.value,
+                created_by_user_id=self.tenant.user_id,
+                connected_at=now,
+                last_verified_at=now,
+                revoked_at=None,
+                credential_reference=None,
+                capability_state_json=[
+                    item.value for item in CONNECTOR_DEFINITIONS[ConnectorKey.SALESFORCE].capabilities
+                ],
+                external_account_id=result.identity.user_id,
+                external_account_name=result.identity.name,
+                external_account_email=result.identity.preferred_username,
+                external_tenant_id=result.identity.organization_id,
+                granted_scopes_json=list(result.credential.scopes),
+                metadata_version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            self.repository.add(connection)
+            try:
+                await self.repository.flush()
+            except IntegrityError as exc:
+                await self._preserve_consumed_oauth_state(
+                    oauth_state_id,
+                    ConnectorKey.SALESFORCE,
+                    now,
+                )
+                try:
+                    await client.revoke(result.credential)
+                except SalesforceAPIError:
+                    logger.warning("connection_rejected_credential_revocation_failed")
+                raise PublicAPIError(
+                    "provider_tenant_already_connected",
+                    "This Salesforce organisation is already connected to another Oryntela organisation.",
+                    409,
+                ) from exc
+        else:
+            connection.connection_status = ConnectionStatus.ACTIVE.value
+            connection.created_by_user_id = self.tenant.user_id
+            connection.connected_at = now
+            connection.last_verified_at = now
+            connection.revoked_at = None
+            connection.capability_state_json = [
+                item.value for item in CONNECTOR_DEFINITIONS[ConnectorKey.SALESFORCE].capabilities
+            ]
+            connection.external_account_id = result.identity.user_id
+            connection.external_account_name = result.identity.name
+            connection.external_account_email = result.identity.preferred_username
+            connection.external_tenant_id = result.identity.organization_id
+            connection.granted_scopes_json = list(result.credential.scopes)
+            connection.metadata_version += 1
+            try:
+                await self.repository.flush()
+            except IntegrityError as exc:
+                await self._preserve_consumed_oauth_state(
+                    oauth_state_id,
+                    ConnectorKey.SALESFORCE,
+                    now,
+                )
+                try:
+                    await client.revoke(result.credential)
+                except SalesforceAPIError:
+                    logger.warning("connection_rejected_credential_revocation_failed")
+                raise PublicAPIError(
+                    "provider_tenant_already_connected",
+                    "This Salesforce organisation is already connected to another Oryntela organisation.",
+                    409,
+                ) from exc
+        connection.credential_reference = await store.put(
+            self.tenant.organisation_id,
+            connection.id,
+            result.credential,
+        )
+        state.pkce_verifier_encrypted = None
+        state.pkce_nonce = None
+        crm_state = await self._ensure_crm_connection_state(connection, now)
+        await self._seed_default_crm_field_mappings(connection, now)
+        await self._queue_initial_crm_sync(connection, crm_state, now)
+        self._add_audit(connection, "connection_created", now)
+        await self._commit("The Salesforce connection could not be saved.")
         logger.info("connection_created", extra=self._connection_log_context(connection))
         return self._connection_response(await self._require_connection(connection.id))
 
@@ -974,32 +1284,55 @@ class IntegrationService:
         query: str,
     ) -> CRMSearchResponse:
         await self._require_crm_connector_write()
-        connection = await self._require_hubspot_connection(connection_id)
+        connection = await self._require_crm_connection(connection_id)
         query = query.strip()
         if len(query) < 2 or len(query) > 120:
             raise PublicAPIError("search_query_invalid", "Enter between 2 and 120 characters.", 422)
-        object_type, properties = self._crm_search_shape(entity_type)
-        try:
-            records = await self._require_hubspot().search_records(
-                self._connection_context(connection),
-                object_type,
-                query,
-                properties,
-            )
-        except Exception as exc:
-            self._raise_hubspot_public_error(exc)
-        items = [
-            CRMSearchResult(
-                external_object_type=cast(
-                    Literal["company", "contact", "deal"], object_type[:-1] if object_type != "companies" else "company"
-                ),
-                external_object_id=record.id,
-                display_name=self._crm_display_name(entity_type, record.properties),
-                secondary_label=self._crm_secondary_label(entity_type, record.properties),
-                updated_at=record.updated_at,
-            )
-            for record in records
-        ]
+        canonical_type = self._canonical_crm_object_type(entity_type)
+        if connection.connector_key == ConnectorKey.HUBSPOT.value:
+            object_type, properties = self._crm_search_shape(entity_type)
+            try:
+                hubspot_records = await self._require_hubspot().search_records(
+                    self._connection_context(connection),
+                    object_type,
+                    query,
+                    properties,
+                )
+            except Exception as exc:
+                self._raise_crm_public_error(connection.connector_key, exc)
+            items = [
+                CRMSearchResult(
+                    external_object_type=cast(
+                        Literal["company", "contact", "deal"],
+                        object_type[:-1] if object_type != "companies" else "company",
+                    ),
+                    external_object_id=record.id,
+                    display_name=self._crm_display_name(entity_type, record.properties),
+                    secondary_label=self._crm_secondary_label(entity_type, record.properties),
+                    updated_at=record.updated_at,
+                )
+                for record in hubspot_records
+            ]
+        else:
+            try:
+                salesforce_records = await self._require_salesforce().search_records(
+                    self._connection_context(connection),
+                    canonical_type,
+                    query,
+                )
+            except Exception as exc:
+                self._raise_crm_public_error(connection.connector_key, exc)
+            external_type = canonical_type
+            items = [
+                CRMSearchResult(
+                    external_object_type=external_type,
+                    external_object_id=record.external_object_id,
+                    display_name=self._normalised_crm_display_name(canonical_type, record.fields),
+                    secondary_label=self._normalised_crm_secondary_label(canonical_type, record.fields),
+                    updated_at=record.modified_at,
+                )
+                for record in salesforce_records
+            ]
         return CRMSearchResponse(items=items, total=len(items))
 
     async def get_entity_mapping(
@@ -1008,14 +1341,14 @@ class IntegrationService:
         entity_type: str,
         entity_id: UUID,
     ) -> CRMEntityMappingResponse | None:
-        connection = await self._require_hubspot_connection(connection_id)
+        connection = await self._require_crm_connection(connection_id)
         mapping = await self.repository.entity_mapping(
             self.tenant.organisation_id,
             connection.id,
             entity_type,
             entity_id,
         )
-        return None if mapping is None else self._entity_mapping_response(mapping)
+        return None if mapping is None else self._entity_mapping_response(mapping, connection.connector_key)
 
     async def link_entity(
         self,
@@ -1024,21 +1357,19 @@ class IntegrationService:
         request: CRMEntityLinkRequest,
     ) -> CRMEntityMappingResponse:
         await self._require_crm_connector_write()
-        connection = await self._require_hubspot_connection(request.connection_id)
-        expected_object = {"company": "company", "contact": "contact", "opportunity": "deal"}.get(entity_type)
+        connection = await self._require_crm_connection(request.connection_id)
+        expected_object = self._external_object_type(connection.connector_key, entity_type)
         if expected_object is None or request.external_object_type != expected_object:
-            raise PublicAPIError("crm_mapping_invalid", "Select the matching HubSpot object type.", 422)
+            raise PublicAPIError("crm_mapping_invalid", "Select the matching provider object type.", 422)
         await self._require_local_entity(entity_type, entity_id)
-        plural = {"company": "companies", "contact": "contacts", "deal": "deals"}[request.external_object_type]
         try:
-            record = await self._require_hubspot().get_record(
+            record = await self._crm_adapter(connection).get_record(
                 self._connection_context(connection),
-                plural,
+                self._canonical_crm_object_type(entity_type),
                 request.external_object_id,
-                (),
             )
         except Exception as exc:
-            self._raise_hubspot_public_error(exc)
+            self._raise_crm_public_error(connection.connector_key, exc)
         now = datetime.now(UTC)
         mapping = await self.repository.entity_mapping(
             self.tenant.organisation_id,
@@ -1058,10 +1389,13 @@ class IntegrationService:
                 revenueos_entity_id=entity_id,
                 external_object_type=request.external_object_type,
                 external_object_id=request.external_object_id,
-                external_updated_at=record.updated_at,
+                external_updated_at=record.modified_at,
                 last_synced_at=None,
                 sync_state="active",
                 created_by_user_id=self.tenant.user_id,
+                external_version=record.external_version,
+                authority_version=1,
+                archived_at=None,
                 created_at=now,
                 updated_at=now,
             )
@@ -1069,15 +1403,17 @@ class IntegrationService:
         else:
             mapping.external_object_type = request.external_object_type
             mapping.external_object_id = request.external_object_id
-            mapping.external_updated_at = record.updated_at
+            mapping.external_updated_at = record.modified_at
+            mapping.external_version = record.external_version
             mapping.sync_state = "active"
+            mapping.archived_at = None
         self._add_audit(connection, event_type, now)
         await self._commit("The CRM record link could not be saved.")
-        return self._entity_mapping_response(mapping)
+        return self._entity_mapping_response(mapping, connection.connector_key)
 
     async def unlink_entity(self, connection_id: UUID, entity_type: str, entity_id: UUID) -> None:
         await self._require_crm_connector_write()
-        connection = await self._require_hubspot_connection(connection_id)
+        connection = await self._require_crm_connection(connection_id)
         mapping = await self.repository.entity_mapping(
             self.tenant.organisation_id,
             connection.id,
@@ -1087,8 +1423,10 @@ class IntegrationService:
         )
         if mapping is None:
             return
-        await self.repository.delete_entity_mapping(mapping)
-        self._add_audit(connection, "mapping_removed", datetime.now(UTC))
+        now = datetime.now(UTC)
+        mapping.sync_state = "external_missing"
+        mapping.archived_at = now
+        self._add_audit(connection, "mapping_removed", now)
         await self._commit("The CRM record link could not be removed.")
 
     async def field_configuration(
@@ -1098,29 +1436,47 @@ class IntegrationService:
     ) -> CRMFieldConfigurationResponse:
         self._require_admin()
         await self._require_crm_connector_write()
-        connection = await self._require_hubspot_connection(connection_id)
-        object_type = {"opportunity": "deals", "contact": "contacts"}.get(entity_type)
-        if object_type is None:
-            raise PublicAPIError("crm_entity_type_invalid", "This CRM entity type is unsupported.", 422)
-        try:
-            properties = await self._require_hubspot().properties(self._connection_context(connection), object_type)
-        except Exception as exc:
-            self._raise_hubspot_public_error(exc)
-        supported = {"string", "number", "date", "datetime", "enumeration"}
-        definitions = [
-            CRMPropertyDefinition(
-                entity_type=cast(Literal["opportunity", "contact"], entity_type),
-                external_property_name=item.name,
-                label=item.label,
-                property_type=cast(Literal["string", "number", "date", "datetime", "enumeration"], item.type),
-                options=[
-                    {"label": option.label, "value": option.value} for option in item.options if not option.hidden
-                ],
-                read_only=item.modification_metadata.read_only_value,
-            )
-            for item in properties
-            if item.type in supported
+        connection = await self._require_crm_connection(connection_id)
+        canonical_type = self._canonical_crm_object_type(entity_type)
+        scalar_types = {"string", "number", "date", "datetime", "enumeration"}
+        governed = [
+            rule for rule in rules_for(connection.connector_key, canonical_type) if rule.value_type in scalar_types
         ]
+        if not governed:
+            raise PublicAPIError("crm_entity_type_invalid", "This CRM entity type is unsupported.", 422)
+        if connection.connector_key == ConnectorKey.HUBSPOT.value:
+            object_type = {"company": "companies", "contact": "contacts", "opportunity": "deals"}[entity_type]
+            try:
+                properties = await self._require_hubspot().properties(self._connection_context(connection), object_type)
+            except Exception as exc:
+                self._raise_crm_public_error(connection.connector_key, exc)
+            allowed_names = {rule.provider_field for rule in governed}
+            definitions = [
+                CRMPropertyDefinition(
+                    entity_type=cast(Literal["company", "opportunity", "contact"], entity_type),
+                    external_property_name=item.name,
+                    label=item.label,
+                    property_type=cast(Literal["string", "number", "date", "datetime", "enumeration"], item.type),
+                    options=[
+                        {"label": option.label, "value": option.value} for option in item.options if not option.hidden
+                    ],
+                    read_only=item.modification_metadata.read_only_value,
+                )
+                for item in properties
+                if item.name in allowed_names and item.type in scalar_types
+            ]
+        else:
+            definitions = [
+                CRMPropertyDefinition(
+                    entity_type=cast(Literal["company", "opportunity", "contact"], entity_type),
+                    external_property_name=rule.provider_field,
+                    label=rule.canonical_field.replace("_", " ").title(),
+                    property_type=cast(Literal["string", "number", "date", "datetime", "enumeration"], rule.value_type),
+                    options=[],
+                    read_only=False,
+                )
+                for rule in governed
+            ]
         mappings = await self.repository.list_field_mappings(
             self.tenant.organisation_id,
             connection.id,
@@ -1147,9 +1503,9 @@ class IntegrationService:
             None,
         )
         if selected is None or selected.read_only:
-            raise PublicAPIError("crm_property_invalid", "Select a writable HubSpot property.", 422)
+            raise PublicAPIError("crm_property_invalid", "Select a governed, writable CRM field.", 422)
         self._validate_field_compatibility(request.revenueos_field, selected.property_type)
-        connection = await self._require_hubspot_connection(connection_id)
+        connection = await self._require_crm_connection(connection_id)
         mappings = await self.repository.list_field_mappings(
             self.tenant.organisation_id,
             connection.id,
@@ -1169,6 +1525,7 @@ class IntegrationService:
                 authority=request.authority,
                 enabled=True,
                 configured_by_user_id=self.tenant.user_id,
+                mapping_version=1,
                 created_at=now,
                 updated_at=now,
             )
@@ -1179,6 +1536,11 @@ class IntegrationService:
             mapping.authority = request.authority
             mapping.enabled = True
             mapping.configured_by_user_id = self.tenant.user_id
+            mapping.mapping_version += 1
+        state = await self._require_crm_state(connection.id, for_update=True)
+        state.mapping_version += 1
+        state.lifecycle = "mapping_required"
+        state.writeback_enabled = False
         connection.metadata_version += 1
         self._add_audit(connection, "field_mapping_changed", now)
         await self._commit("The CRM field mapping could not be saved.")
@@ -1187,28 +1549,29 @@ class IntegrationService:
     async def stage_configuration(self, connection_id: UUID) -> CRMStageConfigurationResponse:
         self._require_admin()
         await self._require_crm_connector_write()
-        connection = await self._require_hubspot_connection(connection_id)
+        connection = await self._require_crm_connection(connection_id)
         try:
-            pipelines = await self._require_hubspot().pipelines(self._connection_context(connection))
+            stages = await self._crm_adapter(connection).stages(self._connection_context(connection))
         except Exception as exc:
-            self._raise_hubspot_public_error(exc)
+            self._raise_crm_public_error(connection.connector_key, exc)
         mappings = await self.repository.list_stage_mappings(self.tenant.organisation_id, connection.id)
         return CRMStageConfigurationResponse(
             available_stages=[
                 CRMStageDefinition(
-                    pipeline_id=pipeline.id,
-                    pipeline_label=pipeline.label,
-                    stage_id=stage.id,
-                    stage_label=stage.label,
+                    pipeline_id=stage.pipeline_id,
+                    pipeline_label=stage.pipeline_name,
+                    stage_id=stage.stage_id,
+                    stage_label=stage.stage_name,
                 )
-                for pipeline in pipelines
-                for stage in pipeline.stages
+                for stage in stages
+                if stage.active
             ],
             mappings=[
                 CRMStageMappingResponse(
                     revenueos_stage=item.revenueos_stage,
                     external_pipeline_id=item.external_pipeline_id,
                     external_stage_id=item.external_stage_id,
+                    mapping_version=item.mapping_version,
                 )
                 for item in mappings
             ],
@@ -1225,8 +1588,8 @@ class IntegrationService:
             item.pipeline_id == request.external_pipeline_id and item.stage_id == request.external_stage_id
             for item in configuration.available_stages
         ):
-            raise PublicAPIError("crm_stage_invalid", "Select a current HubSpot deal stage.", 422)
-        connection = await self._require_hubspot_connection(connection_id)
+            raise PublicAPIError("crm_stage_invalid", "Select a current provider opportunity stage.", 422)
+        connection = await self._require_crm_connection(connection_id)
         mapping = await self.repository.stage_mapping(
             self.tenant.organisation_id,
             connection.id,
@@ -1242,6 +1605,7 @@ class IntegrationService:
                 external_pipeline_id=request.external_pipeline_id,
                 external_stage_id=request.external_stage_id,
                 configured_by_user_id=self.tenant.user_id,
+                mapping_version=1,
                 created_at=now,
                 updated_at=now,
             )
@@ -1250,6 +1614,11 @@ class IntegrationService:
             mapping.external_pipeline_id = request.external_pipeline_id
             mapping.external_stage_id = request.external_stage_id
             mapping.configured_by_user_id = self.tenant.user_id
+            mapping.mapping_version += 1
+        state = await self._require_crm_state(connection.id, for_update=True)
+        state.mapping_version += 1
+        state.lifecycle = "mapping_required"
+        state.writeback_enabled = False
         connection.metadata_version += 1
         self._add_audit(connection, "stage_mapping_changed", now)
         await self._commit("The CRM stage mapping could not be saved.")
@@ -1257,6 +1626,7 @@ class IntegrationService:
             revenueos_stage=mapping.revenueos_stage,
             external_pipeline_id=mapping.external_pipeline_id,
             external_stage_id=mapping.external_stage_id,
+            mapping_version=mapping.mapping_version,
         )
 
     def _require_integrations(self) -> None:
@@ -1275,6 +1645,7 @@ class IntegrationService:
     def _credential_store(self) -> CredentialStore:
         if not (
             self.settings.feature_hubspot_crm_enabled
+            or self.settings.feature_salesforce_crm_enabled
             or self.settings.feature_microsoft_365_enabled
             or self.settings.feature_google_workspace_enabled
         ):
@@ -1291,6 +1662,12 @@ class IntegrationService:
         if not self.settings.feature_hubspot_crm_enabled or self.hubspot_client is None:
             raise PublicAPIError("feature_unavailable", "HubSpot CRM sync is not enabled.", 404)
         return self.hubspot_client
+
+    def _require_salesforce(self) -> SalesforceClient:
+        self._require_integrations()
+        if not self.settings.feature_salesforce_crm_enabled or self.salesforce_client is None:
+            raise PublicAPIError("feature_unavailable", "Salesforce CRM sync is not enabled.", 404)
+        return self.salesforce_client
 
     def _require_microsoft(self) -> MicrosoftGraphClient:
         self._require_integrations()
@@ -1329,9 +1706,64 @@ class IntegrationService:
         self._require_active_connection(connection)
         return connection
 
+    async def _require_crm_connection(self, connection_id: UUID) -> IntegrationConnection:
+        connection = await self._require_connection(connection_id)
+        if connection.connector_key not in {ConnectorKey.HUBSPOT.value, ConnectorKey.SALESFORCE.value}:
+            raise PublicAPIError("connection_not_found", "The requested CRM connection was not found.", 404)
+        self._require_connector_available(connection.connector_key)
+        self._require_active_connection(connection)
+        return connection
+
+    async def _require_crm_state(
+        self,
+        connection_id: UUID,
+        *,
+        for_update: bool = False,
+    ) -> CRMConnectionState:
+        statement = select(CRMConnectionState).where(
+            CRMConnectionState.organisation_id == self.tenant.organisation_id,
+            CRMConnectionState.connection_id == connection_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        state = await self.session.scalar(statement)
+        if state is None:
+            raise PublicAPIError("crm_connection_state_missing", "Reconnect the CRM before continuing.", 409)
+        return state
+
+    def _crm_adapter(self, connection: IntegrationConnection) -> CRMProviderAdapter:
+        if connection.connector_key == ConnectorKey.HUBSPOT.value:
+            from revenueos.hubspot_connector import HubSpotSyncAdapter
+
+            return cast(CRMProviderAdapter, HubSpotSyncAdapter(self._require_hubspot()))
+        if connection.connector_key == ConnectorKey.SALESFORCE.value:
+            return cast(CRMProviderAdapter, self._require_salesforce())
+        raise PublicAPIError("connector_unavailable", "The selected CRM connector is unavailable.", 404)
+
+    @staticmethod
+    def _canonical_crm_object_type(entity_type: str) -> CanonicalCRMObjectType:
+        if entity_type == "company":
+            return "account"
+        if entity_type == "contact":
+            return "contact"
+        if entity_type == "opportunity":
+            return "opportunity"
+        raise PublicAPIError("crm_entity_type_invalid", "This CRM entity type is unsupported.", 422)
+
+    @staticmethod
+    def _external_object_type(connector_key: str, entity_type: str) -> str | None:
+        if connector_key == ConnectorKey.HUBSPOT.value:
+            return {"company": "company", "contact": "contact", "opportunity": "deal"}.get(entity_type)
+        if connector_key == ConnectorKey.SALESFORCE.value:
+            return {"company": "account", "contact": "contact", "opportunity": "opportunity"}.get(entity_type)
+        return None
+
     def _require_connector_available(self, connector_key: str) -> None:
         if connector_key == ConnectorKey.HUBSPOT.value:
             self._require_hubspot()
+            return
+        if connector_key == ConnectorKey.SALESFORCE.value:
+            self._require_salesforce()
             return
         if connector_key.startswith("mock_"):
             self._require_mock_connectors()
@@ -1363,6 +1795,51 @@ class IntegrationService:
                 f"Disconnect {definition.display_name} before connecting another primary work mailbox.",
                 409,
             )
+
+    async def _require_primary_external_crm_available(self, requested: ConnectorKey) -> None:
+        await self.session.scalar(
+            select(Organisation.id).where(Organisation.id == self.tenant.organisation_id).with_for_update()
+        )
+        existing = await self.session.scalar(
+            select(IntegrationConnection).where(
+                IntegrationConnection.organisation_id == self.tenant.organisation_id,
+                IntegrationConnection.connector_key.in_((ConnectorKey.HUBSPOT.value, ConnectorKey.SALESFORCE.value)),
+                IntegrationConnection.connector_key != requested.value,
+                IntegrationConnection.connection_status != ConnectionStatus.REVOKED.value,
+            )
+        )
+        if existing is not None:
+            definition = CONNECTOR_DEFINITIONS[ConnectorKey(existing.connector_key)]
+            raise PublicAPIError(
+                "primary_crm_already_connected",
+                f"Disconnect {definition.display_name} before connecting another external CRM.",
+                409,
+            )
+
+    async def _preserve_consumed_oauth_state(
+        self,
+        state_id: UUID,
+        connector_key: ConnectorKey,
+        consumed_at: datetime,
+    ) -> None:
+        """Keep callback state one-time even when a global provider identity conflicts."""
+        await self.repository.rollback()
+        await set_tenant_database_context(self.session, self.tenant.organisation_id)
+        state = await self.session.scalar(
+            select(OAuthConnectionState)
+            .where(
+                OAuthConnectionState.organisation_id == self.tenant.organisation_id,
+                OAuthConnectionState.id == state_id,
+                OAuthConnectionState.connector_key == connector_key.value,
+            )
+            .with_for_update()
+        )
+        if state is not None and state.consumed_at is None:
+            state.consumed_at = consumed_at
+            state.pkce_verifier_encrypted = None
+            state.pkce_nonce = None
+            await self.repository.commit()
+            await set_tenant_database_context(self.session, self.tenant.organisation_id)
 
     @staticmethod
     def _connection_context(connection: IntegrationConnection) -> ExecutorConnectionContext:
@@ -1402,7 +1879,7 @@ class IntegrationService:
         else:
             raise PublicAPIError("crm_entity_type_invalid", "This CRM entity type is unsupported.", 422)
         if record is None:
-            raise PublicAPIError("crm_entity_not_found", "The RevenueOS record was not found.", 404)
+            raise PublicAPIError("crm_entity_not_found", "The Oryntela record was not found.", 404)
 
     @staticmethod
     def _crm_search_shape(entity_type: str) -> tuple[str, tuple[str, ...]]:
@@ -1432,8 +1909,30 @@ class IntegrationService:
         return str(value) if value not in (None, "") else None
 
     @staticmethod
+    def _normalised_crm_display_name(
+        object_type: CanonicalCRMObjectType,
+        fields: Mapping[str, object],
+    ) -> str:
+        if object_type == "contact":
+            name = " ".join(str(fields.get(key) or "") for key in ("first_name", "last_name")).strip()
+            return name or str(fields.get("email") or "Unnamed contact")
+        return str(fields.get("name") or "Unnamed record")
+
+    @staticmethod
+    def _normalised_crm_secondary_label(
+        object_type: CanonicalCRMObjectType,
+        fields: Mapping[str, object],
+    ) -> str | None:
+        key = {"account": "domain", "contact": "email", "opportunity": "stage"}[object_type]
+        value = fields.get(key)
+        return str(value) if value not in (None, "") else None
+
+    @staticmethod
     def _validate_field_compatibility(revenueos_field: str, property_type: str) -> None:
         allowed = {
+            "name": {"string"},
+            "domain": {"string"},
+            "industry": {"string", "enumeration"},
             "stage": {"enumeration"},
             "status": {"enumeration"},
             "expected_close_date": {"date", "datetime"},
@@ -1443,28 +1942,35 @@ class IntegrationService:
             "first_name": {"string"},
             "last_name": {"string"},
             "email": {"string"},
+            "phone": {"string"},
             "job_title": {"string"},
         }
         if property_type not in allowed.get(revenueos_field, set()):
             raise PublicAPIError(
                 "crm_field_type_mismatch",
-                "The RevenueOS field and HubSpot property types are not compatible.",
+                "The Oryntela field and provider field types are not compatible.",
                 422,
             )
 
     @staticmethod
-    def _entity_mapping_response(mapping: CRMEntityMapping) -> CRMEntityMappingResponse:
+    def _entity_mapping_response(mapping: CRMEntityMapping, connector_key: str) -> CRMEntityMappingResponse:
         return CRMEntityMappingResponse(
             id=mapping.id,
             connection_id=mapping.connection_id,
-            connector_key=ConnectorKey.HUBSPOT,
+            connector_key=ConnectorKey(connector_key),
             revenueos_entity_type=cast(Literal["company", "contact", "opportunity"], mapping.revenueos_entity_type),
             revenueos_entity_id=mapping.revenueos_entity_id,
-            external_object_type=cast(Literal["company", "contact", "deal"], mapping.external_object_type),
+            external_object_type=cast(
+                Literal["account", "company", "contact", "opportunity", "deal"],
+                mapping.external_object_type,
+            ),
             external_object_id=mapping.external_object_id,
             external_updated_at=mapping.external_updated_at,
             last_synced_at=mapping.last_synced_at,
             sync_state=cast(Literal["active", "external_missing"], mapping.sync_state),
+            external_version=mapping.external_version,
+            authority_version=mapping.authority_version,
+            archived_at=mapping.archived_at,
             created_at=mapping.created_at,
             updated_at=mapping.updated_at,
         )
@@ -1474,7 +1980,7 @@ class IntegrationService:
         return CRMFieldMappingResponse(
             id=mapping.id,
             connection_id=mapping.connection_id,
-            entity_type=cast(Literal["opportunity", "contact"], mapping.entity_type),
+            entity_type=cast(Literal["company", "opportunity", "contact"], mapping.entity_type),
             revenueos_field=mapping.revenueos_field,
             external_property_name=mapping.external_property_name,
             external_property_type=cast(
@@ -1486,6 +1992,7 @@ class IntegrationService:
                 mapping.authority,
             ),
             enabled=mapping.enabled,
+            mapping_version=mapping.mapping_version,
         )
 
     @staticmethod
@@ -1506,6 +2013,35 @@ class IntegrationService:
         raise PublicAPIError(
             error.code,
             messages.get(error.code, "HubSpot could not complete this request."),
+            status_code,
+        ) from error
+
+    @staticmethod
+    def _raise_crm_public_error(connector_key: str, error: Exception) -> NoReturn:
+        if not isinstance(error, CRMProviderError):
+            raise error
+        provider_name = CONNECTOR_DEFINITIONS[ConnectorKey(connector_key)].display_name
+        messages = {
+            "connection_reauthorisation_required": f"Reconnect {provider_name} before using CRM sync.",
+            "external_object_not_found": f"The selected {provider_name} record no longer exists.",
+            "provider_rate_limited": f"{provider_name} is temporarily rate limiting this organisation.",
+            "provider_timeout": f"{provider_name} did not respond in time.",
+            "provider_unavailable": f"{provider_name} is temporarily unavailable.",
+            "provider_response_invalid": f"{provider_name} returned an unexpected response.",
+            "provider_response_too_large": f"{provider_name} returned more data than Oryntela accepts.",
+            "stale_external_state": f"The {provider_name} record changed. Refresh before trying again.",
+            "provider_person_account_unsupported": (
+                "Salesforce Person Accounts are not supported in this connector version. "
+                "Use a business Account scope before synchronising."
+            ),
+            "provider_currency_capability_required": (
+                "Salesforce did not expose explicit opportunity currency. Amount writeback remains blocked."
+            ),
+        }
+        status_code = 429 if error.code == "provider_rate_limited" else 409
+        raise PublicAPIError(
+            error.code,
+            messages.get(error.code, f"{provider_name} could not complete this request."),
             status_code,
         ) from error
 
@@ -1550,11 +2086,12 @@ class IntegrationService:
             if connection.connector_key in {
                 ConnectorKey.MICROSOFT_365.value,
                 ConnectorKey.GOOGLE_WORKSPACE.value,
+                ConnectorKey.SALESFORCE.value,
             }:
                 definition = CONNECTOR_DEFINITIONS[ConnectorKey(connection.connector_key)]
                 raise PublicAPIError(
                     "connection_reauthorisation_required",
-                    f"{definition.display_name} needs to be reconnected.",
+                    f"Reconnect {definition.display_name} before continuing.",
                     409,
                 )
             raise PublicAPIError(
@@ -1602,6 +2139,151 @@ class IntegrationService:
             created_at=connection.created_at,
             updated_at=connection.updated_at,
         )
+
+    async def _ensure_crm_connection_state(
+        self,
+        connection: IntegrationConnection,
+        now: datetime,
+    ) -> CRMConnectionState:
+        state = await self.session.scalar(
+            select(CRMConnectionState)
+            .where(
+                CRMConnectionState.organisation_id == self.tenant.organisation_id,
+                CRMConnectionState.connection_id == connection.id,
+            )
+            .with_for_update()
+        )
+        if state is None:
+            state = CRMConnectionState(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                connection_id=connection.id,
+                provider_key=connection.connector_key,
+                lifecycle="connected_read_only",
+                health_status="healthy",
+                connector_enabled=True,
+                writeback_enabled=False,
+                mapping_version=1,
+                records_seen=0,
+                records_applied=0,
+                conflict_count=0,
+                initial_sync_started_at=None,
+                initial_sync_completed_at=None,
+                last_successful_sync_at=None,
+                last_health_checked_at=now,
+                last_safe_error_code=None,
+                configured_by_user_id=self.tenant.user_id,
+                created_at=now,
+                updated_at=now,
+            )
+            self.session.add(state)
+            return state
+        state.lifecycle = "connected_read_only"
+        state.health_status = "healthy"
+        state.connector_enabled = True
+        state.writeback_enabled = False
+        state.last_health_checked_at = now
+        state.last_safe_error_code = None
+        state.configured_by_user_id = self.tenant.user_id
+        paused_jobs = (
+            await self.session.scalars(
+                select(CRMSyncJob).where(
+                    CRMSyncJob.organisation_id == self.tenant.organisation_id,
+                    CRMSyncJob.connection_id == connection.id,
+                    CRMSyncJob.status == "paused",
+                )
+            )
+        ).all()
+        for job in paused_jobs:
+            job.status = "queued"
+            job.worker_id = None
+            job.lease_expires_at = None
+            job.completed_at = None
+            job.safe_failure_code = None
+            job.updated_at = now
+        return state
+
+    async def _queue_initial_crm_sync(
+        self,
+        connection: IntegrationConnection,
+        state: CRMConnectionState,
+        now: datetime,
+    ) -> None:
+        idempotency_key = hashlib.sha256(f"initial:{connection.id}:{state.mapping_version}".encode()).hexdigest()
+        existing = await self.session.scalar(
+            select(CRMSyncJob.id).where(
+                CRMSyncJob.organisation_id == self.tenant.organisation_id,
+                CRMSyncJob.connection_id == connection.id,
+                CRMSyncJob.idempotency_key == idempotency_key,
+            )
+        )
+        if existing is not None or state.initial_sync_completed_at is not None:
+            return
+        state.lifecycle = "initial_sync"
+        state.initial_sync_started_at = now
+        self.session.add(
+            CRMSyncJob(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                connection_id=connection.id,
+                provider_key=connection.connector_key,
+                mode="initial",
+                status="queued",
+                idempotency_key=idempotency_key,
+                requested_by_user_id=self.tenant.user_id,
+                attempt_count=0,
+                worker_id=None,
+                lease_expires_at=None,
+                started_at=None,
+                completed_at=None,
+                safe_failure_code=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        self._add_audit(connection, "crm_sync_queued", now)
+
+    async def _seed_default_crm_field_mappings(
+        self,
+        connection: IntegrationConnection,
+        now: datetime,
+    ) -> None:
+        entity_types: dict[CanonicalCRMObjectType, str] = {
+            "account": "company",
+            "contact": "contact",
+            "opportunity": "opportunity",
+        }
+        for object_type, entity_type in entity_types.items():
+            existing = {
+                item.revenueos_field
+                for item in await self.repository.list_field_mappings(
+                    self.tenant.organisation_id,
+                    connection.id,
+                    entity_type,
+                )
+            }
+            for rule in rules_for(connection.connector_key, object_type):
+                if rule.value_type not in {"string", "number", "date", "datetime", "enumeration"}:
+                    continue
+                if rule.canonical_field in existing:
+                    continue
+                self.repository.add(
+                    CRMFieldMapping(
+                        id=uuid.uuid4(),
+                        organisation_id=self.tenant.organisation_id,
+                        connection_id=connection.id,
+                        entity_type=entity_type,
+                        revenueos_field=rule.canonical_field,
+                        external_property_name=rule.provider_field,
+                        external_property_type=rule.value_type,
+                        authority=rule.default_authority,
+                        enabled=True,
+                        configured_by_user_id=self.tenant.user_id,
+                        mapping_version=1,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
 
     def _add_audit(self, connection: IntegrationConnection, event_type: str, created_at: datetime) -> None:
         self.repository.add(
@@ -2308,8 +2990,21 @@ class ActionExecutionService:
         action: ApprovedActionInput,
         connection: IntegrationConnection,
     ) -> ApprovedActionInput:
-        if connection.connector_key != ConnectorKey.HUBSPOT.value:
+        if connection.connector_key not in {ConnectorKey.HUBSPOT.value, ConnectorKey.SALESFORCE.value}:
             return action
+        provider_name = CONNECTOR_DEFINITIONS[ConnectorKey(connection.connector_key)].display_name
+        crm_state = await self.session.scalar(
+            select(CRMConnectionState).where(
+                CRMConnectionState.organisation_id == self.tenant.organisation_id,
+                CRMConnectionState.connection_id == connection.id,
+            )
+        )
+        if crm_state is None or not crm_state.connector_enabled or not crm_state.writeback_enabled:
+            raise PublicAPIError(
+                "crm_writeback_disabled",
+                "An administrator must review CRM mappings and enable writeback before external updates.",
+                409,
+            )
         entity_type: str
         entity_id: UUID
         field_name: str | None = None
@@ -2325,7 +3020,7 @@ class ActionExecutionService:
             if action.payload.operation != "update" or action.payload.contact_id is None:
                 raise PublicAPIError(
                     "contact_mapping_required",
-                    "Link an existing HubSpot contact before updating it.",
+                    f"Link an existing {provider_name} contact before updating it.",
                     409,
                 )
             entity_type = "contact"
@@ -2362,7 +3057,7 @@ class ActionExecutionService:
         if mapping is None or mapping.sync_state != "active":
             raise PublicAPIError(
                 "crm_mapping_missing",
-                "Connect this RevenueOS record to a HubSpot record before reviewing the Action.",
+                f"Connect this Oryntela record to a {provider_name} record before reviewing the Action.",
                 409,
             )
         property_name: str | None = None
@@ -2379,7 +3074,7 @@ class ActionExecutionService:
             if field_mapping is None:
                 raise PublicAPIError(
                     "crm_field_mapping_missing",
-                    "Configure this HubSpot field mapping before reviewing the Action.",
+                    f"Configure this {provider_name} field mapping before reviewing the Action.",
                     409,
                 )
             property_name = field_mapping.external_property_name
@@ -2394,7 +3089,7 @@ class ActionExecutionService:
                 if stage is None:
                     raise PublicAPIError(
                         "crm_stage_mapping_missing",
-                        "Configure this RevenueOS-to-HubSpot stage mapping before reviewing the Action.",
+                        f"Configure this Oryntela-to-{provider_name} stage mapping before reviewing the Action.",
                         409,
                     )
                 proposed_value = stage.external_stage_id
@@ -2406,7 +3101,11 @@ class ActionExecutionService:
             action,
             external_target=ApprovedExternalTarget(
                 mapping_id=mapping.id,
-                external_object_type={"opportunity": "deals", "contact": "contacts"}[entity_type],
+                external_object_type=(
+                    {"opportunity": "deals", "contact": "contacts"}[entity_type]
+                    if connection.connector_key == ConnectorKey.HUBSPOT.value
+                    else {"opportunity": "opportunity", "contact": "contact"}[entity_type]
+                ),
                 external_object_id=mapping.external_object_id,
                 external_property_name=property_name,
                 external_property_type=property_type,

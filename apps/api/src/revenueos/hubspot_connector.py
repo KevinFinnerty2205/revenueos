@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Literal, NoReturn, cast
 from urllib.parse import urlencode
@@ -14,6 +14,18 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from revenueos.action_contracts import ContactUpdatePayload, LogInteractionPayload, OpportunityUpdatePayload
 from revenueos.config import Settings
 from revenueos.credential_store import ConnectorCredential, CredentialStore
+from revenueos.crm_provider import (
+    CRMObjectType,
+    CRMProviderError,
+    CRMProviderOwner,
+    CRMProviderPage,
+    CRMProviderRecord,
+    CRMProviderStage,
+    CRMScalar,
+    canonicalise_fields,
+    provider_fields,
+    rules_for,
+)
 from revenueos.domain import ConnectorKey, CRMFieldAuthority
 from revenueos.integration_contracts import CRMActivityExecutionPreview, CRMExecutionPreview, ExecutionPreviewContent
 from revenueos.integration_executors import (
@@ -30,19 +42,21 @@ from revenueos.integration_executors import (
 HUBSPOT_REQUIRED_SCOPES = (
     "oauth",
     "crm.objects.companies.read",
+    "crm.objects.companies.write",
     "crm.objects.contacts.read",
     "crm.objects.contacts.write",
     "crm.objects.deals.read",
     "crm.objects.deals.write",
     "crm.objects.meetings.read",
     "crm.objects.meetings.write",
+    "crm.objects.owners.read",
     "crm.schemas.companies.read",
     "crm.schemas.contacts.read",
     "crm.schemas.deals.read",
 )
 
 
-class HubSpotAPIError(Exception):
+class HubSpotAPIError(CRMProviderError):
     def __init__(
         self,
         code: str,
@@ -50,12 +64,15 @@ class HubSpotAPIError(Exception):
         retryable: bool = False,
         uncertain: bool = False,
         retry_after_seconds: int | None = None,
+        external_object_id: str | None = None,
     ) -> None:
-        super().__init__(code)
-        self.code = code
-        self.retryable = retryable
-        self.uncertain = uncertain
-        self.retry_after_seconds = retry_after_seconds
+        super().__init__(
+            code,
+            retryable=retryable,
+            uncertain=uncertain,
+            retry_after_seconds=retry_after_seconds,
+            external_object_id=external_object_id,
+        )
 
 
 class _ProviderModel(BaseModel):
@@ -83,15 +100,71 @@ class _TokenMetadata(_ProviderModel):
     scopes: list[str] = Field(default_factory=list)
 
 
+class _AssociationTarget(_ProviderModel):
+    id: str
+
+
+class _AssociationCollection(_ProviderModel):
+    results: list[_AssociationTarget] = Field(default_factory=list)
+
+
+class _BatchAssociationType(_ProviderModel):
+    label: str | None = None
+
+
+class _BatchAssociationTarget(_ProviderModel):
+    to_object_id: str | int = Field(validation_alias=AliasChoices("toObjectId", "id"))
+    association_types: list[_BatchAssociationType] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("associationTypes", "types"),
+    )
+
+
+class _BatchAssociationSource(_ProviderModel):
+    id: str | int
+
+
+class _BatchAssociationResult(_ProviderModel):
+    source: _BatchAssociationSource = Field(validation_alias="from")
+    to: list[_BatchAssociationTarget] = Field(default_factory=list)
+
+
+class _BatchAssociationResponse(_ProviderModel):
+    results: list[_BatchAssociationResult] = Field(default_factory=list)
+
+
 class HubSpotRecord(_ProviderModel):
     id: str
     properties: dict[str, object] = Field(default_factory=dict)
     updated_at: datetime | None = Field(default=None, validation_alias=AliasChoices("updatedAt", "updated_at"))
+    archived: bool = False
+    associations: dict[str, _AssociationCollection] = Field(default_factory=dict)
+
+
+class _PagingAfter(_ProviderModel):
+    after: str
+
+
+class _Paging(_ProviderModel):
+    next: _PagingAfter | None = None
 
 
 class _SearchResponse(_ProviderModel):
     results: list[HubSpotRecord] = Field(default_factory=list)
     total: int = 0
+    paging: _Paging | None = None
+
+
+class _Owner(_ProviderModel):
+    id: str
+    email: str | None = None
+    first_name: str | None = Field(default=None, validation_alias=AliasChoices("firstName", "first_name"))
+    last_name: str | None = Field(default=None, validation_alias=AliasChoices("lastName", "last_name"))
+    archived: bool = False
+
+
+class _OwnerResponse(_ProviderModel):
+    results: list[_Owner] = Field(default_factory=list)
 
 
 class HubSpotPropertyOption(_ProviderModel):
@@ -267,13 +340,13 @@ class HubSpotClient:
         except ValueError as exc:
             raise HubSpotAPIError("connection_reauthorisation_required") from exc
         if credential.expires_at.astimezone(UTC) <= datetime.now(UTC) + timedelta(seconds=60):
-            credential = await self._refresh(context, credential)
+            credential = await self._refresh(context, credential, force=False)
         try:
             metadata = await self.introspect(credential.access_token)
         except HubSpotAPIError as exc:
             if exc.code != "connection_reauthorisation_required":
                 raise
-            credential = await self._refresh(context, credential)
+            credential = await self._refresh(context, credential, force=True)
             metadata = await self.introspect(credential.access_token)
         return credential, metadata
 
@@ -284,11 +357,14 @@ class HubSpotClient:
         object_id: str,
         properties: tuple[str, ...],
     ) -> HubSpotRecord:
+        params = {"properties": ",".join(properties)}
+        if object_type in {"contacts", "deals"}:
+            params["associations"] = "companies"
         response = await self._authenticated_request(
             context,
             "GET",
             f"/crm/objects/2026-03/{object_type}/{object_id}",
-            params={"properties": ",".join(properties)},
+            params=params,
             write=False,
         )
         return self._parse(HubSpotRecord, response)
@@ -307,7 +383,176 @@ class HubSpotClient:
             json_body={"properties": properties},
             write=True,
         )
-        return self._parse(HubSpotRecord, response)
+        try:
+            return self._parse(HubSpotRecord, response)
+        except HubSpotAPIError as exc:
+            raise HubSpotAPIError(
+                "provider_update_verification_unknown",
+                uncertain=True,
+                external_object_id=object_id,
+            ) from exc
+
+    async def create_record(
+        self,
+        context: ExecutorConnectionContext,
+        object_type: str,
+        properties: dict[str, str],
+        *,
+        associated_company_id: str | None = None,
+    ) -> HubSpotRecord:
+        body: dict[str, object] = {"properties": properties}
+        if associated_company_id is not None:
+            association_type = await self.association_type(context, object_type, "companies")
+            body["associations"] = [
+                {
+                    "to": {"id": associated_company_id},
+                    "types": [
+                        {
+                            "associationCategory": "HUBSPOT_DEFINED",
+                            "associationTypeId": association_type,
+                        }
+                    ],
+                }
+            ]
+        response = await self._authenticated_request(
+            context,
+            "POST",
+            f"/crm/objects/2026-03/{object_type}",
+            json_body=body,
+            write=True,
+        )
+        try:
+            return self._parse(HubSpotRecord, response)
+        except HubSpotAPIError as exc:
+            raise HubSpotAPIError("provider_create_verification_unknown", uncertain=True) from exc
+
+    async def association_type(
+        self,
+        context: ExecutorConnectionContext,
+        from_object_type: str,
+        to_object_type: str,
+    ) -> int:
+        allowed = {"companies", "contacts", "deals", "meetings"}
+        if from_object_type not in allowed or to_object_type not in allowed:
+            raise HubSpotAPIError("association_capability_unavailable")
+        response = await self._authenticated_request(
+            context,
+            "GET",
+            f"/crm/associations/2026-03/{from_object_type}/{to_object_type}/labels",
+            write=False,
+        )
+        labels = self._parse(_AssociationResponse, response).results
+        for label in labels:
+            if label.category == "HUBSPOT_DEFINED" and label.label is None:
+                return label.type_id
+        raise HubSpotAPIError("association_capability_unavailable")
+
+    async def list_records_page(
+        self,
+        context: ExecutorConnectionContext,
+        object_type: str,
+        properties: tuple[str, ...],
+        *,
+        cursor: str | None,
+        modified_after: datetime | None,
+        limit: int,
+    ) -> tuple[list[HubSpotRecord], str | None]:
+        page_size = min(max(limit, 1), 200)
+        archived = cursor is not None and cursor.startswith("archive:")
+        if not archived and (modified_after is not None or (cursor is not None and cursor.startswith("search:"))):
+            after = self._cursor_after(cursor, "search")
+            filters: list[dict[str, str]] = []
+            if modified_after is not None:
+                filters.append(
+                    {
+                        "propertyName": "hs_lastmodifieddate",
+                        "operator": "GTE",
+                        "value": str(int(modified_after.astimezone(UTC).timestamp() * 1000)),
+                    }
+                )
+            body: dict[str, object] = {
+                "filterGroups": [{"filters": filters}],
+                "sorts": ["hs_lastmodifieddate"],
+                "limit": page_size,
+                "properties": list(properties),
+            }
+            if after is not None:
+                body["after"] = after
+            response = await self._authenticated_request(
+                context,
+                "POST",
+                f"/crm/objects/2026-03/{object_type}/search",
+                json_body=body,
+                write=False,
+            )
+            parsed = self._parse(_SearchResponse, response)
+            next_after = parsed.paging.next.after if parsed.paging and parsed.paging.next else None
+            return parsed.results, f"search:{next_after}" if next_after else "archive:"
+        prefix = "archive" if archived else "list"
+        after = self._cursor_after(cursor, prefix)
+        params = {
+            "limit": str(page_size),
+            "properties": ",".join(properties),
+            "archived": "true" if archived else "false",
+        }
+        if object_type in {"contacts", "deals"}:
+            params["associations"] = "companies"
+        if after is not None:
+            params["after"] = after
+        response = await self._authenticated_request(
+            context,
+            "GET",
+            f"/crm/objects/2026-03/{object_type}",
+            params=params,
+            write=False,
+        )
+        parsed = self._parse(_SearchResponse, response)
+        next_after = parsed.paging.next.after if parsed.paging and parsed.paging.next else None
+        if next_after:
+            return parsed.results, f"{prefix}:{next_after}"
+        return parsed.results, None if archived else "archive:"
+
+    async def owners(self, context: ExecutorConnectionContext) -> list[_Owner]:
+        response = await self._authenticated_request(
+            context,
+            "GET",
+            "/crm/v3/owners/",
+            params={"limit": "200", "archived": "false"},
+            write=False,
+        )
+        return self._parse(_OwnerResponse, response).results
+
+    async def batch_company_associations(
+        self,
+        context: ExecutorConnectionContext,
+        object_type: str,
+        record_ids: tuple[str, ...],
+    ) -> dict[str, str | None]:
+        if object_type not in {"contacts", "deals"} or not record_ids or len(record_ids) > 200:
+            raise HubSpotAPIError("provider_request_invalid")
+        response = await self._authenticated_request(
+            context,
+            "POST",
+            f"/crm/associations/2026-03/{object_type}/companies/batch/read",
+            json_body={"inputs": [{"id": record_id} for record_id in record_ids]},
+            write=False,
+        )
+        parsed = self._parse(_BatchAssociationResponse, response)
+        result: dict[str, str | None] = {record_id: None for record_id in record_ids}
+        for association in parsed.results:
+            source_id = str(association.source.id)
+            if source_id not in result:
+                raise HubSpotAPIError("provider_response_invalid")
+            primary = [
+                str(item.to_object_id)
+                for item in association.to
+                if any(kind.label == "Primary" for kind in item.association_types)
+            ]
+            if len(primary) == 1:
+                result[source_id] = primary[0]
+            elif not primary and len(association.to) == 1:
+                result[source_id] = str(association.to[0].to_object_id)
+        return result
 
     async def search_records(
         self,
@@ -397,17 +642,7 @@ class HubSpotClient:
         return self._parse(HubSpotRecord, response)
 
     async def _meeting_deal_association_type(self, context: ExecutorConnectionContext) -> int:
-        response = await self._authenticated_request(
-            context,
-            "GET",
-            "/crm/associations/2026-03/meetings/deals/labels",
-            write=False,
-        )
-        labels = self._parse(_AssociationResponse, response).results
-        for label in labels:
-            if label.category == "HUBSPOT_DEFINED" and label.label is None:
-                return label.type_id
-        raise HubSpotAPIError("association_capability_unavailable")
+        return await self.association_type(context, "meetings", "deals")
 
     async def _authenticated_request(
         self,
@@ -430,7 +665,7 @@ class HubSpotClient:
         except ValueError as exc:
             raise HubSpotAPIError("connection_reauthorisation_required") from exc
         if credential.expires_at.astimezone(UTC) <= datetime.now(UTC) + timedelta(seconds=60):
-            credential = await self._refresh(context, credential)
+            credential = await self._refresh(context, credential, force=False)
         try:
             return await self._request(
                 method,
@@ -444,7 +679,7 @@ class HubSpotClient:
         except HubSpotAPIError as exc:
             if exc.code != "connection_reauthorisation_required":
                 raise
-        credential = await self._refresh(context, credential)
+        credential = await self._refresh(context, credential, force=True)
         return await self._request(
             method,
             path,
@@ -459,9 +694,24 @@ class HubSpotClient:
         self,
         context: ExecutorConnectionContext,
         credential: ConnectorCredential,
+        *,
+        force: bool,
     ) -> ConnectorCredential:
         assert self.settings.hubspot_client_id is not None
         assert self.settings.hubspot_client_secret is not None
+        if context.credential_reference is None:
+            raise HubSpotAPIError("connection_reauthorisation_required")
+        try:
+            current = await self.credential_store.get_for_update(
+                context.organisation_id,
+                context.connection_id,
+                context.credential_reference,
+            )
+        except ValueError as exc:
+            raise HubSpotAPIError("connection_reauthorisation_required") from exc
+        if not force and current.expires_at.astimezone(UTC) > datetime.now(UTC) + timedelta(seconds=60):
+            return current
+        credential = current
         try:
             response = await self._request(
                 "POST",
@@ -484,6 +734,9 @@ class HubSpotClient:
             expires_at=datetime.now(UTC) + timedelta(seconds=refreshed.expires_in),
             scopes=tuple(sorted(set(refreshed.scopes or list(credential.scopes)))),
             external_account_id=credential.external_account_id,
+            api_base_url=credential.api_base_url,
+            schema_version=credential.schema_version,
+            schema_capabilities=credential.schema_capabilities,
         )
         await self.credential_store.put(context.organisation_id, context.connection_id, value)
         return value
@@ -554,7 +807,21 @@ class HubSpotClient:
             raise HubSpotAPIError("provider_unavailable", retryable=not write, uncertain=write)
         if response.status_code >= 400:
             raise HubSpotAPIError("provider_request_rejected")
+        if len(response.content) > self.settings.hubspot_max_response_bytes:
+            raise HubSpotAPIError("provider_response_too_large", uncertain=write)
         return response
+
+    @staticmethod
+    def _cursor_after(cursor: str | None, prefix: str) -> str | None:
+        if cursor is None:
+            return None
+        expected = f"{prefix}:"
+        if not cursor.startswith(expected):
+            raise HubSpotAPIError("provider_cursor_invalid")
+        value = cursor.removeprefix(expected)
+        if value and (not value.isdigit() or len(value) > 64):
+            raise HubSpotAPIError("provider_cursor_invalid")
+        return value or None
 
     @staticmethod
     def _parse[T: BaseModel](model: type[T], response: httpx.Response) -> T:
@@ -562,6 +829,197 @@ class HubSpotClient:
             return model.model_validate_json(response.content)
         except ValidationError as exc:
             raise HubSpotAPIError("provider_response_invalid") from exc
+
+
+class HubSpotSyncAdapter:
+    """Provider-neutral sync adapter over the date-versioned HubSpot client."""
+
+    provider_key: Literal["hubspot"] = "hubspot"
+    _object_names: dict[CRMObjectType, str] = {
+        "account": "companies",
+        "contact": "contacts",
+        "opportunity": "deals",
+    }
+
+    def __init__(self, client: HubSpotClient) -> None:
+        self.client = client
+
+    async def validate_connection(self, context: ExecutorConnectionContext) -> None:
+        credential, metadata = await self.client.validate_credentials(context)
+        if credential.external_account_id != str(metadata.hub_id) or (
+            context.external_account_id is not None and context.external_account_id != str(metadata.hub_id)
+        ):
+            raise HubSpotAPIError("provider_identity_mismatch")
+
+    async def list_records(
+        self,
+        context: ExecutorConnectionContext,
+        object_type: CRMObjectType,
+        *,
+        cursor: str | None,
+        modified_after: datetime | None,
+        limit: int,
+    ) -> CRMProviderPage:
+        records, next_cursor = await self.client.list_records_page(
+            context,
+            self._object_names[object_type],
+            provider_fields(self.provider_key, object_type),
+            cursor=cursor,
+            modified_after=modified_after,
+            limit=limit,
+        )
+        archived_page = cursor is not None and cursor.startswith("archive:")
+        if archived_page and modified_after is not None:
+            watermark = modified_after.astimezone(UTC)
+            records = [
+                record
+                for record in records
+                if record.updated_at is None or record.updated_at.astimezone(UTC) >= watermark
+            ]
+        if (
+            records
+            and object_type in {"contact", "opportunity"}
+            and not archived_page
+            and (modified_after is not None or (cursor is not None and cursor.startswith("search:")))
+        ):
+            associations = await self.client.batch_company_associations(
+                context,
+                self._object_names[object_type],
+                tuple(record.id for record in records),
+            )
+            records_with_associations: list[HubSpotRecord] = []
+            for record in records:
+                company_id = associations[record.id]
+                targets = [] if company_id is None else [_AssociationTarget(id=company_id)]
+                records_with_associations.append(
+                    record.model_copy(update={"associations": {"companies": _AssociationCollection(results=targets)}})
+                )
+            records = records_with_associations
+        normalised = tuple(self._normalise(object_type, record) for record in records)
+        high_watermark = max(
+            (record.modified_at for record in normalised),
+            default=modified_after or datetime.now(UTC),
+        )
+        return CRMProviderPage(normalised, next_cursor, high_watermark)
+
+    async def get_record(
+        self,
+        context: ExecutorConnectionContext,
+        object_type: CRMObjectType,
+        external_object_id: str,
+    ) -> CRMProviderRecord:
+        record = await self.client.get_record(
+            context,
+            self._object_names[object_type],
+            external_object_id,
+            provider_fields(self.provider_key, object_type),
+        )
+        return self._normalise(object_type, record)
+
+    async def create_record(
+        self,
+        context: ExecutorConnectionContext,
+        object_type: CRMObjectType,
+        fields: dict[str, CRMScalar],
+    ) -> CRMProviderRecord:
+        related_account = fields.get("account")
+        if related_account is not None and (
+            not isinstance(related_account, str) or not related_account.isdigit() or len(related_account) > 128
+        ):
+            raise HubSpotAPIError("provider_value_invalid")
+        created = await self.client.create_record(
+            context,
+            self._object_names[object_type],
+            self._provider_payload(object_type, fields),
+            associated_company_id=related_account,
+        )
+        return self._normalise(object_type, created)
+
+    async def update_record(
+        self,
+        context: ExecutorConnectionContext,
+        record: CRMProviderRecord,
+        fields: dict[str, CRMScalar],
+    ) -> CRMProviderRecord:
+        current = await self.get_record(context, record.object_type, record.external_object_id)
+        if current.external_version != record.external_version:
+            raise HubSpotAPIError("stale_external_state")
+        updated = await self.client.update_record(
+            context,
+            self._object_names[record.object_type],
+            record.external_object_id,
+            self._provider_payload(record.object_type, fields),
+        )
+        return self._normalise(record.object_type, updated)
+
+    async def owners(self, context: ExecutorConnectionContext) -> tuple[CRMProviderOwner, ...]:
+        records = await self.client.owners(context)
+        return tuple(
+            CRMProviderOwner(
+                record.id,
+                " ".join(part for part in (record.first_name, record.last_name) if part) or None,
+                record.email,
+                not record.archived,
+            )
+            for record in records
+        )
+
+    async def stages(self, context: ExecutorConnectionContext) -> tuple[CRMProviderStage, ...]:
+        pipelines = await self.client.pipelines(context)
+        return tuple(
+            CRMProviderStage(pipeline.id, pipeline.label, stage.id, stage.label, True)
+            for pipeline in pipelines
+            for stage in pipeline.stages
+        )
+
+    def _normalise(self, object_type: CRMObjectType, record: HubSpotRecord) -> CRMProviderRecord:
+        if record.updated_at is None:
+            raise HubSpotAPIError("provider_response_invalid")
+        company_associations = record.associations.get("companies")
+        related_account_id = (
+            company_associations.results[0].id
+            if company_associations is not None and company_associations.results
+            else None
+        )
+        fields = canonicalise_fields(self.provider_key, object_type, record.properties)
+        owner = fields.get("owner")
+        return CRMProviderRecord(
+            object_type=object_type,
+            external_object_id=record.id,
+            fields=fields,
+            external_version=record.updated_at.astimezone(UTC).isoformat(),
+            modified_at=record.updated_at.astimezone(UTC),
+            owner_external_id=owner if isinstance(owner, str) else None,
+            related_account_external_id=related_account_id,
+            archived=record.archived,
+        )
+
+    def _provider_payload(
+        self,
+        object_type: CRMObjectType,
+        fields: dict[str, CRMScalar],
+    ) -> dict[str, str]:
+        names = {
+            rule.canonical_field: rule.provider_field
+            for rule in rules_for(self.provider_key, object_type)
+            if rule.value_type != "relation"
+        }
+        payload: dict[str, str] = {}
+        for field, value in fields.items():
+            name = names.get(field)
+            if name is None:
+                continue
+            if isinstance(value, datetime):
+                payload[name] = value.astimezone(UTC).isoformat()
+            elif isinstance(value, (date, Decimal)):
+                payload[name] = str(value)
+            elif value is not None:
+                payload[name] = str(value)
+            else:
+                payload[name] = ""
+        if not payload:
+            raise HubSpotAPIError("provider_value_invalid")
+        return payload
 
 
 class HubSpotCRMExecutor(ActionExecutor):
@@ -594,7 +1052,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         if target is None:
             raise PermanentExecutionFailure(
                 "crm_mapping_missing",
-                "Connect this RevenueOS record to a CRM record before reviewing the update.",
+                "Connect this Oryntela record to a CRM record before reviewing the update.",
             )
         if isinstance(action.payload, OpportunityUpdatePayload):
             if target.external_object_type != "deals" or target.external_property_name is None:
@@ -602,12 +1060,12 @@ class HubSpotCRMExecutor(ActionExecutor):
             if target.field_authority == CRMFieldAuthority.CRM_AUTHORITATIVE.value:
                 raise PermanentExecutionFailure(
                     "crm_field_authoritative",
-                    "HubSpot is the source of truth for this field, so RevenueOS will not overwrite it.",
+                    "HubSpot is the source of truth for this field, so Oryntela will not overwrite it.",
                 )
             if action.payload.field == "estimated_value" and action.revenueos_currency is None:
                 raise PermanentExecutionFailure(
                     "currency_context_missing",
-                    "The RevenueOS opportunity needs a currency before its amount can be updated.",
+                    "The Oryntela opportunity needs a currency before its amount can be updated.",
                 )
         elif isinstance(action.payload, ContactUpdatePayload):
             if action.payload.operation != "update":
@@ -620,7 +1078,7 @@ class HubSpotCRMExecutor(ActionExecutor):
             if target.field_authority == CRMFieldAuthority.CRM_AUTHORITATIVE.value:
                 raise PermanentExecutionFailure(
                     "crm_field_authoritative",
-                    "HubSpot is the source of truth for this field, so RevenueOS will not overwrite it.",
+                    "HubSpot is the source of truth for this field, so Oryntela will not overwrite it.",
                 )
         elif isinstance(action.payload, LogInteractionPayload):
             if target.external_object_type != "deals":
@@ -663,7 +1121,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         ):
             raise PermanentExecutionFailure(
                 "currency_mismatch",
-                "HubSpot and RevenueOS use different currencies for this opportunity. No conversion was made.",
+                "HubSpot and Oryntela use different currencies for this opportunity. No conversion was made.",
             )
         return HubSpotExternalState(current_value=current, updated_at=record.updated_at, currency=currency)
 
@@ -732,7 +1190,7 @@ class HubSpotCRMExecutor(ActionExecutor):
                 object_type=action.external_target.external_object_type,
                 object_key=self.object_key(action, idempotency_key),
                 state={"reconciled": True},
-                safe_message="HubSpot already contains the approved value. RevenueOS reconciled the result.",
+                safe_message="HubSpot already contains the approved value. Oryntela reconciled the result.",
             )
         property_name = cast(str, action.external_target.external_property_name)
         try:
@@ -777,7 +1235,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         except (RetryableExecutionFailure, PermanentExecutionFailure):
             raise UnknownExternalStateFailure(
                 "unknown_external_state",
-                "The HubSpot outcome is unknown. RevenueOS will not retry until it can reconcile the record.",
+                "The HubSpot outcome is unknown. Oryntela will not retry until it can reconcile the record.",
             ) from None
         assert action.external_target is not None
         if (
@@ -789,16 +1247,16 @@ class HubSpotCRMExecutor(ActionExecutor):
                 object_type=action.external_target.external_object_type,
                 object_key=self.object_key(action, idempotency_key),
                 state={"reconciled": True},
-                safe_message="HubSpot applied the approved value; RevenueOS reconciled the uncertain response.",
+                safe_message="HubSpot applied the approved value; Oryntela reconciled the uncertain response.",
             )
         if isinstance(refreshed, HubSpotExternalState) and refreshed.current_value == expected.current_value:
             raise RetryableExecutionFailure(
                 "provider_timeout_not_applied",
-                "HubSpot did not apply the update. RevenueOS may retry it safely.",
+                "HubSpot did not apply the update. Oryntela may retry it safely.",
             )
         raise UnknownExternalStateFailure(
             "unknown_external_state",
-            "The HubSpot record changed unexpectedly. RevenueOS will not retry this update.",
+            "The HubSpot record changed unexpectedly. Oryntela will not retry this update.",
         )
 
     async def _create_activity(
@@ -817,12 +1275,12 @@ class HubSpotCRMExecutor(ActionExecutor):
                 object_type="meetings",
                 object_key=self.object_key(action, idempotency_key),
                 state={"reconciled": True},
-                safe_message="The HubSpot activity already exists. RevenueOS reconciled it without a duplicate.",
+                safe_message="The HubSpot activity already exists. Oryntela reconciled it without a duplicate.",
             )
         if len(existing) > 1:
             raise UnknownExternalStateFailure(
                 "activity_reconciliation_ambiguous",
-                "More than one matching HubSpot activity exists. RevenueOS will not create another.",
+                "More than one matching HubSpot activity exists. Oryntela will not create another.",
             )
         body = payload.summary
         if payload.agreed_next_steps:
@@ -845,14 +1303,14 @@ class HubSpotCRMExecutor(ActionExecutor):
                 except (RetryableExecutionFailure, PermanentExecutionFailure):
                     raise UnknownExternalStateFailure(
                         "unknown_external_state",
-                        "The HubSpot activity outcome is unknown. RevenueOS will not create another.",
+                        "The HubSpot activity outcome is unknown. Oryntela will not create another.",
                     ) from None
                 if len(matches) == 1:
                     record = matches[0]
                 else:
                     raise UnknownExternalStateFailure(
                         "unknown_external_state",
-                        "The HubSpot activity outcome is unknown. RevenueOS will not create another.",
+                        "The HubSpot activity outcome is unknown. Oryntela will not create another.",
                     ) from None
             else:
                 self._raise_execution_failure(exc)
@@ -882,7 +1340,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         if len(matches) > 1:
             raise UnknownExternalStateFailure(
                 "activity_reconciliation_ambiguous",
-                "More than one matching HubSpot activity exists. RevenueOS will not retry.",
+                "More than one matching HubSpot activity exists. Oryntela will not retry.",
             )
         return ExecutorResult(
             external_result_id=matches[0].id,

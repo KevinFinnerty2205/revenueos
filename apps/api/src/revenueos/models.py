@@ -5314,7 +5314,7 @@ class IntegrationConnection(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint(
             "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot', "
-            "'microsoft_365', 'google_workspace')",
+            "'salesforce', 'microsoft_365', 'google_workspace')",
             name="ck_integration_connections_key",
         ),
         CheckConstraint(
@@ -5359,6 +5359,27 @@ class IntegrationConnection(TimestampMixin, Base):
             "organisation_id",
             "connection_status",
         ),
+        Index(
+            "uq_integration_connections_org_active_external_crm",
+            "organisation_id",
+            unique=True,
+            postgresql_where=text("connector_key IN ('hubspot', 'salesforce') AND connection_status <> 'revoked'"),
+            sqlite_where=text("connector_key IN ('hubspot', 'salesforce') AND connection_status <> 'revoked'"),
+        ),
+        Index(
+            "uq_integration_connections_external_crm_tenant",
+            "connector_key",
+            text("coalesce(external_tenant_id, external_account_id)"),
+            unique=True,
+            postgresql_where=text(
+                "connector_key IN ('hubspot', 'salesforce') AND connection_status <> 'revoked' "
+                "AND coalesce(external_tenant_id, external_account_id) IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "connector_key IN ('hubspot', 'salesforce') AND connection_status <> 'revoked' "
+                "AND coalesce(external_tenant_id, external_account_id) IS NOT NULL"
+            ),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -5389,7 +5410,7 @@ class OAuthConnectionState(Base):
     __tablename__ = "oauth_connection_states"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('hubspot', 'microsoft_365', 'google_workspace')",
+            "connector_key IN ('hubspot', 'salesforce', 'microsoft_365', 'google_workspace')",
             name="ck_oauth_connection_states_connector",
         ),
         CheckConstraint("length(state_hash) = 64", name="ck_oauth_connection_states_hash"),
@@ -5425,7 +5446,7 @@ class EncryptedConnectorCredential(TimestampMixin, Base):
     __tablename__ = "encrypted_connector_credentials"
     __table_args__ = (
         CheckConstraint(
-            "connector_key IN ('hubspot', 'microsoft_365', 'google_workspace')",
+            "connector_key IN ('hubspot', 'salesforce', 'microsoft_365', 'google_workspace')",
             name="ck_encrypted_connector_credentials_connector",
         ),
         CheckConstraint("length(nonce) = 12", name="ck_encrypted_connector_credentials_nonce"),
@@ -5731,13 +5752,14 @@ class CRMEntityMapping(TimestampMixin, Base):
             name="ck_crm_entity_mappings_entity_type",
         ),
         CheckConstraint(
-            "external_object_type IN ('company', 'contact', 'deal')",
+            "external_object_type IN ('account', 'company', 'contact', 'opportunity', 'deal')",
             name="ck_crm_entity_mappings_object_type",
         ),
         CheckConstraint("sync_state IN ('active', 'external_missing')", name="ck_crm_entity_mappings_state"),
         CheckConstraint(
             "length(trim(external_object_id)) BETWEEN 1 AND 128", name="ck_crm_entity_mappings_external_id"
         ),
+        CheckConstraint("authority_version > 0", name="ck_crm_entity_mappings_authority_version"),
         ForeignKeyConstraint(
             ["organisation_id", "connection_id"],
             ["integration_connections.organisation_id", "integration_connections.id"],
@@ -5781,12 +5803,18 @@ class CRMEntityMapping(TimestampMixin, Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sync_state: Mapped[str] = mapped_column(String(24), nullable=False, default="active", server_default="active")
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    external_version: Mapped[str | None] = mapped_column(String(255))
+    authority_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class CRMFieldMapping(TimestampMixin, Base):
     __tablename__ = "crm_field_mappings"
     __table_args__ = (
-        CheckConstraint("entity_type IN ('opportunity', 'contact')", name="ck_crm_field_mappings_entity_type"),
+        CheckConstraint(
+            "entity_type IN ('company', 'contact', 'opportunity')",
+            name="ck_crm_field_mappings_entity_type",
+        ),
         CheckConstraint(
             "external_property_type IN ('string', 'number', 'date', 'datetime', 'enumeration')",
             name="ck_crm_field_mappings_property_type",
@@ -5799,6 +5827,7 @@ class CRMFieldMapping(TimestampMixin, Base):
         CheckConstraint(
             "length(trim(external_property_name)) BETWEEN 1 AND 128", name="ck_crm_field_mappings_property"
         ),
+        CheckConstraint("mapping_version > 0", name="ck_crm_field_mappings_version"),
         ForeignKeyConstraint(
             ["organisation_id", "connection_id"],
             ["integration_connections.organisation_id", "integration_connections.id"],
@@ -5833,6 +5862,7 @@ class CRMFieldMapping(TimestampMixin, Base):
     authority: Mapped[str] = mapped_column(String(32), nullable=False, default="review_before_sync")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
 
 class CRMStageMapping(TimestampMixin, Base):
@@ -5847,6 +5877,7 @@ class CRMStageMapping(TimestampMixin, Base):
         CheckConstraint(
             "length(trim(external_stage_id)) BETWEEN 1 AND 128", name="ck_crm_stage_mappings_external_stage"
         ),
+        CheckConstraint("mapping_version > 0", name="ck_crm_stage_mappings_version"),
         ForeignKeyConstraint(
             ["organisation_id", "connection_id"],
             ["integration_connections.organisation_id", "integration_connections.id"],
@@ -5872,6 +5903,7 @@ class CRMStageMapping(TimestampMixin, Base):
     external_pipeline_id: Mapped[str] = mapped_column(String(128), nullable=False)
     external_stage_id: Mapped[str] = mapped_column(String(128), nullable=False)
     configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
 
 class OrganisationCRMSetting(TimestampMixin, Base):
@@ -5879,7 +5911,8 @@ class OrganisationCRMSetting(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("mode IN ('native', 'external')", name="ck_organisation_crm_settings_mode"),
         CheckConstraint(
-            "(mode = 'native' AND external_provider IS NULL) OR (mode = 'external' AND external_provider = 'hubspot')",
+            "(mode = 'native' AND external_provider IS NULL) OR "
+            "(mode = 'external' AND external_provider IN ('hubspot', 'salesforce'))",
             name="ck_organisation_crm_settings_provider",
         ),
         ForeignKeyConstraint(
@@ -5897,6 +5930,379 @@ class OrganisationCRMSetting(TimestampMixin, Base):
     external_provider: Mapped[str | None] = mapped_column(String(40))
     configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     configured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CRMConnectionState(TimestampMixin, Base):
+    __tablename__ = "crm_connection_states"
+    __table_args__ = (
+        CheckConstraint("provider_key IN ('hubspot', 'salesforce')", name="ck_crm_connection_states_provider"),
+        CheckConstraint(
+            "lifecycle IN ('connected_read_only', 'initial_sync', 'mapping_required', 'ready', "
+            "'needs_attention', 'disabled')",
+            name="ck_crm_connection_states_lifecycle",
+        ),
+        CheckConstraint(
+            "health_status IN ('unknown', 'healthy', 'degraded', 'needs_reauth', 'rate_limited', 'unavailable')",
+            name="ck_crm_connection_states_health",
+        ),
+        CheckConstraint("mapping_version > 0", name="ck_crm_connection_states_mapping_version"),
+        CheckConstraint(
+            "records_seen >= 0 AND records_applied >= 0 AND conflict_count >= 0",
+            name="ck_crm_connection_states_counts",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_connection_states_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "configured_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_connection_states_configurer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_connection_states_org_id"),
+        UniqueConstraint("organisation_id", "connection_id", name="uq_crm_connection_states_connection"),
+        Index("ix_crm_connection_states_org_health", "organisation_id", "health_status", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    lifecycle: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="connected_read_only", server_default="connected_read_only"
+    )
+    health_status: Mapped[str] = mapped_column(String(24), nullable=False, default="unknown", server_default="unknown")
+    connector_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    writeback_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    records_seen: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    records_applied: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    conflict_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    initial_sync_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    initial_sync_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_successful_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_health_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_safe_error_code: Mapped[str | None] = mapped_column(String(80))
+    configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class CRMOwnerMapping(TimestampMixin, Base):
+    __tablename__ = "crm_owner_mappings"
+    __table_args__ = (
+        CheckConstraint("provider_key IN ('hubspot', 'salesforce')", name="ck_crm_owner_mappings_provider"),
+        CheckConstraint("state IN ('unmapped', 'mapped', 'inactive')", name="ck_crm_owner_mappings_state"),
+        CheckConstraint(
+            "(state = 'mapped' AND user_id IS NOT NULL) OR (state <> 'mapped' AND user_id IS NULL)",
+            name="ck_crm_owner_mappings_user",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_owner_mappings_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_owner_mappings_user",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "configured_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_owner_mappings_configurer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_owner_mappings_org_id"),
+        UniqueConstraint(
+            "organisation_id", "connection_id", "external_owner_id", name="uq_crm_owner_mappings_external_owner"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    external_owner_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_owner_name: Mapped[str | None] = mapped_column(String(200))
+    external_owner_email: Mapped[str | None] = mapped_column(String(320))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="unmapped", server_default="unmapped")
+    configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+
+
+class CRMSyncCursor(TimestampMixin, Base):
+    __tablename__ = "crm_sync_cursors"
+    __table_args__ = (
+        CheckConstraint("provider_key IN ('hubspot', 'salesforce')", name="ck_crm_sync_cursors_provider"),
+        CheckConstraint("object_type IN ('account', 'contact', 'opportunity')", name="ck_crm_sync_cursors_object"),
+        CheckConstraint("strategy IN ('full', 'incremental')", name="ck_crm_sync_cursors_strategy"),
+        CheckConstraint("page_count >= 0 AND record_count >= 0", name="ck_crm_sync_cursors_counts"),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_sync_cursors_connection",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_sync_cursors_org_id"),
+        UniqueConstraint("organisation_id", "connection_id", "object_type", name="uq_crm_sync_cursors_object"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    object_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    strategy: Mapped[str] = mapped_column(String(16), nullable=False)
+    cursor_token: Mapped[str | None] = mapped_column(String(2048))
+    high_watermark_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    page_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CRMSyncJob(TimestampMixin, Base):
+    __tablename__ = "crm_sync_jobs"
+    __table_args__ = (
+        CheckConstraint("provider_key IN ('hubspot', 'salesforce')", name="ck_crm_sync_jobs_provider"),
+        CheckConstraint("mode IN ('initial', 'incremental', 'reconcile')", name="ck_crm_sync_jobs_mode"),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'paused', 'succeeded', 'degraded', 'cancelled', 'failed')",
+            name="ck_crm_sync_jobs_status",
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_crm_sync_jobs_attempts"),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_sync_jobs_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "requested_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_sync_jobs_requester",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_sync_jobs_org_id"),
+        UniqueConstraint("organisation_id", "connection_id", "idempotency_key", name="uq_crm_sync_jobs_key"),
+        Index("ix_crm_sync_jobs_org_status", "organisation_id", "status", "created_at"),
+        Index(
+            "uq_crm_sync_jobs_connection_active",
+            "organisation_id",
+            "connection_id",
+            unique=True,
+            postgresql_where=text("status IN ('queued', 'running', 'paused')"),
+            sqlite_where=text("status IN ('queued', 'running', 'paused')"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued", server_default="queued")
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    safe_failure_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class CRMSyncReceipt(Base):
+    __tablename__ = "crm_sync_receipts"
+    __table_args__ = (
+        CheckConstraint("provider_key IN ('hubspot', 'salesforce')", name="ck_crm_sync_receipts_provider"),
+        CheckConstraint("direction IN ('inbound', 'outbound')", name="ck_crm_sync_receipts_direction"),
+        CheckConstraint("object_type IN ('account', 'contact', 'opportunity')", name="ck_crm_sync_receipts_object"),
+        CheckConstraint(
+            "operation IN ('observe', 'create', 'update', 'archive', 'reconcile')",
+            name="ck_crm_sync_receipts_operation",
+        ),
+        CheckConstraint(
+            "status IN ('applied', 'skipped', 'conflict', 'reconciled', 'unknown', 'failed')",
+            name="ck_crm_sync_receipts_status",
+        ),
+        CheckConstraint("length(idempotency_key) = 64", name="ck_crm_sync_receipts_key"),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_sync_receipts_connection",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_sync_receipts_org_id"),
+        UniqueConstraint("organisation_id", "connection_id", "idempotency_key", name="uq_crm_sync_receipts_key"),
+        Index("ix_crm_sync_receipts_org_created", "organisation_id", "connection_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    direction: Mapped[str] = mapped_column(String(12), nullable=False)
+    object_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    operation: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    revenueos_entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    external_object_id: Mapped[str | None] = mapped_column(String(128))
+    external_version: Mapped[str | None] = mapped_column(String(255))
+    field_keys_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    safe_failure_code: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CRMConflict(TimestampMixin, Base):
+    __tablename__ = "crm_conflicts"
+    __table_args__ = (
+        CheckConstraint("provider_key IN ('hubspot', 'salesforce')", name="ck_crm_conflicts_provider"),
+        CheckConstraint("object_type IN ('account', 'contact', 'opportunity')", name="ck_crm_conflicts_object"),
+        CheckConstraint("status IN ('open', 'resolved', 'ignored')", name="ck_crm_conflicts_status"),
+        CheckConstraint(
+            "resolution IS NULL OR resolution IN ('provider', 'oryntela', 'manual')",
+            name="ck_crm_conflicts_resolution",
+        ),
+        CheckConstraint(
+            "authority IN ('crm_authoritative', 'revenueos_authoritative', 'review_before_sync')",
+            name="ck_crm_conflicts_authority",
+        ),
+        CheckConstraint("mapping_version > 0", name="ck_crm_conflicts_mapping_version"),
+        CheckConstraint(
+            "length(oryntela_fingerprint) = 64 AND length(provider_fingerprint) = 64",
+            name="ck_crm_conflicts_fingerprints",
+        ),
+        CheckConstraint(
+            "(status = 'open' AND resolution IS NULL AND resolved_at IS NULL AND resolved_by_user_id IS NULL "
+            "AND resolved_fingerprint IS NULL) OR "
+            "(status <> 'open' AND resolution IS NOT NULL AND resolved_at IS NOT NULL "
+            "AND resolved_by_user_id IS NOT NULL AND length(resolved_fingerprint) = 64)",
+            name="ck_crm_conflicts_lifecycle",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_conflicts_connection",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "resolved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_conflicts_resolver",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_conflicts_org_id"),
+        Index(
+            "uq_crm_conflicts_open_field",
+            "organisation_id",
+            "connection_id",
+            "object_type",
+            "external_object_id",
+            "field_key",
+            unique=True,
+            postgresql_where=text("status = 'open'"),
+            sqlite_where=text("status = 'open'"),
+        ),
+        Index("ix_crm_conflicts_org_status", "organisation_id", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    object_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    revenueos_entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    external_object_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    field_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    oryntela_value_json: Mapped[object | None] = mapped_column(JSON(none_as_null=True))
+    provider_value_json: Mapped[object | None] = mapped_column(JSON(none_as_null=True))
+    oryntela_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    oryntela_version_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    external_version: Mapped[str] = mapped_column(String(255), nullable=False)
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    authority: Mapped[str] = mapped_column(String(32), nullable=False, default="review_before_sync")
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open", server_default="open")
+    resolution: Mapped[str | None] = mapped_column(String(16))
+    resolved_value_json: Mapped[object | None] = mapped_column(JSON(none_as_null=True))
+    resolved_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    resolved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CRMWritebackPreview(Base):
+    __tablename__ = "crm_writeback_previews"
+    __table_args__ = (
+        CheckConstraint(
+            "entity_type IN ('company', 'contact', 'opportunity')",
+            name="ck_crm_writeback_previews_entity",
+        ),
+        CheckConstraint("operation IN ('create', 'update')", name="ck_crm_writeback_previews_operation"),
+        CheckConstraint("length(preview_fingerprint) = 64", name="ck_crm_writeback_previews_fingerprint"),
+        CheckConstraint(
+            "(confirmed_at IS NULL AND confirmed_by_user_id IS NULL AND receipt_id IS NULL) OR "
+            "(confirmed_at IS NOT NULL AND confirmed_by_user_id IS NOT NULL AND receipt_id IS NOT NULL)",
+            name="ck_crm_writeback_previews_confirmation",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "connection_id"],
+            ["integration_connections.organisation_id", "integration_connections.id"],
+            name="fk_crm_writeback_previews_connection",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "confirmed_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_crm_writeback_previews_confirmer",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "receipt_id"],
+            ["crm_sync_receipts.organisation_id", "crm_sync_receipts.id"],
+            name="fk_crm_writeback_previews_receipt",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_crm_writeback_previews_org_id"),
+        Index("ix_crm_writeback_previews_org_expiry", "organisation_id", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    operation: Mapped[str] = mapped_column(String(16), nullable=False)
+    external_object_id: Mapped[str | None] = mapped_column(String(128))
+    external_version: Mapped[str | None] = mapped_column(String(255))
+    changes_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    preview_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    receipt_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class CRMCustomFieldDefinition(TimestampMixin, Base):
@@ -6298,7 +6704,7 @@ class ActionExecution(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint(
             "connector_key IN ('mock_email', 'mock_calendar', 'mock_crm', 'mock_task', 'hubspot', "
-            "'microsoft_365', 'google_workspace')",
+            "'salesforce', 'microsoft_365', 'google_workspace')",
             name="ck_action_executions_connector",
         ),
         CheckConstraint(
@@ -6456,7 +6862,9 @@ class IntegrationAuditEvent(Base):
             "'field_mapping_changed', 'stage_mapping_changed', "
             "'execution_preview_created', 'execution_confirmed', 'execution_started', "
             "'execution_succeeded', 'execution_failed', 'execution_unknown_state', 'execution_reconciled', "
-            "'provider_sync_completed')",
+            "'provider_sync_completed', 'crm_sync_queued', 'crm_sync_completed', 'crm_mapping_reviewed', "
+            "'crm_connector_changed', 'crm_writeback_changed', 'crm_writeback_reconciled', "
+            "'crm_conflict_resolved', 'crm_provider_switched')",
             name="ck_integration_audit_events_type",
         ),
         CheckConstraint("duration_ms IS NULL OR duration_ms >= 0", name="ck_integration_audit_events_duration"),

@@ -51,7 +51,7 @@ class CRMAvailabilityResponse(APIModel):
     enabled: bool
     can_manage: bool
     mode: CRMMode
-    external_provider: Literal["hubspot"] | None = None
+    external_provider: Literal["hubspot", "salesforce"] | None = None
     external_connected: bool
     custom_fields_read_only: bool
     message: str

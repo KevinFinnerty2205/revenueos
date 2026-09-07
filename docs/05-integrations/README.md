@@ -8,10 +8,13 @@ the [document and email provider boundary](document-email-provider-boundary.md).
 
 WO-022 adds organisation-scoped **mock** email, calendar, CRM and task connections
 for deterministic simulation. They make no external request and must not be
-described as working provider integrations. WO-025C adds HubSpot as the sole
-feature-gated live CRM provider; no other live CRM, ATS, email, calendar, meeting
-or payment provider is represented as connected. Supabase remains a
-planned production database/storage provider rather than proof of a configured deployment.
+described as working provider integrations. WO-025C added the first feature-gated
+HubSpot path. WO-042 now adds production-capable but inactive HubSpot and Salesforce
+account/contact/opportunity adapters behind explicit admin, entitlement and activation
+gates. No provider app, key, account, spend, customer-data smoke test or production
+activation was performed. No ATS, meeting or payment provider is represented as
+connected. Supabase remains a planned production database/storage provider rather
+than proof of a configured deployment.
 
 Future adapters require least-privilege credentials, explicit user authority, idempotency, receipts, reconciliation, audit and a real sandbox test before being called complete.
 
@@ -24,6 +27,14 @@ reviewable intent. WO-022 implements the simulation portion of that boundary plu
 focused outbound path documented in the [provider decision](crm-provider-selection.md),
 [connection guide](hubspot-connection-guide.md) and
 [admin setup](crm-admin-setup.md). It does not add broad inbound sync.
+
+WO-042 adds the bounded provider-neutral lifecycle described in the
+[production CRM connector architecture](../03-engineering/production-crm-connectors.md),
+[field authority matrix](../03-engineering/crm-authority-matrix.md) and dated
+[provider research](crm-provider-research-2026-09-06.md). V1 deliberately uses
+polling, allow-listed fields and per-record reviewed writeback. Dynamics 365,
+webhooks/CDC, arbitrary objects/custom fields, files, notes, broad activity sync and
+autonomous writes remain deferred.
 
 WO-026 adds a strict
 [Prospect research provider boundary](prospect-research-provider-boundary.md) and a

@@ -159,9 +159,10 @@ Q&A slice. It uses no provider, public-web research, text-to-SQL or Action execu
 
 ### WO-025C — Core CRM Sync
 
-**Current status:** implemented on 24 August 2026 for HubSpot only. The connector is
-off by default and observed target-environment/Checkpoint 1B evidence remains a
-separate gate. Salesforce, bulk import and bidirectional sync remain future.
+**Historical WO-025C status:** implemented on 24 August 2026 for HubSpot only. The
+connector was off by default and observed target-environment/Checkpoint 1B evidence
+remained a separate gate. Salesforce was future at this boundary and was later added
+by WO-042; bulk import and unrestricted bidirectional sync remain out of scope.
 
 - **Objective/value/package:** Complete one real CRM read/match and approved-write
   loop while the customer's CRM remains authoritative. **Core integration foundation**.
@@ -715,9 +716,11 @@ operational kill switch. Calendar, Drive and broad Workspace context remain defe
 
 ### WO-042 — CRM Connectors
 
-**Checkpoint 3 disposition:** **Defer.** First prove the existing HubSpot boundary in
-a real sandbox/pilot. Add a second provider or inbound breadth only from customer
-authority/conflict evidence.
+**Current status (6 September 2026): implemented; awaiting engineering review.** A
+later explicit owner work order superseded Checkpoint 3's original defer decision.
+HubSpot and Salesforce now share a production-capable but inactive, provider-neutral
+account/contact/opportunity lifecycle. Production activation and any customer-data
+smoke test remain parked for WO-054.
 
 - **Objective/value/package:** Expand the validated WO-025C external-CRM foundation to
   a second provider or broader bidirectional mappings only where customer evidence
@@ -731,8 +734,8 @@ authority/conflict evidence.
 - **Backend/frontend/AI:** Reuse the first provider-neutral binding/sync contract for a
   second connector, wider field families or bounded backfill; AI never bypasses the
   reviewed Action boundary.
-- **Integrations:** Add only the next validated CRM/provider scope; do not promise a
-  connector matrix in advance.
+- **Integrations:** HubSpot and Salesforce only. Dynamics was assessed and deferred;
+  there is no general connector matrix.
 - **Security/privacy/operations:** Secret/scopes, webhook signatures, field allow-lists,
   deletion policy, replay/backfill limits, provider outage/runbooks and safe telemetry.
 - **Acceptance:** Authority conflicts cannot silently overwrite; retries are idempotent;

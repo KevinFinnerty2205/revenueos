@@ -91,7 +91,7 @@ class CRMService:
         core_access = await commercial.module_access(self.tenant.organisation_id, "core")
         connector_access = await commercial.module_access(self.tenant.organisation_id, "crm")
         setting = await self.repository.setting(self.tenant.organisation_id)
-        connection = await self.repository.active_hubspot_connection(self.tenant.organisation_id)
+        connection = await self.repository.active_external_crm_connection(self.tenant.organisation_id)
         connection_active = connection is not None and connection.connection_status == "active"
         mode = self._effective_mode(setting, connection is not None)
         enabled = core_access == "write" and (mode != "external" or connector_access == "write")
@@ -115,7 +115,8 @@ class CRMService:
             message = "Choose RevenueOS or an external CRM as the system of record."
         elif setting.mode == "external" and not connection_active:
             state = "setup_required"
-            message = "Reconnect HubSpot to continue using it as the external CRM."
+            provider = "HubSpot" if setting.external_provider == "hubspot" else "Salesforce"
+            message = f"Reconnect {provider} to continue using it as the external CRM."
         else:
             state = "available"
             message = "CRM administration is available."
@@ -127,7 +128,10 @@ class CRMService:
             enabled=enabled,
             can_manage=self.tenant.can_manage(),
             mode=mode,
-            external_provider=cast("Literal['hubspot'] | None", setting.external_provider if setting else None),
+            external_provider=cast(
+                "Literal['hubspot', 'salesforce'] | None",
+                setting.external_provider if setting else None,
+            ),
             external_connected=connection_active,
             custom_fields_read_only=not enabled or not self.settings.feature_native_crm_enabled,
             message=message,
@@ -149,17 +153,18 @@ class CRMService:
             await CommercialService(self.session, self.settings).require_module_write(
                 self.tenant.organisation_id, "crm"
             )
-        connection = await self.repository.active_hubspot_connection(self.tenant.organisation_id)
+        connection = await self.repository.active_external_crm_connection(self.tenant.organisation_id)
         if request.mode == "external" and (connection is None or connection.connection_status != "active"):
             raise PublicAPIError(
                 "crm_connection_required",
-                "Connect HubSpot before selecting it as the external CRM.",
+                "Connect HubSpot or Salesforce before selecting it as the external CRM.",
                 409,
             )
+        external_provider = connection.connector_key if request.mode == "external" and connection is not None else None
         if request.mode == "native" and await self.repository.has_active_field_mappings(self.tenant.organisation_id):
             raise PublicAPIError(
                 "crm_mode_conflict",
-                "Disable active HubSpot field mappings before using RevenueOS as your CRM.",
+                "Disable active external CRM field mappings before using Oryntela as your CRM.",
                 409,
             )
         setting = await self.repository.setting(self.tenant.organisation_id, for_update=True)
@@ -168,14 +173,14 @@ class CRMService:
             setting = OrganisationCRMSetting(
                 organisation_id=self.tenant.organisation_id,
                 mode=request.mode,
-                external_provider="hubspot" if request.mode == "external" else None,
+                external_provider=external_provider,
                 configured_by_user_id=self.tenant.user_id,
                 configured_at=now,
             )
             self.repository.add(setting)
         else:
             setting.mode = request.mode
-            setting.external_provider = "hubspot" if request.mode == "external" else None
+            setting.external_provider = external_provider
             setting.configured_by_user_id = self.tenant.user_id
             setting.configured_at = now
         await self._commit()

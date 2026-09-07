@@ -711,7 +711,7 @@ export interface CRMAvailability {
   enabled: boolean;
   canManage: boolean;
   mode: CRMMode;
-  externalProvider: "hubspot" | null;
+  externalProvider: "hubspot" | "salesforce" | null;
   externalConnected: boolean;
   customFieldsReadOnly: boolean;
   message: string;
@@ -2909,6 +2909,7 @@ export type ConnectorKey =
   | "mock_crm"
   | "mock_task"
   | "hubspot"
+  | "salesforce"
   | "microsoft_365"
   | "google_workspace";
 export type ConnectorCapability =
@@ -2921,7 +2922,14 @@ export type ConnectorCapability =
   | "post_internal_message"
   | "upload_or_share_document"
   | "reconcile_email"
-  | "read_calendar";
+  | "read_calendar"
+  | "sync_accounts"
+  | "sync_contacts"
+  | "sync_opportunities"
+  | "create_account"
+  | "create_contact"
+  | "create_opportunity"
+  | "update_account";
 export type ConnectionStatus =
   "active" | "reauthorisation_required" | "revoked";
 export type ExecutionStatus =
@@ -3164,7 +3172,12 @@ export interface OAuthStartResponse {
   expiresAt: string;
 }
 
-export type CRMObjectType = "company" | "contact" | "deal";
+export type CRMObjectType =
+  | "account"
+  | "company"
+  | "contact"
+  | "opportunity"
+  | "deal";
 
 export interface CRMSearchResult {
   externalObjectType: CRMObjectType;
@@ -3182,7 +3195,7 @@ export interface CRMSearchResponse {
 export interface CRMEntityMapping {
   id: string;
   connectionId: string;
-  connectorKey: "hubspot";
+  connectorKey: "hubspot" | "salesforce";
   revenueosEntityType: "company" | "contact" | "opportunity";
   revenueosEntityId: string;
   externalObjectType: CRMObjectType;
@@ -3190,12 +3203,15 @@ export interface CRMEntityMapping {
   externalUpdatedAt: string | null;
   lastSyncedAt: string | null;
   syncState: "active" | "external_missing";
+  externalVersion: string | null;
+  authorityVersion: number;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CRMPropertyDefinition {
-  entityType: "opportunity" | "contact";
+  entityType: "company" | "opportunity" | "contact";
   externalPropertyName: string;
   label: string;
   propertyType: "string" | "number" | "date" | "datetime" | "enumeration";
@@ -3206,7 +3222,7 @@ export interface CRMPropertyDefinition {
 export interface CRMFieldMapping {
   id: string;
   connectionId: string;
-  entityType: "opportunity" | "contact";
+  entityType: "company" | "opportunity" | "contact";
   revenueosField: string;
   externalPropertyName: string;
   externalPropertyType:
@@ -3214,6 +3230,7 @@ export interface CRMFieldMapping {
   authority:
     "crm_authoritative" | "revenueos_authoritative" | "review_before_sync";
   enabled: boolean;
+  mappingVersion: number;
 }
 
 export interface CRMFieldConfiguration {
@@ -3232,11 +3249,148 @@ export interface CRMStageMapping {
   revenueosStage: string;
   externalPipelineId: string;
   externalStageId: string;
+  mappingVersion: number;
 }
 
 export interface CRMStageConfiguration {
   availableStages: CRMStageDefinition[];
   mappings: CRMStageMapping[];
+}
+
+export type ProductionCRMProvider = "hubspot" | "salesforce";
+export type CRMSyncObjectType = "account" | "contact" | "opportunity";
+
+export interface CRMSyncCursor {
+  objectType: CRMSyncObjectType;
+  strategy: "full" | "incremental";
+  pageCount: number;
+  recordCount: number;
+  highWatermarkAt: string | null;
+  completedAt: string | null;
+}
+
+export interface CRMSyncJob {
+  id: string;
+  connectionId: string;
+  providerKey: ProductionCRMProvider;
+  mode: "initial" | "incremental" | "reconcile";
+  status:
+    | "queued"
+    | "running"
+    | "paused"
+    | "succeeded"
+    | "degraded"
+    | "cancelled"
+    | "failed";
+  attemptCount: number;
+  safeFailureCode: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CRMConnectionStatus {
+  connectionId: string;
+  providerKey: ProductionCRMProvider;
+  lifecycle:
+    | "connected_read_only"
+    | "initial_sync"
+    | "mapping_required"
+    | "ready"
+    | "needs_attention"
+    | "disabled";
+  healthStatus:
+    | "unknown"
+    | "healthy"
+    | "degraded"
+    | "needs_reauth"
+    | "rate_limited"
+    | "unavailable";
+  connectorEnabled: boolean;
+  writebackEnabled: boolean;
+  mappingVersion: number;
+  recordsSeen: number;
+  recordsApplied: number;
+  conflictCount: number;
+  initialSyncStartedAt: string | null;
+  initialSyncCompletedAt: string | null;
+  lastSuccessfulSyncAt: string | null;
+  lastHealthCheckedAt: string | null;
+  lastSafeErrorCode: string | null;
+  cursors: CRMSyncCursor[];
+  latestJob: CRMSyncJob | null;
+}
+
+export interface CRMOwnerMapping {
+  id: string;
+  connectionId: string;
+  providerKey: ProductionCRMProvider;
+  externalOwnerId: string;
+  externalOwnerName: string | null;
+  externalOwnerEmail: string | null;
+  userId: string | null;
+  state: "unmapped" | "mapped" | "inactive";
+}
+
+export interface CRMOwnerMappingList {
+  items: CRMOwnerMapping[];
+  total: number;
+}
+
+export interface CRMConflict {
+  id: string;
+  connectionId: string;
+  providerKey: ProductionCRMProvider;
+  objectType: CRMSyncObjectType;
+  revenueosEntityId: string | null;
+  externalObjectId: string;
+  fieldKey: string;
+  oryntelaValue: unknown;
+  providerValue: unknown;
+  oryntelaFingerprint: string;
+  providerFingerprint: string;
+  oryntelaVersionAt: string | null;
+  externalVersion: string;
+  mappingVersion: number;
+  authority:
+    | "crm_authoritative"
+    | "revenueos_authoritative"
+    | "review_before_sync";
+  observedAt: string;
+  allowedResolutions: ("provider" | "oryntela" | "manual")[];
+  status: "open" | "resolved" | "ignored";
+  resolution: "provider" | "oryntela" | "manual" | null;
+  resolvedValue: unknown;
+  resolvedFingerprint: string | null;
+  resolvedByUserId: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CRMConflictList {
+  items: CRMConflict[];
+  total: number;
+}
+
+export interface CRMWritebackPreview {
+  id: string;
+  connectionId: string;
+  entityType: "company" | "contact" | "opportunity";
+  entityId: string;
+  operation: "create" | "update";
+  externalObjectId: string | null;
+  changes: Record<string, unknown>;
+  previewFingerprint: string;
+  expiresAt: string;
+}
+
+export interface CRMWritebackResult {
+  receiptId: string;
+  status: "applied" | "reconciled" | "unknown";
+  externalObjectId: string | null;
+  safeMessage: string;
 }
 
 export type AskScopeType = "opportunity" | "account" | "workspace";

@@ -683,11 +683,22 @@ expected restricted-scope security assessment unless Google grants an exception,
 provider/privacy approval, production secrets, monitoring and an authorised synthetic
 smoke test remain gates.
 
+WO-042 is implemented through migration `0058_production_crm_connectors`: it expands
+the earlier HubSpot boundary into one provider-neutral, tenant-isolated lifecycle for
+HubSpot and Salesforce account, contact and opportunity records. Initial and
+incremental sync are durable and bounded; field, stage and owner authority is
+explicit; conflicts are visible; writes remain off until admin mapping review and are
+then previewed and confirmed one record at a time. Unknown write outcomes are never
+blindly retried. Both adapters are production-capable but inactive. Provider accounts,
+legal/privacy approval, exact production app configuration, secrets, monitoring and
+authorised synthetic smoke tests remain WO-054 gates. Dynamics, webhooks/CDC,
+arbitrary objects/custom fields, notes/files and autonomous writeback remain deferred.
+
 The authorised sequence after WO-050 remains:
 
 1. WO-040 — Microsoft 365 Sales Integration — **implemented; engineering review passed**
 2. WO-041 — Google Workspace Sales Integration — **implemented; awaiting engineering review**
-3. WO-042 — Production CRM Connectors
+3. WO-042 — Production CRM Connectors — **implemented; awaiting engineering review**
 4. WO-043 — Simple Opportunity Deal Room
 5. WO-044 — Reviewed Closed-Won Handover
 6. WO-051 — Oryntela Brand Identity

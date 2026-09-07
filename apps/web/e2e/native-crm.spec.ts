@@ -95,7 +95,7 @@ test("admin deliberately selects RevenueOS as the CRM system of record", async (
 
   await page.goto("/settings");
   const nativeButton = page.getByRole("button", {
-    name: "Use RevenueOS as our CRM",
+    name: "Use Oryntela CRM",
   });
   await expect(nativeButton).toBeDisabled();
   await page

@@ -66,17 +66,16 @@ export function CRMSettings() {
     setSaving(true);
     setMessage(null);
     try {
-      setAvailability(
-        await apiRequest<CRMAvailability>("/api/v1/crm/settings", {
-          method: "PUT",
-          body: JSON.stringify({ mode, confirmed: true }),
-        }),
-      );
+      const next = await apiRequest<CRMAvailability>("/api/v1/crm/settings", {
+        method: "PUT",
+        body: JSON.stringify({ mode, confirmed: true }),
+      });
+      setAvailability(next);
       setConfirmed(false);
       setMessage(
         mode === "native"
-          ? "RevenueOS is now the native CRM system of record."
-          : "HubSpot remains the external CRM system of record.",
+          ? "Oryntela is now the native CRM system of record."
+          : `${providerName(next.externalProvider)} remains the external CRM system of record.`,
       );
     } catch (reason) {
       setMessage(
@@ -160,7 +159,7 @@ export function CRMSettings() {
             CRM foundation
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Accounts, Contacts and Opportunities are always canonical RevenueOS
+            Accounts, Contacts and Opportunities are always canonical Oryntela
             records. This add-on unlocks system-of-record controls and
             organisation custom fields.
           </p>
@@ -188,7 +187,7 @@ export function CRMSettings() {
             <p className="mt-1 text-sm text-slate-600">
               Current mode: <strong>{humanise(availability.mode)}</strong>
               {availability.externalConnected
-                ? " · HubSpot connected"
+                ? ` · ${providerName(availability.externalProvider)} connected`
                 : " · No external CRM connected"}
             </p>
             <label className="mt-4 flex items-start gap-3 text-sm text-slate-700">
@@ -208,7 +207,7 @@ export function CRMSettings() {
                 disabled={saving || !confirmed}
                 onClick={() => void selectMode("native")}
               >
-                Use RevenueOS as our CRM
+                Use Oryntela CRM
               </button>
               <button
                 type="button"
@@ -218,7 +217,9 @@ export function CRMSettings() {
                 }
                 onClick={() => void selectMode("external")}
               >
-                Use HubSpot
+                {availability.externalConnected
+                  ? `Use ${providerName(availability.externalProvider)}`
+                  : "Connect your existing CRM"}
               </button>
             </div>
           </fieldset>
@@ -350,4 +351,10 @@ export function CRMSettings() {
       ) : null}
     </section>
   );
+}
+
+function providerName(provider: CRMAvailability["externalProvider"]): string {
+  if (provider === "salesforce") return "Salesforce";
+  if (provider === "hubspot") return "HubSpot";
+  return "External CRM";
 }

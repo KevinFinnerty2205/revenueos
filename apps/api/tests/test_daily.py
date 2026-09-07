@@ -262,7 +262,7 @@ def _seed_daily_scenario(*, include_second_currency: bool = False) -> dict[str, 
                     approved_action_id,
                     "approved",
                     "Confirm approved pilot scope",
-                    min(now + timedelta(hours=1), end.astimezone(UTC) - timedelta(minutes=5)),
+                    now + min(timedelta(hours=1), remaining_today / 3),
                 ),
                 (rejected_action_id, "rejected", "Rejected historical action", now - timedelta(days=2)),
                 (

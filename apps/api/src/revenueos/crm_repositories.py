@@ -4,13 +4,14 @@ from dataclasses import dataclass
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from revenueos.models import (
     Base,
     Company,
     Contact,
+    CRMConnectionState,
     CRMCustomFieldDefinition,
     CRMCustomFieldValue,
     CRMFieldMapping,
@@ -82,14 +83,14 @@ class CRMRepository:
             statement = statement.with_for_update()
         return cast(OrganisationCRMSetting | None, await self.session.scalar(statement))
 
-    async def active_hubspot_connection(self, organisation_id: UUID) -> IntegrationConnection | None:
+    async def active_external_crm_connection(self, organisation_id: UUID) -> IntegrationConnection | None:
         return cast(
             IntegrationConnection | None,
             await self.session.scalar(
                 select(IntegrationConnection)
                 .where(
                     IntegrationConnection.organisation_id == organisation_id,
-                    IntegrationConnection.connector_key == "hubspot",
+                    IntegrationConnection.connector_key.in_(("hubspot", "salesforce")),
                     IntegrationConnection.connection_status.in_(("active", "reauthorisation_required")),
                 )
                 .order_by(IntegrationConnection.connected_at.desc(), IntegrationConnection.id.desc())
@@ -110,7 +111,7 @@ class CRMRepository:
             .where(
                 CRMFieldMapping.organisation_id == organisation_id,
                 CRMFieldMapping.enabled.is_(True),
-                IntegrationConnection.connector_key == "hubspot",
+                IntegrationConnection.connector_key.in_(("hubspot", "salesforce")),
                 IntegrationConnection.connection_status.in_(("active", "reauthorisation_required")),
             )
             .limit(1)
@@ -148,12 +149,26 @@ class CRMRepository:
                         IntegrationConnection.id == CRMFieldMapping.connection_id,
                     ),
                 )
+                .outerjoin(
+                    CRMConnectionState,
+                    and_(
+                        CRMConnectionState.organisation_id == CRMFieldMapping.organisation_id,
+                        CRMConnectionState.connection_id == CRMFieldMapping.connection_id,
+                    ),
+                )
                 .where(
                     CRMFieldMapping.organisation_id == organisation_id,
                     CRMFieldMapping.entity_type == entity_type,
                     CRMFieldMapping.enabled.is_(True),
-                    IntegrationConnection.connector_key == "hubspot",
+                    IntegrationConnection.connector_key.in_(("hubspot", "salesforce")),
                     IntegrationConnection.connection_status.in_(("active", "reauthorisation_required")),
+                    or_(
+                        CRMConnectionState.id.is_(None),
+                        and_(
+                            CRMConnectionState.connector_enabled.is_(True),
+                            CRMConnectionState.lifecycle == "ready",
+                        ),
+                    ),
                 )
             )
         ).all()
