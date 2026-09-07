@@ -285,6 +285,11 @@ describe("IntegrationSettings", () => {
     expect(
       await screen.findByRole("combobox", { name: "Estimated Value" }),
     ).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "Currency" })).toBeVisible();
+    expect(
+      screen.getAllByRole("combobox", { name: "Name" }).length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("combobox", { name: "Phone" })).toBeVisible();
     expect(
       screen
         .getAllByRole("combobox", { name: "Field authority" })

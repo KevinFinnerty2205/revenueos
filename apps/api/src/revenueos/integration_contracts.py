@@ -569,8 +569,18 @@ class CRMConflictResponse(APIModel):
     field_key: str
     oryntela_value: object | None
     provider_value: object | None
+    oryntela_fingerprint: str
+    provider_fingerprint: str
+    oryntela_version_at: datetime | None
+    external_version: str
+    mapping_version: int
+    authority: Literal["crm_authoritative", "revenueos_authoritative", "review_before_sync"]
+    observed_at: datetime
+    allowed_resolutions: list[Literal["provider", "oryntela", "manual"]]
     status: Literal["open", "resolved", "ignored"]
     resolution: Literal["provider", "oryntela", "manual"] | None
+    resolved_value: object | None
+    resolved_fingerprint: str | None
     resolved_by_user_id: UUID | None
     resolved_at: datetime | None
     created_at: datetime

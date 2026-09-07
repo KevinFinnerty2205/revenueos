@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
@@ -72,6 +73,9 @@ from revenueos.tenant import TenantContext
 
 _OBJECT_ORDER: tuple[CRMObjectType, ...] = ("account", "contact", "opportunity")
 _GENERIC_EMAIL_LOCALS = frozenset({"admin", "contact", "hello", "info", "sales", "support"})
+_PUBLIC_MAILBOX_DOMAINS = frozenset(
+    {"gmail.com", "googlemail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"}
+)
 
 
 class CRMConnectorService:
@@ -220,6 +224,26 @@ class CRMConnectorService:
         )
         if unmapped is not None:
             raise PublicAPIError("crm_owner_mapping_required", "Map each active CRM owner before approval.", 409)
+        invalid_mapped_owner = await self.session.scalar(
+            select(CRMOwnerMapping.id)
+            .outerjoin(
+                OrganisationMembership,
+                (OrganisationMembership.organisation_id == CRMOwnerMapping.organisation_id)
+                & (OrganisationMembership.user_id == CRMOwnerMapping.user_id),
+            )
+            .where(
+                CRMOwnerMapping.organisation_id == self.tenant.organisation_id,
+                CRMOwnerMapping.connection_id == connection.id,
+                CRMOwnerMapping.state == "mapped",
+                (OrganisationMembership.user_id.is_(None) | (OrganisationMembership.status != "active")),
+            )
+        )
+        if invalid_mapped_owner is not None:
+            raise PublicAPIError(
+                "crm_owner_mapping_required",
+                "Remap CRM owners whose Oryntela membership is no longer active.",
+                409,
+            )
         field_entities = set(
             (
                 await self.session.scalars(
@@ -405,34 +429,53 @@ class CRMConnectorService:
         if conflict.status != "open":
             return self._conflict_response(conflict)
         connection = await self._connection(conflict.connection_id)
-        if request.resolution == "provider":
-            if conflict.revenueos_entity_id is None:
-                raise PublicAPIError(
-                    "crm_conflict_requires_mapping",
-                    "Complete the owner, company or stage mapping before importing this record.",
-                    409,
-                )
-            await self._apply_single_local_value(conflict, conflict.provider_value_json, connection.created_by_user_id)
-        elif request.resolution in {"oryntela", "manual"}:
-            state = await self._state(connection.id)
-            if not state.writeback_enabled:
-                raise PublicAPIError(
-                    "crm_writeback_disabled",
-                    "Enable reviewed CRM writeback before choosing the Oryntela value.",
-                    409,
-                )
+        state = await self._state(connection.id, for_update=True)
+        current_local_value = await self._current_conflict_local_value(conflict, for_update=True)
+        if (
+            conflict.mapping_version != state.mapping_version
+            or self._fingerprint(current_local_value) != conflict.oryntela_fingerprint
+        ):
             raise PublicAPIError(
-                "crm_conflict_preview_required",
-                "Create and confirm a writeback preview for this record before resolving it externally.",
+                "crm_conflict_stale",
+                "This conflict is stale. Refresh CRM sync before choosing a resolution.",
                 409,
             )
+        allowed = self._allowed_resolutions(conflict)
+        if request.resolution not in allowed:
+            raise PublicAPIError(
+                "crm_conflict_resolution_not_allowed",
+                "Choose a resolution allowed by this field's CRM authority policy.",
+                409,
+            )
+        resolved_value: object | None
+        if request.resolution == "provider":
+            resolved_value = await self._apply_single_local_value(
+                conflict,
+                conflict.provider_value_json,
+                self.tenant.user_id,
+            )
+        elif request.resolution == "manual":
+            if "manual_value" not in request.model_fields_set:
+                raise PublicAPIError(
+                    "crm_conflict_manual_value_required",
+                    "Supply the reviewed value for this manual resolution.",
+                    422,
+                )
+            resolved_value = await self._apply_single_local_value(
+                conflict,
+                request.manual_value,
+                self.tenant.user_id,
+            )
+        else:
+            resolved_value = current_local_value
         conflict.status = "resolved"
         conflict.resolution = request.resolution
+        conflict.resolved_value_json = self._json_value(resolved_value)
+        conflict.resolved_fingerprint = self._fingerprint(resolved_value)
         conflict.resolved_by_user_id = self.tenant.user_id
         resolved_at = datetime.now(UTC)
         conflict.resolved_at = resolved_at
         conflict.updated_at = resolved_at
-        state = await self._state(connection.id, for_update=True)
         await self.session.flush()
         state.conflict_count = await self._open_conflict_count(connection.id)
         self._audit(connection, "crm_conflict_resolved", conflict.id, "crm_conflict", resolved_at)
@@ -446,7 +489,7 @@ class CRMConnectorService:
     ) -> CRMWritebackPreviewResponse:
         self._require_admin()
         await self._require_entitlement()
-        connection = await self._connection(connection_id)
+        connection = await self._connection(connection_id, for_update=True)
         state = await self._state(connection.id)
         if not state.connector_enabled or not state.writeback_enabled or state.lifecycle != "ready":
             raise PublicAPIError(
@@ -474,7 +517,7 @@ class CRMConnectorService:
             changes = {
                 key: value
                 for key, value in changes.items()
-                if self._json_value(external.fields.get(key)) != self._json_value(value)
+                if not self._field_values_equal(key, external.fields.get(key), value)
             }
             if not changes:
                 raise PublicAPIError("crm_no_writeback_changes", "The CRM already contains these values.", 409)
@@ -523,7 +566,7 @@ class CRMConnectorService:
     ) -> CRMWritebackResultResponse:
         self._require_admin()
         await self._require_entitlement()
-        connection = await self._connection(connection_id)
+        connection = await self._connection(connection_id, for_update=True)
         state = await self._state(connection.id, for_update=True)
         if not state.connector_enabled or not state.writeback_enabled or state.lifecycle != "ready":
             raise PublicAPIError("crm_writeback_disabled", "CRM writeback is not enabled.", 409)
@@ -571,17 +614,50 @@ class CRMConnectorService:
             )
         )
         if existing is not None:
+            existing_preview_id = await self.session.scalar(
+                select(CRMWritebackPreview.id).where(
+                    CRMWritebackPreview.organisation_id == self.tenant.organisation_id,
+                    CRMWritebackPreview.connection_id == connection.id,
+                    CRMWritebackPreview.receipt_id == existing.id,
+                )
+            )
+            if existing_preview_id != preview.id:
+                raise PublicAPIError(
+                    "crm_idempotency_key_reused",
+                    "Use a new idempotency key for this CRM writeback preview.",
+                    409,
+                )
             return self._writeback_result(existing)
         adapter = self._adapter(connection)
         object_type = self._object_type(preview.entity_type)
         mapping = await self._mapping_for_entity(connection.id, preview.entity_type, preview.entity_id)
         fields = cast(dict[str, CRMScalar], dict(preview.changes_json))
+        entity = await self._canonical_entity(preview.entity_type, preview.entity_id, for_update=True)
+        current_outbound = await self._outbound_changes(connection, state, preview.entity_type, entity)
+        serialised_current = {key: self._json_value(value) for key, value in sorted(current_outbound.items())}
         try:
             if preview.operation == "create":
+                if serialised_current != preview.changes_json:
+                    preview.invalidated_at = now
+                    await self._commit("The stale CRM preview could not be invalidated.")
+                    raise PublicAPIError(
+                        "crm_preview_stale",
+                        "The Oryntela record changed; create a new CRM writeback preview.",
+                        409,
+                    )
                 if mapping is not None:
                     external = await adapter.get_record(
                         self._context(connection), object_type, mapping.external_object_id
                     )
+                    if any(
+                        not self._field_values_equal(key, external.fields.get(key), value)
+                        for key, value in fields.items()
+                    ):
+                        raise PublicAPIError(
+                            "crm_external_state_changed",
+                            "The newly linked CRM record differs from this preview; create a new preview.",
+                            409,
+                        )
                     status: Literal["applied", "reconciled", "unknown"] = "reconciled"
                 else:
                     external = await adapter.create_record(self._context(connection), object_type, fields)
@@ -593,6 +669,19 @@ class CRMConnectorService:
                 if current.external_version != preview.external_version:
                     raise PublicAPIError(
                         "crm_external_state_changed", "The CRM record changed; create a new preview.", 409
+                    )
+                serialised_current = {
+                    key: self._json_value(value)
+                    for key, value in sorted(current_outbound.items())
+                    if not self._field_values_equal(key, current.fields.get(key), value)
+                }
+                if serialised_current != preview.changes_json:
+                    preview.invalidated_at = now
+                    await self._commit("The stale CRM preview could not be invalidated.")
+                    raise PublicAPIError(
+                        "crm_preview_stale",
+                        "The Oryntela record changed; create a new CRM writeback preview.",
+                        409,
                     )
                 external = await adapter.update_record(self._context(connection), current, fields)
                 status = "applied"
@@ -607,7 +696,7 @@ class CRMConnectorService:
                 status="unknown",
                 idempotency_key=receipt_key,
                 entity_id=preview.entity_id,
-                external_object_id=preview.external_object_id,
+                external_object_id=exc.external_object_id or preview.external_object_id,
                 external_version=preview.external_version,
                 fields=tuple(fields),
                 safe_failure_code="unknown_external_state",
@@ -673,7 +762,7 @@ class CRMConnectorService:
         """Resolve an uncertain write with a provider read; never repeat the mutation."""
         self._require_admin()
         await self._require_entitlement()
-        connection = await self._connection(connection_id)
+        connection = await self._connection(connection_id, for_update=True)
         state = await self._state(connection.id)
         if not state.connector_enabled:
             raise PublicAPIError("crm_connector_disabled", "Enable the CRM connector before reconciling.", 409)
@@ -744,7 +833,7 @@ class CRMConnectorService:
         except CRMProviderError as exc:
             self._raise_provider_error(connection.connector_key, exc)
         expected = {key: self._json_value(value) for key, value in preview.changes_json.items()}
-        if any(self._json_value(external.fields.get(key)) != value for key, value in expected.items()):
+        if any(not self._field_values_equal(key, external.fields.get(key), value) for key, value in expected.items()):
             raise PublicAPIError(
                 "crm_writeback_still_unknown",
                 "The CRM record does not match the reviewed change. No write was retried.",
@@ -805,6 +894,15 @@ class CRMConnectorService:
         job.started_at = job.started_at or now
         job.attempt_count += 1
         await self._commit("The CRM sync job could not be claimed.")
+        connection = await self._connection(job.connection_id, require_active=False, for_update=True)
+        state = await self._state(connection.id, for_update=True)
+        if connection.connection_status != "active" or not state.connector_enabled:
+            job.status = "cancelled"
+            job.completed_at = datetime.now(UTC)
+            job.worker_id = None
+            job.lease_expires_at = None
+            await self._commit("The disconnected CRM sync could not be cancelled.")
+            return True
         try:
             await self._process_claimed_page(connection, state, job)
         except CRMProviderError as exc:
@@ -1050,6 +1148,8 @@ class CRMConnectorService:
             if not owner.active:
                 row.user_id = None
                 row.state = "inactive"
+            elif row.state == "inactive":
+                row.state = "unmapped"
 
     async def _apply_inbound_record(
         self,
@@ -1057,6 +1157,21 @@ class CRMConnectorService:
         state: CRMConnectionState,
         record: CRMProviderRecord,
     ) -> bool:
+        if (
+            not record.external_object_id.strip()
+            or len(record.external_object_id) > 128
+            or not record.external_version.strip()
+            or len(record.external_version) > 255
+            or (
+                record.owner_external_id is not None
+                and (not record.owner_external_id.strip() or len(record.owner_external_id) > 128)
+            )
+            or (
+                record.related_account_external_id is not None
+                and (not record.related_account_external_id.strip() or len(record.related_account_external_id) > 128)
+            )
+        ):
+            raise CRMProviderError("provider_response_invalid")
         now = datetime.now(UTC)
         receipt_key = self._fingerprint(
             {
@@ -1065,6 +1180,7 @@ class CRMConnectorService:
                 "objectType": record.object_type,
                 "externalObjectId": record.external_object_id,
                 "externalVersion": record.external_version,
+                "mappingVersion": state.mapping_version,
             }
         )
         if (
@@ -1079,6 +1195,28 @@ class CRMConnectorService:
         ):
             return False
         mapping = await self._mapping_by_external(connection, record)
+        if (
+            mapping is not None
+            and mapping.external_updated_at is not None
+            and self._aware(record.modified_at) < self._aware(mapping.external_updated_at)
+        ):
+            self.session.add(
+                self._receipt(
+                    connection,
+                    direction="inbound",
+                    object_type=record.object_type,
+                    operation="observe",
+                    status="skipped",
+                    idempotency_key=receipt_key,
+                    entity_id=mapping.revenueos_entity_id,
+                    external_object_id=record.external_object_id,
+                    external_version=record.external_version,
+                    fields=(),
+                    safe_failure_code="stale_provider_observation",
+                    now=now,
+                )
+            )
+            return False
         created_entity = False
         if record.archived:
             if mapping is not None:
@@ -1088,6 +1226,7 @@ class CRMConnectorService:
                 mapping.external_updated_at = record.modified_at
             await self._create_conflict(
                 connection,
+                state,
                 record,
                 mapping.revenueos_entity_id if mapping else None,
                 "external_deleted",
@@ -1120,6 +1259,7 @@ class CRMConnectorService:
         if mapping is not None and entity is None:
             await self._create_conflict(
                 connection,
+                state,
                 record,
                 mapping.revenueos_entity_id,
                 "local_record_missing",
@@ -1213,29 +1353,34 @@ class CRMConnectorService:
         self,
         entity_type: str,
         entity_id: UUID,
+        *,
+        for_update: bool = False,
     ) -> Company | Contact | Opportunity:
         if entity_type == "company":
+            company_statement = select(Company).where(
+                Company.organisation_id == self.tenant.organisation_id,
+                Company.id == entity_id,
+            )
             company = await self.session.scalar(
-                select(Company).where(
-                    Company.organisation_id == self.tenant.organisation_id,
-                    Company.id == entity_id,
-                )
+                company_statement.with_for_update() if for_update else company_statement
             )
             entity: Company | Contact | Opportunity | None = company
         elif entity_type == "contact":
+            contact_statement = select(Contact).where(
+                Contact.organisation_id == self.tenant.organisation_id,
+                Contact.id == entity_id,
+            )
             contact = await self.session.scalar(
-                select(Contact).where(
-                    Contact.organisation_id == self.tenant.organisation_id,
-                    Contact.id == entity_id,
-                )
+                contact_statement.with_for_update() if for_update else contact_statement
             )
             entity = contact
         elif entity_type == "opportunity":
+            opportunity_statement = select(Opportunity).where(
+                Opportunity.organisation_id == self.tenant.organisation_id,
+                Opportunity.id == entity_id,
+            )
             opportunity = await self.session.scalar(
-                select(Opportunity).where(
-                    Opportunity.organisation_id == self.tenant.organisation_id,
-                    Opportunity.id == entity_id,
-                )
+                opportunity_statement.with_for_update() if for_update else opportunity_statement
             )
             entity = opportunity
         else:
@@ -1266,23 +1411,31 @@ class CRMConnectorService:
         )
         configured = {row.revenueos_field: row for row in rows}
         mapping = await self._mapping_for_entity(connection.id, entity_type, entity.id)
+        local_version_at = entity.updated_at
         changed: list[str] = []
         conflict_found = False
         for rule in rules_for(connection.connector_key, record.object_type):
             field = rule.canonical_field
             field_mapping = configured.get(field)
-            if field_mapping is None or field not in record.fields:
+            if field_mapping is None and rule.value_type not in {"owner", "relation"}:
                 continue
+            if field not in record.fields:
+                continue
+            authority = field_mapping.authority if field_mapping is not None else rule.default_authority
             provider_value = await self._inbound_value(connection, record, field)
             local_value = await self._local_value(connection, entity, field)
             unresolved_reference = (
                 (field == "owner" and record.owner_external_id is not None and provider_value is None)
                 or (field == "account" and record.related_account_external_id is not None and provider_value is None)
                 or (field == "stage" and record.fields.get("stage") is not None and provider_value is None)
+                or (field == "domain" and record.fields.get("domain") not in (None, "") and provider_value is None)
             )
             if unresolved_reference:
+                if field == "owner":
+                    await self._ensure_unknown_owner_mapping(connection, record.owner_external_id)
                 await self._create_conflict(
                     connection,
+                    state,
                     record,
                     entity.id,
                     field,
@@ -1294,25 +1447,30 @@ class CRMConnectorService:
                         if field == "account"
                         else record.fields.get("stage")
                     ),
+                    authority=authority,
+                    oryntela_version_at=local_version_at,
                 )
                 conflict_found = True
                 continue
-            if self._json_value(local_value) == self._json_value(provider_value):
+            if self._field_values_equal(field, local_value, provider_value):
                 continue
             local_changed = (
                 mapping is not None
                 and mapping.last_synced_at is not None
-                and self._aware(entity.updated_at) > self._aware(mapping.last_synced_at)
+                and self._aware(local_version_at) > self._aware(mapping.last_synced_at)
             )
-            requires_review = field_mapping.authority != "crm_authoritative" or local_changed
+            requires_review = authority != "crm_authoritative" or local_changed
             if requires_review:
                 await self._create_conflict(
                     connection,
+                    state,
                     record,
                     entity.id,
                     field,
                     local_value,
                     provider_value,
+                    authority=authority,
+                    oryntela_version_at=local_version_at,
                 )
                 conflict_found = True
                 continue
@@ -1328,6 +1486,19 @@ class CRMConnectorService:
                     )
                 )
                 changed.append(field)
+            else:
+                await self._create_conflict(
+                    connection,
+                    state,
+                    record,
+                    entity.id,
+                    field,
+                    local_value,
+                    record.fields.get(field),
+                    authority=authority,
+                    oryntela_version_at=local_version_at,
+                )
+                conflict_found = True
         if changed:
             entity.updated_at = datetime.now(UTC)
         return changed, conflict_found
@@ -1337,12 +1508,12 @@ class CRMConnectorService:
         conflict: CRMConflict,
         value: object | None,
         actor_user_id: UUID,
-    ) -> None:
+    ) -> object | None:
         if conflict.revenueos_entity_id is None:
             raise PublicAPIError("crm_entity_not_found", "The Oryntela record was not found.", 404)
         connection = await self._connection(conflict.connection_id)
         entity_type = self._entity_type(cast(CRMObjectType, conflict.object_type))
-        entity = await self._canonical_entity(entity_type, conflict.revenueos_entity_id)
+        entity = await self._canonical_entity(entity_type, conflict.revenueos_entity_id, for_update=True)
         old_value = await self._local_value(connection, entity, conflict.field_key)
         if not await self._set_local_value(
             connection,
@@ -1366,6 +1537,24 @@ class CRMConnectorService:
                 actor_user_id,
             )
         )
+        entity.updated_at = datetime.now(UTC)
+        return await self._local_value(connection, entity, conflict.field_key)
+
+    async def _current_conflict_local_value(
+        self,
+        conflict: CRMConflict,
+        *,
+        for_update: bool = False,
+    ) -> object | None:
+        if conflict.revenueos_entity_id is None:
+            raise PublicAPIError("crm_entity_not_found", "The Oryntela record was not found.", 404)
+        connection = await self._connection(conflict.connection_id)
+        entity = await self._canonical_entity(
+            self._entity_type(cast(CRMObjectType, conflict.object_type)),
+            conflict.revenueos_entity_id,
+            for_update=for_update,
+        )
+        return await self._local_value(connection, entity, conflict.field_key)
 
     async def _inbound_value(
         self,
@@ -1379,6 +1568,9 @@ class CRMConnectorService:
             return await self._related_company_id(connection, record.related_account_external_id)
         if field == "stage":
             return await self._inbound_stage(connection.id, record.fields.get("stage"))
+        if field == "domain":
+            parsed = self._domain(record.fields.get("domain"))
+            return parsed[1] if parsed is not None else None
         return record.fields.get(field)
 
     async def _local_value(
@@ -1414,18 +1606,38 @@ class CRMConnectorService:
         value: object | None,
         changed_at: datetime,
     ) -> bool:
-        del connection
         if field == "owner":
-            if not isinstance(value, UUID):
+            owner_id = self._uuid(value)
+            if owner_id is None:
                 return False
-            entity.owner_user_id = value
+            membership = await self.session.scalar(
+                select(OrganisationMembership.user_id).where(
+                    OrganisationMembership.organisation_id == self.tenant.organisation_id,
+                    OrganisationMembership.user_id == owner_id,
+                    OrganisationMembership.status == "active",
+                )
+            )
+            if membership is None:
+                return False
+            entity.owner_user_id = owner_id
             return True
         if field == "account" and isinstance(entity, (Contact, Opportunity)):
-            if not isinstance(value, UUID) and value is not None:
+            company_id = self._uuid(value)
+            if value is not None and company_id is None:
                 return False
-            if isinstance(entity, Contact) and value is None:
+            if isinstance(entity, Contact) and company_id is None:
                 return False
-            entity.company_id = value
+            if company_id is not None:
+                company = await self.session.scalar(
+                    select(Company.id).where(
+                        Company.organisation_id == self.tenant.organisation_id,
+                        Company.id == company_id,
+                        Company.archived_at.is_(None),
+                    )
+                )
+                if company is None:
+                    return False
+            entity.company_id = company_id
             return True
         if field == "domain" and isinstance(entity, Company):
             parsed = self._domain(value)
@@ -1437,10 +1649,23 @@ class CRMConnectorService:
         if field == "stage" and isinstance(entity, Opportunity):
             if not isinstance(value, str):
                 return False
+            if value not in {
+                "qualification",
+                "discovery",
+                "evaluation",
+                "proposal",
+                "negotiation",
+                "procurement",
+                "closed_won",
+                "closed_lost",
+                "other",
+            }:
+                return False
             pipeline, stages = await ensure_default_pipeline(self.session, self.tenant.organisation_id)
             status = "won" if value == "closed_won" else "lost" if value == "closed_lost" else "open"
             target = initial_stage_for(stages, value, status)
             previous = next((item for item in stages if item.id == entity.pipeline_stage_id), None)
+            previous_pipeline_id = entity.pipeline_id
             previous_entered_at = entity.stage_entered_at
             entity.stage = value
             entity.status = status
@@ -1454,7 +1679,7 @@ class CRMConnectorService:
                         id=uuid.uuid4(),
                         organisation_id=self.tenant.organisation_id,
                         opportunity_id=entity.id,
-                        from_pipeline_id=entity.pipeline_id if previous is not None else None,
+                        from_pipeline_id=previous_pipeline_id if previous is not None else None,
                         to_pipeline_id=pipeline.id,
                         from_stage_id=previous.id if previous is not None else None,
                         to_stage_id=target.id,
@@ -1479,17 +1704,24 @@ class CRMConnectorService:
             return True
         if field == "estimated_value" and isinstance(entity, Opportunity):
             number, currency = self._money(value, entity.currency)
+            if value not in (None, "") and number is None:
+                return False
             entity.estimated_value = number
             entity.currency = currency
             return True
         if field == "currency" and isinstance(entity, Opportunity):
             currency = self._text(value, 3)
+            if currency is not None and (len(currency) != 3 or not currency.isalpha()):
+                return False
             if currency is None and entity.estimated_value is not None:
                 return False
             entity.currency = currency.upper() if currency is not None else None
             return True
         if field == "expected_close_date" and isinstance(entity, Opportunity):
-            entity.expected_close_date = self._date(value)
+            parsed_date = self._date(value)
+            if value not in (None, "") and parsed_date is None:
+                return False
+            entity.expected_close_date = parsed_date
             return True
         limits = {
             "name": 200,
@@ -1513,6 +1745,15 @@ class CRMConnectorService:
             return False
         text_value = self._text(value, limits[field])
         if field in {"name", "first_name", "last_name"} and text_value is None:
+            return False
+        if field == "email" and text_value is not None and not self._valid_email(text_value):
+            return False
+        if (
+            field == "email"
+            and isinstance(entity, Contact)
+            and text_value is not None
+            and not await self._contact_email_available(text_value, excluding_id=entity.id)
+        ):
             return False
         setattr(entity, field, text_value)
         return True
@@ -1546,11 +1787,18 @@ class CRMConnectorService:
                 value = entity.website
             elif field == "owner":
                 owner = await self.session.scalar(
-                    select(CRMOwnerMapping).where(
+                    select(CRMOwnerMapping)
+                    .join(
+                        OrganisationMembership,
+                        (OrganisationMembership.organisation_id == CRMOwnerMapping.organisation_id)
+                        & (OrganisationMembership.user_id == CRMOwnerMapping.user_id),
+                    )
+                    .where(
                         CRMOwnerMapping.organisation_id == self.tenant.organisation_id,
                         CRMOwnerMapping.connection_id == connection.id,
                         CRMOwnerMapping.user_id == entity.owner_user_id,
                         CRMOwnerMapping.state == "mapped",
+                        OrganisationMembership.status == "active",
                     )
                 )
                 if owner is None:
@@ -1601,11 +1849,52 @@ class CRMConnectorService:
         if external_owner_id is None:
             return None
         return await self.session.scalar(
-            select(CRMOwnerMapping.user_id).where(
+            select(CRMOwnerMapping.user_id)
+            .join(
+                OrganisationMembership,
+                (OrganisationMembership.organisation_id == CRMOwnerMapping.organisation_id)
+                & (OrganisationMembership.user_id == CRMOwnerMapping.user_id),
+            )
+            .where(
                 CRMOwnerMapping.organisation_id == self.tenant.organisation_id,
                 CRMOwnerMapping.connection_id == connection_id,
                 CRMOwnerMapping.external_owner_id == external_owner_id,
                 CRMOwnerMapping.state == "mapped",
+                OrganisationMembership.status == "active",
+            )
+        )
+
+    async def _ensure_unknown_owner_mapping(
+        self,
+        connection: IntegrationConnection,
+        external_owner_id: str | None,
+    ) -> None:
+        if external_owner_id is None:
+            return
+        existing = await self.session.scalar(
+            select(CRMOwnerMapping.id).where(
+                CRMOwnerMapping.organisation_id == self.tenant.organisation_id,
+                CRMOwnerMapping.connection_id == connection.id,
+                CRMOwnerMapping.external_owner_id == external_owner_id,
+            )
+        )
+        if existing is not None:
+            return
+        now = datetime.now(UTC)
+        self.session.add(
+            CRMOwnerMapping(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                connection_id=connection.id,
+                provider_key=connection.connector_key,
+                external_owner_id=external_owner_id,
+                external_owner_name=None,
+                external_owner_email=None,
+                user_id=None,
+                state="unmapped",
+                configured_by_user_id=self.tenant.user_id,
+                created_at=now,
+                updated_at=now,
             )
         )
 
@@ -1640,6 +1929,15 @@ class CRMConnectorService:
         )
         return result
 
+    async def _contact_email_available(self, email: str, *, excluding_id: UUID | None = None) -> bool:
+        statement = select(Contact.id).where(
+            Contact.organisation_id == self.tenant.organisation_id,
+            func.lower(Contact.email) == email.casefold(),
+        )
+        if excluding_id is not None:
+            statement = statement.where(Contact.id != excluding_id)
+        return await self.session.scalar(statement) is None
+
     def _new_mapping(
         self,
         connection: IntegrationConnection,
@@ -1670,11 +1968,15 @@ class CRMConnectorService:
     async def _create_conflict(
         self,
         connection: IntegrationConnection,
+        state: CRMConnectionState,
         record: CRMProviderRecord,
         entity_id: UUID | None,
         field: str,
         local_value: object | None,
         provider_value: object | None,
+        *,
+        authority: str | None = None,
+        oryntela_version_at: datetime | None = None,
     ) -> CRMConflict:
         row = await self.session.scalar(
             select(CRMConflict).where(
@@ -1688,6 +1990,15 @@ class CRMConnectorService:
         )
         local_json = self._json_value(local_value)
         provider_json = self._json_value(provider_value)
+        resolved_authority = authority or next(
+            (
+                rule.default_authority
+                for rule in rules_for(connection.connector_key, record.object_type)
+                if rule.canonical_field == field
+            ),
+            "review_before_sync",
+        )
+        observed_at = datetime.now(UTC)
         if row is None:
             row = CRMConflict(
                 id=uuid.uuid4(),
@@ -1702,10 +2013,19 @@ class CRMConnectorService:
                 provider_value_json=provider_json,
                 oryntela_fingerprint=self._fingerprint(local_json),
                 provider_fingerprint=self._fingerprint(provider_json),
+                oryntela_version_at=oryntela_version_at,
+                external_version=record.external_version,
+                mapping_version=state.mapping_version,
+                authority=resolved_authority,
+                observed_at=observed_at,
                 status="open",
                 resolution=None,
+                resolved_value_json=None,
+                resolved_fingerprint=None,
                 resolved_by_user_id=None,
                 resolved_at=None,
+                created_at=observed_at,
+                updated_at=observed_at,
             )
             self.session.add(row)
         else:
@@ -1714,6 +2034,12 @@ class CRMConnectorService:
             row.provider_value_json = provider_json
             row.oryntela_fingerprint = self._fingerprint(local_json)
             row.provider_fingerprint = self._fingerprint(provider_json)
+            row.oryntela_version_at = oryntela_version_at
+            row.external_version = record.external_version
+            row.mapping_version = state.mapping_version
+            row.authority = resolved_authority
+            row.observed_at = observed_at
+            row.updated_at = observed_at
         return row
 
     def _change(
@@ -1777,14 +2103,16 @@ class CRMConnectorService:
         connection_id: UUID,
         *,
         require_active: bool = True,
+        for_update: bool = False,
     ) -> IntegrationConnection:
-        connection = await self.session.scalar(
-            select(IntegrationConnection).where(
-                IntegrationConnection.organisation_id == self.tenant.organisation_id,
-                IntegrationConnection.id == connection_id,
-                IntegrationConnection.connector_key.in_(("hubspot", "salesforce")),
-            )
+        statement = select(IntegrationConnection).where(
+            IntegrationConnection.organisation_id == self.tenant.organisation_id,
+            IntegrationConnection.id == connection_id,
+            IntegrationConnection.connector_key.in_(("hubspot", "salesforce")),
         )
+        if for_update:
+            statement = statement.with_for_update()
+        connection = await self.session.scalar(statement)
         if connection is None or (require_active and connection.connection_status != "active"):
             raise PublicAPIError("connection_not_found", "The requested CRM connection was not found.", 404)
         return connection
@@ -1885,13 +2213,31 @@ class CRMConnectorService:
     @staticmethod
     def _strong_email(value: str) -> bool:
         local, separator, domain = value.strip().casefold().partition("@")
-        return bool(separator and "." in domain and local not in _GENERIC_EMAIL_LOCALS)
+        return bool(
+            separator and "." in domain and local not in _GENERIC_EMAIL_LOCALS and domain not in _PUBLIC_MAILBOX_DOMAINS
+        )
+
+    @staticmethod
+    def _valid_email(value: str) -> bool:
+        local, separator, domain = value.strip().partition("@")
+        return bool(separator and local and "." in domain and not any(character.isspace() for character in value))
 
     @staticmethod
     def _text(value: object | None, limit: int) -> str | None:
         if not isinstance(value, str):
             return None
         return value.strip()[:limit] or None
+
+    @staticmethod
+    def _uuid(value: object | None) -> UUID | None:
+        if isinstance(value, UUID):
+            return value
+        if isinstance(value, str):
+            try:
+                return UUID(value)
+            except ValueError:
+                return None
+        return None
 
     @staticmethod
     def _date(value: object | None) -> date | None:
@@ -1929,21 +2275,37 @@ class CRMConnectorService:
             return value.isoformat()
         if isinstance(value, UUID):
             return str(value)
-        if value is None or isinstance(value, (str, int, float, bool)):
+        if isinstance(value, str):
+            return value[:2048]
+        if isinstance(value, float):
+            return value if math.isfinite(value) else None
+        if value is None or isinstance(value, (int, bool)):
             return value
         if isinstance(value, Mapping):
             return {
                 str(key)[:256]: CRMConnectorService._json_value(item)
-                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))[:50]
             }
         if isinstance(value, (list, tuple)):
-            return [CRMConnectorService._json_value(item) for item in value]
+            return [CRMConnectorService._json_value(item) for item in value[:50]]
         return str(value)[:2048]
 
     @classmethod
     def _fingerprint(cls, value: object | None) -> str:
         payload = json.dumps(cls._json_value(value), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode()).hexdigest()
+
+    @classmethod
+    def _field_values_equal(cls, field: str, left: object | None, right: object | None) -> bool:
+        if field == "domain":
+            left_domain = cls._domain(left)
+            right_domain = cls._domain(right)
+            return (left_domain[1] if left_domain is not None else None) == (
+                right_domain[1] if right_domain is not None else None
+            )
+        if field == "email" and isinstance(left, str) and isinstance(right, str):
+            return left.strip().casefold() == right.strip().casefold()
+        return cls._json_value(left) == cls._json_value(right)
 
     @staticmethod
     def _aware(value: datetime) -> datetime:
@@ -2030,8 +2392,8 @@ class CRMConnectorService:
             state=cast(Literal["unmapped", "mapped", "inactive"], owner.state),
         )
 
-    @staticmethod
-    def _conflict_response(conflict: CRMConflict) -> CRMConflictResponse:
+    @classmethod
+    def _conflict_response(cls, conflict: CRMConflict) -> CRMConflictResponse:
         return CRMConflictResponse(
             id=conflict.id,
             connection_id=conflict.connection_id,
@@ -2042,13 +2404,55 @@ class CRMConnectorService:
             field_key=conflict.field_key,
             oryntela_value=conflict.oryntela_value_json,
             provider_value=conflict.provider_value_json,
+            oryntela_fingerprint=conflict.oryntela_fingerprint,
+            provider_fingerprint=conflict.provider_fingerprint,
+            oryntela_version_at=conflict.oryntela_version_at,
+            external_version=conflict.external_version,
+            mapping_version=conflict.mapping_version,
+            authority=cast(
+                Literal["crm_authoritative", "revenueos_authoritative", "review_before_sync"],
+                conflict.authority,
+            ),
+            observed_at=conflict.observed_at,
+            allowed_resolutions=list(cls._allowed_resolutions(conflict)),
             status=cast(Literal["open", "resolved", "ignored"], conflict.status),
             resolution=cast(Literal["provider", "oryntela", "manual"] | None, conflict.resolution),
+            resolved_value=conflict.resolved_value_json,
+            resolved_fingerprint=conflict.resolved_fingerprint,
             resolved_by_user_id=conflict.resolved_by_user_id,
             resolved_at=conflict.resolved_at,
             created_at=conflict.created_at,
             updated_at=conflict.updated_at,
         )
+
+    @classmethod
+    def _allowed_resolutions(
+        cls,
+        conflict: CRMConflict,
+    ) -> tuple[Literal["provider", "oryntela", "manual"], ...]:
+        if conflict.status != "open" or conflict.revenueos_entity_id is None:
+            return ()
+        if conflict.field_key in {"external_deleted", "local_record_missing"}:
+            return ("oryntela",) if conflict.field_key == "external_deleted" else ()
+        if conflict.field_key in {"owner", "account"} and cls._uuid(conflict.provider_value_json) is None:
+            return ()
+        if conflict.field_key == "stage" and conflict.provider_value_json not in {
+            "qualification",
+            "discovery",
+            "evaluation",
+            "proposal",
+            "negotiation",
+            "procurement",
+            "closed_won",
+            "closed_lost",
+            "other",
+        }:
+            return ("oryntela",) if conflict.authority != "crm_authoritative" else ()
+        if conflict.authority == "crm_authoritative":
+            return ("provider",)
+        if conflict.authority == "revenueos_authoritative":
+            return ("oryntela",)
+        return ("provider", "oryntela", "manual")
 
     @staticmethod
     def _preview_response(preview: CRMWritebackPreview) -> CRMWritebackPreviewResponse:
@@ -2070,7 +2474,7 @@ class CRMConnectorService:
         message = {
             "applied": "The reviewed CRM writeback completed.",
             "reconciled": "The CRM writeback had already completed and was reconciled safely.",
-            "unknown": "The CRM outcome is unknown. RevenueOS will not retry it automatically.",
+            "unknown": "The CRM outcome is unknown. Oryntela will not retry it automatically.",
         }[status]
         return CRMWritebackResultResponse(
             receipt_id=receipt.id,
@@ -2147,6 +2551,9 @@ class CRMConnectorService:
             "provider_not_found": f"The {display} record was not found.",
             "provider_stale_write": f"The {display} record changed. Create a new preview.",
             "provider_response_invalid": f"{display} returned an unusable response.",
+            "provider_currency_capability_required": (
+                "Salesforce did not expose explicit opportunity currency. Amount writeback remains blocked."
+            ),
         }
         raise PublicAPIError(
             error.code,
@@ -2157,7 +2564,7 @@ class CRMConnectorService:
     async def _strong_match(self, record: CRMProviderRecord) -> Company | Contact | None:
         if record.object_type == "account":
             canonical = self._domain(record.fields.get("domain"))
-            if canonical is None:
+            if canonical is None or canonical[1] in _PUBLIC_MAILBOX_DOMAINS:
                 return None
             company_matches = list(
                 (
@@ -2197,8 +2604,10 @@ class CRMConnectorService:
     ) -> Company | Contact | Opportunity | None:
         owner_id = await self._owner_user_id(connection.id, record.owner_external_id)
         if owner_id is None:
+            await self._ensure_unknown_owner_mapping(connection, record.owner_external_id)
             await self._create_conflict(
                 connection,
+                state,
                 record,
                 None,
                 "owner",
@@ -2210,9 +2619,14 @@ class CRMConnectorService:
         if record.object_type == "account":
             name = self._text(record.fields.get("name"), 200)
             if name is None:
-                await self._create_conflict(connection, record, None, "name", None, record.fields.get("name"))
+                await self._create_conflict(connection, state, record, None, "name", None, record.fields.get("name"))
                 return None
             website, domain = self._domain(record.fields.get("domain")) or (None, None)
+            if record.fields.get("domain") not in (None, "") and (domain is None or domain in _PUBLIC_MAILBOX_DOMAINS):
+                await self._create_conflict(
+                    connection, state, record, None, "domain", None, record.fields.get("domain")
+                )
+                return None
             entity: Company | Contact | Opportunity = Company(
                 id=uuid.uuid4(),
                 organisation_id=self.tenant.organisation_id,
@@ -2233,6 +2647,7 @@ class CRMConnectorService:
             if company_id is None:
                 await self._create_conflict(
                     connection,
+                    state,
                     record,
                     None,
                     "account",
@@ -2243,7 +2658,14 @@ class CRMConnectorService:
             first_name = self._text(record.fields.get("first_name"), 100)
             last_name = self._text(record.fields.get("last_name"), 100)
             if first_name is None or last_name is None:
-                await self._create_conflict(connection, record, None, "name", None, "incomplete")
+                await self._create_conflict(connection, state, record, None, "name", None, "incomplete")
+                return None
+            email = self._text(record.fields.get("email"), 320)
+            if email is not None and not self._valid_email(email):
+                await self._create_conflict(connection, state, record, None, "email", None, record.fields.get("email"))
+                return None
+            if email is not None and not await self._contact_email_available(email):
+                await self._create_conflict(connection, state, record, None, "email", None, email)
                 return None
             entity = Contact(
                 id=uuid.uuid4(),
@@ -2251,7 +2673,7 @@ class CRMConnectorService:
                 company_id=company_id,
                 first_name=first_name,
                 last_name=last_name,
-                email=self._text(record.fields.get("email"), 320),
+                email=email,
                 phone=self._text(record.fields.get("phone"), 50),
                 job_title=self._text(record.fields.get("job_title"), 150),
                 linkedin_url=None,
@@ -2268,6 +2690,7 @@ class CRMConnectorService:
                 if opportunity_company_id is None:
                     await self._create_conflict(
                         connection,
+                        state,
                         record,
                         None,
                         "account",
@@ -2277,16 +2700,39 @@ class CRMConnectorService:
                     return None
             stage_key = await self._inbound_stage(connection.id, record.fields.get("stage"))
             if stage_key is None:
-                await self._create_conflict(connection, record, None, "stage", None, record.fields.get("stage"))
+                await self._create_conflict(connection, state, record, None, "stage", None, record.fields.get("stage"))
                 return None
             name = self._text(record.fields.get("name"), 200)
             if name is None:
-                await self._create_conflict(connection, record, None, "name", None, record.fields.get("name"))
+                await self._create_conflict(connection, state, record, None, "name", None, record.fields.get("name"))
                 return None
             pipeline, stages = await ensure_default_pipeline(self.session, self.tenant.organisation_id)
             status = "won" if stage_key == "closed_won" else "lost" if stage_key == "closed_lost" else "open"
             stage = initial_stage_for(stages, stage_key, status)
             amount, currency = self._money(record.fields.get("estimated_value"), record.fields.get("currency"))
+            if record.fields.get("estimated_value") not in (None, "") and amount is None:
+                await self._create_conflict(
+                    connection,
+                    state,
+                    record,
+                    None,
+                    "estimated_value",
+                    None,
+                    record.fields.get("estimated_value"),
+                )
+                return None
+            expected_close_date = self._date(record.fields.get("expected_close_date"))
+            if record.fields.get("expected_close_date") not in (None, "") and expected_close_date is None:
+                await self._create_conflict(
+                    connection,
+                    state,
+                    record,
+                    None,
+                    "expected_close_date",
+                    None,
+                    record.fields.get("expected_close_date"),
+                )
+                return None
             entity = Opportunity(
                 id=uuid.uuid4(),
                 organisation_id=self.tenant.organisation_id,
@@ -2296,7 +2742,7 @@ class CRMConnectorService:
                 status=status,
                 estimated_value=amount,
                 currency=currency,
-                expected_close_date=self._date(record.fields.get("expected_close_date")),
+                expected_close_date=expected_close_date,
                 owner_user_id=owner_id,
                 description=self._text(record.fields.get("description"), 2000),
                 archived_at=None,

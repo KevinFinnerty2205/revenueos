@@ -204,7 +204,9 @@ class IntegrationRepository:
             )
         )
         if for_update:
-            statement = statement.with_for_update(of=ActionExecution)
+            # Serialise execution and disconnect: a live provider mutation holds
+            # the connection row until its outcome has been recorded.
+            statement = statement.with_for_update(of=(ActionExecution, IntegrationConnection))
         row = (await self.session.execute(statement)).one_or_none()
         return ExecutionRecord(row[0], row[1]) if row is not None else None
 

@@ -1969,6 +1969,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  external_object_id, field_key,
                                  oryntela_value_json, provider_value_json,
                                  oryntela_fingerprint, provider_fingerprint,
+                                 external_version, mapping_version, authority,
                                  status)
                             VALUES
                                 (:crm_conflict_id, :organisation_id,
@@ -1976,6 +1977,7 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                  :company_id, :external_object_id, 'name',
                                  '"Oryntela"'::json, '"Provider"'::json,
                                  :oryntela_fingerprint, :provider_fingerprint,
+                                 'provider-version-1', 1, 'review_before_sync',
                                  'open')
                             """
                         ),

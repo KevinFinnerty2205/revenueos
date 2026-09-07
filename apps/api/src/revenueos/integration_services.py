@@ -473,6 +473,21 @@ class IntegrationService:
             crm_state.writeback_enabled = False
             crm_state.lifecycle = "disabled"
             crm_state.health_status = "unavailable"
+            crm_jobs = (
+                await self.session.scalars(
+                    select(CRMSyncJob).where(
+                        CRMSyncJob.organisation_id == self.tenant.organisation_id,
+                        CRMSyncJob.connection_id == connection.id,
+                        CRMSyncJob.status.in_(("queued", "running", "paused")),
+                    )
+                )
+            ).all()
+            for job in crm_jobs:
+                job.status = "cancelled"
+                job.worker_id = None
+                job.lease_expires_at = None
+                job.completed_at = now
+                job.updated_at = now
         await self.repository.invalidate_connection_previews(
             self.tenant.organisation_id,
             connection.id,
@@ -2019,6 +2034,9 @@ class IntegrationService:
                 "Salesforce Person Accounts are not supported in this connector version. "
                 "Use a business Account scope before synchronising."
             ),
+            "provider_currency_capability_required": (
+                "Salesforce did not expose explicit opportunity currency. Amount writeback remains blocked."
+            ),
         }
         status_code = 429 if error.code == "provider_rate_limited" else 409
         raise PublicAPIError(
@@ -2167,6 +2185,22 @@ class IntegrationService:
         state.last_health_checked_at = now
         state.last_safe_error_code = None
         state.configured_by_user_id = self.tenant.user_id
+        paused_jobs = (
+            await self.session.scalars(
+                select(CRMSyncJob).where(
+                    CRMSyncJob.organisation_id == self.tenant.organisation_id,
+                    CRMSyncJob.connection_id == connection.id,
+                    CRMSyncJob.status == "paused",
+                )
+            )
+        ).all()
+        for job in paused_jobs:
+            job.status = "queued"
+            job.worker_id = None
+            job.lease_expires_at = None
+            job.completed_at = None
+            job.safe_failure_code = None
+            job.updated_at = now
         return state
 
     async def _queue_initial_crm_sync(

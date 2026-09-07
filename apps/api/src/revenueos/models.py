@@ -6179,9 +6179,19 @@ class CRMConflict(TimestampMixin, Base):
             name="ck_crm_conflicts_resolution",
         ),
         CheckConstraint(
-            "(status = 'open' AND resolution IS NULL AND resolved_at IS NULL AND resolved_by_user_id IS NULL) OR "
+            "authority IN ('crm_authoritative', 'revenueos_authoritative', 'review_before_sync')",
+            name="ck_crm_conflicts_authority",
+        ),
+        CheckConstraint("mapping_version > 0", name="ck_crm_conflicts_mapping_version"),
+        CheckConstraint(
+            "length(oryntela_fingerprint) = 64 AND length(provider_fingerprint) = 64",
+            name="ck_crm_conflicts_fingerprints",
+        ),
+        CheckConstraint(
+            "(status = 'open' AND resolution IS NULL AND resolved_at IS NULL AND resolved_by_user_id IS NULL "
+            "AND resolved_fingerprint IS NULL) OR "
             "(status <> 'open' AND resolution IS NOT NULL AND resolved_at IS NOT NULL "
-            "AND resolved_by_user_id IS NOT NULL)",
+            "AND resolved_by_user_id IS NOT NULL AND length(resolved_fingerprint) = 64)",
             name="ck_crm_conflicts_lifecycle",
         ),
         ForeignKeyConstraint(
@@ -6225,8 +6235,15 @@ class CRMConflict(TimestampMixin, Base):
     provider_value_json: Mapped[object | None] = mapped_column(JSON(none_as_null=True))
     oryntela_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     provider_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    oryntela_version_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    external_version: Mapped[str] = mapped_column(String(255), nullable=False)
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    authority: Mapped[str] = mapped_column(String(32), nullable=False, default="review_before_sync")
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open", server_default="open")
     resolution: Mapped[str | None] = mapped_column(String(16))
+    resolved_value_json: Mapped[object | None] = mapped_column(JSON(none_as_null=True))
+    resolved_fingerprint: Mapped[str | None] = mapped_column(String(64))
     resolved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

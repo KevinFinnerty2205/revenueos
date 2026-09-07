@@ -57,12 +57,14 @@ class CRMProviderError(Exception):
         retryable: bool = False,
         uncertain: bool = False,
         retry_after_seconds: int | None = None,
+        external_object_id: str | None = None,
     ) -> None:
         super().__init__(code)
         self.code = code
         self.retryable = retryable
         self.uncertain = uncertain
         self.retry_after_seconds = retry_after_seconds
+        self.external_object_id = external_object_id
 
 
 class CRMProviderAdapter(Protocol):
@@ -140,7 +142,6 @@ CRM_FIELD_RULES: dict[str, dict[CRMObjectType, tuple[CRMFieldRule, ...]]] = {
             CRMFieldRule("expected_close_date", "closedate", "date", "crm_authoritative"),
             CRMFieldRule("owner", "hubspot_owner_id", "owner", "crm_authoritative"),
             CRMFieldRule("description", "description", "string", "review_before_sync"),
-            CRMFieldRule("next_step", "hs_next_step", "string", "review_before_sync"),
         ),
     },
     "salesforce": {
@@ -168,7 +169,6 @@ CRM_FIELD_RULES: dict[str, dict[CRMObjectType, tuple[CRMFieldRule, ...]]] = {
             CRMFieldRule("expected_close_date", "CloseDate", "date", "crm_authoritative"),
             CRMFieldRule("owner", "OwnerId", "owner", "crm_authoritative"),
             CRMFieldRule("description", "Description", "string", "review_before_sync"),
-            CRMFieldRule("next_step", "NextStep", "string", "review_before_sync"),
         ),
     },
 }

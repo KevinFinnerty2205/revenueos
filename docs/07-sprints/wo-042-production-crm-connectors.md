@@ -2,7 +2,7 @@
 
 - **Branch:** `codex/wo-042-production-crm-connectors`
 - **Baseline:** `d78c5b93`
-- **Status:** implemented; awaiting engineering review
+- **Status:** engineering review complete; approved for merge
 - **Migration:** `0058_production_crm_connectors`
 - **Providers:** HubSpot and Salesforce, production-capable and not production-active
 - **Data/spend:** deterministic synthetic fixtures and official public documentation

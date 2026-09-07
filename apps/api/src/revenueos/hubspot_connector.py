@@ -64,12 +64,15 @@ class HubSpotAPIError(CRMProviderError):
         retryable: bool = False,
         uncertain: bool = False,
         retry_after_seconds: int | None = None,
+        external_object_id: str | None = None,
     ) -> None:
-        super().__init__(code)
-        self.code = code
-        self.retryable = retryable
-        self.uncertain = uncertain
-        self.retry_after_seconds = retry_after_seconds
+        super().__init__(
+            code,
+            retryable=retryable,
+            uncertain=uncertain,
+            retry_after_seconds=retry_after_seconds,
+            external_object_id=external_object_id,
+        )
 
 
 class _ProviderModel(BaseModel):
@@ -380,7 +383,14 @@ class HubSpotClient:
             json_body={"properties": properties},
             write=True,
         )
-        return self._parse(HubSpotRecord, response)
+        try:
+            return self._parse(HubSpotRecord, response)
+        except HubSpotAPIError as exc:
+            raise HubSpotAPIError(
+                "provider_update_verification_unknown",
+                uncertain=True,
+                external_object_id=object_id,
+            ) from exc
 
     async def create_record(
         self,
@@ -411,7 +421,10 @@ class HubSpotClient:
             json_body=body,
             write=True,
         )
-        return self._parse(HubSpotRecord, response)
+        try:
+            return self._parse(HubSpotRecord, response)
+        except HubSpotAPIError as exc:
+            raise HubSpotAPIError("provider_create_verification_unknown", uncertain=True) from exc
 
     async def association_type(
         self,
@@ -453,7 +466,7 @@ class HubSpotClient:
                 filters.append(
                     {
                         "propertyName": "hs_lastmodifieddate",
-                        "operator": "GT",
+                        "operator": "GTE",
                         "value": str(int(modified_after.astimezone(UTC).timestamp() * 1000)),
                     }
                 )
@@ -795,7 +808,7 @@ class HubSpotClient:
         if response.status_code >= 400:
             raise HubSpotAPIError("provider_request_rejected")
         if len(response.content) > self.settings.hubspot_max_response_bytes:
-            raise HubSpotAPIError("provider_response_too_large")
+            raise HubSpotAPIError("provider_response_too_large", uncertain=write)
         return response
 
     @staticmethod
@@ -861,7 +874,7 @@ class HubSpotSyncAdapter:
             records = [
                 record
                 for record in records
-                if record.updated_at is None or record.updated_at.astimezone(UTC) > watermark
+                if record.updated_at is None or record.updated_at.astimezone(UTC) >= watermark
             ]
         if (
             records
@@ -1039,7 +1052,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         if target is None:
             raise PermanentExecutionFailure(
                 "crm_mapping_missing",
-                "Connect this RevenueOS record to a CRM record before reviewing the update.",
+                "Connect this Oryntela record to a CRM record before reviewing the update.",
             )
         if isinstance(action.payload, OpportunityUpdatePayload):
             if target.external_object_type != "deals" or target.external_property_name is None:
@@ -1047,12 +1060,12 @@ class HubSpotCRMExecutor(ActionExecutor):
             if target.field_authority == CRMFieldAuthority.CRM_AUTHORITATIVE.value:
                 raise PermanentExecutionFailure(
                     "crm_field_authoritative",
-                    "HubSpot is the source of truth for this field, so RevenueOS will not overwrite it.",
+                    "HubSpot is the source of truth for this field, so Oryntela will not overwrite it.",
                 )
             if action.payload.field == "estimated_value" and action.revenueos_currency is None:
                 raise PermanentExecutionFailure(
                     "currency_context_missing",
-                    "The RevenueOS opportunity needs a currency before its amount can be updated.",
+                    "The Oryntela opportunity needs a currency before its amount can be updated.",
                 )
         elif isinstance(action.payload, ContactUpdatePayload):
             if action.payload.operation != "update":
@@ -1065,7 +1078,7 @@ class HubSpotCRMExecutor(ActionExecutor):
             if target.field_authority == CRMFieldAuthority.CRM_AUTHORITATIVE.value:
                 raise PermanentExecutionFailure(
                     "crm_field_authoritative",
-                    "HubSpot is the source of truth for this field, so RevenueOS will not overwrite it.",
+                    "HubSpot is the source of truth for this field, so Oryntela will not overwrite it.",
                 )
         elif isinstance(action.payload, LogInteractionPayload):
             if target.external_object_type != "deals":
@@ -1108,7 +1121,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         ):
             raise PermanentExecutionFailure(
                 "currency_mismatch",
-                "HubSpot and RevenueOS use different currencies for this opportunity. No conversion was made.",
+                "HubSpot and Oryntela use different currencies for this opportunity. No conversion was made.",
             )
         return HubSpotExternalState(current_value=current, updated_at=record.updated_at, currency=currency)
 
@@ -1177,7 +1190,7 @@ class HubSpotCRMExecutor(ActionExecutor):
                 object_type=action.external_target.external_object_type,
                 object_key=self.object_key(action, idempotency_key),
                 state={"reconciled": True},
-                safe_message="HubSpot already contains the approved value. RevenueOS reconciled the result.",
+                safe_message="HubSpot already contains the approved value. Oryntela reconciled the result.",
             )
         property_name = cast(str, action.external_target.external_property_name)
         try:
@@ -1222,7 +1235,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         except (RetryableExecutionFailure, PermanentExecutionFailure):
             raise UnknownExternalStateFailure(
                 "unknown_external_state",
-                "The HubSpot outcome is unknown. RevenueOS will not retry until it can reconcile the record.",
+                "The HubSpot outcome is unknown. Oryntela will not retry until it can reconcile the record.",
             ) from None
         assert action.external_target is not None
         if (
@@ -1234,16 +1247,16 @@ class HubSpotCRMExecutor(ActionExecutor):
                 object_type=action.external_target.external_object_type,
                 object_key=self.object_key(action, idempotency_key),
                 state={"reconciled": True},
-                safe_message="HubSpot applied the approved value; RevenueOS reconciled the uncertain response.",
+                safe_message="HubSpot applied the approved value; Oryntela reconciled the uncertain response.",
             )
         if isinstance(refreshed, HubSpotExternalState) and refreshed.current_value == expected.current_value:
             raise RetryableExecutionFailure(
                 "provider_timeout_not_applied",
-                "HubSpot did not apply the update. RevenueOS may retry it safely.",
+                "HubSpot did not apply the update. Oryntela may retry it safely.",
             )
         raise UnknownExternalStateFailure(
             "unknown_external_state",
-            "The HubSpot record changed unexpectedly. RevenueOS will not retry this update.",
+            "The HubSpot record changed unexpectedly. Oryntela will not retry this update.",
         )
 
     async def _create_activity(
@@ -1262,12 +1275,12 @@ class HubSpotCRMExecutor(ActionExecutor):
                 object_type="meetings",
                 object_key=self.object_key(action, idempotency_key),
                 state={"reconciled": True},
-                safe_message="The HubSpot activity already exists. RevenueOS reconciled it without a duplicate.",
+                safe_message="The HubSpot activity already exists. Oryntela reconciled it without a duplicate.",
             )
         if len(existing) > 1:
             raise UnknownExternalStateFailure(
                 "activity_reconciliation_ambiguous",
-                "More than one matching HubSpot activity exists. RevenueOS will not create another.",
+                "More than one matching HubSpot activity exists. Oryntela will not create another.",
             )
         body = payload.summary
         if payload.agreed_next_steps:
@@ -1290,14 +1303,14 @@ class HubSpotCRMExecutor(ActionExecutor):
                 except (RetryableExecutionFailure, PermanentExecutionFailure):
                     raise UnknownExternalStateFailure(
                         "unknown_external_state",
-                        "The HubSpot activity outcome is unknown. RevenueOS will not create another.",
+                        "The HubSpot activity outcome is unknown. Oryntela will not create another.",
                     ) from None
                 if len(matches) == 1:
                     record = matches[0]
                 else:
                     raise UnknownExternalStateFailure(
                         "unknown_external_state",
-                        "The HubSpot activity outcome is unknown. RevenueOS will not create another.",
+                        "The HubSpot activity outcome is unknown. Oryntela will not create another.",
                     ) from None
             else:
                 self._raise_execution_failure(exc)
@@ -1327,7 +1340,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         if len(matches) > 1:
             raise UnknownExternalStateFailure(
                 "activity_reconciliation_ambiguous",
-                "More than one matching HubSpot activity exists. RevenueOS will not retry.",
+                "More than one matching HubSpot activity exists. Oryntela will not retry.",
             )
         return ExecutorResult(
             external_result_id=matches[0].id,

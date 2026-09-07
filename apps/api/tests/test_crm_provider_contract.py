@@ -213,7 +213,9 @@ def test_production_crm_adapters_share_the_bounded_provider_contract(provider: s
                 return httpx.Response(200, json={"fields": []})
             assert request.url.path.endswith("/queryAll")
             query = request.url.params["q"]
-            assert "LIMIT 200" in query
+            assert "LIMIT" not in query
+            assert request.headers["Sforce-Query-Options"] == "batchSize=200"
+            assert "SystemModstamp >= 2026-09-01T00:00:00Z" in query
             return httpx.Response(
                 200,
                 json={

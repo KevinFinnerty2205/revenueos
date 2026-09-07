@@ -6,7 +6,7 @@ import hmac
 import re
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Literal, NoReturn, cast
 from urllib.parse import urlencode, urlparse
 from uuid import UUID
@@ -291,7 +291,7 @@ class SalesforceClient:
         modified_after: datetime | None,
         limit: int,
     ) -> CRMProviderPage:
-        page_size = min(max(limit, 1), 200)
+        del limit
         if cursor is not None:
             path = self._validate_query_cursor(cursor)
             response = await self._authenticated_request(context, "GET", path, write=False)
@@ -302,25 +302,33 @@ class SalesforceClient:
                 object_name,
                 "IsPersonAccount",
             )
-            selected = self._selected_fields(object_type, include_person_account=include_person_account)
+            include_currency = object_type == "opportunity" and await self._supports_field(
+                context,
+                object_name,
+                "CurrencyIsoCode",
+            )
+            selected = self._selected_fields(
+                object_type,
+                include_person_account=include_person_account,
+                include_currency=include_currency,
+            )
             where = ""
             if modified_after is not None:
                 watermark = modified_after.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-                where = f" WHERE SystemModstamp > {watermark}"
-            query = (
-                f"SELECT {','.join(selected)} FROM {object_name}{where} ORDER BY SystemModstamp, Id LIMIT {page_size}"
-            )
+                where = f" WHERE SystemModstamp >= {watermark}"
+            query = f"SELECT {','.join(selected)} FROM {object_name}{where} ORDER BY SystemModstamp, Id"
             response = await self._authenticated_request(
                 context,
                 "GET",
                 f"/services/data/{self.settings.salesforce_api_version}/queryAll",
                 params={"q": query},
+                extra_headers={"Sforce-Query-Options": "batchSize=200"},
                 write=False,
             )
         parsed = self._parse(_QueryResponse, response)
         records = tuple(self._normalise_record(object_type, item) for item in parsed.records)
         high_watermark = max(
-            (item.modified_at for item in records),
+            (item.system_modstamp.astimezone(UTC) for item in parsed.records),
             default=modified_after or datetime.now(UTC),
         )
         return CRMProviderPage(
@@ -341,13 +349,24 @@ class SalesforceClient:
             _OBJECT_NAMES[object_type],
             "IsPersonAccount",
         )
+        include_currency = object_type == "opportunity" and await self._supports_field(
+            context,
+            _OBJECT_NAMES[object_type],
+            "CurrencyIsoCode",
+        )
         response = await self._authenticated_request(
             context,
             "GET",
             f"/services/data/{self.settings.salesforce_api_version}/sobjects/"
             f"{_OBJECT_NAMES[object_type]}/{external_object_id}",
             params={
-                "fields": ",".join(self._selected_fields(object_type, include_person_account=include_person_account))
+                "fields": ",".join(
+                    self._selected_fields(
+                        object_type,
+                        include_person_account=include_person_account,
+                        include_currency=include_currency,
+                    )
+                )
             },
             write=False,
         )
@@ -368,7 +387,16 @@ class SalesforceClient:
             object_name,
             "IsPersonAccount",
         )
-        selected = self._selected_fields(object_type, include_person_account=include_person_account)
+        include_currency = object_type == "opportunity" and await self._supports_field(
+            context,
+            object_name,
+            "CurrencyIsoCode",
+        )
+        selected = self._selected_fields(
+            object_type,
+            include_person_account=include_person_account,
+            include_currency=include_currency,
+        )
         conditions = [f"Name LIKE '%{escaped}%'"]
         if object_type == "contact":
             conditions.append(f"Email LIKE '%{escaped}%'")
@@ -392,6 +420,7 @@ class SalesforceClient:
         object_type: CRMObjectType,
         fields: dict[str, CRMScalar],
     ) -> CRMProviderRecord:
+        await self._require_currency_capability(context, object_type, fields)
         payload = self._provider_payload(object_type, fields)
         response = await self._authenticated_request(
             context,
@@ -403,7 +432,14 @@ class SalesforceClient:
         created = self._parse(_CreateResponse, response)
         if not created.success:
             raise SalesforceAPIError("provider_request_rejected")
-        return await self.get_record(context, object_type, created.id)
+        try:
+            return await self.get_record(context, object_type, created.id)
+        except CRMProviderError as exc:
+            raise SalesforceAPIError(
+                "provider_create_verification_unknown",
+                uncertain=True,
+                external_object_id=created.id,
+            ) from exc
 
     async def update_record(
         self,
@@ -412,6 +448,7 @@ class SalesforceClient:
         fields: dict[str, CRMScalar],
     ) -> CRMProviderRecord:
         self._validate_id(record.external_object_id)
+        await self._require_currency_capability(context, record.object_type, fields)
         payload = self._provider_payload(record.object_type, fields)
         await self._authenticated_request(
             context,
@@ -425,7 +462,14 @@ class SalesforceClient:
             write=True,
             allow_empty=True,
         )
-        return await self.get_record(context, record.object_type, record.external_object_id)
+        try:
+            return await self.get_record(context, record.object_type, record.external_object_id)
+        except CRMProviderError as exc:
+            raise SalesforceAPIError(
+                "provider_update_verification_unknown",
+                uncertain=True,
+                external_object_id=record.external_object_id,
+            ) from exc
 
     async def owners(self, context: ExecutorConnectionContext) -> tuple[CRMProviderOwner, ...]:
         query = "SELECT Id,Name,Email,IsActive FROM User WHERE UserType = 'Standard' ORDER BY Name LIMIT 200"
@@ -726,8 +770,13 @@ class SalesforceClient:
         field_name: str,
     ) -> bool:
         credential = await self._credential(context)
-        if credential.schema_version == self.settings.salesforce_api_version:
-            return field_name in credential.schema_capabilities
+        capability = f"{object_name}.{field_name}"
+        described_marker = f"described:{object_name}"
+        if (
+            credential.schema_version == self.settings.salesforce_api_version
+            and described_marker in credential.schema_capabilities
+        ):
+            return capability in credential.schema_capabilities
         response = await self._authenticated_request(
             context,
             "GET",
@@ -735,7 +784,11 @@ class SalesforceClient:
             write=False,
         )
         described = self._parse(_DescribeResponse, response)
-        capabilities = tuple(sorted(field.name for field in described.fields if field.name in {"IsPersonAccount"}))
+        allowed_capabilities = {
+            "Account": {"IsPersonAccount"},
+            "Opportunity": {"CurrencyIsoCode"},
+        }.get(object_name, set())
+        supported = {f"{object_name}.{field.name}" for field in described.fields if field.name in allowed_capabilities}
         if context.credential_reference is None:
             raise SalesforceAPIError("connection_reauthorisation_required")
         try:
@@ -746,6 +799,14 @@ class SalesforceClient:
             )
         except ValueError as exc:
             raise SalesforceAPIError("connection_reauthorisation_required") from exc
+        existing_capabilities = (
+            set(current.schema_capabilities)
+            if current.schema_version == self.settings.salesforce_api_version
+            else set()
+        )
+        existing_capabilities.add(described_marker)
+        existing_capabilities.update(supported)
+        capabilities = tuple(sorted(existing_capabilities))
         await self.credential_store.put(
             context.organisation_id,
             context.connection_id,
@@ -755,21 +816,37 @@ class SalesforceClient:
                 schema_capabilities=capabilities,
             ),
         )
-        return field_name in capabilities
+        return capability in capabilities
 
     def _selected_fields(
         self,
         object_type: CRMObjectType,
         *,
         include_person_account: bool = False,
+        include_currency: bool = False,
     ) -> tuple[str, ...]:
-        fields = list(provider_fields(self.provider_key, object_type))
+        fields = [
+            field
+            for field in provider_fields(self.provider_key, object_type)
+            if field != "CurrencyIsoCode" or include_currency
+        ]
         for required in ("Id", "SystemModstamp", "LastModifiedDate", "IsDeleted"):
             if required not in fields:
                 fields.append(required)
         if include_person_account and "IsPersonAccount" not in fields:
             fields.append("IsPersonAccount")
         return tuple(fields)
+
+    async def _require_currency_capability(
+        self,
+        context: ExecutorConnectionContext,
+        object_type: CRMObjectType,
+        fields: dict[str, CRMScalar],
+    ) -> None:
+        if object_type != "opportunity" or not {"estimated_value", "currency"}.intersection(fields):
+            return
+        if not await self._supports_field(context, "Opportunity", "CurrencyIsoCode"):
+            raise SalesforceAPIError("provider_currency_capability_required")
 
     def _normalise_record(
         self,
@@ -801,7 +878,7 @@ class SalesforceClient:
             external_object_id=record.id,
             fields=canonicalise_fields(self.provider_key, object_type, values),
             external_version=record.system_modstamp.astimezone(UTC).isoformat(),
-            modified_at=record.last_modified_date.astimezone(UTC),
+            modified_at=record.system_modstamp.astimezone(UTC),
             owner_external_id=record.owner_id,
             related_account_external_id=record.account_id,
             archived=record.is_deleted,
@@ -821,10 +898,9 @@ class SalesforceClient:
             if isinstance(value, (date, datetime)):
                 payload[provider_field] = value.isoformat()
             elif isinstance(value, Decimal):
-                try:
-                    payload[provider_field] = float(value)
-                except (InvalidOperation, ValueError) as exc:
-                    raise SalesforceAPIError("provider_value_invalid") from exc
+                if not value.is_finite():
+                    raise SalesforceAPIError("provider_value_invalid")
+                payload[provider_field] = format(value, "f")
             elif value is None or isinstance(value, (str, int, bool, float)):
                 payload[provider_field] = value
         if not payload:
@@ -921,12 +997,14 @@ class SalesforceCRMExecutor(ActionExecutor):
         canonical_field = self._canonical_field(object_type, action.external_target.external_property_name)
         current = self._string_value(record.fields.get(canonical_field))
         currency = self._string_value(record.fields.get("currency"))
-        if (
-            isinstance(action.payload, OpportunityUpdatePayload)
-            and action.payload.field == "estimated_value"
-            and currency is not None
-            and action.revenueos_currency != currency.upper()
-        ):
+        if isinstance(action.payload, OpportunityUpdatePayload) and action.payload.field == "estimated_value":
+            if currency is None:
+                raise PermanentExecutionFailure(
+                    "currency_context_unavailable",
+                    "Salesforce did not expose an explicit opportunity currency, so no amount update was prepared.",
+                )
+            if action.revenueos_currency == currency.upper():
+                return SalesforceExternalState(record, current, currency)
             raise PermanentExecutionFailure(
                 "currency_mismatch",
                 "Salesforce and Oryntela use different currencies for this opportunity. No conversion was made.",

@@ -3348,8 +3348,21 @@ export interface CRMConflict {
   fieldKey: string;
   oryntelaValue: unknown;
   providerValue: unknown;
+  oryntelaFingerprint: string;
+  providerFingerprint: string;
+  oryntelaVersionAt: string | null;
+  externalVersion: string;
+  mappingVersion: number;
+  authority:
+    | "crm_authoritative"
+    | "revenueos_authoritative"
+    | "review_before_sync";
+  observedAt: string;
+  allowedResolutions: ("provider" | "oryntela" | "manual")[];
   status: "open" | "resolved" | "ignored";
   resolution: "provider" | "oryntela" | "manual" | null;
+  resolvedValue: unknown;
+  resolvedFingerprint: string | null;
   resolvedByUserId: string | null;
   resolvedAt: string | null;
   createdAt: string;

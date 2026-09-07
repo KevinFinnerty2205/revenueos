@@ -1,6 +1,6 @@
 # ADR 0072: provider-neutral CRM reconciliation with reviewed writeback
 
-- **Status:** Accepted for WO-042; awaiting engineering review
+- **Status:** Accepted
 - **Date:** 2026-09-06
 
 ## Context

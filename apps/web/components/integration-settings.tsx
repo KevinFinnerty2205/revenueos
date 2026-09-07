@@ -22,11 +22,11 @@ import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
 
 const OPPORTUNITY_FIELDS = [
+  "name",
   "stage",
-  "status",
   "expected_close_date",
   "estimated_value",
-  "next_step",
+  "currency",
   "description",
 ] as const;
 const ACCOUNT_FIELDS = ["name", "domain", "industry"] as const;
@@ -34,6 +34,7 @@ const CONTACT_FIELDS = [
   "first_name",
   "last_name",
   "email",
+  "phone",
   "job_title",
 ] as const;
 const REVENUEOS_STAGES = [
@@ -924,7 +925,10 @@ function CRMMappingSettings({
     }
   }
 
-  async function resolveProviderConflict(conflictId: string) {
+  async function resolveConflict(
+    conflictId: string,
+    resolution: "provider" | "oryntela",
+  ) {
     onError(null);
     try {
       await apiRequest(
@@ -932,14 +936,17 @@ function CRMMappingSettings({
         {
           method: "POST",
           body: JSON.stringify({
-            resolution: "provider",
-            manualValue: null,
+            resolution,
             confirmed: true,
           }),
         },
       );
       await loadMappings();
-      onMessage("The reviewed provider value was applied to Oryntela.");
+      onMessage(
+        resolution === "provider"
+          ? "The reviewed provider value was applied to Oryntela."
+          : "The current Oryntela value was kept.",
+      );
     } catch (reason: unknown) {
       onError(
         reason instanceof Error
@@ -1199,17 +1206,34 @@ function CRMMappingSettings({
                         {providerName}:{" "}
                         {String(conflict.providerValue ?? "Empty")}
                       </p>
-                      {conflict.revenueosEntityId ? (
-                        <button
-                          type="button"
-                          className="secondary-button mt-2"
-                          onClick={() =>
-                            void resolveProviderConflict(conflict.id)
-                          }
-                        >
-                          Use reviewed {providerName} value
-                        </button>
-                      ) : null}
+                      <p className="mt-1 text-slate-600">
+                        Authority: {humanise(conflict.authority)} · observed{" "}
+                        {new Date(conflict.observedAt).toLocaleString()}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {conflict.allowedResolutions.includes("provider") ? (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() =>
+                              void resolveConflict(conflict.id, "provider")
+                            }
+                          >
+                            Use reviewed {providerName} value
+                          </button>
+                        ) : null}
+                        {conflict.allowedResolutions.includes("oryntela") ? (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() =>
+                              void resolveConflict(conflict.id, "oryntela")
+                            }
+                          >
+                            Keep Oryntela value
+                          </button>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
               </ul>

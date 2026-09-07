@@ -4,8 +4,10 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -266,6 +268,131 @@ def test_salesforce_person_accounts_fail_closed_instead_of_becoming_business_acc
                 await client.list_records(_context(), "account", cursor=None, modified_after=None, limit=100)
 
     asyncio.run(scenario())
+
+
+def test_salesforce_initial_sync_uses_provider_pagination_without_a_total_limit() -> None:
+    calls: list[str] = []
+
+    def record(record_id: str, stamp: str) -> dict[str, object]:
+        return {
+            "Id": record_id,
+            "Name": f"Account {record_id}",
+            "SystemModstamp": stamp,
+            "LastModifiedDate": "2026-09-01T00:00:00Z",
+            "IsDeleted": False,
+        }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path.endswith("/Account/describe"):
+            return httpx.Response(200, json={"fields": []})
+        if request.url.path.endswith("/queryAll"):
+            assert "LIMIT" not in request.url.params["q"]
+            assert request.headers["Sforce-Query-Options"] == "batchSize=200"
+            return httpx.Response(
+                200,
+                json={
+                    "done": False,
+                    "nextRecordsUrl": "/services/data/v67.0/query/01g000000000001",
+                    "records": [record("001000000000001", "2026-09-06T01:00:00Z")],
+                },
+            )
+        assert request.url.path == "/services/data/v67.0/query/01g000000000001"
+        return httpx.Response(
+            200,
+            json={
+                "done": True,
+                "records": [record("001000000000002", "2026-09-06T01:00:00Z")],
+            },
+        )
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            sf = SalesforceClient(_settings(), _MemoryStore(_credential()), http_client=http_client)
+            first = await sf.list_records(
+                _context(),
+                "account",
+                cursor=None,
+                modified_after=datetime(2026, 9, 6, 1, tzinfo=UTC),
+                limit=10,
+            )
+            assert first.next_cursor == "/services/data/v67.0/query/01g000000000001"
+            assert first.records[0].modified_at == datetime(2026, 9, 6, 1, tzinfo=UTC)
+            second = await sf.list_records(
+                _context(),
+                "account",
+                cursor=first.next_cursor,
+                modified_after=datetime(2026, 9, 6, 1, tzinfo=UTC),
+                limit=10,
+            )
+            assert second.next_cursor is None
+            assert second.records[0].external_object_id == "001000000000002"
+
+    asyncio.run(scenario())
+    assert calls == [
+        "/services/data/v67.0/sobjects/Account/describe",
+        "/services/data/v67.0/queryAll",
+        "/services/data/v67.0/query/01g000000000001",
+    ]
+
+
+def test_salesforce_create_preserves_decimal_and_never_retries_after_verification_loss() -> None:
+    post_bodies: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/Opportunity/describe"):
+            return httpx.Response(200, json={"fields": [{"name": "CurrencyIsoCode"}]})
+        if request.method == "POST":
+            post_bodies.append(json.loads(request.content))
+            return httpx.Response(201, json={"id": "006000000000001", "success": True})
+        raise httpx.ReadTimeout("verification response lost", request=request)
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            sf = SalesforceClient(_settings(), _MemoryStore(_credential()), http_client=http_client)
+            with pytest.raises(SalesforceAPIError) as failure:
+                await sf.create_record(
+                    _context(),
+                    "opportunity",
+                    {
+                        "name": "Exact amount",
+                        "estimated_value": Decimal("123456789012345.67"),
+                        "currency": "AUD",
+                    },
+                )
+            assert failure.value.uncertain is True
+            assert failure.value.external_object_id == "006000000000001"
+
+    asyncio.run(scenario())
+    assert post_bodies == [
+        {
+            "Name": "Exact amount",
+            "Amount": "123456789012345.67",
+            "CurrencyIsoCode": "AUD",
+        }
+    ]
+
+
+def test_salesforce_amount_write_fails_closed_without_explicit_currency_capability() -> None:
+    methods: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        methods.append(request.method)
+        assert request.url.path.endswith("/Opportunity/describe")
+        return httpx.Response(200, json={"fields": []})
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            sf = SalesforceClient(_settings(), _MemoryStore(_credential()), http_client=http_client)
+            with pytest.raises(SalesforceAPIError, match="provider_currency_capability_required"):
+                await sf.create_record(
+                    _context(),
+                    "opportunity",
+                    {"estimated_value": Decimal("100.00"), "currency": "AUD"},
+                )
+
+    asyncio.run(scenario())
+    assert methods == ["GET"]
 
 
 def test_salesforce_oauth_is_tenant_bound_encrypted_and_queues_read_only_initial_sync(

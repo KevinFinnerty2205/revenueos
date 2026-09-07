@@ -482,8 +482,15 @@ def upgrade() -> None:
         sa.Column("provider_value_json", sa.JSON(), nullable=True),
         sa.Column("oryntela_fingerprint", sa.String(length=64), nullable=False),
         sa.Column("provider_fingerprint", sa.String(length=64), nullable=False),
+        sa.Column("oryntela_version_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("external_version", sa.String(length=255), nullable=False),
+        sa.Column("mapping_version", sa.Integer(), server_default="1", nullable=False),
+        sa.Column("authority", sa.String(length=32), nullable=False),
+        sa.Column("observed_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("status", sa.String(length=16), server_default="open", nullable=False),
         sa.Column("resolution", sa.String(length=16), nullable=True),
+        sa.Column("resolved_value_json", sa.JSON(), nullable=True),
+        sa.Column("resolved_fingerprint", sa.String(length=64), nullable=True),
         sa.Column("resolved_by_user_id", sa.Uuid(), nullable=True),
         sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
@@ -496,9 +503,19 @@ def upgrade() -> None:
             name="ck_crm_conflicts_resolution",
         ),
         sa.CheckConstraint(
-            "(status = 'open' AND resolution IS NULL AND resolved_at IS NULL AND resolved_by_user_id IS NULL) OR "
+            "authority IN ('crm_authoritative', 'revenueos_authoritative', 'review_before_sync')",
+            name="ck_crm_conflicts_authority",
+        ),
+        sa.CheckConstraint("mapping_version > 0", name="ck_crm_conflicts_mapping_version"),
+        sa.CheckConstraint(
+            "length(oryntela_fingerprint) = 64 AND length(provider_fingerprint) = 64",
+            name="ck_crm_conflicts_fingerprints",
+        ),
+        sa.CheckConstraint(
+            "(status = 'open' AND resolution IS NULL AND resolved_at IS NULL AND resolved_by_user_id IS NULL "
+            "AND resolved_fingerprint IS NULL) OR "
             "(status <> 'open' AND resolution IS NOT NULL AND resolved_at IS NOT NULL "
-            "AND resolved_by_user_id IS NOT NULL)",
+            "AND resolved_by_user_id IS NOT NULL AND length(resolved_fingerprint) = 64)",
             name="ck_crm_conflicts_lifecycle",
         ),
         sa.ForeignKeyConstraint(["organisation_id"], ["organisations.id"], ondelete="CASCADE"),
