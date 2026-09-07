@@ -694,12 +694,22 @@ legal/privacy approval, exact production app configuration, secrets, monitoring 
 authorised synthetic smoke tests remain WO-054 gates. Dynamics, webhooks/CDC,
 arbitrary objects/custom fields, notes/files and autonomous writeback remain deferred.
 
+WO-043 is implemented through migration `0059_opportunity_deal_room`: it adds one
+Opportunity-scoped private draft, explicit immutable public revisions, hashed
+high-entropy revocable links, optional expiry and a standalone read-only buyer page.
+The public projection is a positive allow-list and pins approved Business Case and
+Create presentation revisions. All internal tables use forced RLS; anonymous access
+is restricted to bounded token-resolution functions. It uses the existing Create
+entitlement and storage, consumes no Credits and adds no provider cost. General files,
+buyer accounts/editing/comments, tracking, automatic email and WO-044 handover remain
+deferred.
+
 The authorised sequence after WO-050 remains:
 
 1. WO-040 — Microsoft 365 Sales Integration — **implemented; engineering review passed**
 2. WO-041 — Google Workspace Sales Integration — **implemented; awaiting engineering review**
-3. WO-042 — Production CRM Connectors — **implemented; awaiting engineering review**
-4. WO-043 — Simple Opportunity Deal Room
+3. WO-042 — Production CRM Connectors — **implemented; engineering review passed**
+4. WO-043 — Simple Opportunity Deal Room — **implemented; awaiting engineering review**
 5. WO-044 — Reviewed Closed-Won Handover
 6. WO-051 — Oryntela Brand Identity
 7. WO-052 — Customer-Facing Oryntela Rebrand
@@ -751,11 +761,10 @@ Intelligence. WO-039 uses admin as an interim manager capability and adds no
 hierarchy, scoring, surveillance, AI coach or blended forecast.
 [Checkpoint 3](checkpoint-3-end-to-end-beta-readiness.md) selected Option 3: complete
 WO-039A journey reliability, WO-039B Create trust/security and WO-039C real-data
-operations/native onboarding before WO-040. WO-040 is now implemented, but production provider activation,
-customer-data use, external Engage sending, auto-send and design-partner launch remain
-unauthorised. The first conditional provider recommendation is a narrow Gmail delivery
-slice from WO-041; Microsoft production activation, WO-041 and WO-042–044 breadth are
-deferred pending owner approval and observed customer evidence.
+operations/native onboarding before WO-040. WO-040 through WO-043 are now
+implemented, but production provider activation, customer-data use, external Engage
+sending, auto-send and design-partner launch remain unauthorised. WO-044 remains
+deferred pending separate owner approval and observed customer evidence.
 
 WO-039A is implemented as the existing-product reliability gate: the canonical
 seller journey, direct-route/recovery behaviour, cross-module revalidation, 390 px

@@ -269,6 +269,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "contacts",
         "opportunities",
         "opportunity_audit_events",
+        "deal_rooms",
+        "deal_room_revisions",
+        "deal_room_access_links",
+        "deal_room_audit_events",
         "sales_pipelines",
         "sales_pipeline_stages",
         "opportunity_stage_events",
@@ -648,6 +652,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "crm_sync_receipt_id": uuid.uuid4(),
                 "crm_conflict_id": uuid.uuid4(),
                 "crm_writeback_preview_id": uuid.uuid4(),
+                "deal_room_id": uuid.uuid4(),
+                "deal_room_revision_id": uuid.uuid4(),
+                "deal_room_link_id": uuid.uuid4(),
+                "deal_room_audit_id": uuid.uuid4(),
             }
         )
 
@@ -1300,6 +1308,77 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             "opportunity_name": f"RLS Opportunity {suffix}",
                             "value": Decimal("1000.00"),
                         },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO deal_rooms
+                                (id, organisation_id, opportunity_id,
+                                 created_by_user_id, status, draft_content_json)
+                            VALUES
+                                (:deal_room_id, :organisation_id,
+                                 :opportunity_id, :user_id, 'draft', '{}'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO deal_room_revisions
+                                (id, organisation_id, room_id, revision,
+                                 snapshot_schema_version, snapshot_json,
+                                 content_fingerprint, published_by_user_id,
+                                 published_at)
+                            VALUES
+                                (:deal_room_revision_id, :organisation_id,
+                                 :deal_room_id, 1, 1, '{}'::json,
+                                 :deal_room_fingerprint, :user_id, now())
+                            """
+                        ),
+                        {**identity_parameters, "deal_room_fingerprint": "a" * 64},
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO deal_room_access_links
+                                (id, organisation_id, room_id, token_hash,
+                                 created_by_user_id)
+                            VALUES
+                                (:deal_room_link_id, :organisation_id,
+                                 :deal_room_id, :deal_room_token_hash, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "deal_room_token_hash": ("a" if suffix == "A" else "b") * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE deal_rooms
+                            SET status = 'published',
+                                published_revision_id = :deal_room_revision_id,
+                                last_published_at = now()
+                            WHERE organisation_id = :organisation_id
+                              AND id = :deal_room_id
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO deal_room_audit_events
+                                (id, organisation_id, room_id, actor_user_id,
+                                 action, metadata_json)
+                            VALUES
+                                (:deal_room_audit_id, :organisation_id,
+                                 :deal_room_id, :user_id, 'created', '{}'::json)
+                            """
+                        ),
+                        identity_parameters,
                     )
                     await connection.execute(
                         text(
@@ -3576,6 +3655,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'contacts',
                                     'opportunities',
                                     'opportunity_audit_events',
+                                    'deal_rooms',
+                                    'deal_room_revisions',
+                                    'deal_room_access_links',
+                                    'deal_room_audit_events',
                                     'sales_pipelines',
                                     'sales_pipeline_stages',
                                     'opportunity_stage_events',
@@ -3745,6 +3828,18 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
             async with engine.connect() as connection:
                 transaction = await connection.begin()
                 await connection.exec_driver_sql(f'SET LOCAL ROLE "{role_name}"')
+                direct_room_count = await connection.scalar(text("SELECT count(*) FROM deal_rooms"))
+                assert direct_room_count == 0
+                public_snapshot = await connection.scalar(
+                    text("SELECT snapshot_json FROM public.revenueos_public_deal_room(:token_hash)"),
+                    {"token_hash": "a" * 64},
+                )
+                assert public_snapshot == {}
+                missing_public_snapshot = await connection.scalar(
+                    text("SELECT snapshot_json FROM public.revenueos_public_deal_room(:token_hash)"),
+                    {"token_hash": "f" * 64},
+                )
+                assert missing_public_snapshot is None
                 await connection.execute(
                     text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
                     {"organisation_id": str(tenant_a["organisation_id"])},
@@ -3888,6 +3983,18 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["sales_event_id"]},
                 )
                 assert event_update.rowcount == 0
+                deal_room_update = await connection.execute(
+                    text("UPDATE deal_rooms SET updated_at = now() WHERE id = :id"),
+                    {"id": tenant_b["deal_room_id"]},
+                )
+                assert deal_room_update.rowcount == 0
+                immutable_deal_room_revision = await connection.begin_nested()
+                with pytest.raises(DBAPIError, match="Deal Room revisions are immutable"):
+                    await connection.execute(
+                        text("UPDATE deal_room_revisions SET snapshot_json = '{}'::json WHERE id = :id"),
+                        {"id": tenant_a["deal_room_revision_id"]},
+                    )
+                await immutable_deal_room_revision.rollback()
                 event_delete = await connection.execute(
                     text("DELETE FROM event_attendees WHERE id = :id"),
                     {"id": tenant_b["event_attendee_id"]},
@@ -4482,6 +4589,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "deal_room_audit_events",
+                    "deal_room_access_links",
+                    "deal_room_revisions",
+                    "deal_rooms",
                     "sales_forecast_reviewer_revisions",
                     "sales_forecast_reviewer_judgments",
                     "sales_forecast_judgment_revisions",

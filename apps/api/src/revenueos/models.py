@@ -47,6 +47,7 @@ from revenueos.domain import (
     CompanyStatus,
     ConnectionStatus,
     ConnectorKey,
+    DealRoomStatus,
     EventAttendeeMatchState,
     EventAttendeePriority,
     EventPlanState,
@@ -2928,6 +2929,185 @@ class OpportunityAuditEvent(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+
+class DealRoom(TimestampMixin, Base):
+    __tablename__ = "deal_rooms"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'paused', 'revoked')",
+            name="ck_deal_rooms_status",
+        ),
+        CheckConstraint("draft_version > 0", name="ck_deal_rooms_draft_version"),
+        CheckConstraint("lock_version > 0", name="ck_deal_rooms_lock_version"),
+        CheckConstraint(
+            "(status = 'draft' AND published_revision_id IS NULL) OR "
+            "(status IN ('published', 'paused', 'revoked') AND published_revision_id IS NOT NULL)",
+            name="ck_deal_rooms_publication_state",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_deal_rooms_opportunity",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_deal_rooms_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_deal_rooms_org_id"),
+        UniqueConstraint("organisation_id", "opportunity_id", name="uq_deal_rooms_org_opportunity"),
+        Index("ix_deal_rooms_org_status", "organisation_id", "status", "updated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=DealRoomStatus.DRAFT.value, server_default=DealRoomStatus.DRAFT.value
+    )
+    draft_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    draft_content_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
+    )
+    published_revision_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    last_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DealRoomRevision(Base):
+    __tablename__ = "deal_room_revisions"
+    __table_args__ = (
+        CheckConstraint("revision > 0", name="ck_deal_room_revisions_number"),
+        CheckConstraint("snapshot_schema_version = 1", name="ck_deal_room_revisions_schema"),
+        CheckConstraint(
+            "length(content_fingerprint) = 64 AND content_fingerprint = lower(content_fingerprint)",
+            name="ck_deal_room_revisions_fingerprint",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "room_id"],
+            ["deal_rooms.organisation_id", "deal_rooms.id"],
+            name="fk_deal_room_revisions_room",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "published_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_deal_room_revisions_publisher",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_deal_room_revisions_org_id"),
+        UniqueConstraint("organisation_id", "room_id", "revision", name="uq_deal_room_revisions_number"),
+        Index("ix_deal_room_revisions_org_room", "organisation_id", "room_id", "revision"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    room_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    snapshot_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    published_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DealRoomAccessLink(Base):
+    __tablename__ = "deal_room_access_links"
+    __table_args__ = (
+        CheckConstraint(
+            "length(token_hash) = 64 AND token_hash = lower(token_hash)",
+            name="ck_deal_room_links_token_hash",
+        ),
+        CheckConstraint("expires_at IS NULL OR expires_at > created_at", name="ck_deal_room_links_expiry"),
+        CheckConstraint("revoked_at IS NULL OR revoked_at >= created_at", name="ck_deal_room_links_revoked"),
+        ForeignKeyConstraint(
+            ["organisation_id", "room_id"],
+            ["deal_rooms.organisation_id", "deal_rooms.id"],
+            name="fk_deal_room_links_room",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_deal_room_links_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "revoked_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_deal_room_links_revoker",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_deal_room_links_org_id"),
+        UniqueConstraint("token_hash", name="uq_deal_room_links_token_hash"),
+        Index("ix_deal_room_links_org_room", "organisation_id", "room_id", "created_at"),
+        Index(
+            "uq_deal_room_links_current",
+            "organisation_id",
+            "room_id",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+            sqlite_where=text("revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    room_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revoked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class DealRoomAuditEvent(Base):
+    __tablename__ = "deal_room_audit_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('created', 'draft_updated', 'published', 'republished', 'paused', 'revoked', "
+            "'link_rotated', 'resource_changed', 'publication_source_changed')",
+            name="ck_deal_room_audit_action",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "room_id"],
+            ["deal_rooms.organisation_id", "deal_rooms.id"],
+            name="fk_deal_room_audit_room",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "actor_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_deal_room_audit_actor",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_deal_room_audit_org_room", "organisation_id", "room_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    room_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class MethodologyDefinition(TimestampMixin, Base):

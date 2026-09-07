@@ -83,6 +83,10 @@ from revenueos.models import (
     CRMSyncReceipt,
     CRMWritebackPreview,
     DataNoticeAcknowledgement,
+    DealRoom,
+    DealRoomAccessLink,
+    DealRoomAuditEvent,
+    DealRoomRevision,
     DebriefSession,
     DebriefTurn,
     DocumentFragment,
@@ -446,6 +450,10 @@ def clean_business_entities() -> Iterator[None]:
         async with session_factory() as session:
             await session.execute(update(RecordingSession).values(transcript_version_id=None))
             for model in (
+                DealRoomAuditEvent,
+                DealRoomAccessLink,
+                DealRoomRevision,
+                DealRoom,
                 CreditLedgerEntry,
                 CreditReservationAllocation,
                 CreditOperation,

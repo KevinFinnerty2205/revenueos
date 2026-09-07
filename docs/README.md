@@ -168,6 +168,9 @@ This is the canonical product and engineering documentation index. Documents dis
     - [CRM field authority matrix](03-engineering/crm-authority-matrix.md) — exact bounded V1 field ownership
 157. [CRM provider research](05-integrations/crm-provider-research-2026-09-06.md) — dated HubSpot/Salesforce evidence and Dynamics defer decision
 158. [ADR 0072: Provider-neutral production CRM connectors](08-decisions/0072-provider-neutral-production-crm-connectors.md)
+159. [WO-043: Simple Opportunity Deal Room](07-sprints/wo-043-simple-opportunity-deal-room.md) — explicit immutable customer publication, revocable fragment link and standalone buyer experience
+160. [Opportunity Deal Room architecture](03-engineering/opportunity-deal-room.md) — lifecycle, allow-list, token/RLS boundary, pinned resources and deferrals
+161. [ADR 0073: Immutable Opportunity Deal Room projection](08-decisions/0073-immutable-opportunity-deal-room-projection.md)
 
 ## First design-partner launch package
 
@@ -767,10 +770,11 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0070: Seller-delegated Microsoft Graph with bounded delta reconciliation](08-decisions/0070-microsoft-delegated-delta-sales-integration.md)
 - [ADR 0071: Google Workspace incremental integration](08-decisions/0071-google-workspace-restricted-scope-incremental-integration.md)
 - [ADR 0072: Provider-neutral production CRM connectors](08-decisions/0072-provider-neutral-production-crm-connectors.md)
+- [ADR 0073: Immutable Opportunity Deal Room projection](08-decisions/0073-immutable-opportunity-deal-room-projection.md)
 
 ## Current delivery boundary
 
-Sprints 1–3 and the accepted work through WO-042, including WO-046–050 and the
+Sprints 1–3 and the implemented work through WO-043, including WO-046–050 and the
 WO-039A/B/C gates, are implemented where their individual records say so. WO-010 and
 WO-023 are completed blueprints rather than runtime scope. WO-022 remains the
 simulation foundation; WO-025C added the first production-capable connector and
@@ -791,7 +795,9 @@ implements Native Pipeline, WO-036 implements deterministic Core Sales Insights 
 WO-037 implements explicit canonical Targets/KPI progress, WO-038 implements
 transparent seller ranges plus a separate historical baseline and WO-039 implements
 deal-centric Manager Intelligence. WO-040, WO-041 and WO-042 are implemented but
-inactive; WO-043–045 remain separately authorised future work.
+inactive. WO-043 adds one immutable, allow-listed Opportunity Deal Room without buyer
+identity, general files or external providers; WO-044–045 remain separately
+authorised future work.
 An authenticated user can generate and read Executive Summary, Key Decisions,
 Action Items, Risks & Blockers, Open Questions, Buying Signals, Objections &
 Competitive Signals, Stakeholder Intelligence, Next Best Action and Follow-up Email through one derived Meeting

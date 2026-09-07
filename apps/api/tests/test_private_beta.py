@@ -40,6 +40,7 @@ from revenueos.beta_maintenance import (
 from revenueos.beta_services import BetaService
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
+from revenueos.deal_room_repositories import DealRoomRepository
 from revenueos.demo_data import (
     demo_campaign_ids,
     demo_companion_ids,
@@ -67,6 +68,10 @@ from revenueos.models import (
     CRMImportRow,
     CRMRecordMerge,
     DataNoticeAcknowledgement,
+    DealRoom,
+    DealRoomAccessLink,
+    DealRoomAuditEvent,
+    DealRoomRevision,
     DebriefSession,
     DocumentSource,
     EmailSource,
@@ -228,7 +233,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0058_production_crm_connectors"
+    assert EXPECTED_MIGRATION_HEAD == "0059_opportunity_deal_room"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -1013,6 +1018,11 @@ def test_retention_dry_run_and_execution_are_bounded_and_idempotent() -> None:
 def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user(tmp_path: Path) -> None:
     target_organisation_id = uuid.uuid4()
     target_company_id = uuid.uuid4()
+    target_opportunity_id = uuid.uuid4()
+    target_deal_room_id = uuid.uuid4()
+    target_deal_room_revision_id = uuid.uuid4()
+    target_deal_room_link_id = uuid.uuid4()
+    target_deal_room_audit_id = uuid.uuid4()
     target_connection_id = uuid.uuid4()
     target_provider_sync_state_id = uuid.uuid4()
     target_integration_audit_id = uuid.uuid4()
@@ -1064,6 +1074,65 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
                 )
             )
             now = datetime.now(UTC)
+            session.add(
+                Opportunity(
+                    id=target_opportunity_id,
+                    organisation_id=target_organisation_id,
+                    company_id=target_company_id,
+                    name="Synthetic deletion opportunity",
+                    owner_user_id=PRIMARY_USER_ID,
+                    stage="proposal",
+                    status="open",
+                )
+            )
+            await session.flush()
+            deal_room = DealRoom(
+                id=target_deal_room_id,
+                organisation_id=target_organisation_id,
+                opportunity_id=target_opportunity_id,
+                created_by_user_id=PRIMARY_USER_ID,
+                draft_content_json={},
+            )
+            session.add(deal_room)
+            await session.flush()
+            session.add(
+                DealRoomRevision(
+                    id=target_deal_room_revision_id,
+                    organisation_id=target_organisation_id,
+                    room_id=target_deal_room_id,
+                    revision=1,
+                    snapshot_schema_version=1,
+                    snapshot_json={},
+                    content_fingerprint="f" * 64,
+                    published_by_user_id=PRIMARY_USER_ID,
+                    published_at=now,
+                )
+            )
+            await session.flush()
+            deal_room.status = "published"
+            deal_room.published_revision_id = target_deal_room_revision_id
+            deal_room.last_published_at = now
+            session.add(
+                DealRoomAccessLink(
+                    id=target_deal_room_link_id,
+                    organisation_id=target_organisation_id,
+                    room_id=target_deal_room_id,
+                    token_hash="d" * 64,
+                    created_by_user_id=PRIMARY_USER_ID,
+                    created_at=now,
+                )
+            )
+            session.add(
+                DealRoomAuditEvent(
+                    id=target_deal_room_audit_id,
+                    organisation_id=target_organisation_id,
+                    room_id=target_deal_room_id,
+                    actor_user_id=PRIMARY_USER_ID,
+                    action="published",
+                    metadata_json={},
+                    created_at=now,
+                )
+            )
             session.add(
                 IntegrationConnection(
                     id=target_connection_id,
@@ -1203,6 +1272,12 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
         async with factory() as session:
             assert await session.get(Organisation, target_organisation_id) is None
             assert await session.get(Company, target_company_id) is None
+            assert await session.get(Opportunity, target_opportunity_id) is None
+            assert await session.get(DealRoom, target_deal_room_id) is None
+            assert await session.get(DealRoomRevision, target_deal_room_revision_id) is None
+            assert await session.get(DealRoomAccessLink, target_deal_room_link_id) is None
+            assert await session.get(DealRoomAuditEvent, target_deal_room_audit_id) is None
+            assert await DealRoomRepository(session).public_projection("d" * 64, datetime.now(UTC)) is None
             assert await session.get(IntegrationConnection, target_connection_id) is None
             assert await session.get(ProviderSyncState, target_provider_sync_state_id) is None
             assert await session.get(IntegrationAuditEvent, target_integration_audit_id) is None
@@ -1531,7 +1606,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 35
+        assert payload["exportVersion"] == 36
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1664,7 +1739,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 35
+        assert download.json()["exportVersion"] == 36
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
 

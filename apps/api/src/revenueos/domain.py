@@ -316,6 +316,31 @@ class OpportunityAuditAction(StrEnum):
     REOPENED = "reopened"
 
 
+class DealRoomStatus(StrEnum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    PAUSED = "paused"
+    REVOKED = "revoked"
+
+
+class DealRoomOwnerParty(StrEnum):
+    OUR_TEAM = "our_team"
+    CUSTOMER = "customer"
+    JOINT = "joint"
+
+
+class DealRoomMilestoneStatus(StrEnum):
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    BLOCKED = "blocked"
+
+
+class DealRoomResourceKind(StrEnum):
+    EXTERNAL_LINK = "external_link"
+    PRESENTATION = "presentation"
+
+
 class ActionType(StrEnum):
     FOLLOW_UP_EMAIL = "follow_up_email"
     PERSONALIZED_OUTREACH = "personalized_outreach"

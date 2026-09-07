@@ -81,6 +81,10 @@ from revenueos.models import (
     CRMSyncReceipt,
     CRMWritebackPreview,
     DataNoticeAcknowledgement,
+    DealRoom,
+    DealRoomAccessLink,
+    DealRoomAuditEvent,
+    DealRoomRevision,
     DebriefSession,
     DebriefTurn,
     DocumentFragment,
@@ -194,7 +198,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 35
+EXPORT_VERSION = 36
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1250,6 +1254,10 @@ async def _delete_organisation_records(
         await session.execute(delete(EventAttendee).where(EventAttendee.organisation_id == organisation_id))
         await session.execute(delete(EventAttendeeImport).where(EventAttendeeImport.organisation_id == organisation_id))
         await session.execute(delete(SalesEvent).where(SalesEvent.organisation_id == organisation_id))
+        await session.execute(delete(DealRoomAuditEvent).where(DealRoomAuditEvent.organisation_id == organisation_id))
+        await session.execute(delete(DealRoomAccessLink).where(DealRoomAccessLink.organisation_id == organisation_id))
+        await session.execute(delete(DealRoomRevision).where(DealRoomRevision.organisation_id == organisation_id))
+        await session.execute(delete(DealRoom).where(DealRoom.organisation_id == organisation_id))
         await session.execute(
             delete(OpportunityAuditEvent).where(OpportunityAuditEvent.organisation_id == organisation_id)
         )
@@ -3258,6 +3266,22 @@ async def _export_payload(
     opportunities = await rows(
         select(Opportunity).where(Opportunity.organisation_id == organisation_id).order_by(Opportunity.id)
     )
+    deal_rooms = await rows(select(DealRoom).where(DealRoom.organisation_id == organisation_id).order_by(DealRoom.id))
+    deal_room_revisions = await rows(
+        select(DealRoomRevision)
+        .where(DealRoomRevision.organisation_id == organisation_id)
+        .order_by(DealRoomRevision.room_id, DealRoomRevision.revision)
+    )
+    deal_room_links = await rows(
+        select(DealRoomAccessLink)
+        .where(DealRoomAccessLink.organisation_id == organisation_id)
+        .order_by(DealRoomAccessLink.room_id, DealRoomAccessLink.created_at, DealRoomAccessLink.id)
+    )
+    deal_room_audits = await rows(
+        select(DealRoomAuditEvent)
+        .where(DealRoomAuditEvent.organisation_id == organisation_id)
+        .order_by(DealRoomAuditEvent.room_id, DealRoomAuditEvent.created_at, DealRoomAuditEvent.id)
+    )
     sales_pipelines = await rows(
         select(SalesPipeline).where(SalesPipeline.organisation_id == organisation_id).order_by(SalesPipeline.id)
     )
@@ -5058,6 +5082,67 @@ async def _export_payload(
             )
             for item in opportunities
         ],
+        "dealRooms": {
+            "rooms": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "opportunity_id",
+                        "created_by_user_id",
+                        "status",
+                        "draft_version",
+                        "draft_content_json",
+                        "published_revision_id",
+                        "lock_version",
+                        "last_published_at",
+                        "paused_at",
+                        "revoked_at",
+                        "created_at",
+                        "updated_at",
+                    ),
+                )
+                for item in deal_rooms
+            ],
+            "revisions": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "room_id",
+                        "revision",
+                        "snapshot_schema_version",
+                        "snapshot_json",
+                        "content_fingerprint",
+                        "published_by_user_id",
+                        "published_at",
+                    ),
+                )
+                for item in deal_room_revisions
+            ],
+            "links": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "room_id",
+                        "expires_at",
+                        "created_by_user_id",
+                        "revoked_by_user_id",
+                        "revoked_at",
+                        "created_at",
+                    ),
+                )
+                for item in deal_room_links
+            ],
+            "auditEvents": [
+                _columns(
+                    item,
+                    ("id", "room_id", "actor_user_id", "action", "metadata_json", "created_at"),
+                )
+                for item in deal_room_audits
+            ],
+        },
         "salesPipelines": [
             _columns(
                 item,

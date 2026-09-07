@@ -167,6 +167,7 @@ class Settings(BaseSettings):
         le=1_000,
     )
     private_beta_max_create_slides: int = Field(default=30, ge=1, le=30)
+    deal_room_public_requests_per_minute: int = Field(default=120, ge=10, le=1_000)
     private_beta_create_processing_retries: int = Field(default=3, ge=1, le=3)
     private_beta_max_email_analyses_per_day: int = Field(default=50, ge=1, le=2_000)
     private_beta_max_ask_questions_per_user_per_day: int = Field(default=75, ge=1, le=1_000)
