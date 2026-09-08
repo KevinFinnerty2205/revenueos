@@ -39,6 +39,10 @@ from revenueos.models import (
     BillingSubscription,
     CandidateEvidence,
     CaptureSession,
+    ClosedWonHandover,
+    ClosedWonHandoverAuditEvent,
+    ClosedWonHandoverRevision,
+    ClosedWonHandoverSource,
     CommercialStateEvent,
     Company,
     Contact,
@@ -450,6 +454,10 @@ def clean_business_entities() -> Iterator[None]:
         async with session_factory() as session:
             await session.execute(update(RecordingSession).values(transcript_version_id=None))
             for model in (
+                ClosedWonHandoverAuditEvent,
+                ClosedWonHandoverSource,
+                ClosedWonHandoverRevision,
+                ClosedWonHandover,
                 DealRoomAuditEvent,
                 DealRoomAccessLink,
                 DealRoomRevision,

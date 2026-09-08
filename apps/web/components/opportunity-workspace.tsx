@@ -34,6 +34,7 @@ import { OpportunityMethodology } from "@/components/opportunity-methodology";
 import { CRMRecordLink } from "@/components/crm-record-link";
 import { onOpportunityChanged } from "@/lib/opportunity-events";
 import { DealRoomEditor } from "@/components/deal-room-editor";
+import { ClosedWonHandover } from "@/components/closed-won-handover";
 
 export function OpportunityWorkspace({
   opportunityId,
@@ -370,6 +371,8 @@ export function OpportunityWorkspace({
       <CRMRecordLink opportunityId={opportunity.id} />
 
       <DealRoomEditor opportunityId={opportunity.id} />
+
+      <ClosedWonHandover opportunityId={opportunity.id} />
 
       <section
         id="forecast"

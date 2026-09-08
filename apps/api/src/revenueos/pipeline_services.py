@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -15,6 +16,9 @@ from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
+    ClosedWonHandover,
+    ClosedWonHandoverAuditEvent,
+    ClosedWonHandoverRevision,
     CRMRecordChange,
     IntegrationConnection,
     Opportunity,
@@ -459,10 +463,53 @@ class PipelineService:
         opportunity.outcome_note = None
         opportunity.outcome_provenance = None
         opportunity.updated_at = now
+        await self._retire_current_handover(opportunity.id, now, "opportunity_reopened")
         self._record_domain_changes(opportunity, old_values, "reopened")
         await self._commit("The opportunity could not be reopened.")
         self._log("opportunity_reopened", opportunity_id=opportunity.id, stage_id=target.id)
         return await self.opportunity_pipeline(opportunity.id)
+
+    async def _retire_current_handover(self, opportunity_id: UUID, now: datetime, reason: str) -> None:
+        handover = await self.repository.session.scalar(
+            select(ClosedWonHandover)
+            .where(
+                ClosedWonHandover.organisation_id == self.tenant.organisation_id,
+                ClosedWonHandover.opportunity_id == opportunity_id,
+            )
+            .with_for_update()
+        )
+        if handover is None:
+            return
+        revision = await self.repository.session.scalar(
+            select(ClosedWonHandoverRevision)
+            .where(
+                ClosedWonHandoverRevision.organisation_id == self.tenant.organisation_id,
+                ClosedWonHandoverRevision.handover_id == handover.id,
+                ClosedWonHandoverRevision.status == "approved",
+            )
+            .with_for_update()
+        )
+        if revision is None:
+            return
+        revision.status = "retired"
+        revision.retired_at = now
+        revision.retired_by_user_id = self.tenant.user_id
+        revision.retirement_reason = reason
+        revision.lock_version += 1
+        revision.updated_at = now
+        handover.lock_version += 1
+        handover.updated_at = now
+        self.repository.add(
+            ClosedWonHandoverAuditEvent(
+                id=uuid.uuid4(),
+                organisation_id=self.tenant.organisation_id,
+                handover_id=handover.id,
+                revision_id=revision.id,
+                actor_user_id=self.tenant.user_id,
+                action="retired",
+                metadata_json={"revision": revision.revision, "reason": reason},
+            )
+        )
 
     async def _close(
         self,

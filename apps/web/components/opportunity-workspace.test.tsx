@@ -18,6 +18,10 @@ vi.mock("@/components/deal-room-editor", () => ({
   DealRoomEditor: () => null,
 }));
 
+vi.mock("@/components/closed-won-handover", () => ({
+  ClosedWonHandover: () => null,
+}));
+
 function response(body: object, status = 200) {
   return new Response(JSON.stringify(body), {
     status,

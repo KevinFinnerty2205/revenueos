@@ -41,6 +41,10 @@ from revenueos.models import (
     BillingSubscription,
     CandidateEvidence,
     CaptureSession,
+    ClosedWonHandover,
+    ClosedWonHandoverAuditEvent,
+    ClosedWonHandoverRevision,
+    ClosedWonHandoverSource,
     CommercialPlanVersion,
     CommercialStateEvent,
     Company,
@@ -198,7 +202,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 36
+EXPORT_VERSION = 37
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -1254,6 +1258,16 @@ async def _delete_organisation_records(
         await session.execute(delete(EventAttendee).where(EventAttendee.organisation_id == organisation_id))
         await session.execute(delete(EventAttendeeImport).where(EventAttendeeImport.organisation_id == organisation_id))
         await session.execute(delete(SalesEvent).where(SalesEvent.organisation_id == organisation_id))
+        await session.execute(
+            delete(ClosedWonHandoverAuditEvent).where(ClosedWonHandoverAuditEvent.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ClosedWonHandoverSource).where(ClosedWonHandoverSource.organisation_id == organisation_id)
+        )
+        await session.execute(
+            delete(ClosedWonHandoverRevision).where(ClosedWonHandoverRevision.organisation_id == organisation_id)
+        )
+        await session.execute(delete(ClosedWonHandover).where(ClosedWonHandover.organisation_id == organisation_id))
         await session.execute(delete(DealRoomAuditEvent).where(DealRoomAuditEvent.organisation_id == organisation_id))
         await session.execute(delete(DealRoomAccessLink).where(DealRoomAccessLink.organisation_id == organisation_id))
         await session.execute(delete(DealRoomRevision).where(DealRoomRevision.organisation_id == organisation_id))
@@ -3266,6 +3280,30 @@ async def _export_payload(
     opportunities = await rows(
         select(Opportunity).where(Opportunity.organisation_id == organisation_id).order_by(Opportunity.id)
     )
+    closed_won_handovers = await rows(
+        select(ClosedWonHandover)
+        .where(ClosedWonHandover.organisation_id == organisation_id)
+        .order_by(ClosedWonHandover.id)
+    )
+    closed_won_handover_revisions = await rows(
+        select(ClosedWonHandoverRevision)
+        .where(ClosedWonHandoverRevision.organisation_id == organisation_id)
+        .order_by(ClosedWonHandoverRevision.handover_id, ClosedWonHandoverRevision.revision)
+    )
+    closed_won_handover_sources = await rows(
+        select(ClosedWonHandoverSource)
+        .where(ClosedWonHandoverSource.organisation_id == organisation_id)
+        .order_by(ClosedWonHandoverSource.revision_id, ClosedWonHandoverSource.source_type)
+    )
+    closed_won_handover_audits = await rows(
+        select(ClosedWonHandoverAuditEvent)
+        .where(ClosedWonHandoverAuditEvent.organisation_id == organisation_id)
+        .order_by(
+            ClosedWonHandoverAuditEvent.handover_id,
+            ClosedWonHandoverAuditEvent.created_at,
+            ClosedWonHandoverAuditEvent.id,
+        )
+    )
     deal_rooms = await rows(select(DealRoom).where(DealRoom.organisation_id == organisation_id).order_by(DealRoom.id))
     deal_room_revisions = await rows(
         select(DealRoomRevision)
@@ -5082,6 +5120,85 @@ async def _export_payload(
             )
             for item in opportunities
         ],
+        "closedWonHandovers": {
+            "handovers": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "opportunity_id",
+                        "created_by_user_id",
+                        "lock_version",
+                        "created_at",
+                        "updated_at",
+                    ),
+                )
+                for item in closed_won_handovers
+            ],
+            "revisions": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "handover_id",
+                        "opportunity_id",
+                        "revision",
+                        "status",
+                        "content_schema_version",
+                        "content_json",
+                        "source_pack_fingerprint",
+                        "lock_version",
+                        "created_by_user_id",
+                        "submitted_by_user_id",
+                        "submitted_at",
+                        "approved_by_user_id",
+                        "approved_at",
+                        "superseded_at",
+                        "retired_by_user_id",
+                        "retired_at",
+                        "retirement_reason",
+                        "created_at",
+                        "updated_at",
+                    ),
+                )
+                for item in closed_won_handover_revisions
+            ],
+            "sources": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "revision_id",
+                        "opportunity_id",
+                        "source_type",
+                        "source_id",
+                        "source_version_id",
+                        "source_version",
+                        "authority_type",
+                        "label",
+                        "snapshot_json",
+                        "source_fingerprint",
+                        "pinned_at",
+                    ),
+                )
+                for item in closed_won_handover_sources
+            ],
+            "auditEvents": [
+                _columns(
+                    item,
+                    (
+                        "id",
+                        "handover_id",
+                        "revision_id",
+                        "actor_user_id",
+                        "action",
+                        "metadata_json",
+                        "created_at",
+                    ),
+                )
+                for item in closed_won_handover_audits
+            ],
+        },
         "dealRooms": {
             "rooms": [
                 _columns(
