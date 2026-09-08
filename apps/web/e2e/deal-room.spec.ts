@@ -103,6 +103,12 @@ test("published Deal Room is customer-ready, keyboard usable and fits 390px", as
   await expect(
     page.getByRole("heading", { name: "Secure operations rollout" }),
   ).toBeVisible();
+  await expect(page).toHaveURL(/\/deal-room$/u);
+  await page.getByRole("link", { name: "Business case" }).click();
+  await expect(page).toHaveURL(/\/deal-room#business-case$/u);
+  await expect(
+    page.getByRole("heading", { name: "Secure operations rollout" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Next steps and timeline" }),
   ).toBeVisible();
@@ -143,6 +149,7 @@ test("invalid and revoked links share the safe unavailable experience", async ({
       name: "This Deal Room is no longer available.",
     }),
   ).toBeVisible();
+  await expect(page).toHaveURL(/\/deal-room$/u);
   await expect(
     page.getByText("invalid_but_never_reflected_token_value"),
   ).toHaveCount(0);

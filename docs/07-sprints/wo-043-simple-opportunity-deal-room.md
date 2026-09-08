@@ -2,7 +2,7 @@
 
 - **Branch:** `codex/wo-043-simple-opportunity-deal-room`
 - **Baseline:** `e5936c046423ab0a059b5d2c12a4812b4ab8db55`
-- **Status:** implemented; awaiting engineering review
+- **Status:** implemented; engineering review passed
 - **Migration:** `0059_opportunity_deal_room`
 - **Data/spend:** deterministic synthetic fixtures only; no customer data, external
   provider, new storage or spend (AUD $0)
@@ -72,6 +72,14 @@ Backend, shared-contract, component and Playwright coverage exercises the full
 lifecycle, security boundary, pinned revisions, malicious text, unavailable resources,
 mobile layout and accessible interaction. The complete repository gate, desktop/390px
 visual evidence and GitHub CI status are recorded in the draft PR and final handoff.
+
+Engineering review hardened the database projection to reconstruct only the public
+allow-list, bound revision pointers to their owning room, made revocation win concurrent
+publication races, restored the tenant context after commits, scoped rate limiting to a
+source-and-token pair, removed fragment tokens from browser history without breaking
+section navigation, and removed the public route from the Clerk browser/middleware
+surface. PostgreSQL tests now exercise the real non-bypass runtime role, forced RLS,
+function privileges, publication rollback and lifecycle concurrency.
 
 Visual QA evidence:
 

@@ -63,7 +63,127 @@ def _create_public_projection_functions() -> None:
         SECURITY DEFINER
         SET search_path = pg_catalog, public
         AS $$
-            SELECT revisions.snapshot_json,
+            SELECT jsonb_build_object(
+                       'schemaVersion', revisions.snapshot_json::jsonb -> 'schemaVersion',
+                       'revision', to_jsonb(revisions.revision),
+                       'publishedAt', to_jsonb(revisions.published_at),
+                       'sellerCompanyName', revisions.snapshot_json::jsonb -> 'sellerCompanyName',
+                       'customerCompanyName', revisions.snapshot_json::jsonb -> 'customerCompanyName',
+                       'opportunityName', revisions.snapshot_json::jsonb -> 'opportunityName',
+                       'overview', revisions.snapshot_json::jsonb -> 'overview',
+                       'businessCase',
+                       CASE
+                           WHEN jsonb_typeof(revisions.snapshot_json::jsonb -> 'businessCase') = 'object'
+                           THEN jsonb_build_object(
+                               'title', revisions.snapshot_json::jsonb #> '{businessCase,title}',
+                               'version', revisions.snapshot_json::jsonb #> '{businessCase,version}',
+                               'currency', revisions.snapshot_json::jsonb #> '{businessCase,currency}',
+                               'scenarios',
+                               COALESCE(
+                                   (
+                                       SELECT jsonb_agg(
+                                           jsonb_build_object(
+                                               'name', scenario.value -> 'name',
+                                               'outputs',
+                                               COALESCE(
+                                                   (
+                                                       SELECT jsonb_agg(
+                                                           jsonb_build_object(
+                                                               'label', output.value -> 'label',
+                                                               'value', output.value -> 'value',
+                                                               'unit', output.value -> 'unit'
+                                                           )
+                                                       )
+                                                       FROM jsonb_array_elements(
+                                                           COALESCE(
+                                                               scenario.value -> 'outputs',
+                                                               '[]'::jsonb
+                                                           )
+                                                       ) AS output(value)
+                                                   ),
+                                                   '[]'::jsonb
+                                               )
+                                           )
+                                       )
+                                       FROM jsonb_array_elements(
+                                           COALESCE(
+                                               revisions.snapshot_json::jsonb #> '{businessCase,scenarios}',
+                                               '[]'::jsonb
+                                           )
+                                       ) AS scenario(value)
+                                   ),
+                                   '[]'::jsonb
+                               )
+                           )
+                           ELSE 'null'::jsonb
+                       END,
+                       'commercialSummary', revisions.snapshot_json::jsonb -> 'commercialSummary',
+                       'stakeholders',
+                       COALESCE(
+                           (
+                               SELECT jsonb_agg(
+                                   jsonb_build_object(
+                                       'id', stakeholder.value -> 'id',
+                                       'name', stakeholder.value -> 'name',
+                                       'role', stakeholder.value -> 'role',
+                                       'company', stakeholder.value -> 'company',
+                                       'party', stakeholder.value -> 'party'
+                                   )
+                               )
+                               FROM jsonb_array_elements(
+                                   COALESCE(
+                                       revisions.snapshot_json::jsonb -> 'stakeholders',
+                                       '[]'::jsonb
+                                   )
+                               ) AS stakeholder(value)
+                           ),
+                           '[]'::jsonb
+                       ),
+                       'milestones',
+                       COALESCE(
+                           (
+                               SELECT jsonb_agg(
+                                   jsonb_build_object(
+                                       'id', milestone.value -> 'id',
+                                       'title', milestone.value -> 'title',
+                                       'ownerParty', milestone.value -> 'ownerParty',
+                                       'targetDate', milestone.value -> 'targetDate',
+                                       'status', milestone.value -> 'status',
+                                       'note', milestone.value -> 'note'
+                                   )
+                               )
+                               FROM jsonb_array_elements(
+                                   COALESCE(
+                                       revisions.snapshot_json::jsonb -> 'milestones',
+                                       '[]'::jsonb
+                                   )
+                               ) AS milestone(value)
+                           ),
+                           '[]'::jsonb
+                       ),
+                       'resources',
+                       COALESCE(
+                           (
+                               SELECT jsonb_agg(
+                                   jsonb_build_object(
+                                       'id', snapshot_resource.value -> 'id',
+                                       'kind', snapshot_resource.value -> 'kind',
+                                       'title', snapshot_resource.value -> 'title',
+                                       'url', snapshot_resource.value -> 'url',
+                                       'downloadAvailable', snapshot_resource.value -> 'downloadAvailable'
+                                   )
+                               )
+                               FROM jsonb_array_elements(
+                                   COALESCE(
+                                       revisions.snapshot_json::jsonb -> 'resources',
+                                       '[]'::jsonb
+                                   )
+                               ) AS snapshot_resource(value)
+                           ),
+                           '[]'::jsonb
+                       ),
+                       'nextMeetingAt', revisions.snapshot_json::jsonb -> 'nextMeetingAt'
+                   )::json,
                    revisions.revision,
                    revisions.published_at,
                    links.expires_at
@@ -73,6 +193,7 @@ def _create_public_projection_functions() -> None:
              AND rooms.id = links.room_id
             JOIN public.deal_room_revisions AS revisions
               ON revisions.organisation_id = rooms.organisation_id
+             AND revisions.room_id = rooms.id
              AND revisions.id = rooms.published_revision_id
             JOIN public.opportunities AS opportunities
               ON opportunities.organisation_id = rooms.organisation_id
@@ -117,6 +238,7 @@ def _create_public_projection_functions() -> None:
              AND rooms.id = links.room_id
             JOIN public.deal_room_revisions AS revisions
               ON revisions.organisation_id = rooms.organisation_id
+             AND revisions.room_id = rooms.id
              AND revisions.id = rooms.published_revision_id
             JOIN public.opportunities AS opportunities
               ON opportunities.organisation_id = rooms.organisation_id
@@ -154,13 +276,54 @@ def _create_public_projection_functions() -> None:
     op.execute("GRANT EXECUTE ON FUNCTION public.revenueos_public_deal_room_resource(text, text) TO PUBLIC")
 
 
+def _create_publication_pointer_guard() -> None:
+    if op.get_bind().dialect.name != "postgresql":
+        return
+    op.execute(
+        """
+        CREATE FUNCTION public.revenueos_deal_room_publication_pointer_guard()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        SET search_path = pg_catalog, public
+        AS $$
+        BEGIN
+            IF NEW.published_revision_id IS NOT NULL
+               AND (
+                   TG_OP = 'INSERT'
+                   OR NEW.published_revision_id IS DISTINCT FROM OLD.published_revision_id
+               ) THEN
+                PERFORM 1
+                  FROM public.deal_room_revisions AS revisions
+                 WHERE revisions.organisation_id = NEW.organisation_id
+                   AND revisions.room_id = NEW.id
+                   AND revisions.id = NEW.published_revision_id;
+                IF NOT FOUND THEN
+                    RAISE EXCEPTION 'Published Deal Room revision must belong to the same room';
+                END IF;
+            END IF;
+            RETURN NEW;
+        END;
+        $$
+        """
+    )
+    op.execute(
+        """CREATE TRIGGER deal_rooms_publication_pointer_guard
+        BEFORE INSERT OR UPDATE OF published_revision_id ON deal_rooms
+        FOR EACH ROW EXECUTE FUNCTION public.revenueos_deal_room_publication_pointer_guard()"""
+    )
+    op.execute("REVOKE ALL ON FUNCTION public.revenueos_deal_room_publication_pointer_guard() FROM PUBLIC")
+
+
 def _create_immutable_guard() -> None:
     if op.get_bind().dialect.name != "postgresql":
         return
     op.execute(
         """
         CREATE FUNCTION public.revenueos_deal_room_revision_immutable()
-        RETURNS trigger LANGUAGE plpgsql AS $$
+        RETURNS trigger
+        LANGUAGE plpgsql
+        SET search_path = pg_catalog, public
+        AS $$
         BEGIN
             IF TG_OP = 'DELETE'
                AND current_setting('app.beta_maintenance', true) = 'approved' THEN
@@ -176,6 +339,7 @@ def _create_immutable_guard() -> None:
         BEFORE UPDATE OR DELETE ON deal_room_revisions
         FOR EACH ROW EXECUTE FUNCTION public.revenueos_deal_room_revision_immutable()"""
     )
+    op.execute("REVOKE ALL ON FUNCTION public.revenueos_deal_room_revision_immutable() FROM PUBLIC")
 
 
 def _create_closed_opportunity_guard() -> None:
@@ -184,7 +348,10 @@ def _create_closed_opportunity_guard() -> None:
     op.execute(
         """
         CREATE FUNCTION public.revenueos_pause_closed_deal_room()
-        RETURNS trigger LANGUAGE plpgsql AS $$
+        RETURNS trigger
+        LANGUAGE plpgsql
+        SET search_path = pg_catalog, public
+        AS $$
         BEGIN
             IF (NEW.status IN ('won', 'lost') OR NEW.archived_at IS NOT NULL)
                AND (OLD.status IS DISTINCT FROM NEW.status OR OLD.archived_at IS DISTINCT FROM NEW.archived_at) THEN
@@ -205,6 +372,7 @@ def _create_closed_opportunity_guard() -> None:
         AFTER UPDATE OF status, archived_at ON opportunities
         FOR EACH ROW EXECUTE FUNCTION public.revenueos_pause_closed_deal_room()"""
     )
+    op.execute("REVOKE ALL ON FUNCTION public.revenueos_pause_closed_deal_room() FROM PUBLIC")
 
 
 def upgrade() -> None:
@@ -355,6 +523,7 @@ def upgrade() -> None:
 
     _enable_tenant_rls()
     _create_immutable_guard()
+    _create_publication_pointer_guard()
     _create_public_projection_functions()
     _create_closed_opportunity_guard()
 
@@ -367,6 +536,8 @@ def downgrade() -> None:
         op.execute("DROP FUNCTION IF EXISTS public.revenueos_public_deal_room_resource(text, text)")
         op.execute("DROP FUNCTION IF EXISTS public.revenueos_public_deal_room(text, timestamptz)")
         op.execute("DROP FUNCTION IF EXISTS public.revenueos_public_deal_room(text)")
+        op.execute("DROP TRIGGER IF EXISTS deal_rooms_publication_pointer_guard ON deal_rooms")
+        op.execute("DROP FUNCTION IF EXISTS public.revenueos_deal_room_publication_pointer_guard()")
         op.execute("DROP TRIGGER IF EXISTS deal_room_revisions_immutable ON deal_room_revisions")
         op.execute("DROP FUNCTION IF EXISTS public.revenueos_deal_room_revision_immutable()")
     op.drop_index("ix_deal_room_audit_org_room", table_name="deal_room_audit_events")

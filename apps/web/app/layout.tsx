@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
+import { ConditionalClerkProvider } from "@/components/conditional-clerk-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,5 +22,9 @@ export default function RootLayout({
         undefined &&
         process.env.NODE_ENV === "production")) &&
     Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
-  return clerkEnabled ? <ClerkProvider>{content}</ClerkProvider> : content;
+  return (
+    <ConditionalClerkProvider enabled={clerkEnabled}>
+      {content}
+    </ConditionalClerkProvider>
+  );
 }

@@ -62,7 +62,9 @@ Business Case formulas, raw inputs and non-customer-facing outputs are excluded.
 external response also omits internal case, version and presentation identifiers.
 Those exact source references stay inside the immutable server snapshot so publication
 and authorised export retain provenance and a presentation download can be checked
-against its pinned source.
+against its pinned source. The public database function independently rebuilds every
+root and nested object from the same positive allow-list; it does not return the raw
+server snapshot or rely on the web client to hide fields.
 
 ## Link and public database boundary
 
@@ -71,6 +73,10 @@ Only `SHA-256(token)` is persisted; the plaintext is returned once and cannot be
 recovered. The browser link uses `/deal-room#access=<token>`. URL fragments are not
 sent in the HTTP request or Referer. The buyer page exchanges the token in a no-store
 POST body. Request logging records method/path/status and never bodies.
+After capturing a valid-shaped fragment into page memory, the buyer page replaces the
+current history entry with `/deal-room`. Section navigation cannot clear or replace
+the captured authority, and neither the Clerk browser provider nor Clerk middleware
+runs for this public route.
 
 Internal routes derive the organisation from verified auth, require Create access and
 permit the Opportunity owner or an organisation administrator. Every repository query
@@ -84,16 +90,27 @@ link, published room and open/unarchived Opportunity. Expiry is evaluated agains
 database clock rather than caller-supplied time. PostgreSQL uses the hash index; the
 high-entropy token is never compared or stored in plaintext.
 
+Both functions use fixed SQL, fully qualified objects and
+`search_path = pg_catalog, public`. Execute is deliberately granted through PostgreSQL
+`PUBLIC` because the separately provisioned application-role name is deployment
+specific; this grants no table or schema-create authority, and the 256-bit bearer
+digest plus the function's exact projection remains the complete authority boundary.
+Trigger helpers revoke `PUBLIC` execution. A database trigger also rejects a
+published-revision pointer unless that immutable revision belongs to the same tenant
+and room, and both public functions repeat the room/revision join predicate.
+
 The resource endpoint rechecks the pinned presentation as approved, ready, available
 and not archived, then verifies byte count and SHA-256 checksum before returning the
 existing PPTX. It never exposes a storage key. External URLs are not fetched by the
 server and must be HTTPS with a hostname and without embedded credentials.
 
 Rotation revokes the old link before inserting the replacement in the same
-transaction. Optimistic draft/room versions and row locks make concurrent publish,
-revoke and rotation fail stale rather than overwrite another decision. Public reads
-resolve one current revision, so a page never combines sections from different
-publications.
+transaction. Optimistic draft/room versions and consistently ordered Opportunity/room
+row locks reject competing publishes. Revocation is intentionally safety-biased: once
+its row lock is acquired, an authorised confirmed revoke terminates the then-current
+link even if a competing publish advanced the submitted lock version. A publish that
+runs after revocation fails stale. Public reads resolve one current revision, so a
+page never combines sections from different publications.
 
 ## Browser privacy and abuse controls
 
@@ -104,8 +121,10 @@ middleware. The web route emits `X-Robots-Tag: noindex, nofollow, noarchive` and
 metadata; these are indexing controls, not access control.
 
 Public token lookup and resource download share a bounded per-process sliding-minute
-rate limiter. It retains only an ephemeral keyed digest of the client address and no
-IP, fingerprint, geolocation, third-party signal, view count or last-viewed record.
+rate limiter scoped to the client-address/bearer pair, so abuse against one room does
+not globally lock unrelated rooms behind the same proxy address. It retains only an
+ephemeral keyed digest of that pair and no plaintext IP or token, fingerprint,
+geolocation, third-party signal, view count or last-viewed record.
 Invalid, expired, paused, revoked, closed and unavailable-resource paths return the
 same safe customer message where applicable.
 
@@ -140,7 +159,9 @@ Deterministic API tests cover lifecycle, one-room uniqueness, stale publication,
 allow-list injection, token hashing, audit/export token absence, rotation, expiry,
 closed Opportunity access, unrelated-seller denial, approved source validation,
 revision pinning and deleted presentation handling. PostgreSQL coverage includes
-forced RLS, cross-tenant invisibility, immutable revisions and the bounded public
-functions. Component and Playwright tests cover text-safe rendering, unavailable UX,
-headings, links/download controls, keyboard focus, 390px overflow and noindex/
-no-referrer headers.
+forced RLS, non-bypass runtime-role responses, function ownership/execute/search-path
+metadata, nested projection stripping, pointer integrity, immutable revisions,
+concurrent create/publish, publish rollback, publish/revoke and publish/close races.
+Component and Playwright tests cover text-safe rendering, fragment scrubbing and
+section navigation, unavailable UX, headings, links/download controls, keyboard
+focus, 390px overflow and noindex/no-referrer headers.

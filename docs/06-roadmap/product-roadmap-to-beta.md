@@ -709,7 +709,7 @@ The authorised sequence after WO-050 remains:
 1. WO-040 — Microsoft 365 Sales Integration — **implemented; engineering review passed**
 2. WO-041 — Google Workspace Sales Integration — **implemented; awaiting engineering review**
 3. WO-042 — Production CRM Connectors — **implemented; engineering review passed**
-4. WO-043 — Simple Opportunity Deal Room — **implemented; awaiting engineering review**
+4. WO-043 — Simple Opportunity Deal Room — **implemented; engineering review passed**
 5. WO-044 — Reviewed Closed-Won Handover
 6. WO-051 — Oryntela Brand Identity
 7. WO-052 — Customer-Facing Oryntela Rebrand

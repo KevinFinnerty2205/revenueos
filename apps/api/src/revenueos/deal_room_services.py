@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.business_case_contracts import ScenarioCalculationResponse
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
+from revenueos.database import set_tenant_database_context
 from revenueos.deal_room_contracts import (
     DealRoomAdminResponse,
     DealRoomBusinessCaseOption,
@@ -69,15 +70,16 @@ def _safe_file_name(value: str) -> str:
 
 
 class PublicDealRoomRateLimiter:
-    """Small process-local brute-force guard with no retained plaintext address."""
+    """Process-local defence in depth without plaintext address or token retention."""
 
     def __init__(self) -> None:
         self._secret = secrets.token_bytes(32)
         self._requests: dict[str, deque[float]] = defaultdict(deque)
         self._lock = threading.Lock()
 
-    def check(self, client_address: str, limit: int) -> None:
-        key = hmac.digest(self._secret, client_address.encode("utf-8"), "sha256").hex()
+    def check(self, client_address: str, access_token: str, limit: int) -> None:
+        key_material = f"{client_address}\0{access_token}".encode()
+        key = hmac.digest(self._secret, key_material, "sha256").hex()
         current = monotonic()
         with self._lock:
             requests = self._requests[key]
@@ -286,9 +288,12 @@ class DealRoomService:
         await self._require_entitlement(write=True)
         opportunity, room = await self._locked(opportunity_id)
         self._require_authority(opportunity)
-        self._check_lock(room, request.expected_lock_version)
         if room.published_revision_id is None:
             raise PublicAPIError("deal_room_not_published", "Publish this Deal Room before revoking it.", 409)
+        # Revocation is deliberately safety-biased: a stale revoke still terminates
+        # whichever link is current after waiting for the publication row lock.
+        # A concurrent publish that runs second still fails its optimistic check.
+        stale_request = room.lock_version != request.expected_lock_version
         now = datetime.now(UTC)
         active_link = await self.repository.active_link(self.tenant.organisation_id, room.id)
         if active_link is not None:
@@ -298,7 +303,11 @@ class DealRoomService:
         room.revoked_at = now
         room.lock_version += 1
         room.updated_at = now
-        self._audit(room, "revoked", {"link_revoked": active_link is not None})
+        self._audit(
+            room,
+            "revoked",
+            {"link_revoked": active_link is not None, "stale_request_applied_for_safety": stale_request},
+        )
         await self._commit("The Deal Room could not be revoked.")
         return DealRoomMutationResponse(workspace=await self._workspace_response(opportunity, room))
 
@@ -672,6 +681,7 @@ class DealRoomService:
     async def _commit(self, safe_message: str) -> None:
         try:
             await self.session.commit()
+            await set_tenant_database_context(self.session, self.tenant.organisation_id)
         except (IntegrityError, SQLAlchemyError) as exc:
             await self.session.rollback()
             raise PublicAPIError("deal_room_persistence_failure", safe_message, 500) from exc

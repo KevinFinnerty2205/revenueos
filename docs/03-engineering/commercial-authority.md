@@ -77,6 +77,11 @@ connector access; Core calendar/task paths require Core. Connection creation/tes
 preview, confirmation, worker execution and reconciliation re-check the applicable
 module. Revocation remains available as a safety action.
 
+The WO-043 Opportunity Deal Room is part of the existing Create entitlement; it does
+not add a plan or Credit charge. Complete, Enterprise and the Complete trial therefore
+receive the same Deal Room access as their Create access, while current add-on rules
+continue to apply.
+
 A write-authorisation check takes a shared lock on the commercial-state row for the
 operation transaction. Plan changes take the conflicting update lock. This gives a
 concurrent downgrade and new module operation one deterministic order: work already

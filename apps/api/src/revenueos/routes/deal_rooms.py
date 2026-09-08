@@ -82,9 +82,9 @@ async def rotate_deal_room_link(
     return await service.rotate_link(opportunity_id, request)
 
 
-def _rate_limit(request: Request, settings: Settings) -> None:
+def _rate_limit(request: Request, access_token: str, settings: Settings) -> None:
     address = request.client.host if request.client is not None else "unknown"
-    public_rate_limiter.check(address, settings.deal_room_public_requests_per_minute)
+    public_rate_limiter.check(address, access_token, settings.deal_room_public_requests_per_minute)
 
 
 @public_router.post("/resolve", response_model=PublicDealRoomResolveResponse)
@@ -94,7 +94,7 @@ async def resolve_public_deal_room(
     service: PublicService,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> PublicDealRoomResolveResponse:
-    _rate_limit(request, settings)
+    _rate_limit(request, request_body.token, settings)
     return await service.resolve(request_body.token)
 
 
@@ -106,7 +106,7 @@ async def download_public_deal_room_resource(
     service: PublicService,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Response:
-    _rate_limit(request, settings)
+    _rate_limit(request, request_body.token, settings)
     content, file_name = await service.download(request_body.token, resource_id)
     return Response(
         content=content,

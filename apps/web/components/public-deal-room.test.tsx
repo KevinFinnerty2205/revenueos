@@ -101,6 +101,15 @@ describe("PublicDealRoom", () => {
         }),
       }),
     );
+    expect(window.location.pathname).toBe("/deal-room");
+    expect(window.location.hash).toBe("");
+
+    window.history.replaceState(null, "", "/deal-room#business-case");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(
+      screen.getByRole("heading", { name: "Secure rollout" }),
+    ).toBeVisible();
+    expect(mockedApiRequest).toHaveBeenCalledTimes(1);
   });
 
   it("uses the same safe unavailable state without reflecting an invalid token", async () => {

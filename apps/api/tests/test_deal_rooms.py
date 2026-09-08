@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from revenueos.auth import AuthenticatedUser, get_current_user
 from revenueos.beta_maintenance import EXPORT_VERSION, _export_payload
 from revenueos.commercial_services import CommercialService
+from revenueos.deal_room_services import PublicDealRoomRateLimiter
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
     CreatePresentationVersion,
@@ -28,7 +29,7 @@ from .conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, TEST_DB_URL
 from .test_business_api import create_company, create_contact, create_opportunity
 from .test_business_cases import _create_approved_model, _inputs
 from .test_create_studio import _review_and_approve, _run_worker, _upload
-from .test_meeting_api import cast_auth_dependency
+from .test_meeting_api import cast_auth_dependency, secondary_user
 
 
 def _draft_payload(room: dict[str, object], *, overview: str) -> dict[str, object]:
@@ -101,6 +102,17 @@ def _resolve(client: TestClient, token: str) -> object:
     return client.post("/api/v1/deal-rooms/public/resolve", json={"token": token})
 
 
+def test_public_rate_limit_is_scoped_to_source_and_bearer_authority() -> None:
+    limiter = PublicDealRoomRateLimiter()
+    for _ in range(2):
+        limiter.check("198.51.100.10", "room-a-token", 2)
+    with pytest.raises(PublicAPIError, match="Too many Deal Room requests"):
+        limiter.check("198.51.100.10", "room-a-token", 2)
+
+    limiter.check("198.51.100.10", "room-b-token", 2)
+    limiter.check("198.51.100.11", "room-a-token", 2)
+
+
 def test_deal_room_requires_the_existing_create_entitlement(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -140,7 +152,9 @@ def test_deal_room_requires_the_existing_create_entitlement(
 def test_deal_room_explicit_publication_snapshot_link_lifecycle_and_safe_projection(
     client: TestClient,
     app: FastAPI,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    caplog.set_level("INFO")
     company = create_company(client, name="Synthetic Customer")
     opportunity = create_opportunity(client, str(company["id"]), name="Synthetic secure rollout")
 
@@ -172,6 +186,20 @@ def test_deal_room_explicit_publication_snapshot_link_lifecycle_and_safe_project
         json=unsafe_url,
     )
     assert rejected_url.status_code == 422
+    for rejected_resource_url in (
+        "data:text/plain,secret",
+        "file:///etc/passwd",
+        "vbscript:msgbox(1)",
+        "https:///missing-host",
+        "https://buyer:secret@example.com/resource",
+    ):
+        unsafe_resource = _draft_payload(room, overview="Safe objective")
+        unsafe_resource["content"]["resources"][0]["externalUrl"] = rejected_resource_url  # type: ignore[index]
+        unsafe_response = client.put(
+            f"/api/v1/opportunities/{opportunity['id']}/deal-room/draft",
+            json=unsafe_resource,
+        )
+        assert unsafe_response.status_code == 422
 
     original_overview = "<script>alert('not executable')</script> Align the approved implementation objective."
     saved = client.put(
@@ -209,6 +237,12 @@ def test_deal_room_explicit_publication_snapshot_link_lifecycle_and_safe_project
         "nextMeetingAt",
     }
     assert projection["overview"] == original_overview
+    internal_opportunity_edit = client.patch(
+        f"/api/v1/opportunities/{opportunity['id']}",
+        json={"name": "Internal renamed opportunity"},
+    )
+    assert internal_opportunity_edit.status_code == 200, internal_opportunity_edit.text
+    assert _resolve(client, token).json()["room"]["opportunityName"] == "Synthetic secure rollout"
     invalid_token = "short-malformed-token"
     invalid = _resolve(client, invalid_token)
     assert invalid.status_code == 404
@@ -282,10 +316,43 @@ def test_deal_room_explicit_publication_snapshot_link_lifecycle_and_safe_project
 
     revoked = client.post(
         f"/api/v1/opportunities/{opportunity['id']}/deal-room/revoke",
-        json={"confirmed": True, "expectedLockVersion": room["lockVersion"]},
+        json={"confirmed": True, "expectedLockVersion": room["lockVersion"] - 1},
     )
     assert revoked.status_code == 200, revoked.text
     assert _resolve(client, rotated_token).status_code == 404
+
+    app.dependency_overrides[get_current_user] = cast_auth_dependency(secondary_user())
+    cross_tenant_requests = (
+        client.get(f"/api/v1/opportunities/{opportunity['id']}/deal-room"),
+        client.post(f"/api/v1/opportunities/{opportunity['id']}/deal-room"),
+        client.put(
+            f"/api/v1/opportunities/{opportunity['id']}/deal-room/draft",
+            json=_draft_payload(room, overview="Cross-tenant write must fail."),
+        ),
+        client.post(
+            f"/api/v1/opportunities/{opportunity['id']}/deal-room/publish",
+            json={
+                "expectedDraftVersion": room["draftVersion"],
+                "expectedLockVersion": room["lockVersion"],
+                "confirmed": True,
+            },
+        ),
+        client.post(
+            f"/api/v1/opportunities/{opportunity['id']}/deal-room/pause",
+            json={"expectedLockVersion": room["lockVersion"], "confirmed": True},
+        ),
+        client.post(
+            f"/api/v1/opportunities/{opportunity['id']}/deal-room/revoke",
+            json={"expectedLockVersion": room["lockVersion"], "confirmed": True},
+        ),
+        client.post(
+            f"/api/v1/opportunities/{opportunity['id']}/deal-room/rotate-link",
+            json={"expectedLockVersion": room["lockVersion"], "expiresAt": None},
+        ),
+    )
+    assert all(response.status_code == 404 for response in cross_tenant_requests)
+    assert all(response.json()["code"] == "opportunity_not_found" for response in cross_tenant_requests)
+    app.dependency_overrides.pop(get_current_user, None)
 
     async def assert_secrets_and_audits() -> None:
         engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
@@ -320,6 +387,8 @@ def test_deal_room_explicit_publication_snapshot_link_lifecycle_and_safe_project
             await engine.dispose()
 
     asyncio.run(assert_secrets_and_audits())
+    assert token not in caplog.text
+    assert rotated_token not in caplog.text
 
     peer_id = uuid.uuid4()
 
@@ -507,6 +576,28 @@ def test_deal_room_pins_approved_business_case_and_create_presentation_revision(
     assert approved_v2.status_code == 200, approved_v2.text
     assert approved_v2.json()["currentVersion"]["version"] == 2
     assert _resolve(client, token).json()["room"]["businessCase"]["version"] == 1
+
+    regenerated_presentation = client.post(
+        f"/api/v1/create/presentations/{presentation_id}/generate",
+        json={
+            "idempotencyKey": "deal-room-presentation-v2",
+            "explicitRegenerate": True,
+        },
+    )
+    assert regenerated_presentation.status_code == 200, regenerated_presentation.text
+    assert _run_worker(app)
+    approved_presentation_v2 = client.post(
+        f"/api/v1/create/presentations/{presentation_id}/approve",
+        json={"confirmed": True},
+    )
+    assert approved_presentation_v2.status_code == 200, approved_presentation_v2.text
+    assert approved_presentation_v2.json()["currentVersion"]["version"] == 2
+    assert approved_presentation_v2.json()["currentVersion"]["id"] != presentation_version["id"]
+    pinned_download = client.post(
+        f"/api/v1/deal-rooms/public/resources/{resource_id}/download",
+        json={"token": token},
+    )
+    assert pinned_download.status_code == 200, pinned_download.text
 
     room = published["workspace"]["room"]
     cross_asset = client.put(

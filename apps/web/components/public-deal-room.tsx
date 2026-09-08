@@ -41,10 +41,11 @@ export function PublicDealRoom() {
   useEffect(() => {
     let controller: AbortController | null = null;
     const resolveCurrentToken = () => {
+      const currentToken = accessToken();
+      if (!currentToken && token.current) return;
       controller?.abort();
       controller = new AbortController();
       const requestController = controller;
-      const currentToken = accessToken();
       token.current = currentToken;
       setResponse(null);
       setUnavailable(false);
@@ -54,6 +55,11 @@ export function PublicDealRoom() {
         setLoading(false);
         return;
       }
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${window.location.search}`,
+      );
       apiRequest<PublicDealRoomResolveResponse>(
         "/api/v1/deal-rooms/public/resolve",
         {

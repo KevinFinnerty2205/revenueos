@@ -285,6 +285,7 @@ class DealRoomRepository:
                     DealRoom,
                     and_(
                         DealRoom.organisation_id == DealRoomRevision.organisation_id,
+                        DealRoom.id == DealRoomRevision.room_id,
                         DealRoom.published_revision_id == DealRoomRevision.id,
                     ),
                 )

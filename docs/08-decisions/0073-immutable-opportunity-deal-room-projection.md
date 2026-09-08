@@ -32,8 +32,18 @@ are first-class.
 Keep forced tenant RLS on every table. Public access uses narrow PostgreSQL
 `SECURITY DEFINER` functions that can return only the current snapshot or one pinned
 presentation's storage metadata after all token, room and Opportunity lifecycle
-checks. Do not grant anonymous ordinary tenant-table access. The service validates the
-stored public schema again before responding.
+checks. The projection function reconstructs the exact nested public schema instead
+of returning the raw provenance-bearing snapshot. Both functions require the current
+revision to belong to the linked room, and a trigger enforces that publication-pointer
+invariant. Do not grant anonymous ordinary tenant-table access. The service validates
+the stored public schema again before responding.
+
+Capture the browser fragment into page memory and immediately scrub it from the
+current history entry. Keep the public route outside Clerk middleware/provider
+initialisation. Scope the non-persistent rate-limit digest to client address plus
+bearer authority so one caller cannot globally deny unrelated rooms. Treat confirmed
+revocation as safety-prioritised over a concurrent publish, even when its submitted
+optimistic version has just become stale.
 
 Assign entitlement to the existing Create module, including the existing Complete
 trial behaviour. Charge no Credits. Reuse current private Create storage and support

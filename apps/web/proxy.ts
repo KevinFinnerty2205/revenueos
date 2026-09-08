@@ -8,6 +8,12 @@ import {
 const handleClerkRequest = clerkMiddleware();
 
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
+  if (
+    request.nextUrl.pathname === "/deal-room" ||
+    request.nextUrl.pathname.startsWith("/deal-room/")
+  ) {
+    return NextResponse.next();
+  }
   const requestedMode =
     process.env.AUTH_MODE ?? process.env.NEXT_PUBLIC_AUTH_MODE;
   const clerkEnabled =
