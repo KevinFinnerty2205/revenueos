@@ -156,6 +156,21 @@ describe("ClosedWonHandover", () => {
     );
   });
 
+  it("requires explicit review confirmation before refreshing pinned sources", async () => {
+    mockedApiRequest.mockResolvedValueOnce(workspace());
+
+    render(<ClosedWonHandover opportunityId="opportunity-1" />);
+
+    const refresh = await screen.findByRole("button", {
+      name: "Refresh pinned sources",
+    });
+    expect(refresh).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /I reviewed the claims/i }),
+    );
+    expect(refresh).toBeEnabled();
+  });
+
   it("marks manual edits as reviewed draft work and submits with optimistic locks", async () => {
     const initial = workspace();
     const savedRevision = revision({

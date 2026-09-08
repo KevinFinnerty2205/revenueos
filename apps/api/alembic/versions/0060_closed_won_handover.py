@@ -354,9 +354,12 @@ def upgrade() -> None:
             name="ck_closed_won_handover_revisions_source_fingerprint",
         ),
         sa.CheckConstraint(
-            "(status = 'draft' AND submitted_at IS NULL AND approved_at IS NULL) OR "
-            "(status = 'in_review' AND submitted_at IS NOT NULL AND approved_at IS NULL) OR "
-            "(status IN ('approved', 'superseded', 'retired') AND submitted_at IS NOT NULL AND approved_at IS NOT NULL)",
+            "(status = 'draft' AND submitted_by_user_id IS NULL AND submitted_at IS NULL "
+            "AND approved_by_user_id IS NULL AND approved_at IS NULL) OR "
+            "(status = 'in_review' AND submitted_by_user_id IS NOT NULL AND submitted_at IS NOT NULL "
+            "AND approved_by_user_id IS NULL AND approved_at IS NULL) OR "
+            "(status IN ('approved', 'superseded', 'retired') AND submitted_by_user_id IS NOT NULL "
+            "AND submitted_at IS NOT NULL AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL)",
             name="ck_closed_won_handover_revisions_lifecycle",
         ),
         sa.CheckConstraint(
@@ -365,8 +368,10 @@ def upgrade() -> None:
             name="ck_closed_won_handover_revisions_superseded",
         ),
         sa.CheckConstraint(
-            "(status = 'retired' AND retired_at IS NOT NULL AND retirement_reason IS NOT NULL) OR "
-            "(status <> 'retired' AND retired_at IS NULL AND retirement_reason IS NULL)",
+            "(status = 'retired' AND retired_at IS NOT NULL AND ("
+            "(retirement_reason = 'authorised_user_retired' AND retired_by_user_id IS NOT NULL) OR "
+            "retirement_reason IN ('opportunity_reopened', 'opportunity_corrected_lost'))) OR "
+            "(status <> 'retired' AND retired_by_user_id IS NULL AND retired_at IS NULL AND retirement_reason IS NULL)",
             name="ck_closed_won_handover_revisions_retired",
         ),
         sa.ForeignKeyConstraint(["organisation_id"], ["organisations.id"], ondelete="CASCADE"),
@@ -444,6 +449,13 @@ def upgrade() -> None:
             "length(source_fingerprint) = 64 AND source_fingerprint = lower(source_fingerprint)",
             name="ck_closed_won_handover_sources_fingerprint",
         ),
+        sa.CheckConstraint(
+            "(source_type IN ('evidence', 'business_case', 'deal_room', 'action') "
+            "AND source_version_id IS NOT NULL AND source_version IS NOT NULL AND source_version > 0) OR "
+            "(source_type IN ('opportunity', 'contact', 'interaction', 'task') "
+            "AND source_version_id IS NULL AND source_version IS NULL)",
+            name="ck_closed_won_handover_sources_version",
+        ),
         sa.CheckConstraint("length(trim(label)) BETWEEN 1 AND 240", name="ck_closed_won_handover_sources_label"),
         sa.ForeignKeyConstraint(["organisation_id"], ["organisations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
@@ -471,6 +483,14 @@ def upgrade() -> None:
         "ix_closed_won_handover_sources_org_revision",
         "closed_won_handover_sources",
         ["organisation_id", "revision_id", "source_type"],
+    )
+    op.create_index(
+        "uq_closed_won_handover_sources_unversioned_reference",
+        "closed_won_handover_sources",
+        ["organisation_id", "revision_id", "source_type", "source_id"],
+        unique=True,
+        postgresql_where=sa.text("source_version_id IS NULL"),
+        sqlite_where=sa.text("source_version_id IS NULL"),
     )
 
     op.create_table(
@@ -528,6 +548,10 @@ def downgrade() -> None:
         op.execute("DROP FUNCTION IF EXISTS public.revenueos_closed_won_handover_approval_guard()")
     op.drop_index("ix_closed_won_handover_audit_org_handover", table_name="closed_won_handover_audit_events")
     op.drop_table("closed_won_handover_audit_events")
+    op.drop_index(
+        "uq_closed_won_handover_sources_unversioned_reference",
+        table_name="closed_won_handover_sources",
+    )
     op.drop_index("ix_closed_won_handover_sources_org_revision", table_name="closed_won_handover_sources")
     op.drop_table("closed_won_handover_sources")
     op.drop_index("uq_closed_won_handover_revisions_current_approved", table_name="closed_won_handover_revisions")

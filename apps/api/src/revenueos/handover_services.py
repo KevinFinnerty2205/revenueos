@@ -236,6 +236,8 @@ class HandoverService:
             raise PublicAPIError("handover_immutable", "Approved handover claims cannot be changed.", 409)
         content = HandoverContent.model_validate(revision.content_json)
         found = False
+        previous_authority: HandoverAuthorityType | None = None
+        previous_source_count = 0
         now = datetime.now(UTC)
         updated: dict[str, list[HandoverItem]] = {}
         for key in SECTION_KEYS:
@@ -243,6 +245,8 @@ class HandoverService:
             for item in getattr(content, key):
                 if item.id == request.item_id:
                     found = True
+                    previous_authority = item.authority_type
+                    previous_source_count = len(item.source_ids)
                     item = item.model_copy(
                         update={
                             "authority_type": HandoverAuthorityType.SELLER_CONFIRMED,
@@ -264,7 +268,16 @@ class HandoverService:
         handover.lock_version += 1
         handover.updated_at = now
         self._audit(
-            handover, revision, "claim_confirmed", {"revision": revision.revision, "item_id": str(request.item_id)}
+            handover,
+            revision,
+            "claim_confirmed",
+            {
+                "revision": revision.revision,
+                "item_id": str(request.item_id),
+                "previous_authority": previous_authority.value if previous_authority is not None else "unknown",
+                "reason": "explicit_seller_confirmation",
+                "source_count": previous_source_count,
+            },
         )
         await self._commit("The handover item could not be confirmed.")
         return await self._workspace_response(opportunity, handover)
@@ -291,7 +304,7 @@ class HandoverService:
         definitions = await self._source_definitions(opportunity)
         new_id_by_key = {definition.stable_key: definition.reference_id for definition in definitions}
         generated = self._initial_content(opportunity, definitions)
-        merged: dict[str, list[HandoverItem]] = {}
+        preserved_by_section: dict[HandoverSectionKey, list[HandoverItem]] = {}
         for section_key in SECTION_KEYS:
             preserved: list[HandoverItem] = []
             for item in getattr(existing_content, section_key):
@@ -308,8 +321,8 @@ class HandoverService:
                     if (new_id := new_id_by_key.get(stable_key)) is not None
                 ]
                 preserved.append(item.model_copy(update={"source_ids": refreshed_ids}))
-            merged[section_key] = [*getattr(generated, section_key), *preserved]
-        refreshed_content = HandoverContent(schema_version=1, **merged)
+            preserved_by_section[section_key] = preserved
+        refreshed_content = self._merge_refreshed_content(preserved_by_section, generated)
         await self.repository.delete_sources(self.tenant.organisation_id, revision.id)
         await self.session.flush()
         self._persist_sources(revision, definitions)
@@ -647,12 +660,7 @@ class HandoverService:
             content = evidence.content_json
             raw_label = content.get("sourceLabel")
             label = raw_label if isinstance(raw_label, str) and raw_label.strip() else "Reviewed customer Evidence"
-            has_customer_direct = False
-            raw_items = content.get("items")
-            if isinstance(raw_items, list):
-                has_customer_direct = any(
-                    isinstance(item, dict) and item.get("originClass") == "customer_direct" for item in raw_items
-                )
+            has_customer_direct = self._snapshot_has_customer_direct_evidence(content)
             append(
                 HandoverSourceType.EVIDENCE,
                 evidence.source_evidence_id,
@@ -850,6 +858,23 @@ class HandoverService:
         return HandoverContent(schema_version=1, **bounded)
 
     @staticmethod
+    def _merge_refreshed_content(
+        preserved: dict[HandoverSectionKey, list[HandoverItem]],
+        generated: HandoverContent,
+    ) -> HandoverContent:
+        merged = {key: list(preserved[key]) for key in SECTION_KEYS}
+        total = sum(len(items) for items in merged.values())
+        for item_index in range(max(SECTION_ITEM_LIMITS.values())):
+            for key in SECTION_KEYS:
+                if total == MAX_HANDOVER_ITEMS:
+                    return HandoverContent(schema_version=1, **merged)
+                generated_items = getattr(generated, key)
+                if item_index < len(generated_items) and len(merged[key]) < SECTION_ITEM_LIMITS[key]:
+                    merged[key].append(generated_items[item_index])
+                    total += 1
+        return HandoverContent(schema_version=1, **merged)
+
+    @staticmethod
     def _deal_room_items(sections: dict[HandoverSectionKey, list[HandoverItem]], definition: SourceDefinition) -> None:
         snapshot = definition.snapshot
         overview = snapshot.get("overview")
@@ -919,6 +944,17 @@ class HandoverService:
                         action_status="completed" if milestone.get("status") == "done" else "open",
                     )
                 )
+
+    @staticmethod
+    def _snapshot_has_customer_direct_evidence(snapshot: dict[str, object]) -> bool:
+        raw_items = snapshot.get("items")
+        return isinstance(raw_items, list) and any(
+            isinstance(item, dict)
+            and item.get("originClass") == "customer_direct"
+            and item.get("supportClass") in {"direct", "reported", "corroborated", "verified"}
+            and item.get("conflictState") not in {"conflicting", "superseded"}
+            for item in raw_items
+        )
 
     @staticmethod
     def _evidence_items(sections: dict[HandoverSectionKey, list[HandoverItem]], definition: SourceDefinition) -> None:
@@ -1019,18 +1055,23 @@ class HandoverService:
                     blockers.append(f"{key}: an item does not have an approved high-risk authority.")
                 if not set(item.source_ids).issubset(source_by_id):
                     blockers.append(f"{key}: an item references a source outside this handover revision.")
-                source_types = {
-                    source_by_id[source_id].source_type for source_id in item.source_ids if source_id in source_by_id
-                }
-                if item.authority_type == HandoverAuthorityType.CUSTOMER_EVIDENCE and "evidence" not in source_types:
+                cited_sources = [source_by_id[source_id] for source_id in item.source_ids if source_id in source_by_id]
+                if item.authority_type == HandoverAuthorityType.CUSTOMER_EVIDENCE and not any(
+                    source.source_type == "evidence"
+                    and source.authority_type == HandoverAuthorityType.CUSTOMER_EVIDENCE.value
+                    for source in cited_sources
+                ):
                     blockers.append(f"{key}: Customer Evidence authority requires a pinned Evidence source.")
-                if item.authority_type == HandoverAuthorityType.COMMERCIAL_RECORD and not source_types.intersection(
-                    {"opportunity", "business_case"}
+                if item.authority_type == HandoverAuthorityType.COMMERCIAL_RECORD and not any(
+                    source.source_type in {"opportunity", "business_case"}
+                    and source.authority_type == HandoverAuthorityType.COMMERCIAL_RECORD.value
+                    for source in cited_sources
                 ):
                     blockers.append(f"{key}: Commercial Record authority requires a canonical commercial source.")
-                if (
-                    item.authority_type == HandoverAuthorityType.CUSTOMER_FACING_APPROVED
-                    and "deal_room" not in source_types
+                if item.authority_type == HandoverAuthorityType.CUSTOMER_FACING_APPROVED and not any(
+                    source.source_type == "deal_room"
+                    and source.authority_type == HandoverAuthorityType.CUSTOMER_FACING_APPROVED.value
+                    for source in cited_sources
                 ):
                     blockers.append(f"{key}: customer-facing approved context requires a published Deal Room source.")
 

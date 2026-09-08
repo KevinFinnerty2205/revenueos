@@ -52,6 +52,11 @@ PostgreSQL triggers enforce immutability and the Closed-Won approval prerequisit
 addition to service checks. Aggregate and revision expected versions reject stale
 seller/reviewer writes. Ordered row locks plus the one-current index make competing
 edits, approvals, retirement and Opportunity-status changes fail safely.
+Lifecycle checks bind submitted/approved states to their human actor and timestamp,
+constrain retirement reasons and reject actorless manual retirement. Source checks
+require coherent positive version metadata for Evidence, Business Case, Deal Room and
+Action sources, no version metadata for canonical unversioned sources, and no
+duplicate unversioned source reference within a revision.
 
 ## Truth and authority model
 
@@ -60,15 +65,15 @@ revision's server-owned source pack. The client cannot name a source table or at
 an arbitrary identifier. Manual changes are recorded as `SELLER_CONFIRMED` with the
 authenticated actor and timestamp; they are never relabelled as Customer Evidence.
 
-| Authority | Meaning | Eligible in an approved handover |
-| --- | --- | --- |
-| `CUSTOMER_EVIDENCE` | A reviewed Evidence snapshot contains a customer-direct, adequately supported, non-conflicting statement. | Yes. It must cite a pinned Evidence snapshot. |
-| `SELLER_CONFIRMED` | An authorised seller or administrator explicitly authored or confirmed the statement. | Yes, with actor and timestamp. It remains seller testimony, not Customer Evidence. |
-| `COMMERCIAL_RECORD` | A canonical Opportunity value/close fact or exact approved Business Case revision. | Yes. It must cite the canonical commercial source. It does not turn a Deal Room into a contract. |
-| `CUSTOMER_FACING_APPROVED` | Context copied from an immutable published Deal Room revision. | Yes. It must cite that exact revision; publication is reviewed context, not legal-contract authority. |
-| `SYSTEM_DERIVED` | Deterministic formatting of bounded canonical data, such as a Contact label, Interaction reference or Task. | Yes outside high-risk claims when source-backed. It is not a customer statement. |
-| `INFERENCE` | A possible interpretation without approved factual authority. | No. It must be removed or explicitly seller-confirmed before approval. |
-| `UNKNOWN` | The fact is not established. | No. It must remain visibly unresolved, be removed, or be explicitly seller-confirmed before approval. |
+| Authority                  | Meaning                                                                                                     | Eligible in an approved handover                                                                      |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `CUSTOMER_EVIDENCE`        | A reviewed Evidence snapshot contains a customer-direct, adequately supported, non-conflicting statement.   | Yes. It must cite a pinned Evidence snapshot.                                                         |
+| `SELLER_CONFIRMED`         | An authorised seller or administrator explicitly authored or confirmed the statement.                       | Yes, with actor and timestamp. It remains seller testimony, not Customer Evidence.                    |
+| `COMMERCIAL_RECORD`        | A canonical Opportunity value/close fact or exact approved Business Case revision.                          | Yes. It must cite the canonical commercial source. It does not turn a Deal Room into a contract.      |
+| `CUSTOMER_FACING_APPROVED` | Context copied from an immutable published Deal Room revision.                                              | Yes. It must cite that exact revision; publication is reviewed context, not legal-contract authority. |
+| `SYSTEM_DERIVED`           | Deterministic formatting of bounded canonical data, such as a Contact label, Interaction reference or Task. | Yes outside high-risk claims when source-backed. It is not a customer statement.                      |
+| `INFERENCE`                | A possible interpretation without approved factual authority.                                               | No. It must be removed or explicitly seller-confirmed before approval.                                |
+| `UNKNOWN`                  | The fact is not established.                                                                                | No. It must remain visibly unresolved, be removed, or be explicitly seller-confirmed before approval. |
 
 Commercial scope, commitments and implementation expectations accept only Customer
 Evidence, seller confirmation, commercial records or approved customer-facing
@@ -80,6 +85,10 @@ Empty sections are valid. RevenueOS prefers an explicit empty/unknown state to g
 success metrics, manufactured objectives or invented implementation requirements.
 The UI exposes source and authority badges, approval blockers and a claim-confirmation
 control rather than hiding provenance in a metadata wall.
+Explicit confirmation preserves cited source references and records the previous
+authority, authenticated actor, time, fixed reason and source count in metadata-only
+history. It does not copy the claim text into the audit or elevate the claim beyond
+Seller Confirmed.
 
 ## Source pack and deterministic drafting
 

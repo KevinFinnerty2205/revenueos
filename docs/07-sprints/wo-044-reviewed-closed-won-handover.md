@@ -2,7 +2,7 @@
 
 - **Branch:** `codex/wo-044-reviewed-closed-won-handover`
 - **Baseline:** `bd9fda9bf76418ea2e8730cee76a49e9b7d29a44`
-- **Status:** implemented; awaiting engineering review
+- **Status:** implemented and engineering-reviewed in PR #80
 - **Migration:** `0060_closed_won_handover`
 - **Data/spend:** deterministic synthetic fixtures only; no customer data, external
   provider, new storage or spend (AUD $0)
@@ -50,7 +50,10 @@ immutable numbered revisions, pinned sources and metadata-only audits. Forced RL
 tenant/Opportunity composite foreign keys cover all four tables. Partial unique
 indexes permit at most one editable revision and one current approved revision.
 PostgreSQL independently blocks approval for a non-Won Opportunity and mutation of
-approved content/sources.
+approved content/sources. Lifecycle checks require the corresponding human actor for
+submission and approval, constrain retirement reasons, and require coherent positive
+version metadata for versioned sources. A partial unique index also rejects duplicate
+unversioned source references.
 
 Reopening, archiving or correcting the canonical Opportunity away from Won retires
 the current approved handover without deleting it. A new legitimate close requires a
@@ -65,11 +68,12 @@ user type.
 ## Verification
 
 API, migration and real PostgreSQL tests exercise eligibility, idempotent preparation,
-approval policy, unsupported promises, source tenancy/version staleness, RLS,
+approval policy, unsupported promises, deleted Evidence, source tenancy/version
+staleness, dense reviewed-draft refresh, RLS, malformed lifecycle/source states,
 immutability, concurrent approval, supersession, retirement and Opportunity
 correction. React and Playwright cover all six visible states, source warnings,
 approved/history reading, keyboard interaction and desktop/390 px layout. Full gate,
-visual evidence and CI results are recorded in the draft pull request and final owner
+visual evidence and CI results are recorded in the pull request and final owner
 handoff.
 
 See [Closed-Won Handover architecture](../03-engineering/closed-won-handover.md) and

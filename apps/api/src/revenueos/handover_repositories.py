@@ -24,6 +24,7 @@ from revenueos.models import (
     RevenueBrainSourceSnapshot,
     Task,
 )
+from revenueos.source_evidence_repositories import SourceEvidenceRepository
 
 
 class HandoverRepository:
@@ -227,24 +228,15 @@ class HandoverRepository:
         organisation_id: UUID,
         opportunity_id: UUID,
     ) -> list[RevenueBrainSourceSnapshot]:
-        candidates = list(
-            (
-                await self.session.scalars(
-                    select(RevenueBrainSourceSnapshot)
-                    .where(
-                        RevenueBrainSourceSnapshot.organisation_id == organisation_id,
-                        RevenueBrainSourceSnapshot.opportunity_id == opportunity_id,
-                        RevenueBrainSourceSnapshot.schema_version == 1,
-                    )
-                    .order_by(
-                        RevenueBrainSourceSnapshot.source_evidence_id,
-                        RevenueBrainSourceSnapshot.version.desc(),
-                    )
-                )
-            ).all()
+        candidates = await SourceEvidenceRepository(self.session).list_snapshots_for_opportunity(
+            organisation_id,
+            opportunity_id,
+            limit=100,
         )
         latest: dict[UUID, RevenueBrainSourceSnapshot] = {}
         for snapshot in candidates:
+            if snapshot.schema_version != 1:
+                continue
             latest.setdefault(snapshot.source_evidence_id, snapshot)
         return list(latest.values())[:20]
 

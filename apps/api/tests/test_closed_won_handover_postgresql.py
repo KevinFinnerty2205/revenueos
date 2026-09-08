@@ -120,6 +120,7 @@ def test_postgresql_handover_rls_source_versioning_guards_and_concurrency(
                     "deal_room_revisions",
                     "create_business_cases",
                     "create_business_case_versions",
+                    "evidence",
                     "revenue_brain_source_snapshots",
                     "interactions",
                     "action_proposals",
@@ -428,6 +429,29 @@ def test_postgresql_handover_rls_source_versioning_guards_and_concurrency(
                         await session.execute(statement)
                         await session.flush()
                     await savepoint.rollback()
+                for values in (
+                    {
+                        "status": "retired",
+                        "retired_by_user_id": admin_a_id,
+                        "retired_at": datetime.now(UTC),
+                        "retirement_reason": "invalid_reason",
+                    },
+                    {
+                        "status": "retired",
+                        "retired_by_user_id": None,
+                        "retired_at": datetime.now(UTC),
+                        "retirement_reason": "authorised_user_retired",
+                    },
+                ):
+                    savepoint = await session.begin_nested()
+                    with pytest.raises(DBAPIError):
+                        await session.execute(
+                            update(ClosedWonHandoverRevision)
+                            .where(ClosedWonHandoverRevision.id == revision_one_id)
+                            .values(**values)
+                        )
+                        await session.flush()
+                    await savepoint.rollback()
                 savepoint = await session.begin_nested()
                 with pytest.raises(DBAPIError):
                     await session.execute(
@@ -460,8 +484,58 @@ def test_postgresql_handover_rls_source_versioning_guards_and_concurrency(
             assert second_draft.active_revision is not None
             assert second_draft.active_revision.revision == 2
             source_to_move = second_draft.active_revision.sources[0]
+            versioned_source = next(
+                source for source in second_draft.active_revision.sources if source.source_type.value == "deal_room"
+            )
+            unversioned_source = next(
+                source for source in second_draft.active_revision.sources if source.source_type.value == "opportunity"
+            )
             session = await runtime_session(tenant_a)
             try:
+                savepoint = await session.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await session.execute(
+                        update(ClosedWonHandoverRevision)
+                        .where(ClosedWonHandoverRevision.id == second_draft.active_revision.id)
+                        .values(status="in_review", submitted_at=datetime.now(UTC))
+                    )
+                    await session.flush()
+                await savepoint.rollback()
+                savepoint = await session.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await session.execute(
+                        update(ClosedWonHandoverSource)
+                        .where(ClosedWonHandoverSource.id == versioned_source.id)
+                        .values(source_version_id=None, source_version=None)
+                    )
+                    await session.flush()
+                await savepoint.rollback()
+                savepoint = await session.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await session.execute(
+                        text(
+                            """
+                            INSERT INTO closed_won_handover_sources
+                                (id, organisation_id, revision_id, opportunity_id,
+                                 source_type, source_id, authority_type, label,
+                                 snapshot_json, source_fingerprint)
+                            VALUES
+                                (:id, :organisation_id, :revision_id, :opportunity_id,
+                                 'opportunity', :source_id, 'commercial_record',
+                                 'Duplicate unversioned source', '{}'::json, :fingerprint)
+                            """
+                        ),
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": organisation_a_id,
+                            "revision_id": second_draft.active_revision.id,
+                            "opportunity_id": opportunity_a_id,
+                            "source_id": unversioned_source.source_id,
+                            "fingerprint": "c" * 64,
+                        },
+                    )
+                    await session.flush()
+                await savepoint.rollback()
                 savepoint = await session.begin_nested()
                 with pytest.raises(DBAPIError):
                     await session.execute(

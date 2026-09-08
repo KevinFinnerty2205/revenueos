@@ -757,7 +757,7 @@ export function ClosedWonHandover({
               <button
                 className="secondary-button"
                 type="button"
-                disabled={busy || dirty}
+                disabled={busy || dirty || !confirmed}
                 onClick={() => void lifecycle("refresh-sources")}
               >
                 Refresh pinned sources

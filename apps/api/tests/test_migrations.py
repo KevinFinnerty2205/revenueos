@@ -474,6 +474,8 @@ def test_closed_won_handover_migration_guards_and_cycle(tmp_path: Path, monkeypa
             "uq_closed_won_handover_revisions_editable",
             "uq_closed_won_handover_revisions_current_approved",
         }.issubset(revision_indexes)
+        source_indexes = {row[1] for row in connection.execute("PRAGMA index_list(closed_won_handover_sources)")}
+        assert "uq_closed_won_handover_sources_unversioned_reference" in source_indexes
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0060_closed_won_handover",)
 
     command.downgrade(configuration, "0059_opportunity_deal_room")

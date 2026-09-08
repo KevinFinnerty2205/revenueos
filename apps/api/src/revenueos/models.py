@@ -3158,9 +3158,12 @@ class ClosedWonHandoverRevision(TimestampMixin, Base):
             name="ck_closed_won_handover_revisions_source_fingerprint",
         ),
         CheckConstraint(
-            "(status = 'draft' AND submitted_at IS NULL AND approved_at IS NULL) OR "
-            "(status = 'in_review' AND submitted_at IS NOT NULL AND approved_at IS NULL) OR "
-            "(status IN ('approved', 'superseded', 'retired') AND submitted_at IS NOT NULL AND approved_at IS NOT NULL)",
+            "(status = 'draft' AND submitted_by_user_id IS NULL AND submitted_at IS NULL "
+            "AND approved_by_user_id IS NULL AND approved_at IS NULL) OR "
+            "(status = 'in_review' AND submitted_by_user_id IS NOT NULL AND submitted_at IS NOT NULL "
+            "AND approved_by_user_id IS NULL AND approved_at IS NULL) OR "
+            "(status IN ('approved', 'superseded', 'retired') AND submitted_by_user_id IS NOT NULL "
+            "AND submitted_at IS NOT NULL AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL)",
             name="ck_closed_won_handover_revisions_lifecycle",
         ),
         CheckConstraint(
@@ -3169,8 +3172,10 @@ class ClosedWonHandoverRevision(TimestampMixin, Base):
             name="ck_closed_won_handover_revisions_superseded",
         ),
         CheckConstraint(
-            "(status = 'retired' AND retired_at IS NOT NULL AND retirement_reason IS NOT NULL) OR "
-            "(status <> 'retired' AND retired_at IS NULL AND retirement_reason IS NULL)",
+            "(status = 'retired' AND retired_at IS NOT NULL AND ("
+            "(retirement_reason = 'authorised_user_retired' AND retired_by_user_id IS NOT NULL) OR "
+            "retirement_reason IN ('opportunity_reopened', 'opportunity_corrected_lost'))) OR "
+            "(status <> 'retired' AND retired_by_user_id IS NULL AND retired_at IS NULL AND retirement_reason IS NULL)",
             name="ck_closed_won_handover_revisions_retired",
         ),
         ForeignKeyConstraint(
@@ -3281,6 +3286,13 @@ class ClosedWonHandoverSource(Base):
             "length(source_fingerprint) = 64 AND source_fingerprint = lower(source_fingerprint)",
             name="ck_closed_won_handover_sources_fingerprint",
         ),
+        CheckConstraint(
+            "(source_type IN ('evidence', 'business_case', 'deal_room', 'action') "
+            "AND source_version_id IS NOT NULL AND source_version IS NOT NULL AND source_version > 0) OR "
+            "(source_type IN ('opportunity', 'contact', 'interaction', 'task') "
+            "AND source_version_id IS NULL AND source_version IS NULL)",
+            name="ck_closed_won_handover_sources_version",
+        ),
         CheckConstraint("length(trim(label)) BETWEEN 1 AND 240", name="ck_closed_won_handover_sources_label"),
         ForeignKeyConstraint(
             ["organisation_id", "revision_id", "opportunity_id"],
@@ -3306,6 +3318,16 @@ class ClosedWonHandoverSource(Base):
             "organisation_id",
             "revision_id",
             "source_type",
+        ),
+        Index(
+            "uq_closed_won_handover_sources_unversioned_reference",
+            "organisation_id",
+            "revision_id",
+            "source_type",
+            "source_id",
+            unique=True,
+            postgresql_where=text("source_version_id IS NULL"),
+            sqlite_where=text("source_version_id IS NULL"),
         ),
     )
 

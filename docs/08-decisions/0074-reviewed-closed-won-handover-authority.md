@@ -44,6 +44,11 @@ Use forced PostgreSQL RLS and composite tenant/Opportunity foreign keys on every
 table. Keep audits metadata-only and export the document/provenance through the
 existing organisation export/deletion framework.
 
+Require lifecycle actor/timestamp coherence and source-version coherence at the
+database boundary. Explicit seller confirmation records its previous authority and a
+fixed confirmation reason in safe audit metadata while preserving its source
+references; it never rewrites the claim as customer or commercial authority.
+
 Run the automatic Opportunity-correction retirement as a trigger-only
 `SECURITY DEFINER` function with a locked search path, revoked public execution and
 tenant/Opportunity predicates derived only from the trusted trigger row. This lets a
