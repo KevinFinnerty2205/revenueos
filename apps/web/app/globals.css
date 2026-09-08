@@ -30,6 +30,24 @@ body {
   }
 }
 
+@media print {
+  .deal-room-public {
+    background: white !important;
+  }
+
+  .deal-room-public header,
+  .deal-room-public nav,
+  .deal-room-public footer,
+  .deal-room-public button {
+    display: none !important;
+  }
+
+  .deal-room-public section {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+}
+
 @layer components {
   .primary-button {
     @apply inline-flex min-h-11 items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60;

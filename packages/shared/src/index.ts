@@ -159,6 +159,145 @@ export interface BillingSuccessStatus {
   message: string;
 }
 
+export type DealRoomStatus = "draft" | "published" | "paused" | "revoked";
+export type DealRoomOwnerParty = "our_team" | "customer" | "joint";
+export type DealRoomMilestoneStatus =
+  "not_started" | "in_progress" | "done" | "blocked";
+
+export interface DealRoomStakeholderDraft {
+  id: string;
+  name: string;
+  role: string;
+  company: string;
+  party: "seller" | "customer";
+  sourceContactId: string | null;
+}
+
+export interface DealRoomMilestoneDraft {
+  id: string;
+  title: string;
+  ownerParty: DealRoomOwnerParty;
+  targetDate: string | null;
+  status: DealRoomMilestoneStatus;
+  note: string | null;
+}
+
+export interface DealRoomResourceDraft {
+  id: string;
+  kind: "external_link" | "presentation";
+  title: string;
+  externalUrl: string | null;
+  presentationVersionId: string | null;
+}
+
+export interface DealRoomDraftContent {
+  overview: string | null;
+  commercialSummary: string | null;
+  businessCaseVersionId: string | null;
+  stakeholders: DealRoomStakeholderDraft[];
+  milestones: DealRoomMilestoneDraft[];
+  resources: DealRoomResourceDraft[];
+  nextMeetingAt: string | null;
+}
+
+export interface DealRoomWorkspace {
+  room: {
+    id: string;
+    opportunityId: string;
+    status: DealRoomStatus;
+    effectiveAccess: "available" | "unavailable";
+    draftVersion: number;
+    lockVersion: number;
+    draft: DealRoomDraftContent;
+    publishedRevisionId: string | null;
+    publishedRevision: number | null;
+    lastPublishedAt: string | null;
+    link: {
+      active: boolean;
+      expiresAt: string | null;
+      createdAt: string | null;
+    };
+    revisions: Array<{
+      id: string;
+      revision: number;
+      publishedAt: string;
+      publishedByUserId: string;
+      contentFingerprint: string;
+    }>;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  businessCases: Array<{
+    caseId: string;
+    versionId: string;
+    title: string;
+    version: number;
+    approvedAt: string;
+  }>;
+  presentations: Array<{
+    presentationId: string;
+    versionId: string;
+    title: string;
+    version: number;
+    approvedAt: string;
+  }>;
+  entitlement: "create";
+  creditsRequired: false;
+}
+
+export interface DealRoomMutation {
+  workspace: DealRoomWorkspace;
+  shareToken: string | null;
+}
+
+export interface PublicDealRoomProjection {
+  schemaVersion: 1;
+  revision: number;
+  publishedAt: string;
+  sellerCompanyName: string;
+  customerCompanyName: string | null;
+  opportunityName: string;
+  overview: string | null;
+  businessCase: {
+    title: string;
+    version: number;
+    currency: string;
+    scenarios: Array<{
+      name: string;
+      outputs: Array<{ label: string; value: string; unit: string }>;
+    }>;
+  } | null;
+  commercialSummary: string | null;
+  stakeholders: Array<{
+    id: string;
+    name: string;
+    role: string;
+    company: string;
+    party: "seller" | "customer";
+  }>;
+  milestones: Array<{
+    id: string;
+    title: string;
+    ownerParty: DealRoomOwnerParty;
+    targetDate: string | null;
+    status: DealRoomMilestoneStatus;
+    note: string | null;
+  }>;
+  resources: Array<{
+    id: string;
+    kind: "external_link" | "presentation";
+    title: string;
+    url: string | null;
+    downloadAvailable: boolean;
+  }>;
+  nextMeetingAt: string | null;
+}
+
+export interface PublicDealRoomResolveResponse {
+  room: PublicDealRoomProjection;
+  expiresAt: string | null;
+}
+
 export type CreditLedgerEventType =
   | "purchase"
   | "promotional_grant"

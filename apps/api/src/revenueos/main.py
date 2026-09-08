@@ -37,6 +37,7 @@ from revenueos.routes import (
     credits,
     crm,
     daily,
+    deal_rooms,
     events,
     evidence,
     health,
@@ -160,6 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
     app.include_router(health.router)
+    app.include_router(deal_rooms.public_router)
     app.include_router(me.router)
     app.include_router(beta.router)
     app.include_router(billing.router)
@@ -172,6 +174,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(daily.router, dependencies=commercial_access)
     app.include_router(evidence.router, dependencies=commercial_access)
     app.include_router(opportunities.router, dependencies=commercial_access)
+    app.include_router(deal_rooms.router, dependencies=commercial_access)
     app.include_router(pipelines.router, dependencies=commercial_access)
     app.include_router(prospect.router, dependencies=commercial_access)
     app.include_router(sales_insights.router, dependencies=commercial_access)

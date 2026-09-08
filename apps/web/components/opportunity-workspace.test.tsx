@@ -14,6 +14,10 @@ import type {
 } from "@revenueos/shared";
 import { OpportunityWorkspace } from "@/components/opportunity-workspace";
 
+vi.mock("@/components/deal-room-editor", () => ({
+  DealRoomEditor: () => null,
+}));
+
 function response(body: object, status = 200) {
   return new Response(JSON.stringify(body), {
     status,

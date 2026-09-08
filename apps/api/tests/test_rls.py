@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import uuid
 from datetime import UTC, datetime
@@ -269,6 +270,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "contacts",
         "opportunities",
         "opportunity_audit_events",
+        "deal_rooms",
+        "deal_room_revisions",
+        "deal_room_access_links",
+        "deal_room_audit_events",
         "sales_pipelines",
         "sales_pipeline_stages",
         "opportunity_stage_events",
@@ -648,6 +653,11 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                 "crm_sync_receipt_id": uuid.uuid4(),
                 "crm_conflict_id": uuid.uuid4(),
                 "crm_writeback_preview_id": uuid.uuid4(),
+                "deal_room_id": uuid.uuid4(),
+                "deal_room_revision_id": uuid.uuid4(),
+                "deal_room_link_id": uuid.uuid4(),
+                "deal_room_audit_id": uuid.uuid4(),
+                "deal_room_resource_id": uuid.uuid4(),
             }
         )
 
@@ -1300,6 +1310,149 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                             "opportunity_name": f"RLS Opportunity {suffix}",
                             "value": Decimal("1000.00"),
                         },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO deal_rooms
+                                (id, organisation_id, opportunity_id,
+                                 created_by_user_id, status, draft_content_json)
+                            VALUES
+                                (:deal_room_id, :organisation_id,
+                                 :opportunity_id, :user_id, 'draft', '{}'::json)
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO deal_room_revisions
+                                (id, organisation_id, room_id, revision,
+                                 snapshot_schema_version, snapshot_json,
+                                 content_fingerprint, published_by_user_id,
+                                 published_at)
+                            VALUES
+                                (:deal_room_revision_id, :organisation_id,
+                                 :deal_room_id, 1, 1,
+                                 CAST(:deal_room_snapshot AS json),
+                                 :deal_room_fingerprint, :user_id, now())
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "deal_room_fingerprint": "a" * 64,
+                            "deal_room_snapshot": json.dumps(
+                                {
+                                    "schemaVersion": 1,
+                                    "revision": 1,
+                                    "publishedAt": "2026-09-08T00:00:00Z",
+                                    "sellerCompanyName": f"RLS Organisation {suffix}",
+                                    "customerCompanyName": f"RLS Company {suffix}",
+                                    "opportunityName": f"RLS Opportunity {suffix}",
+                                    "overview": "Synthetic published overview.",
+                                    "businessCase": {
+                                        "title": "Approved synthetic case",
+                                        "caseId": str(tenant["create_business_case_id"]),
+                                        "versionId": str(tenant["create_business_case_version_id"]),
+                                        "version": 1,
+                                        "currency": "AUD",
+                                        "scenarios": [
+                                            {
+                                                "name": "Base",
+                                                "outputs": [
+                                                    {
+                                                        "label": "ROI",
+                                                        "value": "42.0",
+                                                        "unit": "%",
+                                                        "internalFormula": "must-not-leak",
+                                                    }
+                                                ],
+                                                "internalScenario": "must-not-leak",
+                                            }
+                                        ],
+                                        "internalCase": "must-not-leak",
+                                    },
+                                    "commercialSummary": "Approved synthetic scope.",
+                                    "stakeholders": [
+                                        {
+                                            "id": str(uuid.uuid4()),
+                                            "name": "Synthetic buyer",
+                                            "role": "Director",
+                                            "company": f"RLS Company {suffix}",
+                                            "party": "customer",
+                                            "sourceContactId": str(tenant["contact_id"]),
+                                        }
+                                    ],
+                                    "milestones": [
+                                        {
+                                            "id": str(uuid.uuid4()),
+                                            "title": "Synthetic review",
+                                            "ownerParty": "joint",
+                                            "targetDate": "2026-09-20",
+                                            "status": "not_started",
+                                            "note": None,
+                                            "internalActionId": str(uuid.uuid4()),
+                                        }
+                                    ],
+                                    "resources": [
+                                        {
+                                            "id": str(tenant["deal_room_resource_id"]),
+                                            "kind": "presentation",
+                                            "title": "Approved synthetic presentation",
+                                            "url": None,
+                                            "downloadAvailable": True,
+                                            "presentationVersionId": str(tenant["create_presentation_version_id"]),
+                                            "storageKey": "must-not-leak",
+                                        }
+                                    ],
+                                    "nextMeetingAt": None,
+                                    "forecastProbability": 0.99,
+                                }
+                            ),
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO deal_room_access_links
+                                (id, organisation_id, room_id, token_hash,
+                                 created_by_user_id)
+                            VALUES
+                                (:deal_room_link_id, :organisation_id,
+                                 :deal_room_id, :deal_room_token_hash, :user_id)
+                            """
+                        ),
+                        {
+                            **identity_parameters,
+                            "deal_room_token_hash": ("a" if suffix == "A" else "b") * 64,
+                        },
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE deal_rooms
+                            SET status = 'published',
+                                published_revision_id = :deal_room_revision_id,
+                                last_published_at = now()
+                            WHERE organisation_id = :organisation_id
+                              AND id = :deal_room_id
+                            """
+                        ),
+                        identity_parameters,
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO deal_room_audit_events
+                                (id, organisation_id, room_id, actor_user_id,
+                                 action, metadata_json)
+                            VALUES
+                                (:deal_room_audit_id, :organisation_id,
+                                 :deal_room_id, :user_id, 'created', '{}'::json)
+                            """
+                        ),
+                        identity_parameters,
                     )
                     await connection.execute(
                         text(
@@ -3576,6 +3729,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'contacts',
                                     'opportunities',
                                     'opportunity_audit_events',
+                                    'deal_rooms',
+                                    'deal_room_revisions',
+                                    'deal_room_access_links',
+                                    'deal_room_audit_events',
                                     'sales_pipelines',
                                     'sales_pipeline_stages',
                                     'opportunity_stage_events',
@@ -3745,10 +3902,182 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
             async with engine.connect() as connection:
                 transaction = await connection.begin()
                 await connection.exec_driver_sql(f'SET LOCAL ROLE "{role_name}"')
+                direct_room_count = await connection.scalar(text("SELECT count(*) FROM deal_rooms"))
+                assert direct_room_count == 0
+                function_rows = (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT procedures.proname,
+                                   procedures.prosecdef,
+                                   procedures.proconfig,
+                                   owners.rolname AS owner_name,
+                                   has_function_privilege(
+                                       current_user, procedures.oid, 'EXECUTE'
+                                   ) AS can_execute
+                            FROM pg_proc AS procedures
+                            JOIN pg_roles AS owners
+                              ON owners.oid = procedures.proowner
+                            WHERE procedures.oid IN (
+                                'public.revenueos_public_deal_room(text)'::regprocedure,
+                                'public.revenueos_public_deal_room_resource(text,text)'::regprocedure
+                            )
+                            ORDER BY procedures.proname
+                            """
+                        )
+                    )
+                ).all()
+                assert len(function_rows) == 2
+                assert all(row.prosecdef for row in function_rows)
+                assert all(row.proconfig == ["search_path=pg_catalog, public"] for row in function_rows)
+                assert all(row.owner_name != role_name for row in function_rows)
+                assert all(row.can_execute for row in function_rows)
+                assert not await connection.scalar(
+                    text("SELECT has_schema_privilege(current_user, 'public', 'CREATE')")
+                )
+                trigger_function_execute = await connection.scalar(
+                    text(
+                        """
+                        SELECT has_function_privilege(
+                            current_user,
+                            'public.revenueos_deal_room_publication_pointer_guard()'::regprocedure,
+                            'EXECUTE'
+                        )
+                        """
+                    )
+                )
+                assert trigger_function_execute is False
+                publication_trigger_events = await connection.execute(
+                    text(
+                        """
+                        SELECT triggers.tgtype & 4 <> 0 AS on_insert,
+                               triggers.tgtype & 16 <> 0 AS on_update
+                        FROM pg_trigger AS triggers
+                        WHERE triggers.tgrelid = 'public.deal_rooms'::regclass
+                          AND triggers.tgname = 'deal_rooms_publication_pointer_guard'
+                        """
+                    )
+                )
+                publication_trigger = publication_trigger_events.one()
+                assert publication_trigger.on_insert is True
+                assert publication_trigger.on_update is True
+                public_snapshot = await connection.scalar(
+                    text("SELECT snapshot_json FROM public.revenueos_public_deal_room(:token_hash)"),
+                    {"token_hash": "a" * 64},
+                )
+                assert set(public_snapshot) == {
+                    "schemaVersion",
+                    "revision",
+                    "publishedAt",
+                    "sellerCompanyName",
+                    "customerCompanyName",
+                    "opportunityName",
+                    "overview",
+                    "businessCase",
+                    "commercialSummary",
+                    "stakeholders",
+                    "milestones",
+                    "resources",
+                    "nextMeetingAt",
+                }
+                assert set(public_snapshot["businessCase"]) == {
+                    "title",
+                    "version",
+                    "currency",
+                    "scenarios",
+                }
+                assert set(public_snapshot["businessCase"]["scenarios"][0]) == {"name", "outputs"}
+                assert set(public_snapshot["businessCase"]["scenarios"][0]["outputs"][0]) == {
+                    "label",
+                    "value",
+                    "unit",
+                }
+                assert set(public_snapshot["stakeholders"][0]) == {"id", "name", "role", "company", "party"}
+                assert set(public_snapshot["milestones"][0]) == {
+                    "id",
+                    "title",
+                    "ownerParty",
+                    "targetDate",
+                    "status",
+                    "note",
+                }
+                assert set(public_snapshot["resources"][0]) == {
+                    "id",
+                    "kind",
+                    "title",
+                    "url",
+                    "downloadAvailable",
+                }
+                assert "must-not-leak" not in json.dumps(public_snapshot)
+                missing_public_snapshot = await connection.scalar(
+                    text("SELECT snapshot_json FROM public.revenueos_public_deal_room(:token_hash)"),
+                    {"token_hash": "f" * 64},
+                )
+                assert missing_public_snapshot is None
                 await connection.execute(
                     text("SELECT set_config('app.organisation_id', :organisation_id, true)"),
                     {"organisation_id": str(tenant_a["organisation_id"])},
                 )
+                await connection.execute(
+                    text(
+                        """
+                        UPDATE create_presentation_versions
+                           SET state = 'ready', review_state = 'approved',
+                               storage_status = 'available',
+                               pptx_storage_key = :storage_key,
+                               checksum_sha256 = :checksum,
+                               byte_size = 1,
+                               approved_by_user_id = :user_id,
+                               approved_at = now()
+                         WHERE organisation_id = :organisation_id
+                           AND id = :version_id
+                        """
+                    ),
+                    {
+                        "storage_key": f"create/{tenant_a['organisation_id']}/synthetic.pptx",
+                        "checksum": "c" * 64,
+                        "user_id": tenant_a["user_id"],
+                        "organisation_id": tenant_a["organisation_id"],
+                        "version_id": tenant_a["create_presentation_version_id"],
+                    },
+                )
+                public_resource = (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT storage_key, checksum_sha256, byte_size, resource_title
+                            FROM public.revenueos_public_deal_room_resource(
+                                :token_hash, :resource_id
+                            )
+                            """
+                        ),
+                        {
+                            "token_hash": "a" * 64,
+                            "resource_id": str(tenant_a["deal_room_resource_id"]),
+                        },
+                    )
+                ).first()
+                assert public_resource is not None
+                assert public_resource.checksum_sha256 == "c" * 64
+                assert public_resource.byte_size == 1
+                assert public_resource.resource_title == "Approved synthetic presentation"
+                cross_tenant_resource = (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT storage_key
+                            FROM public.revenueos_public_deal_room_resource(
+                                :token_hash, :resource_id
+                            )
+                            """
+                        ),
+                        {
+                            "token_hash": "a" * 64,
+                            "resource_id": str(tenant_b["deal_room_resource_id"]),
+                        },
+                    )
+                ).first()
+                assert cross_tenant_resource is None
                 tenant_a_counts = {
                     table: await connection.scalar(text(f"SELECT count(*) FROM {table}")) for table in tenant_tables
                 }
@@ -3888,6 +4217,102 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     {"id": tenant_b["sales_event_id"]},
                 )
                 assert event_update.rowcount == 0
+                deal_room_update = await connection.execute(
+                    text("UPDATE deal_rooms SET updated_at = now() WHERE id = :id"),
+                    {"id": tenant_b["deal_room_id"]},
+                )
+                assert deal_room_update.rowcount == 0
+                immutable_deal_room_revision = await connection.begin_nested()
+                with pytest.raises(DBAPIError, match="Deal Room revisions are immutable"):
+                    await connection.execute(
+                        text("UPDATE deal_room_revisions SET snapshot_json = '{}'::json WHERE id = :id"),
+                        {"id": tenant_a["deal_room_revision_id"]},
+                    )
+                await immutable_deal_room_revision.rollback()
+                pointer_fixture = await connection.begin_nested()
+                other_opportunity_id = uuid.uuid4()
+                other_room_id = uuid.uuid4()
+                other_revision_id = uuid.uuid4()
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO opportunities
+                            (id, organisation_id, company_id, name, stage, status,
+                             estimated_value, currency, owner_user_id,
+                             pipeline_id, pipeline_stage_id, stage_entered_at,
+                             stage_tracking_started_at)
+                        VALUES
+                            (:opportunity_id, :organisation_id, :company_id,
+                             'Second RLS Opportunity', 'discovery', 'open',
+                             1000.00, 'AUD', :user_id, :pipeline_id,
+                             :pipeline_stage_id, now(), now())
+                        """
+                    ),
+                    {
+                        "opportunity_id": other_opportunity_id,
+                        "organisation_id": tenant_a["organisation_id"],
+                        "company_id": tenant_a["company_id"],
+                        "user_id": tenant_a["user_id"],
+                        "pipeline_id": tenant_a["sales_pipeline_id"],
+                        "pipeline_stage_id": tenant_a["sales_pipeline_stage_id"],
+                    },
+                )
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO deal_rooms
+                            (id, organisation_id, opportunity_id,
+                             created_by_user_id, status, draft_content_json)
+                        VALUES
+                            (:room_id, :organisation_id, :opportunity_id,
+                             :user_id, 'draft', '{}'::json)
+                        """
+                    ),
+                    {
+                        "room_id": other_room_id,
+                        "organisation_id": tenant_a["organisation_id"],
+                        "opportunity_id": other_opportunity_id,
+                        "user_id": tenant_a["user_id"],
+                    },
+                )
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO deal_room_revisions
+                            (id, organisation_id, room_id, revision,
+                             snapshot_schema_version, snapshot_json,
+                             content_fingerprint, published_by_user_id,
+                             published_at)
+                        VALUES
+                            (:revision_id, :organisation_id, :room_id, 1, 1,
+                             '{}'::json, :fingerprint, :user_id, now())
+                        """
+                    ),
+                    {
+                        "revision_id": other_revision_id,
+                        "organisation_id": tenant_a["organisation_id"],
+                        "room_id": other_room_id,
+                        "fingerprint": "d" * 64,
+                        "user_id": tenant_a["user_id"],
+                    },
+                )
+                mismatched_pointer = await connection.begin_nested()
+                with pytest.raises(DBAPIError, match="must belong to the same room"):
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE deal_rooms
+                               SET published_revision_id = :revision_id
+                             WHERE id = :room_id
+                            """
+                        ),
+                        {
+                            "revision_id": other_revision_id,
+                            "room_id": tenant_a["deal_room_id"],
+                        },
+                    )
+                await mismatched_pointer.rollback()
+                await pointer_fixture.rollback()
                 event_delete = await connection.execute(
                     text("DELETE FROM event_attendees WHERE id = :id"),
                     {"id": tenant_b["event_attendee_id"]},
@@ -4482,6 +4907,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     },
                 )
                 for table in (
+                    "deal_room_audit_events",
+                    "deal_room_access_links",
+                    "deal_room_revisions",
+                    "deal_rooms",
                     "sales_forecast_reviewer_revisions",
                     "sales_forecast_reviewer_judgments",
                     "sales_forecast_judgment_revisions",

@@ -113,4 +113,5 @@ Synthetic visual evidence:
 See [production CRM connector architecture](../03-engineering/production-crm-connectors.md),
 [authority matrix](../03-engineering/crm-authority-matrix.md) and
 [ADR 0072](../08-decisions/0072-provider-neutral-production-crm-connectors.md).
-WO-043 is not started. WO-055 remains recorded and not implemented.
+WO-043 is implemented in its separate work-order record. WO-055 remains recorded and
+not implemented.

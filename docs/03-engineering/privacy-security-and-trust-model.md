@@ -319,6 +319,16 @@ suppression, quotas and execution-time checks constrain abuse. Production mailbo
 sending and tracking remain unavailable. See the
 [Engage outreach security review](personalised-outreach-security-review.md).
 
+## Current public Deal Room trust boundary
+
+WO-043 is the first unauthenticated buyer surface. It publishes only an immutable,
+seller-reviewed positive allow-list behind a 256-bit bearer token whose plaintext is
+never persisted. Forced RLS remains unchanged; bounded fixed-SQL `SECURITY DEFINER`
+functions validate digest, expiry, room, revision, Opportunity and presentation
+authority. The standalone route scrubs its fragment token from history, does not
+initialise the identity provider, sends no referrer, stores no view analytics and permits no
+buyer write. See [Opportunity Deal Room architecture](opportunity-deal-room.md).
+
 ## WO-023 extension
 
 The [End-to-End Sales Platform security and privacy review](end-to-end-sales-platform-security-privacy.md)
