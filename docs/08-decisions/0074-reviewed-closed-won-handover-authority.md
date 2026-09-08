@@ -44,6 +44,13 @@ Use forced PostgreSQL RLS and composite tenant/Opportunity foreign keys on every
 table. Keep audits metadata-only and export the document/provenance through the
 existing organisation export/deletion framework.
 
+Run the automatic Opportunity-correction retirement as a trigger-only
+`SECURITY DEFINER` function with a locked search path, revoked public execution and
+tenant/Opportunity predicates derived only from the trusted trigger row. This lets a
+least-privilege runtime role update the canonical Opportunity without receiving
+unrelated handover-table grants; callers cannot supply an organisation or handover
+identifier to the function.
+
 Use deterministic drafting for V1. Do not invoke the existing AI provider merely
 because AI could draft: the conservative allow-list already creates useful context
 without API spend, prompt construction or another authority-escalation path.

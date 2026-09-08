@@ -7,6 +7,9 @@ Draft and review revisions remain editable under optimistic locks. Approved
 content and its pinned source pack are immutable; only supersession or safe
 retirement may change the lifecycle state. PostgreSQL RLS is forced for every
 tenant table and canonical Opportunity status remains the approval authority.
+The Opportunity correction trigger is a locked-search-path SECURITY DEFINER
+function so restricted runtime roles do not need cross-domain handover grants;
+its only scope is the trusted tenant and Opportunity keys from the trigger row.
 """
 
 from collections.abc import Sequence
@@ -220,6 +223,7 @@ def _create_opportunity_correction_guard() -> None:
         CREATE FUNCTION public.revenueos_retire_invalid_closed_won_handover()
         RETURNS trigger
         LANGUAGE plpgsql
+        SECURITY DEFINER
         SET search_path = pg_catalog, public
         AS $$
         BEGIN
