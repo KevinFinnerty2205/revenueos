@@ -44,6 +44,7 @@ from revenueos.domain import (
     CampaignStepState,
     CaptureSessionStatus,
     CaptureSessionType,
+    ClosedWonHandoverStatus,
     CompanyStatus,
     ConnectionStatus,
     ConnectorKey,
@@ -60,6 +61,7 @@ from revenueos.domain import (
     EvidenceType,
     EvidenceValidationState,
     ExecutionStatus,
+    HandoverAuthorityType,
     InteractionCreationOrigin,
     InteractionLifecycleStatus,
     InteractionType,
@@ -3103,6 +3105,292 @@ class DealRoomAuditEvent(Base):
     )
     room_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ClosedWonHandover(TimestampMixin, Base):
+    __tablename__ = "closed_won_handovers"
+    __table_args__ = (
+        CheckConstraint("lock_version > 0", name="ck_closed_won_handovers_lock_version"),
+        ForeignKeyConstraint(
+            ["organisation_id", "opportunity_id"],
+            ["opportunities.organisation_id", "opportunities.id"],
+            name="fk_closed_won_handovers_opportunity",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_closed_won_handovers_creator",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_closed_won_handovers_org_id"),
+        UniqueConstraint("organisation_id", "id", "opportunity_id", name="uq_closed_won_handovers_org_id_opportunity"),
+        UniqueConstraint("organisation_id", "opportunity_id", name="uq_closed_won_handovers_org_opportunity"),
+        Index("ix_closed_won_handovers_org_opportunity", "organisation_id", "opportunity_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+
+class ClosedWonHandoverRevision(TimestampMixin, Base):
+    __tablename__ = "closed_won_handover_revisions"
+    __table_args__ = (
+        CheckConstraint("revision > 0", name="ck_closed_won_handover_revisions_number"),
+        CheckConstraint(
+            "status IN ('draft', 'in_review', 'approved', 'superseded', 'retired')",
+            name="ck_closed_won_handover_revisions_status",
+        ),
+        CheckConstraint("content_schema_version = 1", name="ck_closed_won_handover_revisions_schema"),
+        CheckConstraint("lock_version > 0", name="ck_closed_won_handover_revisions_lock_version"),
+        CheckConstraint(
+            "length(source_pack_fingerprint) = 64 AND source_pack_fingerprint = lower(source_pack_fingerprint)",
+            name="ck_closed_won_handover_revisions_source_fingerprint",
+        ),
+        CheckConstraint(
+            "(status = 'draft' AND submitted_by_user_id IS NULL AND submitted_at IS NULL "
+            "AND approved_by_user_id IS NULL AND approved_at IS NULL) OR "
+            "(status = 'in_review' AND submitted_by_user_id IS NOT NULL AND submitted_at IS NOT NULL "
+            "AND approved_by_user_id IS NULL AND approved_at IS NULL) OR "
+            "(status IN ('approved', 'superseded', 'retired') AND submitted_by_user_id IS NOT NULL "
+            "AND submitted_at IS NOT NULL AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL)",
+            name="ck_closed_won_handover_revisions_lifecycle",
+        ),
+        CheckConstraint(
+            "(status = 'superseded' AND superseded_at IS NOT NULL) OR "
+            "(status <> 'superseded' AND superseded_at IS NULL)",
+            name="ck_closed_won_handover_revisions_superseded",
+        ),
+        CheckConstraint(
+            "(status = 'retired' AND retired_at IS NOT NULL AND ("
+            "(retirement_reason = 'authorised_user_retired' AND retired_by_user_id IS NOT NULL) OR "
+            "retirement_reason IN ('opportunity_reopened', 'opportunity_corrected_lost'))) OR "
+            "(status <> 'retired' AND retired_by_user_id IS NULL AND retired_at IS NULL AND retirement_reason IS NULL)",
+            name="ck_closed_won_handover_revisions_retired",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "handover_id", "opportunity_id"],
+            [
+                "closed_won_handovers.organisation_id",
+                "closed_won_handovers.id",
+                "closed_won_handovers.opportunity_id",
+            ],
+            name="fk_closed_won_handover_revisions_handover",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "created_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_closed_won_handover_revisions_creator",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "submitted_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_closed_won_handover_revisions_submitter",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "approved_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_closed_won_handover_revisions_approver",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "retired_by_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_closed_won_handover_revisions_retirer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_closed_won_handover_revisions_org_id"),
+        UniqueConstraint(
+            "organisation_id", "id", "opportunity_id", name="uq_closed_won_handover_revisions_org_id_opportunity"
+        ),
+        UniqueConstraint("organisation_id", "handover_id", "revision", name="uq_closed_won_handover_revisions_number"),
+        Index(
+            "ix_closed_won_handover_revisions_org_handover",
+            "organisation_id",
+            "handover_id",
+            "revision",
+        ),
+        Index(
+            "uq_closed_won_handover_revisions_editable",
+            "organisation_id",
+            "handover_id",
+            unique=True,
+            postgresql_where=text("status IN ('draft', 'in_review')"),
+            sqlite_where=text("status IN ('draft', 'in_review')"),
+        ),
+        Index(
+            "uq_closed_won_handover_revisions_current_approved",
+            "organisation_id",
+            "handover_id",
+            unique=True,
+            postgresql_where=text("status = 'approved'"),
+            sqlite_where=text("status = 'approved'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    handover_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=ClosedWonHandoverStatus.DRAFT.value,
+        server_default=ClosedWonHandoverStatus.DRAFT.value,
+    )
+    content_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    content_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    source_pack_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    submitted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retired_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retirement_reason: Mapped[str | None] = mapped_column(String(64))
+
+
+class ClosedWonHandoverSource(Base):
+    __tablename__ = "closed_won_handover_sources"
+    __table_args__ = (
+        CheckConstraint(
+            "source_type IN ('opportunity', 'evidence', 'business_case', 'deal_room', "
+            "'contact', 'interaction', 'action', 'task')",
+            name="ck_closed_won_handover_sources_type",
+        ),
+        CheckConstraint(
+            "authority_type IN ('customer_evidence', 'seller_confirmed', 'commercial_record', "
+            "'customer_facing_approved', 'system_derived', 'inference', 'unknown')",
+            name="ck_closed_won_handover_sources_authority",
+        ),
+        CheckConstraint(
+            "length(source_fingerprint) = 64 AND source_fingerprint = lower(source_fingerprint)",
+            name="ck_closed_won_handover_sources_fingerprint",
+        ),
+        CheckConstraint(
+            "(source_type IN ('evidence', 'business_case', 'deal_room', 'action') "
+            "AND source_version_id IS NOT NULL AND source_version IS NOT NULL AND source_version > 0) OR "
+            "(source_type IN ('opportunity', 'contact', 'interaction', 'task') "
+            "AND source_version_id IS NULL AND source_version IS NULL)",
+            name="ck_closed_won_handover_sources_version",
+        ),
+        CheckConstraint("length(trim(label)) BETWEEN 1 AND 240", name="ck_closed_won_handover_sources_label"),
+        ForeignKeyConstraint(
+            ["organisation_id", "revision_id", "opportunity_id"],
+            [
+                "closed_won_handover_revisions.organisation_id",
+                "closed_won_handover_revisions.id",
+                "closed_won_handover_revisions.opportunity_id",
+            ],
+            name="fk_closed_won_handover_sources_revision",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_closed_won_handover_sources_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "revision_id",
+            "source_type",
+            "source_id",
+            "source_version_id",
+            name="uq_closed_won_handover_sources_reference",
+        ),
+        Index(
+            "ix_closed_won_handover_sources_org_revision",
+            "organisation_id",
+            "revision_id",
+            "source_type",
+        ),
+        Index(
+            "uq_closed_won_handover_sources_unversioned_reference",
+            "organisation_id",
+            "revision_id",
+            "source_type",
+            "source_id",
+            unique=True,
+            postgresql_where=text("source_version_id IS NULL"),
+            sqlite_where=text("source_version_id IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    revision_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_version_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    source_version: Mapped[int | None] = mapped_column(Integer)
+    authority_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=HandoverAuthorityType.SYSTEM_DERIVED.value
+    )
+    label: Mapped[str] = mapped_column(String(240), nullable=False)
+    snapshot_json: Mapped[dict[str, object]] = mapped_column(JSON(none_as_null=True), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    pinned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ClosedWonHandoverAuditEvent(Base):
+    __tablename__ = "closed_won_handover_audit_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('draft_created', 'draft_updated', 'submitted_for_review', 'claim_confirmed', "
+            "'approved', 'superseded', 'retired')",
+            name="ck_closed_won_handover_audit_action",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "handover_id"],
+            ["closed_won_handovers.organisation_id", "closed_won_handovers.id"],
+            name="fk_closed_won_handover_audit_handover",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "revision_id"],
+            ["closed_won_handover_revisions.organisation_id", "closed_won_handover_revisions.id"],
+            name="fk_closed_won_handover_audit_revision",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "actor_user_id"],
+            ["organisation_memberships.organisation_id", "organisation_memberships.user_id"],
+            name="fk_closed_won_handover_audit_actor",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_closed_won_handover_audit_org_handover",
+            "organisation_id",
+            "handover_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False
+    )
+    handover_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    revision_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     action: Mapped[str] = mapped_column(String(40), nullable=False)
     metadata_json: Mapped[dict[str, object]] = mapped_column(
         JSON(none_as_null=True), nullable=False, default=dict, server_default="{}"

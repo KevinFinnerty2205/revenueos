@@ -56,11 +56,12 @@ acknowledgement, e-signature, payments, tracking, AI drafting and automatic emai
 Engage sharing are deferred. Seller copy-link is the complete V1 sharing flow.
 
 Closed Won and Closed Lost both make the room unavailable and pause a currently
-published room. This is not a Closed-Won handover; WO-044 is not implemented.
+published room. This remains distinct from the internal WO-044 Closed-Won Handover,
+which may cite the immutable published revision without re-enabling the buyer link.
 
 ## Data lifecycle
 
-Organisation export version 36 includes Deal Room configuration, immutable snapshots,
+Organisation export version 37 includes Deal Room configuration, immutable snapshots,
 source fingerprints, link lifecycle metadata and audit events, but no plaintext or
 hashed token. Approved organisation deletion removes links/revisions/rooms and makes
 all prior links unusable. Existing retention and Opportunity soft-archive policies

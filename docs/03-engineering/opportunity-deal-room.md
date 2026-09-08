@@ -33,7 +33,8 @@ revoked room may be deliberately published again, which issues a new link.
 
 Closing Won, closing Lost or archiving the Opportunity makes public resolution fail.
 PostgreSQL also pauses a currently published room in the same database transaction.
-There is no indefinite Closed-Won handover: WO-044 remains separate and unimplemented.
+Closed-Won handover remains a separate internal boundary; WO-044 now references the
+immutable published revision without re-enabling buyer access.
 
 ## Publication allow-list
 
@@ -145,7 +146,7 @@ The seller copies the one-time link and chooses how to share it.
 
 ## Export, deletion and retention
 
-Organisation export version 36 contains Deal Room draft configuration, immutable
+Organisation export version 37 contains Deal Room draft configuration, immutable
 published snapshots and fingerprints, link lifecycle metadata and audit metadata. It
 contains neither plaintext tokens nor token hashes. Approved organisation deletion
 removes audits, links, revisions and rooms before Opportunity records; links stop

@@ -40,6 +40,7 @@ from revenueos.routes import (
     deal_rooms,
     events,
     evidence,
+    handovers,
     health,
     integrations,
     interactions,
@@ -175,6 +176,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(evidence.router, dependencies=commercial_access)
     app.include_router(opportunities.router, dependencies=commercial_access)
     app.include_router(deal_rooms.router, dependencies=commercial_access)
+    app.include_router(handovers.router, dependencies=commercial_access)
     app.include_router(pipelines.router, dependencies=commercial_access)
     app.include_router(prospect.router, dependencies=commercial_access)
     app.include_router(sales_insights.router, dependencies=commercial_access)

@@ -298,6 +298,124 @@ export interface PublicDealRoomResolveResponse {
   expiresAt: string | null;
 }
 
+export type ClosedWonHandoverStatus =
+  | "draft"
+  | "in_review"
+  | "approved"
+  | "superseded"
+  | "retired";
+export type HandoverAuthorityType =
+  | "customer_evidence"
+  | "seller_confirmed"
+  | "commercial_record"
+  | "customer_facing_approved"
+  | "system_derived"
+  | "inference"
+  | "unknown";
+export type HandoverSourceType =
+  | "opportunity"
+  | "evidence"
+  | "business_case"
+  | "deal_room"
+  | "contact"
+  | "interaction"
+  | "action"
+  | "task";
+export type HandoverSectionKey =
+  | "executiveSummary"
+  | "customerObjectives"
+  | "whyTheyBought"
+  | "commercialScope"
+  | "keyStakeholders"
+  | "commitments"
+  | "successCriteria"
+  | "implementationExpectations"
+  | "risks"
+  | "openItems"
+  | "timeline"
+  | "nextActions";
+
+export interface HandoverItem {
+  id: string;
+  text: string;
+  authorityType: HandoverAuthorityType;
+  sourceIds: string[];
+  confirmedByUserId: string | null;
+  confirmedAt: string | null;
+  owner: string | null;
+  dueDate: string | null;
+  actionStatus: "open" | "in_progress" | "completed" | "cancelled" | null;
+  riskKind: "observed_risk" | "seller_concern" | "system_inference" | null;
+}
+
+export interface HandoverContent {
+  schemaVersion: 1;
+  executiveSummary: HandoverItem[];
+  customerObjectives: HandoverItem[];
+  whyTheyBought: HandoverItem[];
+  commercialScope: HandoverItem[];
+  keyStakeholders: HandoverItem[];
+  commitments: HandoverItem[];
+  successCriteria: HandoverItem[];
+  implementationExpectations: HandoverItem[];
+  risks: HandoverItem[];
+  openItems: HandoverItem[];
+  timeline: HandoverItem[];
+  nextActions: HandoverItem[];
+}
+
+export interface HandoverSource {
+  id: string;
+  sourceType: HandoverSourceType;
+  sourceId: string;
+  sourceVersionId: string | null;
+  sourceVersion: number | null;
+  authorityType: HandoverAuthorityType;
+  label: string;
+  sourceFingerprint: string;
+  pinnedAt: string;
+}
+
+export interface HandoverRevisionSummary {
+  id: string;
+  revision: number;
+  status: ClosedWonHandoverStatus;
+  createdByUserId: string;
+  submittedAt: string | null;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  supersededAt: string | null;
+  retiredAt: string | null;
+  retirementReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HandoverRevision extends HandoverRevisionSummary {
+  handoverId: string;
+  opportunityId: string;
+  contentSchemaVersion: 1;
+  content: HandoverContent;
+  sources: HandoverSource[];
+  lockVersion: number;
+  approvalBlockers: string[];
+}
+
+export interface HandoverWorkspace {
+  handoverId: string | null;
+  opportunityId: string;
+  opportunityStatus: "open" | "won" | "lost" | "on_hold";
+  handoverLockVersion: number | null;
+  activeRevision: HandoverRevision | null;
+  currentApprovedRevision: HandoverRevisionSummary | null;
+  history: HandoverRevisionSummary[];
+  canManage: boolean;
+  canApprove: boolean;
+  entitlement: "create";
+  creditsRequired: false;
+  aiDrafting: "not_used";
+}
+
 export type CreditLedgerEventType =
   | "purchase"
   | "promotional_grant"

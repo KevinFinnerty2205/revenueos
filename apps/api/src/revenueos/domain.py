@@ -323,6 +323,35 @@ class DealRoomStatus(StrEnum):
     REVOKED = "revoked"
 
 
+class ClosedWonHandoverStatus(StrEnum):
+    DRAFT = "draft"
+    IN_REVIEW = "in_review"
+    APPROVED = "approved"
+    SUPERSEDED = "superseded"
+    RETIRED = "retired"
+
+
+class HandoverAuthorityType(StrEnum):
+    CUSTOMER_EVIDENCE = "customer_evidence"
+    SELLER_CONFIRMED = "seller_confirmed"
+    COMMERCIAL_RECORD = "commercial_record"
+    CUSTOMER_FACING_APPROVED = "customer_facing_approved"
+    SYSTEM_DERIVED = "system_derived"
+    INFERENCE = "inference"
+    UNKNOWN = "unknown"
+
+
+class HandoverSourceType(StrEnum):
+    OPPORTUNITY = "opportunity"
+    EVIDENCE = "evidence"
+    BUSINESS_CASE = "business_case"
+    DEAL_ROOM = "deal_room"
+    CONTACT = "contact"
+    INTERACTION = "interaction"
+    ACTION = "action"
+    TASK = "task"
+
+
 class DealRoomOwnerParty(StrEnum):
     OUR_TEAM = "our_team"
     CUSTOMER = "customer"

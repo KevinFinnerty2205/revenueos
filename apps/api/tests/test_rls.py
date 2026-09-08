@@ -274,6 +274,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
         "deal_room_revisions",
         "deal_room_access_links",
         "deal_room_audit_events",
+        "closed_won_handovers",
+        "closed_won_handover_revisions",
+        "closed_won_handover_sources",
+        "closed_won_handover_audit_events",
         "sales_pipelines",
         "sales_pipeline_stages",
         "opportunity_stage_events",
@@ -3733,6 +3737,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                                     'deal_room_revisions',
                                     'deal_room_access_links',
                                     'deal_room_audit_events',
+                                    'closed_won_handovers',
+                                    'closed_won_handover_revisions',
+                                    'closed_won_handover_sources',
+                                    'closed_won_handover_audit_events',
                                     'sales_pipelines',
                                     'sales_pipeline_stages',
                                     'opportunity_stage_events',
@@ -4082,6 +4090,10 @@ def test_postgresql_rls_isolates_every_tenant_table() -> None:
                     table: await connection.scalar(text(f"SELECT count(*) FROM {table}")) for table in tenant_tables
                 }
                 empty_wo022_tables = {
+                    "closed_won_handovers",
+                    "closed_won_handover_revisions",
+                    "closed_won_handover_sources",
+                    "closed_won_handover_audit_events",
                     "execution_previews",
                     "action_executions",
                     "action_execution_attempts",
