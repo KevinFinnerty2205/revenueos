@@ -4,6 +4,7 @@ import type { OpportunityPipeline, PipelineStage } from "@revenueos/shared";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { humanise } from "@/lib/business-entities";
+import { displayPipelineName } from "@/lib/customer-display";
 import { notifyOpportunityChanged } from "@/lib/opportunity-events";
 
 type CloseMode = "won" | "lost" | null;
@@ -63,7 +64,10 @@ export function OpportunityPipelinePanel({
       pipeline?.availablePipelines.flatMap((definition) =>
         definition.stages
           .filter((stage) => stage.active && stage.stageType === "open")
-          .map((stage) => ({ ...stage, pipelineName: definition.name })),
+          .map((stage) => ({
+            ...stage,
+            pipelineName: displayPipelineName(definition.name),
+          })),
       ) ?? [],
     [pipeline],
   );
@@ -167,7 +171,7 @@ export function OpportunityPipelinePanel({
     <section className="form-card" aria-labelledby="opportunity-pipeline-title">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Deal workflow
           </p>
           <h2
@@ -177,7 +181,8 @@ export function OpportunityPipelinePanel({
             {pipeline.stage.name}
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            {pipeline.pipeline.name} · {timingLabel(pipeline)}
+            {displayPipelineName(pipeline.pipeline.name)} ·{" "}
+            {timingLabel(pipeline)}
           </p>
           <p className="mt-2 text-xs leading-5 text-slate-500">
             Stage changes record workflow progress only. They do not confirm

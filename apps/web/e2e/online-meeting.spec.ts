@@ -327,7 +327,7 @@ function completedBrief() {
         { risk: "Security timing may delay the pilot.", severity: "high" },
       ],
       successCriteria: ["A pilot owner and date are agreed."],
-      interactionGuidance: "Attend in Teams; RevenueOS remains passive.",
+      interactionGuidance: "Attend in Teams; Oryntela remains passive.",
       confidence: 0.82,
       companyName: "Synthetic Account",
       opportunityName: "Pilot",

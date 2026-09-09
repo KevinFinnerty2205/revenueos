@@ -1,10 +1,10 @@
-# RevenueOS Daily implementation
+# Oryntela Daily implementation
 
 - **Status:** Implemented in WO-025
 - **Route:** Home at `/dashboard`
 - **API:** `GET /api/v1/daily`
 
-RevenueOS Daily is the default Core Home experience. It composes current persisted
+Oryntela Daily is the default Core Home experience. It composes current persisted
 Interaction, Pre-Interaction Brief, Action Layer, Opportunity, Sales Methodology,
 Revenue Brain and Next Best Action state into one bounded personal day plan. It is
 application policy inside the existing modular monolith, not a new AI capability or

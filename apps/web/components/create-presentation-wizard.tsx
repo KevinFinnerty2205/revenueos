@@ -58,7 +58,7 @@ const objectives: Array<{
     value: "business_case",
     label: "Business case",
     description:
-      "Use an approved deterministic Business Case; RevenueOS never invents ROI inputs or outputs.",
+      "Use an approved deterministic Business Case; Oryntela never invents ROI inputs or outputs.",
   },
   {
     value: "event_follow_up",
@@ -212,12 +212,12 @@ export function CreatePresentationWizard() {
       <PageHeader
         eyebrow="Create · Guided brief"
         title="Plan a presentation"
-        description="Choose the customer context and approved source template. RevenueOS will show a deterministic slide plan before it generates anything."
+        description="Choose the customer context and approved source template. Oryntela will show a deterministic slide plan before it generates anything."
       />
       <nav aria-label="Breadcrumb" className="text-sm text-slate-600">
         <Link
           href="/create"
-          className="font-semibold text-teal-800 hover:underline"
+          className="font-semibold text-brand-secondary hover:underline"
         >
           Create
         </Link>{" "}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SignUp } from "@clerk/nextjs";
+import { BrandLogo } from "@/components/brand-logo";
 import { getAuthState } from "@/lib/auth";
 
 export default function SignUpPage() {
@@ -10,29 +11,33 @@ export default function SignUpPage() {
 
   if (clerkConfigured) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#f5f7f4] px-5 py-12">
-        <SignUp
-          path="/sign-up"
-          signInUrl="/sign-in"
-          forceRedirectUrl="/select-organisation"
-        />
+      <main className="grid min-h-screen place-items-center bg-brand-background px-5 py-12">
+        <div className="grid justify-items-center gap-8">
+          <BrandLogo className="h-10 w-auto" />
+          <SignUp
+            path="/sign-up"
+            signInUrl="/sign-in"
+            forceRedirectUrl="/select-organisation"
+          />
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f5f7f4] px-5 py-12">
+    <main className="grid min-h-screen place-items-center bg-brand-background px-5 py-12">
       <section
         className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-900/5 sm:p-10"
         aria-labelledby="sign-up-title"
       >
+        <BrandLogo className="h-9 w-auto" />
         <Link
           href="/"
-          className="text-sm font-bold text-teal-800 hover:text-teal-950 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+          className="mt-8 inline-flex text-sm font-bold text-brand-secondary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
         >
-          ← Back to RevenueOS
+          ← Back to Oryntela
         </Link>
-        <p className="mt-10 text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+        <p className="mt-10 text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
           Project foundation
         </p>
         <h1
@@ -49,7 +54,7 @@ export default function SignUpPage() {
         {auth.authenticated ? (
           <Link
             href="/dashboard"
-            className="mt-8 block rounded-full bg-teal-700 px-5 py-3 text-center text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+            className="mt-8 block rounded-full bg-brand-primary px-5 py-3 text-center text-sm font-bold text-white hover:bg-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
           >
             Open example workspace
           </Link>

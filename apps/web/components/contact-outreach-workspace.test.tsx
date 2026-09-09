@@ -17,7 +17,7 @@ const workspace = {
     state: "available",
     enabled: true,
     canManage: true,
-    message: "RevenueOS Engage is available for this organisation.",
+    message: "Engage is available for this organisation.",
   },
   contactId: "contact-1",
   contactName: "Jane Smith",
@@ -384,7 +384,7 @@ describe("ContactOutreachWorkspace", () => {
           ...workspace.contactability,
           state: "engage_unavailable",
           allowed: false,
-          reason: "RevenueOS Engage is not enabled for this organisation.",
+          reason: "Engage is not enabled for this organisation.",
         },
       }),
     );

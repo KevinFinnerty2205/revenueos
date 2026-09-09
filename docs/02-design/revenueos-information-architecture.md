@@ -1,4 +1,4 @@
-# RevenueOS information architecture
+# Oryntela information architecture
 
 > **Oryntela consolidation — 4 September 2026:** Keep the implemented grouped
 > navigation until user evidence supports a change. The
@@ -19,26 +19,26 @@ six-area table below is still the entitlement-aware target.
 
 | Area     | User question                                | Primary contents                                                             | Entitlement behaviour                        |
 | -------- | -------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------- |
-| Home     | What should I do today?                      | RevenueOS Daily, priorities, interactions, actions, deal attention, pipeline | Core                                         |
+| Home     | What should I do today?                      | Oryntela Daily, priorities, interactions, actions, deal attention, pipeline | Core                                         |
 | Find     | Who should I target?                         | Account/person search, research, ICP, territory, outreach entry              | Prospect/Engage with calm unavailable states |
 | Sell     | What am I actively working on?               | Accounts, opportunities, people, interactions and actions                    | Core; CRM adds native administration         |
 | Pipeline | Where are my deals and what needs attention? | List/board, stage movement, methodology, forecast drill-down                 | Core; CRM adds record-management depth       |
-| Create   | What should RevenueOS create for me?         | Presentation, proposal, business case and ROI guided flows                   | Create add-on                                |
+| Create   | What should Oryntela create for me?         | Presentation, proposal, business case and ROI guided flows                   | Create add-on                                |
 | Insights | How am I performing and why?                 | Targets, funnel, forecast, manager and coaching views                        | Core                                         |
 
-Global **Search or ask RevenueOS** and **Settings** are utilities, not primary areas.
+Global **Search or ask Oryntela** and **Settings** are utilities, not primary areas.
 This produces six primary areas rather than a growing list of Leads, Contacts,
 Accounts, Calls, Meetings, Documents, Campaigns, Tasks and internal AI concepts.
 
 ```mermaid
 flowchart TB
-    N["RevenueOS"] --> H["Home"]
+    N["Oryntela"] --> H["Home"]
     N --> F["Find"]
     N --> S["Sell"]
     N --> P["Pipeline"]
     N --> C["Create"]
     N --> I["Insights"]
-    N -. "global utility" .-> Q["Search or ask RevenueOS"]
+    N -. "global utility" .-> Q["Search or ask Oryntela"]
     N -. "global utility" .-> ST["Settings"]
     S --> A["Account"]
     S --> O["Opportunity"]
@@ -51,7 +51,7 @@ I --> M["Manager view when authorised"]
 
 WO-037 implements **Overview · Targets · Funnel · Activity · Win / loss** inside
 Insights. Forecast/manager/coaching remain future. Targets does not add a new top-level
-navigation item, and RevenueOS Daily/mobile bottom navigation remain unchanged.
+navigation item, and Oryntela Daily/mobile bottom navigation remain unchanged.
 
 ## Why this model
 
@@ -78,10 +78,10 @@ navigation item, and RevenueOS Daily/mobile bottom navigation remain unchanged.
 | Opportunity  | How do I win this deal?                  | Resolve the most important gap/action                 |
 | Interaction  | How do I prepare, capture and follow up? | Continue the current lifecycle phase                  |
 | Pipeline     | Where are my deals?                      | Review the highlighted exception or filter            |
-| Create       | What should RevenueOS create for me?     | Choose an output type                                 |
+| Create       | What should Oryntela create for me?     | Choose an output type                                 |
 | Insights     | How am I performing and why?             | Open the most material change                         |
 | Manager view | Where does my team need help?            | Open the highest-impact deal/coaching exception       |
-| Settings     | How is RevenueOS configured?             | Choose the relevant personal/admin area               |
+| Settings     | How is Oryntela configured?             | Choose the relevant personal/admin area               |
 
 ## Sell hierarchy
 
@@ -94,7 +94,7 @@ workspace. Interaction is a time-bound before/during/after workflow. An Action i
 reviewable work with source and consequence. Each object links to the others without
 recreating their entire content.
 
-## Search or ask RevenueOS
+## Search or ask Oryntela
 
 The global control supports three routed intents:
 
@@ -152,7 +152,7 @@ to one relevant inline suggestion.
 
 ## Migration from the current navigation
 
-The `/dashboard` compatibility route now renders Home / RevenueOS Daily and the shell
+The `/dashboard` compatibility route now renders Home / Oryntela Daily and the shell
 label is **Home**. Getting started, Companies, Contacts, Opportunities, Interactions,
 Meetings, Tasks, Assistant, Feedback and Settings remain the truthful implementation
 surface. Later areas should migrate route by route with redirects and preserved deep
@@ -160,14 +160,14 @@ links:
 
 - Dashboard → Home (implemented without changing the compatible route);
 - Companies/Contacts/Opportunities/Interactions/Meetings/Tasks → Sell children;
-- Assistant → Search or ask RevenueOS;
+- Assistant → Search or ask Oryntela;
 - Getting started and Feedback → contextual/help/settings destinations.
 
 Do not rename routes or remove current deep links in WO-023.
 
 ## Current WO-025B Ask placement
 
-`/assistant` now defaults to deterministic Search and exposes **Ask RevenueOS** as a
+`/assistant` now defaults to deterministic Search and exposes **Ask Oryntela** as a
 second mode. Opportunity and Account workspaces deep-link to that same utility with an
 explicit scope. Desktop/mobile top-level navigation remains unchanged. The scope label
 persists through each independent question, while source details and follow-ups use

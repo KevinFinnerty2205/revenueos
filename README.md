@@ -1,6 +1,6 @@
-# RevenueOS AI
+# Oryntela
 
-RevenueOS is the AI sales teammate that remembers every customer interaction and turns conversations into action.
+Oryntela is the AI sales teammate that remembers every customer interaction and turns conversations into action.
 
 This repository contains the Sprint 1 foundation, Sprint 2 tenant-isolated
 business entities, Sprint 3 Meeting Domain, WO-004A1/A2/B1/B2/B3 AI
@@ -15,7 +15,7 @@ Transcription Foundation, WO-016 Browser Face-to-Face Companion, WO-017 Phone
 Call Intelligence, WO-018 Online Meeting Capture, WO-019 Documents & Email
 Evidence, WO-020 Live Interaction Intelligence, WO-021 Action Layer, WO-022
 Integrations & Execution Foundation, WO-024 Sales Methodology Engine, WO-025
-RevenueOS Daily, WO-025A Core Experience readiness, WO-025B Ask RevenueOS and
+Oryntela Daily, WO-025A Core Experience readiness, WO-025B Ask Oryntela and
 WO-025C Focused CRM Sync. Interactions, Meetings,
 deliberately supplied transcripts, audit history, AI persistence/domain rules
 and a separate durable worker are implemented. The Opportunity Workspace adds
@@ -89,17 +89,17 @@ external action is implemented.
 WO-023 documents the proposed end-to-end Sales OS, Core/add-on boundaries,
 simplicity-first information architecture and conditional WO-024–045 roadmap. It
 changes no production behaviour, schema, dependency or navigation.
-WO-024 implements RevenueOS Core methodology projections for MEDDIC, MEDDPICC,
+WO-024 implements Oryntela Core methodology projections for MEDDIC, MEDDPICC,
 BANT and SPICED plus bounded versioned custom definitions. The deterministic engine
 maps current validated Evidence into categorical, source-linked field states and adds
 Opportunity Deal and Settings experiences. It adds no qualification score, stage
 blocking, rep ranking, new top-level navigation item or external provider call.
-WO-025 makes the compatible `/dashboard` route Home / RevenueOS Daily. One bounded
+WO-025 makes the compatible `/dashboard` route Home / Oryntela Daily. One bounded
 personal read model composes local-day Interactions, current Actions, explainable deal
 attention, currency-safe descriptive pipeline and existing Next Best Action. It adds
 no migration, target/forecast engine, deal score, new AI/provider or Daily nav item.
 WO-025A tightens the Core experience for design partners without expanding product
-scope. WO-025B adds evidence-backed Ask RevenueOS over authorised Core records and
+scope. WO-025B adds evidence-backed Ask Oryntela over authorised Core records and
 validated intelligence, with citations and explicit unknown/conflict states.
 WO-025C selects HubSpot as the single production CRM connector. Organisation admins
 can complete server-side OAuth, configure bounded object/field/stage mappings and
@@ -121,21 +121,21 @@ explicitly synthetic; Daily still presents no forecast or invented target.
 
 ## Product blueprint
 
-The [RevenueOS master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
+The [Oryntela master product blueprint](docs/01-product/master-product-blueprint.md) defines the Sales Brain direction through private beta. Start with the [documentation index](docs/README.md), [MVP and beta scope](docs/06-roadmap/mvp-and-beta-scope.md) and [sequenced roadmap](docs/06-roadmap/product-roadmap-to-beta.md).
 
 The proposed direction beyond the current WO-025C baseline is defined by the
 [End-to-End Sales Platform vision](docs/01-product/end-to-end-sales-platform-vision.md),
 [commercial packaging](docs/01-product/revenueos-commercial-packaging.md),
 [simplicity-first information architecture](docs/02-design/revenueos-information-architecture.md)
 and [conditional WO-024–045 roadmap](docs/06-roadmap/end-to-end-sales-platform-roadmap.md).
-WO-024 implements Sales Methodology, WO-025 implements RevenueOS Daily, WO-025B
-implements bounded Ask RevenueOS and WO-025C implements the first reviewed HubSpot
+WO-024 implements Sales Methodology, WO-025 implements Oryntela Daily, WO-025B
+implements bounded Ask Oryntela and WO-025C implements the first reviewed HubSpot
 CRM path; later roadmap items remain unauthorised.
 
 WO-010 defines the approved direction in the
 [Interaction Intelligence vision](docs/01-product/interaction-intelligence-vision.md),
 [product blueprint](docs/01-product/interaction-intelligence-product-blueprint.md)
-and [roadmap](docs/06-roadmap/interaction-intelligence-roadmap.md). RevenueOS is
+and [roadmap](docs/06-roadmap/interaction-intelligence-roadmap.md). Oryntela is
 positioned as the AI operating system for customer interactions across Capture,
 Intelligence and Action. WO-011 now implements the tenant-isolated Interaction,
 Capture Session and metadata-only Evidence foundation plus one-to-one Meeting
@@ -236,7 +236,7 @@ Public web routes:
 
 Protected routes:
 
-- `/dashboard` — Home / RevenueOS Daily
+- `/dashboard` — Home / Oryntela Daily
 - `/onboarding`
 - `/select-organisation`
 - `/companies`
@@ -295,7 +295,7 @@ API routes:
 - `GET /ready` — configured dependency readiness
 - `GET /health/ready` — canonical configured dependency readiness
 - `GET /api/v1/me` — trusted authenticated user and organisation context
-- `GET /api/v1/daily?timezone=Australia%2FSydney` — bounded personal RevenueOS Daily read model
+- `GET /api/v1/daily?timezone=Australia%2FSydney` — bounded personal Oryntela Daily read model
 - beta notice, onboarding, feedback and tenant-admin operations under
   `/api/v1/beta`
 - CRUD under `/api/v1/companies`

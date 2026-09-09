@@ -10,7 +10,7 @@
 ## Decision
 
 WO-025C implements HubSpot as the only production CRM connector. HubSpot gives
-RevenueOS the strongest first path for relationship-driven small and mid-market
+Oryntela the strongest first path for relationship-driven small and mid-market
 teams: OAuth can be tested in free developer test accounts, CRM objects share a
 consistent API shape, account properties and pipelines can be discovered, and
 deals, contacts and meeting activities support the focused workflow without a
@@ -57,9 +57,9 @@ Salesforce:
 
 ## Implementation choice
 
-RevenueOS uses direct bounded HTTP rather than a provider SDK. The adapter owns
+Oryntela uses direct bounded HTTP rather than a provider SDK. The adapter owns
 explicit connect/read/write timeouts and performs no hidden retry. The durable
-WO-022 worker remains the retry owner. This keeps provider types out of RevenueOS
+WO-022 worker remains the retry owner. This keeps provider types out of Oryntela
 contracts and makes every external response deterministic in tests.
 
 The standard confidential HubSpot OAuth documentation specifies client-secret

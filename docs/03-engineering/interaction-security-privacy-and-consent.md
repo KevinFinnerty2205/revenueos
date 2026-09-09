@@ -31,9 +31,9 @@ See the [Companion security review](companion-security-review.md).
 
 ## Governance posture
 
-RevenueOS must support organisation policy and jurisdiction-specific configuration,
+Oryntela must support organisation policy and jurisdiction-specific configuration,
 but it must not decide legal authority by itself. Before any production capture
-release, the customer and RevenueOS need appropriate legal/privacy review for the
+release, the customer and Oryntela need appropriate legal/privacy review for the
 launch jurisdictions, participants, employment context, source types, providers,
 retention and intended use.
 
@@ -78,7 +78,7 @@ pauses/stops acquisition; treatment of already captured material follows reviewe
 policy and applicable requirements.
 
 Recording indicators remain visible and accessible. Background recording must use
-OS-required modes/indicators. RevenueOS never records implicitly or always-on.
+OS-required modes/indicators. Oryntela never records implicitly or always-on.
 
 ## Consent/policy evidence
 
@@ -186,7 +186,7 @@ source type/provider is enabled, document:
 
 No recording, transcript, image, document, email, prompt, output, token or signed URL
 appears in logs. Model output remains untrusted until strict validation and
-provenance checks. Customer content is not used to train provider or RevenueOS models
+provenance checks. Customer content is not used to train provider or Oryntela models
 without separate explicit, lawful agreement.
 
 ## Data residency

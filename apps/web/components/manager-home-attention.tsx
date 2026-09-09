@@ -80,7 +80,7 @@ export function ManagerHomeAttention({
               className="rounded-2xl border border-amber-200 bg-white p-4"
             >
               <Link
-                className="font-semibold text-teal-900 hover:underline"
+                className="font-semibold text-brand-primary hover:underline"
                 href={item.href}
               >
                 {item.opportunityName}

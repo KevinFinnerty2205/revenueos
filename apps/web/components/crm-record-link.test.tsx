@@ -25,7 +25,7 @@ const connection = {
   lastVerifiedAt: "2026-08-24T01:00:00Z",
   revokedAt: null,
   externalAccountId: "1234567",
-  externalAccountName: "RevenueOS test account",
+  externalAccountName: "Oryntela test account",
   grantedScopes: ["oauth"],
   metadataVersion: 1,
   executionMode: "live",

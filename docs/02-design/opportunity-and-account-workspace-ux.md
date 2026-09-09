@@ -122,7 +122,7 @@ WO-024 places a compact Methodology card directly under the Opportunity Deal hea
 It leads with categorical counts and the three highest-priority gaps, then reveals
 all fields, Evidence/provenance, review controls and history on demand. On mobile it
 remains a single-column summary rather than a matrix. Methodology is absent from
-top-level navigation and RevenueOS remains fully usable when the organisation selects
+top-level navigation and Oryntela remains fully usable when the organisation selects
 none. See [Sales Methodology UX](sales-methodology-ux.md).
 
 WO-025 adds only source links into this existing workspace: Daily Action and deal

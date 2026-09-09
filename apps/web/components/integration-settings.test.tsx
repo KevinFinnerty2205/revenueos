@@ -81,7 +81,7 @@ const hubspotConnection = {
   ],
   capabilityState: ["update_opportunity", "update_contact", "create_activity"],
   externalAccountId: "1234567",
-  externalAccountName: "RevenueOS test account",
+  externalAccountName: "Oryntela test account",
   grantedScopes: ["oauth", "crm.objects.deals.read"],
   executionMode: "live",
   simulationOnly: false,
@@ -270,7 +270,7 @@ describe("IntegrationSettings", () => {
     expect(
       await screen.findByText("Live — explicit review required"),
     ).toBeVisible();
-    expect(screen.getByText(/RevenueOS test account/)).toBeVisible();
+    expect(screen.getByText(/Oryntela test account/)).toBeVisible();
     expect(screen.getByText(/never sends a raw transcript/i)).toBeVisible();
     expect(
       screen.queryByRole("combobox", { name: "Estimated Value" }),

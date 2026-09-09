@@ -13,7 +13,7 @@ obligations.
 
 Zoom download references are time-sensitive secrets and must remain server-side.
 The adapter would respect provider rate limits, reconcile unknown retrieval outcomes
-before retry and expose revoked/expired connection state. RevenueOS deletion removes
+before retry and expose revoked/expired connection state. Oryntela deletion removes
 its copy; it does not delete Zoom's cloud recording by default.
 
 Primary references: [Zoom app integrations and

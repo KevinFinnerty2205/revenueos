@@ -24,6 +24,6 @@ an app installation. The normal phone-call screen does not call `getUserMedia`;
 microphone permission can occur only after the user deliberately chooses Voice
 Journal.
 
-If a user manually starts and ends the Interaction, RevenueOS derives elapsed
-duration from those timestamps. That number describes the RevenueOS lifecycle and
+If a user manually starts and ends the Interaction, Oryntela derives elapsed
+duration from those timestamps. That number describes the Oryntela lifecycle and
 may differ from the phone system's duration.

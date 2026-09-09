@@ -95,7 +95,7 @@ export function MeetingList() {
     <section aria-labelledby="meetings-title">
       <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
             Conversations
           </p>
           <h1
@@ -254,7 +254,7 @@ function MeetingRows({
           >
             <Link
               href={`/meetings/${meeting.id}`}
-              className="text-lg font-bold text-slate-950 hover:text-teal-800"
+              className="text-lg font-bold text-slate-950 hover:text-brand-secondary"
             >
               {meeting.title}
             </Link>
@@ -271,7 +271,7 @@ function MeetingRows({
             </p>
             <Link
               href={`/meetings/${meeting.id}/edit`}
-              className="mt-4 inline-flex text-sm font-bold text-teal-700 hover:text-teal-900"
+              className="mt-4 inline-flex text-sm font-bold text-brand-secondary hover:text-brand-primary"
             >
               Edit meeting
             </Link>
@@ -301,7 +301,7 @@ function MeetingRows({
                 <tr key={meeting.id} className="hover:bg-slate-50/70">
                   <td className="px-5 py-4">
                     <Link
-                      className="font-bold text-slate-950 hover:text-teal-800"
+                      className="font-bold text-slate-950 hover:text-brand-secondary"
                       href={`/meetings/${meeting.id}`}
                     >
                       {meeting.title}
@@ -324,7 +324,7 @@ function MeetingRows({
                   </td>
                   <td className="px-5 py-4 text-right">
                     <Link
-                      className="font-bold text-teal-700 hover:text-teal-900"
+                      className="font-bold text-brand-secondary hover:text-brand-primary"
                       href={`/meetings/${meeting.id}/edit`}
                     >
                       Edit

@@ -1,4 +1,4 @@
-# Ask RevenueOS simplicity review
+# Ask Oryntela simplicity review
 
 **Review status:** passed for WO-025B private-beta scope
 

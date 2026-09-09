@@ -201,7 +201,7 @@ export function ProspectTargetMarketBuilder({
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="RevenueOS Prospect"
+        eyebrow="Prospect"
         title={marketId ? "Edit target market" : "New target market"}
         description="Describe the organisations you want to sell to in four simple steps."
       />
@@ -226,7 +226,7 @@ export function ProspectTargetMarketBuilder({
               setState((current) => ({ ...current, name: event.target.value }))
             }
             placeholder="Australian Multi-Site Enterprises"
-            className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 px-4 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+            className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 px-4 outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
           />
           <label
             className="mt-5 block text-sm font-semibold text-slate-800"
@@ -246,7 +246,7 @@ export function ProspectTargetMarketBuilder({
                 description: event.target.value,
               }))
             }
-            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
           />
           <CheckboxGroup
             legend="Industries"
@@ -326,7 +326,7 @@ export function ProspectTargetMarketBuilder({
                   ProspectEmployeeBand | "",
               }))
             }
-            className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100 sm:max-w-md"
+            className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20 sm:max-w-md"
           >
             <option value="">Any supported size</option>
             {capabilities.employeeBands.map((band) => (
@@ -365,7 +365,7 @@ export function ProspectTargetMarketBuilder({
               }))
             }
             placeholder="Enterprise access-control systems"
-            className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 px-4 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+            className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 px-4 outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
           />
           <p className="mt-2 text-xs leading-5 text-slate-500">
             This is bounded context for your team. It is not sent as an
@@ -375,7 +375,7 @@ export function ProspectTargetMarketBuilder({
 
         <BuilderStep
           step="4"
-          title="What should RevenueOS exclude?"
+          title="What should Oryntela exclude?"
           description="Hard exclusions are applied only when the data is known."
         >
           <CheckboxGroup
@@ -399,9 +399,9 @@ export function ProspectTargetMarketBuilder({
                   excludeExistingAccounts: event.target.checked,
                 }))
               }
-              className="h-5 w-5 accent-teal-700"
+              className="h-5 w-5 accent-brand-secondary"
             />
-            Exclude companies already in RevenueOS Sales
+            Exclude companies already in Oryntela Sales
           </label>
         </BuilderStep>
 
@@ -726,7 +726,7 @@ export function ProspectTargetMarketDetail({ marketId }: { marketId: string }) {
             {[
               ...definition.excludedIndustries,
               definition.excludeExistingAccounts
-                ? "Existing RevenueOS Accounts"
+                ? "Existing Oryntela CRM Accounts"
                 : null,
             ]
               .filter(Boolean)
@@ -735,7 +735,7 @@ export function ProspectTargetMarketDetail({ marketId }: { marketId: string }) {
         ) : null}
       </section>
 
-      <section className="rounded-2xl border border-teal-100 bg-teal-50/50 p-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
+      <section className="rounded-2xl border border-brand-secondary/15 bg-brand-secondary/10 p-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
         <div>
           <h2 className="font-semibold text-slate-950">
             {market.status === "archived"
@@ -747,7 +747,7 @@ export function ProspectTargetMarketDetail({ marketId }: { marketId: string }) {
           <p className="mt-1 text-sm text-slate-600">
             {discovery
               ? `${discovery.run.candidateCount} bounded candidates found ${new Date(discovery.run.requestedAt).toLocaleDateString("en-AU")}.`
-              : "RevenueOS applies supported criteria and preserves the reasons for this point-in-time search."}
+              : "Oryntela applies supported criteria and preserves the reasons for this point-in-time search."}
           </p>
         </div>
         {market.status === "active" ? (
@@ -770,7 +770,7 @@ export function ProspectTargetMarketDetail({ marketId }: { marketId: string }) {
         <p
           role="status"
           aria-live="polite"
-          className="text-sm font-semibold text-teal-800"
+          className="text-sm font-semibold text-brand-secondary"
         >
           Finding accounts…
         </p>
@@ -789,7 +789,7 @@ export function ProspectTargetMarketDetail({ marketId }: { marketId: string }) {
           <section aria-labelledby="account-results-title">
             <div className="flex flex-col gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
                   Accounts you may want to research
                 </p>
                 <h2
@@ -839,7 +839,7 @@ export function ProspectTargetMarketDetail({ marketId }: { marketId: string }) {
                     type="button"
                     aria-pressed={filter === value}
                     onClick={() => setFilter(value)}
-                    className={`min-h-11 rounded-full border px-4 text-sm font-semibold ${filter === value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-700"}`}
+                    className={`min-h-11 rounded-full border px-4 text-sm font-semibold ${filter === value ? "border-brand-secondary bg-brand-primary text-white" : "border-slate-300 bg-white text-slate-700"}`}
                   >
                     {label}
                   </button>
@@ -922,7 +922,7 @@ function BuilderStep({
       <legend className="sr-only">
         Step {step}: {title}
       </legend>
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Step {step}
       </p>
       <h2 className="mt-2 text-xl font-semibold text-slate-950">{title}</h2>
@@ -964,7 +964,7 @@ function CheckboxGroup<TValue extends string>({
                     : selected.filter((item) => item !== value),
                 )
               }
-              className="h-5 w-5 accent-teal-700"
+              className="h-5 w-5 accent-brand-secondary"
             />
             {label(value)}
           </label>
@@ -1022,12 +1022,12 @@ function CandidateCard({
               {candidate.companyName}
             </h3>
             <span
-              className={`rounded-full px-3 py-1 text-xs font-bold ${candidate.priority === "high" ? "bg-teal-100 text-teal-900" : candidate.priority === "excluded" ? "bg-slate-200 text-slate-800" : "bg-amber-100 text-amber-900"}`}
+              className={`rounded-full px-3 py-1 text-xs font-bold ${candidate.priority === "high" ? "bg-brand-secondary/15 text-brand-primary" : candidate.priority === "excluded" ? "bg-slate-200 text-slate-800" : "bg-amber-100 text-amber-900"}`}
             >
               {priorityLabels[candidate.priority]}
             </span>
           </div>
-          <p className="mt-1 break-all text-sm font-medium text-teal-800">
+          <p className="mt-1 break-all text-sm font-medium text-brand-secondary">
             {candidate.domain}
           </p>
           <p className="mt-2 text-sm text-slate-600">
@@ -1116,7 +1116,7 @@ function CandidateCard({
                       target="_blank"
                       rel="noopener noreferrer"
                       referrerPolicy="no-referrer"
-                      className="font-semibold text-teal-800 underline"
+                      className="font-semibold text-brand-secondary underline"
                     >
                       Source
                     </a>

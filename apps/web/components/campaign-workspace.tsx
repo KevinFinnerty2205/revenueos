@@ -88,7 +88,7 @@ function StatePill({ state }: { state: string }) {
         attention
           ? "bg-amber-100 text-amber-900"
           : positive
-            ? "bg-teal-100 text-teal-900"
+            ? "bg-brand-secondary/15 text-brand-primary"
             : "bg-slate-100 text-slate-700"
       }`}
     >
@@ -117,7 +117,7 @@ function Notice({
       {notice ? (
         <p
           role="status"
-          className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950"
+          className="rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-4 text-sm text-brand-primary"
         >
           {notice}
         </p>
@@ -152,7 +152,7 @@ export function CampaignListWorkspace() {
     <section aria-labelledby="campaigns-title">
       <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
             Engage · Sell
           </p>
           <h1
@@ -187,7 +187,7 @@ export function CampaignListWorkspace() {
       ) : null}
       {!loading && result?.items.length === 0 ? (
         <div className="form-card text-center">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             First campaign
           </p>
           <h2 className="mt-3 text-2xl font-semibold">
@@ -209,7 +209,7 @@ export function CampaignListWorkspace() {
             <Link
               key={campaign.id}
               href={`/campaigns/${campaign.id}`}
-              className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+              className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-secondary/35 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -235,7 +235,7 @@ export function CampaignListWorkspace() {
                   </div>
                   <div>
                     <dt className="text-xs text-slate-500">Eligible</dt>
-                    <dd className="mt-1 font-bold text-teal-800">
+                    <dd className="mt-1 font-bold text-brand-secondary">
                       {campaign.eligibleCount}
                     </dd>
                   </div>
@@ -405,12 +405,12 @@ export function CampaignBuilder() {
     <section aria-labelledby="campaign-builder-title">
       <Link
         href="/campaigns"
-        className="text-sm font-bold text-teal-800 hover:text-teal-950"
+        className="text-sm font-bold text-brand-secondary hover:text-brand-primary"
       >
         ← Campaigns
       </Link>
       <div className="mt-5">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
           Create campaign
         </p>
         <h1
@@ -420,11 +420,11 @@ export function CampaignBuilder() {
           A clear sequence, not an automation maze
         </h1>
         <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-          Choose existing Contacts and one to four ordered steps. RevenueOS
+          Choose existing Contacts and one to four ordered steps. Oryntela
           evaluates every recipient before launch and again before every send.
         </p>
         {eventContext ? (
-          <p className="mt-4 rounded-2xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950">
+          <p className="mt-4 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-4 text-sm text-brand-primary">
             Event audience · {humanise(eventContext.eventStage)}. Only canonical
             Contacts linked to the Event are accepted, and normal Engage policy
             checks still apply.
@@ -455,7 +455,7 @@ export function CampaignBuilder() {
               <label className="grid gap-2 text-sm font-bold text-slate-800">
                 Purpose
                 <textarea
-                  className="min-h-24 rounded-xl border border-slate-300 p-4 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+                  className="min-h-24 rounded-xl border border-slate-300 p-4 text-sm outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
                   value={purpose}
                   maxLength={300}
                   onChange={(event) => setPurpose(event.target.value)}
@@ -503,7 +503,7 @@ export function CampaignBuilder() {
                               : [...current, contact.id],
                           )
                         }
-                        className="size-4 accent-teal-700"
+                        className="size-4 accent-brand-secondary"
                       />
                       <span className="min-w-0">
                         <span className="block font-semibold text-slate-950">
@@ -523,7 +523,7 @@ export function CampaignBuilder() {
                 </p>
               )}
             </div>
-            <p className="mt-3 text-sm font-bold text-teal-800">
+            <p className="mt-3 text-sm font-bold text-brand-secondary">
               {selected.length} of 50 Contacts selected
             </p>
           </fieldset>
@@ -619,7 +619,7 @@ export function CampaignBuilder() {
             <legend className="form-legend">4. Approval and safeguards</legend>
             <div className="mt-5 grid gap-3">
               <label
-                className={`rounded-2xl border p-4 ${approvalMode === "review_each_send" ? "border-teal-500 bg-teal-50" : "border-slate-200"}`}
+                className={`rounded-2xl border p-4 ${approvalMode === "review_each_send" ? "border-brand-secondary/65 bg-brand-secondary/10" : "border-slate-200"}`}
               >
                 <span className="flex gap-3">
                   <input
@@ -628,7 +628,7 @@ export function CampaignBuilder() {
                     value="review_each_send"
                     checked={approvalMode === "review_each_send"}
                     onChange={() => setApprovalMode("review_each_send")}
-                    className="accent-teal-700"
+                    className="accent-brand-secondary"
                   />
                   <span>
                     <strong className="block">Review each send</strong>
@@ -711,8 +711,8 @@ export function CampaignShortcut() {
   }, []);
   if (!enabled) return null;
   return (
-    <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-teal-200 bg-teal-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm text-teal-950">
+    <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-brand-primary">
         <strong>Planning bounded outreach?</strong> Build a Campaign from
         existing Contacts and review eligibility before launch.
       </p>
@@ -838,7 +838,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     <section aria-labelledby="campaign-title">
       <Link
         href="/campaigns"
-        className="text-sm font-bold text-teal-800 hover:text-teal-950"
+        className="text-sm font-bold text-brand-secondary hover:text-brand-primary"
       >
         ← Campaigns
       </Link>
@@ -921,7 +921,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                   key={step.id}
                   className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4"
                 >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-slate-950 text-sm font-bold text-white">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-primary text-sm font-bold text-white">
                     {index + 1}
                   </span>
                   <div>
@@ -952,7 +952,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                 </p>
               </div>
               <p className="text-sm font-bold">
-                <span className="text-teal-800">
+                <span className="text-brand-secondary">
                   {campaign.eligibleCount} eligible
                 </span>{" "}
                 ·{" "}
@@ -1051,7 +1051,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                   <Link
                     key={item.id}
                     href={`/campaigns/${campaign.id}/enrollments/${item.id}`}
-                    className="flex min-h-16 items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4 hover:border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                    className="flex min-h-16 items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4 hover:border-brand-secondary/35 focus:outline-none focus:ring-2 focus:ring-brand-focus"
                   >
                     <div>
                       <p className="font-semibold">{item.recipientName}</p>
@@ -1069,8 +1069,8 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
         </div>
 
         <aside className="space-y-5">
-          <section className="rounded-3xl bg-slate-950 p-6 text-white">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">
+          <section className="rounded-3xl bg-brand-primary p-6 text-white">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-primary-foreground">
               Operational status
             </p>
             <dl className="mt-5 grid grid-cols-2 gap-4">
@@ -1133,7 +1133,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
 
       {campaign.canLaunch ? (
         <section
-          className="mt-6 rounded-3xl border-2 border-teal-700 bg-white p-6 sm:p-8"
+          className="mt-6 rounded-3xl border-2 border-brand-secondary bg-white p-6 sm:p-8"
           aria-labelledby="launch-title"
         >
           <h2 id="launch-title" className="text-2xl font-semibold">
@@ -1157,7 +1157,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                 type="checkbox"
                 checked={confirmed}
                 onChange={(event) => setConfirmed(event.target.checked)}
-                className="mt-0.5 size-4 accent-teal-700"
+                className="mt-0.5 size-4 accent-brand-secondary"
               />
               I reviewed the exact audience and ordered sequence and want to
               launch this campaign.
@@ -1288,7 +1288,7 @@ function OutreachReview({
     <section className="form-card" aria-labelledby="message-review-title">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Ready for review
           </p>
           <h2 id="message-review-title" className="mt-2 text-xl font-semibold">
@@ -1313,10 +1313,10 @@ function OutreachReview({
           {current.version.sources.map((source) => (
             <li
               key={source.id}
-              className="rounded-xl bg-teal-50 p-3 text-sm text-teal-950"
+              className="rounded-xl bg-brand-secondary/10 p-3 text-sm text-brand-primary"
             >
               <strong>{source.label}</strong>
-              <span className="mt-1 block text-xs text-teal-800">
+              <span className="mt-1 block text-xs text-brand-secondary">
                 {humanise(source.trustState)} source
               </span>
             </li>
@@ -1458,13 +1458,13 @@ export function CampaignEnrollmentDetail({
     <section aria-labelledby="recipient-title">
       <Link
         href={`/campaigns/${campaignId}`}
-        className="text-sm font-bold text-teal-800 hover:text-teal-950"
+        className="text-sm font-bold text-brand-secondary hover:text-brand-primary"
       >
         ← Campaign
       </Link>
       <header className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
             Campaign recipient
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -1553,7 +1553,7 @@ export function CampaignEnrollmentDetail({
           <section className="rounded-3xl border border-slate-200 bg-white p-6">
             <h2 className="font-semibold">Seller-reported outcome</h2>
             <p className="mt-2 text-xs leading-5 text-slate-500">
-              RevenueOS does not read the mailbox or infer replies in this
+              Oryntela does not read the mailbox or infer replies in this
               release. Reporting an outcome stops future steps and does not
               create customer Evidence.
             </p>
@@ -1587,8 +1587,8 @@ export function CampaignEnrollmentDetail({
               </div>
             ) : null}
           </section>
-          <section className="rounded-3xl bg-slate-950 p-6 text-white">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-300">
+          <section className="rounded-3xl bg-brand-primary p-6 text-white">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-primary-foreground">
               Next work
             </p>
             <p className="mt-3 text-lg font-semibold">

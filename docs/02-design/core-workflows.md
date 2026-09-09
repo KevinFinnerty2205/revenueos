@@ -67,7 +67,7 @@ This document defines target workflows through beta. It does not claim these sta
 3. `[USER APPROVAL]` User marks distinct or approves a merge where the product supports a reversible merge.
 4. System preserves aliases/external identities and redirects eligible links without crossing tenants.
 
-**Exceptions:** CRM-authoritative duplicates may require correction in the CRM; RevenueOS must not fabricate a successful external merge. Destructive auto-merge is not beta scope.
+**Exceptions:** CRM-authoritative duplicates may require correction in the CRM; Oryntela must not fabricate a successful external merge. Destructive auto-merge is not beta scope.
 
 ## 6. Relationship memory creation
 

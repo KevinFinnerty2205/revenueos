@@ -3,7 +3,7 @@
 **Status:** Current WO-026 design contract
 
 Every research observation shows one of four exact labels: **Verified**, **From
-data provider**, **RevenueOS inference** or **Not established**. The label sits with
+data provider**, **Oryntela inference** or **Not established**. The label sits with
 the statement, not in a remote legend, and is always readable as text.
 
 Verified observations expose their authoritative source. Provider-supplied values
@@ -19,4 +19,4 @@ There is no confidence percentage or unexplained badge.
 
 Refresh comparison uses plain categories: new, changed and no longer supported.
 An earlier statement is not edited in place. This preserves the distinction between
-“the research changed” and “RevenueOS changed its mind without evidence”.
+“the research changed” and “Oryntela changed its mind without evidence”.

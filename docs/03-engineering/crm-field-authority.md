@@ -11,7 +11,7 @@ enabled field mapping stores an explicit authority:
 
 `review_before_sync` is the database, API and UI default. It applies to stage,
 status, close date, amount, next step, description, Contact name/email/title and
-future methodology fields. RevenueOS never silently marks itself authoritative.
+future methodology fields. Oryntela never silently marks itself authoritative.
 
 The admin UI intentionally offers only “Review before update” and “CRM is source
 of truth”. Changing authority increments the connection metadata version, which
@@ -25,7 +25,7 @@ reinterpret field authority as permission to execute unreviewed AI output.
 
 ## WO-034 native-mode reuse
 
-Organisation CRM settings now explicitly choose RevenueOS (`native`) or connected
+Organisation CRM settings now explicitly choose Oryntela (`native`) or connected
 HubSpot (`external`). Native mode defaults normal local fields to
 `revenueos_authoritative`; it does not change evidence trust. External mode uses the
 same active mapping rows described above. `crm_authoritative` fields appear read-only

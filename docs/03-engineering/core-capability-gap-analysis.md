@@ -7,7 +7,7 @@
 
 ## Architecture verdict
 
-RevenueOS does not need a platform rewrite to close the important Core gaps. The
+Oryntela does not need a platform rewrite to close the important Core gaps. The
 current FastAPI/web/PostgreSQL modular monolith already provides tenant-scoped domain
 repositories, forced RLS, immutable/versioned Evidence and AI artefacts, a durable
 job lifecycle, typed provider ports, Action review, execution preview,
@@ -34,7 +34,7 @@ agent runtime is justified.
 | Action Layer             | Immutable revisions, provenance, risk, review and exact approval                                                  | Proposal preparation is not a guaranteed post-Interaction automation; no live effect                        | C foundation                                         |
 | Execution Foundation     | Separate preview/confirmation, fingerprint, idempotency, attempts, revoke and unknown state                       | Mock connections and mock results only                                                                      | A first CRM adapter; B other providers               |
 | Sales Methodology        | Deterministic evidence policies, immutable versions/history and correction                                        | No manager roll-up; limited standard registry; no automatic queue                                           | C; manager context B                                 |
-| RevenueOS Daily          | Bounded set-based aggregate, deterministic ranking, partial availability                                          | Personal only; Search target is a placeholder; no target/forecast                                           | C; Search A; later engines B                         |
+| Oryntela Daily          | Bounded set-based aggregate, deterministic ranking, partial availability                                          | Personal only; Search target is a placeholder; no target/forecast                                           | C; Search A; later engines B                         |
 | Security/trust           | Verified-context design, explicit predicates, forced RLS, content-safe logs, lifecycle controls                   | Production customer-data and provider/operational approvals remain outstanding                              | A launch gate                                        |
 
 ## WO-025A engineering boundary
@@ -61,7 +61,7 @@ Experience consolidation should create server-friendly read projections and rout
 composition while preserving current route/API compatibility. It should not rename
 database entities merely to change navigation.
 
-## WO-025B Ask RevenueOS architecture
+## WO-025B Ask Oryntela architecture
 
 ### Query modes
 
@@ -158,7 +158,7 @@ a user must select one exact external record before a mapping is stored.
 
 ### Authority and execution
 
-Per field family, make external-authoritative, RevenueOS-authoritative or reviewed
+Per field family, make external-authoritative, Oryntela-authoritative or reviewed
 bidirectional policy visible. The first Core connector should normally use
 external-authoritative reads plus reviewed outbound proposals. A recent human edit,
 validation rule, permission failure or unknown external state cannot be silently

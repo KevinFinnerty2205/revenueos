@@ -9,7 +9,7 @@ There is no standalone Manager application or top-level navigation item. The exi
 workflow remains the map:
 
 ```text
-Home / RevenueOS Daily
+Home / Oryntela Daily
   → compact Deals needing attention (maximum five)
   → Pipeline?view=attention
   → existing Opportunity
@@ -58,7 +58,7 @@ not seller competency questions.
 
 Insights Overview stacks five independently labelled references for the current
 quarter/currency: Actual, organisation Target, Seller Likely, Manager Likely and
-RevenueOS baseline. Missing Target/review/sample stays missing. Personal Targets are
+Oryntela baseline. Missing Target/review/sample stays missing. Personal Targets are
 not included and no gap creates pressure on a customer or Action.
 
 Forecast continues to own the detailed range. Admins see separate seller and manager
@@ -79,7 +79,7 @@ stays in existing desktop-first Insights views.
 
 - Deals—not people—are the primary objects.
 - Every reason and question explains why and exposes its source.
-- Seller, manager and RevenueOS views are distinct; there is no final blend.
+- Seller, manager and Oryntela views are distinct; there is no final blend.
 - Home is a compact extension, Pipeline remains familiar and Opportunity remains the
   source workspace.
 - There is no rep/deal score, grade, rank, leaderboard, activity-performance table,

@@ -57,7 +57,7 @@ Meeting/Interaction/source snapshots.
 - UTC created and updated timestamps.
 
 Value and currency form one optional pair. Both must be supplied together or
-both must be null; currency without value is invalid. RevenueOS does not derive
+both must be null; currency without value is invalid. Oryntela does not derive
 value, currency or close date from meeting content. Calendar-invalid dates are
 rejected by the API. No probability, forecast category or pipeline target is
 stored or calculated.
@@ -351,7 +351,7 @@ Opportunity's canonical fields. WO-025C additionally adds a lazy contextual
 **Connect to CRM record** control and live HubSpot exact-value preview. Ordinary
 Opportunity render makes no provider request; the seller explicitly searches and
 selects a deal. A live result is shown in the Action execution history and does not
-silently mutate the canonical RevenueOS Opportunity.
+silently mutate the canonical Oryntela Opportunity.
 
 ## WO-023 future Opportunity and Account Workspace
 

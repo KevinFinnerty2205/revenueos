@@ -265,7 +265,7 @@ export function ValueModelAdmin() {
       <nav aria-label="Breadcrumb" className="text-sm text-slate-600">
         <Link
           href="/create"
-          className="font-semibold text-teal-800 hover:underline"
+          className="font-semibold text-brand-secondary hover:underline"
         >
           Create
         </Link>{" "}
@@ -486,7 +486,7 @@ export function ValueModelAdmin() {
         {message ? (
           <p
             role="status"
-            className="rounded-xl bg-teal-50 p-4 text-sm text-teal-900"
+            className="rounded-xl bg-brand-secondary/10 p-4 text-sm text-brand-primary"
           >
             {message}
           </p>

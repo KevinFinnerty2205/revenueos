@@ -124,7 +124,7 @@ function base64FromBuffer(buffer: ArrayBuffer): string {
 
 function Status({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex rounded-full bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-900">
+    <span className="inline-flex rounded-full bg-brand-secondary/10 px-2.5 py-1 text-xs font-bold text-brand-primary">
       {children}
     </span>
   );
@@ -169,7 +169,7 @@ export function EventListWorkspace() {
     <section aria-labelledby="events-title">
       <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
             Engage · Sell
           </p>
           <h1
@@ -202,7 +202,7 @@ export function EventListWorkspace() {
       <label className="mb-6 block max-w-md text-sm font-semibold text-slate-800">
         Search Events
         <input
-          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200"
+          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-secondary/25"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Name, city or venue"
@@ -238,7 +238,7 @@ export function EventListWorkspace() {
           <Link
             key={event.id}
             href={`/events/${event.id}`}
-            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-secondary/35 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
           >
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -337,10 +337,10 @@ export function EventBuilder() {
 
   return (
     <section aria-labelledby="new-event-title">
-      <Link href="/events" className="text-sm font-bold text-teal-800">
+      <Link href="/events" className="text-sm font-bold text-brand-secondary">
         ← Events
       </Link>
-      <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+      <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
         Create Event
       </p>
       <h1
@@ -510,7 +510,7 @@ function Field({
       {label}
       {cloneElement(children, {
         className:
-          "mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200",
+          "mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-secondary/25",
       })}
     </label>
   );
@@ -616,10 +616,10 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
 
   return (
     <section aria-labelledby="event-title">
-      <Link href="/events" className="text-sm font-bold text-teal-800">
+      <Link href="/events" className="text-sm font-bold text-brand-secondary">
         ← Events
       </Link>
-      <header className="mt-5 rounded-[2rem] bg-slate-950 p-6 text-white sm:p-8">
+      <header className="mt-5 rounded-[2rem] bg-brand-primary p-6 text-white sm:p-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -679,7 +679,7 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
               aria-selected={tab === value}
               type="button"
               onClick={() => setTab(value)}
-              className={`min-h-11 min-w-0 rounded-xl px-1 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 sm:px-4 sm:text-sm ${tab === value ? "bg-teal-700 text-white" : "bg-white text-slate-700"}`}
+              className={`min-h-11 min-w-0 rounded-xl px-1 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-brand-focus sm:px-4 sm:text-sm ${tab === value ? "bg-brand-primary text-white" : "bg-white text-slate-700"}`}
             >
               {humanise(value)}
             </button>
@@ -701,7 +701,7 @@ export function EventDetailWorkspace({ eventId }: { eventId: string }) {
       {notice ? (
         <p
           role="status"
-          className="mt-4 rounded-2xl bg-teal-50 p-4 text-sm text-teal-950"
+          className="mt-4 rounded-2xl bg-brand-secondary/10 p-4 text-sm text-brand-primary"
         >
           {notice}
         </p>
@@ -1000,7 +1000,7 @@ function EventEditor({
 
   return (
     <details className="mt-6 border-t border-slate-200 pt-5">
-      <summary className="cursor-pointer text-sm font-bold text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600">
+      <summary className="cursor-pointer text-sm font-bold text-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus">
         Edit Event details
       </summary>
       <form onSubmit={save} className="mt-4 grid gap-4">
@@ -1248,7 +1248,7 @@ function ImportPanel({
             </div>
             <button
               type="button"
-              className="mt-3 text-sm font-bold text-teal-800 underline"
+              className="mt-3 text-sm font-bold text-brand-secondary underline"
               onClick={() => void previewFile(fileName, contentBase64, mapping)}
             >
               Apply mapping and review again
@@ -1454,7 +1454,7 @@ function AttendeeCard({
       <label className="mt-4 block text-sm font-semibold text-slate-800">
         Quick seller note (optional)
         <textarea
-          className="mt-2 min-h-20 w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200"
+          className="mt-2 min-h-20 w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-secondary/25"
           maxLength={1000}
           value={sellerNote}
           disabled={busy || event.readOnly}
@@ -1482,7 +1482,7 @@ function AttendeeCard({
           type="button"
           disabled={busy || event.readOnly}
           onClick={() => void met()}
-          className="min-h-12 rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+          className="min-h-12 rounded-xl bg-brand-primary px-5 py-3 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
         >
           Mark met
         </button>
@@ -1603,7 +1603,7 @@ function ActivityPanel({
             {event.campaigns.map((campaign) => (
               <li key={campaign.campaignId}>
                 <Link
-                  className="font-bold text-teal-800"
+                  className="font-bold text-brand-secondary"
                   href={`/campaigns/${campaign.campaignId}`}
                 >
                   {campaign.name}

@@ -196,7 +196,7 @@ export function ManagerDealReviewPanel({
         />
         <article className="rounded-2xl border border-sky-200 bg-white p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-sky-800">
-            RevenueOS historical baseline
+            Oryntela historical baseline
           </p>
           <p className="mt-2 text-xl font-semibold text-slate-950">
             {formatMoney(
@@ -267,18 +267,18 @@ export function ManagerDealReviewPanel({
         </ReviewSection>
         <ReviewSection
           title="Questions to discuss"
-          empty="No priority discussion questions are currently identified from RevenueOS evidence and deal state."
+          empty="No priority discussion questions are currently identified from Oryntela evidence and deal state."
         >
           {data.questions.map((question) => (
             <article
               key={question.id}
-              className="rounded-xl border border-teal-200 bg-white p-4"
+              className="rounded-xl border border-brand-secondary/25 bg-white p-4"
             >
-              <h4 className="font-semibold leading-6 text-teal-950">
+              <h4 className="font-semibold leading-6 text-brand-primary">
                 {question.question}
               </h4>
               <details className="mt-2 text-sm text-slate-600">
-                <summary className="cursor-pointer font-semibold text-teal-800">
+                <summary className="cursor-pointer font-semibold text-brand-secondary">
                   Why this question?
                 </summary>
                 <p className="mt-2 leading-6">{question.whyShown}</p>
@@ -388,7 +388,7 @@ function Sources({
 }) {
   return (
     <details className="mt-3 text-xs text-slate-500">
-      <summary className="cursor-pointer font-semibold text-teal-800">
+      <summary className="cursor-pointer font-semibold text-brand-secondary">
         Sources
       </summary>
       <ul className="mt-2 space-y-1">

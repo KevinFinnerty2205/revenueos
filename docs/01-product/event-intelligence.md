@@ -8,7 +8,7 @@
 
 Before an Event, a seller creates a bounded workspace, deliberately selects an
 authorised UTF-8 CSV, maps approved business fields, reviews exclusions and accepts
-the versioned authority statement. RevenueOS conservatively links exact identities,
+the versioned authority statement. Oryntela conservatively links exact identities,
 surfaces existing relationships and active Opportunities, and assigns an explainable
 category: **Priority to meet**, **Worth meeting**, **Context only** or **Needs more
 information**. There is no numeric score and attendance is not intent.
@@ -54,7 +54,7 @@ remain `seller_reported_activity`; they are not silently upgraded to customer-di
 Evidence.
 
 Prospect is an optional enhancement. If entitled, the seller may explicitly open the
-existing Find/research path. RevenueOS does not research all attendees or overwrite
+existing Find/research path. Oryntela does not research all attendees or overwrite
 Event-list facts with public research.
 
 ## Current limits and known limitations

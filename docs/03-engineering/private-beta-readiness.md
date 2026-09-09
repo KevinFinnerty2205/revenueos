@@ -18,7 +18,7 @@ reused—WO-048 test billing does not meter this path and there is no native-fet
 
 ## Status and boundary
 
-WO-009 prepares RevenueOS for a controlled private beta with approximately
+WO-009 prepares Oryntela for a controlled private beta with approximately
 5–10 trusted design partners. It hardens the existing product; it adds no AI
 capability, prompt, schema, job type or provider. Production customer data
 remains prohibited unless a separate approval explicitly changes that rule.
@@ -44,7 +44,7 @@ authentication and SQLite remain development/test-only.
   An admin cannot disable their own membership through the beta API.
 - Clerk invitations, sign-up restrictions and organisation creation policy are
   configured in Clerk. Deleting the external Clerk identity remains an
-  operator step after RevenueOS deletion completes.
+  operator step after Oryntela deletion completes.
 
 For a custom Clerk JWT template, set `NEXT_PUBLIC_CLERK_JWT_TEMPLATE` in the
 web service. The template audience must equal `API_CLERK_AUDIENCE` and it must
@@ -180,7 +180,7 @@ Daily PostgreSQL counters are tenant scoped and updated atomically:
 
 Counters use the UTC calendar date and reset by selecting the next date row;
 they are not mutated at midnight. Admin Settings shows counts and limits. Cost
-is reported as unavailable; RevenueOS makes no hard-coded pricing claim.
+is reported as unavailable; Oryntela makes no hard-coded pricing claim.
 
 ## Feature flags
 
@@ -278,7 +278,7 @@ makes zero external provider calls:
 Dataset version 13 schedules the first two companion Interactions near the seed time,
 values the open Opportunity at AUD 420,000 and adds two current internal Actions:
 one overdue high-priority review item and one approved-but-not-complete item due
-today. This gives RevenueOS Daily useful current Interactions, Actions, methodology
+today. This gives Oryntela Daily useful current Interactions, Actions, methodology
 attention and pipeline without adding a forecast, target or provider request.
 
 ```text
@@ -307,7 +307,7 @@ Never run the seed automatically or use it to overwrite a real record.
 
 The Feedback navigation item accepts a fixed category, optional 1–5 rating,
 message up to 2,000 characters, current route and optional same-tenant meeting
-or opportunity IDs. RevenueOS never attaches transcripts, generated content or
+or opportunity IDs. Oryntela never attaches transcripts, generated content or
 screenshots. Submissions are user/tenant scoped and daily rate limited.
 Admins can retrieve their organisation's bounded newest-first list from
 `GET /api/v1/beta/admin/feedback`. Treat messages as potentially sensitive;
@@ -464,7 +464,7 @@ selection, projections and reviews. Retention and deletion cover those rows plus
 linked salesperson-reported clarification Evidence. Synthetic demo data now includes
 historical BANT and current MEDDPICC projections from final synthetic sources; it
 makes zero provider calls. The Core methodology flag uses the existing feature-flag
-endpoint and can fail closed without disabling other RevenueOS workflows.
+endpoint and can fail closed without disabling other Oryntela workflows.
 
 WO-025 adds no export or retention schema because Daily is computed and unpersisted.
 The v13 demo additions are existing Opportunity, Interaction and Action rows and

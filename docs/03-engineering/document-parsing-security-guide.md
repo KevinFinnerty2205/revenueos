@@ -3,7 +3,7 @@
 ## Boundary
 
 Document parsing is deliberately narrow: PDF and UTF-8 TXT only. Parsing is local
-and bounded before private storage and before any AI provider call. RevenueOS does
+and bounded before private storage and before any AI provider call. Oryntela does
 not run document macros, scripts, URLs, attachments, OCR, shell commands or remote
 fetches.
 

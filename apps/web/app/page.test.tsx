@@ -6,6 +6,10 @@ describe("landing page", () => {
   it("describes the reviewed private-beta workflow without claiming recording or connected actions", () => {
     render(<LandingPage />);
 
+    expect(screen.getByRole("link", { name: "Oryntela Home" })).toHaveAttribute(
+      "href",
+      "/",
+    );
     expect(
       screen.getByRole("heading", {
         level: 1,
@@ -19,5 +23,8 @@ describe("landing page", () => {
     ).toBeVisible();
     expect(screen.getByText("Review required")).toBeVisible();
     expect(screen.getByText(/private reviewed visual evidence/i)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "support@oryntela.com.au" }),
+    ).toHaveAttribute("href", "mailto:support@oryntela.com.au");
   });
 });

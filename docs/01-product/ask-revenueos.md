@@ -1,4 +1,4 @@
-# Ask RevenueOS
+# Ask Oryntela
 
 ## Prospect Person boundary
 
@@ -9,29 +9,29 @@ contract and prompt-injection review.
 
 **Status:** current WO-025B Core capability
 
-Ask RevenueOS is an evidence-backed question-and-answer surface for the sales work a
+Ask Oryntela is an evidence-backed question-and-answer surface for the sales work a
 signed-in user is already authorised to see. It makes Methodology, Revenue Brain,
-accepted Evidence, current Actions, Next Best Action and RevenueOS Daily easier to
+accepted Evidence, current Actions, Next Best Action and Oryntela Daily easier to
 use; it is not a generic chatbot, a research agent or a database query tool.
 
 ## User promise
 
 A seller can ask about one Opportunity, one Account, or a bounded set of their own
-open Opportunities. RevenueOS returns one of four explicit states:
+open Opportunities. Oryntela returns one of four explicit states:
 
 - `supported` — current retrieved sources support the answer;
 - `partially_supported` — some relevant evidence exists, but a material gap remains;
 - `conflicting` — current authorised sources disagree and both sides remain visible;
-- `unknown` — RevenueOS lacks reliable evidence and does not guess.
+- `unknown` — Oryntela lacks reliable evidence and does not guess.
 
 Every substantive answer contains concise cited points. Source cards expose the
 source label, provenance class, a short excerpt and a link back to the underlying
-RevenueOS work. Customer-direct, seller-reported, seller-prepared and imported
+Oryntela work. Customer-direct, seller-reported, seller-prepared and imported
 evidence remain distinct.
 
 ## Entry points
 
-- **Search → Ask RevenueOS** is the global/workspace entry. Normal Search remains the
+- **Search → Ask Oryntela** is the global/workspace entry. Normal Search remains the
   default deterministic record finder.
 - **Ask about this deal** opens Opportunity scope.
 - **Ask about this account** opens Account scope.
@@ -74,7 +74,7 @@ answers per user/day and 500 per organisation/day, with at most 12 retrieved sou
 
 ## Known limitations
 
-Ask only answers from authorised RevenueOS data. There is no public-web or Prospect
+Ask only answers from authorised Oryntela data. There is no public-web or Prospect
 research, generic internet search, arbitrary SQL/text-to-SQL, vector database,
 predictive forecast, autonomous Action, CRM mutation, email sending, calendar action,
 biometric inference or sensitive-trait inference. Answers depend on available

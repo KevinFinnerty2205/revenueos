@@ -181,7 +181,7 @@ test("admin previews and confirms an explicit-map Account import", async ({
   await mapColumn(importPanel, "Notes", "");
   await page.getByRole("button", { name: "Preview import" }).click();
   await expect(
-    page.getByText(/RevenueOS has not changed CRM records/u),
+    page.getByText(/Oryntela has not changed CRM records/u),
   ).toBeVisible();
   await expect(
     page.getByText("Possible duplicates", { exact: true }),

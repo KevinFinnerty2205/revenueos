@@ -3,7 +3,7 @@
 ## Provider app configuration
 
 Create one HubSpot OAuth app on the 2026.03 developer platform. Register the exact
-RevenueOS callback URI and the scopes listed in the
+Oryntela callback URI and the scopes listed in the
 [OAuth security guide](../03-engineering/crm-oauth-credential-security.md). Use a
 HubSpot developer test account for manual proof; never run standard tests against
 a real account.
@@ -29,13 +29,13 @@ connectors remain prohibited in production.
 
 1. Admin opens Settings → Integrations and selects **Connect HubSpot**.
 2. HubSpot shows the requested permissions; a HubSpot Super Admin installs.
-3. RevenueOS validates one-time state, exchanges the code server-side, verifies
+3. Oryntela validates one-time state, exchanges the code server-side, verifies
    scopes/account and stores an encrypted token envelope.
 4. Settings shows account, last verified, capabilities and mapping disclosure.
 5. **Test connection** refreshes if necessary and verifies account identity without
    returning customer data.
 6. **Reconnect** repeats OAuth when scopes/auth change and must resolve to the same
-   HubSpot account. RevenueOS rejects an account switch so dormant record mappings
+   HubSpot account. Oryntela rejects an account switch so dormant record mappings
    cannot be rebound to a different tenant account.
 7. **Disconnect** attempts provider revocation, invalidates work and deletes the
    local credential envelope. Dormant mapping metadata is retained for a reviewed

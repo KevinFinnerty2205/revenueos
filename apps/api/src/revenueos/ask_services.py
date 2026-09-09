@@ -187,7 +187,7 @@ class AskRevenueOSService:
             supported_scopes=("opportunity", "account", "workspace"),
             max_sources=self.settings.private_beta_ask_max_sources,
             safe_message=(
-                "Ask answers from authorised RevenueOS evidence. It does not search the public web or perform actions."
+                "Ask answers from authorised Oryntela evidence. It does not search the public web or perform actions."
             ),
         )
 
@@ -205,7 +205,7 @@ class AskRevenueOSService:
                 generated_at,
                 scope,
                 question_class,
-                "RevenueOS can only answer bounded sales questions from authorised evidence. Instructions to change its rules, reveal hidden data or execute actions are ignored.",
+                "Oryntela can only answer bounded sales questions from authorised evidence. Instructions to change its rules, reveal hidden data or execute actions are ignored.",
             )
         elif question_class == "unsupported_public_web":
             answer = self._unknown_answer(
@@ -213,7 +213,7 @@ class AskRevenueOSService:
                 generated_at,
                 scope,
                 question_class,
-                "I don’t have that information in RevenueOS. Ask RevenueOS does not research the public web yet.",
+                "I don’t have that information in Oryntela. Ask Oryntela does not research the public web yet.",
             )
         elif question_class == "selling_context":
             answer = await self._selling_context_answer(request_id, generated_at, scope, request.question)
@@ -350,13 +350,13 @@ class AskRevenueOSService:
     async def record_telemetry(self, request: AskTelemetryRequest) -> None:
         self._require_enabled()
         if not await self.repository.active_membership(self.tenant.organisation_id, self.tenant.user_id):
-            raise PublicAPIError("forbidden", "You do not have permission to use Ask RevenueOS.", 403)
+            raise PublicAPIError("forbidden", "You do not have permission to use Ask Oryntela.", 403)
         if not await self.repository.ask_event_exists(
             self.tenant.organisation_id,
             self.tenant.user_id,
             request.ask_request_id,
         ):
-            raise PublicAPIError("ask_request_not_found", "The Ask RevenueOS request was not found.", 404)
+            raise PublicAPIError("ask_request_not_found", "The Ask Oryntela request was not found.", 404)
         event_type = "ask_source_opened" if request.event_type == "source_opened" else "ask_follow_up_selected"
         self.session.add(
             BetaSystemEvent(
@@ -378,7 +378,7 @@ class AskRevenueOSService:
         if not self.settings.feature_ask_revenueos_enabled:
             raise PublicAPIError(
                 "feature_unavailable",
-                "Ask RevenueOS is not enabled for this private-beta workspace.",
+                "Ask Oryntela is not enabled for this private-beta workspace.",
                 404,
             )
 
@@ -388,7 +388,7 @@ class AskRevenueOSService:
         scope_id: UUID | None,
     ) -> tuple[AskScope, list[Opportunity]]:
         if not await self.repository.active_membership(self.tenant.organisation_id, self.tenant.user_id):
-            raise PublicAPIError("forbidden", "You do not have permission to use Ask RevenueOS.", 403)
+            raise PublicAPIError("forbidden", "You do not have permission to use Ask Oryntela.", 403)
         if scope_type == "opportunity":
             if scope_id is None:
                 raise PublicAPIError("invalid_ask_scope", "Opportunity scope requires an opportunity ID.", 422)
@@ -546,13 +546,13 @@ class AskRevenueOSService:
                 generated_at,
                 scope,
                 "daily_focus",
-                "You’re caught up based on the current RevenueOS Daily view. No supported priority needs your attention right now.",
+                "You’re caught up based on the current Oryntela Daily view. No supported priority needs your attention right now.",
             )
         priority = daily.top_priority
         source = AskSource(
             id=priority.source_id,
             source_type="daily",
-            label=f"RevenueOS Daily · {daily.local_date.isoformat()}",
+            label=f"Oryntela Daily · {daily.local_date.isoformat()}",
             occurred_at=priority.starts_at or priority.due_at or daily.generated_at,
             excerpt=self._short(priority.reason),
             provenance="validated_intelligence",
@@ -598,7 +598,7 @@ class AskRevenueOSService:
             selected = self._select_methodology_items(items, lowered, question_class)
             for item in selected[:6]:
                 state_label = item.state.replace("_", " ")
-                conclusion = item.conclusion or "RevenueOS does not have a reliable conclusion."
+                conclusion = item.conclusion or "Oryntela does not have a reliable conclusion."
                 prefix = f"{names.get(projection.opportunity_id, 'Opportunity')} · " if len(names) > 1 else ""
                 text = self._short(f"{prefix}{item.display_name}: {conclusion} ({state_label}).")
                 excerpt = self._short(item.conclusion or f"{item.display_name} is {state_label}.")
@@ -619,7 +619,7 @@ class AskRevenueOSService:
                         conflict=item.state == "conflicting",
                         incomplete=item.state in {"unknown", "partially_supported", "stale"},
                         uncertainty=(
-                            f"{item.display_name} is {state_label}; RevenueOS has not treated it as confirmed."
+                            f"{item.display_name} is {state_label}; Oryntela has not treated it as confirmed."
                             if item.state != "confirmed"
                             else None
                         ),
@@ -1195,7 +1195,7 @@ class AskRevenueOSService:
             question_class=question_class,
             summary_points=(),
             sources=(),
-            uncertainties=("RevenueOS will not fill evidence gaps with assumptions.",),
+            uncertainties=("Oryntela will not fill evidence gaps with assumptions.",),
             suggested_action=None,
             follow_up_questions=tuple(self._default_follow_ups(question_class)[:4]),
             scope=scope,
@@ -1236,12 +1236,12 @@ class AskRevenueOSService:
             if quota == "user_limit":
                 raise PublicAPIError(
                     "ask_user_daily_limit_exceeded",
-                    "You have reached today’s Ask RevenueOS limit. Try again tomorrow.",
+                    "You have reached today’s Ask Oryntela limit. Try again tomorrow.",
                     429,
                 )
             raise PublicAPIError(
                 "ask_organisation_daily_limit_exceeded",
-                "This workspace has reached today’s Ask RevenueOS limit. Try again tomorrow or contact an administrator.",
+                "This workspace has reached today’s Ask Oryntela limit. Try again tomorrow or contact an administrator.",
                 429,
             )
         await self.session.commit()
@@ -1294,9 +1294,9 @@ class AskRevenueOSService:
     ) -> str:
         first = candidates[0].text
         if status == "conflicting":
-            return f"RevenueOS found material disagreement in the current evidence. {first} Review the cited sources before relying on this conclusion."
+            return f"Oryntela found material disagreement in the current evidence. {first} Review the cited sources before relying on this conclusion."
         if question_class == "opportunity_filter":
-            return f"RevenueOS found {len(candidates)} relevant {'opportunity' if len(candidates) == 1 else 'opportunities'} in your accessible work. {first}"
+            return f"Oryntela found {len(candidates)} relevant {'opportunity' if len(candidates) == 1 else 'opportunities'} in your accessible work. {first}"
         if status == "partially_supported":
             return f"The available evidence gives a partial answer. {first}"
         return first

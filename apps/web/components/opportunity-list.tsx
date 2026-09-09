@@ -8,6 +8,7 @@ import type {
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { displayPipelineName } from "@/lib/customer-display";
 import { notifyOpportunityChanged } from "@/lib/opportunity-events";
 import { humanise } from "@/lib/business-entities";
 import { ManagerPipelineView } from "@/components/manager-pipeline-view";
@@ -118,7 +119,7 @@ export function OpportunityList() {
     <section aria-labelledby="pipeline-title">
       <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
             Sell
           </p>
           <h1
@@ -213,7 +214,7 @@ export function OpportunityList() {
         >
           {board?.pipelines.map((pipeline) => (
             <option key={pipeline.id} value={pipeline.id}>
-              {pipeline.name}
+              {displayPipelineName(pipeline.name)}
             </option>
           ))}
         </select>
@@ -371,7 +372,7 @@ function ViewButton({
       onClick={onClick}
       className={`rounded-xl px-4 py-2 text-sm font-bold ${
         active
-          ? "bg-slate-950 text-white"
+          ? "bg-brand-primary text-white"
           : "border border-slate-300 bg-white text-slate-700"
       }`}
     >
@@ -561,7 +562,7 @@ function OpportunityCard({
       <h3 className="mt-1 font-semibold leading-6 text-slate-950">
         <Link
           href={`/opportunities/${card.opportunityId}`}
-          className="rounded hover:text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600"
+          className="rounded hover:text-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus"
         >
           {card.opportunityName}
         </Link>
@@ -653,7 +654,7 @@ function PipelineList({
               <tr key={card.opportunityId}>
                 <td className="px-4 py-4">
                   <Link
-                    className="font-semibold text-slate-950 hover:text-teal-800"
+                    className="font-semibold text-slate-950 hover:text-brand-secondary"
                     href={`/opportunities/${card.opportunityId}`}
                   >
                     {card.opportunityName}

@@ -10,7 +10,7 @@ external meeting reference rather than presenting an unapproved link. Raw links 
 tokens are not included in audit events, telemetry or logs.
 
 The browser renders **Open Meeting** only for the stored normalised URL, using a new
-tab with `noopener noreferrer`. RevenueOS never auto-joins, prefetches, follows a
+tab with `noopener noreferrer`. Oryntela never auto-joins, prefetches, follows a
 redirect or navigates in the background. The API never performs DNS resolution or
 HTTP requests for a supplied meeting URL, removing the SSRF route entirely.
 

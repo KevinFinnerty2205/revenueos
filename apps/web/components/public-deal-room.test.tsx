@@ -83,7 +83,13 @@ describe("PublicDealRoom", () => {
     expect(screen.getByText(/window\.intruded=true/u)).toBeVisible();
     expect(screen.getByText(/Jordan <img src=x/u)).toBeVisible();
     expect(container.querySelector("script")).toBeNull();
-    expect(container.querySelector("img")).toBeNull();
+    expect(
+      container.querySelector("img:not([src^='/brand/oryntela/'])"),
+    ).toBeNull();
+    expect(
+      container.querySelector("img[src*='oryntela-symbol.svg']"),
+    ).not.toBeNull();
+    expect(screen.getByText("Powered by Oryntela")).toBeVisible();
     expect(
       screen.queryByText(/MEDDIC|forecast probability|manager coaching/iu),
     ).toBeNull();

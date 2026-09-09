@@ -1,4 +1,4 @@
-# RevenueOS Daily prioritisation
+# Oryntela Daily prioritisation
 
 - **Status:** Implemented deterministic policy
 - **Principle:** One explainable next action, never a hidden score

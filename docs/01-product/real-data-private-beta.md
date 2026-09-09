@@ -4,9 +4,9 @@ Status: implementation complete; partner launch remains approval-gated. This ope
 
 ## Operating model
 
-RevenueOS may accept real sales data only for a named design partner after the partner-specific launch record is complete. An operator provisions the organisation and first administrator; public tenant creation and production just-in-time membership creation are disabled. Onboarding is supervised, Native CRM is the default data path, and every add-on is explicitly selected.
+Oryntela may accept real sales data only for a named design partner after the partner-specific launch record is complete. An operator provisions the organisation and first administrator; public tenant creation and production just-in-time membership creation are disabled. Onboarding is supervised, Native CRM is the default data path, and every add-on is explicitly selected.
 
-The partner starts with a small synthetic or approved subset, then imports Accounts, Contacts and open Opportunities. RevenueOS does not treat an imported email as permission to contact, does not create Evidence or intelligence from CSV, and does not reconstruct historical pipeline events. A current imported stage is marked `import_baseline`; reliable time-in-stage begins only after a later RevenueOS transition.
+The partner starts with a small synthetic or approved subset, then imports Accounts, Contacts and open Opportunities. Oryntela does not treat an imported email as permission to contact, does not create Evidence or intelligence from CSV, and does not reconstruct historical pipeline events. A current imported stage is marked `import_baseline`; reliable time-in-stage begins only after a later Oryntela transition.
 
 ## Capability matrix
 

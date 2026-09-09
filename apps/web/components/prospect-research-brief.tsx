@@ -17,7 +17,7 @@ import { ProspectPeopleSection } from "@/components/prospect-people";
 const trustLabels: Record<ProspectTrustState, string> = {
   verified: "Verified",
   provider_supplied: "From data provider",
-  inferred: "RevenueOS inference",
+  inferred: "Oryntela inference",
   unknown: "Not established",
 };
 
@@ -25,7 +25,7 @@ const trustDescriptions: Record<ProspectTrustState, string> = {
   verified: "Supported directly by an authoritative public source.",
   provider_supplied: "Supplied by an external business-data provider.",
   inferred: "A hypothesis based on sourced public information.",
-  unknown: "RevenueOS could not verify this reliably.",
+  unknown: "Oryntela could not verify this reliably.",
 };
 
 const overviewCategories = new Set([
@@ -309,19 +309,19 @@ export function ProspectResearchBriefView({
       <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <Link
           href="/find"
-          className="text-sm font-bold text-teal-700 hover:text-teal-900"
+          className="text-sm font-bold text-brand-secondary hover:text-brand-primary"
         >
           ← Back to Find
         </Link>
         <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
               Account Research
             </p>
             <h1 className="mt-2 break-words text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
               {brief.target.name}
             </h1>
-            <p className="mt-2 break-all text-sm font-semibold text-teal-800">
+            <p className="mt-2 break-all text-sm font-semibold text-brand-secondary">
               {brief.target.domain}
             </p>
             {brief.target.location ? (
@@ -411,23 +411,23 @@ export function ProspectResearchBriefView({
 
       {isProcessing ? (
         <section
-          className="rounded-3xl border border-teal-100 bg-teal-50/70 p-7"
+          className="rounded-3xl border border-brand-secondary/15 bg-brand-secondary/10 p-7"
           aria-live="polite"
         >
-          <h2 className="text-xl font-semibold text-teal-950">
+          <h2 className="text-xl font-semibold text-brand-primary">
             Researching company…
           </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-teal-900">
-            RevenueOS is checking permitted public business sources. You can
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-brand-primary">
+            Oryntela is checking permitted public business sources. You can
             leave this page and come back.
           </p>
         </section>
       ) : brief.status === "not_started" ? (
-        <section className="rounded-3xl border border-teal-200 bg-teal-50 p-7">
-          <h2 className="text-xl font-semibold text-teal-950">
+        <section className="rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-7">
+          <h2 className="text-xl font-semibold text-brand-primary">
             Ready to research
           </h2>
-          <p className="mt-2 text-sm leading-6 text-teal-900">
+          <p className="mt-2 text-sm leading-6 text-brand-primary">
             No research job has been started. Begin a bounded review of
             permitted public business sources when you are ready.
           </p>
@@ -446,8 +446,8 @@ export function ProspectResearchBriefView({
             Couldn’t complete research
           </h2>
           <p className="mt-2 text-sm leading-6 text-rose-900">
-            RevenueOS couldn’t find enough reliable public information about
-            this company.
+            Oryntela couldn’t find enough reliable public information about this
+            company.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <ProspectCreditAction
@@ -478,7 +478,7 @@ export function ProspectResearchBriefView({
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-900">
             The provider outcome is uncertain. Reserved Credits remain held and
-            RevenueOS will not retry or charge again until the operation is
+            Oryntela will not retry or charge again until the operation is
             reconciled.
           </p>
         </section>
@@ -564,7 +564,7 @@ export function ProspectResearchBriefView({
           {unknown.length > 0 ? (
             <ResearchSection
               title="Not established"
-              description="Relevant facts RevenueOS did not guess."
+              description="Relevant facts Oryntela did not guess."
             >
               <ObservationList items={unknown} sourceById={sourceById} />
             </ResearchSection>
@@ -577,7 +577,7 @@ export function ProspectResearchBriefView({
           <Sources sources={brief.sources} />
 
           <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <summary className="cursor-pointer font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-600">
+            <summary className="cursor-pointer font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-focus">
               Research history
             </summary>
             <div className="mt-4 space-y-3">
@@ -618,13 +618,13 @@ export function ProspectResearchBriefView({
               className="text-2xl font-semibold tracking-tight text-slate-950 outline-none"
             >
               {brief.existingCompanyMatch
-                ? "This company is already in RevenueOS"
+                ? "This company is already in Oryntela"
                 : `Add ${brief.target.name} to Sales?`}
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
               {brief.existingCompanyMatch
                 ? `Attach this public research to ${brief.existingCompanyMatch.name}. No duplicate Account will be created.`
-                : "This creates a RevenueOS Account using the reviewed company details. It will not create an Opportunity or Contact automatically."}
+                : "This creates a Oryntela CRM Account using the reviewed company details. It will not create an Opportunity or Contact automatically."}
             </p>
             <dl className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm">
               <div>
@@ -671,8 +671,14 @@ export function ProspectResearchBriefView({
 function ResearchStatus({ brief }: { brief: ProspectResearchBrief }) {
   const content = {
     not_started: ["Ready to research", "bg-slate-100 text-slate-800"],
-    pending: ["Researching company…", "bg-teal-50 text-teal-950"],
-    researching: ["Researching company…", "bg-teal-50 text-teal-950"],
+    pending: [
+      "Researching company…",
+      "bg-brand-secondary/10 text-brand-primary",
+    ],
+    researching: [
+      "Researching company…",
+      "bg-brand-secondary/10 text-brand-primary",
+    ],
     ready: ["Research ready", "bg-emerald-50 text-emerald-950"],
     partial: ["Research incomplete", "bg-amber-50 text-amber-950"],
     no_result: ["No reliable results", "bg-slate-100 text-slate-800"],
@@ -778,7 +784,7 @@ function ObservationSources({
           target="_blank"
           rel="noopener noreferrer"
           referrerPolicy="no-referrer"
-          className="font-bold text-teal-700 underline decoration-teal-200 underline-offset-2 hover:text-teal-900"
+          className="font-bold text-brand-secondary underline decoration-brand-secondary/25 underline-offset-2 hover:text-brand-primary"
         >
           {source.publisher} ↗
         </a>
@@ -854,7 +860,7 @@ function Sources({ sources }: { sources: ProspectResearchSource[] }) {
   return (
     <ResearchSection
       title="Sources"
-      description="Public source metadata only. RevenueOS does not mirror full webpages."
+      description="Public source metadata only. Oryntela does not mirror full webpages."
     >
       <ul className="divide-y divide-slate-100">
         {sources.map((source) => (
@@ -874,7 +880,7 @@ function Sources({ sources }: { sources: ProspectResearchSource[] }) {
               target="_blank"
               rel="noopener noreferrer"
               referrerPolicy="no-referrer"
-              className="text-sm font-bold text-teal-700 hover:text-teal-900"
+              className="text-sm font-bold text-brand-secondary hover:text-brand-primary"
             >
               Open source ↗
             </a>

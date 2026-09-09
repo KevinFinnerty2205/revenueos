@@ -1,4 +1,4 @@
-# RevenueOS Daily security and privacy review
+# Oryntela Daily security and privacy review
 
 - **Status:** Reviewed for WO-025
 - **Data model:** Computed read only; no migration or retained Daily snapshot

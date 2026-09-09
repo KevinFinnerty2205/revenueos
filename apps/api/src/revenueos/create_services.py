@@ -463,7 +463,7 @@ class CreateService:
             return await self._presentation_response(existing)
         company = await self.repository.company(self.tenant.organisation_id, request.account_id)
         if company is None:
-            raise PublicAPIError("account_not_found", "Choose a canonical RevenueOS Account.", 404)
+            raise PublicAPIError("account_not_found", "Choose a canonical Oryntela CRM Account.", 404)
         opportunity: Opportunity | None = None
         if request.opportunity_id is not None:
             opportunity = await self.repository.opportunity(self.tenant.organisation_id, request.opportunity_id)
@@ -1053,7 +1053,7 @@ class CreateService:
                 "origin": "system_metadata",
                 "supportState": "strong",
                 "customerSafeClassification": "customer_safe",
-                "sourceLabel": "RevenueOS Account",
+                "sourceLabel": "Oryntela CRM Account",
                 "freshness": "current",
                 "paraphraseAllowed": False,
                 "exactTextRequired": True,
@@ -1068,7 +1068,7 @@ class CreateService:
                     "origin": "system_metadata",
                     "supportState": "strong",
                     "customerSafeClassification": "customer_safe",
-                    "sourceLabel": "RevenueOS Opportunity",
+                    "sourceLabel": "Oryntela CRM Opportunity",
                     "freshness": "current",
                     "paraphraseAllowed": False,
                     "exactTextRequired": True,
@@ -1669,7 +1669,7 @@ class CreateService:
         commercial = CommercialService(self.session, self.settings)
         if write:
             if not self.settings.feature_create_enabled:
-                raise PublicAPIError("create_unavailable", "RevenueOS Create is temporarily unavailable.", 503)
+                raise PublicAPIError("create_unavailable", "Create is temporarily unavailable.", 503)
             await commercial.require_module_write(self.tenant.organisation_id, "create")
             return
         access = await commercial.module_access(self.tenant.organisation_id, "create")
@@ -1821,7 +1821,7 @@ def _json_fingerprint(value: object) -> str:
 
 def _safe_file_name(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9._ -]+", "", value).strip(" .")
-    return cleaned[:120] or "RevenueOS presentation"
+    return cleaned[:120] or "Oryntela presentation"
 
 
 def _business_case_output_statement(

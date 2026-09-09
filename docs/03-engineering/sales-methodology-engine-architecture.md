@@ -18,7 +18,7 @@ Evidence path.
 
 ## Purpose
 
-RevenueOS supports multiple qualification and discovery methodologies without
+Oryntela supports multiple qualification and discovery methodologies without
 creating a separate intelligence system for each one. Canonical, tenant-owned
 Evidence remains the truth. A versioned Methodology Projection Engine interprets
 that Evidence for MEDDIC, MEDDPICC, BANT, SPICED or a safe organisation-defined

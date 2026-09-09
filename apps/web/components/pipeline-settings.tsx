@@ -7,6 +7,7 @@ import type {
 } from "@revenueos/shared";
 import { FormEvent, useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { displayPipelineName } from "@/lib/customer-display";
 
 export function PipelineSettings() {
   const [availability, setAvailability] = useState<CRMAvailability | null>(
@@ -127,7 +128,7 @@ export function PipelineSettings() {
     availability.canManage;
   return (
     <section className="form-card" aria-labelledby="pipeline-settings-title">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         CRM
       </p>
       <h2
@@ -155,7 +156,7 @@ export function PipelineSettings() {
             ? "Pipeline stages are managed in HubSpot. Native definitions remain historical and read-only."
             : availability?.enabled && availability.mode === "native"
               ? "An organisation administrator manages native pipeline definitions."
-              : "Enable RevenueOS CRM and choose RevenueOS as the system of record to configure native pipelines."}
+              : "Enable Oryntela CRM and choose Oryntela as the system of record to configure native pipelines."}
         </p>
       ) : (
         <>
@@ -248,7 +249,9 @@ function PipelineEditor({
     <article className="rounded-2xl border border-slate-200 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-slate-950">{pipeline.name}</h3>
+          <h3 className="font-semibold text-slate-950">
+            {displayPipelineName(pipeline.name)}
+          </h3>
           <p className="mt-1 text-xs text-slate-500">
             {pipeline.isDefault
               ? "Default for new opportunities"

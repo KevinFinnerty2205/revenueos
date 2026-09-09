@@ -8,5 +8,5 @@ procurement and security/legal proposals preserve current/proposed values and re
 
 These contracts make later mapping testable while avoiding today’s vendor-specific
 objects. They contain no provider account ID, access token, remote record ID or sync
-state. RevenueOS does not claim a CRM integration until a separately approved adapter
+state. Oryntela does not claim a CRM integration until a separately approved adapter
 performs authenticated tenant-scoped writes and records provider confirmation.

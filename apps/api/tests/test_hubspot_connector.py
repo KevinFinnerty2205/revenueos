@@ -1046,7 +1046,7 @@ def _connect_hubspot(
     async def exchange_code(self: HubSpotClient, code: str) -> tuple[ConnectorCredential, str | None]:
         del self
         assert code == "test-code"
-        return credential, "RevenueOS test account"
+        return credential, "Oryntela test account"
 
     monkeypatch.setattr(HubSpotClient, "exchange_code", exchange_code)
     start = client.post("/api/v1/integrations/hubspot/oauth/start")

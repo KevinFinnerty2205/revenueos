@@ -4,7 +4,7 @@
 
 WO-044 adds an internal, reviewed transition artefact inside one Opportunity
 Workspace. It lets the Opportunity owner or an organisation administrator prepare a
-bounded draft from sales context already held by RevenueOS. It is not a contract,
+bounded draft from sales context already held by Oryntela. It is not a contract,
 customer portal, implementation project, task system or automatic workflow.
 
 The handover has no public route or share token. It does not publish into the Deal
@@ -81,7 +81,7 @@ context. Any inference or unknown in any section blocks approval. This rule prev
 phrases such as “we promised” or “the customer expects” from becoming authoritative
 without a permitted source or a named human confirmation.
 
-Empty sections are valid. RevenueOS prefers an explicit empty/unknown state to generic
+Empty sections are valid. Oryntela prefers an explicit empty/unknown state to generic
 success metrics, manufactured objectives or invented implementation requirements.
 The UI exposes source and authority badges, approval blockers and a claim-confirmation
 control rather than hiding provenance in a metadata wall.
@@ -153,7 +153,7 @@ All reads derive the organisation from verified authentication and every reposit
 query carries explicit organisation plus relevant Opportunity/aggregate predicates.
 The Opportunity owner or an organisation administrator may prepare, edit, confirm,
 submit and retire. Final approval is administrator-only. An administrator may approve
-their own reviewed handover in V1; RevenueOS has no manager hierarchy and WO-044 does
+their own reviewed handover in V1; Oryntela has no manager hierarchy and WO-044 does
 not invent a two-person approval chain. Other authorised organisation members can
 view only approved, superseded and retired revisions—not another seller's working
 draft.

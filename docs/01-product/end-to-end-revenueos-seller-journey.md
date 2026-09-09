@@ -1,8 +1,8 @@
-# End-to-end RevenueOS seller journey
+# End-to-end Oryntela seller journey
 
 ## Current journey
 
-RevenueOS supports one connected, review-led seller loop. A seller starts at Home,
+Oryntela supports one connected, review-led seller loop. A seller starts at Home,
 uses Find to research a previously unknown Company and Person, then deliberately
 promotes them into the canonical Account and Contact records. From the Contact the
 seller prepares and reviews Outreach, uses the simulation-only execution path, and
@@ -33,8 +33,8 @@ Forecast eligibility while retaining stage, closure and forecast history.
 
 ## Product boundaries
 
-RevenueOS is not a generic chat tool or a replacement for every CRM. Search finds
-records; Ask RevenueOS answers a bounded set of authorised sales-data questions.
+Oryntela is not a generic chat tool or a replacement for every CRM. Search finds
+records; Ask Oryntela answers a bounded set of authorised sales-data questions.
 Prospect research is not customer Evidence. Revenue Brain is the durable reviewed
 intelligence layer, and Sales Brain remains centred on the Opportunity.
 

@@ -27,7 +27,7 @@ call or phone-specific transcription queue.
 - `user_uploaded_recording`; or
 - `external_provider_recording`.
 
-This describes how the audio reached RevenueOS. It does not prove legality,
+This describes how the audio reached Oryntela. It does not prove legality,
 speaker identity or truth. Recording-derived transcript Evidence remains distinct
 from reviewed `salesperson_reported` Debrief Evidence.
 

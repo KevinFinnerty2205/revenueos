@@ -136,7 +136,7 @@ owner.
 - **Detection:** confirmed request remains processing/failed or command exits
   without organisation removal.
 - **Immediate containment:** block new use of the target organisation and
-  disable its memberships in Clerk/RevenueOS; do not claim success.
+  disable its memberships in Clerk/Oryntela; do not claim success.
 - **Diagnosis:** verify exact confirmation/request/tenant, transaction error and
   dependency ordering using metadata only.
 - **Safe recovery:** retry the same maintenance command. The destructive phase
@@ -274,6 +274,6 @@ owner.
 4. Retry only `failed_retryable` rows through the bounded worker policy. Never
    replay `unknown_external_state`; investigate/reconcile first.
 5. For `stale_external_state`, create a new review/preview after resolving the
-   expected value. Do not bypass the comparison or mutate RevenueOS merely to pass.
+   expected value. Do not bypass the comparison or mutate Oryntela merely to pass.
 6. Validate tenant isolation, one deterministic mock result, export v13 omissions
    and no external network request before re-enabling.

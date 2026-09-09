@@ -78,7 +78,7 @@ export function AskRevenueOS({
         setError(
           reason instanceof Error
             ? reason.message
-            : "Ask RevenueOS is unavailable right now.",
+            : "Ask Oryntela is unavailable right now.",
         );
       })
       .finally(() => {
@@ -112,7 +112,7 @@ export function AskRevenueOS({
       setError(
         reason instanceof Error
           ? reason.message
-          : "RevenueOS couldn’t answer that right now.",
+          : "Oryntela couldn’t answer that right now.",
       );
     } finally {
       setLoading(false);
@@ -127,7 +127,7 @@ export function AskRevenueOS({
   if (checking) {
     return (
       <p role="status" className="form-card text-sm text-slate-600">
-        Checking Ask RevenueOS availability…
+        Checking Ask Oryntela availability…
       </p>
     );
   }
@@ -136,7 +136,7 @@ export function AskRevenueOS({
     return (
       <div role="alert" className="form-card border-rose-200 bg-rose-50">
         <p className="font-semibold text-rose-950">
-          {error ?? "Ask RevenueOS is unavailable right now."}
+          {error ?? "Ask Oryntela is unavailable right now."}
         </p>
         <p className="mt-2 text-sm text-rose-800">
           Normal record Search is still available.
@@ -151,14 +151,14 @@ export function AskRevenueOS({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <label htmlFor="ask-revenueos-question" className="form-label">
-              Ask RevenueOS
+              Ask Oryntela
             </label>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Ask a sales question about what RevenueOS already knows. Every
+              Ask a sales question about what Oryntela already knows. Every
               factual answer shows its authorised sources.
             </p>
           </div>
-          <span className="rounded-full bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-900">
+          <span className="rounded-full bg-brand-secondary/10 px-3 py-1.5 text-xs font-bold text-brand-primary">
             About: {capabilities.scope.label}
           </span>
         </div>
@@ -179,11 +179,11 @@ export function AskRevenueOS({
             className="primary-button min-h-11"
             disabled={loading}
           >
-            {loading ? "Checking RevenueOS…" : "Ask"}
+            {loading ? "Checking Oryntela…" : "Ask"}
           </button>
         </div>
         <p id="ask-boundary" className="mt-3 text-xs leading-5 text-slate-500">
-          RevenueOS does not search the public web or perform actions from an
+          Oryntela does not search the public web or perform actions from an
           answer.
         </p>
         {error ? (
@@ -221,7 +221,7 @@ export function AskRevenueOS({
                   setQuestion(suggestion);
                   void submitQuestion(suggestion);
                 }}
-                className="min-h-11 rounded-full border border-slate-300 bg-white px-4 py-2 text-left text-sm font-semibold text-slate-700 hover:border-teal-500 hover:text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                className="min-h-11 rounded-full border border-slate-300 bg-white px-4 py-2 text-left text-sm font-semibold text-slate-700 hover:border-brand-secondary/65 hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus"
               >
                 {suggestion}
               </button>
@@ -262,12 +262,12 @@ const AskAnswerView = forwardRef<
       ref={ref}
       tabIndex={-1}
       aria-labelledby={titleId}
-      className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm outline-none focus:ring-2 focus:ring-teal-600 sm:p-8"
+      className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm outline-none focus:ring-2 focus:ring-brand-focus sm:p-8"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
-            RevenueOS answer
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
+            Oryntela answer
           </p>
           <h2
             id={titleId}
@@ -289,7 +289,7 @@ const AskAnswerView = forwardRef<
           <h3 className="font-semibold text-slate-950">
             {answer.questionClass === "selling_context"
               ? "Approved profile statements"
-              : "Why RevenueOS believes it"}
+              : "Why Oryntela believes it"}
           </h3>
           <ul className="mt-3 space-y-3">
             {answer.summaryPoints.map((point, index) => (
@@ -297,7 +297,7 @@ const AskAnswerView = forwardRef<
                 key={`${point.text}-${index}`}
                 className="text-sm leading-6 text-slate-700"
               >
-                <span aria-hidden="true" className="mr-2 text-teal-700">
+                <span aria-hidden="true" className="mr-2 text-brand-secondary">
                   •
                 </span>
                 {point.text}{" "}
@@ -315,7 +315,7 @@ const AskAnswerView = forwardRef<
                           source.id,
                         )
                       }
-                      className="ml-1 font-semibold text-teal-800 underline decoration-teal-300 underline-offset-4"
+                      className="ml-1 font-semibold text-brand-secondary underline decoration-brand-secondary/35 underline-offset-4"
                     >
                       Source
                     </Link>
@@ -339,7 +339,7 @@ const AskAnswerView = forwardRef<
 
       {answer.sources.length ? (
         <details className="mt-7 rounded-2xl border border-slate-200 p-4">
-          <summary className="cursor-pointer font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          <summary className="cursor-pointer font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-focus">
             Sources ({answer.sources.length})
           </summary>
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -354,12 +354,12 @@ const AskAnswerView = forwardRef<
                       source.id,
                     )
                   }
-                  className="block min-h-20 rounded-xl border border-slate-200 p-4 hover:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  className="block min-h-20 rounded-xl border border-slate-200 p-4 hover:border-brand-secondary/50 focus:outline-none focus:ring-2 focus:ring-brand-focus"
                 >
                   <span className="block font-semibold text-slate-950">
                     {source.label}
                   </span>
-                  <span className="mt-1 block text-xs font-semibold text-teal-800">
+                  <span className="mt-1 block text-xs font-semibold text-brand-secondary">
                     {provenanceLabel(source.provenance)}
                   </span>
                   {source.excerpt ? (
@@ -400,7 +400,7 @@ const AskAnswerView = forwardRef<
                 type="button"
                 disabled={busy}
                 onClick={() => onFollowUp(followUp)}
-                className="min-h-11 rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                className="min-h-11 rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-focus"
               >
                 {followUp}
               </button>
@@ -434,8 +434,8 @@ function provenanceLabel(
     salesperson_reported: "Reported by salesperson",
     seller_prepared: "Seller-prepared context",
     imported_external: "Imported evidence",
-    validated_intelligence: "Validated RevenueOS intelligence",
-    system_metadata: "RevenueOS record",
+    validated_intelligence: "Validated Oryntela intelligence",
+    system_metadata: "Oryntela record",
     organisation_approved: "Organisation-approved context",
   }[provenance];
 }

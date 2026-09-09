@@ -1,7 +1,7 @@
 # Simplicity and discoverability principles
 
 - **Status:** Mandatory design gate for future work orders
-- **Goal:** RevenueOS absorbs complexity so the salesperson does not have to
+- **Goal:** Oryntela absorbs complexity so the salesperson does not have to
 
 WO-025A applies this gate to the existing Core: one next-action focus on Opportunity,
 lifecycle-led Interaction controls, progressive meeting/administration disclosure,
@@ -54,7 +54,7 @@ The work order and acceptance criteria must answer:
 3. Are advanced controls hidden until needed?
 4. Are labels written in salesperson language?
 5. Does the page say what to do next?
-6. Can the workflow be completed without understanding RevenueOS architecture?
+6. Can the workflow be completed without understanding Oryntela architecture?
 7. Does the feature really need a navigation item?
 8. Can it live within an existing page?
 9. Is mobile simpler than desktop?

@@ -5,7 +5,7 @@
 > [Oryntela master product blueprint](oryntela-master-product-blueprint.md); it
 > remains distinct from targets and pipeline value.
 
-**Status:** Implemented by WO-038 as a RevenueOS Core capability.
+**Status:** Implemented by WO-038 as a Oryntela Core capability.
 
 Forecast answers what may close in a calendar month or quarter without presenting a
 weighted-pipeline fiction. The Insights **Forecast** tab keeps four concepts visible
@@ -14,7 +14,7 @@ and separate:
 - **Actual:** canonical Won value from Sales Analytics;
 - **Target:** an explicit matching Won-value goal from Targets;
 - **Seller forecast:** human Commit, Likely and Possible cases; and
-- **RevenueOS baseline:** a deterministic reference from comparable historical stage
+- **Oryntela baseline:** a deterministic reference from comparable historical stage
   outcomes.
 
 An Opportunity is eligible only when it is currently open/on hold, has a canonical

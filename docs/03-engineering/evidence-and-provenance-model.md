@@ -18,7 +18,7 @@ customer-confirmed.
   transcript evidence with immutable versions/segments, and WO-017 retains
   phone-recording source plus deterministic debrief reconciliation state. See the
   [Evidence foundation implementation guide](evidence-foundation-implementation.md)
-- **Goal:** Let RevenueOS explain what it believes, why, what conflicts and how the
+- **Goal:** Let Oryntela explain what it believes, why, what conflicts and how the
   conclusion was validated without pretending every source is equally authoritative
 
 ## Model overview

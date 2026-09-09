@@ -127,7 +127,7 @@ export function InteractionForm() {
   return (
     <section aria-labelledby="interaction-form-title" className="form-card">
       <div className="max-w-2xl">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
           Customer activity
         </p>
         <h1
@@ -139,7 +139,7 @@ export function InteractionForm() {
         <p className="mt-3 text-sm leading-6 text-slate-600">
           Add a customer event and choose how to capture it after it happens.
           Online meeting links are stored only as safe, query-free navigation
-          links; RevenueOS does not join or fetch them.
+          links; Oryntela does not join or fetch them.
         </p>
       </div>
 
@@ -227,12 +227,12 @@ export function InteractionForm() {
             </label>
           </div>
           {interactionType === "phone_call" ? (
-            <fieldset className="grid gap-5 rounded-2xl border border-teal-200 bg-teal-50 p-5 sm:grid-cols-2">
-              <legend className="px-2 text-sm font-bold text-teal-950">
+            <fieldset className="grid gap-5 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5 sm:grid-cols-2">
+              <legend className="px-2 text-sm font-bold text-brand-primary">
                 Phone call
               </legend>
-              <p className="sm:col-span-2 text-sm leading-6 text-teal-950">
-                Use the phone system you already have. RevenueOS prepares and
+              <p className="sm:col-span-2 text-sm leading-6 text-brand-primary">
+                Use the phone system you already have. Oryntela prepares and
                 times the interaction; it does not intercept or record a normal
                 cellular call.
               </p>
@@ -274,13 +274,13 @@ export function InteractionForm() {
             </fieldset>
           ) : null}
           {interactionType === "online_meeting" ? (
-            <fieldset className="grid gap-5 rounded-2xl border border-teal-200 bg-teal-50 p-5 sm:grid-cols-2">
-              <legend className="px-2 text-sm font-bold text-teal-950">
+            <fieldset className="grid gap-5 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5 sm:grid-cols-2">
+              <legend className="px-2 text-sm font-bold text-brand-primary">
                 Online meeting
               </legend>
-              <p className="sm:col-span-2 text-sm leading-6 text-teal-950">
-                Use your normal meeting app. RevenueOS stores a safe link for
-                you to open and offers authorised import or debrief choices
+              <p className="sm:col-span-2 text-sm leading-6 text-brand-primary">
+                Use your normal meeting app. Oryntela stores a safe link for you
+                to open and offers authorised import or debrief choices
                 afterwards. It does not join, record system audio or run a bot.
               </p>
               <label className="grid gap-2 text-sm font-bold text-slate-800">

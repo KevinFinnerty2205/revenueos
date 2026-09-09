@@ -2,7 +2,7 @@
 
 ## Two distinct questions
 
-**Record authority** answers which system may edit a canonical CRM field. **Evidence provenance** answers where a value or claim came from and how trustworthy it is. Native mode makes RevenueOS authoritative for editable record state; it does not magically verify manually entered or provider-supplied data.
+**Record authority** answers which system may edit a canonical CRM field. **Evidence provenance** answers where a value or claim came from and how trustworthy it is. Native mode makes Oryntela authoritative for editable record state; it does not magically verify manually entered or provider-supplied data.
 
 ## Authority rules
 

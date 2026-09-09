@@ -2,7 +2,7 @@
 
 ## Capture and content threats
 
-- Camera access is available only through a visible user-initiated browser file input. RevenueOS does not request background access, record video or keep the camera active after the browser chooser closes.
+- Camera access is available only through a visible user-initiated browser file input. Oryntela does not request background access, record video or keep the camera active after the browser chooser closes.
 - The browser shows a local preview before upload and requires an explicit authority/consent confirmation. Users remain responsible for excluding bystanders and content they are not authorised to share.
 - Whiteboards and screenshots can expose confidential, personal or unrelated material. Guidance asks users to frame or redact before upload; the system does not claim reliable automatic redaction.
 - Business-card text is personal data. Extraction creates review-only contact candidates, with no automatic Contact mutation, enrichment, external lookup, buying signal or stakeholder-role inference.

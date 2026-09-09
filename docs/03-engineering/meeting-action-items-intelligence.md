@@ -2,7 +2,7 @@
 
 ## Product behaviour
 
-WO-004C3 adds RevenueOS's third Meeting Intelligence capability. An authorised
+WO-004C3 adds Oryntela's third Meeting Intelligence capability. An authorised
 user opens a meeting's **Intelligence** tab and requests **Action Items** from
 the current usable transcript. The API queues work without calling a provider
 synchronously. The durable worker validates and persists a versioned artefact,
@@ -12,7 +12,7 @@ Action Items, Decisions and Executive Summary have independent jobs,
 idempotency and artefacts. Action Items records only concrete work that a
 person or group committed or agreed to perform. It does not turn a decision,
 topic, risk, question, aspiration or vague suggestion into work, and it does
-not create or edit a RevenueOS task.
+not create or edit a Oryntela task.
 
 ## End-to-end flow
 

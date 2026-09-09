@@ -167,7 +167,7 @@ export function FaceToFaceCompanion({
     window.sessionStorage.setItem(captureStorageKey(interactionId), choice);
     setMessage(
       choice === "passive"
-        ? "Passive Companion is active. RevenueOS is not recording or listening."
+        ? "Passive Companion is active. Oryntela is not recording or listening."
         : "Recording controls are ready. Consent must be confirmed before microphone access is requested.",
     );
   }
@@ -186,7 +186,7 @@ export function FaceToFaceCompanion({
       setInteraction(started);
       setMessage(
         started.interactionType === "online_meeting"
-          ? "Meeting started. Passive Companion is active; RevenueOS is not recording or listening."
+          ? "Meeting started. Passive Companion is active; Oryntela is not recording or listening."
           : "Interaction started. Choose how you want Companion to help.",
       );
     } catch (requestError: unknown) {
@@ -335,12 +335,12 @@ export function FaceToFaceCompanion({
       <div className="-mx-4 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:mx-0 sm:rounded-2xl">
         <div className="flex items-center justify-between gap-3">
           <Link
-            className="text-sm font-bold text-teal-800"
+            className="text-sm font-bold text-brand-secondary"
             href={`/interactions/${interactionId}`}
           >
             Back
           </Link>
-          <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold tracking-[0.16em] text-white">
+          <span className="rounded-full bg-brand-primary px-3 py-1 text-xs font-bold tracking-[0.16em] text-white">
             {phase}
           </span>
         </div>
@@ -355,7 +355,7 @@ export function FaceToFaceCompanion({
       {message ? (
         <p
           role="status"
-          className="mt-4 rounded-xl bg-teal-50 p-4 text-sm text-teal-950"
+          className="mt-4 rounded-xl bg-brand-secondary/10 p-4 text-sm text-brand-primary"
         >
           {message}
         </p>
@@ -420,8 +420,8 @@ export function FaceToFaceCompanion({
           ) : null}
 
           {effectiveCaptureChoice === "passive" ? (
-            <section className="mt-5 rounded-3xl border border-teal-200 bg-teal-50 p-5">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">
+            <section className="mt-5 rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
                 Passive Companion
               </p>
               <h2 className="mt-2 text-2xl font-semibold text-slate-950">
@@ -534,11 +534,11 @@ function BeforePhase({
   const content = brief?.state === "completed" ? brief.brief : null;
   return (
     <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         30-second brief
       </p>
       <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-        <span className="rounded-full bg-teal-50 px-3 py-1 text-teal-900">
+        <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-brand-primary">
           {humanise(interaction.interactionType)}
         </span>
         <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
@@ -706,7 +706,7 @@ function CaptureChoicePanel({
   );
   return (
     <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Choose deliberately
       </p>
       <h2 className="mt-2 text-2xl font-semibold text-slate-950">
@@ -821,7 +821,7 @@ function CompanionControls({
                 key={marker.type}
                 type="button"
                 disabled={working}
-                className="min-h-14 rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                className="min-h-14 rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-focus"
                 onClick={() => onAddMarker(marker.type)}
               >
                 {marker.label}
@@ -881,7 +881,7 @@ function AfterPhase({
 }) {
   return (
     <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Capture summary
       </p>
       <h2 className="mt-2 text-2xl font-semibold text-slate-950">
@@ -926,7 +926,7 @@ function AfterPhase({
       </div>
       {visualEnabled || interaction.opportunityId || interaction.companyId ? (
         <details className="mt-4 rounded-2xl border border-slate-200 p-4">
-          <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-focus">
             More options
           </summary>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">

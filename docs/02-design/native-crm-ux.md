@@ -9,7 +9,7 @@ No CRM destination is added. Desktop continues to use Accounts, People and Pipel
 
 ## Settings
 
-Settings → CRM first shows the current availability and a plain-language choice: use RevenueOS as the CRM or use connected HubSpot. Only admins see mutation controls. Selecting a mode requires explicit confirmation. Connection/mapping conflicts produce a safe explanation and do not silently rewrite authority. Custom-field administration groups fields by record type and exposes only label, key, supported type, options/order and archive.
+Settings → CRM first shows the current availability and a plain-language choice: use Oryntela as the CRM or use connected HubSpot. Only admins see mutation controls. Selecting a mode requires explicit confirmation. Connection/mapping conflicts produce a safe explanation and do not silently rewrite authority. Custom-field administration groups fields by record type and exposes only label, key, supported type, options/order and archive.
 
 ## Records
 

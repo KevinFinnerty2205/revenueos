@@ -8,7 +8,7 @@ Forecast Model v1 answers two different questions without blending their answers
 
 1. **Seller forecast range:** what the Opportunity owner currently judges may close
    in one explicit calendar month or quarter.
-2. **RevenueOS historical baseline:** what expected monetary contribution follows
+2. **Oryntela historical baseline:** what expected monetary contribution follows
    from the organisation's own reliably tracked outcomes for the current Pipeline and
    stable stage.
 
@@ -25,7 +25,7 @@ history rows in the migrated local database. The deterministic demo generator ha
 synthetic pipeline history, but synthetic fixtures are not customer calibration
 evidence.
 
-RevenueOS must therefore support an honest bootstrap state. Seller judgment is
+Oryntela must therefore support an honest bootstrap state. Seller judgment is
 available when the system cohort is sparse. The historical baseline is unavailable
 for an Opportunity until the exact cohort below contains at least ten final outcomes.
 There is no organisation-wide, stage-name, industry or external benchmark fallback.
@@ -113,7 +113,7 @@ For a cohort with `won_count + lost_count >= 10`:
 ```text
 observed final Win Rate = won_count / (won_count + lost_count)
 
-RevenueOS expected contribution =
+Oryntela expected contribution =
     current Opportunity amount × observed final Win Rate
 ```
 
@@ -122,7 +122,7 @@ amount, Won count, final sample, displayed one-decimal rate, exact Pipeline/stag
 lookback, minimum sample, model version and multiplication lineage. Wording calls this
 an observed historical baseline, not a known deal probability.
 
-The aggregate RevenueOS baseline is the sum of expected contributions only for
+The aggregate Oryntela baseline is the sum of expected contributions only for
 covered valued Opportunities in the selected currency. It always discloses covered
 and uncovered Opportunity counts and amounts. Uncovered Opportunities are not treated
 as zero and the system baseline is not presented as a complete seller forecast.
@@ -135,7 +135,7 @@ system low/high band would therefore overstate meaning in the current sparse pri
 beta setting. WO-038 instead uses the explicit Commit/Likely/Possible seller cases as
 the primary range and displays one separate empirical expected-value baseline.
 
-RevenueOS never blends these perspectives into a hidden final number. A later system
+Oryntela never blends these perspectives into a hidden final number. A later system
 range requires a separately versioned and calibrated policy.
 
 ## Context without numerical weighting

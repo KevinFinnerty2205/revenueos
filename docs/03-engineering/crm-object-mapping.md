@@ -2,7 +2,7 @@
 
 `crm_entity_mappings` is the tenant-scoped external-reference boundary:
 
-| RevenueOS | HubSpot | WO-025C use |
+| Oryntela | HubSpot | WO-025C use |
 | --- | --- | --- |
 | Company | company | explicit search/link architecture; no writes |
 | Contact | contact | explicit link required before a Contact update |
@@ -10,10 +10,10 @@
 | Interaction | meeting | external result is recorded on execution; no domain ID replacement |
 | Action | task | model shape reserved; task capability not advertised by HubSpot |
 
-Mappings store organisation and connection IDs, RevenueOS entity type/ID,
+Mappings store organisation and connection IDs, Oryntela entity type/ID,
 provider object type/ID, safe updated/sync timestamps and state. They do not store
-provider payloads. Composite uniqueness prevents one RevenueOS record mapping to
-two provider records or one provider record mapping to two RevenueOS records
+provider payloads. Composite uniqueness prevents one Oryntela record mapping to
+two provider records or one provider record mapping to two Oryntela records
 inside the same tenant connection.
 
 Link creation is always explicit. Search is bounded to ten provider results. The

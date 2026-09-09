@@ -1,6 +1,6 @@
 # Sales Methodology Engine implementation guide
 
-**Status:** Implemented by WO-024 as a RevenueOS Core capability.
+**Status:** Implemented by WO-024 as a Oryntela Core capability.
 
 ## Boundary
 
@@ -83,7 +83,7 @@ MEDDPICC projections from synthetic final sources, with zero provider calls.
 There is no Opportunity override, team assignment, automatic queue, provider
 normalisation, arbitrary expression, stage gate, completeness percentage,
 qualification score, close probability, manager dashboard, rep ranking or employee
-surveillance. RevenueOS may be wrong; every conclusion remains inspectable and
+surveillance. Oryntela may be wrong; every conclusion remains inspectable and
 reviewable.
 
 ## WO-035 Pipeline boundary

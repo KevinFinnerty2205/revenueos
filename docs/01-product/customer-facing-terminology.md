@@ -20,8 +20,8 @@ Use these names in ordinary seller and manager experiences.
 | Manager view | Admin-only deal review and coaching context | Admin intelligence module |
 
 “Provider supplied” is valid only when field provenance actually comes from a
-provider. “RevenueOS record” is the customer-facing description for a canonical
-record when an external CRM is not configured. Search finds records. Ask RevenueOS
+provider. “Oryntela record” is the customer-facing description for a canonical
+record when an external CRM is not configured. Search finds records. Ask Oryntela
 answers only its displayed set of bounded, authorised questions.
 
 Engineering vocabulary remains appropriate in admin documentation and diagnostic

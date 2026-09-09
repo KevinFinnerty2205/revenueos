@@ -23,7 +23,7 @@ immutable approved history, content-minimised audit/log metadata and organisatio
 export/deletion apply. Consumer code must cite or persist the exact revision and keep
 this authority separate from customer-direct and seller-reported Evidence.
 
-RevenueOS must be able to demonstrate that:
+Oryntela must be able to demonstrate that:
 
 1. one organisation cannot access another organisation's data;
 2. capture is deliberate, visible and subject to consent and applicable law;
@@ -157,7 +157,7 @@ Exclusion allows a user to prevent processing/use without misrepresenting the so
 
 ## Recording consent
 
-- RevenueOS never records or captures a conversation implicitly.
+- Oryntela never records or captures a conversation implicitly.
 - MVP ingestion begins only when a user deliberately selects a file/pastes text and confirms they have the required consent or authority.
 - Connected post-meeting capture has a clear enabled state, eligible-source policy and per-event provenance.
 - Consent evidence records policy/version, actor, time and capture method without claiming to establish legal compliance.

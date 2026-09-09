@@ -535,7 +535,7 @@ class MicrosoftEmailExecutor(ActionExecutor):
             if exc.retryable:
                 raise RetryableExecutionFailure(
                     exc.code,
-                    "Microsoft is temporarily unavailable. RevenueOS will retry safely.",
+                    "Microsoft is temporarily unavailable. Oryntela will retry safely.",
                     retry_after_seconds=exc.retry_after_seconds,
                 ) from exc
             raise PermanentExecutionFailure(
@@ -631,7 +631,7 @@ class MicrosoftEmailExecutor(ActionExecutor):
         if operation.state == "unknown":
             raise UnknownExternalStateFailure(
                 "microsoft_send_outcome_unknown",
-                "Microsoft may have accepted this email. RevenueOS will not send it again until reconciled.",
+                "Microsoft may have accepted this email. Oryntela will not send it again until reconciled.",
             )
         if operation.state != "submitting":
             raise PermanentExecutionFailure(
@@ -656,13 +656,13 @@ class MicrosoftEmailExecutor(ActionExecutor):
                 operation.state = "unknown"
                 raise UnknownExternalStateFailure(
                     "microsoft_send_outcome_unknown",
-                    "Microsoft may have accepted this email. RevenueOS will not send it again until reconciled.",
+                    "Microsoft may have accepted this email. Oryntela will not send it again until reconciled.",
                 ) from exc
             operation.state = "failed"
             if exc.retryable:
                 raise RetryableExecutionFailure(
                     exc.code,
-                    "Microsoft is temporarily unavailable. RevenueOS will retry safely.",
+                    "Microsoft is temporarily unavailable. Oryntela will retry safely.",
                     retry_after_seconds=exc.retry_after_seconds,
                 ) from exc
             if exc.code == "connection_reauthorisation_required":

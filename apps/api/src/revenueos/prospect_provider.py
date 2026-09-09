@@ -264,7 +264,7 @@ class DeterministicMockProspectProvider:
                 website_url="https://northstar-facilities.example/",
                 location="Sydney, Australia",
                 industry="Facilities services",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
             CompanyCandidate(
                 candidate_id="northstar-software",
@@ -273,7 +273,7 @@ class DeterministicMockProspectProvider:
                 website_url="https://northstar-software.example/",
                 location="Melbourne, Australia",
                 industry="Business software",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
             CompanyCandidate(
                 candidate_id="harbourline-logistics",
@@ -282,7 +282,7 @@ class DeterministicMockProspectProvider:
                 website_url="https://harbourline-logistics.example/",
                 location="Brisbane, Australia",
                 industry="Logistics",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
             CompanyCandidate(
                 candidate_id="harbour-health-network",
@@ -291,7 +291,7 @@ class DeterministicMockProspectProvider:
                 website_url="https://harbour-health.example/",
                 location="Newcastle, Australia",
                 industry="Healthcare",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
             CompanyCandidate(
                 candidate_id="southbank-retail-group",
@@ -300,7 +300,7 @@ class DeterministicMockProspectProvider:
                 website_url="https://southbank-retail.example/",
                 location="Melbourne, Australia",
                 industry="Retail",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
             CompanyCandidate(
                 candidate_id="pacific-systems",
@@ -309,7 +309,7 @@ class DeterministicMockProspectProvider:
                 website_url="https://pacific-systems.example/",
                 location="Auckland, New Zealand",
                 industry="Business software",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
             CompanyCandidate(
                 candidate_id="bluepeak-technologies",
@@ -318,7 +318,7 @@ class DeterministicMockProspectProvider:
                 website_url="https://bluepeak-technologies.example/",
                 location="Sydney, Australia",
                 industry="Business software",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
             CompanyCandidate(
                 candidate_id="atlas-operations",
@@ -327,7 +327,7 @@ class DeterministicMockProspectProvider:
                 website_url="https://atlas-operations.example/",
                 location="Brisbane, Australia",
                 industry="Facilities services",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
         )
 
@@ -392,7 +392,7 @@ class DeterministicMockProspectProvider:
                     "Jane leads technology strategy and may be relevant to technical evaluation and executive sponsorship."
                 ),
                 discovery_source="company_leadership",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
             PersonCandidate(
                 person_id="northstar-john-brown",
@@ -406,7 +406,7 @@ class DeterministicMockProspectProvider:
                 relevant_function="finance",
                 why_may_matter="John leads finance and may be relevant to commercial approval and financial review.",
                 discovery_source="company_leadership",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
             PersonCandidate(
                 person_id="northstar-sarah-jones",
@@ -420,7 +420,7 @@ class DeterministicMockProspectProvider:
                 relevant_function="procurement",
                 why_may_matter="Sarah leads procurement and may shape purchasing and supplier review.",
                 discovery_source="company_leadership",
-                provider_attribution="RevenueOS synthetic research data",
+                provider_attribution="Oryntela synthetic research data",
             ),
         )
         return people[:limit]
@@ -476,7 +476,7 @@ class DeterministicMockProspectProvider:
             "contact_provider",
             "https://mock-provider.example/people/northstar-jane-smith",
             "Synthetic business contact profile",
-            "RevenueOS deterministic mock provider",
+            "Oryntela deterministic mock provider",
             ProspectSourceAuthority.STRUCTURED_PROVIDER,
             provider_source_id="mock:northstar-jane-smith",
         )
@@ -790,7 +790,7 @@ class DeterministicMockProspectProvider:
             "structured_provider",
             "https://mock-provider.example/companies/northstar-facilities-group",
             "Synthetic company profile",
-            "RevenueOS deterministic mock provider",
+            "Oryntela deterministic mock provider",
             ProspectSourceAuthority.STRUCTURED_PROVIDER,
             provider_source_id="mock:northstar-facilities-group",
             version="2" if refresh else "1",

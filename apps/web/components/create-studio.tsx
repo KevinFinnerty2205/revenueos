@@ -166,7 +166,7 @@ export function CreateStudio() {
     return (
       <div className="space-y-6">
         <PageHeader
-          eyebrow="RevenueOS Create"
+          eyebrow="Create"
           title="Sales Content Studio"
           description="Build reviewed, traceable customer presentations from approved company content."
         />
@@ -198,7 +198,7 @@ export function CreateStudio() {
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="RevenueOS Create"
+        eyebrow="Create"
         title="Sales Content Studio"
         description="Plan first, generate from approved sources, review every claim, then download an editable PowerPoint."
         actions={
@@ -220,7 +220,7 @@ export function CreateStudio() {
       <section aria-labelledby="business-cases-title" className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
               Transparent value modelling
             </p>
             <h2
@@ -260,7 +260,7 @@ export function CreateStudio() {
                 <Link
                   key={item.id}
                   href={`/create/business-cases/${item.id}`}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-secondary/35 focus:outline-none focus:ring-2 focus:ring-brand-focus"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -313,14 +313,14 @@ export function CreateStudio() {
       </section>
 
       {approvedTemplates.length === 0 ? (
-        <section className="rounded-3xl border border-teal-200 bg-teal-50 p-6 sm:p-8">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+        <section className="rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-6 sm:p-8">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             First use
           </p>
-          <h2 className="mt-2 text-2xl font-semibold text-teal-950">
+          <h2 className="mt-2 text-2xl font-semibold text-brand-primary">
             Approve a company presentation template first
           </h2>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-teal-900">
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-brand-primary">
             An administrator uploads a company-approved PPTX, reviews each
             slide, classifies reuse and edit rules, and approves an immutable
             template version. Create will not generate without that approval.
@@ -331,7 +331,7 @@ export function CreateStudio() {
       <section aria-labelledby="presentations-title" className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
               Studio
             </p>
             <h2
@@ -351,7 +351,7 @@ export function CreateStudio() {
               <Link
                 key={item.id}
                 href={`/create/presentations/${item.id}`}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-secondary/35 focus:outline-none focus:ring-2 focus:ring-brand-focus"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -386,7 +386,7 @@ export function CreateStudio() {
 
       <section aria-labelledby="templates-title" className="space-y-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Controlled source content
           </p>
           <h2
@@ -401,7 +401,7 @@ export function CreateStudio() {
             <Link
               key={item.id}
               href={`/create/templates/${item.id}`}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-brand-secondary/35 focus:outline-none focus:ring-2 focus:ring-brand-focus"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -471,7 +471,7 @@ export function CreateStudio() {
               />
               <span>
                 I confirm that I am authorised to upload this company content
-                and approve it for customer-facing reuse in RevenueOS.
+                and approve it for customer-facing reuse in Oryntela.
               </span>
             </label>
             <button type="submit" className="primary-button mt-5">

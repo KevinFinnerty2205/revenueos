@@ -12,6 +12,7 @@ import type {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { displayPipelineName } from "@/lib/customer-display";
 
 const categoryLabels: Record<SalesForecastCategory, string> = {
   commit: "Commit",
@@ -280,7 +281,7 @@ function OpportunityForecastCard({
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href={`/opportunities/${opportunity.opportunityId}`}
-              className="text-lg font-semibold text-teal-900 hover:underline"
+              className="text-lg font-semibold text-brand-primary hover:underline"
             >
               {opportunity.opportunityName}
             </Link>
@@ -339,7 +340,7 @@ function OpportunityForecastCard({
               type="button"
               onClick={() => void saveJudgment()}
               disabled={saving || periodLocked || !category}
-              className="mt-2 min-h-11 w-full rounded-xl bg-teal-800 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="mt-2 min-h-11 w-full rounded-xl bg-brand-secondary px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
             >
               {saving
                 ? "Saving…"
@@ -405,7 +406,7 @@ function OpportunityForecastCard({
           <button
             type="button"
             onClick={() => void loadManagerHistory()}
-            className="mt-3 text-sm font-semibold text-teal-800 hover:underline"
+            className="mt-3 text-sm font-semibold text-brand-secondary hover:underline"
           >
             {managerHistoryLoading
               ? "Loading manager history…"
@@ -447,7 +448,7 @@ function OpportunityForecastCard({
       <button
         type="button"
         onClick={() => void loadHistory()}
-        className="mt-4 text-sm font-semibold text-teal-800 underline-offset-4 hover:underline"
+        className="mt-4 text-sm font-semibold text-brand-secondary underline-offset-4 hover:underline"
       >
         {historyLoading
           ? "Loading history…"
@@ -617,7 +618,7 @@ export function SalesForecast() {
               <option value="">All pipelines</option>
               {metadata?.pipelines.map((pipeline) => (
                 <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
+                  {displayPipelineName(pipeline.name)}
                   {pipeline.active ? "" : " (inactive)"}
                 </option>
               ))}
@@ -757,7 +758,7 @@ export function SalesForecast() {
                 />
               ) : null}
               <SummaryCard
-                label="RevenueOS baseline"
+                label="Oryntela baseline"
                 value={formatMoney(
                   forecast.revenueosBaseline.expectedContribution,
                   forecast.currency,
@@ -816,15 +817,15 @@ export function SalesForecast() {
 
           <section
             aria-labelledby="seller-range-title"
-            className="rounded-2xl border border-teal-200 bg-teal-50 p-5"
+            className="rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5"
           >
             <h2
               id="seller-range-title"
-              className="text-lg font-semibold text-teal-950"
+              className="text-lg font-semibold text-brand-primary"
             >
               Seller forecast range
             </h2>
-            <p className="mt-1 text-sm leading-6 text-teal-900">
+            <p className="mt-1 text-sm leading-6 text-brand-primary">
               {forecast.sellerForecast.disclosure}
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -853,7 +854,7 @@ export function SalesForecast() {
                 detail={`Commit + Likely + Possible · ${forecast.sellerForecast.possible.opportunityCount} opportunities`}
               />
             </div>
-            <p className="mt-4 text-sm text-teal-900">
+            <p className="mt-4 text-sm text-brand-primary">
               {forecast.sellerForecast.unreviewedCount} unreviewed ·{" "}
               {forecast.sellerForecast.notThisPeriodCount} marked Not this
               period · {forecast.sellerForecast.needsReviewCount} stale.
@@ -924,7 +925,7 @@ export function SalesForecast() {
               Deal review
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Each category is an explicit seller judgment. RevenueOS does not
+              Each category is an explicit seller judgment. Oryntela does not
               infer or attach a probability.
             </p>
             {metadata?.canReviewManagerView ? (

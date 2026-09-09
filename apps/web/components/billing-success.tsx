@@ -41,7 +41,7 @@ export function BillingSuccess() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
           Test billing
         </p>
         <h1 className="mt-2 text-3xl font-bold text-slate-950">
@@ -62,7 +62,7 @@ export function BillingSuccess() {
         {status ? (
           <p
             role="status"
-            className={`mt-3 text-sm leading-6 ${status.confirmed ? "text-teal-900" : "text-amber-900"}`}
+            className={`mt-3 text-sm leading-6 ${status.confirmed ? "text-brand-primary" : "text-amber-900"}`}
           >
             {status.message}
           </p>

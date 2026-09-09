@@ -35,7 +35,7 @@ inherits the WO-013 debrief, WO-014 visual and WO-015 recording controls.
 | Device/browser suspends the tab       | Foreground-only copy, best-effort wake lock, page-leave warning, server chunk recovery               |
 | Unsent memory chunk lost on reload    | Explicit limitation; no claim of durable offline capture                                             |
 | Shared-device shoulder surfing        | Minimal DURING UI and no transcript body; device security remains the user’s responsibility          |
-| User records without lawful authority | Explicit attestation and notice version; RevenueOS does not make jurisdictional legal conclusions    |
+| User records without lawful authority | Explicit attestation and notice version; Oryntela does not make jurisdictional legal conclusions    |
 | Marker is mistaken for evidence       | Metadata-only schema, product labels, no automatic intelligence mutation                             |
 | Duplicate tab starts another session  | Tenant-scoped active-session conflict in recording service                                           |
 | Visual contains sensitive data        | Existing authorisation, private storage, metadata stripping, review, retention and deletion controls |

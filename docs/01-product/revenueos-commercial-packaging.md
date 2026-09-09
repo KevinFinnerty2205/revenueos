@@ -1,7 +1,7 @@
-# RevenueOS commercial packaging
+# Oryntela commercial packaging
 
 > **Oryntela consolidation — 4 September 2026:** Oryntela is the selected public
-> brand direction; RevenueOS remains the technical product/repository name. WO-047
+> brand direction; Oryntela remains the technical product/repository name. WO-047
 > implements this V1 package as internal commercial authority. WO-048 adds a
 > test-only billing architecture over it; neither work order authorises public
 > pricing, live payments or launch.

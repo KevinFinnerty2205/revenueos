@@ -58,13 +58,13 @@ export function ProspectModuleSettings() {
 
   return (
     <section className="form-card" aria-labelledby="prospect-module-title">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Modules
       </p>
       <div className="mt-2 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="prospect-module-title" className="form-legend">
-            RevenueOS Prospect
+            Prospect
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             Let active sales members find companies and create sourced public
@@ -81,9 +81,9 @@ export function ProspectModuleSettings() {
               saving || availability.state === "temporarily_unavailable"
             }
             onClick={() => void update(!availability.enabled)}
-            className={`inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 ${
+            className={`inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 ${
               availability.enabled
-                ? "border-teal-700 bg-teal-700 text-white"
+                ? "border-brand-secondary bg-brand-primary text-white"
                 : "border-slate-300 bg-white text-slate-700"
             }`}
           >
@@ -126,7 +126,7 @@ export function ProspectModuleSettings() {
           </div>
           {provider.blockers.length > 0 ? (
             <details className="mt-3 text-sm text-slate-700">
-              <summary className="min-h-11 cursor-pointer py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2">
+              <summary className="min-h-11 cursor-pointer py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2">
                 Review activation requirements
               </summary>
               <ul className="list-disc space-y-2 pl-5">

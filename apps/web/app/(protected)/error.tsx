@@ -11,7 +11,7 @@ export default function ProtectedWorkspaceError({
   return (
     <section className="form-card" aria-labelledby="workspace-error-title">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-rose-700">
-        RevenueOS workspace
+        Oryntela workspace
       </p>
       <h1 id="workspace-error-title" className="mt-2 text-2xl font-semibold">
         This page could not be loaded

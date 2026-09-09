@@ -269,7 +269,7 @@ export function ImportedCallRecording({
       aria-labelledby={`add-${context}-recording-title`}
       className="form-card"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Compliant recording import
       </p>
       <h2
@@ -280,7 +280,7 @@ export function ImportedCallRecording({
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
         {context === "online_meeting"
-          ? "Add an authorised recording exported from your meeting platform. RevenueOS privately uploads it for batch transcription; it does not join the meeting, capture system audio or run a bot."
+          ? "Add an authorised recording exported from your meeting platform. Oryntela privately uploads it for batch transcription; it does not join the meeting, capture system audio or run a bot."
           : "Add an existing authorised business-call recording. This uses the same private upload and transcription path as other Interaction recordings; it does not record or monitor your phone."}
       </p>
 
@@ -402,7 +402,10 @@ export function ImportedCallRecording({
             </p>
           ) : null}
           {working ? (
-            <p role="status" className="text-sm font-semibold text-teal-800">
+            <p
+              role="status"
+              className="text-sm font-semibold text-brand-secondary"
+            >
               Secure upload {progress}%
             </p>
           ) : null}

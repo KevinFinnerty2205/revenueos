@@ -185,7 +185,7 @@ describe("ExecutiveSummaryPanel", () => {
     render(<ExecutiveSummaryPanel meetingId="meeting-1" />);
     expect(
       await screen.findByText(
-        /RevenueOS could not reach the service.*Request ID:/,
+        /Oryntela could not reach the service.*Request ID:/,
       ),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));

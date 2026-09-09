@@ -217,13 +217,13 @@ export function CRMExternalWritebackPanel({
                 ))}
               </dl>
               <p className="mt-4 text-xs text-amber-900">
-                Preview expires {formatDate(preview.expiresAt)}. RevenueOS will
+                Preview expires {formatDate(preview.expiresAt)}. Oryntela will
                 reject it if the CRM record or mapping changes first.
               </p>
               <label className="mt-4 flex items-start gap-3 text-sm font-semibold text-amber-950">
                 <input
                   type="checkbox"
-                  className="mt-1 h-4 w-4 accent-teal-700"
+                  className="mt-1 h-4 w-4 accent-brand-secondary"
                   checked={confirmed}
                   onChange={(event) => setConfirmed(event.target.checked)}
                 />
@@ -265,7 +265,7 @@ export function CRMExternalWritebackPanel({
               {result.status === "unknown" ? (
                 <>
                   <p className="mt-2 font-semibold">
-                    RevenueOS did not retry the update.
+                    Oryntela did not retry the update.
                   </p>
                   <button
                     type="button"

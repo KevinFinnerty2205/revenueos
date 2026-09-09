@@ -129,7 +129,7 @@ export function CRMRecordLink({ opportunityId }: { opportunityId: string }) {
 
   return (
     <section className="form-card" aria-labelledby="crm-record-link-title">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         External CRM context
       </p>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">

@@ -1,13 +1,13 @@
-# RevenueOS Core competitive capability floor
+# Oryntela Core competitive capability floor
 
 - **Status:** Product contract clarified at Checkpoint 1; future work remains
   separately authorised
-- **Purpose:** Define the minimum coherent Core without turning RevenueOS into a
+- **Purpose:** Define the minimum coherent Core without turning Oryntela into a
   feature-count competitor
 
 ## Product standard
 
-RevenueOS Core must help a relationship-driven seller complete this loop:
+Oryntela Core must help a relationship-driven seller complete this loop:
 
 1. understand what matters now;
 2. prepare for the next customer Interaction;
@@ -33,7 +33,7 @@ The loop, not any individual screen or model, is the competitive floor.
 | Trust the result          | Provenance, source class, conflicts, freshness, review and correction                                 | Implemented strongly                                         | Keep visible wherever a conclusion or action matters                           |
 | Remember the relationship | Immutable longitudinal account/Opportunity context                                                    | Implemented deterministic foundation                         | Extend across final source-neutral Evidence and explicit outcomes              |
 | Qualify the deal          | MEDDIC, MEDDPICC, BANT, SPICED and bounded custom method                                              | Implemented                                                  | Prefer categorical evidence states and questions over percentage theatre       |
-| Progress the deal         | Risks, gaps, Next Best Action and reviewable Actions                                                  | Implemented in RevenueOS                                     | Complete a production approved-action loop in the selected system of record    |
+| Progress the deal         | Risks, gaps, Next Best Action and reviewable Actions                                                  | Implemented in Oryntela                                     | Complete a production approved-action loop in the selected system of record    |
 | Reduce sales admin        | Prepare notes, follow-up and CRM-ready changes                                                        | One reviewed HubSpot field/activity path implemented         | Validate in the target environment; selected mail path later                   |
 | Retrieve knowledge        | Search and evidence-backed questions                                                                  | Implemented in bounded WO-025A/B form                        | Validate usefulness/citation trust before Prospect                             |
 | Understand pipeline       | Reproducible pipeline, conversion and movement                                                        | Descriptive personal pipeline only                           | WO-035/036                                                                     |
@@ -49,15 +49,15 @@ Core retains its five product parts:
 
 1. **Sales Brain** — Capture → Intelligence → Action across customer Interactions.
 2. **Sales Methodology** — explainable projections over canonical Evidence.
-3. **RevenueOS Intelligence** — deal/pipeline analytics, Win/Loss, targets,
+3. **Oryntela Intelligence** — deal/pipeline analytics, Win/Loss, targets,
    forecasting, coaching and manager understanding.
-4. **RevenueOS Workspace** — organised account/Opportunity Evidence and working
+4. **Oryntela Workspace** — organised account/Opportunity Evidence and working
    memory, not generic document management.
-5. **RevenueOS Daily** — the simple personal habit and prioritisation surface.
+5. **Oryntela Daily** — the simple personal habit and prioritisation surface.
 
 The following are also Core capability or Core-enabling infrastructure:
 
-- **Ask RevenueOS / universal Search** because it unlocks the value of accumulated
+- **Ask Oryntela / universal Search** because it unlocks the value of accumulated
   authorised relationship knowledge;
 - **Win/Loss Intelligence** because understanding outcomes is part of revenue
   intelligence, not a prospecting or content add-on;
@@ -74,26 +74,26 @@ The following are also Core capability or Core-enabling infrastructure:
 | Prospect | Find and research net-new accounts/people, ICP/territory and safe promotion into Sell    |
 | Engage   | Outbound messages, campaigns, sequences and event follow-up at scale                     |
 | Create   | Generated presentations, proposals, templates and ROI/business cases                     |
-| CRM      | Optional native system-of-record administration for teams choosing RevenueOS-native mode |
+| CRM      | Optional native system-of-record administration for teams choosing Oryntela-native mode |
 
 The native CRM product is distinct from a CRM connector. Core needs the latter to
 honour the customer's existing system of record; it does not need Salesforce parity.
 
 ## Prepared, approved and executed
 
-RevenueOS must use these words consistently:
+Oryntela must use these words consistently:
 
-- **Prepared:** RevenueOS created a draft, projection or proposed change from current
+- **Prepared:** Oryntela created a draft, projection or proposed change from current
   authorised evidence. Nothing external happened.
 - **Reviewed/edited:** a user inspected and may have changed the exact proposal.
 - **Approved:** the user accepted that immutable version. Approval alone does not
   execute it.
 - **Confirmed:** where the risk requires it, the user reviewed the destination and
   exact server preview immediately before execution.
-- **Executed/acknowledged:** the provider accepted the exact operation and RevenueOS
+- **Executed/acknowledged:** the provider accepted the exact operation and Oryntela
   stored a reconciled receipt.
 - **Failed/unknown:** the provider did not complete, or the external result is
-  uncertain; RevenueOS does not guess or retry unsafely.
+  uncertain; Oryntela does not guess or retry unsafely.
 
 Automatic preparation is the default product ambition. Consequential external
 execution remains review-by-default through beta. Lower-risk policy automation may
@@ -111,13 +111,13 @@ control.
 
 ### Implemented technically; credible externally only after target-environment evidence
 
-- Ask RevenueOS what happened, what changed and what is missing—with sources.
-- Finish the meeting; RevenueOS prepares the follow-through and applies the CRM
+- Ask Oryntela what happened, what changed and what is missing—with sources.
+- Finish the meeting; Oryntela prepares the follow-through and applies the CRM
   update you approve.
 
 ### Credible only after later connected Core work
 
-- RevenueOS handles the sales admin you approve.
+- Oryntela handles the sales admin you approve.
 - Forecast revenue with an explainable range.
 - Know where the team needs coaching and why.
 - Learn why deals are won or lost across the portfolio.
@@ -128,16 +128,16 @@ provider and cohort evidence genuinely supports them.
 
 ## Deliberate competitive differences
 
-RevenueOS will not use a primary methodology completion score, generic health number,
+Oryntela will not use a primary methodology completion score, generic health number,
 rep rank or opaque close probability as the truth. It will preserve unknown,
 conflicting and stale evidence; show important factors; and recommend a verifiable
 next action.
 
-RevenueOS will not require recording. Direct capture, authorised imports, Debrief,
+Oryntela will not require recording. Direct capture, authorised imports, Debrief,
 Voice Journal, Visual Evidence, documents and email remain distinct evidence sources
 with different support strength.
 
-RevenueOS will not turn Ask into generic chat, Workspace into SharePoint, Analytics
+Oryntela will not turn Ask into generic chat, Workspace into SharePoint, Analytics
 into generic BI or CRM into a Salesforce clone. Capability must reduce seller work
 inside Home, Opportunity or Search before it earns another surface.
 
@@ -145,6 +145,6 @@ inside Home, Opportunity or Search before it earns another surface.
 
 Core is ready for adjacent add-on investment only when users can complete and trust
 the Core loop without the add-on. At Checkpoint 1 that means the target environment,
-one production-supported capture path, simple navigation/onboarding, Ask RevenueOS
+one production-supported capture path, simple navigation/onboarding, Ask Oryntela
 and one approved CRM update path must be validated before WO-026. WO-025C supplies
 the HubSpot technical path; observed Checkpoint 1B evidence is still required.

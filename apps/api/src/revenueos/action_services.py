@@ -754,7 +754,7 @@ class ActionService:
                     title="Review the follow-up email draft",
                     description=(
                         "Review and edit the existing Follow-up Email draft. Approval records intent only; "
-                        "RevenueOS will not send it."
+                        "Oryntela will not send it."
                     ),
                     proposed_due_at=None,
                     target_entity_type=None,
@@ -1030,7 +1030,7 @@ class ActionService:
                     action_type=ActionType.REVIEW_CONFLICT,
                     priority=ActionPriority.HIGH,
                     title=f"Resolve {category.replace('_', ' ')} discrepancy",
-                    description="Review the conflicting accepted evidence. RevenueOS has not selected either claim.",
+                    description="Review the conflicting accepted evidence. Oryntela has not selected either claim.",
                     proposed_due_at=None,
                     target_entity_type="opportunity",
                     target_entity_id=opportunity.id,

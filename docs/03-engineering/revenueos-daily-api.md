@@ -1,4 +1,4 @@
-# RevenueOS Daily read-model API
+# Oryntela Daily read-model API
 
 ## Endpoint
 

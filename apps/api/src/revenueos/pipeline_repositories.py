@@ -70,7 +70,7 @@ async def ensure_default_pipeline(
         else:
             pipeline = SalesPipeline(
                 organisation_id=organisation_id,
-                name="RevenueOS Sales Pipeline",
+                name="Oryntela Sales Pipeline",
                 is_default=True,
             )
             session.add(pipeline)

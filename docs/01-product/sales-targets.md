@@ -5,7 +5,7 @@
 > [future-state hypothesis](../02-design/oryntela-daily-future-state.md), not an
 > authorised Home change.
 
-**Status:** Implemented by WO-037 as a RevenueOS Core capability.
+**Status:** Implemented by WO-037 as a Oryntela Core capability.
 
 ## Product promise
 
@@ -16,7 +16,7 @@ performance score or instruction to create work.
 
 The Insights Overview shows at most five signed-in-person and organisation targets.
 The dedicated **Targets** tab owns creation, exact progress, detail, history and
-archive. RevenueOS Daily deliberately does not change in v1; it remains a concise
+archive. Oryntela Daily deliberately does not change in v1; it remains a concise
 prioritisation surface rather than another dashboard.
 
 ## Supported metrics
@@ -50,7 +50,7 @@ ID and its definition version so the meaning remains explainable.
   peers. Member deactivation archives that person's current and upcoming targets
   while preserving history.
 
-RevenueOS has only `admin` and `member` organisation roles today. WO-037 does not
+Oryntela has only `admin` and `member` organisation roles today. WO-037 does not
 invent a manager hierarchy, team object or manager role. Those remain WO-039 work.
 
 ## Period, value and progress behaviour
@@ -73,7 +73,7 @@ zero. Past targets are locked. Current and future targets can be archived with a
 explicit confirmation; configuration and revisions remain available in history.
 
 Progress is `actual / current goal × 100`, rounded to one decimal for display.
-RevenueOS shows exact actual, goal, remaining or amount above goal, and supports
+Oryntela shows exact actual, goal, remaining or amount above goal, and supports
 progress above 100%. The visual bar caps at its physical width but the text and API
 retain the exact percentage. There is no pacing, “on track”, projection or forecast.
 

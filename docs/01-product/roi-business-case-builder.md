@@ -2,7 +2,7 @@
 
 ## Current implementation (WO-033)
 
-ROI & Business Case Builder belongs to RevenueOS Create and requires the existing `create` entitlement. It lets a salesperson select a canonical Account, optionally select an Opportunity, choose the latest approved organisation Value Model, enter every required numeric input, calculate on the server, review formulas and provenance, compare explicit scenarios, approve an immutable version and reuse that exact version in a presentation.
+ROI & Business Case Builder belongs to Oryntela Create and requires the existing `create` entitlement. It lets a salesperson select a canonical Account, optionally select an Opportunity, choose the latest approved organisation Value Model, enter every required numeric input, calculate on the server, review formulas and provenance, compare explicit scenarios, approve an immutable version and reuse that exact version in a presentation.
 
 The product rule is absolute: AI may explain a supplied number, but no AI or provider creates a calculation input or output. WO-033 uses no AI provider. Missing values block calculation.
 

@@ -18,12 +18,12 @@ const availability = {
   externalProvider: null,
   externalConnected: false,
   customFieldsReadOnly: false,
-  message: "RevenueOS CRM is ready.",
+  message: "Oryntela CRM is ready.",
 };
 
 const pipeline = {
   id: "pipeline-1",
-  name: "RevenueOS Sales Pipeline",
+  name: "Oryntela Sales Pipeline",
   isDefault: true,
   active: true,
   archivedAt: null,

@@ -285,7 +285,7 @@ def test_capabilities_and_unknown_answers_state_product_boundaries(client: TestC
         "maxQuestionCharacters": 1000,
         "maxSources": 12,
         "safeMessage": (
-            "Ask answers from authorised RevenueOS evidence. It does not search the public web or perform actions."
+            "Ask answers from authorised Oryntela evidence. It does not search the public web or perform actions."
         ),
     }
 

@@ -243,7 +243,7 @@ export function SellingProfileSettings() {
       className="form-card"
       aria-labelledby="selling-profile-title"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Admin control
       </p>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
@@ -274,16 +274,19 @@ export function SellingProfileSettings() {
         </p>
       ) : null}
       {message ? (
-        <p role="status" className="mt-4 text-sm font-semibold text-teal-800">
+        <p
+          role="status"
+          className="mt-4 text-sm font-semibold text-brand-secondary"
+        >
           {message}
         </p>
       ) : null}
 
       {profile.current ? (
-        <article className="mt-6 rounded-2xl border border-teal-200 bg-teal-50 p-5">
+        <article className="mt-6 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase text-teal-800">
+              <p className="text-xs font-bold uppercase text-brand-secondary">
                 Approved current
               </p>
               <h3 className="mt-1 text-lg font-bold">

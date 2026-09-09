@@ -227,7 +227,7 @@ export function BusinessCaseReview({ caseId }: { caseId: string }) {
       <nav aria-label="Breadcrumb" className="text-sm text-slate-600">
         <Link
           href="/create"
-          className="font-semibold text-teal-800 hover:underline"
+          className="font-semibold text-brand-secondary hover:underline"
         >
           Create
         </Link>{" "}
@@ -253,7 +253,7 @@ export function BusinessCaseReview({ caseId }: { caseId: string }) {
       {base ? (
         <section aria-labelledby="results-title" className="space-y-5">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
               Under the base assumptions
             </p>
             <h2
@@ -538,16 +538,16 @@ export function BusinessCaseReview({ caseId }: { caseId: string }) {
       {version?.reviewState === "pending" &&
       businessCase.state === "calculated" ? (
         <section
-          className="rounded-3xl border border-teal-200 bg-teal-50 p-6 sm:p-8"
+          className="rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-6 sm:p-8"
           aria-labelledby="approval-title"
         >
           <h2
             id="approval-title"
-            className="text-xl font-semibold text-teal-950"
+            className="text-xl font-semibold text-brand-primary"
           >
             Approve this exact Business Case version
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-teal-900">
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-brand-primary">
             Approval binds model v{businessCase.modelVersion},{" "}
             {businessCase.currency}, all shown inputs, assumptions, scenario
             overrides and deterministic outputs. Any edit creates a new version
@@ -566,7 +566,7 @@ export function BusinessCaseReview({ caseId }: { caseId: string }) {
       {message ? (
         <p
           role="status"
-          className="rounded-xl bg-teal-50 p-4 text-sm text-teal-900"
+          className="rounded-xl bg-brand-secondary/10 p-4 text-sm text-brand-primary"
         >
           {message}
         </p>

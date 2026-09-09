@@ -1,0 +1,21 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 300 76"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Oryntela wordmark</title>
+  <desc id="desc">
+    The Oryntela name in a refined, optically spaced title-case vector wordmark.
+  </desc>
+  <g fill="#0E1B32" transform="translate(2 59) scale(.08 -.08)">
+    <path d="M369-16Q268-16 195.5 28.5Q123 73 84 156Q45 239 45 354T84 552.5Q123 636 195.5 681Q268 726 369 726T543.5 681Q616 636 655 552.5Q694 469 694 354T655 156Q616 73 543.5 28.5Q471-16 369-16Zm0 84q110 0 172.5 75.5T604 354q0 135-62.5 211.5T369 642q-109 0-171.5-76.5T135 354q0-135 62.5-210.5T369 68Z" />
+    <path transform="translate(720)" d="M80 0v530h74l3-98q27 98 126 98h52v-80h-51q-120 0-120-130V0Z" />
+    <path transform="translate(1048)" d="M103-150v74h61q28 0 41.5 8.5T226-40l19 50h-29L22 530h92L272 88l151 442h92L300-67q-15-43-45-63t-83-20Z" />
+    <path transform="translate(1540)" d="M80 0v530h77l2-95q21 55 64.5 81t98.5 26q61 0 100.5-27t59-72.5T501 341V0h-84v317q0 74-26.5 112.5T304 468q-61 0-100.5-38.5T164 317V0Z" />
+    <path transform="translate(2080)" d="M274 0q-72 0-106.5 33T133 136v320H55v74h78v124h84V530h141v-74H217V138q0-36 16-50t49-14h76V0Z" />
+    <path transform="translate(2425)" d="M287-12q-75 0-129.5 34T73.5 118.5Q44 181 44 265t29.5 146q29.5 62 83 96.5T283 542q69 0 122-32.5t82.5-94.5Q517 353 517 264v-25H132q5-85 45.5-128T287 68q52 0 85.5 24.5T419 157l90-7q-21-71-79.5-116.5T287-12ZM132 313h293q-6 77-44.5 113T283 462q-61 0-100.5-37.5T132 313Z" />
+    <path transform="translate(2940)" d="M184 0q-46 0-75 24t-29 76v610h84V107q0-33 33-33h46V0Z" />
+    <path transform="translate(3165)" d="M268-12q-76 0-125.5 38T68.5 127Q44 190 44 265t24 137q24 63 73.5 101.5T267 542q59 0 100.5-23t63.5-63v74h84V0h-76l-3 83q-21-44-64-69.5T268-12Zm17 80q55 0 86.5 28.5T417 170.5Q431 216 431 265t-14 96.5Q403 406 371.5 434T285 462q-53 0-87-27.5T148 362.5Q132 318 132 265t15.5-95.5Q163 124 197 96t88-28Z" />
+  </g>
+</svg>

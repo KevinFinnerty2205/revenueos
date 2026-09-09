@@ -150,8 +150,8 @@ export function RecommendedActions({
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
-            RevenueOS suggestion
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
+            Oryntela suggestion
           </p>
           <h2 id="recommended-actions-title" className="form-legend mt-2">
             Next actions
@@ -185,7 +185,7 @@ export function RecommendedActions({
             aria-selected={tab === value}
             className={
               tab === value
-                ? "rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white"
+                ? "rounded-full bg-brand-primary px-4 py-2 text-sm font-bold text-white"
                 : "rounded-full border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700"
             }
             onClick={() => setTab(value)}

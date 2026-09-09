@@ -4,7 +4,7 @@
 to this review surface.
 
 The screen orders information by decision value: calendar month/quarter and currency
-filters; Actual/Target/Seller Commit/RevenueOS baseline; inclusive seller range;
+filters; Actual/Target/Seller Commit/Oryntela baseline; inclusive seller range;
 separate historical baseline; input-quality disclosure; deal review; calibration.
 This hierarchy makes the different authorities visible before detail.
 

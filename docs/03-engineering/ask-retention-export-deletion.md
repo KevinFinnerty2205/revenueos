@@ -1,4 +1,4 @@
-# Ask RevenueOS retention, export and deletion
+# Ask Oryntela retention, export and deletion
 
 ## Decision
 

@@ -2,7 +2,7 @@
 
 **Status:** WO-036 implementation contract.
 
-RevenueOS Sales Analytics is a Core Intelligence read model inside the existing
+Oryntela Sales Analytics is a Core Intelligence read model inside the existing
 FastAPI modular monolith. It reads canonical Opportunity, immutable stage-history,
 Interaction and confirmed execution facts. It adds no warehouse, ETL job, queue,
 provider, prompt, model call, generic query language or mutable analytics fact copy.

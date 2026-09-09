@@ -273,7 +273,7 @@ export function OpportunityWorkspace({
         >
           <Link
             href="/opportunities"
-            className="hover:text-teal-800 hover:underline"
+            className="hover:text-brand-secondary hover:underline"
           >
             Pipeline
           </Link>{" "}
@@ -283,7 +283,7 @@ export function OpportunityWorkspace({
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800">
+              <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-xs font-bold text-brand-secondary">
                 {humanise(opportunity.stage)}
               </span>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
@@ -393,7 +393,7 @@ export function OpportunityWorkspace({
             <p className="mt-2 max-w-3xl text-sm leading-6 text-sky-900">
               Set an explicit Commit, Likely, Possible or Not this period
               judgment and inspect its immutable history. The seller judgment
-              remains separate from RevenueOS&apos;s historical stage baseline.
+              remains separate from Oryntela&apos;s historical stage baseline.
             </p>
             {!opportunity.expectedCloseDate ? (
               <p className="mt-2 text-sm font-semibold text-amber-900">
@@ -413,9 +413,9 @@ export function OpportunityWorkspace({
 
       <section
         aria-labelledby="deal-focus-title"
-        className="rounded-3xl border border-teal-200 bg-teal-950 p-6 text-white shadow-sm sm:p-8"
+        className="rounded-3xl border border-brand-secondary/25 bg-brand-primary p-6 text-white shadow-sm sm:p-8"
       >
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-primary-foreground">
           How to move this deal forward
         </p>
         <h2 id="deal-focus-title" className="mt-3 text-2xl font-semibold">
@@ -425,16 +425,16 @@ export function OpportunityWorkspace({
               ? `Close ${methodologyGaps} methodology ${methodologyGaps === 1 ? "gap" : "gaps"}`
               : "Review the next customer step")}
         </h2>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-teal-50">
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-brand-primary-foreground">
           {pendingAction
-            ? "RevenueOS has prepared this suggestion from reviewed evidence. Confirm or edit it before treating it as agreed work."
+            ? "Oryntela has prepared this suggestion from reviewed evidence. Confirm or edit it before treating it as agreed work."
             : methodologyGaps > 0
               ? "Use the deal methodology below to see what is known, what is missing and why it matters."
               : "Use the latest reviewed evidence below to keep ownership and timing clear."}
         </p>
         <Link
           href={pendingAction ? "#recommended-actions" : "#deal-methodology"}
-          className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-white px-4 text-sm font-bold text-teal-950 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-teal-950"
+          className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-white px-4 text-sm font-bold text-brand-primary focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-brand-primary"
         >
           {pendingAction ? "Review suggestion" : "Review deal evidence"}
         </Link>
@@ -455,7 +455,7 @@ export function OpportunityWorkspace({
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
                 Latest field interaction
               </p>
               <h2
@@ -465,7 +465,7 @@ export function OpportunityWorkspace({
                 {workspace.latestInteractionCapture.title}
               </h2>
             </div>
-            <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-900">
+            <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-xs font-bold text-brand-primary">
               {humanise(workspace.latestInteractionCapture.captureStatus)}
             </span>
           </div>
@@ -580,7 +580,7 @@ export function OpportunityWorkspace({
                     className={`mt-2 text-xs font-semibold ${
                       item.conflictState === "conflicting"
                         ? "text-rose-800"
-                        : "text-teal-800"
+                        : "text-brand-secondary"
                     }`}
                   >
                     Recording comparison: {humanise(item.conflictState)}
@@ -599,14 +599,14 @@ export function OpportunityWorkspace({
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
                 Reviewed visual evidence
               </p>
               <h2 id="visual-intelligence-title" className="form-legend mt-2">
                 Latest visual interaction intelligence
               </h2>
             </div>
-            <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800">
+            <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-xs font-bold text-brand-secondary">
               {workspace.visualIntelligence.sourceLabel}
             </span>
           </div>
@@ -629,7 +629,7 @@ export function OpportunityWorkspace({
                 <p className="mt-2 text-sm leading-6 text-slate-800">
                   {item.statement}
                 </p>
-                <p className="mt-2 text-xs font-semibold text-teal-800">
+                <p className="mt-2 text-xs font-semibold text-brand-secondary">
                   {humanise(item.sourceOwnership)} · AI-interpreted,
                   user-reviewed
                 </p>
@@ -652,7 +652,7 @@ export function OpportunityWorkspace({
                 aria-labelledby="latest-next-best-action"
                 className="overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-sm"
               >
-                <div className="bg-slate-950 p-6 text-white sm:p-8">
+                <div className="bg-brand-primary p-6 text-white sm:p-8">
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
                     Latest associated meeting
                   </p>
@@ -978,7 +978,7 @@ function RecentMeetings({
               <div>
                 <Link
                   href={`/meetings/${meeting.id}`}
-                  className="font-bold text-teal-800 hover:text-teal-950 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  className="font-bold text-brand-secondary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus"
                 >
                   {meeting.title}
                 </Link>

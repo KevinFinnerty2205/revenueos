@@ -2,7 +2,7 @@
 
 ## Support policy
 
-RevenueOS uses runtime feature detection rather than browser-name assumptions.
+Oryntela uses runtime feature detection rather than browser-name assumptions.
 The table records the current verification posture, not a permanent browser
 guarantee. Any browser can lose capture when backgrounded, locked or suspended.
 

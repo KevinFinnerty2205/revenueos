@@ -177,14 +177,14 @@ export function OnlineMeetingCapture({
   return (
     <div className="grid gap-6">
       <section className="form-card" aria-labelledby="online-capture-title">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
           {humanise(capabilities.meetingPlatform)} · passive Companion
         </p>
         <h2 id="online-capture-title" className="mt-2 text-2xl font-semibold">
           Capture this meeting
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          {capabilities.safeMessage} RevenueOS never joins this meeting or
+          {capabilities.safeMessage} Oryntela never joins this meeting or
           captures browser system audio. Choose an authorised source below, or
           report what happened while the context is fresh.
         </p>

@@ -4,7 +4,7 @@
 
 WO-019 does not connect Gmail, Outlook, Google Drive, OneDrive, SharePoint or any
 document system. Users upload one supported document or paste one email through a
-first-party RevenueOS screen. Local and CI processing uses a deterministic
+first-party Oryntela screen. Local and CI processing uses a deterministic
 no-network mock. OpenAI is the only implemented extraction adapter and is disabled
 unless explicitly configured.
 
@@ -33,7 +33,7 @@ A future mailbox or drive connector needs a separate work order and must provide
    re-checks before access and downstream use;
 4. stable external IDs, version/change tracking and idempotent reconciliation;
 5. source ACL, deletion, export, retention and residency behaviour documented for
-   both RevenueOS and the upstream provider;
+   both Oryntela and the upstream provider;
 6. safe rate-limit, retry, webhook authenticity and connector-health handling;
 7. no silent Contact creation and no sender identity without exact evidence; and
 8. provider contract tests plus tenant, revocation and deletion regressions.

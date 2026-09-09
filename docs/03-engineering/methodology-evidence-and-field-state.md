@@ -5,7 +5,7 @@ performance score.
 
 | State | Rule | User meaning |
 | --- | --- | --- |
-| `confirmed` | Current admissible customer-direct/accepted support satisfies the field | RevenueOS has current Evidence and shows why |
+| `confirmed` | Current admissible customer-direct/accepted support satisfies the field | Oryntela has current Evidence and shows why |
 | `partially_supported` | Credible support exists but identity, detail or authority is incomplete, or support is seller-reported/contextual | Some of the answer is known; a material gap remains |
 | `unknown` | No reliable current admissible support | Absence is not a negative fact; ask the natural gap question |
 | `conflicting` | Current admissible sources materially disagree | Both sides remain visible for review |

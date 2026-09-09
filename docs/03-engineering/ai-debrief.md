@@ -5,7 +5,7 @@
 WO-013 implements a tenant-isolated post-interaction capture workflow for completed
 Interactions. It works without customer recording or a supplied transcript. The
 salesperson can use guided text/voice answers or a short Voice Journal, review every
-candidate item, and accept, edit or reject it before RevenueOS composes validated
+candidate item, and accept, edit or reject it before Oryntela composes validated
 Interaction Intelligence.
 
 This is not a CRM, call interceptor, long-form recorder, meeting bot, live assistant
@@ -15,7 +15,7 @@ or autonomous action system.
 
 1. The user confirms they are safely stopped and starts `ai_debrief` or
    `voice_journal` with an idempotency key.
-2. RevenueOS creates one Capture Session and one Debrief Session. The standard
+2. Oryntela creates one Capture Session and one Debrief Session. The standard
    opening is “How did it go?”; a short phone call uses “What changed?”.
 3. Each answer becomes an unreviewed `Evidence` row, a `DebriefTurn` and a source
    `EvidenceFragment` before structured reasoning runs.

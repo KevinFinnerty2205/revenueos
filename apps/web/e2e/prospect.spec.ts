@@ -6,7 +6,7 @@ const availability = {
   enabled: true,
   canManage: true,
   executionMode: "demo",
-  message: "RevenueOS Prospect is available for this organisation.",
+  message: "Prospect is available for this organisation.",
 };
 
 const candidates = [
@@ -17,7 +17,7 @@ const candidates = [
     websiteUrl: "https://northstar-facilities.example/",
     location: "Sydney, Australia",
     industry: "Facilities services",
-    providerAttribution: "RevenueOS synthetic research data",
+    providerAttribution: "Oryntela synthetic research data",
   },
   {
     candidateId: "northstar-software",
@@ -26,7 +26,7 @@ const candidates = [
     websiteUrl: "https://northstar-software.example/",
     location: "Melbourne, Australia",
     industry: "Business software",
-    providerAttribution: "RevenueOS synthetic research data",
+    providerAttribution: "Oryntela synthetic research data",
   },
 ];
 
@@ -37,7 +37,7 @@ const target = {
   websiteUrl: "https://northstar-facilities.example/",
   location: "Sydney, Australia",
   industry: "Facilities services",
-  providerAttribution: "RevenueOS synthetic research data",
+  providerAttribution: "Oryntela synthetic research data",
   promotedCompanyId: null,
   promotedAt: null,
   createdAt: "2026-08-25T00:00:00Z",
@@ -64,7 +64,7 @@ const sources = [
     canonicalUrl: "https://mock-provider.example/companies/northstar",
     domain: "mock-provider.example",
     title: "Synthetic company profile",
-    publisher: "RevenueOS deterministic mock provider",
+    publisher: "Oryntela deterministic mock provider",
     publishedAt: null,
     retrievedAt: "2026-08-25T00:02:00Z",
     authorityClass: "structured_provider",
@@ -167,7 +167,7 @@ function processingBrief() {
   return {
     target,
     status: "researching",
-    statusMessage: "RevenueOS is checking permitted public business sources.",
+    statusMessage: "Oryntela is checking permitted public business sources.",
     currentRun: null,
     latestRun: pending,
     observations: [],
@@ -188,7 +188,7 @@ function failedBrief() {
     target,
     status: "failed",
     statusMessage:
-      "RevenueOS couldn’t find enough reliable public information about this company.",
+      "Oryntela couldn’t find enough reliable public information about this company.",
     currentRun: null,
     latestRun: failed,
     observations: [],
@@ -235,7 +235,7 @@ function readyBrief(
     target,
     status: options.partial ? "partial" : "ready",
     statusMessage: options.partial
-      ? "RevenueOS found enough information for a partial brief, but some sources were unavailable."
+      ? "Oryntela found enough information for a partial brief, but some sources were unavailable."
       : "Research ready.",
     currentRun: current,
     latestRun: current,
@@ -294,7 +294,7 @@ const prospectPerson = {
   relevantFunction: "technology",
   whyMayMatter:
     "Her public remit suggests she may help evaluate operational technology change.",
-  providerAttribution: "RevenueOS deterministic mock provider",
+  providerAttribution: "Oryntela deterministic mock provider",
   identityState: "supported",
   employmentState: "current",
   researchStatus: "ready",
@@ -433,7 +433,7 @@ function peopleDiscovery(withPeople: boolean) {
       : [],
     resultLimit: 15,
     message: withPeople
-      ? "RevenueOS found 1 person worth understanding. Buying roles remain hypotheses."
+      ? "Oryntela found 1 person worth understanding. Buying roles remain hypotheses."
       : "Find relevant people from this researched company when you are ready.",
   };
 }
@@ -637,7 +637,7 @@ test("flagship account research path is sourced, refreshable and explicitly prom
   for (const label of [
     "Verified",
     "From data provider",
-    "RevenueOS inference",
+    "Oryntela inference",
     "Not established",
   ]) {
     await expect(page.getByText(label).first()).toBeVisible();
@@ -873,7 +873,10 @@ test("people discovery and person research stay sourced, hypothesis-led and dupl
   await expect(
     page.getByText("Permission not assessed", { exact: false }),
   ).toBeVisible();
-  await expect(page.locator("img")).toHaveCount(0);
+  await expect(page.locator('img:not([src^="/brand/oryntela/"])')).toHaveCount(
+    0,
+  );
+  await expect(page.locator('img[src^="/brand/oryntela/"]')).toHaveCount(2);
   if (process.env.CAPTURE_WO_027_SCREENSHOTS === "1") {
     await page.screenshot({
       path: "../../docs/07-sprints/assets/wo-027-person-research-desktop.png",
@@ -979,7 +982,7 @@ test("exact-domain existing Account is attached without a duplicate", async ({
   await page.goto(`/find/${target.id}`);
   await page.getByRole("button", { name: "Add to Sales" }).click();
   await expect(
-    page.getByText("This company is already in RevenueOS"),
+    page.getByText("This company is already in Oryntela"),
   ).toBeVisible();
   await expect(
     page.getByText(/No duplicate Account will be created/i),

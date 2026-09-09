@@ -118,7 +118,7 @@ export function CreateTemplateReview({ templateId }: { templateId: string }) {
       <nav aria-label="Breadcrumb" className="text-sm text-slate-600">
         <Link
           href="/create"
-          className="font-semibold text-teal-800 hover:underline"
+          className="font-semibold text-brand-secondary hover:underline"
         >
           Create
         </Link>{" "}
@@ -127,7 +127,7 @@ export function CreateTemplateReview({ templateId }: { templateId: string }) {
 
       <section
         aria-labelledby="compatibility-title"
-        className={`rounded-2xl border p-5 ${version.compatibilityState === "compatible" ? "border-teal-200 bg-teal-50" : version.compatibilityState === "unsupported" ? "border-rose-200 bg-rose-50" : "border-amber-200 bg-amber-50"}`}
+        className={`rounded-2xl border p-5 ${version.compatibilityState === "compatible" ? "border-brand-secondary/25 bg-brand-secondary/10" : version.compatibilityState === "unsupported" ? "border-rose-200 bg-rose-50" : "border-amber-200 bg-amber-50"}`}
       >
         <p className="text-xs font-bold uppercase tracking-[0.16em]">
           PowerPoint compatibility
@@ -146,8 +146,8 @@ export function CreateTemplateReview({ templateId }: { templateId: string }) {
         <section className="form-card">
           <h2 className="form-legend">Secure processing is running</h2>
           <p role="status" className="mt-2 text-sm leading-6 text-slate-600">
-            RevenueOS is checking the PPTX package and extracting a bounded
-            slide structure. No slide content is approved automatically.
+            Oryntela is checking the PPTX package and extracting a bounded slide
+            structure. No slide content is approved automatically.
           </p>
         </section>
       ) : version.processingState === "failed" ? (
@@ -177,7 +177,7 @@ export function CreateTemplateReview({ templateId }: { templateId: string }) {
           <section aria-labelledby="slide-review-title" className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
                   Human approval boundary
                 </p>
                 <h2
@@ -216,7 +216,10 @@ export function CreateTemplateReview({ templateId }: { templateId: string }) {
               version for later source changes.
             </p>
             {version.approvalState === "approved" ? (
-              <p role="status" className="mt-4 font-semibold text-teal-800">
+              <p
+                role="status"
+                className="mt-4 font-semibold text-brand-secondary"
+              >
                 Approved for customer-facing presentation generation.
               </p>
             ) : (
@@ -469,7 +472,7 @@ function SlideReview({
 
 function compatibilityCopy(state: string, details: string[]): string {
   if (state === "compatible") {
-    return "RevenueOS can safely generate from the reviewed placeholders in this template.";
+    return "Oryntela can safely generate from the reviewed placeholders in this template.";
   }
   if (state === "unsupported") {
     return templateFailureMessage(details[0] ?? null);
@@ -480,7 +483,7 @@ function compatibilityCopy(state: string, details: string[]): string {
   if (details.includes("pptx_unmapped_text_requires_lock")) {
     return "Move every customer-facing text box into a standard PowerPoint placeholder, or mark the slide Reuse as is or Locked.";
   }
-  return "Review every slide and use standard PowerPoint placeholders for content RevenueOS may change.";
+  return "Review every slide and use standard PowerPoint placeholders for content Oryntela may change.";
 }
 
 function templateFailureMessage(code: string | null): string {

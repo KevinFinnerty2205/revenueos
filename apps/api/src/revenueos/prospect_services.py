@@ -118,14 +118,14 @@ class ProspectService:
                 enabled=False,
                 can_manage=self.tenant.can_manage(),
                 execution_mode="unavailable",
-                message="RevenueOS Prospect is not available in this environment.",
+                message="Prospect is not available in this environment.",
             )
         return ProspectAvailabilityResponse(
             state="available",
             enabled=True,
             can_manage=self.tenant.can_manage(),
             execution_mode="credits" if self.provider.mode == "external" else "demo",
-            message="RevenueOS Prospect is available for this organisation.",
+            message="Prospect is available for this organisation.",
         )
 
     async def provider_readiness(self) -> ProspectProviderReadinessResponse:
@@ -513,7 +513,7 @@ class ProspectService:
                 company_id=company.id,
                 company_name=company.name,
                 research_target_id=target.id,
-                message="This research is already attached to a RevenueOS account.",
+                message="This research is already attached to a Oryntela account.",
             )
         current = await self.repository.current_run(self.tenant.organisation_id, target.id)
         if current is None:
@@ -534,7 +534,7 @@ class ProspectService:
             if request.existing_company_id != existing.id:
                 raise PublicAPIError(
                     "existing_company_match",
-                    "This company is already in RevenueOS. Review and attach the research to that account.",
+                    "This company is already in Oryntela. Review and attach the research to that account.",
                     409,
                 )
             company = existing
@@ -1037,7 +1037,7 @@ class ProspectService:
         if not self.settings.feature_prospect_enabled or (
             self.settings.environment == "production" and self.settings.prospect_research_provider_name == "mock"
         ):
-            raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
+            raise PublicAPIError("prospect_unavailable", "Prospect is temporarily unavailable.", 503)
         await commercial.require_module_write(self.tenant.organisation_id, "prospect")
 
     def _normalise_search_query(self, value: str) -> str:
@@ -1102,21 +1102,21 @@ class ProspectService:
         if latest.status in ACTIVE_RUN_STATUSES:
             return (
                 "pending" if latest.status == "pending" else "researching",
-                "RevenueOS is checking permitted public business sources. You can leave this page and return later.",
+                "Oryntela is checking permitted public business sources. You can leave this page and return later.",
             )
         if latest.status == "unknown":
             return "unknown", "The provider outcome is unknown. Credits remain reserved while it is reconciled."
         if latest.status == "no_result":
             return "no_result", "No reliable result was returned. No unsupported facts were created."
         if latest.status == "failed" and current is None:
-            return "failed", "RevenueOS couldn’t find enough reliable public information about this company."
+            return "failed", "Oryntela couldn’t find enough reliable public information about this company."
         if latest.status == "failed" and current is not None:
             return "partial" if current.status == "partial" else "ready", (
                 "The latest refresh couldn’t be completed. The previous sourced brief is still shown."
             )
         if current is not None and current.status == "partial":
             return "partial", (
-                "RevenueOS found enough information for a partial brief, but some sources were unavailable."
+                "Oryntela found enough information for a partial brief, but some sources were unavailable."
             )
         return "ready", "Research ready."
 

@@ -11,7 +11,7 @@ callbacks fail closed. Active membership and user status are checked on each
 integration request.
 
 The browser receives the HubSpot authorisation URL and later sends the returned
-code/state to the RevenueOS API. It never receives an access token, refresh token,
+code/state to the Oryntela API. It never receives an access token, refresh token,
 client secret, encryption key or credential reference. Production requires HTTPS
 for the exact redirect and official HubSpot API/authorisation hosts.
 

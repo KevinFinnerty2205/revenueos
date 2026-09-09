@@ -169,7 +169,7 @@ export function CRMRecordPanel({
       >
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
               {humanise(entityType)} record
             </p>
             <h1
@@ -187,7 +187,7 @@ export function CRMRecordPanel({
               </p>
             ) : null}
             {mergedHref ? (
-              <p className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950">
+              <p className="mt-4 rounded-xl border border-brand-secondary/25 bg-brand-secondary/10 p-4 text-sm text-brand-primary">
                 This duplicate was merged and is retained as a read-only
                 tombstone. Continue with the{" "}
                 <Link className="font-bold underline" href={mergedHref}>
@@ -221,7 +221,7 @@ export function CRMRecordPanel({
           ([, authority]) => authority === "crm_authoritative",
         ) ? (
           <p className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-            Fields marked as CRM-controlled are read-only in RevenueOS.
+            Fields marked as CRM-controlled are read-only in Oryntela.
             Review-before-sync fields remain editable and require the existing
             sync review flow.
           </p>
@@ -274,7 +274,7 @@ export function CRMRecordPanel({
       ) : null}
 
       <details className="form-card group">
-        <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2">
+        <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2">
           <span className="flex items-center justify-between gap-4">
             <span>
               CRM details
@@ -282,7 +282,7 @@ export function CRMRecordPanel({
                 Custom fields stay secondary to the relationship overview.
               </span>
             </span>
-            <span aria-hidden="true" className="text-teal-700">
+            <span aria-hidden="true" className="text-brand-secondary">
               <span className="group-open:hidden">Show</span>
               <span className="hidden group-open:inline">Hide</span>
             </span>
@@ -323,7 +323,7 @@ export function CRMRecordPanel({
                   {field.editable ? (
                     <button
                       type="button"
-                      className="mt-3 text-sm font-bold text-teal-700 hover:text-teal-900 disabled:opacity-50"
+                      className="mt-3 text-sm font-bold text-brand-secondary hover:text-brand-primary disabled:opacity-50"
                       disabled={saving !== null || record.archivedAt !== null}
                       onClick={() => void saveField(field)}
                     >
@@ -357,13 +357,13 @@ export function CRMRecordPanel({
               <li key={item.id} className="py-4 first:pt-0">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-teal-700">
+                    <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
                       {item.sourceLabel}
                     </p>
                     {item.href ? (
                       <Link
                         href={item.href}
-                        className="mt-1 block font-semibold text-slate-950 hover:text-teal-800"
+                        className="mt-1 block font-semibold text-slate-950 hover:text-brand-secondary"
                       >
                         {item.title}
                       </Link>
@@ -394,7 +394,7 @@ export function CRMRecordPanel({
       </section>
 
       <details className="form-card group">
-        <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2">
+        <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2">
           <span className="flex items-center justify-between gap-4">
             <span>
               Record history
@@ -402,7 +402,7 @@ export function CRMRecordPanel({
                 Review who changed CRM fields, when and from which source.
               </span>
             </span>
-            <span aria-hidden="true" className="text-teal-700">
+            <span aria-hidden="true" className="text-brand-secondary">
               <span className="group-open:hidden">Show</span>
               <span className="hidden group-open:inline">Hide</span>
             </span>
@@ -545,6 +545,6 @@ function formatDate(value: string): string {
 
 function recordModeLabel(mode: CRMRecord["mode"]): string {
   if (mode === "external") return "Core fields managed by the connected CRM";
-  if (mode === "native") return "Managed in RevenueOS";
-  return "RevenueOS record";
+  if (mode === "native") return "Managed in Oryntela";
+  return "Oryntela record";
 }

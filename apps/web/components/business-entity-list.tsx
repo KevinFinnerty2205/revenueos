@@ -136,7 +136,7 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
     <section aria-labelledby={`${entity}-title`}>
       <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
             {labels.eyebrow}
           </p>
           <h1
@@ -151,7 +151,7 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
         </div>
         <Link
           href={`/${entity}/new`}
-          className="inline-flex min-h-11 items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+          className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-primary px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
         >
           Create {labels.singular}
         </Link>
@@ -170,7 +170,7 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
           value={searchDraft}
           onChange={(event) => setSearchDraft(event.target.value)}
           placeholder={`Search ${labels.plural.toLowerCase()}`}
-          className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+          className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm outline-none transition focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
         />
         {filterConfig ? (
           <>
@@ -186,7 +186,7 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
                 setPage(1);
                 setFilter(event.target.value);
               }}
-              className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+              className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
             >
               <option value="">All {filterConfig.plural}</option>
               {filterConfig.values.map((value) => (
@@ -199,7 +199,7 @@ export function BusinessEntityList({ entity }: { entity: BusinessEntityName }) {
         ) : null}
         <button
           type="submit"
-          className="min-h-11 rounded-xl border border-slate-300 bg-slate-50 px-5 text-sm font-bold text-slate-800 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+          className="min-h-11 rounded-xl border border-slate-300 bg-slate-50 px-5 text-sm font-bold text-slate-800 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
         >
           Search
         </button>
@@ -301,7 +301,7 @@ function EntityRows({
                     ? `/contacts/${row.id}`
                     : `/${entity}/${row.id}/edit`
               }
-              className="mt-5 inline-flex text-sm font-bold text-teal-700 hover:text-teal-900"
+              className="mt-5 inline-flex text-sm font-bold text-brand-secondary hover:text-brand-primary"
             >
               {entity === "opportunities"
                 ? "Open workspace"
@@ -347,7 +347,7 @@ function EntityRows({
                             ? `/contacts/${row.id}`
                             : `/${entity}/${row.id}/edit`
                       }
-                      className="font-bold text-teal-700 hover:text-teal-900"
+                      className="font-bold text-brand-secondary hover:text-brand-primary"
                     >
                       {entity === "opportunities" || entity === "contacts"
                         ? "Open"
@@ -377,7 +377,7 @@ function displayCells(
         value: (
           <Link
             href={`/companies/${company.id}`}
-            className="font-bold text-teal-700 hover:text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+            className="font-bold text-brand-secondary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
           >
             {company.name}
           </Link>
@@ -403,7 +403,7 @@ function displayCells(
         value: (
           <Link
             href={`/contacts/${contact.id}`}
-            className="font-bold text-teal-700 hover:text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+            className="font-bold text-brand-secondary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
           >
             {contact.firstName} {contact.lastName}
           </Link>
@@ -509,7 +509,7 @@ function EmptyList({ entity }: { entity: BusinessEntityName }) {
   const labels = entityLabels[entity];
   return (
     <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-8 shadow-sm sm:p-12">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
         Nothing here yet
       </p>
       <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">

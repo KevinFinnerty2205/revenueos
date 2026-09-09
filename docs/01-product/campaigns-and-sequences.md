@@ -58,7 +58,7 @@ Opportunity stop an enrolment. Quota/cooldown defer without bursting. Material
 recipient, source, policy or mailbox changes require attention.
 
 Reply, meeting booked and not interested are manual seller-reported outcomes in
-WO-030. RevenueOS does not read a mailbox or invent reply detection. Reporting an
+WO-030. Oryntela does not read a mailbox or invent reply detection. Reporting an
 outcome stops future steps and records provenance as `seller_reported`; it does not
 create customer Evidence or mutate Methodology, Stakeholder Intelligence or Revenue
 Brain.

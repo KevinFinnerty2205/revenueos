@@ -127,7 +127,7 @@ function companyBrief() {
       websiteUrl: account.website,
       location: account.location,
       industry: account.industry,
-      providerAttribution: "RevenueOS synthetic research data",
+      providerAttribution: "Oryntela synthetic research data",
       promotedCompanyId: state.accountPromoted ? ids.account : null,
       promotedAt: state.accountPromoted ? "2026-08-31T00:04:00Z" : null,
       createdAt: "2026-08-31T00:00:00Z",
@@ -174,7 +174,7 @@ const person = {
   relevantFunction: "technology",
   whyMayMatter:
     "Her public remit suggests she may help evaluate operational technology change.",
-  providerAttribution: "RevenueOS synthetic research data",
+  providerAttribution: "Oryntela synthetic research data",
   identityState: "supported",
   employmentState: "current",
   researchStatus: "ready",
@@ -340,7 +340,7 @@ function contactWorkspace() {
       state: "available",
       enabled: true,
       canManage: true,
-      message: "RevenueOS Engage is available for this organisation.",
+      message: "Engage is available for this organisation.",
     },
     contactId: ids.contact,
     contactName: "Jane Smith",
@@ -998,7 +998,7 @@ function salesTarget() {
     ownerUserId: "user-flagship",
     ownerDisplayName: "Alex Morgan",
     pipelineId: ids.pipeline,
-    pipelineName: "RevenueOS Sales Pipeline",
+    pipelineName: "Oryntela Sales Pipeline",
     periodType: "quarter",
     periodStart: "2026-07-01",
     periodEnd: "2026-09-30",
@@ -1054,7 +1054,7 @@ const forecastBaseline = {
   status: "available",
   modelVersion: "forecast_historical_stage_outcome_v1",
   pipelineId: ids.pipeline,
-  pipelineName: "RevenueOS Sales Pipeline",
+  pipelineName: "Oryntela Sales Pipeline",
   stageId: ids.proposal,
   stageName: "Proposal",
   wonCount: 8,
@@ -1178,7 +1178,7 @@ function salesForecast() {
             currency: "AUD",
             expectedCloseDate: "2026-09-30",
             pipelineId: ids.pipeline,
-            pipelineName: "RevenueOS Sales Pipeline",
+            pipelineName: "Oryntela Sales Pipeline",
             stageId: ids.proposal,
             stageName: "Proposal",
             stageEnteredAt: "2026-08-31T00:10:00Z",
@@ -1219,7 +1219,7 @@ function managerReview() {
       ownerUserId: "user-flagship",
       ownerDisplayName: "Alex Morgan",
       pipelineId: ids.pipeline,
-      pipelineName: "RevenueOS Sales Pipeline",
+      pipelineName: "Oryntela Sales Pipeline",
       stageId: state.closedWon ? ids.won : ids.proposal,
       stageName: state.closedWon ? "Closed Won" : "Proposal",
       amount: "420000.00",
@@ -1309,7 +1309,7 @@ function pipelineResponse(view = "open") {
     companyId: ids.account,
     companyName: account.name,
     pipelineId: ids.pipeline,
-    pipelineName: "RevenueOS Sales Pipeline",
+    pipelineName: "Oryntela Sales Pipeline",
     stageId: activeStage.id,
     stageName: activeStage.name,
     stageType: activeStage.stageType,
@@ -1331,7 +1331,7 @@ function pipelineResponse(view = "open") {
   const visible = view === "closed" ? state.closedWon : !state.closedWon;
   const pipeline = {
     id: ids.pipeline,
-    name: "RevenueOS Sales Pipeline",
+    name: "Oryntela Sales Pipeline",
     isDefault: true,
     active: true,
     archivedAt: null,
@@ -1546,7 +1546,7 @@ async function routeFlagship(page: Page) {
             websiteUrl: account.website,
             location: account.location,
             industry: account.industry,
-            providerAttribution: "RevenueOS synthetic research data",
+            providerAttribution: "Oryntela synthetic research data",
           },
         ],
         query: "Northstar",
@@ -1594,7 +1594,7 @@ async function routeFlagship(page: Page) {
         gaps: [],
         resultLimit: 15,
         message: state.peopleFound
-          ? "RevenueOS found 1 person worth understanding."
+          ? "Oryntela found 1 person worth understanding."
           : "Find relevant people when you are ready.",
       });
       return;
@@ -1607,7 +1607,7 @@ async function routeFlagship(page: Page) {
         people: [person],
         gaps: [],
         resultLimit: 15,
-        message: "RevenueOS found 1 person worth understanding.",
+        message: "Oryntela found 1 person worth understanding.",
       });
       return;
     }
@@ -2099,7 +2099,7 @@ async function routeFlagship(page: Page) {
         metrics: [targetMetric],
         owners: [{ userId: "user-flagship", displayName: "Alex Morgan" }],
         pipelines: [
-          { id: ids.pipeline, name: "RevenueOS Sales Pipeline", active: true },
+          { id: ids.pipeline, name: "Oryntela Sales Pipeline", active: true },
         ],
         canAssignPersonalTargets: true,
         canCreateOrganisationTargets: true,
@@ -2128,7 +2128,7 @@ async function routeFlagship(page: Page) {
           { userId: "user-flagship", displayName: "Alex Morgan", active: true },
         ],
         pipelines: [
-          { id: ids.pipeline, name: "RevenueOS Sales Pipeline", active: true },
+          { id: ids.pipeline, name: "Oryntela Sales Pipeline", active: true },
         ],
         canViewOrganisationForecast: true,
         canReviewManagerView: true,

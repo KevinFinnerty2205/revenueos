@@ -11,7 +11,7 @@ deferred to avoid archive and formula complexity.
 Approved mappings are first/last name, company, title, business email,
 country/location, professional profile URL, company domain and registration category.
 Sensitive/private headers cannot be mapped. Formula-looking values remain inert text;
-RevenueOS never evaluates them. Invalid/free-mail addresses and unsafe/private URLs
+Oryntela never evaluates them. Invalid/free-mail addresses and unsafe/private URLs
 are excluded. UI/API error payloads and logs contain issue codes/counts/row numbers,
 not attendee values.
 

@@ -2,7 +2,7 @@
 
 ## Current status
 
-RevenueOS has no selected production hosting platform and this repository does
+Oryntela has no selected production hosting platform and this repository does
 not deploy automatically. WO-009 defines one supported private-beta topology
 and operating boundary for the current web, API, worker and PostgreSQL
 components; it is not production-data approval.
@@ -189,7 +189,7 @@ Event-local history after normalising Event source values. Canonical Contacts,
 Interactions and Campaigns are outside that cascade.
 
 Rollback first disables HubSpot and Action Execution. Existing external updates
-cannot be undone by RevenueOS. Disconnect/revoke tenant connections before retiring
+cannot be undone by Oryntela. Disconnect/revoke tenant connections before retiring
 the app/client secret or downgrading. Prefer application rollback with the forward
 schema; downgrading `0034` permanently removes OAuth state, encrypted credentials
 and CRM mapping configuration and restores the WO-022 simulation-only checks.

@@ -1,11 +1,12 @@
-# RevenueOS master product blueprint
+# Oryntela master product blueprint
 
-> **Oryntela consolidation — 4 September 2026:** This remains the historical
-> technical product contract. The
+> **Oryntela implementation — 9 September 2026:** This remains the technical
+> product contract at its existing compatibility path. The
 > [Oryntela master product blueprint](oryntela-master-product-blueprint.md) is the
 > authoritative source for the selected public brand, consolidated product
-> principles, commercial hypotheses and future sequencing. It does not authorise
-> a technical RevenueOS-to-Oryntela rebrand or any implementation.
+> principles, commercial hypotheses and future sequencing. WO-052 applies the
+> Oryntela identity to customer-facing surfaces while intentionally retaining
+> stable Oryntela package, schema, route and migration identifiers.
 
 - **Status:** Target product direction through the Interaction Platform private beta
 - **Current shipped baseline:** Sprints 1–3 plus Meeting Intelligence, Opportunity
@@ -27,7 +28,7 @@ retains integration-led planning and completed-baseline context.
 
 **Core principle:** Automate work, not relationships.
 
-**Interaction north star:** RevenueOS captures the best possible evidence from every
+**Interaction north star:** Oryntela captures the best possible evidence from every
 customer interaction, transforms that evidence into trusted intelligence, and helps
 sales teams build stronger customer relationships over time.
 
@@ -44,7 +45,7 @@ describe implemented behaviour or authorise a later work order.
 
 ## Executive summary
 
-RevenueOS is the AI teammate for relationship-driven professionals. It sits above systems of record and communication tools—including Salesforce, HubSpot, email, calendars, phone and meeting platforms—as an intelligence and workflow layer. It is not a CRM.
+Oryntela is the AI teammate for relationship-driven professionals. It sits above systems of record and communication tools—including Salesforce, HubSpot, email, calendars, phone and meeting platforms—as an intelligence and workflow layer. It is not a CRM.
 
 The first product, Sales Brain, should turn authorised evidence from a customer
 interaction into a reviewable chain of evidence, decisions and approved work:
@@ -59,13 +60,13 @@ interaction into a reviewable chain of evidence, decisions and approved work:
 7. preserve correctable relationship memory; and
 8. use that memory to prepare the next interaction.
 
-RevenueOS exists to eliminate administrative work from relationship-driven professions by building AI teammates that remember, reason and act. Its governing principle is **automate work, not relationships**.
+Oryntela exists to eliminate administrative work from relationship-driven professions by building AI teammates that remember, reason and act. Its governing principle is **automate work, not relationships**.
 
 ## Product thesis
 
 Revenue professionals lose time and context because customer knowledge is distributed across conversations, inboxes, calendars, personal notes and CRM records. Systems of record preserve fields but do not reliably reconstruct why a relationship changed, what was promised or what should happen next.
 
-RevenueOS can create durable value by:
+Oryntela can create durable value by:
 
 - treating authorised interaction sources as attributable evidence rather than
   disposable recordings;
@@ -131,7 +132,7 @@ Detailed needs are in [Personas and jobs](personas-and-jobs.md).
 
 ### Category
 
-RevenueOS is an AI teammate and relationship intelligence layer. Sales Brain is the first application on that platform.
+Oryntela is an AI teammate and relationship intelligence layer. Sales Brain is the first application on that platform.
 
 ### Positioning statement
 
@@ -185,12 +186,12 @@ Studio for administrator-attested and approved PPTX templates, Account-bound
 deterministic plans, typed customer-safe context, exact claim provenance, seller
 review and private editable PPTX download. It makes no AI-provider call and adds no
 proposal/DOCX/PDF, pricing, ROI, generated imagery, external sending or Office
-execution. See [RevenueOS Create](revenueos-create.md). WO-033 and broader Create
+execution. See [Oryntela Create](revenueos-create.md). WO-033 and broader Create
 outputs remain future and require separate approval.
 
 ## Product boundaries
 
-RevenueOS owns:
+Oryntela owns:
 
 - the reviewable intelligence derived from authorised source material;
 - provenance, confidence, corrections and exclusions;
@@ -207,11 +208,11 @@ Connected systems remain authoritative for:
 - identity and organisation membership through Clerk; and
 - billing transactions through Stripe when introduced.
 
-RevenueOS may cache the minimum connected data needed for its workflows, with source identity, sync state and retention recorded. Conflicts must be visible; a local inference must never silently overwrite an authoritative external value.
+Oryntela may cache the minimum connected data needed for its workflows, with source identity, sync state and retention recorded. Conflicts must be visible; a local inference must never silently overwrite an authoritative external value.
 
 ## Competitive differentiation
 
-| Alternative                      | Useful capability                         | RevenueOS distinction                                                                                 |
+| Alternative                      | Useful capability                         | Oryntela distinction                                                                                 |
 | -------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | CRM                              | Structured system of record               | Preserves conversational context and prepares work while leaving the CRM authoritative                |
 | Meeting notetaker                | Transcription and per-meeting summaries   | Builds correctable, cross-meeting relationship memory and carries it into the next interaction        |
@@ -248,9 +249,9 @@ Initial targets are hypotheses to validate with design partners:
 
 Shortly before an interaction, the seller receives a concise brief containing recent
 changes, open commitments, risks and suggested questions, each linked to its source.
-During it, RevenueOS is passive by default and capture is optional. Afterwards it
+During it, Oryntela is passive by default and capture is optional. Afterwards it
 offers “Let’s capture this while it is fresh,” using a recording, Voice Journal,
-targeted AI Debrief, visual evidence or another authorised source. RevenueOS presents
+targeted AI Debrief, visual evidence or another authorised source. Oryntela presents
 a provenance-aware review queue—not a falsely final answer. The seller corrects
 attribution or interpretation, approves selected tasks, follow-up content and CRM
 changes, then returns to customer work. The next brief reflects confirmed memory and
@@ -347,7 +348,7 @@ An integration appears in beta only after its real adapter, authorisation, idemp
 
 ## Explicit non-goals through beta
 
-- recreating Salesforce/HubSpot breadth; RevenueOS may be the intentionally lightweight native sales system of record selected by an entitled organisation;
+- recreating Salesforce/HubSpot breadth; Oryntela may be the intentionally lightweight native sales system of record selected by an entitled organisation;
 - silently sending email, changing CRM data or performing consequential actions;
 - broad sales engagement automation or generic workflow building;
 - lead generation, contact enrichment, prospect databases or automated outreach;
@@ -394,7 +395,7 @@ Monte Carlo analysis. See [ROI & Business Case Builder](roi-business-case-builde
 
 ## WO-034 implemented extension
 
-RevenueOS can now be deliberately configured as the lightweight native sales CRM or
+Oryntela can now be deliberately configured as the lightweight native sales CRM or
 continue alongside connected HubSpot. Existing Company, Contact and Opportunity are
 the only CRM records. Core keeps their basic CRUD and readable canonical
 activity/history; the CRM add-on provides explicit system-of-record administration,

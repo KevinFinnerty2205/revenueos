@@ -2,7 +2,7 @@
 
 Business contact availability is separate from identity, accuracy and permission to contact.
 
-WO-027 stores each permitted business contact point with type, value, source, trust state, verification method, observation time, optional expiry and export permission. The UI uses exact labels: **Verified**, **From data provider**, **RevenueOS inference** and **Not established**. It always states **Permission not assessed**.
+WO-027 stores each permitted business contact point with type, value, source, trust state, verification method, observation time, optional expiry and export permission. The UI uses exact labels: **Verified**, **From data provider**, **Oryntela inference** and **Not established**. It always states **Permission not assessed**.
 
 The Prospect discovery path accepts a business email only when an approved source or
 provider supplies it. Inferred or pattern-generated email addresses are rejected

@@ -74,7 +74,7 @@ new datastore or queue.
 
 Prospect Person remains outside Core Contact until an explicit duplicate-safe
 promotion transaction. That transaction writes only Contact and field provenance.
-Evidence, Methodology, Stakeholder Intelligence, Revenue Brain, Ask RevenueOS and
+Evidence, Methodology, Stakeholder Intelligence, Revenue Brain, Ask Oryntela and
 outreach do not consume WO-027 research.
 
 ## Current scope
@@ -254,7 +254,7 @@ FastAPI exposes:
 - `GET /health` for process health;
 - `GET /ready` for honest configured-dependency readiness;
 - `GET /api/v1/me` for the authenticated identity and active organisation context;
-- `GET /api/v1/daily` for the bounded tenant/user-scoped RevenueOS Daily Home projection;
+- `GET /api/v1/daily` for the bounded tenant/user-scoped Oryntela Daily Home projection;
 - CRUD collections and resources under `/api/v1/companies`, `/api/v1/contacts`, `/api/v1/opportunities` and `/api/v1/tasks`;
 - an enriched opportunity list, aggregate read at `/api/v1/opportunities/{opportunityId}/workspace` and stale-write-safe meeting association at `/api/v1/meetings/{meetingId}/opportunity`;
 - meeting, nested participant, singular transcript and audit-history resources under `/api/v1/meetings`;
@@ -617,7 +617,7 @@ predicates apply to every new row.
 
 Research Targets do not become Companies until explicit duplicate-safe promotion.
 Public research remains separate from customer Evidence and cannot mutate
-Methodology, Revenue Brain or Ask RevenueOS. The current provider is a deterministic
+Methodology, Revenue Brain or Ask Oryntela. The current provider is a deterministic
 no-network adapter; production mock configuration fails closed and no public-page
 fetcher or AI synthesis exists. See the
 [Prospect architecture](prospect-account-research-architecture.md) and

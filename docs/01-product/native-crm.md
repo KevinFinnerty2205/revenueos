@@ -1,19 +1,19 @@
-# RevenueOS Native CRM
+# Oryntela Native CRM
 
 - **Status:** WO-034 foundation, WO-035 Native Pipeline and WO-039C supervised import/merge implemented
-- **Promise:** Small teams can run their sales CRM and Sales Brain in one place; larger teams can keep HubSpot and use the same RevenueOS intelligence layer.
+- **Promise:** Small teams can run their sales CRM and Sales Brain in one place; larger teams can keep HubSpot and use the same Oryntela intelligence layer.
 
 ## What customers get
 
-Company, Contact and Opportunity records now form a deliberately simple sales CRM. Sellers can create and edit short records, assign an owner, prevent strong duplicates, view recent relationship activity and inspect field history. Entitled administrators can archive/restore records, choose RevenueOS as system of record and administer up to 25 active custom fields for each record type.
+Company, Contact and Opportunity records now form a deliberately simple sales CRM. Sellers can create and edit short records, assign an owner, prevent strong duplicates, view recent relationship activity and inspect field history. Entitled administrators can archive/restore records, choose Oryntela as system of record and administer up to 25 active custom fields for each record type.
 
-RevenueOS remains Sales Brain with an optional CRM, not a generic CRM with an AI tab. Interactions, Evidence, Methodology, Revenue Brain, Actions, Daily, Prospect, Engage and Create continue to own their existing concepts. CRM reads them; it does not duplicate them.
+Oryntela remains Sales Brain with an optional CRM, not a generic CRM with an AI tab. Interactions, Evidence, Methodology, Revenue Brain, Actions, Daily, Prospect, Engage and Create continue to own their existing concepts. CRM reads them; it does not duplicate them.
 
 ## Modes
 
 | Mode         | System of record            | Editing behaviour                                                                                                |
 | ------------ | --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| RevenueOS    | RevenueOS canonical records | Normal and bounded custom fields editable under Core role/tenant policy                                           |
+| Oryntela    | Oryntela canonical records | Normal and bounded custom fields editable under Core role/tenant policy                                           |
 | External CRM | HubSpot in v1               | Mapped authority is shown; HubSpot-authoritative fields are read-only; review-before-sync behaviour is preserved |
 
 An administrator makes and confirms the choice in Settings → CRM. HubSpot must be connected before selecting external mode. Active field mappings must be resolved before switching to native mode; WO-034 does not pretend to be a migration wizard.
@@ -69,6 +69,6 @@ analytics, implemented WO-037 targets, WO-038 forecasting and WO-039 manager int
 
 Core retains the descriptive Board/List/Closed experience and canonical stage history.
 The CRM add-on unlocks native multiple-pipeline/stage administration. Native mode makes
-RevenueOS authoritative; external mode shows `Managed in HubSpot` and denies direct
+Oryntela authoritative; external mode shows `Managed in HubSpot` and denies direct
 native movement. See the [implementation guide](native-pipeline.md) and
 [packaging decision](pipeline-packaging.md).

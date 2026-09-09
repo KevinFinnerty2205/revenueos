@@ -470,7 +470,7 @@ def test_expired_old_email_keeps_contact_when_a_newer_active_source_supports_it(
                 canonical_url="https://mock-provider.example/people/newer-jane-smith",
                 domain="mock-provider.example",
                 title="Newer synthetic business contact profile",
-                publisher="RevenueOS deterministic mock provider",
+                publisher="Oryntela deterministic mock provider",
                 retrieved_at=now,
                 authority_class="structured_provider",
                 provider_source_id="mock:newer-jane-smith",

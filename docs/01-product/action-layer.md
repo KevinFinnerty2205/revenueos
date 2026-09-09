@@ -8,7 +8,7 @@ keeping the human in control.
 
 An Action can be proposed, edited as a new immutable revision, approved, rejected,
 superseded, or marked complete manually where that is safe. Approval means only
-that a user accepted the proposal. It does not mean RevenueOS sent an email,
+that a user accepted the proposal. It does not mean Oryntela sent an email,
 created a task, updated a record, scheduled a meeting, or called another system.
 
 ## Grounding and action types
@@ -89,7 +89,7 @@ Evidence.
 The Action Layer remains the review/intent source. WO-022 mock adapters still
 simulate; WO-025C HubSpot is the only live adapter and always requires confirmation.
 
-WO-025 RevenueOS Daily reads only current proposed, edited and approved Actions for
+WO-025 Oryntela Daily reads only current proposed, edited and approved Actions for
 the user's owned Opportunities. It caps the section at five, keeps **Approved — not
 complete** explicit, maps simulation state to safe salesperson language and links
 back to the existing review/confirmation boundary. Rejected, superseded, completed

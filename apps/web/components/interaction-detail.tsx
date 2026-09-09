@@ -137,14 +137,14 @@ export function InteractionDetail({
   return (
     <section aria-labelledby="interaction-detail-title">
       <Link
-        className="text-sm font-bold text-teal-800 hover:underline"
+        className="text-sm font-bold text-brand-secondary hover:underline"
         href="/interactions"
       >
         Back to interactions
       </Link>
       <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide">
-          <span className="rounded-full bg-teal-50 px-3 py-1 text-teal-800">
+          <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-brand-secondary">
             {humanise(interaction.interactionType)}
           </span>
           <span
@@ -397,7 +397,7 @@ export function InteractionDetail({
                 Use your meeting platform
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                RevenueOS remains passive while the meeting runs. It does not
+                Oryntela remains passive while the meeting runs. It does not
                 join, record system audio, monitor the browser or run a meeting
                 bot. End the meeting here, then add an authorised recording or
                 transcript, or report what happened while it is fresh.
@@ -412,7 +412,7 @@ export function InteractionDetail({
                 Use your normal phone
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                RevenueOS does not intercept cellular calls, read device call
+                Oryntela does not intercept cellular calls, read device call
                 logs, activate the microphone in the background or record this
                 call. Complete it in your existing phone system, then capture
                 the outcome while it is fresh.

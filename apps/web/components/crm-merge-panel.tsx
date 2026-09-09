@@ -112,7 +112,7 @@ export function CRMMergePanel({
 
   return (
     <details className="form-card group">
-      <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2">
+      <summary className="cursor-pointer list-none font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2">
         <span className="flex items-center justify-between gap-4">
           <span>
             Merge a duplicate
@@ -121,7 +121,7 @@ export function CRMMergePanel({
               source tombstone.
             </span>
           </span>
-          <span aria-hidden="true" className="text-teal-700">
+          <span aria-hidden="true" className="text-brand-secondary">
             <span className="group-open:hidden">Show</span>
             <span className="hidden group-open:inline">Hide</span>
           </span>
@@ -143,7 +143,7 @@ export function CRMMergePanel({
           />
         </label>
         <p id="merge-survivor-help" className="mt-2 text-xs text-slate-500">
-          Copy the ID from the survivor record URL. RevenueOS verifies that both
+          Copy the ID from the survivor record URL. Oryntela verifies that both
           records belong to this organisation.
         </p>
         <button

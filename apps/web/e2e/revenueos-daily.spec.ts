@@ -204,7 +204,7 @@ async function routeDaily(page: Page, response = dailyResponse()) {
               ownerUserId: "user-1",
               ownerDisplayName: "Alex Morgan",
               pipelineId: "pipeline-daily",
-              pipelineName: "RevenueOS Sales Pipeline",
+              pipelineName: "Oryntela Sales Pipeline",
               stageId: "stage-discovery",
               stageName: "Discovery",
               amount: "420000.00",
@@ -247,7 +247,7 @@ async function routeDaily(page: Page, response = dailyResponse()) {
   return () => requests;
 }
 
-test("RevenueOS Daily keeps the complete review journey one click away", async ({
+test("Oryntela Daily keeps the complete review journey one click away", async ({
   page,
 }) => {
   const requestCount = await routeDaily(page);
@@ -317,7 +317,7 @@ test("RevenueOS Daily keeps the complete review journey one click away", async (
   }
 });
 
-test("RevenueOS Daily teaches a useful first step to a new user", async ({
+test("Oryntela Daily teaches a useful first step to a new user", async ({
   page,
 }) => {
   const base = dailyResponse();
@@ -349,7 +349,7 @@ test("RevenueOS Daily teaches a useful first step to a new user", async ({
 
   await expect(
     page.getByRole("heading", {
-      name: "Let’s get your first deal into RevenueOS.",
+      name: "Let’s get your first deal into Oryntela.",
     }),
   ).toBeVisible();
   await expect(
@@ -360,7 +360,7 @@ test("RevenueOS Daily teaches a useful first step to a new user", async ({
   ).toHaveCount(0);
 });
 
-test("RevenueOS Daily puts the next interaction first on mobile", async ({
+test("Oryntela Daily puts the next interaction first on mobile", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });

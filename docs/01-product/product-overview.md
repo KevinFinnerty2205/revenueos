@@ -1,9 +1,9 @@
 # Product overview
 
-> **Oryntela consolidation — 4 September 2026:** Read this implemented RevenueOS
+> **Oryntela consolidation — 4 September 2026:** Read this implemented Oryntela
 > history with the [Oryntela master product blueprint](oryntela-master-product-blueprint.md).
 > Oryntela is the selected public brand; current technical identifiers remain
-> RevenueOS until separately authorised.
+> Oryntela until separately authorised.
 
 WO-025A presents the implemented Core as one outcome-led experience: Home, Sell,
 Pipeline and bounded Search on desktop; Today, Interactions, Actions and Search on
@@ -28,24 +28,24 @@ through a separate read-only preview and explicit final confirmation. Email,
 calendar, CRM and task outcomes are simulations only; no external system is
 contacted or changed.
 
-WO-023 adds the proposed end-to-end Sales OS blueprint. [RevenueOS Core](revenueos-core-product.md)
+WO-023 adds the proposed end-to-end Sales OS blueprint. [Oryntela Core](revenueos-core-product.md)
 remains independently valuable. WO-026 now implements the first bounded
 [Prospect](revenueos-prospect.md) account-research slice; [Engage](revenueos-engage.md),
 [Create](revenueos-create.md) and [CRM](revenueos-crm.md) remain future optional modules.
 See the [platform vision](end-to-end-sales-platform-vision.md) and
 [information architecture](../02-design/revenueos-information-architecture.md).
 
-WO-024 now implements the Sales Methodology Engine and WO-025 implements RevenueOS
+WO-024 now implements the Sales Methodology Engine and WO-025 implements Oryntela
 Daily as the protected Home experience. Checkpoint 1 concludes that the Core
 foundation is differentiated but should not proceed to Prospect until target-
 environment design-partner readiness, simpler Core navigation/onboarding,
-evidence-backed Ask RevenueOS and one selected production CRM path are validated.
+evidence-backed Ask Oryntela and one selected production CRM path are validated.
 See the
 [Core readiness decision](../06-roadmap/checkpoint-1-core-competitive-readiness.md).
 
 ## Product definition
 
-RevenueOS AI is a multi-tenant relationship-intelligence platform. Sales Brain will help relationship-driven revenue professionals prepare for conversations, capture useful context, reduce administration and follow through thoughtfully.
+Oryntela is a multi-tenant relationship-intelligence platform. Sales Brain will help relationship-driven revenue professionals prepare for conversations, capture useful context, reduce administration and follow through thoughtfully.
 
 ## Target Sales Brain journey
 
@@ -66,7 +66,7 @@ broader future Sales OS sequence is separately defined in the
 
 ## Interaction Intelligence direction
 
-RevenueOS is positioned as **the AI operating system for customer interactions**.
+Oryntela is positioned as **the AI operating system for customer interactions**.
 The product works across Capture, Intelligence and Action before, during and after
 the event. Interaction becomes the future source-neutral parent while the mature
 Meeting domain remains compatible through an additive migration. WO-011 now
@@ -88,7 +88,7 @@ WO-017 adds the current browser-first phone-call workflow. A user can link a
 same-tenant Contact/company/opportunity, scan a compact brief, manually start/end an
 ordinary call, record its direction/outcome and capture fresh reported evidence.
 An existing authorised recording can enter the same WO-015 private upload and batch
-transcription pipeline. RevenueOS does not dial, intercept or monitor the call.
+transcription pipeline. Oryntela does not dial, intercept or monitor the call.
 
 ## Current product surface
 
@@ -97,9 +97,9 @@ The current implementation provides:
 - an honest public landing page;
 - sign-in, sign-up and sign-out paths prepared for Clerk;
 - a protected application shell and fixed development organisation;
-- Home (RevenueOS Daily), Sell, Pipeline, Search and Settings desktop navigation plus
+- Home (Oryntela Daily), Sell, Pipeline, Search and Settings desktop navigation plus
   Today, Interactions, Actions and Search mobile navigation;
-- a bounded personal RevenueOS Daily Home with one deterministic priority, local-day
+- a bounded personal Oryntela Daily Home with one deterministic priority, local-day
   Interactions, current Actions, explainable deal attention, currency-safe pipeline
   and existing Next Best Action focus;
 - tenant-isolated list/create/edit/delete workflows for companies, contacts, opportunities and tasks;
@@ -114,7 +114,7 @@ The current implementation provides:
 - a controlled private-beta foundation with Clerk organisation sign-in,
   versioned transcript/data notice, onboarding, retention, export/deletion
   requests, usage limits, feedback and an admin-only organisation view; and
-- deterministic Search plus evidence-backed Ask RevenueOS for explicit Opportunity,
+- deterministic Search plus evidence-backed Ask Oryntela for explicit Opportunity,
   Account and user-owned workspace questions;
 - an entitled Prospect Find journey with bounded company resolution, sourced public
   Account Research, controlled refresh and explicit duplicate-safe Add to Sales;
@@ -227,7 +227,7 @@ ingestion.
 
 ## Action Layer now implemented
 
-RevenueOS can turn final validated intelligence into reviewable opportunity Actions.
+Oryntela can turn final validated intelligence into reviewable opportunity Actions.
 Users can revise, approve or reject proposals with clear sources and risk labels.
 Approval never sends, syncs, schedules or changes a business record. This provides
 durable human intent while keeping future execution integrations out of current scope.
@@ -235,11 +235,11 @@ durable human intent while keeping future execution integrations out of current 
 ## Sales Methodology now implemented
 
 WO-024 adds MEDDIC, MEDDPICC, BANT, SPICED and bounded custom organisation
-methodologies to RevenueOS Core. They organise current validated Evidence into
+methodologies to Oryntela Core. They organise current validated Evidence into
 reviewable categorical field states under Opportunity → Deal. There is no percentage,
 qualification score, close probability, stage gate or new top-level navigation item.
 
-## RevenueOS Daily now implemented
+## Oryntela Daily now implemented
 
 WO-025 makes Home a bounded personal day plan with one deterministic top priority,
 local-day Interactions, current Actions, explainable deal attention, descriptive
@@ -248,11 +248,11 @@ forecast, team/manager aggregation, a new AI engine or a new navigation destinat
 
 ## Checkpoint 1 readiness boundary
 
-RevenueOS cannot currently promise that it handles sales administration after a
+Oryntela cannot currently promise that it handles sales administration after a
 meeting. It can prepare source-aware intelligence, follow-up and CRM-ready Action
 proposals, but every email/calendar/CRM/task execution is a labelled simulation.
 WO-025A replaces the Assistant placeholder with deterministic Search; WO-025B adds
-Ask RevenueOS as an ephemeral evidence-backed mode and contextual deal/account utility.
+Ask Oryntela as an ephemeral evidence-backed mode and contextual deal/account utility.
 Ask cannot research the web or execute an Action. Production customer-data use also remains prohibited
 until the target-environment gates are approved.
 

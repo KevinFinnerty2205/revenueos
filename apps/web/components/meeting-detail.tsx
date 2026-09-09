@@ -251,7 +251,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
         <div>
           <Link
             href="/meetings"
-            className="text-sm font-bold text-teal-700 hover:text-teal-900"
+            className="text-sm font-bold text-brand-secondary hover:text-brand-primary"
           >
             ← Meetings
           </Link>
@@ -267,7 +267,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
           </p>
           <Link
             href={`/interactions/${meeting.interactionId}`}
-            className="mt-3 inline-flex rounded-full bg-teal-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-teal-800 hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-600"
+            className="mt-3 inline-flex rounded-full bg-brand-secondary/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-brand-secondary hover:bg-brand-secondary/15 focus:outline-none focus:ring-2 focus:ring-brand-focus"
           >
             Interaction record
           </Link>
@@ -293,7 +293,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
             tabIndex={activeTab === tab ? 0 : -1}
             className={`min-h-11 flex-1 rounded-lg px-4 text-sm font-bold transition ${
               activeTab === tab
-                ? "bg-teal-700 text-white"
+                ? "bg-brand-primary text-white"
                 : "text-slate-700 hover:bg-slate-50"
             }`}
             onClick={() => setActiveTab(tab)}
@@ -322,7 +322,7 @@ export function MeetingDetail({ meetingId }: { meetingId: string }) {
                 {opportunity ? (
                   <Link
                     href={`/opportunities/${opportunity.id}`}
-                    className="font-bold text-teal-700 hover:text-teal-900"
+                    className="font-bold text-brand-secondary hover:text-brand-primary"
                   >
                     {opportunity.name}
                   </Link>

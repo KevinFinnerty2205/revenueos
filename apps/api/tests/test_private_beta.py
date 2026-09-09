@@ -1742,6 +1742,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert download.json()["exportVersion"] == 37
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
+        assert download.headers["Content-Disposition"] == (f'attachment; filename="oryntela-export-{request_id}.json"')
 
     async def tamper(*, output_path: str, expires_at: datetime) -> None:
         engine = create_async_engine(TEST_DB_URL)

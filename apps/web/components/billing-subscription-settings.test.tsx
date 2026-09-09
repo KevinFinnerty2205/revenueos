@@ -342,7 +342,7 @@ describe("BillingSubscriptionSettings", () => {
     render(<BillingSubscriptionSettings />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "RevenueOS could not reach the service.",
+      "Oryntela could not reach the service.",
     );
     const retry = screen.getByRole("button", { name: "Try again" });
     retry.focus();

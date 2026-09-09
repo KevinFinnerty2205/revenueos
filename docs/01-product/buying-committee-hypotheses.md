@@ -10,4 +10,4 @@ Each hypothesis stores a cautious rationale, trust state, source links, research
 
 ## Non-propagation rule
 
-A reviewed hypothesis does not create or update a canonical stakeholder, Methodology field, Opportunity fact, Evidence row, Revenue Brain insight or Ask RevenueOS source. Confirmation requires later customer/sales evidence through the relevant domain. Coverage gaps such as “Security owner not yet identified” are research prompts, not proof that a role is absent.
+A reviewed hypothesis does not create or update a canonical stakeholder, Methodology field, Opportunity fact, Evidence row, Revenue Brain insight or Ask Oryntela source. Confirmation requires later customer/sales evidence through the relevant domain. Coverage gaps such as “Security owner not yet identified” are research prompts, not proof that a role is absent.

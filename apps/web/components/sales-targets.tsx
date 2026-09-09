@@ -11,6 +11,7 @@ import type {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { apiRequest } from "@/lib/api";
+import { displayPipelineName } from "@/lib/customer-display";
 
 type TargetView = "current" | "past" | "archived";
 type TargetKind = "self" | "assigned" | "organisation";
@@ -128,11 +129,11 @@ function TargetCard({
       : "Unavailable";
   return (
     <article
-      className={`rounded-2xl border p-5 shadow-sm ${isActivity ? "border-slate-200 bg-slate-50/60" : "border-teal-100 bg-white"}`}
+      className={`rounded-2xl border p-5 shadow-sm ${isActivity ? "border-slate-200 bg-slate-50/60" : "border-brand-secondary/15 bg-white"}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-wider text-brand-secondary">
             {targetLabel(target)} · {categoryLabels[target.metric.category]}
           </p>
           <h3 className="mt-1 text-lg font-semibold text-slate-950">
@@ -141,7 +142,7 @@ function TargetCard({
           <p className="mt-1 text-sm text-slate-500">
             {target.periodLabel}
             {target.pipelineName
-              ? ` · ${target.pipelineName}`
+              ? ` · ${displayPipelineName(target.pipelineName)}`
               : " · All pipelines"}
           </p>
         </div>
@@ -167,7 +168,7 @@ function TargetCard({
             aria-valuenow={Math.min(100, Math.max(0, percentage))}
           >
             <div
-              className={`h-full rounded-full motion-reduce:transition-none ${isActivity ? "bg-slate-500" : "bg-teal-600"}`}
+              className={`h-full rounded-full motion-reduce:transition-none ${isActivity ? "bg-slate-500" : "bg-brand-primary"}`}
               style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
             />
           </div>
@@ -201,7 +202,7 @@ function TargetCard({
         <button
           type="button"
           onClick={() => onView(target)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-focus"
         >
           View details
         </button>
@@ -209,7 +210,7 @@ function TargetCard({
           <button
             type="button"
             onClick={() => onRevise(target)}
-            className="rounded-lg border border-teal-700 px-3 py-2 text-sm font-semibold text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600"
+            className="rounded-lg border border-brand-secondary px-3 py-2 text-sm font-semibold text-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus"
           >
             Change target
           </button>
@@ -218,7 +219,7 @@ function TargetCard({
           <button
             type="button"
             onClick={() => onArchive(target)}
-            className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-600"
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-focus"
           >
             Archive
           </button>
@@ -241,11 +242,11 @@ function TargetDetail({
       role="dialog"
       aria-modal="true"
       aria-labelledby="target-detail-title"
-      className="mb-6 rounded-2xl border-2 border-teal-200 bg-white p-5 shadow-lg"
+      className="mb-6 rounded-2xl border-2 border-brand-secondary/25 bg-white p-5 shadow-lg"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-wider text-brand-secondary">
             {targetLabel(target)}
           </p>
           <h2
@@ -258,7 +259,7 @@ function TargetDetail({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-teal-600"
+          className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-focus"
         >
           Close
         </button>
@@ -302,7 +303,7 @@ function TargetDetail({
           {insightsHref ? (
             <a
               href={insightsHref}
-              className="mt-4 inline-block text-sm font-semibold text-teal-800 underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-teal-600"
+              className="mt-4 inline-block text-sm font-semibold text-brand-secondary underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-focus"
             >
               View this metric in Insights
             </a>
@@ -379,7 +380,7 @@ export function SalesTargetsOverview({ onViewAll }: { onViewAll: () => void }) {
   return (
     <section
       aria-labelledby="active-targets-title"
-      className="rounded-2xl border border-teal-200 bg-teal-50/60 p-5"
+      className="rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -397,7 +398,7 @@ export function SalesTargetsOverview({ onViewAll }: { onViewAll: () => void }) {
         <button
           type="button"
           onClick={onViewAll}
-          className="rounded-lg border border-teal-700 px-3 py-2 text-sm font-semibold text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+          className="rounded-lg border border-brand-secondary px-3 py-2 text-sm font-semibold text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus"
         >
           {visibleTargets.length ? "View all targets" : "Set a target"}
         </button>
@@ -411,9 +412,9 @@ export function SalesTargetsOverview({ onViewAll }: { onViewAll: () => void }) {
           {visibleTargets.map((target) => (
             <article
               key={target.id}
-              className="rounded-xl border border-teal-100 bg-white p-4"
+              className="rounded-xl border border-brand-secondary/15 bg-white p-4"
             >
-              <p className="text-xs font-bold uppercase tracking-wider text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-wider text-brand-secondary">
                 {targetLabel(target)} · {target.periodLabel}
               </p>
               <h3 className="mt-1 font-semibold text-slate-950">
@@ -673,7 +674,7 @@ export function SalesTargets() {
         <button
           type="button"
           onClick={() => setShowForm((value) => !value)}
-          className="rounded-xl bg-teal-800 px-4 py-2.5 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+          className="rounded-xl bg-brand-secondary px-4 py-2.5 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
         >
           {showForm ? "Cancel" : "Set target"}
         </button>
@@ -682,7 +683,7 @@ export function SalesTargets() {
       {notice ? (
         <p
           role="status"
-          className="rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950"
+          className="rounded-xl border border-brand-secondary/25 bg-brand-secondary/10 p-4 text-sm text-brand-primary"
         >
           {notice}
         </p>
@@ -699,11 +700,11 @@ export function SalesTargets() {
       {showForm && metadata ? (
         <form
           onSubmit={submitTarget}
-          className="rounded-2xl border border-teal-200 bg-white p-5 shadow-sm"
+          className="rounded-2xl border border-brand-secondary/25 bg-white p-5 shadow-sm"
         >
           <h3 className="text-lg font-semibold text-slate-950">Set target</h3>
           <p className="mt-1 text-sm text-slate-600">
-            Choose a supported metric, calendar period and goal. RevenueOS
+            Choose a supported metric, calendar period and goal. Oryntela
             supplies the actual.
           </p>
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -717,7 +718,7 @@ export function SalesTargets() {
                   if (!opportunityMetricIds.has(nextMetricId))
                     setPipelineId("");
                 }}
-                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
               >
                 {(["outcome", "pipeline_development", "activity"] as const).map(
                   (category) => (
@@ -742,7 +743,7 @@ export function SalesTargets() {
                   onChange={(event) =>
                     setKind(event.target.value as TargetKind)
                   }
-                  className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                  className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
                 >
                   <option value="self">My personal goal</option>
                   <option value="assigned">A salesperson · assigned</option>
@@ -757,7 +758,7 @@ export function SalesTargets() {
                   required
                   value={ownerUserId}
                   onChange={(event) => setOwnerUserId(event.target.value)}
-                  className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                  className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
                 >
                   <option value="">Choose a salesperson</option>
                   {metadata.owners.map((owner) => (
@@ -782,7 +783,7 @@ export function SalesTargets() {
                     );
                   }
                 }}
-                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
               >
                 <option value="month">Monthly</option>
                 <option value="quarter">Quarterly</option>
@@ -798,7 +799,7 @@ export function SalesTargets() {
                   min={currentMonth()}
                   value={monthAnchor}
                   onChange={(event) => setMonthAnchor(event.target.value)}
-                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
                 />
               </label>
             ) : (
@@ -807,7 +808,7 @@ export function SalesTargets() {
                 <select
                   value={controlledAnchor}
                   onChange={(event) => setControlledAnchor(event.target.value)}
-                  className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                  className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
                 >
                   {quarterOrYearOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -825,14 +826,14 @@ export function SalesTargets() {
                 <select
                   value={pipelineId}
                   onChange={(event) => setPipelineId(event.target.value)}
-                  className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                  className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
                 >
                   <option value="">All pipelines</option>
                   {metadata.pipelines
                     .filter((pipeline) => pipeline.active)
                     .map((pipeline) => (
                       <option key={pipeline.id} value={pipeline.id}>
-                        {pipeline.name}
+                        {displayPipelineName(pipeline.name)}
                       </option>
                     ))}
                 </select>
@@ -848,7 +849,7 @@ export function SalesTargets() {
                   maxLength={3}
                   pattern="[A-Za-z]{3}"
                   onChange={(event) => setCurrency(event.target.value)}
-                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 uppercase focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 uppercase focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
                 />
               </label>
             ) : null}
@@ -863,7 +864,7 @@ export function SalesTargets() {
                 placeholder={
                   selectedMetric?.unit === "currency" ? "20000" : "12"
                 }
-                className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
               />
             </label>
           </div>
@@ -878,7 +879,7 @@ export function SalesTargets() {
           <button
             disabled={submitting}
             type="submit"
-            className="mt-5 rounded-xl bg-teal-800 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+            className="mt-5 rounded-xl bg-brand-secondary px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
           >
             {submitting ? "Setting target…" : "Set target"}
           </button>
@@ -954,7 +955,7 @@ export function SalesTargets() {
               disabled={submitting}
               type="button"
               onClick={() => void confirmArchive()}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-white"
             >
               Archive target
             </button>
@@ -985,7 +986,7 @@ export function SalesTargets() {
             role="tab"
             aria-selected={view === item}
             onClick={() => setView(item)}
-            className={`min-h-11 rounded-lg px-4 text-sm font-semibold capitalize focus:outline-none focus:ring-2 focus:ring-teal-600 ${view === item ? "bg-white text-teal-900 shadow-sm" : "text-slate-600"}`}
+            className={`min-h-11 rounded-lg px-4 text-sm font-semibold capitalize focus:outline-none focus:ring-2 focus:ring-brand-focus ${view === item ? "bg-white text-brand-primary shadow-sm" : "text-slate-600"}`}
           >
             {item}
           </button>
@@ -1005,7 +1006,7 @@ export function SalesTargets() {
             <button
               type="button"
               onClick={() => setShowForm(true)}
-              className="mt-5 rounded-xl bg-teal-800 px-4 py-2.5 text-sm font-semibold text-white"
+              className="mt-5 rounded-xl bg-brand-secondary px-4 py-2.5 text-sm font-semibold text-white"
             >
               Set a target
             </button>
@@ -1102,7 +1103,7 @@ export function SalesTargets() {
                   <button
                     type="button"
                     onClick={() => void openDetail(target)}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-focus"
                   >
                     Open
                   </button>

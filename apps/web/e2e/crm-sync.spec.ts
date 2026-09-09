@@ -20,7 +20,7 @@ const hubspotConnection = {
   revokedAt: null,
   metadataVersion: 1,
   externalAccountId: "1234567",
-  externalAccountName: "RevenueOS test account",
+  externalAccountName: "Oryntela test account",
   grantedScopes: ["oauth", "crm.objects.deals.read", "crm.objects.deals.write"],
   executionMode: "live",
   simulationOnly: false,
@@ -738,14 +738,14 @@ test("admin connects, maps, verifies and disconnects HubSpot", async ({
   await integrations.getByRole("button", { name: "Connect HubSpot" }).click();
   await expect(page.getByRole("heading", { name: "Connected" })).toBeVisible();
   await expect(
-    page.getByText(/RevenueOS test account is connected/i),
+    page.getByText(/Oryntela test account is connected/i),
   ).toBeVisible();
   await page.getByRole("link", { name: "Return to settings" }).click();
 
   await expect(
     integrations.getByText("Live — explicit review required").first(),
   ).toBeVisible();
-  await expect(integrations.getByText(/RevenueOS test account/)).toBeVisible();
+  await expect(integrations.getByText(/Oryntela test account/)).toBeVisible();
   await integrations.getByText("CRM sync, ownership and mappings").click();
   await integrations
     .getByRole("button", { name: "Load HubSpot configuration" })
@@ -960,7 +960,7 @@ test("salesperson links and confirms an exact CRM update after stale-state revie
             ownerUserId: "user-1",
             ownerName: "Alex Morgan",
             description:
-              "Canonical RevenueOS value remains unchanged by CRM sync.",
+              "Canonical Oryntela value remains unchanged by CRM sync.",
             createdAt: "2026-08-01T00:00:00Z",
             updatedAt: "2026-08-24T00:00:00Z",
           },

@@ -58,7 +58,7 @@ Voice Journal, Debrief and Visual Evidence. It works without forcing a campaign 
 
 ### After
 
-RevenueOS groups people met, unresolved identity, follow-up needed and possible
+Oryntela groups people met, unresolved identity, follow-up needed and possible
 opportunity. Individual review comes before any group campaign. Attendee-list access
 never implies marketing consent.
 

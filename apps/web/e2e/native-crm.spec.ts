@@ -38,7 +38,7 @@ async function routeShell(page: Page, role: "admin" | "member" = "admin") {
   );
 }
 
-test("admin deliberately selects RevenueOS as the CRM system of record", async ({
+test("admin deliberately selects Oryntela as the CRM system of record", async ({
   page,
 }) => {
   await routeShell(page);
@@ -60,7 +60,7 @@ test("admin deliberately selects RevenueOS as the CRM system of record", async (
           message:
             mode === "native"
               ? "CRM administration is available."
-              : "Choose RevenueOS or an external CRM as the system of record.",
+              : "Choose Oryntela or an external CRM as the system of record.",
         },
       });
     },

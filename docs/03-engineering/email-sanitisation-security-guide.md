@@ -4,7 +4,7 @@
 
 WO-019 accepts manually selected plain text. HTML, MIME attachments, remote images,
 tracking pixels, mailbox links and provider message payloads are outside the
-current contract. RevenueOS neither renders HTML nor follows links found in email
+current contract. Oryntela neither renders HTML nor follows links found in email
 text.
 
 ## Conservative normalisation

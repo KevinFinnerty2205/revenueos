@@ -4,7 +4,7 @@
 
 1. Confirm deployment head is `0055_live_prospect_provider`, `API_FEATURE_NATIVE_CRM_ENABLED=true` and `API_FEATURE_NATIVE_PIPELINE_ENABLED=true`.
 2. Confirm the organisation has active Core commercial access using the reviewed commercial operator workflow.
-3. In Settings → CRM, explicitly choose RevenueOS. Connected HubSpot additionally requires the commercial CRM connector entitlement.
+3. In Settings → CRM, explicitly choose Oryntela. Connected HubSpot additionally requires the commercial CRM connector entitlement.
 4. Create one synthetic Account, Contact and Opportunity; confirm owner, record overview, history, archive/restore, strong duplicate handling and a real default Pipeline assignment/event.
 5. For external mode, verify the connector is active and a mapped authoritative field is read-only. Do not make a live provider call during smoke testing.
 

@@ -1,4 +1,4 @@
-# RevenueOS Core product
+# Oryntela Core product
 
 - **Status:** Core definition through Checkpoint 1; implemented and future capability
   is explicitly identified below
@@ -16,16 +16,16 @@ sequence. See the [Core capability floor](core-competitive-capability-floor.md) 
 
 ## Core promise
 
-RevenueOS Core understands authorised customer evidence, remembers the relationship,
+Oryntela Core understands authorised customer evidence, remembers the relationship,
 helps a seller prepare and follow through, and explains what matters today.
 
 Core has five inseparable parts:
 
 1. Sales Brain;
 2. Sales Methodology;
-3. RevenueOS Intelligence;
-4. RevenueOS Workspace; and
-5. RevenueOS Daily.
+3. Oryntela Intelligence;
+4. Oryntela Workspace; and
+5. Oryntela Daily.
 
 ## Sales Brain
 
@@ -67,13 +67,13 @@ the same Evidence. SPIN, Challenger, Sandler, GAP Selling and Solution Selling r
 possible future configuration, not implemented standards.
 
 Each item is `confirmed`, `partially_supported`, `unknown`, `conflicting` or `stale`.
-The user sees what RevenueOS believes, why, the evidence, last support date,
+The user sees what Oryntela believes, why, the evidence, last support date,
 conflicts and missing information. A methodology can change without erasing history.
 
 Gaps influence preparation, questions, debrief, Next Best Action, deal coaching and
 forecast explanation. They do not become a simplistic completion or rep score.
 
-## RevenueOS Intelligence
+## Oryntela Intelligence
 
 Core includes descriptive and diagnostic Sales Insights, explicit Targets/KPI
 progress and Transparent Forecasting now; Manager Intelligence remains later work.
@@ -86,7 +86,7 @@ The complete Core direction includes:
 - manager deal-attention views; and
 - coaching grounded in actual evidence and historical outcomes.
 
-Checkpoint 1 also confirms evidence-backed universal Search/**Ask RevenueOS** and
+Checkpoint 1 also confirms evidence-backed universal Search/**Ask Oryntela** and
 responsible **Win/Loss Intelligence** as Core. Enough production CRM integration to
 read/match context and execute an approved Core update is Core-enabling
 infrastructure; the optional native CRM product remains an add-on.
@@ -95,7 +95,7 @@ The default is a short narrative and action list. Charts and tables are drill-do
 Forecasting in Core avoids forcing customers to buy an add-on to understand the
 revenue already represented in Sales Brain.
 
-## RevenueOS Workspace
+## Oryntela Workspace
 
 Workspace is the organised evidence and working memory of a revenue relationship.
 It includes Account Workspace, Opportunity Workspace, the Interaction timeline,
@@ -106,7 +106,7 @@ It is not generic file storage. Every item should have account/opportunity conte
 provenance, access, retention and a clear sales purpose. Broad enterprise document
 management is outside Core.
 
-## RevenueOS Daily
+## Oryntela Daily
 
 Daily is the implemented default habit surface and answers **What matters today?**
 It combines local-day Interactions, current Actions/commitments, explainable deal
@@ -159,9 +159,9 @@ and [Daily experience](../02-design/revenueos-daily-experience.md).
 
 WO-024 implements the methodology slice of Core: one organisation default or none,
 four immutable standards, bounded custom definitions, explainable Opportunity views
-and preparation/action context. WO-025 implements the personal RevenueOS Daily Home.
+and preparation/action context. WO-025 implements the personal Oryntela Daily Home.
 WO-025A completes the Core experience-readiness pass and WO-025B implements Ask
-RevenueOS as bounded evidence-backed Opportunity, Account and user-owned workspace
+Oryntela as bounded evidence-backed Opportunity, Account and user-owned workspace
 Q&A. Ask reuses existing intelligence, preserves provenance/conflict and returns
 unknown rather than widening to public research. Analytics, aggregate Win/Loss and
 Targets and Transparent Forecasting are now implemented. Qualitative Win/Loss

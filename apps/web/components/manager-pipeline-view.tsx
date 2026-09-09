@@ -7,6 +7,7 @@ import type {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { displayPipelineName } from "@/lib/customer-display";
 
 const forecastLabels: Record<SalesForecastCategory, string> = {
   commit: "Commit",
@@ -122,7 +123,7 @@ export function ManagerPipelineView({
                 <div>
                   <Link
                     href={item.href}
-                    className="text-lg font-semibold text-teal-900 hover:underline"
+                    className="text-lg font-semibold text-brand-primary hover:underline"
                   >
                     {item.opportunityName}
                   </Link>
@@ -139,7 +140,7 @@ export function ManagerPipelineView({
                 </p>
               </div>
               <p className="mt-3 text-sm text-slate-700">
-                {item.pipelineName} · {item.stageName}
+                {displayPipelineName(item.pipelineName)} · {item.stageName}
               </p>
               <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
                 <div className="rounded-xl bg-slate-50 p-3">
@@ -167,7 +168,7 @@ export function ManagerPipelineView({
               </ul>
               <Link
                 href={item.href}
-                className="mt-4 inline-block text-sm font-semibold text-teal-800 hover:underline"
+                className="mt-4 inline-block text-sm font-semibold text-brand-secondary hover:underline"
               >
                 Review Opportunity →
               </Link>

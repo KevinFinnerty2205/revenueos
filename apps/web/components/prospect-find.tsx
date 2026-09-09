@@ -152,7 +152,7 @@ export function ProspectFind() {
     return (
       <div className="space-y-6">
         <PageHeader
-          eyebrow="RevenueOS Prospect"
+          eyebrow="Prospect"
           title="Find"
           description="Research a company you know or discover accounts in a target market."
         />
@@ -181,7 +181,7 @@ export function ProspectFind() {
     return (
       <div className="space-y-6">
         <PageHeader
-          eyebrow="RevenueOS Prospect"
+          eyebrow="Prospect"
           title="Find companies"
           description="Find and research the companies you should sell to."
         />
@@ -205,16 +205,16 @@ export function ProspectFind() {
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="RevenueOS Prospect"
+        eyebrow="Prospect"
         title="Find"
         description="Research a company you know or discover accounts in a target market."
       />
 
       <section
-        className="rounded-3xl border border-teal-100 bg-white p-5 shadow-sm sm:p-8"
+        className="rounded-3xl border border-brand-secondary/15 bg-white p-5 shadow-sm sm:p-8"
         aria-labelledby="find-question"
       >
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
           Start with a company
         </p>
         <h2
@@ -240,7 +240,7 @@ export function ProspectFind() {
             maxLength={200}
             required
             placeholder="Search company name or website"
-            className="min-h-12 flex-1 rounded-xl border border-slate-300 px-4 text-base outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+            className="min-h-12 flex-1 rounded-xl border border-slate-300 px-4 text-base outline-none transition focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
           />
           <button
             type="submit"
@@ -290,7 +290,7 @@ export function ProspectFind() {
                     <h3 className="text-lg font-semibold text-slate-950">
                       {candidate.name}
                     </h3>
-                    <p className="mt-1 break-all text-sm font-medium text-teal-800">
+                    <p className="mt-1 break-all text-sm font-medium text-brand-secondary">
                       {candidate.domain}
                     </p>
                     <p className="mt-2 text-sm text-slate-600">
@@ -323,7 +323,7 @@ export function ProspectFind() {
       <section aria-labelledby="target-markets-title">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
               Discover accounts
             </p>
             <h2
@@ -353,7 +353,7 @@ export function ProspectFind() {
             </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
               Create a guided target market with industry, geography, size and
-              exclusions. RevenueOS will return a bounded list with transparent
+              exclusions. Oryntela will return a bounded list with transparent
               fit reasons—not an intent score.
             </p>
             {targetMarkets?.canCreate ? (
@@ -375,7 +375,7 @@ export function ProspectFind() {
               <Link
                 key={market.id}
                 href={`/find/target-markets/${market.id}`}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-600"
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-secondary/35 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-focus"
               >
                 <span className="flex items-start justify-between gap-4">
                   <span>
@@ -404,7 +404,7 @@ export function ProspectFind() {
                       ? `${market.latestRun.candidateCount} accounts found`
                       : "Ready for first search"}
                   </span>
-                  <span className="font-bold text-teal-800">Open →</span>
+                  <span className="font-bold text-brand-secondary">Open →</span>
                 </span>
               </Link>
             ))}
@@ -429,7 +429,7 @@ export function ProspectFind() {
               <Link
                 key={item.target.id}
                 href={`/find/${item.target.id}`}
-                className="flex min-h-16 items-center justify-between gap-4 px-5 py-4 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600"
+                className="flex min-h-16 items-center justify-between gap-4 px-5 py-4 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-focus"
               >
                 <span>
                   <span className="block font-semibold text-slate-950">
@@ -439,7 +439,7 @@ export function ProspectFind() {
                     {item.target.domain}
                   </span>
                 </span>
-                <span className="text-right text-xs font-bold text-teal-800">
+                <span className="text-right text-xs font-bold text-brand-secondary">
                   {statusLabels[item.status]}
                 </span>
               </Link>

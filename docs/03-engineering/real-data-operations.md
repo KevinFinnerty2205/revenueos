@@ -61,7 +61,7 @@ immutable provisioning/commercial events. Native CRM itself is Core; select the 
 add-on only for supported external CRM connector access. Repeating identical input
 returns `already_applied`; reusing the key for different input blocks.
 
-Add a verified Clerk user with `provision-member` and its printed exact confirmation. Role changes and disable/re-enable use the existing authenticated admin membership route so the decision remains visible to the tenant. Disable the Clerk membership/session first for emergency revocation, then disable RevenueOS membership. Existing business history remains, active personal targets are archived and access/download grants fail on the next API request; already-issued JWTs remain valid only until Clerk revocation/expiry, so the target Clerk policy and measured maximum latency belong in partner evidence.
+Add a verified Clerk user with `provision-member` and its printed exact confirmation. Role changes and disable/re-enable use the existing authenticated admin membership route so the decision remains visible to the tenant. Disable the Clerk membership/session first for emergency revocation, then disable Oryntela membership. Existing business history remains, active personal targets are archived and access/download grants fail on the next API request; already-issued JWTs remain valid only until Clerk revocation/expiry, so the target Clerk policy and measured maximum latency belong in partner evidence.
 
 Run `tenant-preflight --organisation-id <uuid>` before access. It checks an active admin, Native CRM configuration and pipeline/import state without printing names or content.
 

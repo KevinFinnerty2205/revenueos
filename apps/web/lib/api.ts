@@ -88,7 +88,7 @@ async function reliableFetch(
       const retryable = reason instanceof TypeError && attempt + 1 < attempts;
       if (!retryable) {
         throw new ApiClientError(
-          "RevenueOS could not reach the service. Check your connection and try again.",
+          "Oryntela could not reach the service. Check your connection and try again.",
           0,
           "network_error",
           requestId,
@@ -98,7 +98,7 @@ async function reliableFetch(
     }
   }
   throw new ApiClientError(
-    "RevenueOS could not reach the service. Check your connection and try again.",
+    "Oryntela could not reach the service. Check your connection and try again.",
     0,
     "network_error",
     requestId,

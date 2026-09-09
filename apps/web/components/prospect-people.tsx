@@ -74,7 +74,7 @@ export function ProspectPeopleSection({ targetId }: { targetId: string }) {
       setError(
         reason instanceof Error
           ? reason.message
-          : "RevenueOS could not find reliable professional people.",
+          : "Oryntela could not find reliable professional people.",
       );
     } finally {
       setDiscovering(false);
@@ -124,7 +124,7 @@ export function ProspectPeopleSection({ targetId }: { targetId: string }) {
             No people have been researched yet.
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            RevenueOS can look for a small, company-scoped set of public
+            Oryntela can look for a small, company-scoped set of public
             professional profiles. It does not scrape social networks or guess
             private details.
           </p>
@@ -166,7 +166,7 @@ export function ProspectPeopleSection({ targetId }: { targetId: string }) {
                 </span>
                 <Link
                   href={`/find/${targetId}/people/${person.id}`}
-                  className="text-sm font-bold text-teal-700 hover:text-teal-900"
+                  className="text-sm font-bold text-brand-secondary hover:text-brand-primary"
                 >
                   {person.researchStatus === "not_started"
                     ? "Research person"
@@ -193,8 +193,8 @@ export function ProspectPeopleSection({ targetId }: { targetId: string }) {
 
       {discovery?.functions.length ? (
         <details className="mt-5 rounded-2xl border border-slate-200 p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600">
-            Functions RevenueOS considers
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-focus">
+            Functions Oryntela considers
           </summary>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {discovery.functions.map((item) => (
@@ -529,13 +529,13 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
       <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <Link
           href={`/find/${brief.person.companyTargetId}`}
-          className="text-sm font-bold text-teal-700 hover:text-teal-900"
+          className="text-sm font-bold text-brand-secondary hover:text-brand-primary"
         >
           ← Back to company research
         </Link>
         <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
               Public professional research
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
@@ -649,14 +649,14 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
 
       {processing ? (
         <section
-          className="rounded-3xl border border-teal-100 bg-teal-50 p-7"
+          className="rounded-3xl border border-brand-secondary/15 bg-brand-secondary/10 p-7"
           aria-live="polite"
         >
-          <h2 className="text-xl font-semibold text-teal-950">
+          <h2 className="text-xl font-semibold text-brand-primary">
             Researching public professional context…
           </h2>
-          <p className="mt-2 text-sm leading-6 text-teal-900">
-            RevenueOS is checking permitted business sources. It will not create
+          <p className="mt-2 text-sm leading-6 text-brand-primary">
+            Oryntela is checking permitted business sources. It will not create
             a Contact, outreach or customer evidence.
           </p>
         </section>
@@ -670,7 +670,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
           </h2>
           <p className="mt-2 text-sm leading-6 text-amber-900">
             The provider outcome is uncertain. Reserved Credits remain held and
-            RevenueOS will not retry or charge again until the operation is
+            Oryntela will not retry or charge again until the operation is
             reconciled.
           </p>
         </section>
@@ -690,7 +690,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
             Couldn’t complete professional research
           </h2>
           <p className="mt-2 text-sm leading-6 text-rose-900">
-            RevenueOS could not establish reliable public professional context.
+            Oryntela could not establish reliable public professional context.
             No Contact or outreach was created.
           </p>
         </section>
@@ -829,7 +829,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
               </ul>
             ) : (
               <p className="text-sm text-slate-600">
-                No reliable business contact details were established. RevenueOS
+                No reliable business contact details were established. Oryntela
                 did not guess an email address.
               </p>
             )}
@@ -855,7 +855,7 @@ export function ProspectPersonResearchView({ personId }: { personId: string }) {
 
           <PersonSources sources={brief.sources} />
           <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <summary className="cursor-pointer font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-600">
+            <summary className="cursor-pointer font-semibold text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-focus">
               Research history
             </summary>
             <div className="mt-4 space-y-3">
@@ -1071,7 +1071,7 @@ function SafeSourceLink({ source }: { source: ProspectResearchSource }) {
       target="_blank"
       rel="noopener noreferrer"
       referrerPolicy="no-referrer"
-      className="text-xs font-bold text-teal-700 underline decoration-teal-200 underline-offset-2 hover:text-teal-900"
+      className="text-xs font-bold text-brand-secondary underline decoration-brand-secondary/25 underline-offset-2 hover:text-brand-primary"
     >
       {source.publisher} ↗
     </a>
@@ -1082,7 +1082,7 @@ function PersonSources({ sources }: { sources: ProspectResearchSource[] }) {
   return (
     <PersonSection
       title="Sources"
-      description="Public source metadata only. RevenueOS does not mirror full profiles or webpages."
+      description="Public source metadata only. Oryntela does not mirror full profiles or webpages."
     >
       <ul className="divide-y divide-slate-100">
         {sources.map((source) => (
@@ -1139,14 +1139,14 @@ export function ContactPublicProfessionalResearch({
       </p>
     );
   return (
-    <aside className="mt-6 rounded-2xl border border-teal-200 bg-teal-50 p-5">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-800">
+    <aside className="mt-6 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-secondary">
         Separate research context
       </p>
-      <h2 className="mt-2 text-lg font-semibold text-teal-950">
+      <h2 className="mt-2 text-lg font-semibold text-brand-primary">
         {link?.label}
       </h2>
-      <p className="mt-2 text-sm leading-6 text-teal-900">
+      <p className="mt-2 text-sm leading-6 text-brand-primary">
         Public professional research remains separate from customer evidence,
         Stakeholder Intelligence and Revenue Brain facts.
       </p>

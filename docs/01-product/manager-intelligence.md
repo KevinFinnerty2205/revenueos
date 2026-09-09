@@ -18,11 +18,11 @@ independent manager forecast perspective.
 
 The experience is integrated into existing surfaces:
 
-- Home extends RevenueOS Daily with at most five deals needing attention;
+- Home extends Oryntela Daily with at most five deals needing attention;
 - Pipeline has an explicit Manager view with the existing owner and pipeline filters;
 - Opportunity contains the flagship Manager review beside the existing Sales Brain;
 - Insights Overview composes Actual, organisation Target, seller forecast, manager
-  forecast and RevenueOS historical baseline as five separate references; and
+  forecast and Oryntela historical baseline as five separate references; and
 - Forecast supports explicit manager review, immutable history and a factual
   **Different seller and manager views** filter.
 
@@ -59,7 +59,7 @@ canonical context snapshot/staleness rules. It never edits or defaults from the
 seller judgment. The Opportunity owner can see the manager view read-only; only an
 administrator can append a manager revision.
 
-RevenueOS always displays these references separately:
+Oryntela always displays these references separately:
 
 - Actual from `SalesMetricService`;
 - organisation Target from the Target service;
@@ -72,7 +72,7 @@ forecast or comparative seller/manager accuracy ranking.
 
 ## Coaching and no-surveillance policy
 
-Coaching is a practical conversation about a deal and its evidence. RevenueOS does
+Coaching is a practical conversation about a deal and its evidence. Oryntela does
 not create a coaching note, competency record, employee profile, rating, score,
 grade, rank or leaderboard. Manager Intelligence neither collects nor derives login,
 session, page-view, click, screen-time, keystroke, calls-per-hour, email-volume,
@@ -101,7 +101,7 @@ Known limitations:
 - no employee score, ranking, compensation or quota-payroll function;
 - no call-behaviour coaching, sentiment, AI coach or LLM summary;
 - no automatic manager forecast, blended final forecast or cross-company benchmark;
-- attention depends on canonical data RevenueOS can access; unavailable external CRM
+- attention depends on canonical data Oryntela can access; unavailable external CRM
   changes cannot be reviewed;
 - sparse exact-stage history remains unavailable rather than falling back;
 - no external CRM forecast sync or external provider call; and

@@ -8,7 +8,7 @@ auto-ingestion remain disabled. If pilot ecosystems do not dictate another choic
 Google Meet v2 is the recommended first technical spike; production selection still
 requires design-partner entitlement and least-privilege testing.
 
-RevenueOS integrates as an intelligence and workflow layer while the connected provider remains authoritative. The first five design partners use one selected productivity ecosystem and one selected CRM; breadth follows demonstrated need. CRM updates and external communications require explicit user approval throughout beta.
+Oryntela integrates as an intelligence and workflow layer while the connected provider remains authoritative. The first five design partners use one selected productivity ecosystem and one selected CRM; breadth follows demonstrated need. CRM updates and external communications require explicit user approval throughout beta.
 
 ## Integration contract
 
@@ -32,9 +32,9 @@ Provider details must remain in adapters behind domain ports. Domain services ow
 ### Google Calendar
 
 - **User value:** Discover selected upcoming/completed meetings, attendees and context for preparation and ingestion.
-- **Data flow:** Provider → RevenueOS for selected event metadata and change notifications; no RevenueOS event writes in pilot.
+- **Data flow:** Provider → Oryntela for selected event metadata and change notifications; no Oryntela event writes in pilot.
 - **Read/write:** Read minimum calendar/event fields; calendar write is not beta-required.
-- **Source of truth:** Google Calendar for event time, title, attendees and event state; RevenueOS for matching/review state.
+- **Source of truth:** Google Calendar for event time, title, attendees and event state; Oryntela for matching/review state.
 - **Approval:** User/admin selects calendars and eligible events; adding/changing calendar events would require a separate future approval.
 - **Authentication:** Google OAuth with offline access only where required; domain-wide delegation is not a default.
 - **Webhook/polling:** Google watch channels plus bounded incremental sync for recovery; renew channels before expiry.
@@ -46,9 +46,9 @@ Provider details must remain in adapters behind domain ports. Domain services ow
 ### Microsoft Outlook Calendar
 
 - **User value:** The Microsoft 365 equivalent of selected meeting discovery and preparation.
-- **Data flow:** Microsoft Graph → RevenueOS for selected calendar/event metadata.
+- **Data flow:** Microsoft Graph → Oryntela for selected calendar/event metadata.
 - **Read/write:** Delegated read scopes initially; no beta requirement to write calendar events.
-- **Source of truth:** Outlook for event fields; RevenueOS for relationship matching and review state.
+- **Source of truth:** Outlook for event fields; Oryntela for relationship matching and review state.
 - **Approval:** User/admin selects account/calendars and ingestion policy.
 - **Authentication:** Microsoft identity platform OAuth; delegated permissions first, administrator consent only where necessary.
 - **Webhook/polling:** Graph subscriptions plus delta queries for recovery and expiry renewal.
@@ -60,71 +60,71 @@ Provider details must remain in adapters behind domain ports. Domain services ow
 ### Gmail
 
 - **User value:** Create an approved follow-up in the user's mailbox and confirm delivery state where sending is enabled.
-- **Data flow:** RevenueOS → Gmail for one approved draft/send; minimal provider status → RevenueOS. No historic mailbox ingestion by default.
+- **Data flow:** Oryntela → Gmail for one approved draft/send; minimal provider status → Oryntela. No historic mailbox ingestion by default.
 - **Read/write:** Begin with draft creation if it satisfies pilot workflow; enable send only after explicit approval/reconciliation is proven.
-- **Source of truth:** Gmail for message/draft/delivery identifiers; RevenueOS for source-backed draft version and approval.
+- **Source of truth:** Gmail for message/draft/delivery identifiers; Oryntela for source-backed draft version and approval.
 - **Approval:** Exact recipients, subject and body version require user approval; material edits invalidate approval.
 - **Authentication:** Google OAuth with the narrowest draft/send scope for enabled capability; calendar and mail grants remain understandable.
 - **Webhook/polling:** Direct command plus response; Gmail history/watch only if needed to reconcile status, not to ingest the mailbox.
 - **Rate limits:** Per-user quotas, idempotency guard and no blind send retry.
 - **Error recovery:** Revalidate recipients, reconcile unknown outcome by provider identifier, then require user attention if uncertain.
-- **Data deletion:** Delete RevenueOS copy per policy; user controls provider-side message/draft, with limitations stated clearly; revoke tokens on disconnect.
+- **Data deletion:** Delete Oryntela copy per policy; user controls provider-side message/draft, with limitations stated clearly; revoke tokens on disconnect.
 - **Rollout:** Sprint 12 for a Google pilot; otherwise second-mail Sprint 21.
 
 ### Microsoft Outlook Mail
 
 - **User value:** Create or send a reviewed follow-up through the user's Microsoft 365 mailbox.
-- **Data flow:** RevenueOS → Microsoft Graph for one approved draft/send; minimal outcome metadata returns.
+- **Data flow:** Oryntela → Microsoft Graph for one approved draft/send; minimal outcome metadata returns.
 - **Read/write:** Narrow mail draft/send capability; no mailbox-wide read in beta unless a separately defined workflow requires it.
-- **Source of truth:** Outlook for message/delivery state; RevenueOS for approved content/provenance.
+- **Source of truth:** Outlook for message/delivery state; Oryntela for approved content/provenance.
 - **Approval:** Bound to recipients, content version, mailbox and expiry.
 - **Authentication:** Delegated Microsoft OAuth; avoid application-wide mailbox permission for the user workflow.
 - **Webhook/polling:** Direct Graph commands and bounded reconciliation; subscriptions only when a product requirement justifies them.
 - **Rate limits:** Respect Graph throttling and prevent duplicate send on retry.
 - **Error recovery:** Reauthorise, resolve policy rejection and reconcile ambiguous response before another attempt.
-- **Data deletion:** Remove RevenueOS content/metadata according to policy; explain that deleting a sent external email requires provider-side action and may not be possible.
+- **Data deletion:** Remove Oryntela content/metadata according to policy; explain that deleting a sent external email requires provider-side action and may not be possible.
 - **Rollout:** Sprint 12 for a Microsoft pilot; otherwise Sprint 21.
 
 ### Google Meet
 
 - **User value:** Associate eligible Meet sessions and available authorised artefacts with calendar meetings.
-- **Data flow:** Google Calendar/Meet → RevenueOS for meeting identity and explicitly selected available artefact.
-- **Read/write:** Read/import only; RevenueOS does not start recording or control meetings in beta.
-- **Source of truth:** Google for meeting/recording availability; RevenueOS for ingestion and review state.
+- **Data flow:** Google Calendar/Meet → Oryntela for meeting identity and explicitly selected available artefact.
+- **Read/write:** Read/import only; Oryntela does not start recording or control meetings in beta.
+- **Source of truth:** Google for meeting/recording availability; Oryntela for ingestion and review state.
 - **Approval:** User explicitly selects/imports or an administrator enables a clear post-meeting eligibility rule with user-visible state.
 - **Authentication:** Google OAuth scopes added only after API availability and account-entitlement testing.
 - **Webhook/polling:** Calendar event notifications plus bounded artefact discovery where supported.
 - **Rate limits:** Reuse event identities, incremental checks and provider quotas.
 - **Error recovery:** Fall back to manual upload/paste; distinguish unavailable artefact from processing failure.
-- **Data deletion:** Remove imported source and derived data in RevenueOS; provider original remains governed in Google and is identified as such.
+- **Data deletion:** Remove imported source and derived data in Oryntela; provider original remains governed in Google and is identified as such.
 - **Rollout:** Calendar association arrives with the Google calendar sprint (11 or 20); artefact import is Sprint 22 only if Meet is the priority provider, otherwise a later focused beta increment. Exact API/edition feasibility remains to validate.
 
 ### Microsoft Teams
 
 - **User value:** Associate Teams meetings and explicitly available artefacts with Outlook events.
-- **Data flow:** Microsoft Graph/Teams → RevenueOS for meeting identity and authorised recording/transcript import.
+- **Data flow:** Microsoft Graph/Teams → Oryntela for meeting identity and authorised recording/transcript import.
 - **Read/write:** Read/import only; no meeting control or implicit recording.
-- **Source of truth:** Microsoft 365 for meeting and artefact availability; RevenueOS for review and memory.
+- **Source of truth:** Microsoft 365 for meeting and artefact availability; Oryntela for review and memory.
 - **Approval:** Visible connection policy and explicit eligible-source selection; no background capture.
 - **Authentication:** Delegated Graph permissions first; admin-consent requirements and meeting policy must be validated.
 - **Webhook/polling:** Graph subscriptions/delta where supported, bounded discovery otherwise.
 - **Rate limits:** Coordinate with Outlook quotas/subscriptions and use durable backoff.
 - **Error recovery:** Manual source fallback, reauthorisation and clear unsupported-policy state.
-- **Data deletion:** RevenueOS deletion does not claim to delete the Microsoft original; revoke access and remove cached/derived content per policy.
+- **Data deletion:** Oryntela deletion does not claim to delete the Microsoft original; revoke access and remove cached/derived content per policy.
 - **Rollout:** Calendar association arrives with the Outlook calendar sprint (11 or 20); artefact import is Sprint 22 only if Teams is the priority provider, otherwise a later focused beta increment. Exact recording/transcript permissions are unresolved.
 
 ### Zoom
 
 - **User value:** Import an explicitly authorised cloud recording or transcript after a customer meeting.
-- **Data flow:** Zoom → RevenueOS for selected meeting metadata and artefacts; processing status remains in RevenueOS.
+- **Data flow:** Zoom → Oryntela for selected meeting metadata and artefacts; processing status remains in Oryntela.
 - **Read/write:** Read/import only; no meeting scheduling or recording control in beta.
-- **Source of truth:** Zoom for cloud artefact availability; RevenueOS for the imported source lifecycle and review.
+- **Source of truth:** Zoom for cloud artefact availability; Oryntela for the imported source lifecycle and review.
 - **Approval:** Administrator connects the account; user selects or policy-enables eligible completed meetings with visible consent responsibility.
 - **Authentication:** Zoom OAuth/server-to-server choice must follow account ownership and least privilege; never expose credentials client-side.
 - **Webhook/polling:** Signed recording-completed/deleted webhooks, with bounded reconciliation for missed delivery.
 - **Rate limits:** Durable queue, provider limit headers and artefact deduplication.
 - **Error recovery:** Verify signature/replay, retry download within URL expiry, request reauthorisation or use manual upload.
-- **Data deletion:** Delete RevenueOS copy/derivatives; handle provider deletion webhook; do not imply deletion of Zoom original unless an authorised delete capability exists.
+- **Data deletion:** Delete Oryntela copy/derivatives; handle provider deletion webhook; do not imply deletion of Zoom original unless an authorised delete capability exists.
 - **Rollout:** Sprint 22 only if Zoom is the priority provider; otherwise a later focused beta increment. It is not required for the first pilot.
 
 ## Beta-priority CRM integrations
@@ -132,23 +132,23 @@ Provider details must remain in adapters behind domain ports. Domain services ow
 ### Salesforce
 
 - **User value:** Match authoritative accounts/contacts/opportunities, show current fields and apply selected approved changes.
-- **Data flow:** Salesforce → RevenueOS for scoped records/snapshots; RevenueOS → Salesforce only for approved field-level updates.
+- **Data flow:** Salesforce → Oryntela for scoped records/snapshots; Oryntela → Salesforce only for approved field-level updates.
 - **Read/write:** Start read-only; enable a field allowlist for write after mapping, idempotency and conflict tests pass.
-- **Source of truth:** Salesforce for mapped CRM fields; RevenueOS for evidence, proposals, approvals and execution status.
+- **Source of truth:** Salesforce for mapped CRM fields; Oryntela for evidence, proposals, approvals and execution status.
 - **Approval:** Every write is a visible field diff approved by an eligible user during beta.
 - **Authentication:** OAuth connected app with minimum object/field access; customer security policies and token rotation supported.
 - **Webhook/polling:** Change Data Capture/platform events where available plus bounded incremental reconciliation; do not assume universal event coverage.
 - **Rate limits:** Track organisation API allocation, use incremental queries and back off before exhaustion.
 - **Error recovery:** Handle validation rules, field-level security, record version conflict, partial batch outcome and unknown result explicitly.
-- **Data deletion:** Remove tokens, mappings, cursors and cached records; RevenueOS deletion cannot silently delete authoritative Salesforce records.
+- **Data deletion:** Remove tokens, mappings, cursors and cached records; Oryntela deletion cannot silently delete authoritative Salesforce records.
 - **Rollout:** Sprints 13–14 if chosen for the pilot; otherwise second-CRM read/write Sprints 23–24.
 
 ### HubSpot
 
 - **User value:** Match CRM companies/contacts/deals, display authoritative context and apply approved updates.
-- **Data flow:** HubSpot → RevenueOS for scoped objects; approved RevenueOS changes → HubSpot.
+- **Data flow:** HubSpot → Oryntela for scoped objects; approved Oryntela changes → HubSpot.
 - **Read/write:** Read first; write only allowlisted properties after review.
-- **Source of truth:** HubSpot for mapped CRM properties; RevenueOS for conversational evidence and proposal lifecycle.
+- **Source of truth:** HubSpot for mapped CRM properties; Oryntela for conversational evidence and proposal lifecycle.
 - **Approval:** Every beta write is approved at field level; no bulk silent synchronisation.
 - **Authentication:** HubSpot OAuth/private-app choice must preserve per-customer least privilege; OAuth is preferred for repeatable SaaS rollout.
 - **Webhook/polling:** Verified webhooks where supported plus cursor-based incremental reconciliation.
@@ -162,7 +162,7 @@ Provider details must remain in adapters behind domain ports. Domain services ow
 ### Phone providers — Later
 
 - **User value:** Bring explicitly authorised sales-call evidence into the meeting loop.
-- **Data flow/read-write:** Provider recording/transcript → RevenueOS only; no background call control.
+- **Data flow/read-write:** Provider recording/transcript → Oryntela only; no background call control.
 - **Source of truth/approval:** Provider owns call artefact; user must deliberately select or visibly arm capture under organisation and regional policy.
 - **Authentication/transport:** Provider-specific OAuth and signed webhooks where available; polling only as bounded recovery.
 - **Limits/recovery/deletion:** Enforce duration/format limits, fall back to manual upload, delete imported/derived data independently and never claim deletion of provider originals.
@@ -180,8 +180,8 @@ Provider details must remain in adapters behind domain ports. Domain services ow
 ### Slack — Later
 
 - **User value:** Content-minimised exception notifications or explicitly requested collaboration context.
-- **Data flow/read-write:** RevenueOS → Slack notifications first; broad workspace ingestion is not planned.
-- **Source of truth/approval:** RevenueOS owns workflow state; user/admin approves workspace/channel and message category.
+- **Data flow/read-write:** Oryntela → Slack notifications first; broad workspace ingestion is not planned.
+- **Source of truth/approval:** Oryntela owns workflow state; user/admin approves workspace/channel and message category.
 - **Authentication/transport:** Slack OAuth and signed interaction/event verification; minimal scopes.
 - **Limits/recovery/deletion:** Rate-limited delivery, deduplication, revocation handling and honest provider-message deletion limitations.
 - **Rollout:** Later, after in-product notifications prove which events matter.

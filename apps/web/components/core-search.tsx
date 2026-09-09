@@ -152,7 +152,7 @@ export function CoreSearch({
         {submittedQuery ? (
           <section aria-labelledby="search-results-title" className="space-y-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
                 {resultCount} {resultCount === 1 ? "result" : "results"}
               </p>
               <h2
@@ -234,7 +234,7 @@ function SearchModeTabs({
   return (
     <div
       role="tablist"
-      aria-label="Search or Ask RevenueOS"
+      aria-label="Search or Ask Oryntela"
       className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
     >
       <button
@@ -247,8 +247,8 @@ function SearchModeTabs({
         onClick={() => onChange("search")}
         onKeyDown={(event) => changeTabFromKeyboard(event, mode, onChange)}
         data-search-mode="search"
-        className={`min-h-11 rounded-xl px-5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 ${
-          mode === "search" ? "bg-slate-950 text-white" : "text-slate-600"
+        className={`min-h-11 rounded-xl px-5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-brand-focus ${
+          mode === "search" ? "bg-brand-primary text-white" : "text-slate-600"
         }`}
       >
         Search
@@ -263,11 +263,11 @@ function SearchModeTabs({
         onClick={() => onChange("ask")}
         onKeyDown={(event) => changeTabFromKeyboard(event, mode, onChange)}
         data-search-mode="ask"
-        className={`min-h-11 rounded-xl px-5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 ${
-          mode === "ask" ? "bg-slate-950 text-white" : "text-slate-600"
+        className={`min-h-11 rounded-xl px-5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-brand-focus ${
+          mode === "ask" ? "bg-brand-primary text-white" : "text-slate-600"
         }`}
       >
-        Ask RevenueOS
+        Ask Oryntela
       </button>
     </div>
   );
@@ -312,17 +312,17 @@ function ResultGroup({
           <li key={item.href}>
             <Link
               href={item.href}
-              className="group flex min-h-16 items-center justify-between gap-4 rounded-xl px-2 py-3 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              className="group flex min-h-16 items-center justify-between gap-4 rounded-xl px-2 py-3 focus:outline-none focus:ring-2 focus:ring-brand-focus"
             >
               <span>
-                <span className="block font-semibold text-slate-950 group-hover:text-teal-800">
+                <span className="block font-semibold text-slate-950 group-hover:text-brand-secondary">
                   {item.title}
                 </span>
                 <span className="mt-1 block text-sm text-slate-600">
                   {item.detail}
                 </span>
               </span>
-              <span aria-hidden="true" className="text-teal-700">
+              <span aria-hidden="true" className="text-brand-secondary">
                 →
               </span>
             </Link>

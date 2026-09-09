@@ -76,6 +76,13 @@ def test_csv_parser_is_bounded_strict_and_keeps_formula_like_values_as_text() ->
         decode_crm_csv("oversized.csv", oversized)
 
 
+def test_import_template_uses_customer_facing_oryntela_filename(client: TestClient) -> None:
+    response = client.get("/api/v1/crm/imports/template?entityType=account")
+
+    assert response.status_code == 200
+    assert response.headers["Content-Disposition"] == ('attachment; filename="oryntela-account-import-template.csv"')
+
+
 def test_import_requires_native_crm_entitlement_and_administrator(app: FastAPI, client: TestClient) -> None:
     request = {
         "entityType": "account",

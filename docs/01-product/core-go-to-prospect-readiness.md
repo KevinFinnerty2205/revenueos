@@ -8,7 +8,7 @@
 
 ## Product conclusion
 
-RevenueOS Core now delivers a coherent relationship-selling loop for known accounts
+Oryntela Core now delivers a coherent relationship-selling loop for known accounts
 and active opportunities:
 
 1. **Prioritise** — Daily shows one primary focus, upcoming Interactions, Actions and
@@ -16,7 +16,7 @@ and active opportunities:
 2. **Prepare** — an Interaction brief turns current account, opportunity, stakeholder,
    methodology and prior-interaction context into objectives and questions.
 3. **Capture deliberately** — the seller chooses recording, passive Companion,
-   authorised uploads/photos or typed debrief; RevenueOS never listens implicitly.
+   authorised uploads/photos or typed debrief; Oryntela never listens implicitly.
 4. **Review** — structured intelligence, Evidence, trust state, conflict and unknowns
    remain visible and correctable before becoming accepted context.
 5. **Understand** — Opportunity, Revenue Brain and methodology views explain risks,
@@ -26,7 +26,7 @@ and active opportunities:
 7. **Return** — the reviewed outcome and action feed the next Daily priority and future
    preparation.
 
-Ask RevenueOS is a bounded access path across that same authorised evidence. It is not
+Ask Oryntela is a bounded access path across that same authorised evidence. It is not
 a second truth store, a general chatbot or a public-web research product.
 
 This loop is useful before Prospect exists. Prospect adds the upstream ability to
@@ -36,12 +36,12 @@ find and qualify new accounts and people; it does not complete a broken Core loo
 
 Core can credibly promise:
 
-- a seller can walk into a prepared RevenueOS Interaction with clear objectives and
+- a seller can walk into a prepared Oryntela Interaction with clear objectives and
   questions;
 - authorised customer evidence can become structured, reviewed and source-aware deal
   context;
 - Daily, methodology and reviewed Actions help the seller decide what to do next;
-- a supported question can be answered from authorised RevenueOS evidence or return a
+- a supported question can be answered from authorised Oryntela evidence or return a
   clear unknown; and
 - a configured, linked HubSpot record can receive a bounded change only after review
   and explicit confirmation.
@@ -60,14 +60,14 @@ Core cannot credibly promise:
 
 The strongest concise product statement is:
 
-> RevenueOS helps relationship-led sellers prepare for every important conversation,
+> Oryntela helps relationship-led sellers prepare for every important conversation,
 > turn authorised evidence into a clear next action, and apply the HubSpot update they
 > review and confirm.
 
-The phrase “Finish the meeting. RevenueOS handles the admin.” is usable only with the
+The phrase “Finish the meeting. Oryntela handles the admin.” is usable only with the
 following qualifier:
 
-> RevenueOS prepares the follow-through and applies the supported HubSpot update you
+> Oryntela prepares the follow-through and applies the supported HubSpot update you
 > review and confirm.
 
 Do not imply automatic email sending, general CRM autofill or silent execution.
@@ -80,7 +80,7 @@ Do not imply automatic email sending, general CRM autofill or silent execution.
 | Canonical people/companies | Reviewed Company and Contact records                        | Propose duplicate-safe promotion                            | Write provider findings directly as accepted facts |
 | Evidence                   | Provenance, source, time, trust state, conflict, correction | Research sources and findings using the same trust language | Present inference as verified or hide its source   |
 | Revenue Brain              | Accepted longitudinal customer context                      | Add reviewed promoted context later                         | Treat a prospect observation as customer truth     |
-| Ask                        | Bounded Q&A over current authorised RevenueOS knowledge     | Deep-link to Prospect results when explicitly scoped        | Become an unrestricted browsing or SQL agent       |
+| Ask                        | Bounded Q&A over current authorised Oryntela knowledge     | Deep-link to Prospect results when explicitly scoped        | Become an unrestricted browsing or SQL agent       |
 | Actions                    | Review, approval and separate execution                     | Draft future outreach after the Stage B gate                | Send, enrol or update without explicit authority   |
 | Integrations               | HubSpot-first reviewed write path                           | Provider-neutral research adapters                          | Couple Prospect domain rules to HubSpot payloads   |
 
@@ -136,7 +136,7 @@ partner should experience Core value before being asked to evaluate new pipeline
 | Daily and Ask create a reason to return                            | next-day return; useful supported answers; correct unknowns           |
 
 Partner success is not the number of features opened. The indispensable moment is a
-seller saying that RevenueOS helped them enter a conversation better prepared or
+seller saying that Oryntela helped them enter a conversation better prepared or
 leave it with a trusted next step and less reviewed admin.
 
 ## Simplicity contract
@@ -164,16 +164,16 @@ normal Core maintenance issues, not a new pre-Prospect product layer.
 
 | Claim                                                      | Product status                                                               |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Walk into every customer conversation prepared.            | Ready now for supported RevenueOS Interactions.                              |
+| Walk into every customer conversation prepared.            | Ready now for supported Oryntela Interactions.                              |
 | Know what to do next.                                      | Ready now; do not add “exactly” or imply guaranteed outcomes.                |
 | Turn customer evidence into a clear, reviewed next action. | Ready now.                                                                   |
-| Finish the meeting. RevenueOS handles the admin.           | Ready only with the HubSpot/review qualifier.                                |
+| Finish the meeting. Oryntela handles the admin.           | Ready only with the HubSpot/review qualifier.                                |
 | Keep HubSpot updated without hours of manual entry.        | Ready with linked-record, supported-field and confirmation qualifiers.       |
-| Ask RevenueOS anything about your deals.                   | Ready only as “ask supported questions about authorised RevenueOS evidence”. |
+| Ask Oryntela anything about your deals.                   | Ready only as “ask supported questions about authorised Oryntela evidence”. |
 | Never write meeting notes again.                           | Ready only for an approved capture path; not an absolute.                    |
 | Know which deals will close.                               | Future.                                                                      |
 | Coach every rep automatically.                             | Future.                                                                      |
-| One autonomous system runs your revenue team.              | Not the RevenueOS product promise.                                           |
+| One autonomous system runs your revenue team.              | Not the Oryntela product promise.                                           |
 
 ## Product decision
 

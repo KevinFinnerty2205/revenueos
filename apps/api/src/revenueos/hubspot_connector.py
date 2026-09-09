@@ -1267,7 +1267,7 @@ class HubSpotCRMExecutor(ActionExecutor):
     ) -> ExecutorResult:
         payload = cast(LogInteractionPayload, action.payload)
         assert action.external_target is not None
-        marker = f"RevenueOS execution {hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]}"
+        marker = f"Oryntela execution {hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]}"
         existing = await self._find_activity(context, marker)
         if len(existing) == 1:
             return ExecutorResult(
@@ -1333,7 +1333,7 @@ class HubSpotCRMExecutor(ActionExecutor):
             raise PermanentExecutionFailure("unsupported_action", "This is not a HubSpot activity Action.")
         matches = await self._find_activity(
             context,
-            f"RevenueOS execution {hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]}",
+            f"Oryntela execution {hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]}",
         )
         if not matches:
             return None

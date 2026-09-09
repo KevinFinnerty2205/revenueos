@@ -172,7 +172,7 @@ describe("manager intelligence", () => {
     expect(screen.getByText("Organisation target")).toBeVisible();
     expect(screen.getByText("Seller Likely")).toBeVisible();
     expect(screen.getByText("Manager Likely")).toBeVisible();
-    expect(screen.getByText("RevenueOS baseline")).toBeVisible();
+    expect(screen.getByText("Oryntela baseline")).toBeVisible();
     expect(screen.getByText(/no blended final forecast/i)).toBeVisible();
   });
 

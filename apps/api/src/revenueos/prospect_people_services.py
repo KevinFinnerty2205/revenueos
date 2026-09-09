@@ -144,7 +144,7 @@ class ProspectPeopleService:
             await self.repository.rollback()
             raise PublicAPIError(
                 "people_discovery_unavailable",
-                "RevenueOS couldn’t find reliable professional people for this company right now.",
+                "Oryntela couldn’t find reliable professional people for this company right now.",
                 503,
             ) from exc
         if len(validated) > self.settings.private_beta_max_prospect_people_per_discovery:
@@ -449,7 +449,7 @@ class ProspectPeopleService:
                 contact_id=promoted_contact.id,
                 company_id=promoted_contact.company_id,
                 prospect_person_id=person.id,
-                message="This public professional research is already linked to a RevenueOS Contact.",
+                message="This public professional research is already linked to a Oryntela Contact.",
             )
         current = await self.repository.current_person_run(self.tenant.organisation_id, person.id)
         if current is None:
@@ -470,7 +470,7 @@ class ProspectPeopleService:
         if matches and request.duplicate_action is None:
             raise PublicAPIError(
                 "existing_contact_match",
-                "This person may already exist in RevenueOS. Review the possible Contact before continuing.",
+                "This person may already exist in Oryntela. Review the possible Contact before continuing.",
                 409,
             )
 
@@ -984,10 +984,10 @@ class ProspectPeopleService:
             gaps=gaps,
             result_limit=self.settings.private_beta_max_prospect_people_per_discovery,
             message=(
-                f"RevenueOS found {len(people)} people worth understanding. Buying roles remain hypotheses."
+                f"Oryntela found {len(people)} people worth understanding. Buying roles remain hypotheses."
                 if discovered and people
                 else (
-                    "RevenueOS couldn’t find reliable public professional information for this company."
+                    "Oryntela couldn’t find reliable public professional information for this company."
                     if discovered
                     else "Find relevant people from this researched company when you are ready."
                 )
@@ -1225,14 +1225,14 @@ class ProspectPeopleService:
         if latest.status in ACTIVE_RUN_STATUSES:
             return (
                 "pending" if latest.status == "pending" else "researching",
-                "RevenueOS is checking bounded, permitted professional sources.",
+                "Oryntela is checking bounded, permitted professional sources.",
             )
         if latest.status == "unknown":
             return "unknown", "The provider outcome is unknown. Credits remain reserved while it is reconciled."
         if latest.status == "no_result":
             return "no_result", "No reliable professional result was returned. No unsupported details were created."
         if latest.status == "failed" and current is None:
-            return "failed", "RevenueOS couldn’t find enough reliable professional information about this person."
+            return "failed", "Oryntela couldn’t find enough reliable professional information about this person."
         if latest.status == "failed" and current is not None:
             return (
                 "partial" if current.status == "partial" else "ready",
@@ -1250,7 +1250,7 @@ class ProspectPeopleService:
             if not self.settings.feature_prospect_enabled or (
                 self.settings.environment == "production" and self.settings.prospect_research_provider_name == "mock"
             ):
-                raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
+                raise PublicAPIError("prospect_unavailable", "Prospect is temporarily unavailable.", 503)
             await commercial.require_module_write(self.tenant.organisation_id, "prospect")
             return
         access = await commercial.module_access(self.tenant.organisation_id, "prospect")

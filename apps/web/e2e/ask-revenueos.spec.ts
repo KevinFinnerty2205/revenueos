@@ -52,14 +52,12 @@ function askAnswer(
     return {
       ...common,
       answer:
-        "I don’t have that information in RevenueOS. Ask RevenueOS does not research the public web yet.",
+        "I don’t have that information in Oryntela. Ask Oryntela does not research the public web yet.",
       answerStatus: "unknown",
       questionClass: "unsupported_public_web",
       summaryPoints: [],
       sources: [],
-      uncertainties: [
-        "RevenueOS will not fill evidence gaps with assumptions.",
-      ],
+      uncertainties: ["Oryntela will not fill evidence gaps with assumptions."],
     };
   }
   if (/economic buyer/iu.test(question)) {
@@ -90,7 +88,7 @@ function askAnswer(
     return {
       ...common,
       answer:
-        "RevenueOS found material disagreement in the current evidence. The customer requires security review before approval, while seller notes say it is nearly complete.",
+        "Oryntela found material disagreement in the current evidence. The customer requires security review before approval, while seller notes say it is nearly complete.",
       answerStatus: "conflicting",
       questionClass: "recent_change",
       summaryPoints: [
@@ -135,7 +133,7 @@ function askAnswer(
         source(
           "brain-action",
           scopeType === "workspace"
-            ? "RevenueOS Daily · 24 August 2026"
+            ? "Oryntela Daily · 24 August 2026"
             : "Latest customer review · Next Best Action",
           "validated_intelligence",
           "The security response is overdue and blocks the next customer review.",
@@ -200,7 +198,7 @@ async function routeAsk(page: Page) {
           actionExecution: false,
           maxQuestionCharacters: 1000,
           maxSources: 12,
-          safeMessage: "Authorised RevenueOS evidence only.",
+          safeMessage: "Authorised Oryntela evidence only.",
         },
       });
     },
@@ -224,7 +222,7 @@ async function routeAsk(page: Page) {
   return () => telemetryCount;
 }
 
-test("Ask RevenueOS answers the flagship opportunity questions with inspectable provenance", async ({
+test("Ask Oryntela answers the flagship opportunity questions with inspectable provenance", async ({
   page,
 }) => {
   const telemetryCount = await routeAsk(page);
@@ -285,7 +283,7 @@ test("Ask RevenueOS answers the flagship opportunity questions with inspectable 
   await expect.poll(telemetryCount).toBe(2);
 
   await page
-    .getByRole("textbox", { name: "Ask RevenueOS" })
+    .getByRole("textbox", { name: "Ask Oryntela" })
     .fill("What should I do next?");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(
@@ -302,7 +300,7 @@ test("Ask RevenueOS answers the flagship opportunity questions with inspectable 
   }
 
   await page
-    .getByRole("textbox", { name: "Ask RevenueOS" })
+    .getByRole("textbox", { name: "Ask Oryntela" })
     .fill("What changed recently?");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(
@@ -324,7 +322,7 @@ test("Ask RevenueOS answers the flagship opportunity questions with inspectable 
   }
 
   await page
-    .getByRole("textbox", { name: "Ask RevenueOS" })
+    .getByRole("textbox", { name: "Ask Oryntela" })
     .fill("Search the public web for Qantas latest news");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(
@@ -342,10 +340,10 @@ test("Ask RevenueOS answers the flagship opportunity questions with inspectable 
   }
 
   await page.reload();
-  await expect(
-    page.getByRole("textbox", { name: "Ask RevenueOS" }),
-  ).toHaveValue("What is holding this deal back?");
-  await expect(page.getByText("RevenueOS answer")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Ask Oryntela" })).toHaveValue(
+    "What is holding this deal back?",
+  );
+  await expect(page.getByText("Oryntela answer")).toHaveCount(0);
 });
 
 test("account conflict and workspace priority answers remain explicit on mobile", async ({

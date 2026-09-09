@@ -2,7 +2,7 @@
 
 ## Product behaviour
 
-WO-004C1 delivers RevenueOS's first Meeting Intelligence capability: a user opens a meeting's **Intelligence** tab and requests one concise Executive Summary from the current usable transcript. The UI shows empty, queued, running, completed, failed and cancelled states. A completed result contains only:
+WO-004C1 delivers Oryntela's first Meeting Intelligence capability: a user opens a meeting's **Intelligence** tab and requests one concise Executive Summary from the current usable transcript. The UI shows empty, queued, running, completed, failed and cancelled states. A completed result contains only:
 
 - an Executive Summary paragraph;
 - meeting type (`sales_discovery`, `sales_demo`, `customer_success`, `recruitment`, `internal` or `other`);

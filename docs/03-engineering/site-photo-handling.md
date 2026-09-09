@@ -4,4 +4,4 @@ Site photos are observations, not customer statements. Provider output is limite
 
 The user must review each candidate. Accepted items may update Interaction Intelligence and Revenue Brain, but the UI states “Observed; not customer-confirmed”. Site images never prove budget, authority, intent, commitment or approval.
 
-Location metadata is removed before the stored object becomes available. Capture still requires explicit authority; RevenueOS does not infer consent from interaction type or device permissions.
+Location metadata is removed before the stored object becomes available. Capture still requires explicit authority; Oryntela does not infer consent from interaction type or device permissions.

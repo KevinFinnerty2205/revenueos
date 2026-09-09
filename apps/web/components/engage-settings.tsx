@@ -78,13 +78,13 @@ export function EngageSettings() {
 
   return (
     <section className="form-card" aria-labelledby="engage-settings-title">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Modules
       </p>
       <div className="mt-2 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 id="engage-settings-title" className="form-legend">
-            RevenueOS Engage
+            Engage
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             Configure source-backed one-to-one outreach, conservative send
@@ -316,7 +316,7 @@ function Checkbox({
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="h-5 w-5 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+        className="h-5 w-5 rounded border-slate-300 text-brand-secondary focus:ring-brand-focus"
       />
       {label}
     </label>

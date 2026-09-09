@@ -2,7 +2,7 @@
 
 ## Cross-module navigation and state contract
 
-RevenueOS remains a Next.js/FastAPI/PostgreSQL modular monolith. Routes carry
+Oryntela remains a Next.js/FastAPI/PostgreSQL modular monolith. Routes carry
 canonical UUIDs and optional explicit return paths. Prospect records remain separate
 from canonical Account/Contact records until deliberate promotion. Promotion is
 Company-first, duplicate-safe and provenance preserving.

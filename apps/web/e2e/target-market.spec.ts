@@ -206,7 +206,7 @@ test("creates a Target Market and reviews explainable account whitespace", async
           state: "available",
           enabled: true,
           canManage: true,
-          message: "RevenueOS Prospect is available for this organisation.",
+          message: "Prospect is available for this organisation.",
         },
       });
       return;

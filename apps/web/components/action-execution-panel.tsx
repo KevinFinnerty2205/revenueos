@@ -163,10 +163,10 @@ export function ActionExecutionPanel({ action }: { action: ActionProposal }) {
   return (
     <div className="mt-5 border-t border-slate-100 pt-4">
       <div
-        className={`rounded-2xl border p-4 ${preview.simulationOnly ? "border-amber-200 bg-amber-50" : "border-teal-200 bg-teal-50"}`}
+        className={`rounded-2xl border p-4 ${preview.simulationOnly ? "border-amber-200 bg-amber-50" : "border-brand-secondary/25 bg-brand-secondary/10"}`}
       >
         <p
-          className={`text-xs font-bold uppercase tracking-[0.14em] ${preview.simulationOnly ? "text-amber-900" : "text-teal-900"}`}
+          className={`text-xs font-bold uppercase tracking-[0.14em] ${preview.simulationOnly ? "text-amber-900" : "text-brand-primary"}`}
         >
           {preview.simulationOnly
             ? "Simulation — no external action will occur"

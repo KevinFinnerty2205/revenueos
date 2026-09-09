@@ -14,7 +14,7 @@ export function EmptyState({
       className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-8 shadow-sm sm:p-12"
       aria-labelledby="empty-state-title"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
         {eyebrow}
       </p>
       <h2

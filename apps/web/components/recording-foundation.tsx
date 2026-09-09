@@ -753,7 +753,7 @@ export function RecordingFoundation({
     <section className="form-card" aria-labelledby="recording-foundation-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-teal-800">
+          <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
             Browser beta
           </p>
           <h2
@@ -802,7 +802,7 @@ export function RecordingFoundation({
           </p>
           <Link
             href={fallbackHref}
-            className="mt-3 inline-block font-bold text-teal-800 hover:underline"
+            className="mt-3 inline-block font-bold text-brand-secondary hover:underline"
           >
             {fallbackLabel}
           </Link>
@@ -837,7 +837,7 @@ export function RecordingFoundation({
             </p>
           ) : null}
 
-          <div className="mt-5 rounded-2xl bg-slate-950 p-5 text-white">
+          <div className="mt-5 rounded-2xl bg-brand-primary p-5 text-white">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-300">
               Recording status
             </p>
@@ -967,13 +967,13 @@ export function RecordingFoundation({
 
       {recording?.externalProcessing ? (
         <p className="mt-4 text-xs leading-5 text-slate-500">
-          External processing is configured for transcription. RevenueOS sends
+          External processing is configured for transcription. Oryntela sends
           audio only after finalisation.
         </p>
       ) : null}
       {transcription ? (
-        <div className="mt-5 rounded-xl border border-teal-200 bg-teal-50 p-4">
-          <p role="status" className="font-semibold text-teal-950">
+        <div className="mt-5 rounded-xl border border-brand-secondary/25 bg-brand-secondary/10 p-4">
+          <p role="status" className="font-semibold text-brand-primary">
             {transcription.safeMessage}
           </p>
           {showTranscript && transcription.text ? (

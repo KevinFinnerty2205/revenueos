@@ -22,7 +22,7 @@ the server reconstructs the exact approved Action version and target mapping.
 - Typed Opportunity field mapping for stage, status, close date, amount, next step
   and description; typed Contact mapping for first/last name, stored business email
   and job title.
-- Explicit RevenueOS-stage to HubSpot pipeline/stage mapping.
+- Explicit Oryntela-stage to HubSpot pipeline/stage mapping.
 - Exact current/new values and authority in execution preview.
 - Decimal-safe amount handling and currency comparison with no conversion.
 - Expected-current-value protection, provider updated timestamp in preview and a

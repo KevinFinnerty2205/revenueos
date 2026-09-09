@@ -1,7 +1,7 @@
 # Create presentation and proposal experience
 
 - **Status:** WO-032/033 presentation and Business Case experience, with WO-039B trust hardening; proposal path remains future
-- **Question:** What should RevenueOS create for me?
+- **Question:** What should Oryntela create for me?
 
 ## Create landing
 
@@ -79,4 +79,4 @@ All source and validation state is available without relying on a rendered thumb
 Controls are keyboard reachable, labels and landmarks are semantic, focus is visible,
 reduced motion is respected and status never depends on colour alone. The source PPTX
 remains responsible for its authored reading order, alt text, contrast and layout;
-RevenueOS does not claim to repair unsupported accessibility defects.
+Oryntela does not claim to repair unsupported accessibility defects.

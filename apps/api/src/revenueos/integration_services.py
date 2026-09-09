@@ -3435,7 +3435,7 @@ class ActionExecutionService:
             ExecutionStatus.FAILED_PERMANENT: "Simulation stopped safely and will not be retried.",
             ExecutionStatus.CANCELLED: "Simulation was cancelled before execution.",
             ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
-                "Outcome is unknown. RevenueOS will not retry without reconciliation."
+                "Outcome is unknown. Oryntela will not retry without reconciliation."
             ),
             ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
         }[status]
@@ -3447,7 +3447,7 @@ class ActionExecutionService:
                 if execution.connector_key == ConnectorKey.MICROSOFT_365.value:
                     safe_message = {
                         ExecutionStatus.QUEUED: "Microsoft email queued. No external send has occurred yet.",
-                        ExecutionStatus.EXECUTING: "RevenueOS is submitting the reviewed email to Microsoft.",
+                        ExecutionStatus.EXECUTING: "Oryntela is submitting the reviewed email to Microsoft.",
                         ExecutionStatus.SUCCEEDED: (
                             "Microsoft accepted the reviewed email for processing. Delivery is not guaranteed."
                         ),
@@ -3459,7 +3459,7 @@ class ActionExecutionService:
                         ),
                         ExecutionStatus.CANCELLED: "The Microsoft email was cancelled before submission.",
                         ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
-                            "The Microsoft send outcome is unknown. RevenueOS will not resend without "
+                            "The Microsoft send outcome is unknown. Oryntela will not resend without "
                             "strong Sent Items evidence."
                         ),
                         ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
@@ -3483,13 +3483,13 @@ class ActionExecutionService:
             else:
                 safe_message = {
                     ExecutionStatus.QUEUED: "HubSpot update queued. No external change has occurred yet.",
-                    ExecutionStatus.EXECUTING: "RevenueOS is applying the reviewed HubSpot action.",
+                    ExecutionStatus.EXECUTING: "Oryntela is applying the reviewed HubSpot action.",
                     ExecutionStatus.SUCCEEDED: "The reviewed HubSpot action completed and was verified.",
                     ExecutionStatus.FAILED_RETRYABLE: "HubSpot did not apply the action; a bounded retry is safe.",
                     ExecutionStatus.FAILED_PERMANENT: "The HubSpot action stopped safely and will not be retried.",
                     ExecutionStatus.CANCELLED: "The HubSpot action was cancelled before execution.",
                     ExecutionStatus.UNKNOWN_EXTERNAL_STATE: (
-                        "The HubSpot outcome is unknown. RevenueOS will not retry without reconciliation."
+                        "The HubSpot outcome is unknown. Oryntela will not retry without reconciliation."
                     ),
                     ExecutionStatus.SIMULATED_SUCCESS: "The simulation completed. No external action occurred.",
                 }[status]

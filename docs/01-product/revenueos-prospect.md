@@ -1,4 +1,4 @@
-# RevenueOS Prospect
+# Oryntela Prospect
 
 > **Oryntela consolidation — 4 September 2026:** Prospect remains a product
 > capability, not a customer plan or a live-data claim. See the
@@ -61,7 +61,7 @@ and one of:
 - `inferred`: a bounded interpretation or format hypothesis; or
 - `unknown`: no supported value.
 
-Source links are shown where the source may be opened lawfully. RevenueOS does not
+Source links are shown where the source may be opened lawfully. Oryntela does not
 infer sensitive traits, fabricate rapport, guess an email address and label it
 verified, or turn private information into outreach context.
 

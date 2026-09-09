@@ -1,6 +1,6 @@
 # ActionExecutor contract
 
-`ActionExecutor` is the provider-neutral port between approved RevenueOS Actions
+`ActionExecutor` is the provider-neutral port between approved Oryntela Actions
 and connector-specific behaviour. WO-022 supplies deterministic mock
 implementations; WO-025C adds one HubSpot implementation behind the same port.
 
@@ -41,7 +41,7 @@ merely enabling the feature flag is not release approval.
 
 ## Native CRM boundary after WO-034
 
-WO-034 does not register RevenueOS itself as a connector and does not route approved
+WO-034 does not register Oryntela itself as a connector and does not route approved
 Actions through an external-connection-shaped executor. Native `update_contact` or
 `update_opportunity` execution remains deferred until the server can select the
 organisation system of record, construct an exact local preview, revalidate current

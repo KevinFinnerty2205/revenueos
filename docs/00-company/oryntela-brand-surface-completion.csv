@@ -1,0 +1,24 @@
+surface,old_state,new_state,status,remaining_legacy_reason
+app-shell,"RevenueOS word and literal R tile","Approved responsive Oryntela primary lockup and symbol",PASS,
+auth,"RevenueOS links and repository-controlled copy","Oryntela lockup and sign-in identity",PASS,"Hosted Clerk configuration remains external to repository"
+metadata,"RevenueOS title; no Oryntela favicon set","Oryntela title template OpenGraph defaults favicon set and app icon",PASS,"No manifest existed; WO-052 did not introduce PWA functionality"
+typography,"Arial/Helvetica primary stack","Local framework-managed Geist variable font with approved fallbacks",PASS,
+brand-colours,"Generic teal brand actions and focus","Approved semantic Oryntela tokens",PASS,"Semantic state and multi-series chart colours retained by design"
+home-sales-brain,"RevenueOS customer copy","Oryntela customer copy; Sales Brain module name retained",PASS,
+ask,"Ask RevenueOS display copy","Ask Oryntela display copy",PASS,"Internal AskRevenueOS names retained"
+prospect-engage-create,"RevenueOS-prefixed module copy","Prospect Engage and Create module names retained with Oryntela surrounding identity",PASS,"Lowercase technical package contracts retained"
+native-crm,"RevenueOS display labels","Oryntela CRM where brand qualification is required",PASS,"revenueos_authoritative fields retained"
+pipeline-forecast-targets-analytics,"RevenueOS baseline labels and teal brand roles","Oryntela labels tokens and tabular numeric behaviour",PASS,"revenueosBaseline JSON field retained"
+manager-intelligence,"RevenueOS evidence labels","Oryntela evidence labels",PASS,
+settings-selling-profile,"RevenueOS workspace copy","Oryntela workspace copy",PASS,
+billing-trial-credits,"RevenueOS product references","Oryntela and Oryntela Credits display labels",PASS,"Commercial behaviour and external Stripe-hosted branding unchanged"
+provider-ux,"RevenueOS consent/status copy","Oryntela consent/status copy",PASS,"Provider app registrations and hosted consent branding deferred to WO-054"
+deal-room-admin,"RevenueOS secure-link copy and teal brand roles","Oryntela copy and brand tokens",PASS,"Security semantics unchanged"
+public-deal-room,"Literal R placeholder and no platform attribution","Seller-first page with dynamic seller monogram and Powered by Oryntela attribution",PASS,"Seller organisation remains primary"
+handover,"RevenueOS authority copy","Oryntela authority copy",PASS,"Truth authority and machine identifiers unchanged"
+generated-pptx,"RevenueOS author/last-modifier and fallback","Oryntela metadata and fallback",PASS,"Customer/seller content remains primary"
+exports,"RevenueOS customer download names","Oryntela customer download names",PASS,"Private revenueos-export storage path retained as safety contract"
+openapi,"RevenueOS AI API display title","Oryntela API display metadata",PASS,"Stable API routes unchanged"
+support-legal,"No current product support link; exact legal API facts","Approved support@oryntela.com.au link; legal entity and ABN preserved",PASS,
+internal-technical,"RevenueOS package schema route field log storage and migration identifiers","Retained",PASS,"Intentional compatibility boundary"
+historical-documentation,"Historical RevenueOS evidence","Retained",PASS,"Historical accuracy"

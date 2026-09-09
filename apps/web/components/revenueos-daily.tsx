@@ -105,8 +105,8 @@ export function RevenueOSDaily() {
     <section aria-labelledby="daily-title">
       <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
-            Home · RevenueOS Daily
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
+            Home · Oryntela Daily
           </p>
           <h1
             id="daily-title"
@@ -151,9 +151,9 @@ export function RevenueOSDaily() {
       {activeEvent ? (
         <Link
           href={`/events/${activeEvent.id}`}
-          className="mb-5 block rounded-3xl border border-teal-200 bg-teal-950 p-5 text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+          className="mb-5 block rounded-3xl border border-brand-secondary/25 bg-brand-primary p-5 text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
         >
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-primary-foreground">
             Active Event
           </p>
           <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -165,7 +165,7 @@ export function RevenueOSDaily() {
                 follow-up
               </p>
             </div>
-            <span className="font-bold text-teal-200">
+            <span className="font-bold text-brand-primary-foreground">
               Open Event workspace →
             </span>
           </div>
@@ -244,8 +244,8 @@ export function RevenueOSDaily() {
 function DailyLoading() {
   return (
     <section aria-labelledby="daily-loading-title" aria-busy="true">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
-        Home · RevenueOS Daily
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
+        Home · Oryntela Daily
       </p>
       <h1
         id="daily-loading-title"
@@ -275,7 +275,7 @@ function DailyError({ onRetry }: { onRetry: () => void }) {
         id="daily-error-title"
         className="mt-3 text-3xl font-semibold text-rose-950"
       >
-        RevenueOS couldn’t load your day.
+        Oryntela couldn’t load your day.
       </h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-rose-900">
         Try again, or continue directly to your current customer work.
@@ -297,18 +297,18 @@ function DailyError({ onRetry }: { onRetry: () => void }) {
 
 function NewUserWelcome() {
   return (
-    <article className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-7 text-white shadow-xl sm:p-10">
-      <div className="absolute -right-20 -top-24 size-64 rounded-full bg-teal-400/20 blur-3xl" />
+    <article className="relative overflow-hidden rounded-[2rem] bg-brand-primary p-7 text-white shadow-xl sm:p-10">
+      <div className="absolute -right-20 -top-24 size-64 rounded-full bg-brand-accent/20 blur-3xl" />
       <div className="relative max-w-2xl">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-300">
-          Welcome to RevenueOS
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-primary-foreground">
+          Welcome to Oryntela
         </p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-          Let’s get your first deal into RevenueOS.
+          Let’s get your first deal into Oryntela.
         </h2>
         <p className="mt-4 text-sm leading-7 text-slate-300">
           Add an opportunity, then create your next customer interaction.
-          RevenueOS will help you prepare, capture what changed and follow
+          Oryntela will help you prepare, capture what changed and follow
           through.
         </p>
         <Link className="primary-button mt-6" href="/opportunities/new">
@@ -344,11 +344,11 @@ function PriorityCard({
   timezone: string;
 }) {
   return (
-    <article className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-xl sm:p-8">
-      <div className="absolute -right-12 -top-16 size-52 rounded-full bg-teal-400/20 blur-3xl" />
+    <article className="relative overflow-hidden rounded-[2rem] bg-brand-primary p-6 text-white shadow-xl sm:p-8">
+      <div className="absolute -right-12 -top-16 size-52 rounded-full bg-brand-accent/20 blur-3xl" />
       <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-2xl">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-300">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-primary-foreground">
             Top priority
           </p>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -380,8 +380,8 @@ function MobileNextInteraction({
   timezone: string;
 }) {
   return (
-    <article className="rounded-3xl bg-slate-950 p-5 text-white shadow-lg">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">
+    <article className="rounded-3xl bg-brand-primary p-5 text-white shadow-lg">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-primary-foreground">
         Next
       </p>
       <h2 className="mt-2 text-xl font-semibold">
@@ -427,7 +427,7 @@ function InteractionsSection({
               className="flex flex-col gap-4 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-wide text-teal-700">
+                <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
                   {formatTime(interaction.startsAt, timezone)} ·{" "}
                   {humanise(interaction.interactionType)}
                 </p>
@@ -518,7 +518,7 @@ function ActionsSection({
               ))}
             </ul>
             <Link
-              className="mt-4 inline-flex min-h-11 items-center text-sm font-bold text-teal-800"
+              className="mt-4 inline-flex min-h-11 items-center text-sm font-bold text-brand-secondary"
               href="/opportunities"
             >
               View all opportunity Actions{" "}
@@ -644,7 +644,7 @@ function MobileDaySummary({
         </ul>
       )}
       <Link
-        className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-teal-800"
+        className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-brand-secondary"
         href="/interactions"
       >
         View day →
@@ -712,7 +712,7 @@ function PipelineCard({
         </div>
       )}
       <Link
-        className="mt-4 inline-flex min-h-11 items-center text-sm font-bold text-teal-800"
+        className="mt-4 inline-flex min-h-11 items-center text-sm font-bold text-brand-secondary"
         href="/opportunities"
       >
         Review pipeline →
@@ -752,7 +752,7 @@ function RecommendationsCard({
                 {item.opportunityName}
               </p>
               <Link
-                className="mt-2 inline-flex min-h-11 items-center text-sm font-bold text-teal-800"
+                className="mt-2 inline-flex min-h-11 items-center text-sm font-bold text-brand-secondary"
                 href={item.href}
               >
                 {item.ctaLabel} →
@@ -780,7 +780,7 @@ function SectionCard({
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-secondary">
             {eyebrow}
           </p>
           <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
