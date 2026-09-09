@@ -1,0 +1,31 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 512 512"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Oryntela social profile icon</title>
+  <desc id="desc">
+    The Oryntela symbol centred on a midnight social-profile field.
+  </desc>
+  <rect width="512" height="512" fill="#0E1B32" />
+  <g transform="translate(96 96) scale(2.5)">
+  <g
+    fill="none"
+    stroke="#F6F4EF"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="14"
+  >
+    <path d="M81 22C49 12 22 34 22 66c0 31 25 51 54 43" />
+    <path d="m51 108 55-87" />
+  </g>
+  <path
+    d="m96 37 10-16"
+    fill="none"
+    stroke="#C96B45"
+    stroke-linecap="round"
+    stroke-width="14"
+  />
+  </g>
+</svg>

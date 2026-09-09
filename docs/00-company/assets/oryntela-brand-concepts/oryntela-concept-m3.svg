@@ -1,0 +1,26 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 760 180"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Oryntela concept M3 — Meridian Abstract Signal</title>
+  <desc id="desc">
+    Non-final concept logo with offset fields resolving around a clear central
+    aperture and an uppercase Oryntela wordmark.
+  </desc>
+  <path d="M34 34h72v28H62v72H34z" fill="#0E1B32" />
+  <path d="M134 146H62v-28h44V46h28z" fill="#204E5A" />
+  <rect x="83" y="79" width="30" height="30" rx="5" fill="#C96B45" />
+  <text
+    x="176"
+    y="111"
+    fill="#0E1B32"
+    font-family="Geist, 'Avenir Next', Arial, sans-serif"
+    font-size="54"
+    font-weight="620"
+    letter-spacing="5.5"
+  >
+    ORYNTELA
+  </text>
+</svg>

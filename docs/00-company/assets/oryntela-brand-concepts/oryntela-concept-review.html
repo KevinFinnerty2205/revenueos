@@ -1,0 +1,2161 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WO-051 Oryntela visual concept round — concept, not final</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Geist, "Avenir Next", Arial, sans-serif;
+        --ink: #0e1b32;
+        --mineral: #204e5a;
+        --copper: #c96b45;
+        --paper: #f6f4ef;
+        --standard-ink: #111827;
+        --cobalt: #2455c3;
+        --coral: #d46a4c;
+        --standard-paper: #f8f6f1;
+        --line: #d9ddd9;
+        --muted: #64706b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        background: #dfe3e1;
+      }
+      body {
+        margin: 0;
+        padding: 40px;
+        color: var(--ink);
+      }
+      .screen-only {
+        width: 1600px;
+        margin: 0 auto 28px;
+        color: #46514c;
+        font-size: 14px;
+      }
+      .screen-only strong {
+        color: #111827;
+      }
+      .sheet,
+      .board {
+        position: relative;
+        overflow: hidden;
+        margin: 0 auto 52px;
+        background: #f6f4ef;
+        box-shadow: 0 22px 70px rgba(14, 27, 50, 0.16);
+      }
+      .sheet::after,
+      .board::after {
+        position: absolute;
+        right: 34px;
+        bottom: 24px;
+        color: rgba(14, 27, 50, 0.36);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        content: "CONCEPT — NOT FINAL";
+      }
+      .eyebrow {
+        margin: 0 0 9px;
+        color: var(--copper);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.17em;
+        text-transform: uppercase;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+      h1 {
+        margin-bottom: 8px;
+        font-size: 34px;
+        letter-spacing: -0.03em;
+      }
+      h2 {
+        margin-bottom: 6px;
+        font-size: 28px;
+        letter-spacing: -0.025em;
+      }
+      h3 {
+        margin-bottom: 8px;
+        font-size: 14px;
+        letter-spacing: -0.01em;
+      }
+      .lede {
+        color: #56615c;
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      .muted {
+        color: var(--muted);
+      }
+
+      .sheet {
+        width: 2000px;
+        height: 1160px;
+        padding: 52px 54px 54px;
+      }
+      .sheet-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 30px;
+      }
+      .sheet-header .lede {
+        width: 620px;
+        margin-bottom: 2px;
+        text-align: right;
+      }
+      .concept-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+      }
+      .concept-card {
+        min-width: 0;
+        height: 854px;
+        padding: 22px;
+        border: 1px solid #d7dcd8;
+        border-radius: 16px;
+        background: #fff;
+      }
+      .concept-card .code {
+        display: inline-grid;
+        width: 36px;
+        height: 26px;
+        margin-bottom: 16px;
+        place-items: center;
+        border-radius: 6px;
+        background: var(--ink);
+        color: white;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .concept-card.standard .code {
+        background: var(--standard-ink);
+      }
+      .concept-card h2 {
+        min-height: 69px;
+        font-size: 22px;
+      }
+      .concept-card .idea {
+        min-height: 72px;
+        color: #59645f;
+        font-size: 13px;
+        line-height: 1.42;
+      }
+      .test-label {
+        margin: 0 0 7px;
+        color: #737d78;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .logo-stage {
+        display: grid;
+        height: 128px;
+        margin-bottom: 12px;
+        place-items: center;
+        border: 1px solid #e1e4e1;
+        border-radius: 12px;
+        background: var(--paper);
+      }
+      .logo-stage.dark {
+        border-color: transparent;
+        background: var(--ink);
+        color: #fff;
+      }
+      .standard .logo-stage {
+        background: var(--standard-paper);
+      }
+      .standard .logo-stage.dark {
+        background: var(--standard-ink);
+      }
+      .logo-stage.mono {
+        background: #fff;
+        color: #000;
+      }
+      .mono {
+        --copper: #000;
+        --mineral: #000;
+        --cobalt: #000;
+        --standard-paper: #fff;
+      }
+      .mono-reverse {
+        --copper: #fff;
+        --mineral: #fff;
+        --cobalt: #fff;
+        --standard-paper: #000;
+        background: #000 !important;
+        color: #fff !important;
+      }
+      .mono-reverse .lockup {
+        color: #fff !important;
+      }
+      .lockup {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--ink);
+      }
+      .dark .lockup {
+        color: white;
+      }
+      .mono .lockup {
+        color: #000;
+      }
+      .standard .lockup {
+        color: var(--standard-ink);
+      }
+      .standard .dark .lockup {
+        color: white;
+      }
+      .logo-icon {
+        width: 62px;
+        height: 62px;
+        overflow: visible;
+        color: inherit;
+      }
+      .brand {
+        color: inherit;
+        font-weight: 620;
+        white-space: nowrap;
+      }
+      .brand.caps {
+        font-size: 23px;
+        letter-spacing: 0.13em;
+      }
+      .brand.title {
+        font-size: 29px;
+        letter-spacing: 0.01em;
+      }
+      .brand.pure {
+        position: relative;
+        font-size: 36px;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+      }
+      .brand.pure::after {
+        position: absolute;
+        right: 2px;
+        bottom: -6px;
+        width: 23px;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--coral);
+        content: "";
+      }
+      .dark .brand.pure::after {
+        background: #e48a6f;
+      }
+      .mono .brand.pure::after {
+        background: currentColor;
+      }
+      .mono-reverse .brand.pure::after {
+        background: currentColor;
+      }
+      .favicon-row {
+        display: flex;
+        align-items: end;
+        gap: 16px;
+        height: 78px;
+        margin-bottom: 15px;
+      }
+      .fav-wrap {
+        display: grid;
+        gap: 5px;
+        justify-items: center;
+        color: var(--ink);
+      }
+      .standard .fav-wrap {
+        color: var(--standard-ink);
+      }
+      .fav-box {
+        display: grid;
+        place-items: center;
+        border: 1px solid #dfe3df;
+        background: #fff;
+      }
+      .fav-box svg {
+        display: block;
+        width: 82%;
+        height: 82%;
+        color: inherit;
+        overflow: visible;
+      }
+      .fav-wrap span {
+        color: #737d78;
+        font-size: 9px;
+      }
+      .app-icon {
+        display: grid;
+        width: 58px;
+        height: 58px;
+        margin-left: auto;
+        place-items: center;
+        border-radius: 14px;
+        background: var(--ink);
+        color: #fff;
+      }
+      .standard .app-icon {
+        background: var(--standard-ink);
+      }
+      .app-icon svg {
+        width: 37px;
+        height: 37px;
+        color: white;
+      }
+      .palette {
+        display: flex;
+        height: 38px;
+        margin: 11px 0 10px;
+        overflow: hidden;
+        border: 1px solid #e1e4e1;
+        border-radius: 8px;
+      }
+      .palette span {
+        flex: 1;
+      }
+      .palette-note {
+        color: #69736f;
+        font-size: 10px;
+        line-height: 1.4;
+      }
+      .architecture {
+        margin-top: 13px;
+        padding-top: 12px;
+        border-top: 1px solid #e1e4e1;
+        color: #4e5954;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+
+      .board {
+        width: 1600px;
+        height: 1100px;
+        padding: 42px 48px 48px;
+      }
+      .board.standard-board {
+        background: var(--standard-paper);
+        color: var(--standard-ink);
+      }
+      .board-head {
+        display: grid;
+        grid-template-columns: 1fr 540px;
+        gap: 36px;
+        align-items: end;
+        height: 104px;
+        margin-bottom: 22px;
+      }
+      .board-head .idea {
+        margin: 0 0 4px;
+        color: #52605a;
+        font-size: 17px;
+        line-height: 1.45;
+      }
+      .board-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr 1fr;
+        grid-template-rows: 295px 308px 246px;
+        gap: 14px;
+      }
+      .panel {
+        min-width: 0;
+        padding: 20px;
+        border: 1px solid #d9ddd9;
+        border-radius: 14px;
+        background: #fff;
+      }
+      .panel.dark-panel {
+        border-color: transparent;
+        background: var(--ink);
+        color: #fff;
+      }
+      .standard-board .dark-panel {
+        background: var(--standard-ink);
+      }
+      .primary-panel {
+        grid-column: span 2;
+      }
+      .primary-panel .lockup {
+        justify-content: center;
+        height: 218px;
+      }
+      .primary-panel .logo-icon {
+        width: 118px;
+        height: 118px;
+      }
+      .primary-panel .brand.caps {
+        font-size: 45px;
+      }
+      .primary-panel .brand.title {
+        font-size: 56px;
+      }
+      .primary-panel .brand.pure {
+        font-size: 74px;
+      }
+      .variants {
+        display: grid;
+        grid-template-rows: repeat(4, 1fr);
+        gap: 6px;
+      }
+      .variant {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        min-height: 47px;
+        padding: 5px 12px;
+        border-radius: 10px;
+        background: var(--paper);
+      }
+      .variant.dark {
+        background: var(--ink);
+        color: #fff;
+      }
+      .standard-board .variant {
+        background: var(--standard-paper);
+      }
+      .standard-board .variant.dark {
+        background: var(--standard-ink);
+      }
+      .variant .lockup {
+        transform: scale(0.72);
+        transform-origin: left center;
+      }
+      .variant .logo-icon {
+        width: 50px;
+        height: 50px;
+      }
+      .variant small {
+        color: #7a847f;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+      }
+      .variant.dark small {
+        color: #bdc8c3;
+      }
+      .variant.mono-reverse small {
+        color: #d7d7d7;
+      }
+      .scale-panel {
+        display: grid;
+        grid-template-columns: 1fr 112px;
+        gap: 18px;
+      }
+      .scale-panel .favicon-row {
+        height: 132px;
+        align-items: center;
+      }
+      .scale-panel .app-icon {
+        width: 96px;
+        height: 96px;
+        border-radius: 22px;
+      }
+      .scale-panel .app-icon svg {
+        width: 62px;
+        height: 62px;
+      }
+      .scale-panel .verdict {
+        grid-column: span 2;
+        margin: 0;
+        color: #52605a;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .context-panel {
+        padding: 0;
+        overflow: hidden;
+      }
+      .mock-nav {
+        display: flex;
+        height: 64px;
+        align-items: center;
+        gap: 22px;
+        padding: 0 18px;
+        border-bottom: 1px solid #e1e4e1;
+        background: #fff;
+      }
+      .mock-nav .lockup {
+        gap: 7px;
+        margin-right: auto;
+      }
+      .mock-nav .logo-icon {
+        width: 30px;
+        height: 30px;
+      }
+      .mock-nav .brand.caps {
+        font-size: 12px;
+      }
+      .mock-nav .brand.title {
+        font-size: 16px;
+      }
+      .mock-nav .brand.pure {
+        font-size: 18px;
+      }
+      .nav-item {
+        color: #4f5b56;
+        font-size: 10px;
+      }
+      .nav-pill {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #e5e9e6;
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 112px 1fr;
+        height: 213px;
+        background: #f5f7f4;
+      }
+      .rail {
+        padding: 16px 13px;
+        border-right: 1px solid #dde2de;
+        background: #fbfcfb;
+      }
+      .rail-line {
+        height: 8px;
+        margin-bottom: 13px;
+        border-radius: 4px;
+        background: #dbe1dd;
+      }
+      .rail-line.active {
+        width: 76%;
+        background: var(--mineral);
+      }
+      .standard-board .rail-line.active {
+        background: var(--cobalt);
+      }
+      .workspace {
+        padding: 17px;
+      }
+      .workspace h4 {
+        margin: 0 0 5px;
+        font-size: 14px;
+      }
+      .workspace p {
+        margin: 0 0 14px;
+        color: #7a847f;
+        font-size: 9px;
+      }
+      .metric-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 9px;
+      }
+      .metric {
+        height: 78px;
+        padding: 12px;
+        border: 1px solid #dce1dd;
+        border-radius: 9px;
+        background: #fff;
+      }
+      .metric b {
+        display: block;
+        margin-bottom: 12px;
+        font-size: 18px;
+      }
+      .metric span {
+        color: #7a847f;
+        font-size: 8px;
+      }
+      .login-panel {
+        display: grid;
+        grid-template-columns: 0.78fr 1.22fr;
+        padding: 0;
+        overflow: hidden;
+      }
+      .login-brand {
+        display: grid;
+        place-items: center;
+        background: var(--ink);
+        color: white;
+      }
+      .standard-board .login-brand {
+        background: var(--standard-ink);
+      }
+      .login-brand .lockup {
+        flex-direction: column;
+        color: white;
+      }
+      .login-brand .logo-icon {
+        width: 70px;
+        height: 70px;
+      }
+      .login-form {
+        padding: 26px 24px;
+        background: #fff;
+      }
+      .login-form h3 {
+        margin-top: 3px;
+        font-size: 20px;
+      }
+      .login-form p {
+        color: #7a847f;
+        font-size: 10px;
+      }
+      .field {
+        height: 36px;
+        margin: 10px 0;
+        border: 1px solid #d7dcd8;
+        border-radius: 7px;
+      }
+      .button {
+        display: grid;
+        height: 36px;
+        place-items: center;
+        border-radius: 7px;
+        background: var(--mineral);
+        color: white;
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .standard-board .button {
+        background: var(--cobalt);
+      }
+      .palette-panel {
+        display: grid;
+        grid-template-columns: 1fr 1.1fr;
+        gap: 20px;
+      }
+      .palette-panel .palette {
+        height: 46px;
+      }
+      .palette-values {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px 14px;
+        color: #4f5b56;
+        font-size: 10px;
+        line-height: 1.4;
+      }
+      .type-note {
+        color: #4f5b56;
+        font-size: 12px;
+        line-height: 1.52;
+      }
+      .type-sample {
+        margin: 4px 0 10px;
+        font-size: 29px;
+        font-weight: 620;
+        letter-spacing: -0.025em;
+      }
+      .hero-panel {
+        grid-column: span 2;
+        display: grid;
+        grid-template-columns: 1fr 1.1fr;
+        gap: 24px;
+        align-items: center;
+        overflow: hidden;
+      }
+      .hero-copy h3 {
+        margin-bottom: 8px;
+        font-size: 24px;
+      }
+      .hero-copy p {
+        max-width: 360px;
+        color: #68736e;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      .hero-copy .button {
+        width: 112px;
+        margin-top: 15px;
+      }
+      .hero-product {
+        position: relative;
+        height: 196px;
+        padding: 18px;
+        border: 1px solid #d8ded9;
+        border-radius: 12px;
+        background: #f5f7f4;
+        box-shadow: 0 12px 28px rgba(14, 27, 50, 0.08);
+      }
+      .hero-product::before {
+        display: block;
+        width: 45%;
+        height: 9px;
+        margin-bottom: 18px;
+        border-radius: 5px;
+        background: #cfd7d2;
+        content: "";
+      }
+      .hero-chart {
+        display: flex;
+        height: 118px;
+        align-items: end;
+        gap: 12px;
+        padding: 0 14px;
+        border-left: 1px solid #d4dad6;
+        border-bottom: 1px solid #d4dad6;
+      }
+      .hero-chart i {
+        flex: 1;
+        border-radius: 5px 5px 0 0;
+        background: var(--mineral);
+        opacity: 0.92;
+      }
+      .standard-board .hero-chart i {
+        background: var(--cobalt);
+      }
+      .s1-no-symbol {
+        display: grid;
+        width: 62px;
+        height: 62px;
+        place-items: center;
+        border: 1px dashed currentColor;
+        border-radius: 10px;
+        color: #83908a;
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-align: center;
+      }
+      .initial-o {
+        font-size: 80%;
+        font-weight: 650;
+      }
+
+      @media print {
+        html,
+        body {
+          background: white;
+        }
+        body {
+          padding: 0;
+        }
+        .screen-only {
+          display: none;
+        }
+        .sheet,
+        .board {
+          break-after: page;
+          margin: 0;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" aria-hidden="true" style="position: absolute">
+      <defs>
+        <symbol id="mark-m1" viewBox="0 0 160 180">
+          <g
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M103 34C72 19 35 41 35 87c0 43 36 68 70 52"
+              stroke-width="18"
+            />
+            <path d="M78 137 132 39" stroke-width="18" />
+          </g>
+          <path
+            d="M122 57 132 39"
+            fill="none"
+            stroke="var(--copper)"
+            stroke-linecap="round"
+            stroke-width="18"
+          />
+        </symbol>
+        <symbol id="mark-m2" viewBox="0 0 170 180">
+          <g
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-width="15"
+          >
+            <path d="M28 39h13c24 0 26 43 58 51" />
+            <path d="M28 90h71" />
+            <path d="M28 141h13c24 0 26-43 58-51" />
+            <path d="M99 90h42" />
+          </g>
+          <path
+            d="M99 90h16"
+            fill="none"
+            stroke="var(--copper)"
+            stroke-linecap="round"
+            stroke-width="15"
+          />
+        </symbol>
+        <symbol id="mark-m3" viewBox="0 0 168 180">
+          <path d="M34 34h72v28H62v72H34z" fill="currentColor" />
+          <path d="M134 146H62v-28h44V46h28z" fill="var(--mineral)" />
+          <rect
+            x="83"
+            y="79"
+            width="30"
+            height="30"
+            rx="5"
+            fill="var(--copper)"
+          />
+        </symbol>
+        <symbol id="mark-s2" viewBox="0 0 174 180">
+          <g
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-width="16"
+          >
+            <path d="M67 34C43 43 31 63 31 90s12 47 36 56" />
+            <path d="M107 34c24 9 36 29 36 56s-12 47-36 56" />
+          </g>
+          <path
+            d="m63 59 24 30 24-30M87 89v34"
+            fill="none"
+            stroke="var(--cobalt)"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="13"
+          />
+        </symbol>
+      </defs>
+    </svg>
+
+    <p class="screen-only">
+      <strong>WO-051 owner review:</strong> compare form and fit, then choose
+      M1, M2, M3, S1, S2, HYBRID or NONE — REWORK. No concept is approved or
+      implemented.
+    </p>
+
+    <section class="sheet" id="contact-sheet" aria-labelledby="sheet-title">
+      <header class="sheet-header">
+        <div>
+          <p class="eyebrow">WO-051 · Owner selection round</p>
+          <h1 id="sheet-title">Oryntela visual concept contact sheet</h1>
+        </div>
+        <p class="lede">
+          Exactly five concepts, compared under the same light, dark, monochrome
+          and small-size conditions. Palette is secondary; silhouette comes
+          first.
+        </p>
+      </header>
+      <div class="concept-grid">
+        <article class="concept-card">
+          <span class="code">M1</span>
+          <h2>Meridian / Direction</h2>
+          <p class="idea">
+            An open circular course and rising meridian create forward tension
+            without a literal arrow.
+          </p>
+          <p class="test-label">Light</p>
+          <div class="logo-stage">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m1" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+          </div>
+          <p class="test-label">Dark</p>
+          <div class="logo-stage dark">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m1" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+          </div>
+          <p class="test-label">Monochrome</p>
+          <div class="logo-stage mono">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m1" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+          </div>
+          <p class="test-label">Symbol · favicon · app icon</p>
+          <div class="favicon-row">
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 16px; height: 16px">
+                <svg viewBox="0 0 170 180"><use href="#mark-m1" /></svg>
+              </div>
+              <span>16</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 32px; height: 32px">
+                <svg viewBox="0 0 170 180"><use href="#mark-m1" /></svg>
+              </div>
+              <span>32</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 48px; height: 48px">
+                <svg viewBox="0 0 170 180"><use href="#mark-m1" /></svg>
+              </div>
+              <span>48</span>
+            </div>
+            <div class="app-icon">
+              <svg viewBox="0 0 170 180"><use href="#mark-m1" /></svg>
+            </div>
+          </div>
+          <div class="palette">
+            <span style="background: #0e1b32"></span
+            ><span style="background: #204e5a"></span
+            ><span style="background: #c96b45"></span
+            ><span style="background: #f6f4ef"></span>
+          </div>
+          <p class="palette-note">
+            Midnight · mineral · restrained copper · warm paper
+          </p>
+          <p class="architecture">
+            <strong>Architecture:</strong> symbol + tracked uppercase wordmark.
+            Strongest use: product header and enterprise marketing.
+          </p>
+        </article>
+
+        <article class="concept-card">
+          <span class="code">M2</span>
+          <h2>Meridian / Orchestration</h2>
+          <p class="idea">
+            Three independent paths resolve into one calm operating line:
+            coordinated, not networked.
+          </p>
+          <p class="test-label">Light</p>
+          <div class="logo-stage">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+          </div>
+          <p class="test-label">Dark</p>
+          <div class="logo-stage dark">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+          </div>
+          <p class="test-label">Monochrome</p>
+          <div class="logo-stage mono">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+          </div>
+          <p class="test-label">Symbol · favicon · app icon</p>
+          <div class="favicon-row">
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 16px; height: 16px">
+                <svg viewBox="0 0 170 180"><use href="#mark-m2" /></svg>
+              </div>
+              <span>16</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 32px; height: 32px">
+                <svg viewBox="0 0 170 180"><use href="#mark-m2" /></svg>
+              </div>
+              <span>32</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 48px; height: 48px">
+                <svg viewBox="0 0 170 180"><use href="#mark-m2" /></svg>
+              </div>
+              <span>48</span>
+            </div>
+            <div class="app-icon">
+              <svg viewBox="0 0 170 180"><use href="#mark-m2" /></svg>
+            </div>
+          </div>
+          <div class="palette">
+            <span style="background: #0e1b32"></span
+            ><span style="background: #204e5a"></span
+            ><span style="background: #c96b45"></span
+            ><span style="background: #f6f4ef"></span>
+          </div>
+          <p class="palette-note">
+            Midnight · mineral · restrained copper · warm paper
+          </p>
+          <p class="architecture">
+            <strong>Architecture:</strong> pathway symbol + title-case wordmark.
+            Strongest use: platform story and workflow navigation.
+          </p>
+        </article>
+
+        <article class="concept-card">
+          <span class="code">M3</span>
+          <h2>Meridian / Abstract Signal</h2>
+          <p class="idea">
+            Two offset information fields lock around one clear decision
+            aperture.
+          </p>
+          <p class="test-label">Light</p>
+          <div class="logo-stage">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m3" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+          </div>
+          <p class="test-label">Dark</p>
+          <div class="logo-stage dark">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m3" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+          </div>
+          <p class="test-label">Monochrome</p>
+          <div class="logo-stage mono">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m3" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+          </div>
+          <p class="test-label">Symbol · favicon · app icon</p>
+          <div class="favicon-row">
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 16px; height: 16px">
+                <svg viewBox="0 0 170 180"><use href="#mark-m3" /></svg>
+              </div>
+              <span>16</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 32px; height: 32px">
+                <svg viewBox="0 0 170 180"><use href="#mark-m3" /></svg>
+              </div>
+              <span>32</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 48px; height: 48px">
+                <svg viewBox="0 0 170 180"><use href="#mark-m3" /></svg>
+              </div>
+              <span>48</span>
+            </div>
+            <div class="app-icon">
+              <svg viewBox="0 0 170 180"><use href="#mark-m3" /></svg>
+            </div>
+          </div>
+          <div class="palette">
+            <span style="background: #0e1b32"></span
+            ><span style="background: #204e5a"></span
+            ><span style="background: #c96b45"></span
+            ><span style="background: #f6f4ef"></span>
+          </div>
+          <p class="palette-note">
+            Midnight · mineral · restrained copper · warm paper
+          </p>
+          <p class="architecture">
+            <strong>Architecture:</strong> abstract glyph + tracked uppercase
+            wordmark. Strongest use: compact product and signal-led contexts.
+          </p>
+        </article>
+
+        <article class="concept-card standard">
+          <span class="code">S1</span>
+          <h2>Oryntela Standard / Pure Wordmark</h2>
+          <p class="idea">
+            A disciplined wordmark relies on proportion, rhythm and one quiet
+            terminal detail.
+          </p>
+          <p class="test-label">Light</p>
+          <div class="logo-stage">
+            <div class="lockup"><span class="brand pure">Oryntela</span></div>
+          </div>
+          <p class="test-label">Dark</p>
+          <div class="logo-stage dark">
+            <div class="lockup"><span class="brand pure">Oryntela</span></div>
+          </div>
+          <p class="test-label">Monochrome</p>
+          <div class="logo-stage mono">
+            <div class="lockup"><span class="brand pure">Oryntela</span></div>
+          </div>
+          <p class="test-label">No symbol · initial test · app icon</p>
+          <div class="favicon-row">
+            <div class="fav-wrap">
+              <div class="fav-box initial-o" style="width: 16px; height: 16px">
+                O
+              </div>
+              <span>16</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box initial-o" style="width: 32px; height: 32px">
+                O
+              </div>
+              <span>32</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box initial-o" style="width: 48px; height: 48px">
+                O
+              </div>
+              <span>48</span>
+            </div>
+            <div class="app-icon initial-o" style="font-size: 36px">O</div>
+          </div>
+          <div class="palette">
+            <span style="background: #111827"></span
+            ><span style="background: #2455c3"></span
+            ><span style="background: #d46a4c"></span
+            ><span style="background: #f8f6f1"></span>
+          </div>
+          <p class="palette-note">
+            Deep ink · disciplined cobalt · restrained coral · paper
+          </p>
+          <p class="architecture">
+            <strong>Architecture:</strong> wordmark only. The initial is tested
+            as a browser necessity, not proposed as a separate symbol.
+          </p>
+        </article>
+
+        <article class="concept-card standard">
+          <span class="code">S2</span>
+          <h2>Oryntela Standard / Wordmark + Minimal Mark</h2>
+          <p class="idea">
+            A dominant wordmark is paired with a compact open O/Y glyph for
+            constrained spaces.
+          </p>
+          <p class="test-label">Light</p>
+          <div class="logo-stage">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-s2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+          </div>
+          <p class="test-label">Dark</p>
+          <div class="logo-stage dark">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-s2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+          </div>
+          <p class="test-label">Monochrome</p>
+          <div class="logo-stage mono">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-s2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+          </div>
+          <p class="test-label">Symbol · favicon · app icon</p>
+          <div class="favicon-row">
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 16px; height: 16px">
+                <svg viewBox="0 0 170 180"><use href="#mark-s2" /></svg>
+              </div>
+              <span>16</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 32px; height: 32px">
+                <svg viewBox="0 0 170 180"><use href="#mark-s2" /></svg>
+              </div>
+              <span>32</span>
+            </div>
+            <div class="fav-wrap">
+              <div class="fav-box" style="width: 48px; height: 48px">
+                <svg viewBox="0 0 170 180"><use href="#mark-s2" /></svg>
+              </div>
+              <span>48</span>
+            </div>
+            <div class="app-icon">
+              <svg viewBox="0 0 170 180"><use href="#mark-s2" /></svg>
+            </div>
+          </div>
+          <div class="palette">
+            <span style="background: #111827"></span
+            ><span style="background: #2455c3"></span
+            ><span style="background: #d46a4c"></span
+            ><span style="background: #f8f6f1"></span>
+          </div>
+          <p class="palette-note">
+            Deep ink · disciplined cobalt · restrained coral · paper
+          </p>
+          <p class="architecture">
+            <strong>Architecture:</strong> wordmark-first lockup + compact O/Y
+            glyph. Strongest use: broad brand system with restrained
+            recognition.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section
+      class="board"
+      id="board-m1"
+      aria-labelledby="m1-title"
+      data-concept="m1"
+    >
+      <header class="board-head">
+        <div>
+          <p class="eyebrow">M1 · Meridian</p>
+          <h2 id="m1-title">Direction</h2>
+        </div>
+        <p class="idea">
+          An open circular course and rising meridian create forward commercial
+          tension without drawing a literal compass, pin or arrow.
+        </p>
+      </header>
+      <div class="board-grid">
+        <section class="panel primary-panel">
+          <p class="test-label">Primary logo · light background</p>
+          <div class="lockup">
+            <svg class="logo-icon" viewBox="0 0 170 180">
+              <use href="#mark-m1" /></svg
+            ><span class="brand caps">ORYNTELA</span>
+          </div>
+        </section>
+        <section class="panel">
+          <p class="test-label">Light · dark · monochrome</p>
+          <div class="variants">
+            <div class="variant">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m1" /></svg
+                ><span class="brand caps">ORYNTELA</span>
+              </div>
+              <small>LIGHT</small>
+            </div>
+            <div class="variant dark">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m1" /></svg
+                ><span class="brand caps">ORYNTELA</span>
+              </div>
+              <small>DARK</small>
+            </div>
+            <div class="variant mono">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m1" /></svg
+                ><span class="brand caps">ORYNTELA</span>
+              </div>
+              <small>BLACK / WHITE</small>
+            </div>
+            <div class="variant mono-reverse">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m1" /></svg
+                ><span class="brand caps">ORYNTELA</span>
+              </div>
+              <small>WHITE / BLACK</small>
+            </div>
+          </div>
+        </section>
+        <section class="panel scale-panel">
+          <div>
+            <p class="test-label">Symbol · actual favicon sizes</p>
+            <div class="favicon-row">
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 16px; height: 16px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-m1" /></svg>
+                </div>
+                <span>16×16</span>
+              </div>
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 32px; height: 32px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-m1" /></svg>
+                </div>
+                <span>32×32</span>
+              </div>
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 48px; height: 48px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-m1" /></svg>
+                </div>
+                <span>48×48</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">App icon</p>
+            <div class="app-icon">
+              <svg viewBox="0 0 170 180"><use href="#mark-m1" /></svg>
+            </div>
+          </div>
+          <p class="verdict">
+            <strong>Small-size assessment:</strong> strong outer silhouette at
+            16px; the copper tip becomes optional detail and the open course
+            remains identifiable in one colour.
+          </p>
+        </section>
+        <section class="panel context-panel">
+          <div class="mock-nav">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m1" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+            <span class="nav-item">Home</span
+            ><span class="nav-item">Pipeline</span
+            ><span class="nav-item">Forecast</span
+            ><span class="nav-pill"></span>
+          </div>
+          <div class="shell">
+            <div class="rail">
+              <div class="rail-line active"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+            </div>
+            <div class="workspace">
+              <h4>Good morning, Alex</h4>
+              <p>Here is the clearest next move across your active work.</p>
+              <div class="metric-row">
+                <div class="metric"><b>7</b><span>Priority actions</span></div>
+                <div class="metric"><b>$1.2m</b><span>Open pipeline</span></div>
+                <div class="metric"><b>3</b><span>Decisions due</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="panel login-panel">
+          <div class="login-brand">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m1" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+          </div>
+          <div class="login-form">
+            <p class="test-label">Login concept</p>
+            <h3>Welcome back</h3>
+            <p>Use your authorised work account.</p>
+            <div class="field"></div>
+            <div class="button">Continue</div>
+            <p style="margin-top: 10px">
+              Mock authentication · no customer data
+            </p>
+          </div>
+        </section>
+        <section class="panel palette-panel">
+          <div>
+            <p class="test-label">Concept palette · not tokens</p>
+            <div class="palette">
+              <span style="background: #0e1b32"></span
+              ><span style="background: #204e5a"></span
+              ><span style="background: #c96b45"></span
+              ><span style="background: #f6f4ef"></span>
+            </div>
+            <div class="palette-values">
+              <span>#0E1B32<br />14, 27, 50</span
+              ><span>#204E5A<br />32, 78, 90</span
+              ><span>#C96B45<br />201, 107, 69</span
+              ><span>#F6F4EF<br />246, 244, 239</span>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">Typography</p>
+            <div class="type-sample">Clear next action.</div>
+            <p class="type-note">
+              Geist Sans reference: tracked uppercase wordmark, economical
+              title/body rhythm. Licence verified as SIL OFL 1.1; no font asset
+              is included in this concept round.
+            </p>
+          </div>
+        </section>
+        <section class="panel hero-panel">
+          <div class="hero-copy">
+            <p class="test-label">Marketing header concept</p>
+            <div class="lockup" style="margin-bottom: 24px">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m1" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+            <h3>The end-to-end sales platform.</h3>
+            <p>
+              Bring customer context, workflow and clear next decisions into one
+              calm commercial system.
+            </p>
+            <div class="button">View product</div>
+          </div>
+          <div class="hero-product">
+            <div class="hero-chart">
+              <i style="height: 42%"></i><i style="height: 58%"></i
+              ><i style="height: 51%"></i><i style="height: 76%"></i
+              ><i style="height: 88%"></i>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section
+      class="board"
+      id="board-m2"
+      aria-labelledby="m2-title"
+      data-concept="m2"
+    >
+      <header class="board-head">
+        <div>
+          <p class="eyebrow">M2 · Meridian</p>
+          <h2 id="m2-title">Orchestration</h2>
+        </div>
+        <p class="idea">
+          Three independent paths resolve into one calm operating line,
+          expressing coordinated work without a connected-dot network diagram.
+        </p>
+      </header>
+      <div class="board-grid">
+        <section class="panel primary-panel">
+          <p class="test-label">Primary logo · light background</p>
+          <div class="lockup">
+            <svg class="logo-icon" viewBox="0 0 170 180">
+              <use href="#mark-m2" /></svg
+            ><span class="brand title">Oryntela</span>
+          </div>
+        </section>
+        <section class="panel">
+          <p class="test-label">Light · dark · monochrome</p>
+          <div class="variants">
+            <div class="variant">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m2" /></svg
+                ><span class="brand title">Oryntela</span>
+              </div>
+              <small>LIGHT</small>
+            </div>
+            <div class="variant dark">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m2" /></svg
+                ><span class="brand title">Oryntela</span>
+              </div>
+              <small>DARK</small>
+            </div>
+            <div class="variant mono">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m2" /></svg
+                ><span class="brand title">Oryntela</span>
+              </div>
+              <small>BLACK / WHITE</small>
+            </div>
+            <div class="variant mono-reverse">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m2" /></svg
+                ><span class="brand title">Oryntela</span>
+              </div>
+              <small>WHITE / BLACK</small>
+            </div>
+          </div>
+        </section>
+        <section class="panel scale-panel">
+          <div>
+            <p class="test-label">Symbol · actual favicon sizes</p>
+            <div class="favicon-row">
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 16px; height: 16px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-m2" /></svg>
+                </div>
+                <span>16×16</span>
+              </div>
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 32px; height: 32px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-m2" /></svg>
+                </div>
+                <span>32×32</span>
+              </div>
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 48px; height: 48px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-m2" /></svg>
+                </div>
+                <span>48×48</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">App icon</p>
+            <div class="app-icon">
+              <svg viewBox="0 0 170 180"><use href="#mark-m2" /></svg>
+            </div>
+          </div>
+          <p class="verdict">
+            <strong>Small-size assessment:</strong> readable from 24px; at 16px
+            the three inputs become a compact fork, so spacing must be optically
+            tuned in the final identity phase.
+          </p>
+        </section>
+        <section class="panel context-panel">
+          <div class="mock-nav">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+            <span class="nav-item">Home</span
+            ><span class="nav-item">Pipeline</span
+            ><span class="nav-item">Forecast</span
+            ><span class="nav-pill"></span>
+          </div>
+          <div class="shell">
+            <div class="rail">
+              <div class="rail-line active"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+            </div>
+            <div class="workspace">
+              <h4>Good morning, Alex</h4>
+              <p>Here is the clearest next move across your active work.</p>
+              <div class="metric-row">
+                <div class="metric"><b>7</b><span>Priority actions</span></div>
+                <div class="metric"><b>$1.2m</b><span>Open pipeline</span></div>
+                <div class="metric"><b>3</b><span>Decisions due</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="panel login-panel">
+          <div class="login-brand">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+          </div>
+          <div class="login-form">
+            <p class="test-label">Login concept</p>
+            <h3>Welcome back</h3>
+            <p>Use your authorised work account.</p>
+            <div class="field"></div>
+            <div class="button">Continue</div>
+            <p style="margin-top: 10px">
+              Mock authentication · no customer data
+            </p>
+          </div>
+        </section>
+        <section class="panel palette-panel">
+          <div>
+            <p class="test-label">Concept palette · not tokens</p>
+            <div class="palette">
+              <span style="background: #0e1b32"></span
+              ><span style="background: #204e5a"></span
+              ><span style="background: #c96b45"></span
+              ><span style="background: #f6f4ef"></span>
+            </div>
+            <div class="palette-values">
+              <span>#0E1B32<br />14, 27, 50</span
+              ><span>#204E5A<br />32, 78, 90</span
+              ><span>#C96B45<br />201, 107, 69</span
+              ><span>#F6F4EF<br />246, 244, 239</span>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">Typography</p>
+            <div class="type-sample">One coordinated view.</div>
+            <p class="type-note">
+              Geist Sans reference: title-case wordmark with compact, calm
+              rhythm. Final drawing should tune the O/Y relationship and N/T
+              spacing after selection.
+            </p>
+          </div>
+        </section>
+        <section class="panel hero-panel">
+          <div class="hero-copy">
+            <p class="test-label">Marketing header concept</p>
+            <div class="lockup" style="margin-bottom: 24px">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+            <h3>The end-to-end sales platform.</h3>
+            <p>
+              Bring customer context, workflow and clear next decisions into one
+              calm commercial system.
+            </p>
+            <div class="button">View product</div>
+          </div>
+          <div class="hero-product">
+            <div class="hero-chart">
+              <i style="height: 42%"></i><i style="height: 58%"></i
+              ><i style="height: 51%"></i><i style="height: 76%"></i
+              ><i style="height: 88%"></i>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section
+      class="board"
+      id="board-m3"
+      aria-labelledby="m3-title"
+      data-concept="m3"
+    >
+      <header class="board-head">
+        <div>
+          <p class="eyebrow">M3 · Meridian</p>
+          <h2 id="m3-title">Abstract Signal</h2>
+        </div>
+        <p class="idea">
+          Two offset information fields lock around one clear decision aperture:
+          signal made usable, without sparkles, brains, waveforms or radar.
+        </p>
+      </header>
+      <div class="board-grid">
+        <section class="panel primary-panel">
+          <p class="test-label">Primary logo · light background</p>
+          <div class="lockup">
+            <svg class="logo-icon" viewBox="0 0 170 180">
+              <use href="#mark-m3" /></svg
+            ><span class="brand caps">ORYNTELA</span>
+          </div>
+        </section>
+        <section class="panel">
+          <p class="test-label">Light · dark · monochrome</p>
+          <div class="variants">
+            <div class="variant">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m3" /></svg
+                ><span class="brand caps">ORYNTELA</span>
+              </div>
+              <small>LIGHT</small>
+            </div>
+            <div class="variant dark">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m3" /></svg
+                ><span class="brand caps">ORYNTELA</span>
+              </div>
+              <small>DARK</small>
+            </div>
+            <div class="variant mono">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m3" /></svg
+                ><span class="brand caps">ORYNTELA</span>
+              </div>
+              <small>BLACK / WHITE</small>
+            </div>
+            <div class="variant mono-reverse">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-m3" /></svg
+                ><span class="brand caps">ORYNTELA</span>
+              </div>
+              <small>WHITE / BLACK</small>
+            </div>
+          </div>
+        </section>
+        <section class="panel scale-panel">
+          <div>
+            <p class="test-label">Symbol · actual favicon sizes</p>
+            <div class="favicon-row">
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 16px; height: 16px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-m3" /></svg>
+                </div>
+                <span>16×16</span>
+              </div>
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 32px; height: 32px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-m3" /></svg>
+                </div>
+                <span>32×32</span>
+              </div>
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 48px; height: 48px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-m3" /></svg>
+                </div>
+                <span>48×48</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">App icon</p>
+            <div class="app-icon">
+              <svg viewBox="0 0 170 180"><use href="#mark-m3" /></svg>
+            </div>
+          </div>
+          <p class="verdict">
+            <strong>Small-size assessment:</strong> excellent block silhouette
+            at 16px; the central copper aperture should collapse to monochrome
+            rather than depend on colour.
+          </p>
+        </section>
+        <section class="panel context-panel">
+          <div class="mock-nav">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m3" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+            <span class="nav-item">Home</span
+            ><span class="nav-item">Pipeline</span
+            ><span class="nav-item">Forecast</span
+            ><span class="nav-pill"></span>
+          </div>
+          <div class="shell">
+            <div class="rail">
+              <div class="rail-line active"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+            </div>
+            <div class="workspace">
+              <h4>Good morning, Alex</h4>
+              <p>Here is the clearest next move across your active work.</p>
+              <div class="metric-row">
+                <div class="metric"><b>7</b><span>Priority actions</span></div>
+                <div class="metric"><b>$1.2m</b><span>Open pipeline</span></div>
+                <div class="metric"><b>3</b><span>Decisions due</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="panel login-panel">
+          <div class="login-brand">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m3" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+          </div>
+          <div class="login-form">
+            <p class="test-label">Login concept</p>
+            <h3>Welcome back</h3>
+            <p>Use your authorised work account.</p>
+            <div class="field"></div>
+            <div class="button">Continue</div>
+            <p style="margin-top: 10px">
+              Mock authentication · no customer data
+            </p>
+          </div>
+        </section>
+        <section class="panel palette-panel">
+          <div>
+            <p class="test-label">Concept palette · not tokens</p>
+            <div class="palette">
+              <span style="background: #0e1b32"></span
+              ><span style="background: #204e5a"></span
+              ><span style="background: #c96b45"></span
+              ><span style="background: #f6f4ef"></span>
+            </div>
+            <div class="palette-values">
+              <span>#0E1B32<br />14, 27, 50</span
+              ><span>#204E5A<br />32, 78, 90</span
+              ><span>#C96B45<br />201, 107, 69</span
+              ><span>#F6F4EF<br />246, 244, 239</span>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">Typography</p>
+            <div class="type-sample">Signal, made useful.</div>
+            <p class="type-note">
+              Geist Sans reference: tracked uppercase wordmark balances the
+              compact geometric glyph. Copper remains a removable detail, never
+              structural.
+            </p>
+          </div>
+        </section>
+        <section class="panel hero-panel">
+          <div class="hero-copy">
+            <p class="test-label">Marketing header concept</p>
+            <div class="lockup" style="margin-bottom: 24px">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-m3" /></svg
+              ><span class="brand caps">ORYNTELA</span>
+            </div>
+            <h3>The end-to-end sales platform.</h3>
+            <p>
+              Bring customer context, workflow and clear next decisions into one
+              calm commercial system.
+            </p>
+            <div class="button">View product</div>
+          </div>
+          <div class="hero-product">
+            <div class="hero-chart">
+              <i style="height: 42%"></i><i style="height: 58%"></i
+              ><i style="height: 51%"></i><i style="height: 76%"></i
+              ><i style="height: 88%"></i>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section
+      class="board standard-board"
+      id="board-s1"
+      aria-labelledby="s1-title"
+      data-concept="s1"
+    >
+      <header class="board-head">
+        <div>
+          <p class="eyebrow" style="color: var(--coral)">
+            S1 · Oryntela Standard
+          </p>
+          <h2 id="s1-title">Pure Wordmark</h2>
+        </div>
+        <p class="idea">
+          A disciplined wordmark relies on proportion, optical rhythm and one
+          quiet terminal detail rather than asking a separate symbol to carry
+          recognition.
+        </p>
+      </header>
+      <div class="board-grid">
+        <section class="panel primary-panel">
+          <p class="test-label">Primary logo · light background</p>
+          <div class="lockup"><span class="brand pure">Oryntela</span></div>
+        </section>
+        <section class="panel">
+          <p class="test-label">Light · dark · monochrome</p>
+          <div class="variants">
+            <div class="variant">
+              <div class="lockup"><span class="brand pure">Oryntela</span></div>
+              <small>LIGHT</small>
+            </div>
+            <div class="variant dark">
+              <div class="lockup"><span class="brand pure">Oryntela</span></div>
+              <small>DARK</small>
+            </div>
+            <div class="variant mono">
+              <div class="lockup"><span class="brand pure">Oryntela</span></div>
+              <small>BLACK / WHITE</small>
+            </div>
+            <div class="variant mono-reverse">
+              <div class="lockup"><span class="brand pure">Oryntela</span></div>
+              <small>WHITE / BLACK</small>
+            </div>
+          </div>
+        </section>
+        <section class="panel scale-panel">
+          <div>
+            <p class="test-label">No symbol · initial-only necessity test</p>
+            <div class="favicon-row">
+              <div class="fav-wrap">
+                <div
+                  class="fav-box initial-o"
+                  style="width: 16px; height: 16px"
+                >
+                  O
+                </div>
+                <span>16×16</span>
+              </div>
+              <div class="fav-wrap">
+                <div
+                  class="fav-box initial-o"
+                  style="width: 32px; height: 32px"
+                >
+                  O
+                </div>
+                <span>32×32</span>
+              </div>
+              <div class="fav-wrap">
+                <div
+                  class="fav-box initial-o"
+                  style="width: 48px; height: 48px"
+                >
+                  O
+                </div>
+                <span>48×48</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">App icon</p>
+            <div class="app-icon initial-o" style="font-size: 56px">O</div>
+          </div>
+          <p class="verdict">
+            <strong>Small-size assessment:</strong> the wordmark is highly
+            legible in headers, but the required browser/app fallback is only an
+            initial and carries the lowest standalone recognition.
+          </p>
+        </section>
+        <section class="panel context-panel">
+          <div class="mock-nav">
+            <div class="lockup"><span class="brand pure">Oryntela</span></div>
+            <span class="nav-item">Home</span
+            ><span class="nav-item">Pipeline</span
+            ><span class="nav-item">Forecast</span
+            ><span class="nav-pill"></span>
+          </div>
+          <div class="shell">
+            <div class="rail">
+              <div class="rail-line active"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+            </div>
+            <div class="workspace">
+              <h4>Good morning, Alex</h4>
+              <p>Here is the clearest next move across your active work.</p>
+              <div class="metric-row">
+                <div class="metric"><b>7</b><span>Priority actions</span></div>
+                <div class="metric"><b>$1.2m</b><span>Open pipeline</span></div>
+                <div class="metric"><b>3</b><span>Decisions due</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="panel login-panel">
+          <div class="login-brand">
+            <div class="lockup"><span class="brand pure">Oryntela</span></div>
+          </div>
+          <div class="login-form">
+            <p class="test-label">Login concept</p>
+            <h3>Welcome back</h3>
+            <p>Use your authorised work account.</p>
+            <div class="field"></div>
+            <div class="button">Continue</div>
+            <p style="margin-top: 10px">
+              Mock authentication · no customer data
+            </p>
+          </div>
+        </section>
+        <section class="panel palette-panel">
+          <div>
+            <p class="test-label">Concept palette · not tokens</p>
+            <div class="palette">
+              <span style="background: #111827"></span
+              ><span style="background: #2455c3"></span
+              ><span style="background: #d46a4c"></span
+              ><span style="background: #f8f6f1"></span>
+            </div>
+            <div class="palette-values">
+              <span>#111827<br />17, 24, 39</span
+              ><span>#2455C3<br />36, 85, 195</span
+              ><span>#D46A4C<br />212, 106, 76</span
+              ><span>#F8F6F1<br />248, 246, 241</span>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">Typography</p>
+            <div class="type-sample">Quietly capable.</div>
+            <p class="type-note">
+              Geist Sans reference with custom O/Y/N/T/A spacing and a
+              restrained terminal. Final letterform outlines and optical kerning
+              are deliberately deferred until selection.
+            </p>
+          </div>
+        </section>
+        <section class="panel hero-panel">
+          <div class="hero-copy">
+            <p class="test-label">Marketing header concept</p>
+            <div class="lockup" style="margin-bottom: 24px">
+              <span class="brand pure">Oryntela</span>
+            </div>
+            <h3>The end-to-end sales platform.</h3>
+            <p>
+              Bring customer context, workflow and clear next decisions into one
+              calm commercial system.
+            </p>
+            <div class="button">View product</div>
+          </div>
+          <div class="hero-product">
+            <div class="hero-chart">
+              <i style="height: 42%"></i><i style="height: 58%"></i
+              ><i style="height: 51%"></i><i style="height: 76%"></i
+              ><i style="height: 88%"></i>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section
+      class="board standard-board"
+      id="board-s2"
+      aria-labelledby="s2-title"
+      data-concept="s2"
+    >
+      <header class="board-head">
+        <div>
+          <p class="eyebrow" style="color: var(--coral)">
+            S2 · Oryntela Standard
+          </p>
+          <h2 id="s2-title">Wordmark + Minimal Mark</h2>
+        </div>
+        <p class="idea">
+          A dominant title-case wordmark is paired with a compact open O/Y glyph
+          for favicons, app icons and constrained navigation.
+        </p>
+      </header>
+      <div class="board-grid">
+        <section class="panel primary-panel">
+          <p class="test-label">Primary logo · light background</p>
+          <div class="lockup">
+            <svg class="logo-icon" viewBox="0 0 170 180">
+              <use href="#mark-s2" /></svg
+            ><span class="brand title">Oryntela</span>
+          </div>
+        </section>
+        <section class="panel">
+          <p class="test-label">Light · dark · monochrome</p>
+          <div class="variants">
+            <div class="variant">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-s2" /></svg
+                ><span class="brand title">Oryntela</span>
+              </div>
+              <small>LIGHT</small>
+            </div>
+            <div class="variant dark">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-s2" /></svg
+                ><span class="brand title">Oryntela</span>
+              </div>
+              <small>DARK</small>
+            </div>
+            <div class="variant mono">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-s2" /></svg
+                ><span class="brand title">Oryntela</span>
+              </div>
+              <small>BLACK / WHITE</small>
+            </div>
+            <div class="variant mono-reverse">
+              <div class="lockup">
+                <svg class="logo-icon" viewBox="0 0 170 180">
+                  <use href="#mark-s2" /></svg
+                ><span class="brand title">Oryntela</span>
+              </div>
+              <small>WHITE / BLACK</small>
+            </div>
+          </div>
+        </section>
+        <section class="panel scale-panel">
+          <div>
+            <p class="test-label">Symbol · actual favicon sizes</p>
+            <div class="favicon-row">
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 16px; height: 16px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-s2" /></svg>
+                </div>
+                <span>16×16</span>
+              </div>
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 32px; height: 32px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-s2" /></svg>
+                </div>
+                <span>32×32</span>
+              </div>
+              <div class="fav-wrap">
+                <div class="fav-box" style="width: 48px; height: 48px">
+                  <svg viewBox="0 0 170 180"><use href="#mark-s2" /></svg>
+                </div>
+                <span>48×48</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">App icon</p>
+            <div class="app-icon">
+              <svg viewBox="0 0 170 180"><use href="#mark-s2" /></svg>
+            </div>
+          </div>
+          <p class="verdict">
+            <strong>Small-size assessment:</strong> the O/Y reading holds at
+            32px; at 16px the open brackets carry the silhouette while the inner
+            branch becomes supporting detail.
+          </p>
+        </section>
+        <section class="panel context-panel">
+          <div class="mock-nav">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-s2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+            <span class="nav-item">Home</span
+            ><span class="nav-item">Pipeline</span
+            ><span class="nav-item">Forecast</span
+            ><span class="nav-pill"></span>
+          </div>
+          <div class="shell">
+            <div class="rail">
+              <div class="rail-line active"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+              <div class="rail-line"></div>
+            </div>
+            <div class="workspace">
+              <h4>Good morning, Alex</h4>
+              <p>Here is the clearest next move across your active work.</p>
+              <div class="metric-row">
+                <div class="metric"><b>7</b><span>Priority actions</span></div>
+                <div class="metric"><b>$1.2m</b><span>Open pipeline</span></div>
+                <div class="metric"><b>3</b><span>Decisions due</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="panel login-panel">
+          <div class="login-brand">
+            <div class="lockup">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-s2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+          </div>
+          <div class="login-form">
+            <p class="test-label">Login concept</p>
+            <h3>Welcome back</h3>
+            <p>Use your authorised work account.</p>
+            <div class="field"></div>
+            <div class="button">Continue</div>
+            <p style="margin-top: 10px">
+              Mock authentication · no customer data
+            </p>
+          </div>
+        </section>
+        <section class="panel palette-panel">
+          <div>
+            <p class="test-label">Concept palette · not tokens</p>
+            <div class="palette">
+              <span style="background: #111827"></span
+              ><span style="background: #2455c3"></span
+              ><span style="background: #d46a4c"></span
+              ><span style="background: #f8f6f1"></span>
+            </div>
+            <div class="palette-values">
+              <span>#111827<br />17, 24, 39</span
+              ><span>#2455C3<br />36, 85, 195</span
+              ><span>#D46A4C<br />212, 106, 76</span
+              ><span>#F8F6F1<br />248, 246, 241</span>
+            </div>
+          </div>
+          <div>
+            <p class="test-label">Typography</p>
+            <div class="type-sample">Recognition, restrained.</div>
+            <p class="type-note">
+              Geist Sans reference: title-case wordmark remains dominant. The
+              O/Y monogram is a secondary utility mark, not an excuse for extra
+              brand furniture.
+            </p>
+          </div>
+        </section>
+        <section class="panel hero-panel">
+          <div class="hero-copy">
+            <p class="test-label">Marketing header concept</p>
+            <div class="lockup" style="margin-bottom: 24px">
+              <svg class="logo-icon" viewBox="0 0 170 180">
+                <use href="#mark-s2" /></svg
+              ><span class="brand title">Oryntela</span>
+            </div>
+            <h3>The end-to-end sales platform.</h3>
+            <p>
+              Bring customer context, workflow and clear next decisions into one
+              calm commercial system.
+            </p>
+            <div class="button">View product</div>
+          </div>
+          <div class="hero-product">
+            <div class="hero-chart">
+              <i style="height: 42%"></i><i style="height: 58%"></i
+              ><i style="height: 51%"></i><i style="height: 76%"></i
+              ><i style="height: 88%"></i>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </body>
+</html>

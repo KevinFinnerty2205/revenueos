@@ -1,0 +1,36 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 760 180"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Oryntela concept M2 — Meridian Orchestration</title>
+  <desc id="desc">
+    Non-final concept logo with three paths resolving into one and an Oryntela
+    wordmark.
+  </desc>
+  <g fill="none" stroke="#0E1B32" stroke-linecap="round" stroke-width="15">
+    <path d="M28 39h13c24 0 26 43 58 51" />
+    <path d="M28 90h71" />
+    <path d="M28 141h13c24 0 26-43 58-51" />
+    <path d="M99 90h42" />
+  </g>
+  <path
+    d="M99 90h16"
+    fill="none"
+    stroke="#C96B45"
+    stroke-linecap="round"
+    stroke-width="15"
+  />
+  <text
+    x="176"
+    y="112"
+    fill="#0E1B32"
+    font-family="Geist, 'Avenir Next', Arial, sans-serif"
+    font-size="62"
+    font-weight="600"
+    letter-spacing="1.5"
+  >
+    Oryntela
+  </text>
+</svg>

@@ -6,6 +6,11 @@ This is the canonical product and engineering documentation index. Documents dis
 
 1. [Company vision](00-company/vision.md)
    - [Oryntela owner register](00-company/oryntela-owner-register.md) — approved brand, domain and business-email facts
+   - [Oryntela brand identity discovery](00-company/oryntela-brand-identity-discovery.md) — WO-051 discovery and owner-approved M1/M3 hybrid identity; production implementation is not yet applied
+     - [Oryntela final identity review board](00-company/assets/oryntela-brand/oryntela-final-review-board.png) — owner-approved identity; not a production asset
+     - [Oryntela practical brand guide](00-company/oryntela-brand-guide.md) — logo, colour, typography, tokens and usage rules
+     - [Oryntela concept contact sheet](00-company/assets/oryntela-brand-concepts/oryntela-concept-contact-sheet.png) — historical M1–M3 and S1–S2 comparison
+   - [Oryntela brand-surface inventory](00-company/oryntela-brand-surface-inventory.csv) — machine-useful WO-052 rebrand surface map
    - [Oryntela preliminary trade-mark preparation](00-company/oryntela-trademark-preparation.md) — dated search record and adviser handoff; not legal clearance
    - [Oryntela trade mark adviser shortlist](00-company/oryntela-trademark-adviser-shortlist.md) — parked adviser research; professional review and filing deferred by owner
 2. [Oryntela master product blueprint](01-product/oryntela-master-product-blueprint.md) — authoritative public-brand, product and future-direction consolidation
@@ -208,6 +213,9 @@ This is the canonical product and engineering documentation index. Documents dis
 
 - [Vision](00-company/vision.md)
 - [Oryntela owner register](00-company/oryntela-owner-register.md)
+- [Oryntela brand identity discovery](00-company/oryntela-brand-identity-discovery.md)
+- [Oryntela practical brand guide](00-company/oryntela-brand-guide.md)
+- [Oryntela brand-surface inventory](00-company/oryntela-brand-surface-inventory.csv)
 - [Oryntela preliminary trade-mark preparation](00-company/oryntela-trademark-preparation.md)
 - [Oryntela trade mark adviser shortlist](00-company/oryntela-trademark-adviser-shortlist.md)
 

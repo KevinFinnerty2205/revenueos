@@ -1,0 +1,39 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 760 180"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Oryntela concept M1 — Meridian Direction</title>
+  <desc id="desc">
+    Non-final concept logo with an abstract directional meridian symbol and
+    uppercase Oryntela wordmark.
+  </desc>
+  <g
+    fill="none"
+    stroke="#0E1B32"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M103 34C72 19 35 41 35 87c0 43 36 68 70 52" stroke-width="18" />
+    <path d="M78 137 132 39" stroke-width="18" />
+  </g>
+  <path
+    d="M122 57 132 39"
+    fill="none"
+    stroke="#C96B45"
+    stroke-linecap="round"
+    stroke-width="18"
+  />
+  <text
+    x="174"
+    y="112"
+    fill="#0E1B32"
+    font-family="Geist, 'Avenir Next', Arial, sans-serif"
+    font-size="55"
+    font-weight="620"
+    letter-spacing="6"
+  >
+    ORYNTELA
+  </text>
+</svg>

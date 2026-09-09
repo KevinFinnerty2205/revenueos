@@ -1,0 +1,1440 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oryntela owner-approved brand identity</title>
+    <style>
+      :root {
+        --midnight: #0e1b32;
+        --deep: #07101f;
+        --warm: #f6f4ef;
+        --white: #ffffff;
+        --copper: #c96b45;
+        --mineral: #204e5a;
+        --muted: #59687a;
+        --border: #7c8999;
+        --line: #d9d6cf;
+        --soft: #ebe7df;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: #dcd8d0;
+        color: var(--midnight);
+        font-family: "Geist", "Helvetica Neue", Arial, sans-serif;
+      }
+
+      body {
+        padding: 44px;
+      }
+
+      .board {
+        width: 1512px;
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid #c9c4bb;
+        background: var(--warm);
+        box-shadow: 0 24px 80px rgba(7, 16, 31, 0.14);
+      }
+
+      .hero {
+        position: relative;
+        min-height: 710px;
+        padding: 76px 82px;
+        overflow: hidden;
+        background: var(--deep);
+        color: var(--warm);
+      }
+
+      .hero::after {
+        position: absolute;
+        top: -280px;
+        right: -240px;
+        width: 720px;
+        height: 720px;
+        border: 1px solid rgba(246, 244, 239, 0.11);
+        border-radius: 50%;
+        content: "";
+      }
+
+      .eyebrow {
+        margin: 0 0 20px;
+        color: var(--copper);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .hero h1 {
+        max-width: 980px;
+        margin: 0;
+        font-size: 88px;
+        font-weight: 600;
+        letter-spacing: -0.055em;
+        line-height: 0.98;
+      }
+
+      .hero-copy {
+        max-width: 720px;
+        margin: 32px 0 0;
+        color: #b9c2cc;
+        font-size: 25px;
+        line-height: 1.45;
+      }
+
+      .status-row {
+        position: absolute;
+        right: 82px;
+        bottom: 70px;
+        left: 82px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        padding-top: 30px;
+        border-top: 1px solid #5a6880;
+      }
+
+      .status-row img {
+        width: 405px;
+        height: auto;
+      }
+
+      .status {
+        max-width: 420px;
+        text-align: right;
+      }
+
+      .status strong {
+        display: block;
+        color: var(--warm);
+        font-size: 18px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .status span {
+        display: block;
+        margin-top: 8px;
+        color: #b9c2cc;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      .section {
+        padding: 76px 82px;
+        border-top: 1px solid var(--line);
+      }
+
+      .section.dark {
+        background: var(--deep);
+        color: var(--warm);
+        border-top-color: #273550;
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: 0.7fr 1.3fr;
+        gap: 44px;
+        margin-bottom: 44px;
+      }
+
+      .section-number {
+        color: var(--copper);
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .section h2 {
+        margin: 0;
+        font-size: 46px;
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1.05;
+      }
+
+      .section-intro {
+        margin: 15px 0 0;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.5;
+      }
+
+      .dark .section-intro {
+        color: #b9c2cc;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+      }
+
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        min-height: 250px;
+        padding: 30px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: var(--white);
+      }
+
+      .card.dark-card {
+        border-color: #2f3c54;
+        background: var(--midnight);
+        color: var(--warm);
+      }
+
+      .card.black-card {
+        background: #000;
+        color: #fff;
+      }
+
+      .card-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 30px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .dark-card .card-label,
+      .black-card .card-label {
+        color: #b9c2cc;
+      }
+
+      .pass {
+        color: var(--mineral);
+      }
+
+      .dark-card .pass,
+      .black-card .pass {
+        color: #f0a17d;
+      }
+
+      .logo-stage {
+        display: flex;
+        min-height: 155px;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .logo-stage img {
+        width: min(100%, 545px);
+        height: auto;
+      }
+
+      .logo-stage.symbol img {
+        width: 150px;
+      }
+
+      .logo-stage.wordmark img {
+        width: 410px;
+      }
+
+      .logo-stage.compact img {
+        width: 208px;
+      }
+
+      .decision-note {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        gap: 34px;
+        margin-top: 24px;
+        padding: 30px;
+        background: #e8e4db;
+      }
+
+      .decision-note strong {
+        font-size: 19px;
+      }
+
+      .decision-note p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.55;
+      }
+
+      .icon-layout {
+        display: grid;
+        grid-template-columns: 1.35fr 0.65fr;
+        gap: 24px;
+      }
+
+      .size-row {
+        display: flex;
+        min-height: 280px;
+        align-items: flex-end;
+        justify-content: space-around;
+        padding: 42px 28px 28px;
+        border: 1px solid var(--line);
+        background: var(--white);
+      }
+
+      .size-item {
+        min-width: 120px;
+        text-align: center;
+      }
+
+      .size-item .pixel-box {
+        display: flex;
+        min-height: 170px;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 18px;
+        background-image:
+          linear-gradient(45deg, #ece9e3 25%, transparent 25%),
+          linear-gradient(-45deg, #ece9e3 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #ece9e3 75%),
+          linear-gradient(-45deg, transparent 75%, #ece9e3 75%);
+        background-position:
+          0 0,
+          0 8px,
+          8px -8px,
+          -8px 0;
+        background-size: 16px 16px;
+      }
+
+      .size-item img {
+        image-rendering: pixelated;
+      }
+
+      .size-item small {
+        display: block;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .app-card {
+        display: grid;
+        min-height: 280px;
+        place-items: center;
+        padding: 28px;
+        border: 1px solid var(--line);
+        background: var(--white);
+      }
+
+      .app-card img {
+        width: 210px;
+        height: 210px;
+      }
+
+      .app-card .app-caption {
+        color: var(--muted);
+        font-size: 14px;
+        text-align: center;
+      }
+
+      .palette {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr 1fr 1fr;
+        gap: 14px;
+      }
+
+      .swatch {
+        min-height: 236px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .swatch strong {
+        font-size: 21px;
+      }
+
+      .swatch code {
+        font:
+          600 15px/1.2 "Geist",
+          Arial,
+          sans-serif;
+        letter-spacing: 0.04em;
+      }
+
+      .swatch.midnight {
+        background: var(--midnight);
+        color: var(--warm);
+      }
+
+      .swatch.warm {
+        border: 1px solid var(--line);
+        background: var(--warm);
+      }
+
+      .swatch.copper {
+        background: var(--copper);
+        color: var(--midnight);
+      }
+
+      .swatch.mineral {
+        background: var(--mineral);
+        color: var(--white);
+      }
+
+      .token-strip {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 1px;
+        margin-top: 16px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: var(--line);
+      }
+
+      .token {
+        min-height: 128px;
+        padding: 20px;
+        background: var(--white);
+      }
+
+      .token span {
+        display: block;
+        margin-bottom: 20px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.055em;
+        text-transform: uppercase;
+      }
+
+      .token strong {
+        font-size: 16px;
+      }
+
+      .contrast-note {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 30px;
+        margin-top: 20px;
+        padding: 24px 28px;
+        border-left: 5px solid var(--copper);
+        background: var(--white);
+      }
+
+      .contrast-note p {
+        max-width: 870px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.5;
+      }
+
+      .contrast-note strong {
+        white-space: nowrap;
+        color: var(--mineral);
+        font-size: 17px;
+      }
+
+      .type-specimen {
+        display: grid;
+        grid-template-columns: 1.5fr 0.5fr;
+        gap: 24px;
+      }
+
+      .type-main,
+      .type-meta {
+        padding: 38px;
+        border: 1px solid var(--line);
+        background: var(--white);
+      }
+
+      .type-main .display {
+        margin: 0 0 24px;
+        font-size: 62px;
+        font-weight: 600;
+        letter-spacing: -0.04em;
+        line-height: 1.03;
+      }
+
+      .type-main .body-copy {
+        max-width: 760px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.55;
+      }
+
+      .type-meta .numbers {
+        margin: 42px 0 10px;
+        font-size: 32px;
+        font-variant-numeric: tabular-nums lining-nums;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      .type-meta p {
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      .mock-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 24px;
+      }
+
+      .mock {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: var(--white);
+      }
+
+      .mock-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 15px 20px;
+        border-bottom: 1px solid var(--line);
+        background: #eeebe4;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+      }
+
+      .product-shell {
+        min-height: 460px;
+        background: #f7f8fa;
+      }
+
+      .product-nav {
+        display: flex;
+        height: 74px;
+        align-items: center;
+        gap: 38px;
+        padding: 0 26px;
+        border-bottom: 1px solid #d8dde4;
+        background: var(--white);
+      }
+
+      .product-nav img {
+        width: 168px;
+      }
+
+      .product-nav .nav-item {
+        color: #59687a;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .product-nav .active {
+        color: var(--midnight);
+      }
+
+      .product-nav .profile {
+        width: 34px;
+        height: 34px;
+        margin-left: auto;
+        border-radius: 50%;
+        background: var(--midnight);
+      }
+
+      .product-content {
+        padding: 34px;
+      }
+
+      .product-content h3 {
+        margin: 0 0 8px;
+        font-size: 27px;
+      }
+
+      .product-content p {
+        margin: 0 0 28px;
+        color: var(--muted);
+      }
+
+      .metric-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+
+      .metric {
+        padding: 19px;
+        border: 1px solid #d8dde4;
+        background: var(--white);
+      }
+
+      .metric span {
+        display: block;
+        margin-bottom: 13px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .metric strong {
+        font-size: 23px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .login-stage {
+        min-height: 460px;
+        display: grid;
+        place-items: center;
+        padding: 30px;
+        background: var(--warm);
+      }
+
+      .login-panel {
+        width: 380px;
+        padding: 34px;
+        border: 1px solid var(--line);
+        background: var(--white);
+        box-shadow: 0 18px 45px rgba(14, 27, 50, 0.08);
+      }
+
+      .login-panel img {
+        width: 190px;
+        margin-bottom: 34px;
+      }
+
+      .login-panel h3 {
+        margin: 0 0 8px;
+        font-size: 26px;
+      }
+
+      .login-panel p {
+        margin: 0 0 24px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .field {
+        height: 47px;
+        margin-bottom: 13px;
+        border: 1px solid var(--border);
+        background: #fff;
+      }
+
+      .button {
+        height: 47px;
+        display: grid;
+        place-items: center;
+        background: var(--midnight);
+        color: var(--warm);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .deal-room {
+        min-height: 510px;
+        padding: 38px;
+        background: var(--deep);
+        color: var(--warm);
+      }
+
+      .deal-room header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 28px;
+        border-bottom: 1px solid #5a6880;
+      }
+
+      .deal-room header img {
+        width: 180px;
+      }
+
+      .deal-room header span {
+        color: #b9c2cc;
+        font-size: 13px;
+      }
+
+      .deal-room h3 {
+        max-width: 600px;
+        margin: 50px 0 16px;
+        font-size: 41px;
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1.05;
+      }
+
+      .deal-room > p {
+        max-width: 620px;
+        color: #b9c2cc;
+        font-size: 17px;
+        line-height: 1.5;
+      }
+
+      .deal-assets {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-top: 34px;
+      }
+
+      .deal-asset {
+        padding: 18px;
+        border: 1px solid #5a6880;
+        background: var(--midnight);
+      }
+
+      .deal-asset small {
+        display: block;
+        margin-top: 7px;
+        color: #b9c2cc;
+      }
+
+      .document {
+        min-height: 510px;
+        padding: 48px 42px;
+        background: var(--warm);
+      }
+
+      .document img {
+        width: 170px;
+      }
+
+      .document h3 {
+        margin: 95px 0 18px;
+        font-size: 45px;
+        line-height: 1.02;
+        letter-spacing: -0.04em;
+      }
+
+      .document .rule {
+        width: 64px;
+        height: 5px;
+        margin-bottom: 26px;
+        background: var(--copper);
+      }
+
+      .document p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.5;
+      }
+
+      .document footer {
+        margin-top: 78px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .website {
+        min-height: 590px;
+        padding: 34px 44px 0;
+        overflow: hidden;
+        background: var(--warm);
+      }
+
+      .site-nav {
+        display: flex;
+        align-items: center;
+        gap: 30px;
+      }
+
+      .site-nav img {
+        width: 192px;
+      }
+
+      .site-nav span {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .site-nav .site-cta {
+        margin-left: auto;
+        padding: 12px 18px;
+        background: var(--midnight);
+        color: var(--warm);
+        font-weight: 600;
+      }
+
+      .site-hero {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 35px;
+        align-items: center;
+        padding-top: 70px;
+      }
+
+      .site-hero h3 {
+        margin: 0 0 20px;
+        font-size: 57px;
+        font-weight: 600;
+        letter-spacing: -0.05em;
+        line-height: 0.98;
+      }
+
+      .site-hero p {
+        max-width: 530px;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.55;
+      }
+
+      .site-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      .site-actions span {
+        padding: 14px 19px;
+        border: 1px solid var(--border);
+        color: var(--midnight);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .site-actions .primary-action {
+        border-color: var(--midnight);
+        background: var(--midnight);
+        color: var(--warm);
+      }
+
+      .product-proof {
+        transform: translateY(18px) rotate(-1.2deg);
+        padding: 20px;
+        border: 1px solid #cbd1da;
+        background: var(--white);
+        box-shadow: 0 25px 60px rgba(14, 27, 50, 0.12);
+      }
+
+      .proof-top {
+        display: flex;
+        gap: 7px;
+        margin-bottom: 20px;
+      }
+
+      .proof-top i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #d8dde4;
+      }
+
+      .proof-chart {
+        position: relative;
+        height: 270px;
+        overflow: hidden;
+        background:
+          linear-gradient(#eef0f3 1px, transparent 1px),
+          linear-gradient(90deg, #eef0f3 1px, transparent 1px);
+        background-size: 48px 48px;
+      }
+
+      .proof-chart::before {
+        position: absolute;
+        right: -40px;
+        bottom: -70px;
+        width: 490px;
+        height: 270px;
+        border: 8px solid var(--mineral);
+        border-color: var(--mineral) transparent transparent transparent;
+        border-radius: 50%;
+        transform: rotate(-13deg);
+        content: "";
+      }
+
+      .proof-chip {
+        position: absolute;
+        top: 58px;
+        right: 48px;
+        padding: 12px 15px;
+        border-left: 4px solid var(--copper);
+        background: var(--white);
+        box-shadow: 0 8px 26px rgba(14, 27, 50, 0.1);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .rules {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
+
+      .rule-card {
+        min-height: 255px;
+        padding: 30px;
+        border: 1px solid #2f3c54;
+        background: var(--midnight);
+      }
+
+      .rule-card strong {
+        display: block;
+        margin-bottom: 16px;
+        color: var(--warm);
+        font-size: 22px;
+      }
+
+      .rule-card p,
+      .rule-card li {
+        color: #b9c2cc;
+        font-size: 15px;
+        line-height: 1.55;
+      }
+
+      .rule-card ul {
+        margin: 0;
+        padding-left: 19px;
+      }
+
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 50px 82px;
+        background: var(--midnight);
+        color: var(--warm);
+      }
+
+      .footer img {
+        width: 245px;
+      }
+
+      .footer div {
+        max-width: 690px;
+        text-align: right;
+      }
+
+      .footer strong {
+        display: block;
+        color: var(--copper);
+        font-size: 20px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .footer span {
+        display: block;
+        margin-top: 8px;
+        color: #b9c2cc;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="board">
+      <header class="hero">
+        <p class="eyebrow">WO-051 · Owner-approved brand identity</p>
+        <h1>Direction, made<br />commercially clear.</h1>
+        <p class="hero-copy">
+          Meridian / Direction, refined from M1 with M3-informed small-size
+          economy. Premium and minimal first; intelligent and commercial second.
+        </p>
+        <div class="status-row">
+          <img src="oryntela-logo-dark.svg" alt="Oryntela" />
+          <div class="status">
+            <strong>Owner approved</strong>
+            <span
+              >Canonical identity assets only. Production remains unchanged.<br />WO-052
+              has not started.</span
+            >
+          </div>
+        </div>
+      </header>
+
+      <section class="section">
+        <div class="section-head">
+          <div class="section-number">01 · Primary system</div>
+          <div>
+            <h2>One open course. One rising meridian.</h2>
+            <p class="section-intro">
+              The M1 idea is preserved and simplified into two equal-weight
+              forms. Copper is a terminal signal, never structural.
+            </p>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-label">
+              <span>Primary / light background</span
+              ><span class="pass">Pass</span>
+            </div>
+            <div class="logo-stage">
+              <img
+                src="oryntela-logo-primary.svg"
+                alt="Oryntela primary logo"
+              />
+            </div>
+          </div>
+          <div class="card dark-card">
+            <div class="card-label">
+              <span>Dark background</span><span class="pass">Pass</span>
+            </div>
+            <div class="logo-stage">
+              <img
+                src="oryntela-logo-dark.svg"
+                alt="Oryntela logo for dark backgrounds"
+              />
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label">
+              <span>Standalone symbol</span><span class="pass">Pass</span>
+            </div>
+            <div class="logo-stage symbol">
+              <img src="oryntela-symbol.svg" alt="Oryntela symbol" />
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label">
+              <span>Outlined wordmark</span><span>Selected: title case</span>
+            </div>
+            <div class="logo-stage wordmark">
+              <img src="oryntela-wordmark.svg" alt="Oryntela wordmark" />
+            </div>
+          </div>
+        </div>
+        <div class="decision-note">
+          <strong>Why title case won</strong>
+          <p>
+            Faster recognition, a more ownable word shape and calmer
+            product-header rhythm. Pair-specific spacing and the single-storey
+            alternate “a” avoid the generic tracked-uppercase treatment from the
+            concept round.
+          </p>
+        </div>
+      </section>
+
+      <section class="section dark">
+        <div class="section-head">
+          <div class="section-number">02 · Reproduction</div>
+          <div>
+            <h2>Colour supports the identity. It does not carry it.</h2>
+            <p class="section-intro">
+              The complete mark remains recognisable in solid black or white and
+              without the copper terminal.
+            </p>
+          </div>
+        </div>
+        <div class="grid-3">
+          <div class="card">
+            <div class="card-label">
+              <span>Black on white</span><span class="pass">Pass</span>
+            </div>
+            <div class="logo-stage">
+              <img src="oryntela-logo-black.svg" alt="Black Oryntela logo" />
+            </div>
+          </div>
+          <div class="card black-card">
+            <div class="card-label">
+              <span>White on black</span><span class="pass">Pass</span>
+            </div>
+            <div class="logo-stage">
+              <img src="oryntela-logo-white.svg" alt="White Oryntela logo" />
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label">
+              <span>Compact lockup</span><span>Optional</span>
+            </div>
+            <div class="logo-stage compact">
+              <img
+                src="oryntela-logo-compact.svg"
+                alt="Compact Oryntela lockup"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div class="section-number">03 · Small-size proof</div>
+          <div>
+            <h2>Built to survive the browser tab.</h2>
+            <p class="section-intro">
+              Actual PNG derivatives are shown enlarged with nearest-neighbour
+              rendering so the 16, 32 and 48px decisions remain visible.
+            </p>
+          </div>
+        </div>
+        <div class="icon-layout">
+          <div class="size-row">
+            <div class="size-item">
+              <div class="pixel-box">
+                <img
+                  src="oryntela-favicon-16.png"
+                  alt="16 pixel favicon"
+                  width="128"
+                  height="128"
+                />
+              </div>
+              <strong>16 × 16</strong><small>Pass · silhouette</small>
+            </div>
+            <div class="size-item">
+              <div class="pixel-box">
+                <img
+                  src="oryntela-favicon-32.png"
+                  alt="32 pixel favicon"
+                  width="160"
+                  height="160"
+                />
+              </div>
+              <strong>32 × 32</strong><small>Pass · aperture</small>
+            </div>
+            <div class="size-item">
+              <div class="pixel-box">
+                <img
+                  src="oryntela-favicon-48.png"
+                  alt="48 pixel favicon"
+                  width="168"
+                  height="168"
+                />
+              </div>
+              <strong>48 × 48</strong><small>Pass · terminal</small>
+            </div>
+          </div>
+          <div class="app-card">
+            <img src="oryntela-app-icon-256.png" alt="Oryntela app icon" />
+            <div class="app-caption">
+              Transparent app icon · no rounded-square dependency<br />64 / 128
+              / 256 / 512px checked
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div class="section-number">04 · Colour</div>
+          <div>
+            <h2>Midnight leads. Copper distinguishes.</h2>
+            <p class="section-intro">
+              Mineral blue supports product meaning; semantic success, warning,
+              error and information colours remain separate.
+            </p>
+          </div>
+        </div>
+        <div class="palette">
+          <div class="swatch midnight">
+            <strong>Midnight</strong><code>#0E1B32</code>
+          </div>
+          <div class="swatch warm">
+            <strong>Warm off-white</strong><code>#F6F4EF</code>
+          </div>
+          <div class="swatch copper">
+            <strong>Copper accent</strong><code>#C96B45</code>
+          </div>
+          <div class="swatch mineral">
+            <strong>Mineral blue</strong><code>#204E5A</code>
+          </div>
+        </div>
+        <div class="token-strip">
+          <div class="token">
+            <span>brand-primary</span><strong>#0E1B32</strong>
+          </div>
+          <div class="token">
+            <span>brand-background</span><strong>#F6F4EF</strong>
+          </div>
+          <div class="token">
+            <span>brand-secondary</span><strong>#204E5A</strong>
+          </div>
+          <div class="token">
+            <span>brand-accent</span><strong>#C96B45</strong>
+          </div>
+          <div class="token">
+            <span>brand-focus</span><strong>#C96B45</strong>
+          </div>
+          <div class="token">
+            <span>brand-surface</span><strong>#FFFFFF</strong>
+          </div>
+          <div class="token">
+            <span>brand-text</span><strong>#0E1B32</strong>
+          </div>
+          <div class="token">
+            <span>brand-muted</span><strong>#59687A</strong>
+          </div>
+          <div class="token">
+            <span>brand-border</span><strong>#7C8999</strong>
+          </div>
+          <div class="token">
+            <span>deep canvas</span><strong>#07101F</strong>
+          </div>
+        </div>
+        <div class="contrast-note">
+          <p>
+            Midnight on warm: 15.64:1. Warm on deep canvas: 17.32:1. Muted slate
+            on warm: 5.18:1. Copper focus against warm: 3.37:1. White normal
+            text on copper is prohibited at 3.70:1; use midnight text where
+            needed.
+          </p>
+          <strong>WCAG identity checks · Pass</strong>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div class="section-number">05 · Typography</div>
+          <div>
+            <h2>
+              Geist carries the system. The wordmark remains its own drawing.
+            </h2>
+            <p class="section-intro">
+              One family keeps product, document and future marketing hierarchy
+              coherent. No font purchase and no remote font service.
+            </p>
+          </div>
+        </div>
+        <div class="type-specimen">
+          <div class="type-main">
+            <p class="eyebrow">Geist Sans · 600</p>
+            <p class="display">
+              Every signal points to the next deliberate move.
+            </p>
+            <p class="body-copy">
+              Oryntela turns evidence across the sales journey into a clearer
+              view of risk, momentum and action. Body copy uses regular weight,
+              normal tracking and generous line height.
+            </p>
+          </div>
+          <div class="type-meta">
+            <p class="eyebrow">Tabular figures</p>
+            <div class="numbers">$1,248,900</div>
+            <div class="numbers">73.4%</div>
+            <p>
+              Use lining, tabular numerals for forecasts, targets, prices and
+              dense tables.
+            </p>
+            <p><strong>Weights:</strong><br />400 · 500 · 600 · 700</p>
+            <p>
+              <strong>Fallback:</strong><br />Helvetica Neue, Arial, sans-serif
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div class="section-number">06 · Product fit</div>
+          <div>
+            <h2>Credible at the size users will actually see.</h2>
+            <p class="section-intro">
+              Review mockups only. These frames do not change the application
+              shell or begin the WO-052 migration.
+            </p>
+          </div>
+        </div>
+        <div class="mock-grid">
+          <article class="mock">
+            <div class="mock-title">
+              <span>Product header</span><span class="pass">Pass</span>
+            </div>
+            <div class="product-shell">
+              <nav class="product-nav">
+                <img src="oryntela-logo-primary.svg" alt="Oryntela" />
+                <span class="nav-item active">Home</span>
+                <span class="nav-item">Prospect</span>
+                <span class="nav-item">Engage</span>
+                <span class="nav-item">Pipeline</span>
+                <span class="profile"></span>
+              </nav>
+              <div class="product-content">
+                <h3>Good morning, Kevin.</h3>
+                <p>
+                  Your commercial priorities, grounded in the latest evidence.
+                </p>
+                <div class="metric-row">
+                  <div class="metric">
+                    <span>Weighted pipeline</span><strong>$1.24m</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Forecast confidence</span><strong>73.4%</strong>
+                  </div>
+                  <div class="metric">
+                    <span>Next actions</span><strong>08</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="mock">
+            <div class="mock-title">
+              <span>Login context</span><span class="pass">Pass</span>
+            </div>
+            <div class="login-stage">
+              <div class="login-panel">
+                <img src="oryntela-logo-primary.svg" alt="Oryntela" />
+                <h3>Welcome back</h3>
+                <p>Continue to your organisation’s sales workspace.</p>
+                <div class="field"></div>
+                <div class="field"></div>
+                <div class="button">Continue securely</div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div class="section-number">07 · External fit</div>
+          <div>
+            <h2>Calm enough for customers. Strong enough for decisions.</h2>
+            <p class="section-intro">
+              Deal Room and document-cover tests keep external presentation
+              separate from internal product chrome.
+            </p>
+          </div>
+        </div>
+        <div class="mock-grid">
+          <article class="mock">
+            <div class="mock-title">
+              <span>External Deal Room</span><span class="pass">Pass</span>
+            </div>
+            <div class="deal-room">
+              <header>
+                <img src="oryntela-logo-dark.svg" alt="Oryntela" />
+                <span>Prepared for Acme Australia</span>
+              </header>
+              <h3>A shared path to commercial confidence.</h3>
+              <p>
+                Your agreed outcomes, evidence and next steps—kept current in
+                one customer-ready view.
+              </p>
+              <div class="deal-assets">
+                <div class="deal-asset">
+                  <strong>Business Case</strong
+                  ><small>Approved · 8 Sep 2026</small>
+                </div>
+                <div class="deal-asset">
+                  <strong>Mutual plan</strong
+                  ><small>Next milestone · 15 Sep</small>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="mock">
+            <div class="mock-title">
+              <span>Business Case cover</span><span class="pass">Pass</span>
+            </div>
+            <div class="document">
+              <img src="oryntela-logo-primary.svg" alt="Oryntela" />
+              <h3>Business Case<br />for Acme Australia</h3>
+              <div class="rule"></div>
+              <p>Commercial value, evidence and an agreed path forward.</p>
+              <footer>
+                Prepared 9 September 2026 · Confidential review draft
+              </footer>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div class="section-number">08 · Future website fit</div>
+          <div>
+            <h2>Product proof before category theatre.</h2>
+            <p class="section-intro">
+              Minimal future header/hero test only. WO-053 owns the marketing
+              website and final tagline.
+            </p>
+          </div>
+        </div>
+        <article class="mock">
+          <div class="mock-title">
+            <span>Website header / hero</span><span class="pass">Pass</span>
+          </div>
+          <div class="website">
+            <nav class="site-nav">
+              <img src="oryntela-logo-primary.svg" alt="Oryntela" />
+              <span>Platform</span><span>Solutions</span><span>Resources</span>
+              <span class="site-cta">Request a demo</span>
+            </nav>
+            <div class="site-hero">
+              <div>
+                <p class="eyebrow">
+                  The end-to-end sales platform · context only
+                </p>
+                <h3>See the whole sales journey. Move with clarity.</h3>
+                <p>
+                  One connected view of relationships, evidence, pipeline and
+                  the next deliberate action.
+                </p>
+                <div class="site-actions">
+                  <span class="primary-action">Request a demo</span
+                  ><span>Explore the platform</span>
+                </div>
+              </div>
+              <div class="product-proof">
+                <div class="proof-top"><i></i><i></i><i></i></div>
+                <div class="proof-chart">
+                  <div class="proof-chip">Momentum improving · 12%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="section dark">
+        <div class="section-head">
+          <div class="section-number">09 · Usage rules</div>
+          <div>
+            <h2>Restraint is part of the identity.</h2>
+            <p class="section-intro">
+              A small system is easier to protect and easier to use
+              consistently.
+            </p>
+          </div>
+        </div>
+        <div class="rules">
+          <div class="rule-card">
+            <strong>Clear space</strong>
+            <p>
+              Let x equal the meridian stroke width. Keep at least 1.5x clear on
+              every side of every logo variant.
+            </p>
+          </div>
+          <div class="rule-card">
+            <strong>Minimum size</strong>
+            <p>
+              Horizontal: 144px wide.<br />Wordmark: 96px wide.<br />Symbol:
+              16px square.
+            </p>
+          </div>
+          <div class="rule-card">
+            <strong>Never</strong>
+            <ul>
+              <li>stretch, rotate or restyle;</li>
+              <li>add glow, gradient or shadow;</li>
+              <li>retype the wordmark;</li>
+              <li>make copper dominant; or</li>
+              <li>use low-contrast backgrounds.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <img src="oryntela-logo-dark.svg" alt="Oryntela" />
+        <div>
+          <strong>Owner-approved identity · production not yet applied</strong>
+          <span
+            >Legal clearance is not claimed · Production code unchanged · AUD $0
+            new spend · No customer data · No migration · WO-052 not started</span
+          >
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>

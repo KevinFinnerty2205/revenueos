@@ -1,0 +1,32 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 760 180"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">
+    Oryntela concept S1 — Oryntela Standard Pure Wordmark
+  </title>
+  <desc id="desc">
+    Non-final wordmark-only concept with restrained custom spacing and a subtle
+    directional terminal.
+  </desc>
+  <text
+    x="42"
+    y="118"
+    fill="#111827"
+    font-family="Geist, 'Avenir Next', Arial, sans-serif"
+    font-size="82"
+    font-weight="600"
+    letter-spacing="-1.4"
+  >
+    Oryntela
+  </text>
+  <path
+    d="M355 132h28"
+    fill="none"
+    stroke="#D46A4C"
+    stroke-linecap="round"
+    stroke-width="5"
+  />
+</svg>
