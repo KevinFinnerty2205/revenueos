@@ -827,7 +827,14 @@ def test_postgresql_handover_rls_source_versioning_guards_and_concurrency(
                     select(ClosedWonHandover.lock_version).where(ClosedWonHandover.organisation_id == organisation_a_id)
                 )
                 assert handover_version_before is not None
-                assert handover_version_after == handover_version_before + 1
+                # The status correction always retires the current approved
+                # revision. If approval obtains the row lock first, it commits
+                # one valid version bump before the correction retires it and
+                # bumps again; if correction wins, approval fails stale/not-won.
+                assert handover_version_after in {
+                    handover_version_before + 1,
+                    handover_version_before + 2,
+                }
                 automatic_audit = await session.scalar(
                     select(ClosedWonHandoverAuditEvent)
                     .where(
