@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This record belongs to the WO-051 approved-candidate identity package. It does
+This record belongs to the owner-approved WO-051 identity package. It does
 not add a font package to the application, alter production typography or start
 WO-052.
 
@@ -18,7 +18,7 @@ WO-052.
 - **Spend:** AUD $0
 
 The upstream repository identifies Geist as OFL-1.1 and provides the same
-copyright notice and licence text retained here. The candidate wordmark is stored
+copyright notice and licence text retained here. The approved wordmark is stored
 as self-contained vector outlines with optical spacing and a selected alternate
 letterform; it has no live-text, embedded-font or remote-font dependency. No Geist
 font binary is committed by WO-051.
@@ -26,7 +26,7 @@ font binary is committed by WO-051.
 If WO-052 later self-hosts Geist for product text, that implementation must add
 only the required WOFF2 weights/subsets, retain this licence notice with the font
 distribution, test the shipped character set and record the exact package/version.
-This candidate record does not itself authorise that production change.
+This licence record does not itself authorise that production change.
 
 ## Other third-party assets
 

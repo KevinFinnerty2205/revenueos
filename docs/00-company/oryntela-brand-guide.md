@@ -1,15 +1,14 @@
-# Oryntela practical brand guide — final identity candidate
+# Oryntela practical brand guide — owner-approved identity
 
-> **FINAL CANDIDATE — OWNER SIGN-OFF REQUIRED**
-> Status: WO-051 design and documentation only. Do not use these assets in
-> production until Kevin gives explicit final owner sign-off and separately
-> authorises WO-052.
+> **OWNER-APPROVED BRAND IDENTITY — PRODUCTION IMPLEMENTATION NOT YET APPLIED**
+> Status: canonical WO-051 design and documentation source. Do not use these
+> assets in production until Kevin separately authorises WO-052.
 
 ## 1. Identity summary
 
 ### Selected direction
 
-The final candidate is **Meridian / Direction**: M1 supplies the brand idea and
+The approved identity is **Meridian / Direction**: M1 supplies the brand idea and
 logo architecture; M3 contributes only small-size discipline and shape economy.
 The result is a refinement of M1, not a mechanical composite.
 
@@ -133,7 +132,7 @@ Copper is an accent, not the dominant colour. Do not use white normal-sized text
 on copper: the contrast is only 3.70:1 on `#FFFFFF`. If a copper control is later
 approved, use midnight text, which is 4.64:1, and test every interaction state.
 
-### Candidate semantic tokens
+### Brand semantic tokens
 
 The reusable light and dark token maps are in
 [`brand-tokens.json`](assets/oryntela-brand/brand-tokens.json). The minimum brand
@@ -158,7 +157,7 @@ tokens. Never substitute brand copper or mineral blue for those meanings.
 Ratios below use WCAG relative luminance. Text combinations meet WCAG AA for their
 stated size; essential non-text boundaries and focus indicators meet 3:1.
 
-| Combination                    |   Ratio | Candidate use               | Result                |
+| Combination                    |   Ratio | Approved use                | Result                |
 | ------------------------------ | ------: | --------------------------- | --------------------- |
 | Midnight on warm off-white     | 15.64:1 | Body/display text and logo  | Pass AAA              |
 | Midnight on white              | 17.19:1 | Product text and controls   | Pass AAA              |
@@ -201,7 +200,7 @@ service, and must retain the OFL notice.
 
 The official Geist repository and licence were rechecked on 9 September 2026 at
 revision `10dc7658f13c38a474cde201bb09a4617267545b`. It identifies Geist as licensed
-under SIL OFL 1.1. The candidate package contains the upstream licence text but no
+under SIL OFL 1.1. The WO-051 package contains the upstream licence text but no
 font binary. See
 [`THIRD-PARTY-LICENCES.md`](assets/oryntela-brand/THIRD-PARTY-LICENCES.md).
 
@@ -271,7 +270,7 @@ On 9 September 2026, the final symbol and lockup were compared again with the
 current public visual identities previously audited for Salesforce, HubSpot, Gong,
 Clari, Outreach, Salesloft, Apollo and Pipedrive, and with ORYNTECH public material.
 
-- The final candidate does not use the reviewed category's cloud, connector node,
+- The approved identity does not use the reviewed category's cloud, connector node,
   sparkle/starburst, agent character, infinity loop, purple-gradient orb or closed
   circular-gradient device.
 - The symbol stays asymmetric and open, while ORYNTECH public material reviewed in
@@ -290,14 +289,11 @@ before irreversible public investment.
 
 ## 13. Status and approval boundary
 
-The candidate package contains no customer data, migration or production code
-change. New spend is AUD $0. The current module names remain unchanged. PR #81 must
-remain **open, draft and unmerged**.
+The owner-approved package contains no customer data, migration or production code
+change. New spend is AUD $0. The current module names remain unchanged. Kevin gave
+final owner sign-off on 9 September 2026 and authorised PR #81 for the normal
+protected merge workflow.
 
-After Kevin inspects the final review board, the permitted responses are:
-
-- explicit final owner sign-off; or
-- a bounded refinement request within WO-051.
-
-Do not begin WO-052, apply the candidate assets to production, change RevenueOS
-references or lock a tagline before that explicit sign-off.
+This approval selects the permanent identity and makes these files the canonical
+source for WO-052. It does not apply the identity to production, change RevenueOS
+references, authorise WO-052 or lock a tagline. WO-052 has not started.

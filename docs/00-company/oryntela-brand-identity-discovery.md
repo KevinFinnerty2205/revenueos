@@ -1,32 +1,33 @@
 # Oryntela brand identity discovery
 
 - **Work order:** WO-051 — discovery, owner-selection concept round and final
-  identity candidate
-- **Prepared:** 8 September 2026; concept round and final candidate added
+  brand identity approval
+- **Prepared:** 8 September 2026; final identity approved
   9 September 2026 (Australia/Sydney)
 - **Repository baseline:** `5e211c723de759b07bcd6785156f85c087a2bd29`
-- **Status:** Final identity candidate complete; final owner sign-off required
+- **Status:** Owner-approved brand identity; production implementation not yet
+  applied
 - **Selected direction:** **HYBRID — M1 Meridian / Direction base with
   M3-influenced small-size simplification**
-- **Implementation authority:** Documentation and candidate assets only. This
-  document does not authorise a production logo, colour, typography, favicon,
-  metadata, product-name or UI change.
+- **Implementation authority:** Canonical WO-051 documentation and identity assets
+  only. Owner approval does not authorise a production logo, colour, typography,
+  favicon, metadata, product-name or UI change; WO-052 requires separate authority.
 - **Trade-mark boundary:** No professional word-mark or device clearance has been
   completed. Nothing here is legal advice or a clearance claim.
 
-## Final owner review in one minute
+## Final owner approval in one minute
 
 Kevin selected the M1 Meridian / Direction idea and architecture, with M3 used only
-to improve shape economy and clarity at 16–48px. The resulting candidate keeps the
+to improve shape economy and clarity at 16–48px. The approved identity keeps the
 open asymmetric course and rising meridian, removes non-essential complexity and
 uses one restrained copper terminal. It remains strong in one colour.
 
 Review the single
 [final owner board](assets/oryntela-brand/oryntela-final-review-board.png), then the
 [practical brand guide](oryntela-brand-guide.md) and
-[candidate asset manifest](assets/oryntela-brand/README.md). The only remaining
-WO-051 decision is explicit final owner sign-off or a bounded refinement request.
-No production implementation or WO-052 work is authorised yet.
+[canonical asset manifest](assets/oryntela-brand/README.md). Kevin gave final owner
+sign-off on 9 September 2026 and authorised PR #81 for the normal protected merge
+workflow. No production implementation or WO-052 work is authorised yet.
 
 ## Scope and facts
 
@@ -697,23 +698,23 @@ After selection, the next action is the **final WO-051 identity package**: refin
 logo, wordmark, symbol, variants, favicon/app icon, palette, typography, guide and
 tokens, followed by final owner approval. Do not begin WO-052 before that approval.
 
-## Final WO-051 identity candidate
+## Final WO-051 owner-approved brand identity
 
 The selected hybrid was refined into one designed mark rather than a mechanical
 combination. M1's open course, asymmetry, negative space and rising directional
 tension remain. M3 contributes the two-stroke economy, compact silhouette and
 one-colour strength required at browser-tab size.
 
-Final candidate outputs:
+Canonical outputs:
 
 - [Final owner-review board](assets/oryntela-brand/oryntela-final-review-board.png)
 - [Browser review source](assets/oryntela-brand/oryntela-final-review.html)
 - [Practical brand guide](oryntela-brand-guide.md)
-- [Canonical candidate asset manifest](assets/oryntela-brand/README.md)
+- [Canonical asset manifest](assets/oryntela-brand/README.md)
 - [Primary horizontal logo](assets/oryntela-brand/oryntela-logo-primary.svg)
 - [Standalone symbol](assets/oryntela-brand/oryntela-symbol.svg)
 - [Outlined wordmark](assets/oryntela-brand/oryntela-wordmark.svg)
-- [Candidate tokens](assets/oryntela-brand/brand-tokens.json)
+- [Brand tokens](assets/oryntela-brand/brand-tokens.json)
 - [Geist licence record](assets/oryntela-brand/THIRD-PARTY-LICENCES.md)
 
 The title-case `Oryntela` wordmark was selected after comparing title-case and
@@ -722,13 +723,13 @@ pair-specific spacing and single-storey alternate `a` create a calmer, less gene
 result than the concept's uniformly tracked capitals. The wordmark is stored as
 outlines and has no live-font dependency.
 
-The Meridian Ink base values remain appropriate as final candidate colours:
+The approved Meridian Ink base values are:
 Midnight `#0E1B32`, warm off-white `#F6F4EF`, copper `#C96B45` and mineral blue
 `#204E5A`. Copper remains a distinguishing accent and is prohibited as a white-text
 normal-size button fill. Exact light/dark roles and verified contrast pairs are in
 the guide and token file.
 
-Geist is the approved candidate family for display and UI. The upstream licence was
+Geist is the approved family for display and UI. The upstream licence was
 rechecked as SIL OFL 1.1 at revision
 `10dc7658f13c38a474cde201bb09a4617267545b`; the package retains the licence text
 but does not distribute a font binary or alter production typography.
@@ -769,10 +770,15 @@ concept-round reference. This older list is not the current selection form.
 
 ## Final checkpoint
 
-**READY FOR FINAL OWNER BRAND SIGN-OFF:**
+**OWNER-APPROVED BRAND IDENTITY:**
 
 **YES**
 
-The final candidate package is complete. Do not merge PR #81, apply the identity to
-production or begin WO-052 until Kevin explicitly signs off or requests a bounded
-WO-051 refinement.
+**PRODUCTION IMPLEMENTATION — NOT YET APPLIED:**
+
+**YES**
+
+Kevin gave final owner sign-off on 9 September 2026. The WO-051 package is the
+canonical source for WO-052 and PR #81 is authorised for the normal protected
+merge workflow. Do not apply the identity to production or begin WO-052 without a
+separate owner instruction.

@@ -1,7 +1,8 @@
-# Oryntela final identity candidate assets
+# Oryntela owner-approved brand identity assets
 
-> **FINAL CANDIDATE — OWNER SIGN-OFF REQUIRED.** These files are the canonical
-> WO-051 identity candidate for later WO-052 reuse. They are not yet production
+> **OWNER-APPROVED BRAND IDENTITY — PRODUCTION IMPLEMENTATION NOT YET APPLIED.**
+> These files are the canonical WO-051 identity source for later WO-052 reuse.
+> They are not yet production
 > assets and must not replace the current application logo, favicon, metadata,
 > tokens, authentication branding, documents, emails or public website.
 
@@ -23,7 +24,7 @@ meridian; it does not mechanically combine the two concept icons.
 - `oryntela-wordmark.svg` — outlined title-case wordmark.
 - `oryntela-symbol.svg` — primary standalone symbol.
 - `oryntela-symbol-monochrome.svg` — black one-colour symbol.
-- `oryntela-favicon.svg` — small-size candidate source.
+- `oryntela-favicon.svg` — small-size source.
 - `oryntela-app-icon.svg` — transparent app-icon source with safe zone.
 - `oryntela-social-profile.svg` — optional midnight social/profile treatment.
 
@@ -47,7 +48,7 @@ requires it.
 
 ## System files
 
-- `brand-tokens.json` — candidate light/dark brand tokens; semantic status colours
+- `brand-tokens.json` — approved light/dark brand tokens; semantic status colours
   remain deliberately separate.
 - `THIRD-PARTY-LICENCES.md` and `GEIST-OFL-1.1.txt` — dated Geist licence record.
 - [`../../oryntela-brand-guide.md`](../../oryntela-brand-guide.md) — practical
@@ -56,5 +57,6 @@ requires it.
 ## Legal and implementation boundary
 
 Owner-approved design work is not trade-mark or device-mark clearance. Qualified
-professional review remains deferred. PR #81 must stay open, draft and unmerged
-until Kevin gives explicit final owner sign-off. WO-052 has not started.
+professional review remains deferred. Kevin gave final owner sign-off on
+9 September 2026 and authorised PR #81 for the normal protected merge workflow.
+WO-052 has not started, and this approval does not authorise production changes.

@@ -1,7 +1,7 @@
 {
-  "status": "approved-candidate-pending-final-owner-sign-off",
-  "version": "0.1.0-candidate",
-  "scope": "WO-051 documentation and review assets only; not production tokens",
+  "status": "owner-approved-brand-identity",
+  "version": "1.0.0",
+  "scope": "Canonical WO-051 source for future WO-052 implementation; not production tokens",
   "colour": {
     "core": {
       "midnight": "#0E1B32",
