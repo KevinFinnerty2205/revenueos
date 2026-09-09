@@ -1,6 +1,6 @@
 # WO-052 — Oryntela customer-facing rebrand
 
-- **Status:** Implementation complete; engineering review pending
+- **Status:** Engineering review complete; merge pending
 - **Date:** 2026-09-09
 - **Baseline:** `0fc6bdb946a0d59ac37e229791e4ea3b5e124bbd`
 - **Branch:** `codex/wo-052-oryntela-customer-facing-rebrand`
@@ -41,12 +41,29 @@ database identifier, migration, stable API route/field, production activation,
 DNS, Zoho configuration or customer data changed. WO-053, WO-054, WO-055 and
 WO-045 remain outside this work order.
 
+## Engineering review corrections
+
+The independent PR review found and corrected five bounded production defects
+plus one regression-test gap before merge:
+
+- one synthetic demo proposal still emitted the former product name;
+- three Prospect messages used the incorrect article “a Oryntela”;
+- the HubSpot interaction marker rename could have missed an activity written
+  before the rebrand and created a duplicate on retry; new writes now use the
+  Oryntela marker while reconciliation recognises both marker generations;
+- the shipped-SVG regression check now also rejects event handlers, protocol-
+  relative or data references, CSS URLs and imports.
+
+Regression coverage fixes the demo output and grammar at the customer boundary,
+proves legacy HubSpot marker reconciliation without a second write, and tightens
+the inert local-SVG contract. No production provider was activated.
+
 ## Validation record
 
 The implementation handoff and draft pull request contain the exact final command
 results and screenshot list. Required gates cover formatting, lint, typechecking,
-285 web unit tests, 77 Playwright journeys, production web build, API formatting/
-lint/typechecking, 1,272 API tests, API build, PostgreSQL zero-to-head migration,
+286 web unit tests, 77 Playwright journeys, production web build, API formatting/
+lint/typechecking, 1,273 API tests, API build, PostgreSQL zero-to-head migration,
 RLS/drift proof, dependency and secret/prohibited-scope audits, generated output
 checks and final brand rescan.
 

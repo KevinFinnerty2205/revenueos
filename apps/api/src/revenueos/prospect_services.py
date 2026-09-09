@@ -513,7 +513,7 @@ class ProspectService:
                 company_id=company.id,
                 company_name=company.name,
                 research_target_id=target.id,
-                message="This research is already attached to a Oryntela account.",
+                message="This research is already attached to an Oryntela account.",
             )
         current = await self.repository.current_run(self.tenant.organisation_id, target.id)
         if current is None:

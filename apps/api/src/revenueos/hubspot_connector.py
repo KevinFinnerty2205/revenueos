@@ -1267,8 +1267,8 @@ class HubSpotCRMExecutor(ActionExecutor):
     ) -> ExecutorResult:
         payload = cast(LogInteractionPayload, action.payload)
         assert action.external_target is not None
-        marker = f"Oryntela execution {hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]}"
-        existing = await self._find_activity(context, marker)
+        marker = self._activity_markers(idempotency_key)[0]
+        existing = await self._find_compatible_activity(context, idempotency_key)
         if len(existing) == 1:
             return ExecutorResult(
                 external_result_id=existing[0].id,
@@ -1299,7 +1299,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         except HubSpotAPIError as exc:
             if exc.uncertain:
                 try:
-                    matches = await self._find_activity(context, marker)
+                    matches = await self._find_compatible_activity(context, idempotency_key)
                 except (RetryableExecutionFailure, PermanentExecutionFailure):
                     raise UnknownExternalStateFailure(
                         "unknown_external_state",
@@ -1331,10 +1331,7 @@ class HubSpotCRMExecutor(ActionExecutor):
         """Read-only recovery check; never creates another activity."""
         if not isinstance(action.payload, LogInteractionPayload):
             raise PermanentExecutionFailure("unsupported_action", "This is not a HubSpot activity Action.")
-        matches = await self._find_activity(
-            context,
-            f"Oryntela execution {hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]}",
-        )
+        matches = await self._find_compatible_activity(context, idempotency_key)
         if not matches:
             return None
         if len(matches) > 1:
@@ -1349,6 +1346,25 @@ class HubSpotCRMExecutor(ActionExecutor):
             state={"reconciled": True},
             safe_message="The HubSpot activity was found and reconciled without creating a duplicate.",
         )
+
+    @staticmethod
+    def _activity_markers(idempotency_key: str) -> tuple[str, str]:
+        marker_id = hashlib.sha256(idempotency_key.encode()).hexdigest()[:24]
+        return (
+            f"Oryntela execution {marker_id}",
+            f"RevenueOS execution {marker_id}",
+        )
+
+    async def _find_compatible_activity(
+        self,
+        context: ExecutorConnectionContext,
+        idempotency_key: str,
+    ) -> list[HubSpotRecord]:
+        matches: dict[str, HubSpotRecord] = {}
+        for marker in self._activity_markers(idempotency_key):
+            for record in await self._find_activity(context, marker):
+                matches[record.id] = record
+        return list(matches.values())
 
     async def _find_activity(
         self,

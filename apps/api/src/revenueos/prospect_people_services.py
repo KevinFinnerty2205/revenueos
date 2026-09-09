@@ -449,7 +449,7 @@ class ProspectPeopleService:
                 contact_id=promoted_contact.id,
                 company_id=promoted_contact.company_id,
                 prospect_person_id=person.id,
-                message="This public professional research is already linked to a Oryntela Contact.",
+                message="This public professional research is already linked to an Oryntela Contact.",
             )
         current = await self.repository.current_person_run(self.tenant.organisation_id, person.id)
         if current is None:

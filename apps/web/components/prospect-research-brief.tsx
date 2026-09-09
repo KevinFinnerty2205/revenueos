@@ -624,7 +624,7 @@ export function ProspectResearchBriefView({
             <p className="mt-3 text-sm leading-6 text-slate-600">
               {brief.existingCompanyMatch
                 ? `Attach this public research to ${brief.existingCompanyMatch.name}. No duplicate Account will be created.`
-                : "This creates a Oryntela CRM Account using the reviewed company details. It will not create an Opportunity or Contact automatically."}
+                : "This creates an Oryntela CRM Account using the reviewed company details. It will not create an Opportunity or Contact automatically."}
             </p>
             <dl className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm">
               <div>

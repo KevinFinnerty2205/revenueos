@@ -20,16 +20,32 @@ const requiredAssets = [
   "oryntela-app-icon-512.png",
 ] as const;
 
-function sourceFiles(directory: string): string[] {
+function sourceFiles(
+  directory: string,
+  extensions = /\.(?:ts|tsx)$/u,
+): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const path = join(directory, entry);
-    if (statSync(path).isDirectory()) return sourceFiles(path);
-    if (!/\.(?:ts|tsx)$/u.test(entry) || /\.test\.(?:ts|tsx)$/u.test(entry)) {
+    if (statSync(path).isDirectory()) return sourceFiles(path, extensions);
+    if (!extensions.test(entry) || /\.test\.(?:ts|tsx)$/u.test(entry)) {
       return [];
     }
     return [path];
   });
 }
+
+it("uses the correct article before the Oryntela name", () => {
+  const roots = [
+    ...productionRoots.map((root) => join(process.cwd(), root)),
+    join(process.cwd(), "..", "api", "src", "revenueos"),
+  ];
+  const failures = roots.flatMap((root) =>
+    sourceFiles(root, /\.(?:py|ts|tsx)$/u).filter((path) =>
+      /\ba Oryntela\b/u.test(readFileSync(path, "utf8")),
+    ),
+  );
+  expect(failures).toEqual([]);
+});
 
 describe("Oryntela production brand surface", () => {
   it("contains no standalone legacy display name, placeholder R, or legacy teal brand utility", () => {
@@ -68,7 +84,7 @@ describe("Oryntela production brand surface", () => {
     for (const asset of svgFiles) {
       const source = readFileSync(join(assetRoot, asset), "utf8");
       expect(source).not.toMatch(
-        /<script|<foreignObject|\s(?:href|xlink:href|src)\s*=\s*["']https?:\/\//iu,
+        /<script|<foreignObject|\son[a-z]+\s*=|\s(?:href|xlink:href|src)\s*=\s*["'](?:https?:|\/\/|data:)|url\s*\(|@import/iu,
       );
     }
   });
