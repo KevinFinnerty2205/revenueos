@@ -183,6 +183,11 @@ function dailyResponse(overrides: Record<string, unknown> = {}) {
 
 async function routeDaily(page: Page, response = dailyResponse()) {
   let requests = 0;
+  page.on("requestfinished", (request) => {
+    if (request.url().startsWith("http://localhost:8000/api/v1/daily")) {
+      requests += 1;
+    }
+  });
   await page.route(
     "http://localhost:8000/api/v1/manager/deal-attention**",
     async (route) => {
@@ -241,7 +246,6 @@ async function routeDaily(page: Page, response = dailyResponse()) {
     },
   );
   await page.route("http://localhost:8000/api/v1/daily**", async (route) => {
-    requests += 1;
     await route.fulfill({ json: response });
   });
   return () => requests;
