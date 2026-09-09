@@ -6,7 +6,8 @@ This is the canonical product and engineering documentation index. Documents dis
 
 1. [Company vision](00-company/vision.md)
    - [Oryntela owner register](00-company/oryntela-owner-register.md) — approved brand, domain and business-email facts
-   - [Oryntela brand identity discovery](00-company/oryntela-brand-identity-discovery.md) — WO-051 owner-review brief; no final visual direction or implementation approved
+   - [Oryntela brand identity discovery](00-company/oryntela-brand-identity-discovery.md) — WO-051 discovery and five-concept owner-selection round; no final visual direction or implementation approved
+     - [Oryntela concept contact sheet](00-company/assets/oryntela-brand-concepts/oryntela-concept-contact-sheet.png) — M1–M3 and S1–S2 comparison; concept, not final
    - [Oryntela brand-surface inventory](00-company/oryntela-brand-surface-inventory.csv) — machine-useful WO-052 rebrand surface map
    - [Oryntela preliminary trade-mark preparation](00-company/oryntela-trademark-preparation.md) — dated search record and adviser handoff; not legal clearance
    - [Oryntela trade mark adviser shortlist](00-company/oryntela-trademark-adviser-shortlist.md) — parked adviser research; professional review and filing deferred by owner

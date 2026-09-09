@@ -1,0 +1,36 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 760 180"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">
+    Oryntela concept S2 — Oryntela Standard Wordmark and Minimal Mark
+  </title>
+  <desc id="desc">
+    Non-final wordmark-led concept with a compact open-bracket O and Y monogram.
+  </desc>
+  <g fill="none" stroke="#111827" stroke-linecap="round" stroke-width="16">
+    <path d="M67 34C43 43 31 63 31 90s12 47 36 56" />
+    <path d="M107 34c24 9 36 29 36 56s-12 47-36 56" />
+  </g>
+  <path
+    d="m63 59 24 30 24-30M87 89v34"
+    fill="none"
+    stroke="#2455C3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="13"
+  />
+  <text
+    x="172"
+    y="113"
+    fill="#111827"
+    font-family="Geist, 'Avenir Next', Arial, sans-serif"
+    font-size="64"
+    font-weight="600"
+    letter-spacing=".5"
+  >
+    Oryntela
+  </text>
+</svg>

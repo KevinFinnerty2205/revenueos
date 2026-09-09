@@ -1,9 +1,10 @@
 # Oryntela brand identity discovery
 
-- **Work order:** WO-051 — discovery and design preparation only
-- **Prepared:** 8 September 2026 (Australia/Sydney)
+- **Work order:** WO-051 — discovery and owner-selection concept round only
+- **Prepared:** 8 September 2026; concept round added 9 September 2026
+  (Australia/Sydney)
 - **Repository baseline:** `5e211c723de759b07bcd6785156f85c087a2bd29`
-- **Status:** Complete for owner visual review; no direction selected
+- **Status:** Concept round complete; owner selection required; no direction selected
 - **Implementation authority:** None. This document does not authorise a logo,
   colour, typography, favicon, metadata, product-name or UI change.
 - **Trade-mark boundary:** No professional word-mark or device clearance has been
@@ -560,9 +561,151 @@ WO-052 does not imply a website build; WO-053 owns the marketing website. The fi
 identity should nonetheless supply WO-053 with logo variants, tokens, typography,
 product screenshot treatment, iconography and social-card requirements.
 
-## Owner decisions required
+## WO-051 visual concept round — owner selection
 
-Only the choices needed before permanent visual design are listed.
+> **CONCEPT — NOT FINAL.** The five options below are narrowing-stage review
+> assets. They are not approved logos, brand tokens, production files or authority
+> to begin WO-052. Production code and canonical product assets remain unchanged.
+
+### Review files
+
+- [Owner contact sheet](assets/oryntela-brand-concepts/oryntela-concept-contact-sheet.png)
+- [Self-contained browser review page](assets/oryntela-brand-concepts/oryntela-concept-review.html)
+- [M1 board — Meridian / Direction](assets/oryntela-brand-concepts/oryntela-concept-m1-board.png)
+- [M2 board — Meridian / Orchestration](assets/oryntela-brand-concepts/oryntela-concept-m2-board.png)
+- [M3 board — Meridian / Abstract Signal](assets/oryntela-brand-concepts/oryntela-concept-m3-board.png)
+- [S1 board — Oryntela Standard / Pure Wordmark](assets/oryntela-brand-concepts/oryntela-concept-s1-board.png)
+- [S2 board — Oryntela Standard / Wordmark + Minimal Mark](assets/oryntela-brand-concepts/oryntela-concept-s2-board.png)
+- [Concept asset manifest and status](assets/oryntela-brand-concepts/README.md)
+
+### Methodology
+
+The round deliberately holds context and craft constant while varying logo
+architecture. M1–M3 use one Meridian palette and S1–S2 use one Standard palette so
+colour does not decide the route by accident. The marks were constructed from
+simple vector geometry or typography, then tested without gradient in colour,
+black on white, white on black, at 16/32/48px, in a neutral app icon, and in
+synthetic header, login and future marketing-header contexts. No customer data,
+stock logo generator, paid font, remote runtime dependency or production UI was
+used.
+
+Geist Sans is the concept-round type reference. Its
+[official repository](https://github.com/vercel/geist-font) states that the family
+is licensed under the SIL Open Font License 1.1. No font file is distributed in
+this round; the concept SVGs retain local system fallbacks. Final wordmark
+outlines, optical kerning and the required licence file belong to the final WO-051
+identity package only after owner selection.
+
+### Five concepts
+
+| Code   | Concept                                         | One-sentence idea                                                                                                       | Logo architecture                                                              | Palette            | Typography                                                                          | Small-size assessment                                                                                  |
+| ------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **M1** | **Meridian / Direction**                        | An open circular course and rising meridian create forward commercial tension without a literal compass, pin or arrow.  | Asymmetric symbol plus tracked uppercase wordmark.                             | Meridian Ink.      | Geist Sans reference; uppercase medium weight with generous tracking.               | Strong silhouette at 16px; copper tip is optional and the one-colour form remains clear.               |
+| **M2** | **Meridian / Orchestration**                    | Three independent paths resolve into one calm operating line without a connected-dot network.                           | Pathway symbol plus title-case wordmark.                                       | Meridian Ink.      | Geist Sans reference; title case and compact semibold rhythm.                       | Readable from 24px; the three-input fork needs final optical spacing to excel at 16px.                 |
+| **M3** | **Meridian / Abstract Signal**                  | Two offset information fields lock around one clear decision aperture.                                                  | Abstract block glyph plus tracked uppercase wordmark.                          | Meridian Ink.      | Geist Sans reference; uppercase medium weight with precise spacing.                 | Best block silhouette at 16px; the central aperture collapses cleanly to monochrome.                   |
+| **S1** | **Oryntela Standard / Pure Wordmark**           | A disciplined wordmark relies on proportion, optical rhythm and one quiet terminal detail instead of a separate symbol. | Wordmark only; initial shown solely as the required browser/app fallback test. | Oryntela Standard. | Geist Sans reference with proposed custom O/Y/N/T/A spacing and terminal treatment. | Excellent in headers; the uncustomised initial carries the weakest standalone recognition.             |
+| **S2** | **Oryntela Standard / Wordmark + Minimal Mark** | A dominant wordmark is paired with a compact open-bracket O/Y ligature for constrained spaces.                          | Wordmark-first lockup plus secondary monogram.                                 | Oryntela Standard. | Geist Sans reference; title-case wordmark remains dominant.                         | O/Y reads at 32px; at 16px the open brackets carry the silhouette and the Y becomes supporting detail. |
+
+### Concept palettes and accessibility
+
+These are review values, not final design tokens.
+
+| Territory | Role               | HEX       | RGB             | Proposed accessible use                                                                                  |
+| --------- | ------------------ | --------- | --------------- | -------------------------------------------------------------------------------------------------------- |
+| Meridian  | Midnight           | `#0E1B32` | `14, 27, 50`    | White text is 17.19:1; suitable for text, navigation and critical controls.                              |
+| Meridian  | Mineral            | `#204E5A` | `32, 78, 90`    | White text is 9.14:1; suitable for text-backed controls, links and focus treatments after state testing. |
+| Meridian  | Copper             | `#C96B45` | `201, 107, 69`  | White is only 3.70:1; decorative/accent use only, not a normal-text button fill. Black is 5.67:1.        |
+| Meridian  | Warm paper         | `#F6F4EF` | `246, 244, 239` | Midnight text is 15.64:1.                                                                                |
+| Standard  | Deep ink           | `#111827` | `17, 24, 39`    | White text is 17.74:1; suitable for text, navigation and critical controls.                              |
+| Standard  | Disciplined cobalt | `#2455C3` | `36, 85, 195`   | White text is 6.64:1; suitable for text-backed controls, links and focus treatments after state testing. |
+| Standard  | Restrained coral   | `#D46A4C` | `212, 106, 76`  | White is only 3.52:1; decorative/accent use only, not a normal-text button fill. Black is 5.97:1.        |
+| Standard  | Paper              | `#F8F6F1` | `248, 246, 241` | Deep-ink text is 16.43:1.                                                                                |
+
+Logo colour is not treated as body text, but every proposed surrounding use must
+still pass the complete focus, hover, disabled, semantic-colour and chart checks
+before any future implementation.
+
+### Internal critique matrix
+
+Scores are a structured critique, not an owner choice. For all rows except the
+last, 10 is strongest. For **risk of visual cliché**, 10 means highest risk.
+
+| Criterion                                  |  M1 |  M2 |  M3 |  S1 |  S2 |
+| ------------------------------------------ | --: | --: | --: | --: | --: |
+| Distinctiveness                            |   8 |   7 |   8 |   6 |   7 |
+| Enterprise credibility                     |   8 |   8 |   7 |   9 |   8 |
+| Simplicity                                 |   8 |   8 |   9 |  10 |   8 |
+| Small-size performance                     |   8 |   6 |   9 |   5 |   8 |
+| Product UI compatibility                   |   8 |   9 |   7 |   9 |   9 |
+| Marketing compatibility                    |   8 |   7 |   8 |   7 |   8 |
+| Memorability                               |   8 |   7 |   8 |   6 |   7 |
+| Monochrome performance                     |   9 |   8 |   9 |  10 |   8 |
+| Risk of visual cliché — 10 is highest risk |   4 |   5 |   4 |   3 |   4 |
+
+Critique notes:
+
+- **M1** has the strongest directional tension, but a final device search must
+  test abstract Q/O and open-course marks across adjacent categories.
+- **M2** explains orchestration immediately and sits naturally in product UI;
+  three-to-one merge geometry is common in workflow and integration products, so
+  the final drawing would need more proprietary proportion.
+- **M3** is the most abstract and most robust at favicon size; without restraint,
+  layered angular fields could drift towards cybersecurity or infrastructure.
+- **S1** is the calmest enterprise option and avoids a separate device conflict;
+  an untouched Geist wordmark would be too generic, so selection would authorise a
+  genuine custom-lettering phase rather than approval of the displayed type.
+- **S2** balances wordmark clarity and compact utility. Its open-bracket revision
+  deliberately avoids the closed gradient ring visible in ORYNTECH's current
+  identity, but the O/Y monogram architecture still requires a professional device
+  search before adoption.
+
+### Similarity sanity check
+
+The five silhouettes were compared with the eight current sales-software brands
+in the competitive audit above and with public material available for the close
+`ORYNTECH`/`ORYNTE` research context on 9 September 2026.
+
+- None uses the category's prominent cloud, AI sparkle/starburst, connected-dot
+  network, infinity loop, agent character, purple-gradient core mark or HubSpot-like
+  connector device.
+- [ORYNTECH](https://www.oryntech.ai/en) currently presents a closed
+  blue/purple/pink gradient circular device, lowercase wordmark and “AI Automation”
+  descriptor. S2 was changed from a closed ring to an open-bracket O/Y ligature
+  after that review. M1 remains asymmetric and course-like rather than a complete
+  ring. Neither observation is a clearance conclusion.
+- M2's merge-path form has the highest generic workflow-symbol risk. M3's angular
+  fields have the highest risk of drifting into cybersecurity/platform language.
+  S1 has the lowest device-similarity exposure but also the lowest inherent device
+  recognition until custom lettering is completed.
+- No reliable public device artwork for `ORYNTE` was located in the bounded review,
+  so no visual comparison is claimed. Its close name/class context remains a high
+  professional fact-verification priority in the preliminary trade-mark record.
+
+**Legal clearance: not claimed.** This was a design sanity check only. Device,
+word-mark, phonetic, jurisdictional and common-law risk require qualified trade-mark
+advice.
+
+### Owner review instructions
+
+Review the contact sheet first, then open the relevant individual boards. Choose
+one of:
+
+- **M1**, **M2**, **M3**, **S1** or **S2**;
+- **HYBRID**, naming the base concept and the exact element(s) to combine; or
+- **NONE — REWORK**, with the visual quality or signal that should change.
+
+Selection does not approve the displayed curves, spacing or colours as final.
+After selection, the next action is the **final WO-051 identity package**: refined
+logo, wordmark, symbol, variants, favicon/app icon, palette, typography, guide and
+tokens, followed by final owner approval. Do not begin WO-052 before that approval.
+
+## Discovery-stage decision record
+
+The original discovery choices are retained below as historical rationale. The
+9 September 2026 owner authorisation narrowed the active decision to the five
+visual concepts above, kept the current module names, deferred the tagline to
+WO-053, set premium/minimal as the first emphasis, and chose Geist as the
+concept-round reference. This older list is not the current selection form.
 
 1. **Preferred design direction:** Meridian, Convergence, Oryntela Standard or
    Copper Field. A mix is acceptable only if one route is named as the structural
@@ -584,7 +727,7 @@ Only the choices needed before permanent visual design are listed.
 
 ## Checkpoint
 
-**READY FOR OWNER BRAND REVIEW:**
+**READY FOR OWNER LOGO SELECTION:**
 
 **YES**
 
