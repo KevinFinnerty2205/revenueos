@@ -1,0 +1,75 @@
+{
+  "status": "approved-candidate-pending-final-owner-sign-off",
+  "version": "0.1.0-candidate",
+  "scope": "WO-051 documentation and review assets only; not production tokens",
+  "colour": {
+    "core": {
+      "midnight": "#0E1B32",
+      "warm-off-white": "#F6F4EF",
+      "copper": "#C96B45",
+      "mineral-blue": "#204E5A",
+      "deep-canvas": "#07101F",
+      "white": "#FFFFFF",
+      "muted-slate": "#59687A",
+      "border-slate": "#7C8999",
+      "dark-muted": "#B9C2CC",
+      "dark-border": "#5A6880"
+    },
+    "light": {
+      "brand-primary": "#0E1B32",
+      "brand-primary-foreground": "#F6F4EF",
+      "brand-secondary": "#204E5A",
+      "brand-accent": "#C96B45",
+      "brand-surface": "#FFFFFF",
+      "brand-background": "#F6F4EF",
+      "brand-text": "#0E1B32",
+      "brand-muted": "#59687A",
+      "brand-border": "#7C8999",
+      "brand-focus": "#C96B45"
+    },
+    "dark": {
+      "brand-primary": "#F6F4EF",
+      "brand-primary-foreground": "#0E1B32",
+      "brand-secondary": "#B9C2CC",
+      "brand-accent": "#C96B45",
+      "brand-surface": "#0E1B32",
+      "brand-background": "#07101F",
+      "brand-text": "#F6F4EF",
+      "brand-muted": "#B9C2CC",
+      "brand-border": "#5A6880",
+      "brand-focus": "#C96B45"
+    },
+    "semantic-boundary": {
+      "success": "separate-product-semantic-token",
+      "warning": "separate-product-semantic-token",
+      "error": "separate-product-semantic-token",
+      "info": "separate-product-semantic-token"
+    }
+  },
+  "typography": {
+    "brand-display": "Geist, Helvetica Neue, Arial, sans-serif",
+    "ui-body": "Geist, Helvetica Neue, Arial, sans-serif",
+    "weights": {
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "tracking": {
+      "display": "-0.02em",
+      "body": "0",
+      "label-uppercase": "0.06em"
+    },
+    "numeric": {
+      "font-variant-numeric": "tabular-nums lining-nums"
+    }
+  },
+  "logo": {
+    "clear-space": "1.5x, where x is the symbol meridian stroke width",
+    "minimum-digital-full-lockup": "144px wide",
+    "minimum-digital-wordmark": "96px wide",
+    "minimum-digital-symbol": "16px square",
+    "minimum-print-full-lockup": "38mm wide",
+    "minimum-print-symbol": "5mm square"
+  }
+}

@@ -1,37 +1,32 @@
 # Oryntela brand identity discovery
 
-- **Work order:** WO-051 — discovery and owner-selection concept round only
-- **Prepared:** 8 September 2026; concept round added 9 September 2026
-  (Australia/Sydney)
+- **Work order:** WO-051 — discovery, owner-selection concept round and final
+  identity candidate
+- **Prepared:** 8 September 2026; concept round and final candidate added
+  9 September 2026 (Australia/Sydney)
 - **Repository baseline:** `5e211c723de759b07bcd6785156f85c087a2bd29`
-- **Status:** Concept round complete; owner selection required; no direction selected
-- **Implementation authority:** None. This document does not authorise a logo,
-  colour, typography, favicon, metadata, product-name or UI change.
+- **Status:** Final identity candidate complete; final owner sign-off required
+- **Selected direction:** **HYBRID — M1 Meridian / Direction base with
+  M3-influenced small-size simplification**
+- **Implementation authority:** Documentation and candidate assets only. This
+  document does not authorise a production logo, colour, typography, favicon,
+  metadata, product-name or UI change.
 - **Trade-mark boundary:** No professional word-mark or device clearance has been
   completed. Nothing here is legal advice or a clearance claim.
 
-## Owner review in one minute
+## Final owner review in one minute
 
-Oryntela should communicate, in the first few seconds, **a composed commercial
-system that turns sales context into clear next decisions**. Intelligence should
-feel present, but AI spectacle should not be the identity. The strongest shared
-qualities across the four routes are clarity, direction, confidence, operational
-trust and ease.
+Kevin selected the M1 Meridian / Direction idea and architecture, with M3 used only
+to improve shape economy and clarity at 16–48px. The resulting candidate keeps the
+open asymmetric course and rising meridian, removes non-essential complexity and
+uses one restrained copper terminal. It remains strong in one colour.
 
-Four deliberately different territories are ready for review:
-
-1. **Meridian** — a precise direction/orchestration symbol with a premium dark
-   foundation.
-2. **Convergence** — an abstract geometric system mark with stronger commercial
-   energy.
-3. **Oryntela Standard** — a distinctive wordmark-led identity with the least
-   visual noise.
-4. **Copper Field** — an unexpected warm, editorial and enterprise-credible
-   identity centred on human commercial judgement.
-
-The owner decisions are collected at the end. They select a route for later design;
-they do not approve any of the hexadecimal values, typefaces or logo descriptions
-as final assets.
+Review the single
+[final owner board](assets/oryntela-brand/oryntela-final-review-board.png), then the
+[practical brand guide](oryntela-brand-guide.md) and
+[candidate asset manifest](assets/oryntela-brand/README.md). The only remaining
+WO-051 decision is explicit final owner sign-off or a bounded refinement request.
+No production implementation or WO-052 work is authorised yet.
 
 ## Scope and facts
 
@@ -685,7 +680,10 @@ in the competitive audit above and with public material available for the close
 word-mark, phonetic, jurisdictional and common-law risk require qualified trade-mark
 advice.
 
-### Owner review instructions
+### Historical owner-selection instructions
+
+> Superseded on 9 September 2026 when Kevin selected **HYBRID: M1 base with
+> M3-influenced small-size simplification**. Retained as the concept-round record.
 
 Review the contact sheet first, then open the relevant individual boards. Choose
 one of:
@@ -698,6 +696,50 @@ Selection does not approve the displayed curves, spacing or colours as final.
 After selection, the next action is the **final WO-051 identity package**: refined
 logo, wordmark, symbol, variants, favicon/app icon, palette, typography, guide and
 tokens, followed by final owner approval. Do not begin WO-052 before that approval.
+
+## Final WO-051 identity candidate
+
+The selected hybrid was refined into one designed mark rather than a mechanical
+combination. M1's open course, asymmetry, negative space and rising directional
+tension remain. M3 contributes the two-stroke economy, compact silhouette and
+one-colour strength required at browser-tab size.
+
+Final candidate outputs:
+
+- [Final owner-review board](assets/oryntela-brand/oryntela-final-review-board.png)
+- [Browser review source](assets/oryntela-brand/oryntela-final-review.html)
+- [Practical brand guide](oryntela-brand-guide.md)
+- [Canonical candidate asset manifest](assets/oryntela-brand/README.md)
+- [Primary horizontal logo](assets/oryntela-brand/oryntela-logo-primary.svg)
+- [Standalone symbol](assets/oryntela-brand/oryntela-symbol.svg)
+- [Outlined wordmark](assets/oryntela-brand/oryntela-wordmark.svg)
+- [Candidate tokens](assets/oryntela-brand/brand-tokens.json)
+- [Geist licence record](assets/oryntela-brand/THIRD-PARTY-LICENCES.md)
+
+The title-case `Oryntela` wordmark was selected after comparing title-case and
+uppercase treatments at lockup and navigation scale. Its readable word shape,
+pair-specific spacing and single-storey alternate `a` create a calmer, less generic
+result than the concept's uniformly tracked capitals. The wordmark is stored as
+outlines and has no live-font dependency.
+
+The Meridian Ink base values remain appropriate as final candidate colours:
+Midnight `#0E1B32`, warm off-white `#F6F4EF`, copper `#C96B45` and mineral blue
+`#204E5A`. Copper remains a distinguishing accent and is prohibited as a white-text
+normal-size button fill. Exact light/dark roles and verified contrast pairs are in
+the guide and token file.
+
+Geist is the approved candidate family for display and UI. The upstream licence was
+rechecked as SIL OFL 1.1 at revision
+`10dc7658f13c38a474cde201bb09a4617267545b`; the package retains the licence text
+but does not distribute a font binary or alter production typography.
+
+All required small-size, monochrome, light/dark and non-production application
+tests pass. The final similarity sanity review retains the same design conclusion:
+the open, asymmetric course does not adopt the audited category's cloud, connector,
+sparkle/starburst, closed gradient ring, network or infinity-loop devices. It also
+remains materially different in silhouette and colour dependency from ORYNTECH's
+closed multicolour circular device. This is a visual design observation only.
+Professional trade-mark and device clearance is still not claimed.
 
 ## Discovery-stage decision record
 
@@ -725,12 +767,12 @@ concept-round reference. This older list is not the current selection form.
 8. **Tagline timing:** approve the recommendation to defer final selection to
    WO-053, or request selection during the final WO-051 identity phase.
 
-## Checkpoint
+## Final checkpoint
 
-**READY FOR OWNER LOGO SELECTION:**
+**READY FOR FINAL OWNER BRAND SIGN-OFF:**
 
 **YES**
 
-The next step is **OWNER VISUAL SELECTION**. Do not begin final identity assets,
-permanent brand implementation or WO-052 until Kevin explicitly approves a
-direction.
+The final candidate package is complete. Do not merge PR #81, apply the identity to
+production or begin WO-052 until Kevin explicitly signs off or requests a bounded
+WO-051 refinement.
