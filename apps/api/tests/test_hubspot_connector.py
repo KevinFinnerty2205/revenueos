@@ -746,8 +746,8 @@ class _ExecutorClient:
         )
 
     async def search_by_property(self, context, object_type, property_name, value, properties):
-        del context, object_type, property_name, value, properties
-        return self.activities
+        del context, object_type, properties
+        return [activity for activity in self.activities if activity.properties.get(property_name) == value]
 
     async def create_meeting(self, context, *, properties, deal_id):
         del context
@@ -837,7 +837,61 @@ def test_hubspot_activity_is_bounded_and_idempotently_reconciled() -> None:
         assert client.created_properties["hs_meeting_body"] == (
             "Final reviewed summary only.\n\nAgreed next steps:\n• Send the approved security pack."
         )
+        assert client.created_properties["hs_internal_meeting_notes"].startswith("Oryntela execution ")
         assert "transcript" not in str(client.created_properties).casefold()
+        assert len(client.activities) == 1
+
+    asyncio.run(scenario())
+
+
+def test_hubspot_activity_reconciles_the_legacy_brand_marker_without_a_duplicate() -> None:
+    async def scenario() -> None:
+        client = _ExecutorClient()
+        executor = HubSpotCRMExecutor(client)  # type: ignore[arg-type]
+        action = ApprovedActionInput(
+            organisation_id=PRIMARY_ORGANISATION_ID,
+            action_id=uuid.uuid4(),
+            action_version=1,
+            opportunity_id=uuid.uuid4(),
+            action_type="log_interaction",
+            risk_class=ActionRiskClass.DATA_MUTATION,
+            title="Log interaction",
+            target_entity_type="opportunity",
+            target_entity_id=uuid.uuid4(),
+            payload=LogInteractionPayload(
+                kind="log_interaction",
+                interaction_id=uuid.uuid4(),
+                occurred_at=datetime(2026, 8, 24, 1, tzinfo=UTC),
+                interaction_type="online_meeting",
+                title="Technical review",
+                summary="Final reviewed summary only.",
+                agreed_next_steps=(),
+            ),
+            external_target=ApprovedExternalTarget(
+                mapping_id=uuid.uuid4(),
+                external_object_type="deals",
+                external_object_id="deal-1",
+            ),
+        )
+        legacy_marker = executor._activity_markers("activity-before-rebrand")[1]
+        client.activities = [
+            HubSpotRecord(
+                id="legacy-meeting",
+                properties={"hs_internal_meeting_notes": legacy_marker},
+                updatedAt="2026-08-24T01:01:00Z",
+            )
+        ]
+
+        result = await executor.execute(
+            action,
+            idempotency_key="activity-before-rebrand",
+            current_external_state=None,
+            context=_context(),
+        )
+
+        assert result.external_result_id == "legacy-meeting"
+        assert result.state == {"reconciled": True}
+        assert client.created_properties is None
         assert len(client.activities) == 1
 
     asyncio.run(scenario())
@@ -1046,7 +1100,7 @@ def _connect_hubspot(
     async def exchange_code(self: HubSpotClient, code: str) -> tuple[ConnectorCredential, str | None]:
         del self
         assert code == "test-code"
-        return credential, "RevenueOS test account"
+        return credential, "Oryntela test account"
 
     monkeypatch.setattr(HubSpotClient, "exchange_code", exchange_code)
     start = client.post("/api/v1/integrations/hubspot/oauth/start")

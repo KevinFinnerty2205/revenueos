@@ -289,7 +289,7 @@ class RevenueOSDailyService:
         except (ValueError, ZoneInfoNotFoundError) as exc:
             raise PublicAPIError(
                 "invalid_timezone",
-                "Choose a valid timezone before loading RevenueOS Daily.",
+                "Choose a valid timezone before loading Oryntela Daily.",
                 422,
             ) from exc
 

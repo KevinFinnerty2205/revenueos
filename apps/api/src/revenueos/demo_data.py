@@ -161,7 +161,7 @@ DEMO_DOCUMENTS = {
         "proposal",
         "salesperson_provided",
         "[DEMO] Seller proposal.txt",
-        "SYNTHETIC DEMO DOCUMENT — no real customer data.\nRevenueOS proposes a four-week pilot.\nPricing remains subject to customer acceptance.",
+        "SYNTHETIC DEMO DOCUMENT — no real customer data.\nOryntela proposes a four-week pilot.\nPricing remains subject to customer acceptance.",
         "implementation",
         "The seller proposes a four-week pilot.",
         "seller_prepared",

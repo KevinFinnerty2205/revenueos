@@ -37,7 +37,7 @@ AUTHORITY_STATEMENT = (
 )
 PERMISSION_NOTICE = (
     "Being listed as an event attendee does not automatically make a person eligible for outreach. "
-    "RevenueOS checks your organisation's Engage policy and Contact suppression/contactability before sending."
+    "Oryntela checks your organisation's Engage policy and Contact suppression/contactability before sending."
 )
 
 _HEADER_NORMALISER = re.compile(r"[^a-z0-9]+")

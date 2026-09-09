@@ -101,7 +101,7 @@ export function ManagerInsightsOverview() {
           detail="Independent review"
         />
         <Position
-          label="RevenueOS baseline"
+          label="Oryntela baseline"
           value={money(
             data.revenueosBaseline.expectedContribution,
             data.currency,

@@ -32,6 +32,6 @@ sandbox verification before it may be described as implemented.
 ## Current adapter
 
 `DeterministicMockDiscoveryProvider` exposes an honest capability set and returns six
-synthetic organisations. RevenueOS—not the provider—applies exclusions, missing-data
+synthetic organisations. Oryntela—not the provider—applies exclusions, missing-data
 policy, priority labels and relationship/whitespace reconciliation. The adapter is
 clearly labelled synthetic and fails closed in production.

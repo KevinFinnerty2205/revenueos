@@ -55,7 +55,7 @@ Future work that adds a body or storage object requires its own approved schema,
 consent, encryption, access, retention, deletion, malware/content handling and
 provenance review. It must not overload these metadata columns.
 
-## Ask RevenueOS consumer
+## Ask Oryntela consumer
 
 Ask v1 reads only accepted document/email Revenue Brain source snapshots whose source
 and every referenced accepted Evidence row are verified, available and not deleted.

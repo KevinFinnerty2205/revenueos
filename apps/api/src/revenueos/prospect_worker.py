@@ -373,7 +373,7 @@ class ProspectWorkerService:
             ):
                 raise ProspectProviderError(
                     "prospect_not_entitled",
-                    "RevenueOS Prospect is no longer enabled for this organisation.",
+                    "Prospect is no longer enabled for this organisation.",
                     retryable=False,
                 )
             if not await repository.requester_is_active(claim.organisation_id, claim.requested_by_user_id):

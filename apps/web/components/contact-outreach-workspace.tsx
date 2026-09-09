@@ -341,7 +341,7 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
     <div className="space-y-7">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
             Contact
           </p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
@@ -351,7 +351,7 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
             {workspace.jobTitle ? `${workspace.jobTitle} · ` : ""}
             <Link
               href={`/companies/${workspace.companyId}`}
-              className="font-semibold text-teal-700"
+              className="font-semibold text-brand-secondary"
             >
               {workspace.companyName}
             </Link>
@@ -381,7 +381,7 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
       {notice ? (
         <p
           role="status"
-          className="rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950"
+          className="rounded-xl border border-brand-secondary/25 bg-brand-secondary/10 p-4 text-sm text-brand-primary"
         >
           {notice}
         </p>
@@ -416,7 +416,7 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
               />
             </dl>
             <div
-              className={`mt-5 rounded-xl border p-4 text-sm ${workspace.contactability.allowed ? "border-teal-200 bg-teal-50 text-teal-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}
+              className={`mt-5 rounded-xl border p-4 text-sm ${workspace.contactability.allowed ? "border-brand-secondary/25 bg-brand-secondary/10 text-brand-primary" : "border-amber-200 bg-amber-50 text-amber-950"}`}
             >
               <p className="font-bold">
                 {workspace.contactability.allowed
@@ -456,8 +456,8 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
               className="form-card"
               aria-labelledby="engage-unavailable-title"
             >
-              <p className="text-xs font-bold uppercase tracking-[0.15em] text-teal-700">
-                RevenueOS Engage
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-brand-secondary">
+                Engage
               </p>
               <h2 id="engage-unavailable-title" className="form-legend mt-2">
                 Personalised outreach is not enabled
@@ -473,14 +473,14 @@ export function ContactOutreachWorkspace({ contactId }: { contactId: string }) {
             </section>
           ) : !outreach ? (
             <section className="form-card" aria-labelledby="new-outreach-title">
-              <p className="text-xs font-bold uppercase tracking-[0.15em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-brand-secondary">
                 One-to-one email
               </p>
               <h2 id="new-outreach-title" className="form-legend mt-2">
                 Create personalised outreach
               </h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                RevenueOS uses only approved seller context and eligible cited
+                Oryntela uses only approved seller context and eligible cited
                 professional research. You review every word before any
                 execution step.
               </p>
@@ -592,7 +592,7 @@ function OutreachEditor({
           className={`rounded-xl border p-4 ${
             preview.simulationOnly
               ? "border-amber-300 bg-amber-50 text-amber-950"
-              : "border-teal-300 bg-teal-50 text-teal-950"
+              : "border-brand-secondary/35 bg-brand-secondary/10 text-brand-primary"
           }`}
         >
           <p className="text-xs font-bold uppercase tracking-[0.15em]">
@@ -625,13 +625,13 @@ function OutreachEditor({
         </div>
         {execution ? (
           <div
-            className="mt-5 rounded-xl border border-teal-200 bg-teal-50 p-4"
+            className="mt-5 rounded-xl border border-brand-secondary/25 bg-brand-secondary/10 p-4"
             aria-live="polite"
           >
-            <p className="font-bold text-teal-950">
+            <p className="font-bold text-brand-primary">
               {humanise(execution.executionStatus)}
             </p>
-            <p className="mt-1 text-sm text-teal-900">
+            <p className="mt-1 text-sm text-brand-primary">
               {execution.safeMessage}
             </p>
             {execution.executionStatus === "queued" ||
@@ -678,7 +678,7 @@ function OutreachEditor({
     <section className="form-card" aria-labelledby="outreach-editor-title">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.15em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-brand-secondary">
             {humanise(outreach.purpose)} · Version {outreach.currentVersion}
           </p>
           <h2 id="outreach-editor-title" className="form-legend mt-2">
@@ -686,7 +686,7 @@ function OutreachEditor({
           </h2>
         </div>
         <span
-          className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${outreach.state === "approved" ? "bg-teal-100 text-teal-900" : "bg-slate-100 text-slate-700"}`}
+          className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${outreach.state === "approved" ? "bg-brand-secondary/15 text-brand-primary" : "bg-slate-100 text-slate-700"}`}
         >
           {humanise(outreach.state)}
         </span>
@@ -781,7 +781,7 @@ function OutreachEditor({
         </p>
         {!outreach.version.personalizationUsed ? (
           <p className="mt-3 rounded-lg bg-white p-3 text-sm font-semibold text-slate-700">
-            No reliable personalised hook was available, so RevenueOS used a
+            No reliable personalised hook was available, so Oryntela used a
             transparent role-and-company introduction.
           </p>
         ) : null}
@@ -798,7 +798,7 @@ function OutreachEditor({
               </p>
               {source.url ? (
                 <a
-                  className="mt-2 inline-flex font-semibold text-teal-700"
+                  className="mt-2 inline-flex font-semibold text-brand-secondary"
                   href={source.url}
                   target="_blank"
                   rel="noreferrer"
@@ -872,7 +872,7 @@ function OutreachHistory({
             >
               <button
                 type="button"
-                className="text-left font-semibold text-teal-700 hover:text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                className="text-left font-semibold text-brand-secondary hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
                 disabled={busy}
                 onClick={() => onOpen(item.id)}
               >

@@ -24,7 +24,7 @@ accept archive filtering and return safe exact-duplicate metadata. See the compl
 [Native CRM API contract](native-crm-api.md). FastAPI/Pydantic/OpenAPI remains
 authoritative.
 
-## RevenueOS Create
+## Oryntela Create
 
 FastAPI/OpenAPI is authoritative for the WO-032 camel-case contracts under
 `/api/v1/create`. Both the environment feature flag and the server-side organisation
@@ -53,7 +53,7 @@ Creation/generation use bounded idempotency keys. Errors contain safe codes such
 `claim_source_changed`, `generated_validation_failed`, `invalid_download_grant` and
 `presentation_file_integrity_failed`; they never echo uploaded/customer content.
 
-## RevenueOS Daily
+## Oryntela Daily
 
 `GET /api/v1/daily?timezone=<IANA>` returns one strict, bounded personal Home read
 model. It composes local-day Interactions, current Actions, controlled deal-attention
@@ -347,7 +347,7 @@ See [AI Debrief](ai-debrief.md).
 
 Requests accept JPEG/PNG only and enforce checksum, size, dimension, pixel,
 source-ownership, consent and idempotency constraints. Relative local upload
-URLs require API auth; absolute S3-compatible signed URLs receive no RevenueOS
+URLs require API auth; absolute S3-compatible signed URLs receive no Oryntela
 bearer token. See [Visual Evidence engineering guide](visual-evidence-engineering-guide.md).
 
 ### Recording and transcription
@@ -785,10 +785,10 @@ Mutation is administrator-only and requires an active membership. The approved
 projection carries the exact profile/revision/version plus
 `authority: organisation_approved` and `customerEvidence: false`. No profile content
 is accepted as customer Evidence, public research, CRM authority or AI instruction.
-Ask RevenueOS may cite this exact projection for organisation-context questions; no
+Ask Oryntela may cite this exact projection for organisation-context questions; no
 other persistent consumer is connected in WO-046.
 
-## Ask RevenueOS API
+## Ask Oryntela API
 
 | Method | Path | Behaviour |
 | --- | --- | --- |

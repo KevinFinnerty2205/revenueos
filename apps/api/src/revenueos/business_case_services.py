@@ -545,7 +545,7 @@ class BusinessCaseService:
         if missing:
             item = self._input_definition(definition, sorted(missing)[0])
             raise PublicAPIError(
-                "business_case_input_missing", f"{item.label} is required; RevenueOS will not invent it.", 422
+                "business_case_input_missing", f"{item.label} is required; Oryntela will not invent it.", 422
             )
         if unknown:
             raise PublicAPIError(
@@ -1045,7 +1045,7 @@ class BusinessCaseService:
         commercial = CommercialService(self.session, self.settings)
         if write:
             if not self.settings.feature_create_enabled:
-                raise PublicAPIError("create_unavailable", "RevenueOS Create is temporarily unavailable.", 503)
+                raise PublicAPIError("create_unavailable", "Create is temporarily unavailable.", 503)
             await commercial.require_module_write(self.tenant.organisation_id, "create")
             return
         access = await commercial.module_access(self.tenant.organisation_id, "create")

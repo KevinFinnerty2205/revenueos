@@ -446,7 +446,7 @@ class SalesAnalyticsService:
             live_outreach_sent_count=len(live_sends),
             outreach_followed_by_meeting=outreach_follow_on,
             association_disclosure=(
-                "These are RevenueOS-recorded activities followed by a later recorded outcome within 30 days. "
+                "These are Oryntela-recorded activities followed by a later recorded outcome within 30 days. "
                 "They are associations, not attribution or proof of causation. Only fully matured outcome windows enter rates."
             ),
         )

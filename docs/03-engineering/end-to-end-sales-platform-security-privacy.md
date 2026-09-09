@@ -51,7 +51,7 @@ and security review.
 ## Responsible research
 
 Research is limited to relevant public or contractually licensed professional/business
-information. RevenueOS must not scrape prohibited sources, infer protected/sensitive
+information. Oryntela must not scrape prohibited sources, infer protected/sensitive
 traits, reveal private-life knowledge, profile vulnerability, generate deceptive
 rapport or label guessed contact points as verified. Findings are atomic, sourced,
 dated and assigned `verified`, `provider_supplied`, `inferred` or `unknown` state.

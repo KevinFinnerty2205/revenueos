@@ -30,7 +30,7 @@ const capabilities: AskCapabilities = {
   maxQuestionCharacters: 1000,
   maxSources: 12,
   safeMessage:
-    "Ask answers from authorised RevenueOS evidence. It does not search the public web or perform actions.",
+    "Ask answers from authorised Oryntela evidence. It does not search the public web or perform actions.",
 };
 
 function answer(overrides: Partial<AskAnswer> = {}): AskAnswer {
@@ -120,7 +120,7 @@ describe("AskRevenueOS", () => {
     render(<AskRevenueOS scopeType="opportunity" scopeId="opportunity-1" />);
 
     expect(await screen.findByText("About: Qantas expansion")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Ask RevenueOS"), {
+    fireEvent.change(screen.getByLabelText("Ask Oryntela"), {
       target: { value: "What is holding this deal back?" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
@@ -129,7 +129,7 @@ describe("AskRevenueOS", () => {
       await screen.findByRole("heading", { name: "Partially supported" }),
     ).toBeVisible();
     expect(screen.getByText(/Security review is the clearest/)).toBeVisible();
-    expect(screen.getByText("Why RevenueOS believes it")).toBeVisible();
+    expect(screen.getByText("Why Oryntela believes it")).toBeVisible();
     expect(screen.getByText("Needs clarification")).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Review opportunity" }),
@@ -208,7 +208,7 @@ describe("AskRevenueOS", () => {
     );
     render(<AskRevenueOS scopeType="opportunity" scopeId="opportunity-1" />);
     await screen.findByText("About: Qantas expansion");
-    fireEvent.change(screen.getByLabelText("Ask RevenueOS"), {
+    fireEvent.change(screen.getByLabelText("Ask Oryntela"), {
       target: { value: "What do we sell?" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
@@ -237,8 +237,8 @@ describe("AskRevenueOS", () => {
         answerStatus: status,
         answer:
           status === "unknown"
-            ? "I don’t have that information in RevenueOS. Ask RevenueOS does not research the public web yet."
-            : "RevenueOS found material disagreement in the current evidence.",
+            ? "I don’t have that information in Oryntela. Ask Oryntela does not research the public web yet."
+            : "Oryntela found material disagreement in the current evidence.",
         summaryPoints: status === "unknown" ? [] : answer().summaryPoints,
         sources: status === "unknown" ? [] : answer().sources,
         suggestedAction: null,
@@ -282,19 +282,19 @@ describe("AskRevenueOS", () => {
       screen.getByRole("button", { name: "What is holding this deal back?" }),
     );
     expect(
-      screen.getByRole("button", { name: "Checking RevenueOS…" }),
+      screen.getByRole("button", { name: "Checking Oryntela…" }),
     ).toBeDisabled();
     resolveAnswer?.(
       jsonResponse(
         {
           code: "ask_unavailable",
-          message: "RevenueOS could not answer right now.",
+          message: "Oryntela could not answer right now.",
         },
         503,
       ),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "RevenueOS could not answer right now.",
+      "Oryntela could not answer right now.",
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(

@@ -46,7 +46,7 @@ Changing the default affects new Opportunities only.
 
 ## Default and compatibility behaviour
 
-Migration `0044_native_pipeline` creates one `RevenueOS Sales Pipeline` per existing
+Migration `0044_native_pipeline` creates one `Oryntela Sales Pipeline` per existing
 organisation using the existing canonical stage taxonomy: Discovery, Qualification,
 Evaluation, Proposal, Negotiation, Procurement, Other, Closed Won and Closed Lost. New
 Opportunities enter the first active open stage in the default pipeline and record a

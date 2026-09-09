@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SignOutButton } from "@clerk/nextjs";
+import { BrandLogo } from "@/components/brand-logo";
 import { getAuthState } from "@/lib/auth";
 
 export default function SignOutPage() {
@@ -9,12 +10,13 @@ export default function SignOutPage() {
     Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f5f7f4] px-5 py-12">
+    <main className="grid min-h-screen place-items-center bg-brand-background px-5 py-12">
       <section
         className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl shadow-slate-900/5 sm:p-10"
         aria-labelledby="sign-out-title"
       >
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+        <BrandLogo className="mx-auto h-9 w-auto" />
+        <p className="mt-8 text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
           Authentication
         </p>
         <h1
@@ -30,16 +32,16 @@ export default function SignOutPage() {
         </p>
         {clerkConfigured ? (
           <SignOutButton redirectUrl="/">
-            <button className="mt-8 inline-flex rounded-full bg-slate-950 px-5 py-3 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2">
+            <button className="mt-8 inline-flex rounded-full bg-brand-primary px-5 py-3 text-sm font-bold text-white hover:bg-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2">
               Sign out securely
             </button>
           </SignOutButton>
         ) : (
           <Link
             href="/"
-            className="mt-8 inline-flex rounded-full bg-slate-950 px-5 py-3 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+            className="mt-8 inline-flex rounded-full bg-brand-primary px-5 py-3 text-sm font-bold text-white hover:bg-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
           >
-            Return to RevenueOS
+            Return to Oryntela
           </Link>
         )}
       </section>

@@ -104,7 +104,7 @@ class SourceContext:
 
 
 class SalesMethodologyProjectionService:
-    """Deterministic projection over current validated RevenueOS evidence."""
+    """Deterministic projection over current validated Oryntela evidence."""
 
     def __init__(
         self,
@@ -411,7 +411,7 @@ class SalesMethodologyProjectionService:
                 generation_available=False,
                 needs_refresh=False,
                 safe_message=(
-                    "Your organisation has not selected a sales methodology. RevenueOS continues to work normally."
+                    "Your organisation has not selected a sales methodology. Oryntela continues to work normally."
                 ),
                 definition=None,
                 projection_id=None,
@@ -1261,7 +1261,7 @@ class SalesMethodologyProjectionService:
             explicit_conflicts = []
         elif explicit_conflicts:
             state = "conflicting"
-            conclusion = "Current valid sources disagree. RevenueOS has not selected either interpretation."
+            conclusion = "Current valid sources disagree. Oryntela has not selected either interpretation."
         elif any(item.support == "direct" for item in support):
             state = "confirmed"
             conclusion = next(item.conclusion for item in support if item.support == "direct" and item.conclusion)
@@ -1490,7 +1490,7 @@ class SalesMethodologyProjectionService:
             safe_message=(
                 "New or changed evidence is available. Refresh this methodology view before relying on it."
                 if needs_refresh
-                else "This view uses the current validated evidence available to RevenueOS."
+                else "This view uses the current validated evidence available to Oryntela."
             ),
             definition=self._definition_summary(effective),
             projection_id=projection.id,

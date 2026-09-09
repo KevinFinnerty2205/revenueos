@@ -12,5 +12,5 @@ attendee data. It must produce the same approved EventAttendee fields and cannot
 registration into contactability, customer Evidence or buying intent.
 
 Ticket sales, registration, payments, agenda/speaker/venue operations, badge OCR,
-facial recognition and attendee marketing export are outside RevenueOS's product
+facial recognition and attendee marketing export are outside Oryntela's product
 boundary.

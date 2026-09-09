@@ -73,6 +73,7 @@ from revenueos.models import (
     DealRoomAuditEvent,
     DealRoomRevision,
     DebriefSession,
+    DocumentFragment,
     DocumentSource,
     EmailSource,
     EngageCampaignVersion,
@@ -721,6 +722,13 @@ def test_demo_seed_is_tenant_scoped_idempotent_and_resettable() -> None:
             assert customer_document.source_ownership == "customer_provided"
             assert seller_document is not None
             assert seller_document.source_ownership == "salesperson_provided"
+            seller_fragment = await session.get(
+                DocumentFragment,
+                source_evidence_ids["seller-proposal:fragment"],
+            )
+            assert seller_fragment is not None
+            assert "Oryntela proposes a four-week pilot" in seller_fragment.content_text
+            assert "RevenueOS" not in seller_fragment.content_text
             assert inbound_email is not None
             assert inbound_email.origin_class == "customer_direct"
             assert outbound_email is not None
@@ -1742,6 +1750,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
         assert download.json()["exportVersion"] == 37
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
+        assert download.headers["Content-Disposition"] == (f'attachment; filename="oryntela-export-{request_id}.json"')
 
     async def tamper(*, output_path: str, expires_at: datetime) -> None:
         engine = create_async_engine(TEST_DB_URL)

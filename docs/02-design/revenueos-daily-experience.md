@@ -1,4 +1,4 @@
-# RevenueOS Daily experience
+# Oryntela Daily experience
 
 > **Oryntela consolidation — 4 September 2026:** This is the implemented Daily
 > contract. Potential role-aware target and forecast context is documented in the
@@ -19,7 +19,7 @@ dashboard, notification inbox or second copy of the source workflows.
 ## Desktop hierarchy
 
 ```text
-Home · RevenueOS Daily                         Search
+Home · Oryntela Daily                         Search
 
 Good morning, Kevin
 Monday, 17 August · What matters today
@@ -45,7 +45,7 @@ column. No chart competes with the next action.
 ## Mobile hierarchy
 
 ```text
-Home · RevenueOS Daily              Search
+Home · Oryntela Daily              Search
 
 Good morning, Kevin
 
@@ -89,7 +89,7 @@ currency detail is hidden on mobile, while counts and links remain available.
 - Nothing urgent: calmly show **You're caught up** and keep the useful context.
 - Partial source failure: retain available sections and show only
   **Actions temporarily unavailable** (or the relevant source).
-- Total failure: **RevenueOS couldn't load your day**, Retry and direct links to
+- Total failure: **Oryntela couldn't load your day**, Retry and direct links to
   Interactions and Opportunities.
 
 Loading uses a restrained skeleton. “Updated just now” is subtle, and browser focus

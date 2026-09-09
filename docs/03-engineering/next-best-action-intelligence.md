@@ -3,7 +3,7 @@
 ## Product behaviour
 
 WO-006D adds a meeting-scoped **Next Best Action** composer. After all eight
-current-version Meeting Intelligence extractions are validated, RevenueOS
+current-version Meeting Intelligence extractions are validated, Oryntela
 returns one overall recommendation, its priority and confidence, concise
 reasoning and at most five ordered recommended actions. Each action includes a
 reason, priority, confidence and explicit source dependencies.

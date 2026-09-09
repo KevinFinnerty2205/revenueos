@@ -773,7 +773,7 @@ def test_microsoft_unknown_execution_requires_strong_sent_items_evidence_before_
     status = client.get(f"/api/v1/executions/{execution_id}")
     assert status.status_code == 200, status.text
     assert status.json()["safeMessage"] == (
-        "The Microsoft send outcome is unknown. RevenueOS will not resend without strong Sent Items evidence."
+        "The Microsoft send outcome is unknown. Oryntela will not resend without strong Sent Items evidence."
     )
 
     async def assert_still_unknown_and_add_evidence() -> None:

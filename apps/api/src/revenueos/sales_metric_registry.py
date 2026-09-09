@@ -126,7 +126,7 @@ SALES_METRIC_DEFINITIONS: tuple[SalesMetricDefinition, ...] = (
     SalesMetricDefinition(
         id="meetings_completed_count",
         label="Meetings completed",
-        description="Completed meeting and customer-session Interactions recorded in RevenueOS.",
+        description="Completed meeting and customer-session Interactions recorded in Oryntela.",
         unit="count",
         targetable=True,
         supported_filters=_DATE_FILTERS,
@@ -139,7 +139,7 @@ SALES_METRIC_DEFINITIONS: tuple[SalesMetricDefinition, ...] = (
     SalesMetricDefinition(
         id="phone_calls_completed_count",
         label="Calls completed",
-        description="Completed phone-call Interactions recorded in RevenueOS as supporting activity context.",
+        description="Completed phone-call Interactions recorded in Oryntela as supporting activity context.",
         unit="count",
         targetable=True,
         supported_filters=_DATE_FILTERS,

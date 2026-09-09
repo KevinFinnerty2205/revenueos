@@ -1,8 +1,8 @@
-# RevenueOS Prospect Account Research
+# Oryntela Prospect Account Research
 
 **Status:** Current WO-026 implementation
 
-RevenueOS Prospect now provides the minimum account-research journey for an
+Oryntela Prospect now provides the minimum account-research journey for an
 entitled sales workspace:
 
 > Find → choose a company → Research → inspect sources → Add to Sales
@@ -20,11 +20,11 @@ controlled Refresh creates another immutable run and shows new, changed and no
 longer supported observations without rewriting history. A failed refresh leaves
 the most recent usable brief intact.
 
-Add to Sales is an explicit confirmation. RevenueOS checks the normalised domain
+Add to Sales is an explicit confirmation. Oryntela checks the normalised domain
 inside the active organisation. It links the Research Target to the deterministic
 existing match or creates one canonical Company when confirmed. It never creates
 an Opportunity or Contact and never mutates Methodology, Revenue Brain or Ask
-RevenueOS state.
+Oryntela state.
 
 ## Availability and limits
 

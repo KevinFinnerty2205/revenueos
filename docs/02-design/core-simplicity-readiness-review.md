@@ -17,7 +17,7 @@ evidence. Bounded entity search is available now, while cited Ask remains WO-025
 
 ## Five-second findings
 
-RevenueOS Daily clearly answers “What matters today?” The greeting, date, dark top-
+Oryntela Daily clearly answers “What matters today?” The greeting, date, dark top-
 priority/next-Interaction card and one CTA establish a useful hierarchy. Bounded
 Actions, deal attention, pipeline and recommended focus follow in a sensible order.
 
@@ -153,7 +153,7 @@ Session and Evidence objects. Keep product language centred on:
 
 - **Prepare** — what matters and what to ask;
 - **Capture** — record, add a source or continue without recording;
-- **Review** — what RevenueOS understood and what needs correction; and
+- **Review** — what Oryntela understood and what needs correction; and
 - **Follow through** — approve the resulting work.
 
 Source authority, consent, upload state and provider limitations remain visible at
@@ -173,7 +173,7 @@ Connection IDs, fingerprints, idempotency and adapter names belong in operator
 diagnostics, not the normal seller screen. Simulation stays unmistakable in the
 current build.
 
-## Ask RevenueOS placement
+## Ask Oryntela placement
 
 Search should be globally reachable and context-aware. It should open normal search
 first, then accept supported natural-language questions. Account/Opportunity pages
@@ -181,7 +181,7 @@ may pre-scope it, but should not embed separate chat histories.
 
 An answer contains:
 
-1. the concise answer or explicit “RevenueOS does not have enough evidence”;
+1. the concise answer or explicit “Oryntela does not have enough evidence”;
 2. important conflict/freshness/coverage qualifiers;
 3. source citations/deep links; and
 4. one safe navigation/refinement action.
@@ -228,7 +228,7 @@ remains available for a safe walkthrough, not the main product journey.
 
 ## Decision
 
-WO-025 Daily passes. RevenueOS Core as a whole does not yet pass the simplicity gate
+WO-025 Daily passes. Oryntela Core as a whole does not yet pass the simplicity gate
 for Prospect expansion. WO-025A must consolidate navigation/onboarding and the
 Opportunity hierarchy; WO-025B must replace the Search/Assistant dead end. Deal Room,
 forecast, coaching and manager features stay in their later owning work orders so

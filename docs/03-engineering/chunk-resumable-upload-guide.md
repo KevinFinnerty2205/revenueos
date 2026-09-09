@@ -34,5 +34,5 @@ object/direction and reveal no permanent credential. Logs exclude URLs and keys.
 
 Verified chunks remain resumable until session expiry (24 hours by default).
 Closing a tab, device lock or background suspension can interrupt browser capture;
-RevenueOS does not promise background upload or local recovery after termination.
+Oryntela does not promise background upload or local recovery after termination.
 The maintenance command handles expired sessions, missing objects and orphans.

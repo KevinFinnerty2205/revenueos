@@ -571,7 +571,7 @@ class CRMMergeService:
             )
         )
         if setting is None:
-            raise PublicAPIError("crm_setup_required", "Configure RevenueOS as the CRM before merging records.", 409)
+            raise PublicAPIError("crm_setup_required", "Configure Oryntela as the CRM before merging records.", 409)
 
     def _change(
         self,

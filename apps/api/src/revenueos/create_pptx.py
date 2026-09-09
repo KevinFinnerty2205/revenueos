@@ -316,8 +316,8 @@ class BoundedPptxProcessor:
             del organisation_name
             presentation.core_properties.title = title[:255]
             presentation.core_properties.subject = "Customer presentation"
-            presentation.core_properties.author = "RevenueOS"
-            presentation.core_properties.last_modified_by = "RevenueOS"
+            presentation.core_properties.author = "Oryntela"
+            presentation.core_properties.last_modified_by = "Oryntela"
             presentation.core_properties.comments = ""
             presentation.core_properties.keywords = ""
             presentation.core_properties.category = ""

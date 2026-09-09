@@ -305,7 +305,7 @@ export function MeetingForm({ meetingId }: { meetingId?: string }) {
   return (
     <section aria-labelledby="meeting-form-title">
       <header className="mb-8">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
           {editing ? "Edit meeting" : "New meeting"}
         </p>
         <h1
@@ -506,7 +506,7 @@ export function MeetingForm({ meetingId }: { meetingId?: string }) {
             <legend className="form-legend">Transcript</legend>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Optional. Paste plain text or deliberately choose a .txt file.
-              RevenueOS does not record or transcribe from this form. Online
+              Oryntela does not record or transcribe from this form. Online
               meetings also support provenance-aware TXT, VTT and SRT import
               from their Interaction capture page.
             </p>

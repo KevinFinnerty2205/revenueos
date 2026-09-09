@@ -77,7 +77,7 @@ def _configure_policy(
             "campaignAutoSendAllowed": campaign_auto_send_allowed,
             "offeringName": offering_name,
             "valueProposition": (
-                "RevenueOS helps growing teams coordinate secure access across locations without adding manual work."
+                "Oryntela helps growing teams coordinate secure access across locations without adding manual work."
             ),
             "approvedCta": "Would a short conversation next week be useful?",
         },
@@ -446,7 +446,7 @@ def test_no_reliable_hook_is_transparent_and_uses_only_approved_seller_context(
     assert "expansion into three additional" not in draft["version"]["body"]
     assert "technology consolidation" not in draft["version"]["body"]
     assert draft["version"]["warnings"] == [
-        "No reliable professional research hook was available; RevenueOS did not invent one."
+        "No reliable professional research hook was available; Oryntela did not invent one."
     ]
 
 

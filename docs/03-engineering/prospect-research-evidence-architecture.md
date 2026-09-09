@@ -9,7 +9,7 @@ statements. Contact promotion copies only canonical identity/contact fields with
 provenance and does not promote research claims.
 
 No WO-027 service calls Evidence, Methodology, Stakeholder Intelligence, Revenue Brain
-or Ask RevenueOS writers. Later use of saved public research must preserve a distinct
+or Ask Oryntela writers. Later use of saved public research must preserve a distinct
 public-research origin and require an explicitly approved consumer contract.
 
 - **Status:** WO-026/027 separation is implemented; broader ICP/territory architecture remains proposed
@@ -23,7 +23,7 @@ public-research origin and require an explicitly approved consumer contract.
 | Prospect Account | A research candidate not yet accepted as a canonical Company                |
 | Prospect Person  | A professional candidate associated with a Prospect Account                 |
 | Lead             | A deliberately saved or assigned person/account pursuit requiring follow-up |
-| Contact          | A canonical person in RevenueOS, normally associated with a Company         |
+| Contact          | A canonical person in Oryntela, normally associated with a Company         |
 | Account          | User-facing language for a canonical Company and its relationship workspace |
 
 Research objects remain staged until a user or explicit policy promotes them. Saving
@@ -64,14 +64,14 @@ trust state is one of:
 
 Record source type, URL/provider reference, publisher, observation time, retrieval
 time, policy/provider version and expiry. Conflicting findings coexist until review;
-supersession preserves history. A provider confidence score never replaces RevenueOS
+supersession preserves history. A provider confidence score never replaces Oryntela
 trust state or visible provenance.
 
 ## Business contact verification
 
 Contact points use separate states such as `source_claimed`, `format_valid`,
 `provider_verified`, `delivery_observed`, `invalid`, `opted_out` and `unknown`.
-RevenueOS must never guess an address and present it as verified. Verification method,
+Oryntela must never guess an address and present it as verified. Verification method,
 provider, time and expiry are visible. Opt-out, suppression and do-not-contact state
 override any positive verification.
 
@@ -137,4 +137,4 @@ source payloads.
 
 WO-023 adds no provider, crawler, enrichment, Lead schema or contact-verification
 implementation. Consumer profiling, covert surveillance, sensitive-trait inference,
-unbounded data resale and uncontrolled list building are not RevenueOS capabilities.
+unbounded data resale and uncontrolled list building are not Oryntela capabilities.

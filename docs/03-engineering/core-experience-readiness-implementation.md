@@ -15,7 +15,7 @@ compatible and contextual links still reach Meetings, Tasks, onboarding and feed
 
 `/assistant` is now a bounded workspace search for Companies, Opportunities and
 Interactions. It does not use a provider, inspect transcript bodies, answer natural-
-language questions or mutate data. Ask RevenueOS remains WO-025B.
+language questions or mutate data. Ask Oryntela remains WO-025B.
 
 Opportunity now leads with deal identity, one next-action focus, methodology,
 evidence and reviewable Actions. Meeting association, account history, complete
@@ -61,7 +61,7 @@ environment-specific launch review.
 
 ## Known limitations
 
-- Ask RevenueOS is now implemented by WO-025B as a second Search mode and contextual
+- Ask Oryntela is now implemented by WO-025B as a second Search mode and contextual
   Opportunity/Account utility; normal Search remains deterministic.
 - Production CRM matching and approved writes remain WO-025C.
 - Forecasting, Manager Intelligence and Prospect remain later work.

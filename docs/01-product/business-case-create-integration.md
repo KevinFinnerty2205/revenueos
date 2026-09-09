@@ -1,4 +1,4 @@
-# Business Case integration with RevenueOS Create
+# Business Case integration with Oryntela Create
 
 Only the current approved immutable Business Case version may be selected in the presentation brief. The case must match the presentation Account; an Opportunity-bound case must also match the selected Opportunity.
 

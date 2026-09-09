@@ -1,4 +1,4 @@
-# RevenueOS Engage
+# Oryntela Engage
 
 > **Oryntela consolidation — 4 September 2026:** Engage remains a product
 > capability, not a customer plan or a live-send claim. The

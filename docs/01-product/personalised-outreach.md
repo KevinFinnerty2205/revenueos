@@ -7,7 +7,7 @@
 
 ## Product promise
 
-RevenueOS Engage helps a relationship-driven seller turn permitted business-contact
+Oryntela Engage helps a relationship-driven seller turn permitted business-contact
 data, bounded Prospect research and an administrator-approved offering into a short,
 professional email. It does not decide that a person may be contacted merely because
 an address exists or has a trust label. The user chooses a purpose, inspects why the
@@ -39,7 +39,7 @@ deceptive `Re:`/`Fwd:` subjects and invented percentage/ROI claims. Research is 
 customer Evidence and an outbound seller message cannot confirm Methodology or
 Revenue Brain facts.
 
-If no reliable professional hook exists, RevenueOS says so and creates a transparent
+If no reliable professional hook exists, Oryntela says so and creates a transparent
 role/company/value-based introduction. It never invents an anecdote, post, event,
 relationship or inferred email address to make the message seem personalised.
 
@@ -61,7 +61,7 @@ value proposition or CTA also invalidates the existing review/send boundary.
 Organisation administrators configure outbound enablement, whether provider-supplied
 business addresses are permitted, cooldown, per-user/per-organisation daily limits,
 offering, value proposition and CTA. The UI reminds administrators that their
-organisation remains responsible for applicable outreach and privacy law; RevenueOS
+organisation remains responsible for applicable outreach and privacy law; Oryntela
 does not present configuration as legal advice.
 
 ## Suppression and opt-out
@@ -123,7 +123,7 @@ WO-029 itself has no provider OAuth. WO-040/041 add inactive Microsoft and Googl
 Workspace OAuth, reviewed send and strongly correlated replies without delivered/read
 semantics. An unsubscribe route, bulk recipient import, LinkedIn/call automation,
 tracking, predictive send time or arbitrary recipient address. HubSpot logging is not
-performed: seller outreach stays inside RevenueOS until a separately reviewed
+performed: seller outreach stays inside Oryntela until a separately reviewed
 CRM-activity contract exists.
 
 WO-030 now reuses this exact Outreach Message, source-backed rendering, suppression,

@@ -13,10 +13,10 @@ export default async function CompanyAccountPage({
   return (
     <div className="space-y-7">
       <CRMRecordPanel entityType="account" entityId={id} />
-      <section className="mb-7 flex flex-col gap-4 rounded-2xl border border-teal-200 bg-teal-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <section className="mb-7 flex flex-col gap-4 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.15em] text-teal-700">
-            RevenueOS Create
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-brand-secondary">
+            Create
           </p>
           <h2 className="mt-1 text-lg font-semibold text-slate-950">
             Create Account content

@@ -13,7 +13,7 @@ describe("sign-out page", () => {
 
     expect(screen.getByRole("heading", { name: "Sign out" })).toBeVisible();
     expect(
-      screen.getByRole("link", { name: "Return to RevenueOS" }),
+      screen.getByRole("link", { name: "Return to Oryntela" }),
     ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Sign out securely" }),

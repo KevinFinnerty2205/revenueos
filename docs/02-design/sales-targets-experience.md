@@ -21,7 +21,7 @@ dedicated Targets tab provides:
   never progress; and
 - current, past and archived views.
 
-RevenueOS Daily has no target card or priority mutation in v1. This is deliberate:
+Oryntela Daily has no target card or priority mutation in v1. This is deliberate:
 Insights owns progress and Daily continues to answer what needs attention today.
 
 ## Creation and management

@@ -6,7 +6,7 @@ to speak naturally instead of answering several prompts.
 ## User journey
 
 1. Complete the Interaction and open its detail page.
-2. Confirm that you are safely stopped. RevenueOS must never encourage capture while
+2. Confirm that you are safely stopped. Oryntela must never encourage capture while
    driving or operating equipment.
 3. Choose Voice Journal. If microphone capture is supported, separately acknowledge
    that the short voice segment will be processed.

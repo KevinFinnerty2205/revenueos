@@ -324,7 +324,7 @@ def test_pptx_processor_rejects_active_content_and_external_relationships() -> N
     ):
         for info in original.infolist():
             modified.writestr(info.filename, original.read(info))
-        modified.writestr("ppt/vbaProject.bin", b"not executable in RevenueOS")
+        modified.writestr("ppt/vbaProject.bin", b"not executable in Oryntela")
     with pytest.raises(UnsafePptxError):
         processor.parse(unsafe.getvalue())
 
@@ -337,8 +337,8 @@ def test_pptx_processor_rejects_active_content_and_external_relationships() -> N
     exported = Presentation(io.BytesIO(rendered))
     assert len(exported.slides) == 1
     assert exported.core_properties.title == "Customer-safe export"
-    assert exported.core_properties.author == "RevenueOS"
-    assert exported.core_properties.last_modified_by == "RevenueOS"
+    assert exported.core_properties.author == "Oryntela"
+    assert exported.core_properties.last_modified_by == "Oryntela"
     with zipfile.ZipFile(io.BytesIO(rendered)) as archive:
         content_types = archive.read("[Content_Types].xml")
         assert b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"' in content_types

@@ -6,7 +6,7 @@ top-level Methodology navigation item.
 The Opportunity card first explains that the selected framework organises validated
 Evidence without scoring or blocking stages. It shows categorical counts and the
 three most important gaps, ordered conflict, stale, unknown, partial, then confirmed.
-**View all** reveals the rest. Each field answers what RevenueOS believes, what to do
+**View all** reveals the rest. Each field answers what Oryntela believes, what to do
 next and when it was supported. **Why this state** progressively reveals sources and
 provenance. History loads only on request.
 
@@ -14,7 +14,7 @@ Review controls use plain actions: Confirm interpretation, Add clarification, Ma
 not known and Mark incorrect. Clarification explicitly warns that it is
 salesperson-reported and not customer-confirmed. Changed sources hide old current
 conclusions until Refresh evidence succeeds. Empty/error states explain the next
-action; `none` leaves the rest of RevenueOS fully usable.
+action; `none` leaves the rest of Oryntela fully usable.
 
 On narrow screens the same semantic sequence naturally becomes one column: name and
 summary, priority gaps, then View all. There is no dense matrix. Buttons remain touch

@@ -1,4 +1,4 @@
-# RevenueOS Daily simplicity review
+# Oryntela Daily simplicity review
 
 - **Review:** WO-025 desktop and 390 × 844 mobile implementations
 - **Outcome:** Pass

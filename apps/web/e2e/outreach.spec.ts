@@ -35,7 +35,7 @@ function workspace(
       state: "available",
       enabled: true,
       canManage: true,
-      message: "RevenueOS Engage is available for this organisation.",
+      message: "Engage is available for this organisation.",
     },
     contactId,
     contactName: "Jane Smith",
@@ -684,7 +684,7 @@ test("keeps Engage administration bounded and explicit", async ({ page }) => {
           state: "available",
           enabled: true,
           canManage: true,
-          message: "RevenueOS Engage is available for this organisation.",
+          message: "Engage is available for this organisation.",
         },
       });
       return;
@@ -704,7 +704,7 @@ test("keeps Engage administration bounded and explicit", async ({ page }) => {
           approvedCta: "Would a short conversation next week be useful?",
           canManage: true,
           complianceNotice:
-            "RevenueOS provides configurable product controls, not legal advice.",
+            "Oryntela provides configurable product controls, not legal advice.",
         },
       });
       return;
@@ -717,7 +717,7 @@ test("keeps Engage administration bounded and explicit", async ({ page }) => {
 
   await page.goto("/settings");
   const engage = page.locator("section", {
-    has: page.getByRole("heading", { name: "RevenueOS Engage" }),
+    has: page.getByRole("heading", { name: "Engage" }),
   });
   await expect(engage.getByLabel("Approved offering")).toHaveValue(
     "Multi-site Access Management",

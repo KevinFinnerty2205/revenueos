@@ -1,4 +1,4 @@
-# RevenueOS Create
+# Oryntela Create
 
 > **Oryntela consolidation — 4 September 2026:** Create remains a product
 > capability rather than a customer plan. See the
@@ -18,7 +18,7 @@ classification and immutable approval.
 
 The current output is editable `.pptx` only. A canonical Account, audience,
 objective and approved template version are required; an Opportunity and a bounded
-focus instruction are optional. RevenueOS shows a deterministic, reorderable slide
+focus instruction are optional. Oryntela shows a deterministic, reorderable slide
 plan before generation. Required and exact-text slides cannot be removed. Generated
 text and every material claim stay reviewable until the seller explicitly approves
 the exact structurally validated version, after which a short-lived, single-use,
@@ -43,7 +43,7 @@ The primary action is **Create** followed by an output type. The flow asks for a
 opportunity, objective, audience, duration/length, required sections, approved
 template and optional content constraints. A blank prompt is secondary.
 
-RevenueOS combines:
+Oryntela combines:
 
 ```mermaid
 flowchart LR
@@ -96,7 +96,7 @@ selected for new output.
 ROI is a deterministic value model. The organisation defines formulas and value
 drivers such as labour/time savings, downtime reduction, revenue uplift, software
 consolidation, risk reduction, energy savings and operational costs. The seller
-enters customer assumptions. RevenueOS calculates current/proposed cost, benefit,
+enters customer assumptions. Oryntela calculates current/proposed cost, benefit,
 implementation cost, payback and ROI with units, currency and rounding visible.
 
 AI may explain the calculation but may not create or alter numeric inputs. Every
@@ -104,7 +104,7 @@ output labels seller/customer assumptions and supports sensitivity scenarios.
 
 ## Experience, administration and limits
 
-Create is a top-level desktop area because the user's question—**What should RevenueOS
+Create is a top-level desktop area because the user's question—**What should Oryntela
 create for me?**—is distinct. Account and Opportunity pages also offer contextual
 Create actions. First-time users see a setup guide when no approved template exists.
 The mobile experience supports presentation review and download but keeps template

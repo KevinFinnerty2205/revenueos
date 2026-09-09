@@ -1,4 +1,4 @@
-# Ask RevenueOS prompt-injection security
+# Ask Oryntela prompt-injection security
 
 ## Threat model
 

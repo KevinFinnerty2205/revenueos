@@ -10,7 +10,7 @@
 
 ## Product outcome
 
-RevenueOS is the AI operating system for customer interactions. It captures the
+Oryntela is the AI operating system for customer interactions. It captures the
 best possible evidence, converts it into trusted intelligence and helps a revenue
 team act on that understanding across the life of a relationship.
 
@@ -163,13 +163,13 @@ end or a calendar end candidate, subject to organisation policy, quiet hours and
 user notification preferences. It must reveal no customer details on a locked
 screen unless the user has opted in.
 
-The opening is natural: “How did it go?” RevenueOS then compares the response with
+The opening is natural: “How did it go?” Oryntela then compares the response with
 known objectives, risks, stakeholders, decisions, timeline and next steps. It asks
 only about strategically material missing or changed information, allows stop/skip
 at any point and produces a review screen.
 
 The voice journal entry is labelled **Reported by you after the interaction**.
-RevenueOS must show a persistent safety message and require the user to confirm
+Oryntela must show a persistent safety message and require the user to confirm
 they are not driving before interactive capture. Car integrations and motion
 detection may strengthen this later; they do not justify claiming that the system
 can reliably determine driving state.
@@ -177,7 +177,7 @@ can reliably determine driving state.
 ## Presentation mode
 
 Presentation mode treats the prepared deck as salesperson-originated context, not
-customer evidence. Before the interaction, RevenueOS prepares audience context,
+customer evidence. Before the interaction, Oryntela prepares audience context,
 objectives, likely questions and known objections. During it, capture remains
 minimal. Afterwards, the debrief asks which sections caused discussion, who engaged,
 which questions or objections arose, what material was requested, whether the
@@ -273,7 +273,7 @@ The recommended sequence is:
 9. Live Interaction Intelligence; and
 10. Interaction Platform Beta.
 
-Kevin can first use RevenueOS for real face-to-face meetings without manually
+Kevin can first use Oryntela for real face-to-face meetings without manually
 uploading a transcript after **WO-013 — AI Debrief and Voice Journal**, subject to
 the existing production-customer-data launch gates and the WO-013 acceptance
 criteria.
@@ -292,7 +292,7 @@ criteria.
 
 ## Assumptions and unresolved questions
 
-- Calendar access and push-notification policy will determine how reliably RevenueOS
+- Calendar access and push-notification policy will determine how reliably Oryntela
   can infer an interaction end.
 - Design-partner policy and jurisdiction will determine which recording paths can be
   piloted; the blueprint is not legal advice.
@@ -314,7 +314,7 @@ criteria.
 
 ## WO-023 relationship
 
-WO-023 places this lifecycle inside RevenueOS Core. Future Prospect, Engage, Create,
+WO-023 places this lifecycle inside Oryntela Core. Future Prospect, Engage, Create,
 CRM, Daily, methodology and forecasting capabilities must reuse authorised Evidence,
 Revenue Brain and human-review boundaries; they do not replace them or broaden
 capture authority implicitly. See the

@@ -7,7 +7,7 @@ export default function FeedbackPage() {
       <PageHeader
         eyebrow="Private beta"
         title="Share feedback"
-        description="Tell us what broke, felt confusing or produced an unhelpful result. RevenueOS never attaches transcript or generated content automatically."
+        description="Tell us what broke, felt confusing or produced an unhelpful result. Oryntela never attaches transcript or generated content automatically."
       />
       <BetaFeedbackForm />
     </div>

@@ -147,7 +147,7 @@ export function OpportunityMethodology({
     <section aria-labelledby="deal-methodology-title" className="form-card">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Deal · evidence view
           </p>
           <h2 id="deal-methodology-title" className="form-legend mt-2">
@@ -190,7 +190,10 @@ export function OpportunityMethodology({
         </p>
       ) : null}
       {message ? (
-        <p role="status" className="mt-4 text-sm font-semibold text-teal-800">
+        <p
+          role="status"
+          className="mt-4 text-sm font-semibold text-brand-secondary"
+        >
           {message}
         </p>
       ) : null}
@@ -267,7 +270,7 @@ export function OpportunityMethodology({
 
       {methodology.projectionId ? (
         <details className="mt-6 border-t border-slate-200 pt-5">
-          <summary className="cursor-pointer text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          <summary className="cursor-pointer text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-focus">
             Methodology history
           </summary>
           <button
@@ -286,7 +289,7 @@ export function OpportunityMethodology({
                   className="rounded-xl border border-slate-200 p-3"
                 >
                   <details>
-                    <summary className="cursor-pointer font-semibold focus:outline-none focus:ring-2 focus:ring-teal-600">
+                    <summary className="cursor-pointer font-semibold focus:outline-none focus:ring-2 focus:ring-brand-focus">
                       {item.methodologyName} · view v{item.projectionVersion} ·{" "}
                       {formatMeetingDate(item.generatedAt)}
                       {item.id === history.currentProjectionId
@@ -369,7 +372,7 @@ function MethodologyItem({
         </p>
       ) : null}
       <details className="mt-4">
-        <summary className="cursor-pointer text-sm font-bold text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600">
+        <summary className="cursor-pointer text-sm font-bold text-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus">
           Why this state · {item.sources.length} source
           {item.sources.length === 1 ? "" : "s"}
         </summary>
@@ -398,7 +401,7 @@ function MethodologyItem({
         )}
       </details>
       <details className="mt-4">
-        <summary className="cursor-pointer text-sm font-bold text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600">
+        <summary className="cursor-pointer text-sm font-bold text-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus">
           Review or correct
         </summary>
         <div

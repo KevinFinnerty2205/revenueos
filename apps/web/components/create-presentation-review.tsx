@@ -234,7 +234,7 @@ export function CreatePresentationReview({
       <nav aria-label="Breadcrumb" className="text-sm text-slate-600">
         <Link
           href="/create"
-          className="font-semibold text-teal-800 hover:underline"
+          className="font-semibold text-brand-secondary hover:underline"
         >
           Create
         </Link>{" "}
@@ -278,7 +278,7 @@ export function CreatePresentationReview({
         <section className="form-card">
           <h2 className="form-legend">Rendering the PowerPoint</h2>
           <p role="status" className="mt-2 text-sm leading-6 text-slate-600">
-            RevenueOS is composing approved slides against the immutable source
+            Oryntela is composing approved slides against the immutable source
             snapshot. This page will refresh automatically.
           </p>
         </section>
@@ -296,7 +296,7 @@ export function CreatePresentationReview({
         <>
           <section aria-labelledby="slide-review-title" className="space-y-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
                 Bounded text review
               </p>
               <h2
@@ -332,7 +332,7 @@ export function CreatePresentationReview({
           <section className="form-card" aria-labelledby="claim-manifest-title">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
                   Traceability
                 </p>
                 <h2 id="claim-manifest-title" className="form-legend mt-1">
@@ -389,14 +389,14 @@ export function CreatePresentationReview({
             </div>
           </section>
 
-          <section className="rounded-3xl border border-teal-200 bg-teal-50 p-6 sm:p-8">
-            <h2 className="text-2xl font-semibold text-teal-950">
+          <section className="rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-6 sm:p-8">
+            <h2 className="text-2xl font-semibold text-brand-primary">
               Human approval before download
             </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-teal-900">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-brand-primary">
               Approval confirms the current immutable version, its required
               slides, source manifest and any claims you explicitly kept.
-              RevenueOS does not send the deck or upload it to an external
+              Oryntela does not send the deck or upload it to an external
               presentation service.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
@@ -458,7 +458,7 @@ function PlanReview({
   );
   return (
     <section className="form-card" aria-labelledby="plan-review-title">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Plan first
       </p>
       <h2 id="plan-review-title" className="form-legend mt-1">

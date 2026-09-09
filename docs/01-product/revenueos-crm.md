@@ -1,4 +1,4 @@
-# RevenueOS CRM
+# Oryntela CRM
 
 > **Oryntela consolidation — 4 September 2026:** Native CRM is a product mode and
 > foundation, not permission to pursue full CRM parity. The
@@ -6,11 +6,11 @@
 > Oryntela complementary to systems of record and supports a core-first partner.
 
 - **Status:** Native CRM Foundation implemented by WO-034; Native Pipeline implemented by WO-035
-- **Principle:** RevenueOS works with your CRM—or it can be your intentionally simple sales CRM.
+- **Principle:** Oryntela works with your CRM—or it can be your intentionally simple sales CRM.
 
 For small organisations, existing Company, Contact and Opportunity records now provide the native system-of-record foundation. For larger organisations, the same local canonical graph works alongside HubSpot with explicit field authority. CRM enriches Accounts, People and Pipeline; it is not a separate top-level application and it does not displace Sales Brain.
 
-Core retains basic relationship/deal CRUD because Sales Brain needs it. The CRM add-on unlocks explicit RevenueOS system-of-record configuration and bounded custom-field administration/mutation, with richer record history now visible in the canonical workspaces. Entitlement loss preserves Core and existing custom values read-only. No billing implementation is implied.
+Core retains basic relationship/deal CRUD because Sales Brain needs it. The CRM add-on unlocks explicit Oryntela system-of-record configuration and bounded custom-field administration/mutation, with richer record history now visible in the canonical workspaces. Entitlement loss preserves Core and existing custom values read-only. No billing implementation is implied.
 
 Current v1 includes one-person ownership, short Account/Contact/Opportunity forms, exact domain/business-email dedupe, archive/restore, six optional typed custom-field types, human-readable field history and bounded activity composed from existing Interactions, Outreach, Actions, Events and Opportunities. External HubSpot-authoritative fields are visibly read-only and still protected by WO-025C service policy.
 

@@ -6,7 +6,7 @@ Time-saved estimates are hypotheses to measure during the pilot. They are not gu
 
 ## 1. Organisation setup — Beta
 
-- **Trigger:** An authorised administrator starts a RevenueOS organisation.
+- **Trigger:** An authorised administrator starts a Oryntela organisation.
 - **Steps:** Verify identity; create or link the organisation; confirm region and policy defaults; invite initial members; assign roles; review readiness.
 - **System behaviour:** Resolves one trusted tenant context, records configuration changes and keeps unavailable capabilities visibly disabled.
 - **User control points:** Administrator chooses membership, role, retention and whether connectors may be enabled.
@@ -172,7 +172,7 @@ Time-saved estimates are hypotheses to measure during the pilot. They are not gu
 - **User control points:** Scope is explicit; authorised users may cancel before irreversible execution where safe.
 - **Failure states:** Provider deletion unavailable, legal hold, partial derived-data failure, backup expiry pending or insufficient permission.
 - **Trust and privacy:** Deletion claims distinguish active systems, connected systems and expiring backups; raw content is absent from audit logs.
-- **Expected time saved:** A single controlled workflow instead of manual requests across RevenueOS stores.
+- **Expected time saved:** A single controlled workflow instead of manual requests across Oryntela stores.
 
 ## 18. Handle failed ingestion or low-confidence output — Pilot
 

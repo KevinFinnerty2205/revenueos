@@ -15,7 +15,7 @@ interface OnboardingState {
 const steps = [
   {
     title: "Move your first customer conversation forward",
-    body: "RevenueOS helps you prepare, capture what happened, review the evidence and keep the next step clear.",
+    body: "Oryntela helps you prepare, capture what happened, review the evidence and keep the next step clear.",
     href: null,
     linkLabel: null,
     action: "Show me how",
@@ -36,7 +36,7 @@ const steps = [
   },
   {
     title: "Plan the next interaction",
-    body: "Add the next meeting, call or in-person interaction from the deal. RevenueOS will keep preparation and capture in the same customer journey.",
+    body: "Add the next meeting, call or in-person interaction from the deal. Oryntela will keep preparation and capture in the same customer journey.",
     href: "/interactions/new",
     linkLabel: "Add an Interaction",
     action: "I know the next interaction",
@@ -115,7 +115,7 @@ export function BetaOnboarding() {
           Your workspace is ready
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          You can revisit this guide from its direct link at any time. RevenueOS
+          You can revisit this guide from its direct link at any time. Oryntela
           suggestions still need your review before anything changes.
         </p>
         <Link className="primary-button mt-6" href="/dashboard">
@@ -134,12 +134,12 @@ export function BetaOnboarding() {
         className="h-2 overflow-hidden rounded-full bg-slate-200"
       >
         <div
-          className="h-full bg-teal-700"
+          className="h-full bg-brand-primary"
           style={{ width: `${((index + 1) / steps.length) * 100}%` }}
         />
       </div>
       <section className="form-card" aria-labelledby="onboarding-step-title">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
           Step {index + 1} of {steps.length}
         </p>
         <h2 id="onboarding-step-title" className="mt-2 text-2xl font-semibold">

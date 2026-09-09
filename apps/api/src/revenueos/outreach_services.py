@@ -198,7 +198,7 @@ async def evaluate_contactability(
     if not settings.feature_engage_enabled or access != "write":
         return ContactabilityResult(
             OutreachContactability.ENGAGE_UNAVAILABLE,
-            "RevenueOS Engage is not enabled for this organisation.",
+            "Engage is not enabled for this organisation.",
             "unknown",
         )
     sender_id = sender_user_id or tenant.user_id
@@ -412,13 +412,13 @@ class OutreachService:
                 state="temporarily_unavailable",
                 enabled=False,
                 can_manage=self.tenant.can_manage(),
-                message="RevenueOS Engage is unavailable in this environment.",
+                message="Engage is unavailable in this environment.",
             )
         return EngageAvailabilityResponse(
             state="available",
             enabled=True,
             can_manage=self.tenant.can_manage(),
-            message="RevenueOS Engage is available for this organisation.",
+            message="Engage is available for this organisation.",
         )
 
     async def update_entitlement(self, request: EngageEntitlementUpdate) -> EngageAvailabilityResponse:
@@ -1511,7 +1511,7 @@ class OutreachService:
             ["Edited by you. Source-backed provenance applies only to the generated personalisation you retained."]
             if user_edited
             else (
-                ["No reliable professional research hook was available; RevenueOS did not invent one."]
+                ["No reliable professional research hook was available; Oryntela did not invent one."]
                 if not prospect_sources
                 else []
             )
@@ -1614,7 +1614,7 @@ class OutreachService:
             approved_cta=policy.approved_cta if policy else None,
             can_manage=self.tenant.can_manage(),
             compliance_notice=(
-                "RevenueOS provides configurable product controls, not legal advice. Your organisation remains responsible "
+                "Oryntela provides configurable product controls, not legal advice. Your organisation remains responsible "
                 "for applicable outreach, privacy and marketing obligations."
             ),
         )
@@ -1650,7 +1650,7 @@ class OutreachService:
         safe_message = {
             "simulated_success": "Email simulation completed. No external email was sent.",
             "succeeded": "The mailbox provider accepted the email for sending. This is not delivery confirmation.",
-            "unknown_external_state": "The provider outcome is uncertain. RevenueOS will not resend automatically.",
+            "unknown_external_state": "The provider outcome is uncertain. Oryntela will not resend automatically.",
             "failed_permanent": "The email could not be sent.",
             "failed_retryable": "The email send attempt failed before confirmed acceptance.",
             "cancelled": "The email send was cancelled before confirmed acceptance.",

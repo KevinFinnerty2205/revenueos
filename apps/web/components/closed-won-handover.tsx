@@ -451,7 +451,7 @@ export function ClosedWonHandover({
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-indigo-950">
           Build an internal, source-pinned handover while the Opportunity is
-          open or Closed Won. RevenueOS uses deterministic extraction only: it
+          open or Closed Won. Oryntela uses deterministic extraction only: it
           does not call an AI provider or treat inferred intelligence as
           customer fact.
         </p>

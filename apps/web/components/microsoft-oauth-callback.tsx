@@ -61,7 +61,7 @@ export function MicrosoftOAuthCallback() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
       <section className="form-card" aria-live="polite">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
           Microsoft 365
         </p>
         <h1 className="mt-2 text-2xl font-bold text-slate-950">

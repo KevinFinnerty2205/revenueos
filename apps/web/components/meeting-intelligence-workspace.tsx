@@ -281,7 +281,7 @@ export function MeetingIntelligenceWorkspace({
 
   return (
     <section aria-labelledby="meeting-intelligence-title" className="space-y-6">
-      <header className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 p-6 text-white shadow-sm sm:p-8">
+      <header className="overflow-hidden rounded-2xl border border-slate-200 bg-brand-primary p-6 text-white shadow-sm sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <div className="flex flex-wrap items-center gap-3">

@@ -4,16 +4,16 @@
 - **Validation profile:** `CREATE_PPTX_PROFILE_VERSION = 1`
 - **Audience:** organisation administrators who prepare templates and sellers who review output
 
-## What RevenueOS promises
+## What Oryntela promises
 
 The downloaded PowerPoint is the authoritative customer-facing file. The browser
 review shows slide structure, customer-facing text, required content, claim sources
 and Business Case values; it is not a pixel-identical PowerPoint renderer. PowerPoint
 may render fonts, wrapping, spacing and layout differently by operating system,
-installed fonts and PowerPoint version. RevenueOS therefore requires a final human
+installed fonts and PowerPoint version. Oryntela therefore requires a final human
 review before customer use.
 
-For a supported template, RevenueOS guarantees the generated package can be safely
+For a supported template, Oryntela guarantees the generated package can be safely
 reopened, contains the expected slides and placeholder replacements, retains exact
 required text, matches its non-removed claim manifest, contains the selected approved
 Business Case values, and has no notes, comments, hidden slides, external links or
@@ -53,14 +53,14 @@ generation.
 ### Supported with limitations
 
 - Ordinary text boxes, tables, shapes, headers/footers and slide numbers may remain on
-  an approved locked/reuse-as-is slide, but RevenueOS does not edit or preview their
+  an approved locked/reuse-as-is slide, but Oryntela does not edit or preview their
   internal layout.
 - Font family names are retained where present. Proprietary font files are never
   extracted, embedded or redistributed; PowerPoint may substitute a missing font.
-- Bounds and conservative text-density checks can recommend review, but RevenueOS
+- Bounds and conservative text-density checks can recommend review, but Oryntela
   does not reproduce PowerPoint's exact font metrics and never silently shrinks text
   to an unreadable size.
-- “Locked” means RevenueOS generation does not modify the slide. It is not PowerPoint
+- “Locked” means Oryntela generation does not modify the slide. It is not PowerPoint
   DRM and a recipient can still edit the downloaded file.
 
 ### Rejected
@@ -69,7 +69,7 @@ generation.
 - Macros, ActiveX, OLE/embedded packages or workbooks, embedded fonts, custom XML,
   external templates/data/media and executable/action relationships.
 - Every external relationship, including clickable web/email hyperlinks, in profile
-  v1. RevenueOS never fetches a link while parsing or rendering.
+  v1. Oryntela never fetches a link while parsing or rendering.
 - SVG, EMF/WMF, audio, video, 3D models and images whose bytes do not match their PNG,
   JPEG or GIF extension.
 - Hidden slides for customer reuse. Speaker notes and comments may be detected for
@@ -77,7 +77,7 @@ generation.
 - Encrypted/password-protected, malformed, ambiguous, path-traversing, duplicate-entry,
   excessively compressed or otherwise over-limit packages.
 
-RevenueOS performs structural safety validation. This is not a general antivirus or
+Oryntela performs structural safety validation. This is not a general antivirus or
 “virus-free” guarantee.
 
 ## Compatibility matrix
@@ -88,7 +88,7 @@ RevenueOS performs structural safety validation. This is not a general antivirus
 | Slide title                 | Yes                        | Yes                                         | Supported placeholder only         | Yes                   | Yes                   | Font wrapping may vary                            | Yes                         |
 | Body text                   | Yes                        | Yes                                         | Supported content placeholder only | Yes                   | Yes                   | Line wrapping may vary                            | Yes                         |
 | Required/exact text         | Yes                        | Exact text checked after save               | No when exact                      | Yes                   | Yes                   | Visual wrapping only                              | Yes                         |
-| Locked/reuse content        | Yes                        | Reused without RevenueOS edits              | No                                 | Structure/text        | Yes                   | Viewer may edit later                             | Yes                         |
+| Locked/reuse content        | Yes                        | Reused without Oryntela edits              | No                                 | Structure/text        | Yes                   | Viewer may edit later                             | Yes                         |
 | Placeholder replacement     | Yes                        | Source bounds/style retained where present  | Yes                                | Yes                   | Yes                   | Font metrics may vary                             | Yes                         |
 | Approved reusable content   | Yes                        | Version-pinned                              | Policy-dependent                   | Yes                   | Yes                   | Layout best effort                                | Yes                         |
 | Customer-specific claims    | Yes                        | Claim/slide/output equality checked         | Supported placeholder              | Yes with lineage      | Yes                   | Layout best effort                                | Yes                         |
@@ -111,7 +111,7 @@ RevenueOS performs structural safety validation. This is not a general antivirus
 1. Start with a standard `.pptx`; do not rename another format.
 2. Use the built-in **Title Slide** layout for the customer title and audience. Keep a
    native title placeholder and subtitle placeholder.
-3. Use native title and body/content placeholders on slides RevenueOS may edit.
+3. Use native title and body/content placeholders on slides Oryntela may edit.
 4. Remove or convert every other text box on an editable slide; otherwise choose
    **Reuse as is** or **Locked** so old customer-specific text cannot survive.
 5. Use **Reuse as is** or **Locked** for approved brand, legal, image-heavy, table or
@@ -133,7 +133,7 @@ signed-in user's active membership, Create entitlement, tenant, exact current ve
 template/source validity, approval and file checksum. A used, expired, wrong-user,
 wrong-tenant, stale or revoked grant is denied; request a fresh download.
 
-If the file is missing or its checksum differs, RevenueOS shows that the presentation
+If the file is missing or its checksum differs, Oryntela shows that the presentation
 is unavailable and serves no bytes. A successful download consumes the grant before
 the response is returned; if the connection then fails, request a new download.
 

@@ -111,7 +111,7 @@ class DailyRepository:
 
     async def user_display_name(self, user_id: UUID) -> str:
         return cast(str | None, await self.session.scalar(select(User.display_name).where(User.id == user_id))) or (
-            "RevenueOS user"
+            "Oryntela user"
         )
 
     async def interactions(

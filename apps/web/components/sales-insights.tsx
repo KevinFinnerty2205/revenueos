@@ -10,6 +10,7 @@ import type {
 } from "@revenueos/shared";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { displayPipelineName } from "@/lib/customer-display";
 import { PageHeader } from "@/components/page-header";
 import { SalesForecast } from "@/components/sales-forecast";
 import { SalesTargets, SalesTargetsOverview } from "@/components/sales-targets";
@@ -147,7 +148,7 @@ function ExactTable({
 }) {
   return (
     <details className="mt-5 rounded-xl border border-slate-200 bg-white">
-      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-teal-800 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600">
+      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-brand-secondary focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-focus">
         View exact values
       </summary>
       <div className="overflow-x-auto border-t border-slate-200">
@@ -234,19 +235,22 @@ function OverviewPanel({
           Won value
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Currencies remain separate; RevenueOS does not apply exchange rates.
+          Currencies remain separate; Oryntela does not apply exchange rates.
         </p>
         {data.wonValues.length ? (
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {data.wonValues.map((item) => (
-              <div key={item.currency} className="rounded-xl bg-teal-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-teal-700">
+              <div
+                key={item.currency}
+                className="rounded-xl bg-brand-secondary/10 p-4"
+              >
+                <p className="text-xs font-bold uppercase tracking-wider text-brand-secondary">
                   {item.currency}
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-teal-950">
+                <p className="mt-1 text-2xl font-semibold text-brand-primary">
                   {formatMoney(item.amount, item.currency)}
                 </p>
-                <p className="mt-1 text-xs text-teal-800">
+                <p className="mt-1 text-xs text-brand-secondary">
                   {item.opportunityCount} won
                 </p>
               </div>
@@ -288,13 +292,13 @@ function FunnelPanel({ data }: { data: SalesFunnel }) {
               id="funnel-title"
               className="text-lg font-semibold text-slate-950"
             >
-              {data.pipelineName} progression
+              {displayPipelineName(data.pipelineName)} progression
             </h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
               {data.cohortDefinition}
             </p>
           </div>
-          <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800">
+          <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-xs font-bold text-brand-secondary">
             {data.cohortCount} in cohort
           </span>
         </div>
@@ -312,7 +316,7 @@ function FunnelPanel({ data }: { data: SalesFunnel }) {
               </div>
               <div className="h-7 overflow-hidden rounded-lg bg-slate-100">
                 <div
-                  className="flex h-full min-w-8 items-center justify-end rounded-lg bg-teal-600 pr-2 text-xs font-bold text-white motion-reduce:transition-none"
+                  className="flex h-full min-w-8 items-center justify-end rounded-lg bg-brand-primary pr-2 text-xs font-bold text-white motion-reduce:transition-none"
                   style={{
                     width: `${Math.max(4, (stage.enteredCount / maximum) * 100)}%`,
                   }}
@@ -387,7 +391,7 @@ function RateCard({ label, rate }: { label: string; rate: SalesFollowOnRate }) {
       </p>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
         <div
-          className="h-full rounded-full bg-teal-600"
+          className="h-full rounded-full bg-brand-primary"
           style={{ width: `${width}%` }}
         />
       </div>
@@ -468,7 +472,7 @@ function ReasonBars({
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                 <div
-                  className="h-full rounded-full bg-teal-600"
+                  className="h-full rounded-full bg-brand-primary"
                   style={{ width: `${numberValue(reason.percentage) ?? 0}%` }}
                 />
               </div>
@@ -743,7 +747,7 @@ export function SalesInsights() {
                 onChange={(event) =>
                   changePreset(event.target.value as DatePreset)
                 }
-                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
               >
                 {datePresets.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -757,12 +761,12 @@ export function SalesInsights() {
               <select
                 value={pipelineId}
                 onChange={(event) => setPipelineId(event.target.value)}
-                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
               >
                 <option value="">All pipelines</option>
                 {metadata?.pipelines.map((pipeline) => (
                   <option key={pipeline.id} value={pipeline.id}>
-                    {pipeline.name}
+                    {displayPipelineName(pipeline.name)}
                     {pipeline.active ? "" : " (inactive)"}
                   </option>
                 ))}
@@ -773,7 +777,7 @@ export function SalesInsights() {
               <select
                 value={ownerUserId}
                 onChange={(event) => setOwnerUserId(event.target.value)}
-                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
               >
                 <option value="">All owners</option>
                 {metadata?.owners.map((owner) => (
@@ -805,7 +809,7 @@ export function SalesInsights() {
                   value={startDate}
                   max={endDate}
                   onChange={(event) => setStartDate(event.target.value)}
-                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
                 />
               </label>
               <label className="text-sm font-semibold text-slate-700">
@@ -816,7 +820,7 @@ export function SalesInsights() {
                   min={startDate}
                   max={localDate(new Date())}
                   onChange={(event) => setEndDate(event.target.value)}
-                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus/20"
                 />
               </label>
             </div>
@@ -841,7 +845,7 @@ export function SalesInsights() {
               role="tab"
               aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`min-h-11 whitespace-nowrap rounded-lg px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-teal-600 ${activeTab === tab.id ? "bg-white text-teal-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+              className={`min-h-11 whitespace-nowrap rounded-lg px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-focus ${activeTab === tab.id ? "bg-white text-brand-primary shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
             >
               {tab.label}
             </button>
@@ -914,9 +918,9 @@ export function SalesInsights() {
         <footer className="mt-8 text-xs leading-5 text-slate-500">
           Inclusive local dates: {startDate} to {endDate}.{" "}
           {selectedPipeline
-            ? `Pipeline: ${selectedPipeline.name}. `
+            ? `Pipeline: ${displayPipelineName(selectedPipeline.name)}. `
             : "All pipelines. "}
-          Definitions use canonical RevenueOS records and metric catalogue
+          Definitions use canonical Oryntela records and metric catalogue
           version 1.
         </footer>
       ) : null}

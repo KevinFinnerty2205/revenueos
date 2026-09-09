@@ -24,7 +24,7 @@ consumes the same registry rather than reimplementing a formula.
 - Counts are distinct canonical records. Rates always return numerator and
   denominator. A zero denominator is `unavailable`, not zero percent.
 - Monetary observations are grouped by ISO currency. Missing values are counted as
-  unvalued, never as zero. RevenueOS applies no FX conversion.
+  unvalued, never as zero. Oryntela applies no FX conversion.
 
 ## Registry version 1
 

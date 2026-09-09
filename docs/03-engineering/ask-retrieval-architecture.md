@@ -1,4 +1,4 @@
-# Ask RevenueOS retrieval architecture
+# Ask Oryntela retrieval architecture
 
 ## Boundary
 
@@ -26,7 +26,7 @@ the browser, crawl the public web or invoke a provider.
 
 The implementation reuses, rather than re-derives, current product intelligence:
 
-1. Opportunity metadata and RevenueOS Daily/current Action state where the question
+1. Opportunity metadata and Oryntela Daily/current Action state where the question
    asks for current work or focus;
 2. current Methodology projections and explicit field states;
 3. current Revenue Brain longitudinal insights;

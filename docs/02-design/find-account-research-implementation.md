@@ -20,7 +20,7 @@ progress while the client polls persisted state. Polling stops on a terminal sta
 page reads do not re-run research.
 
 Refresh is visible but secondary. Add to Sales is the primary action and opens an
-explicit confirmation explaining whether RevenueOS will attach an exact-domain
+explicit confirmation explaining whether Oryntela will attach an exact-domain
 Company or create one. The seller can cancel without mutation. After promotion,
 the action links to the Company.
 

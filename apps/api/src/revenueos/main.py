@@ -91,9 +91,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await app_engine.dispose()
 
     app = FastAPI(
-        title="RevenueOS AI API",
+        title="Oryntela API",
         version="0.4.0",
-        description="Tenant-isolated RevenueOS private beta API.",
+        description="Tenant-isolated Oryntela private beta API.",
         docs_url=None if app_settings.environment == "production" else "/docs",
         redoc_url=None if app_settings.environment == "production" else "/redoc",
         lifespan=lifespan,

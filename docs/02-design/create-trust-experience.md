@@ -37,7 +37,7 @@ The review heading carries visible copy:
 > is the final file. Fonts, spacing and layout may vary slightly by device and
 > PowerPoint version.
 
-This is ordinary product copy, not hidden legal text. RevenueOS never says “pixel
+This is ordinary product copy, not hidden legal text. Oryntela never says “pixel
 perfect”, “looks exactly like PowerPoint”, “font fidelity guaranteed” or “locked in
 PowerPoint”. Conservative overflow signals say **Review recommended**; they do not
 silently compress text.
@@ -73,7 +73,7 @@ landmarks are semantic; form controls retain labels, keyboard navigation and vis
 focus; motion is not needed to understand state.
 
 The structured review remains useful without thumbnails. The uploaded template owns
-its authored reading order, alt text and contrast; RevenueOS does not claim to repair
+its authored reading order, alt text and contrast; Oryntela does not claim to repair
 those source accessibility properties.
 
 See the [customer compatibility guide](../01-product/create-powerpoint-trust-guide.md).

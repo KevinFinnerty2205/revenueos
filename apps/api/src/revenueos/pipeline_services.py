@@ -902,7 +902,7 @@ class PipelineService:
         if setting is None or setting.mode != "native":
             raise PublicAPIError(
                 "native_crm_required",
-                "Select RevenueOS as the CRM before configuring native pipelines.",
+                "Select Oryntela as the CRM before configuring native pipelines.",
                 409,
             )
 

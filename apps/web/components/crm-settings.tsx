@@ -150,7 +150,7 @@ export function CRMSettings() {
 
   return (
     <section className="form-card" aria-labelledby="crm-settings-title">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Native CRM
       </p>
       <div className="mt-2 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
@@ -195,7 +195,7 @@ export function CRMSettings() {
                 type="checkbox"
                 checked={confirmed}
                 onChange={(event) => setConfirmed(event.target.checked)}
-                className="mt-1 h-4 w-4 accent-teal-700"
+                className="mt-1 h-4 w-4 accent-brand-secondary"
               />
               I understand that changing the system of record affects which
               mapped fields can be edited.

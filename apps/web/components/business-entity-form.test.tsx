@@ -270,7 +270,7 @@ describe("BusinessEntityForm", () => {
     render(<BusinessEntityForm entity="contacts" entityId="contact-1" />);
     expect(await screen.findByLabelText(/First name/)).toBeDisabled();
     expect(
-      screen.getByText("CRM controlled · read-only in RevenueOS"),
+      screen.getByText("CRM controlled · read-only in Oryntela"),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
 

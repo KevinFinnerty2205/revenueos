@@ -20,7 +20,7 @@ async def get_daily_service(
     if not await DailyRepository(session).membership_exists(tenant.organisation_id, tenant.user_id):
         raise PublicAPIError(
             "forbidden",
-            "You do not have permission to open RevenueOS Daily.",
+            "You do not have permission to open Oryntela Daily.",
             403,
         )
     yield RevenueOSDailyService(session, tenant, settings)

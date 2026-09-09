@@ -1,17 +1,17 @@
-# RevenueOS Sales Analytics and Win/Loss Intelligence
+# Oryntela Sales Analytics and Win/Loss Intelligence
 
 > **Oryntela consolidation — 4 September 2026:** Analytics supports the
 > evidence-to-action loop; it is not a general BI expansion mandate. See the
 > [Oryntela master product blueprint](oryntela-master-product-blueprint.md).
 
-**Status:** implemented by WO-036 as a RevenueOS Core capability.
+**Status:** implemented by WO-036 as a Oryntela Core capability.
 
 > **WO-038 handoff:** Transparent Forecasting reuses `won_value` definition version 1
 > through `SalesMetricService` for Actual. Closing, reopening or correcting canonical
 > Opportunities therefore reconciles Insights, Targets and Forecast without copied
 > Won formulas. Historical expected contribution remains a separate model.
 
-Sales Insights answers five bounded questions from canonical RevenueOS history: what
+Sales Insights answers five bounded questions from canonical Oryntela history: what
 entered the pipeline, what progressed, how long completed stages took, what later
 followed recorded calls and meetings, and what was finally won or lost. It complements
 Pipeline workflow; it is not a general reporting or business-intelligence product.

@@ -7,7 +7,7 @@ production-capable Google Workspace mail/calendar.
 WO-022 lets an organisation administrator enable deterministic mock email,
 calendar, CRM and task connections. An active organisation member may then take
 an already approved Action through a separate server-generated preview and final
-confirmation. The result is an auditable simulation; RevenueOS does not contact
+confirmation. The result is an auditable simulation; Oryntela does not contact
 or mutate an external provider.
 
 WO-025C extends the same boundary with HubSpot as the sole production CRM adapter.

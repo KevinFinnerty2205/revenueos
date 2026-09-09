@@ -1,7 +1,30 @@
 @import "tailwindcss";
 
 :root {
+  --brand-primary: #0e1b32;
+  --brand-primary-foreground: #f6f4ef;
+  --brand-secondary: #204e5a;
+  --brand-accent: #c96b45;
+  --brand-background: #f6f4ef;
+  --brand-surface: #ffffff;
+  --brand-text: #0e1b32;
+  --brand-muted: #59687a;
+  --brand-border: #7c8999;
+  --brand-focus: #c96b45;
   color-scheme: light;
+}
+
+@theme inline {
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-primary-foreground: var(--brand-primary-foreground);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-background: var(--brand-background);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-text: var(--brand-text);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-border: var(--brand-border);
+  --color-brand-focus: var(--brand-focus);
 }
 
 * {
@@ -10,13 +33,21 @@
 
 body {
   margin: 0;
-  background: #f5f7f4;
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--brand-background);
+  color: var(--brand-text);
+  font-family:
+    var(--font-geist-sans), "Geist", "Helvetica Neue", Arial, sans-serif;
 }
 
 ::selection {
-  background: #99f6e4;
-  color: #042f2e;
+  background: color-mix(in srgb, var(--brand-accent) 35%, white);
+  color: var(--brand-primary);
+}
+
+table,
+.tabular-nums,
+input[type="number"] {
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -50,15 +81,15 @@ body {
 
 @layer components {
   .primary-button {
-    @apply inline-flex min-h-11 items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60;
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-primary px-5 py-3 text-sm font-bold text-brand-primary-foreground shadow-sm transition hover:bg-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60;
   }
 
   .secondary-button {
-    @apply inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-800 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-bold text-slate-800 transition hover:border-brand-secondary hover:bg-brand-secondary/10 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .form-control {
-    @apply min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-950 outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-100;
+    @apply min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-950 outline-none transition focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20;
   }
 
   .form-card {

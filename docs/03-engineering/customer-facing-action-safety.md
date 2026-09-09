@@ -10,7 +10,7 @@ versioned. Source currency is checked again at approval. Approval invokes no
 adapter. WO-022 rechecks currency, recipient/attendees, connection, risk class and
 the complete preview fingerprint before a separate simulation confirmation.
 
-Customer-facing proposals cannot use manual completion because RevenueOS has no
+Customer-facing proposals cannot use manual completion because Oryntela has no
 independent delivery confirmation. A successful WO-022 mock result is explicitly
 `simulated_success`, not delivery. Future live execution still requires a separate
 work order covering credentials, scopes, provider receipts, reconciliation,

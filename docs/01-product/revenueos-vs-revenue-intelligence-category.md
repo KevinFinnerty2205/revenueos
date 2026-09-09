@@ -1,4 +1,4 @@
-# RevenueOS versus the revenue-intelligence category
+# Oryntela versus the revenue-intelligence category
 
 - **Status:** Checkpoint 1 product review, based on public vendor information accessed
   17 August 2026
@@ -55,7 +55,7 @@ marketed to mid-market revenue teams.
 
 ## Product-level comparison
 
-| Buyer expectation                     | Category/Airspeed public direction               | RevenueOS after WO-025                                                                  | Product decision                                                              |
+| Buyer expectation                     | Category/Airspeed public direction               | Oryntela after WO-025                                                                  | Product decision                                                              |
 | ------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Automatic online conversation capture | Normal category entry path                       | Native platform capture absent; deliberate import and no-recording workflows exist      | Support the cohort's first production path, then add one provider at a time   |
 | Fast structured notes                 | Summary, action and key-moment generation        | Broad strict structured intelligence already exists                                     | Validate production quality; do not add another generic notes artefact        |
@@ -74,11 +74,11 @@ marketed to mid-market revenue teams.
 The detailed row-by-row Airspeed parity-plus matrix is in
 [Checkpoint 1](../06-roadmap/checkpoint-1-core-competitive-readiness.md#airspeed-parity-plus-assessment).
 
-## Where RevenueOS is strongest
+## Where Oryntela is strongest
 
 ### Evidence has meaning
 
-RevenueOS distinguishes direct customer evidence, imported material,
+Oryntela distinguishes direct customer evidence, imported material,
 salesperson-reported observations, seller-created context and AI inference. It keeps
 source, freshness, review and conflicts visible. A transcript label does not become a
 verified person, a seller presentation does not become customer intent and absence
@@ -99,7 +99,7 @@ becoming a second CRM fact store.
 
 ### Action remains accountable
 
-RevenueOS already has a stronger safety contract than a simple “AI agent” promise:
+Oryntela already has a stronger safety contract than a simple “AI agent” promise:
 immutable proposals, exact approval, separate preview/confirmation, idempotency,
 unknown-outcome handling and revocation. The missing piece is a production adapter,
 not a looser authority model.
@@ -108,15 +108,15 @@ not a looser authority model.
 
 One explained priority, bounded lists and a calm caught-up state translate complex
 underlying intelligence into seller work. The category frequently delivers reports
-or alerts; RevenueOS can differentiate through a coherent personal day rather than
+or alerts; Oryntela can differentiate through a coherent personal day rather than
 more notifications.
 
-## Where RevenueOS is weakest
+## Where Oryntela is weakest
 
 1. **The external loop is not real.** There is no production CRM, mail, calendar or
    meeting-platform connector, and customer data remains prohibited.
 2. **Accumulated knowledge retrieval is newly bounded.** WO-025B adds cited Ask over
-   authorised RevenueOS data, but no public research, broad manager scope or persisted
+   authorised Oryntela data, but no public research, broad manager scope or persisted
    conversations; real cohort usefulness remains to be observed.
 3. **Pipeline intelligence is incomplete.** Forecasting, analytics, Win/Loss,
    targets, team visibility and coaching are documented but absent.
@@ -128,7 +128,7 @@ more notifications.
 
 ## Compete, differentiate or decline
 
-### Commodity capabilities RevenueOS still needs
+### Commodity capabilities Oryntela still needs
 
 - one reliable production capture/intelligence path;
 - one real CRM read/match/approved-write connector;
@@ -144,7 +144,7 @@ more notifications.
 - Evidence-backed methodology without percentage theatre;
 - longitudinal Revenue Brain;
 - reviewable Actions and safe execution semantics;
-- RevenueOS Daily; and
+- Oryntela Daily; and
 - optional native CRM without requiring CRM replacement.
 
 ### Competitor patterns not worth copying
@@ -162,10 +162,10 @@ more notifications.
 
 ## Positioning decision
 
-RevenueOS should not position as “another call recorder with more AI”. The durable
+Oryntela should not position as “another call recorder with more AI”. The durable
 category position is:
 
-> RevenueOS is the evidence-backed Sales Brain for relationship-driven teams. It
+> Oryntela is the evidence-backed Sales Brain for relationship-driven teams. It
 > helps you prepare, capture what changed with or without recording, remember the
 > whole relationship and complete the follow-through you approve.
 
@@ -176,17 +176,17 @@ visibility.
 
 After the pre-Prospect sequence is validated, the stronger message becomes:
 
-> Finish the meeting. RevenueOS prepares the follow-through, shows its evidence and
+> Finish the meeting. Oryntela prepares the follow-through, shows its evidence and
 > applies the CRM update you approve.
 
 Only a later live mail path and measured operational reliability justify shortening
-that to “RevenueOS handles the admin.”
+that to “Oryntela handles the admin.”
 
 ## Pricing and go-to-market implication
 
 Airspeed's public starting-price claim and bundled implementation support indicate
-that buyers may compare RevenueOS with an operational service as much as a software
-seat. RevenueOS should not set or imply a price from that claim. It should learn:
+that buyers may compare Oryntela with an operational service as much as a software
+seat. Oryntela should not set or imply a price from that claim. It should learn:
 
 - whether the first ICP will pay for the complete Core loop before add-ons;
 - which CRM and productivity stack serves the cohort;

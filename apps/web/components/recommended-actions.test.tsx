@@ -26,7 +26,7 @@ function action(overrides: Partial<ActionProposal> = {}): ActionProposal {
     approvedVersion: null,
     title: "Send the reviewed follow-up draft",
     description:
-      "Review the final draft before taking any action outside RevenueOS.",
+      "Review the final draft before taking any action outside Oryntela.",
     proposedDueAt: "2026-08-18T02:00:00Z",
     targetEntityType: "contact",
     targetEntityId: "contact-1",
@@ -332,7 +332,7 @@ describe("RecommendedActions", () => {
       attemptCount: 1,
       retryable: false,
       safeMessage:
-        "The HubSpot outcome is unknown. RevenueOS will not retry until it is reconciled.",
+        "The HubSpot outcome is unknown. Oryntela will not retry until it is reconciled.",
       createdAt: "2026-08-24T01:02:00Z",
       updatedAt: "2026-08-24T01:02:06Z",
     };
@@ -464,7 +464,7 @@ describe("RecommendedActions", () => {
       attemptCount: 1,
       retryable: false,
       safeMessage:
-        "The Microsoft send outcome is unknown. RevenueOS will not resend without strong Sent Items evidence.",
+        "The Microsoft send outcome is unknown. Oryntela will not resend without strong Sent Items evidence.",
       createdAt: "2026-09-06T01:02:00Z",
       updatedAt: "2026-09-06T01:02:16Z",
     };

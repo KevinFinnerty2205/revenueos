@@ -10,6 +10,7 @@ import type {
 } from "@revenueos/shared";
 import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiBlob, apiRequest } from "@/lib/api";
+import { displayPipelineName } from "@/lib/customer-display";
 import { humanise } from "@/lib/business-entities";
 
 type ColumnMapping = Record<string, string | null>;
@@ -250,7 +251,7 @@ export function CRMImportOnboarding() {
       );
       setPreview(next);
       setConfirmed(false);
-      setMessage("Preview complete. RevenueOS has not changed CRM records.");
+      setMessage("Preview complete. Oryntela has not changed CRM records.");
     } catch (reason) {
       setMessage(
         reason instanceof Error
@@ -302,7 +303,7 @@ export function CRMImportOnboarding() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `revenueos-${entityType}-import-template.csv`;
+      anchor.download = `oryntela-${entityType}-import-template.csv`;
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (reason) {
@@ -326,7 +327,7 @@ export function CRMImportOnboarding() {
   const counts = preview ? dispositionCounts(preview) : null;
   return (
     <section className="form-card" aria-labelledby="crm-import-title">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Supervised onboarding
       </p>
       <h2 id="crm-import-title" className="form-legend mt-2">
@@ -334,7 +335,7 @@ export function CRMImportOnboarding() {
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
         Import Accounts, Contacts or open Opportunities from a UTF-8 CSV.
-        Preview is read-only; RevenueOS never infers permission to contact and
+        Preview is read-only; Oryntela never infers permission to contact and
         does not retain the raw CSV.
       </p>
 
@@ -460,7 +461,7 @@ export function CRMImportOnboarding() {
                 >
                   {pipelines.map((pipeline) => (
                     <option key={pipeline.id} value={pipeline.id}>
-                      {pipeline.name}
+                      {displayPipelineName(pipeline.name)}
                     </option>
                   ))}
                 </select>
@@ -499,8 +500,8 @@ export function CRMImportOnboarding() {
       ) : null}
 
       {preview ? (
-        <div className="mt-6 rounded-2xl border border-teal-200 bg-teal-50 p-5">
-          <h3 className="font-semibold text-teal-950">Import preview</h3>
+        <div className="mt-6 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
+          <h3 className="font-semibold text-brand-primary">Import preview</h3>
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
             <Metric label="Rows checked" value={preview.rowCount} />
             <Metric
@@ -533,16 +534,16 @@ export function CRMImportOnboarding() {
               }
             />
           </dl>
-          <p className="mt-4 text-sm text-teal-950">
+          <p className="mt-4 text-sm text-brand-primary">
             Possible duplicates and invalid rows are skipped. Permission to
             contact is never inferred.
           </p>
           {preview.state === "previewed" ? (
             <>
-              <label className="mt-4 flex items-start gap-3 text-sm font-semibold text-teal-950">
+              <label className="mt-4 flex items-start gap-3 text-sm font-semibold text-brand-primary">
                 <input
                   type="checkbox"
-                  className="mt-1 h-4 w-4 accent-teal-700"
+                  className="mt-1 h-4 w-4 accent-brand-secondary"
                   checked={confirmed}
                   onChange={(event) => setConfirmed(event.target.checked)}
                 />
@@ -561,7 +562,7 @@ export function CRMImportOnboarding() {
               </button>
             </>
           ) : (
-            <p className="mt-4 font-semibold text-teal-950">
+            <p className="mt-4 font-semibold text-brand-primary">
               Import confirmed · {preview.importedRowCount} records created.
             </p>
           )}
@@ -619,8 +620,8 @@ function MappingSelectors({
 function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <dt className="font-semibold text-teal-800">{label}</dt>
-      <dd className="mt-1 text-xl font-bold text-teal-950">{value}</dd>
+      <dt className="font-semibold text-brand-secondary">{label}</dt>
+      <dd className="mt-1 text-xl font-bold text-brand-primary">{value}</dd>
     </div>
   );
 }

@@ -29,7 +29,7 @@ state, idempotent retrieval, bounded retry, expired/revoked-token handling and a
 support runbook. If webhooks become necessary they additionally require signature
 verification, replay protection, timestamp tolerance, event allowlisting, bounded
 payloads and trusted tenant mapping. Auto-ingestion remains server-authoritative and
-off by default; RevenueOS never silently processes every calendar meeting.
+off by default; Oryntela never silently processes every calendar meeting.
 
 ## First integration recommendation
 

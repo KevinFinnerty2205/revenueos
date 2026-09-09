@@ -1,6 +1,6 @@
 # Design principles
 
-RevenueOS should feel calm, capable and trustworthy.
+Oryntela should feel calm, capable and trustworthy.
 
 ## Qualities
 

@@ -25,7 +25,7 @@ const metadata = {
   pipelines: [
     {
       id: pipelineId,
-      name: "RevenueOS Sales Pipeline",
+      name: "Oryntela Sales Pipeline",
       isDefault: true,
       active: true,
       stages: [
@@ -103,7 +103,7 @@ const emptyOverview = {
 const funnel = {
   scope: { ...scope, pipelineId },
   pipelineId,
-  pipelineName: "RevenueOS Sales Pipeline",
+  pipelineName: "Oryntela Sales Pipeline",
   cohortDefinition:
     "Opportunities first entering this pipeline during the selected period; progression measured through today.",
   cohortCount: 19,
@@ -303,7 +303,7 @@ const targetMetadata = {
     { userId: "user-2", displayName: "Taylor Seller" },
   ],
   pipelines: [
-    { id: pipelineId, name: "RevenueOS Sales Pipeline", active: true },
+    { id: pipelineId, name: "Oryntela Sales Pipeline", active: true },
   ],
   canAssignPersonalTargets: true,
   canCreateOrganisationTargets: true,
@@ -371,7 +371,7 @@ const forecastBaseline = {
   status: "available",
   modelVersion: "forecast_historical_stage_outcome_v1",
   pipelineId,
-  pipelineName: "RevenueOS Sales Pipeline",
+  pipelineName: "Oryntela Sales Pipeline",
   stageId: "stage-evaluation",
   stageName: "Evaluation",
   wonCount: 7,
@@ -413,7 +413,7 @@ const forecastHistory = {
       currencySnapshot: "AUD",
       expectedCloseDateSnapshot: "2026-09-13",
       pipelineIdSnapshot: pipelineId,
-      pipelineNameSnapshot: "RevenueOS Sales Pipeline",
+      pipelineNameSnapshot: "Oryntela Sales Pipeline",
       stageIdSnapshot: "stage-evaluation",
       stageNameSnapshot: "Evaluation",
       opportunityStatusSnapshot: "open",
@@ -486,7 +486,7 @@ const salesForecast = {
       currency: "AUD",
       expectedCloseDate: "2026-09-13",
       pipelineId,
-      pipelineName: "RevenueOS Sales Pipeline",
+      pipelineName: "Oryntela Sales Pipeline",
       stageId: "stage-evaluation",
       stageName: "Evaluation",
       stageEnteredAt: "2026-08-01T02:00:00Z",
@@ -517,7 +517,7 @@ const forecastMetadata = {
   organisationTimezone: "Australia/Sydney",
   owners: metadata.owners,
   pipelines: [
-    { id: pipelineId, name: "RevenueOS Sales Pipeline", active: true },
+    { id: pipelineId, name: "Oryntela Sales Pipeline", active: true },
   ],
   canViewOrganisationForecast: true,
   modelVersion: "forecast_historical_stage_outcome_v1",
@@ -672,7 +672,7 @@ test("Sales Insights reconciles exact funnel, activity and Win/Loss fixtures", a
   await expect(page.getByText(/choose one pipeline/i)).toBeVisible();
   await page.getByLabel("Pipeline").selectOption(pipelineId);
   await expect(
-    page.getByText("RevenueOS Sales Pipeline progression"),
+    page.getByText("Oryntela Sales Pipeline progression"),
   ).toBeVisible();
   await expect(page.getByText(/baseline-only/i)).toBeVisible();
   await expect(
@@ -736,7 +736,7 @@ test("Sales Insights remains usable at a 390-pixel viewport", async ({
 
   await page.getByLabel("Pipeline").selectOption(pipelineId);
   for (const [tabName, fileName, expectedText] of [
-    ["Funnel", "funnel", "RevenueOS Sales Pipeline progression"],
+    ["Funnel", "funnel", "Oryntela Sales Pipeline progression"],
     ["Activity", "activity", "Calls followed by a meeting"],
     ["Win / loss", "win-loss", "Why we won"],
   ] as const) {

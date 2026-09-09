@@ -131,7 +131,7 @@ async def crm_import_template(
         ),
         "opportunity": ("Name,Account Domain,Stage,Estimated Value,Currency,Expected Close Date,Description,Owner\r\n"),
     }
-    filename = f"revenueos-{entity_type}-import-template.csv"
+    filename = f"oryntela-{entity_type}-import-template.csv"
     return Response(
         content=templates[entity_type],
         media_type="text/csv; charset=utf-8",

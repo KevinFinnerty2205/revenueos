@@ -46,7 +46,7 @@ persuasion vulnerability are not permitted personalisation inputs. The implement
 contains no personality profile, protected-trait inference or manipulation score.
 
 Address verification and provider supply are provenance, not permission. Policy copy
-explicitly assigns legal/privacy responsibility to the organisation. RevenueOS does
+explicitly assigns legal/privacy responsibility to the organisation. Oryntela does
 not silently listen, record, scrape, infer addresses or enrich from private sources.
 
 ## OAuth and provider boundary

@@ -1,12 +1,12 @@
 # End-to-end Sales Platform vision
 
 - **Status:** Approved future direction from WO-023; implementation requires separate work orders
-- **Current baseline:** RevenueOS through WO-022, with Sales Brain, Interaction Intelligence, Opportunity Workspace, Revenue Brain, reviewable Actions and simulation-only execution
+- **Current baseline:** Oryntela through WO-022, with Sales Brain, Interaction Intelligence, Opportunity Workspace, Revenue Brain, reviewable Actions and simulation-only execution
 - **Category:** The AI operating system for sales
 
 ## Product promise
 
-RevenueOS helps salespeople find the right customers, understand the right people,
+Oryntela helps salespeople find the right customers, understand the right people,
 win better conversations, progress every opportunity and know what to do next.
 
 Sales Brain remains the product's centre. Every future capability must do at least
@@ -18,7 +18,7 @@ one of the following:
 4. help create opportunities for Sales Brain; or
 5. help manage and forecast the revenue represented in Sales Brain.
 
-RevenueOS must become more powerful without feeling more complicated. A new seller
+Oryntela must become more powerful without feeling more complicated. A new seller
 should understand the next useful action within approximately 30 seconds, without
 learning the internal architecture.
 
@@ -50,12 +50,12 @@ improve later targeting and coaching.
 
 ```mermaid
 flowchart TB
-    subgraph Core["RevenueOS Core"]
+    subgraph Core["Oryntela Core"]
         SB["Sales Brain"]
         ME["Sales Methodology"]
-        RI["RevenueOS Intelligence"]
-        WS["RevenueOS Workspace"]
-        RD["RevenueOS Daily"]
+        RI["Oryntela Intelligence"]
+        WS["Oryntela Workspace"]
+        RD["Oryntela Daily"]
     end
     P["Prospect"] --> SB
     E["Engage"] --> SB
@@ -71,7 +71,7 @@ flowchart TB
 
 Core is valuable enough to buy and keep independently. Prospect, Engage, Create and
 CRM expand what Core can do; they do not remove essential Sales Brain behaviour from
-Core. RevenueOS Complete bundles Core and all four add-ons.
+Core. Oryntela Complete bundles Core and all four add-ons.
 
 ## Revenue Brain is the centre
 
@@ -143,7 +143,7 @@ No separate manager product or giant CRM sub-application is required.
 
 ## Product boundaries
 
-RevenueOS should not become generic project management, a SharePoint clone, a full
+Oryntela should not become generic project management, a SharePoint clone, a full
 Salesforce clone, marketing automation, a social network, generic BI, a no-code
 workflow engine, an unrestricted AI chatbot or employee-surveillance software.
 
@@ -154,20 +154,20 @@ outreach. Autonomous cold calling is explicitly deferred.
 
 ## Category and messaging
 
-**Category:** RevenueOS is the AI operating system for sales.
+**Category:** Oryntela is the AI operating system for sales.
 
-**Core message:** RevenueOS Sales Brain understands every authorised customer
+**Core message:** Oryntela Sales Brain understands every authorised customer
 interaction, remembers the opportunity and helps you know what matters and what to
 do next.
 
-RevenueOS competes conceptually with parts of CRM, conversation intelligence, sales
+Oryntela competes conceptually with parts of CRM, conversation intelligence, sales
 engagement, prospecting, forecasting, enablement and content-generation categories.
 Its advantage is the connected evidence-to-action loop, not the number of features.
 No current-market factual claim is made by this blueprint.
 
 ## Related documents
 
-- [RevenueOS Core](revenueos-core-product.md)
+- [Oryntela Core](revenueos-core-product.md)
 - [Commercial packaging](revenueos-commercial-packaging.md)
 - [Information architecture](../02-design/revenueos-information-architecture.md)
 - [End-to-end roadmap](../06-roadmap/end-to-end-sales-platform-roadmap.md)

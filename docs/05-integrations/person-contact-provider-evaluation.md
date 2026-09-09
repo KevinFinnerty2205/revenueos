@@ -2,7 +2,7 @@
 
 ## WO-027 decision
 
-RevenueOS remains provider-abstraction/mock-only. No free or paid production account, credit bundle or trial was activated.
+Oryntela remains provider-abstraction/mock-only. No free or paid production account, credit bundle or trial was activated.
 
 | Candidate | Useful capability | Review finding | Decision |
 | --- | --- | --- | --- |

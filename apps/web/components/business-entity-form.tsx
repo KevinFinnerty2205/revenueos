@@ -402,7 +402,7 @@ export function BusinessEntityForm({
   return (
     <section aria-labelledby={`${entity}-form-title`}>
       <header className="mb-8">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
           {isEditing ? "Edit record" : "New record"}
         </p>
         <h1
@@ -497,7 +497,7 @@ export function BusinessEntityForm({
               type="submit"
               disabled={submitting}
               aria-describedby={submitError ? "form-error" : undefined}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-teal-700 px-5 text-sm font-bold text-white hover:bg-teal-800 disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-primary px-5 text-sm font-bold text-white hover:bg-brand-secondary disabled:cursor-wait disabled:opacity-60"
             >
               {submitting
                 ? "Saving…"
@@ -530,7 +530,7 @@ function FormField({
   const id = `field-${field.name}`;
   const isRequired = required ?? field.required;
   const className =
-    "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-950 outline-none transition focus:border-teal-700 focus:ring-2 focus:ring-teal-100";
+    "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-950 outline-none transition focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20";
 
   return (
     <div className={field.fullWidth ? "sm:col-span-2" : undefined}>
@@ -598,7 +598,7 @@ function FormField({
       )}
       {disabled ? (
         <p className="mt-2 text-xs font-semibold text-blue-700">
-          CRM controlled · read-only in RevenueOS
+          CRM controlled · read-only in Oryntela
         </p>
       ) : null}
     </div>

@@ -177,7 +177,7 @@ export function CustomerEvidencePanel({
     <section aria-labelledby="customer-evidence-title" className="form-card">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Source-aware evidence
           </p>
           <h2 id="customer-evidence-title" className="form-legend mt-2">
@@ -231,7 +231,7 @@ export function CustomerEvidencePanel({
       {message ? (
         <p
           role="status"
-          className="mt-5 rounded-xl bg-teal-50 p-4 text-sm font-semibold text-teal-900"
+          className="mt-5 rounded-xl bg-brand-secondary/10 p-4 text-sm font-semibold text-brand-primary"
         >
           {message}
         </p>
@@ -314,7 +314,7 @@ export function CustomerEvidencePanel({
                 className="rounded-2xl border border-slate-200 p-4"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-bold uppercase tracking-wide text-teal-800">
+                  <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
                     {humanise(item.category)} · {humanise(item.sourceKind)}
                   </p>
                   <time

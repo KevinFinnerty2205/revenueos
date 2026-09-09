@@ -186,7 +186,7 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
   return (
     <div className="space-y-6">
       <header className="mb-8">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
           Account
         </p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
@@ -296,7 +296,7 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
                 {snapshot.opportunityId ? (
                   <Link
                     href={`/opportunities/${snapshot.opportunityId}`}
-                    className="mt-3 inline-flex text-sm font-bold text-teal-800 underline underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                    className="mt-3 inline-flex text-sm font-bold text-brand-secondary underline underline-offset-4 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
                   >
                     Open opportunity
                   </Link>
@@ -370,7 +370,7 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
                 </ul>
                 <Link
                   href={`/interactions/${snapshot.interactionId}`}
-                  className="mt-3 inline-flex text-sm font-bold text-teal-800 underline underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                  className="mt-3 inline-flex text-sm font-bold text-brand-secondary underline underline-offset-4 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
                 >
                   Open interaction
                 </Link>
@@ -437,7 +437,7 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
                 </ul>
                 <Link
                   href={`/interactions/${snapshot.interactionId}`}
-                  className="mt-3 inline-flex text-sm font-bold text-teal-800 underline underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                  className="mt-3 inline-flex text-sm font-bold text-brand-secondary underline underline-offset-4 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
                 >
                   Open interaction
                 </Link>
@@ -475,11 +475,11 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
               return (
                 <li
                   key={snapshot.id}
-                  className="relative border-l-2 border-teal-200 pb-1 pl-6"
+                  className="relative border-l-2 border-brand-secondary/25 pb-1 pl-6"
                 >
                   <span
                     aria-hidden="true"
-                    className="absolute -left-[7px] top-1.5 h-3 w-3 rounded-full bg-teal-700"
+                    className="absolute -left-[7px] top-1.5 h-3 w-3 rounded-full bg-brand-primary"
                   />
                   <p className="text-sm font-semibold text-slate-950">
                     Meeting snapshot
@@ -493,14 +493,14 @@ export function RevenueBrainTimeline({ accountId }: { accountId: string }) {
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm">
                     <Link
                       href={`/meetings/${snapshot.meetingId}`}
-                      className="font-bold text-teal-800 underline decoration-teal-300 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                      className="font-bold text-brand-secondary underline decoration-brand-secondary/35 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
                     >
                       Open meeting
                     </Link>
                     {snapshot.opportunityId ? (
                       <Link
                         href={`/opportunities/${snapshot.opportunityId}`}
-                        className="font-bold text-teal-800 underline decoration-teal-300 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                        className="font-bold text-brand-secondary underline decoration-brand-secondary/35 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
                       >
                         Open opportunity
                       </Link>

@@ -2,7 +2,7 @@
 
 ## Product behaviour
 
-WO-004C2 adds RevenueOS's second Meeting Intelligence capability. An authorised
+WO-004C2 adds Oryntela's second Meeting Intelligence capability. An authorised
 user opens a meeting's **Intelligence** tab and requests **Decisions** from the
 current usable transcript. The API queues work; it never calls a provider
 synchronously. The separately running worker validates and persists a versioned

@@ -277,7 +277,7 @@ export function SalesMethodologySettings() {
       className="form-card"
     >
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
           Admin control
         </p>
         <h2 id="sales-methodology-settings-title" className="form-legend mt-2">
@@ -295,7 +295,10 @@ export function SalesMethodologySettings() {
         </p>
       ) : null}
       {message ? (
-        <p role="status" className="mt-4 text-sm font-semibold text-teal-800">
+        <p
+          role="status"
+          className="mt-4 text-sm font-semibold text-brand-secondary"
+        >
           {message}
         </p>
       ) : null}
@@ -307,7 +310,7 @@ export function SalesMethodologySettings() {
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <MethodologyChoice
             name="None"
-            description="RevenueOS works normally without a selected methodology."
+            description="Oryntela works normally without a selected methodology."
             selected={catalogue.current.selection === "none"}
             busy={busy}
             onSelect={() => void select("none")}
@@ -528,7 +531,7 @@ function MethodologyChoice({
 }) {
   return (
     <div
-      className={`rounded-2xl border p-4 ${selected ? "border-teal-500 bg-teal-50" : "border-slate-200"}`}
+      className={`rounded-2xl border p-4 ${selected ? "border-brand-secondary/65 bg-brand-secondary/10" : "border-slate-200"}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -536,14 +539,14 @@ function MethodologyChoice({
           <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
         </div>
         {selected ? (
-          <span className="rounded-full bg-teal-700 px-2 py-1 text-xs font-bold text-white">
+          <span className="rounded-full bg-brand-primary px-2 py-1 text-xs font-bold text-white">
             Selected
           </span>
         ) : null}
       </div>
       {details ? (
         <details className="mt-3">
-          <summary className="cursor-pointer text-sm font-bold text-teal-800">
+          <summary className="cursor-pointer text-sm font-bold text-brand-secondary">
             Inspect {details.fieldCount} fields
           </summary>
           <ol className="mt-2 space-y-1 text-sm text-slate-700">

@@ -1,4 +1,4 @@
-# Ask RevenueOS source and citation model
+# Ask Oryntela source and citation model
 
 ## Invariant
 
@@ -28,8 +28,8 @@ The UI and answer text preserve:
 - `salesperson_reported` — a seller's report or outbound statement;
 - `seller_prepared` — seller-authored proposal/context;
 - `imported_external` — imported context whose origin remains explicit;
-- `validated_intelligence` — current validated RevenueOS derivation;
-- `system_metadata` — current RevenueOS record fields.
+- `validated_intelligence` — current validated Oryntela derivation;
+- `system_metadata` — current Oryntela record fields.
 
 Seller-side material is never rewritten as “the customer said”. Questions that
 explicitly ask what the customer said filter to customer-direct evidence. Seller-side

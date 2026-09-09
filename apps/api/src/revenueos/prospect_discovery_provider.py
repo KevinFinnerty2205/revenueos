@@ -166,7 +166,7 @@ class DeterministicMockDiscoveryProvider:
                 trigger_source_reference="https://northstar-facilities.example/news/australian-expansion",
                 observed_at=observed_at,
                 expires_at=expires_at,
-                provider_attribution="RevenueOS synthetic discovery data",
+                provider_attribution="Oryntela synthetic discovery data",
             ),
             DiscoveredCompany(
                 provider_candidate_id="harbour-health-network",
@@ -182,7 +182,7 @@ class DeterministicMockDiscoveryProvider:
                 business_characteristics=("multi_site", "regulated"),
                 observed_at=observed_at,
                 expires_at=expires_at,
-                provider_attribution="RevenueOS synthetic discovery data",
+                provider_attribution="Oryntela synthetic discovery data",
             ),
             DiscoveredCompany(
                 provider_candidate_id="southbank-retail-group",
@@ -198,7 +198,7 @@ class DeterministicMockDiscoveryProvider:
                 business_characteristics=("multi_site",),
                 observed_at=observed_at,
                 expires_at=expires_at,
-                provider_attribution="RevenueOS synthetic discovery data",
+                provider_attribution="Oryntela synthetic discovery data",
             ),
             DiscoveredCompany(
                 provider_candidate_id="pacific-systems",
@@ -214,7 +214,7 @@ class DeterministicMockDiscoveryProvider:
                 business_characteristics=("international", "b2b"),
                 observed_at=observed_at,
                 expires_at=expires_at,
-                provider_attribution="RevenueOS synthetic discovery data",
+                provider_attribution="Oryntela synthetic discovery data",
             ),
             DiscoveredCompany(
                 provider_candidate_id="bluepeak-technologies",
@@ -230,7 +230,7 @@ class DeterministicMockDiscoveryProvider:
                 business_characteristics=("multi_site", "b2b"),
                 observed_at=observed_at,
                 expires_at=expires_at,
-                provider_attribution="RevenueOS synthetic discovery data",
+                provider_attribution="Oryntela synthetic discovery data",
             ),
             DiscoveredCompany(
                 provider_candidate_id="atlas-operations",
@@ -246,7 +246,7 @@ class DeterministicMockDiscoveryProvider:
                 business_characteristics=("multi_site", "b2b"),
                 observed_at=observed_at,
                 expires_at=expires_at,
-                provider_attribution="RevenueOS synthetic discovery data",
+                provider_attribution="Oryntela synthetic discovery data",
             ),
         )
         return CompanyDiscoveryResult(outcome="completed", candidates=candidates[:limit])

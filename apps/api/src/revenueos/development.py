@@ -107,7 +107,7 @@ async def ensure_development_identity(
                     require_opt_out_mechanism=False,
                     offering_name="Multi-site Access Management",
                     value_proposition=(
-                        "RevenueOS helps growing teams coordinate secure access across locations without adding manual work."
+                        "Oryntela helps growing teams coordinate secure access across locations without adding manual work."
                     ),
                     approved_cta="Would a short conversation next week be useful?",
                     configured_by_user_id=DEVELOPMENT_USER_ID,

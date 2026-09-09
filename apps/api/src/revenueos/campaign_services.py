@@ -705,10 +705,10 @@ class CampaignService:
             ),
             launch_warning=(
                 (
-                    "RevenueOS will prepare and send future approved sequence steps through the connected "
+                    "Oryntela will prepare and send future approved sequence steps through the connected "
                     "work mailbox when every safety check passes."
                     if mailbox is not None and mailbox.connector_key in {"microsoft_365", "google_workspace"}
-                    else "RevenueOS will prepare and simulate future approved sequence steps automatically "
+                    else "Oryntela will prepare and simulate future approved sequence steps automatically "
                     "when all safety checks pass."
                 )
                 if auto

@@ -141,7 +141,7 @@ export function CoreNavigation() {
   return (
     <>
       <details className="relative mt-3 lg:hidden">
-        <summary className="ml-auto flex min-h-11 w-fit cursor-pointer list-none items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600">
+        <summary className="ml-auto flex min-h-11 w-fit cursor-pointer list-none items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-focus">
           More destinations
         </summary>
         <nav
@@ -155,9 +155,9 @@ export function CoreNavigation() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-teal-600 ${
+                className={`flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-focus ${
                   active
-                    ? "bg-teal-50 text-teal-900"
+                    ? "bg-brand-secondary/10 text-brand-primary"
                     : "text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -184,10 +184,10 @@ export function CoreNavigation() {
                       key={item.href}
                       href={item.href}
                       aria-current={active ? "page" : undefined}
-                      className={`block rounded-xl px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 ${
+                      className={`block rounded-xl px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 ${
                         active
-                          ? "bg-teal-50 text-teal-900"
-                          : "text-slate-600 hover:bg-teal-50 hover:text-teal-800"
+                          ? "bg-brand-secondary/10 text-brand-primary"
+                          : "text-slate-600 hover:bg-brand-secondary/10 hover:text-brand-secondary"
                       }`}
                     >
                       {item.label}
@@ -212,10 +212,10 @@ export function CoreNavigation() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`block rounded-xl px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 ${
+                className={`block rounded-xl px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 ${
                   active
-                    ? "bg-teal-50 text-teal-900"
-                    : "text-slate-600 hover:bg-teal-50 hover:text-teal-800"
+                    ? "bg-brand-secondary/10 text-brand-primary"
+                    : "text-slate-600 hover:bg-brand-secondary/10 hover:text-brand-secondary"
                 }`}
               >
                 {item.label}
@@ -236,8 +236,10 @@ export function CoreNavigation() {
               key={item.label}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={`flex min-h-12 items-center justify-center rounded-xl px-1 text-center text-xs font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 ${
-                active ? "bg-teal-50 text-teal-900" : "text-slate-600"
+              className={`flex min-h-12 items-center justify-center rounded-xl px-1 text-center text-xs font-bold focus:outline-none focus:ring-2 focus:ring-brand-focus ${
+                active
+                  ? "bg-brand-secondary/10 text-brand-primary"
+                  : "text-slate-600"
               }`}
             >
               {item.label}

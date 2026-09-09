@@ -57,8 +57,8 @@ function BriefContent({ content }: { content: PreInteractionBriefContent }) {
   }
   return (
     <div className="mt-6 space-y-4">
-      <div className="rounded-2xl bg-slate-950 p-5 text-white">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">
+      <div className="rounded-2xl bg-brand-primary p-5 text-white">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-primary-foreground">
           Account context
         </p>
         <p className="mt-3 text-sm leading-6 text-slate-100">
@@ -91,7 +91,9 @@ function BriefContent({ content }: { content: PreInteractionBriefContent }) {
           <ol className="mt-3 space-y-4">
             {content.questionsToAsk.map((item, index) => (
               <li key={item.question} className="flex gap-3">
-                <span className="font-bold text-teal-700">{index + 1}.</span>
+                <span className="font-bold text-brand-secondary">
+                  {index + 1}.
+                </span>
                 <div>
                   <div className="flex flex-wrap items-start gap-2">
                     <p className="font-semibold text-slate-900">
@@ -149,7 +151,7 @@ function BriefContent({ content }: { content: PreInteractionBriefContent }) {
         className="rounded-2xl border border-slate-200 bg-white p-5"
         open
       >
-        <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600">
+        <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-focus">
           Commitments, risks and success criteria
         </summary>
         <div className="mt-5 grid gap-6 lg:grid-cols-3">
@@ -210,13 +212,13 @@ function BriefContent({ content }: { content: PreInteractionBriefContent }) {
         </div>
       </details>
 
-      <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
-        <h3 className="font-semibold text-teal-950">
+      <div className="rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
+        <h3 className="font-semibold text-brand-primary">
           {content.interactionType === "presentation"
             ? "Presentation guidance"
             : "Interaction guidance"}
         </h3>
-        <p className="mt-2 text-sm leading-6 text-teal-950">
+        <p className="mt-2 text-sm leading-6 text-brand-primary">
           {content.interactionGuidance}
         </p>
       </div>
@@ -231,8 +233,8 @@ function PhoneCallBriefContent({
 }) {
   return (
     <div className="mt-6 space-y-4">
-      <div className="rounded-2xl bg-slate-950 p-5 text-white">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">
+      <div className="rounded-2xl bg-brand-primary p-5 text-white">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-primary-foreground">
           Compact call brief
         </p>
         <p className="mt-3 text-lg font-semibold">{content.headline}</p>
@@ -311,13 +313,15 @@ function PhoneCallBriefContent({
               key={item.question}
               className="flex gap-3 text-sm text-slate-800"
             >
-              <span className="font-bold text-teal-700">{index + 1}.</span>
+              <span className="font-bold text-brand-secondary">
+                {index + 1}.
+              </span>
               <span>{item.question}</span>
             </li>
           ))}
         </ol>
       </BriefSection>
-      <p className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-sm leading-6 text-teal-950">
+      <p className="rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-4 text-sm leading-6 text-brand-primary">
         {content.interactionGuidance}
       </p>
     </div>
@@ -422,7 +426,7 @@ export function PreInteractionBrief({
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
             AI Companion · Before
           </p>
           <h2
@@ -471,7 +475,7 @@ export function PreInteractionBrief({
           </div>
         ) : null}
         {!loading && response?.state === "not_generated" ? (
-          <div className="rounded-2xl border border-dashed border-teal-300 bg-white p-5">
+          <div className="rounded-2xl border border-dashed border-brand-secondary/35 bg-white p-5">
             <h3 className="font-semibold text-slate-900">
               Prepare for this{" "}
               {interactionType === "phone_call" ? "call" : "interaction"}

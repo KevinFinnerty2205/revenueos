@@ -6,9 +6,9 @@
 
 ## Product boundary
 
-RevenueOS supports one canonical sales graph in two organisation modes:
+Oryntela supports one canonical sales graph in two organisation modes:
 
-- **RevenueOS-native:** local canonical fields are authoritative and normal record editing needs no connector.
+- **Oryntela-native:** local canonical fields are authoritative and normal record editing needs no connector.
 - **External CRM:** local canonical records remain available to Sales Brain, while active HubSpot mappings retain the WO-025C field-authority rules.
 
 There is no `CRMAccount`, `CRMContact`, `CRMOpportunity`, Lead, CRM Task, CRM Note or CRM Activity model. Accounts are `companies`; People are `contacts`; Actions are existing tasks/proposals; recent activity is a bounded read model over Interactions, Outreach, Tasks, Event encounters and Opportunities.

@@ -32,7 +32,7 @@ target-environment OAuth registration, secret injection and manual sandbox proof
 - **Observability:** metadata-only connection/mapping/preview/execution/reconciliation
   audit. No customer names, emails, notes, field values, token or provider payload.
 - **Lifecycle:** export includes safe connection/mapping/policy/execution metadata;
-  disconnect/deletion attempts token revocation then deletes local secrets. RevenueOS
+  disconnect/deletion attempts token revocation then deletes local secrets. Oryntela
   deletion never deletes or rolls back external CRM records.
 
 ## Threat regressions

@@ -23,7 +23,7 @@ export function ApiAuthBridge({ children }: { children: React.ReactNode }) {
 
   if (!ready) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#f5f7f4] px-5">
+      <main className="grid min-h-screen place-items-center bg-brand-background px-5">
         <p role="status" className="text-sm font-semibold text-slate-600">
           Preparing your secure workspace…
         </p>

@@ -179,7 +179,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
       applyMutation(
         result,
         result.shareToken
-          ? "Published. Copy the new secure link now; RevenueOS will not display it again."
+          ? "Published. Copy the new secure link now; Oryntela will not display it again."
           : "Published as a new immutable revision. The current secure link is unchanged.",
       );
     } catch (reason: unknown) {
@@ -312,18 +312,18 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
     return (
       <section
         aria-labelledby="deal-room-title"
-        className="rounded-3xl border border-teal-200 bg-teal-50 p-6 shadow-sm sm:p-8"
+        className="rounded-3xl border border-brand-secondary/25 bg-brand-secondary/10 p-6 shadow-sm sm:p-8"
       >
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
           Customer collaboration
         </p>
         <h2
           id="deal-room-title"
-          className="mt-2 text-2xl font-semibold text-teal-950"
+          className="mt-2 text-2xl font-semibold text-brand-primary"
         >
           Create a simple Deal Room
         </h2>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-teal-900">
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-brand-primary">
           Share a reviewed, read-only snapshot of agreed context, milestones and
           approved resources. Internal deal intelligence is never copied
           automatically. Nothing is public yet.
@@ -341,7 +341,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
         >
           {busy ? "Creating…" : "Create Deal Room draft"}
         </button>
-        <p className="mt-3 text-xs font-semibold text-teal-800">
+        <p className="mt-3 text-xs font-semibold text-brand-secondary">
           Included with Create · No Credits required
         </p>
       </section>
@@ -359,7 +359,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Customer collaboration
           </p>
           <h2 id="deal-room-title" className="form-legend mt-2">
@@ -394,7 +394,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
       {message ? (
         <p
           role="status"
-          className="mt-5 rounded-xl bg-teal-50 p-4 text-sm font-semibold text-teal-900"
+          className="mt-5 rounded-xl bg-brand-secondary/10 p-4 text-sm font-semibold text-brand-primary"
         >
           {message}
         </p>
@@ -433,7 +433,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
           <label className="grid gap-2 text-sm font-semibold text-slate-800">
             Customer-facing overview
             <textarea
-              className="min-h-28 rounded-xl border border-slate-300 p-4 text-sm font-normal outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+              className="min-h-28 rounded-xl border border-slate-300 p-4 text-sm font-normal outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
               maxLength={2000}
               value={draft.overview ?? ""}
               onChange={(event) =>
@@ -467,7 +467,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
           <label className="grid gap-2 text-sm font-semibold text-slate-800">
             Commercial summary approved for sharing
             <textarea
-              className="min-h-24 rounded-xl border border-slate-300 p-4 text-sm font-normal outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+              className="min-h-24 rounded-xl border border-slate-300 p-4 text-sm font-normal outline-none focus:border-brand-secondary focus:ring-2 focus:ring-brand-secondary/20"
               maxLength={1500}
               value={draft.commercialSummary ?? ""}
               onChange={(event) =>
@@ -544,8 +544,8 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
         ) : null}
       </div>
 
-      <div className="mt-6 grid gap-4 rounded-2xl border border-teal-200 bg-teal-50 p-5">
-        <label className="flex items-start gap-3 text-sm font-semibold text-teal-950">
+      <div className="mt-6 grid gap-4 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
+        <label className="flex items-start gap-3 text-sm font-semibold text-brand-primary">
           <input
             type="checkbox"
             className="mt-1 size-4"
@@ -555,7 +555,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
           I have reviewed every field and selected resource as appropriate for
           this customer.
         </label>
-        <label className="grid gap-2 text-sm font-semibold text-teal-950 sm:max-w-md">
+        <label className="grid gap-2 text-sm font-semibold text-brand-primary sm:max-w-md">
           Optional secure-link expiry
           <input
             type="datetime-local"
@@ -619,7 +619,7 @@ export function DealRoomEditor({ opportunityId }: { opportunityId: string }) {
             Save this draft before reviewing and publishing it.
           </p>
         ) : null}
-        <p className="text-xs font-semibold text-teal-800">
+        <p className="text-xs font-semibold text-brand-secondary">
           Publishing and link access use no Oryntela Credits.
         </p>
       </div>

@@ -24,7 +24,7 @@ Cards contain only:
 - next open Action or `No next Action`;
 - at most two deterministic reasons;
 - time in current stage and owner;
-- the accessible move control when RevenueOS has stage authority.
+- the accessible move control when Oryntela has stage authority.
 
 No probability, score, methodology matrix, forecast, inline amount editing or provider
 detail competes with the decision to open the Opportunity.

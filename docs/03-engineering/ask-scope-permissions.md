@@ -1,4 +1,4 @@
-# Ask RevenueOS scope and permissions
+# Ask Oryntela scope and permissions
 
 ## Scope resolution
 

@@ -14,7 +14,7 @@ or committed to.
 Promotion links a Research Target to a canonical Company; it does not copy
 research observations into Evidence. The Company page exposes a separately labelled
 Public research card that links back to the brief. The link does not mutate the
-Opportunity Workspace, Methodology fields, Revenue Brain snapshots, Ask RevenueOS
+Opportunity Workspace, Methodology fields, Revenue Brain snapshots, Ask Oryntela
 retrieval corpus, Contacts or Opportunities.
 
 Deleting Prospect research removes the target, runs, source metadata, observations

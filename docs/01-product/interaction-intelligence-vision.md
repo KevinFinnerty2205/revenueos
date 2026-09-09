@@ -7,21 +7,21 @@
 
 ## North star
 
-> RevenueOS captures the best possible evidence from every customer interaction,
+> Oryntela captures the best possible evidence from every customer interaction,
 > transforms that evidence into trusted intelligence, and helps sales teams build
 > stronger customer relationships over time.
 
-RevenueOS should never force a salesperson to remember important details hours
+Oryntela should never force a salesperson to remember important details hours
 after a customer interaction. It should help capture, organise and validate those
 details while they are still fresh, using the method that best fits the situation.
 
 ## Positioning
 
-RevenueOS is **the AI operating system for customer interactions**. It complements
+Oryntela is **the AI operating system for customer interactions**. It complements
 the CRM and communication systems already used by a revenue team; it does not
 replace them.
 
-RevenueOS is not merely a meeting recorder, transcript summariser, call bot,
+Oryntela is not merely a meeting recorder, transcript summariser, call bot,
 transcription product or CRM note-taking tool. A recording is one possible source,
 not the product boundary. The product works across three layers:
 
@@ -42,18 +42,18 @@ flowchart LR
 
 ## The user promise
 
-Before an interaction, RevenueOS explains what matters: the relationship history,
+Before an interaction, Oryntela explains what matters: the relationship history,
 current opportunity, commitments, risks, stakeholders, unanswered questions and a
 small number of useful objectives or questions.
 
-During an interaction, RevenueOS is passive by default. It may record when that is
+During an interaction, Oryntela is passive by default. It may record when that is
 authorised, accept a quick marker or photo, or do nothing at all. The customer and
 the salesperson's attention take priority over the software.
 
-Immediately afterwards, RevenueOS offers: **“Let’s capture this while it is
+Immediately afterwards, Oryntela offers: **“Let’s capture this while it is
 fresh.”** The salesperson can speak naturally, type, add authorised visual evidence
 or skip. An opportunity-aware debrief asks only about material gaps, changes and
-uncertainty. RevenueOS then presents a reviewable account of what it believes, why
+uncertainty. Oryntela then presents a reviewable account of what it believes, why
 it believes it and what should happen next.
 
 ## Product principles
@@ -90,7 +90,7 @@ it believes it and what should happen next.
 ## Experience priorities
 
 The first priority is an ordinary face-to-face customer meeting where the seller
-cannot or should not record. RevenueOS should prepare the seller, prompt an
+cannot or should not record. Oryntela should prepare the seller, prompt an
 immediate opportunity-aware debrief, structure a voice journal, support review and
 feed validated results to Opportunity Workspace and Revenue Brain.
 
@@ -101,7 +101,7 @@ after the simpler lifecycle proves useful and trustworthy.
 
 ## Trust model
 
-RevenueOS presents intelligence as claims with supporting and conflicting evidence,
+Oryntela presents intelligence as claims with supporting and conflicting evidence,
 not as one opaque answer. It distinguishes:
 
 - directly captured customer evidence;
@@ -132,7 +132,7 @@ administration and without sacrificing trust. Useful measures include:
 - repeated use of validated intelligence in later preparation.
 
 Recording hours, model calls and employee activity rankings are not success
-measures. RevenueOS must not become an employee-surveillance product.
+measures. Oryntela must not become an employee-surveillance product.
 
 ## Scope boundary
 

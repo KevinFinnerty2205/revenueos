@@ -3,7 +3,7 @@
 ## Current product boundary
 
 WO-020 adds an optional, quiet Live Companion panel for an in-progress supported
-Interaction when RevenueOS already has an authorised progressive transcript source.
+Interaction when Oryntela already has an authorised progressive transcript source.
 It helps a salesperson notice material conversation changes without pretending that
 an incomplete transcript is final evidence.
 
@@ -18,7 +18,7 @@ the final Opportunity Workspace intelligence projection or Revenue Brain.
 3. Explicitly choose **Enable Live Intelligence**.
 4. Review bounded objective/question progress and material emerging signals.
 5. Collapse the panel, dismiss an individual signal or disable it for the Interaction.
-6. End the Interaction. RevenueOS freezes live processing.
+6. End the Interaction. Oryntela freezes live processing.
 7. Finalise the normal evidence path and run final Interaction Intelligence.
 8. Compare the frozen live state with final intelligence.
 9. Use AI Debrief for material ambiguity that final evidence did not resolve.

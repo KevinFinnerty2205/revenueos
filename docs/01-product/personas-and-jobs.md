@@ -37,7 +37,7 @@ These personas describe roles and jobs rather than permission guarantees. The be
 
 - Covert recording, inaccurate attribution, fabricated facts, unexpected email or CRM writes, manager surveillance and customer data exposure.
 
-**Expected RevenueOS value**
+**Expected Oryntela value**
 
 - A short source-backed briefing, a reviewable post-meeting work queue and correctable memory that reduce searching and re-entry.
 
@@ -77,7 +77,7 @@ These personas describe roles and jobs rather than permission guarantees. The be
 
 - Unsupported risk scoring, decontextualised quotations, overbroad access, individual ranking and false certainty.
 
-**Expected RevenueOS value**
+**Expected Oryntela value**
 
 - An exception-led view of changed commitments, inactivity, unresolved risk and low-confidence evidence with links to source context.
 
@@ -118,13 +118,13 @@ These personas describe roles and jobs rather than permission guarantees. The be
 
 - Silent writes, untraceable transformations, non-idempotent sync, excessive scopes, weak tenant isolation and misleading success states.
 
-**Expected RevenueOS value**
+**Expected Oryntela value**
 
 - Source-backed CRM proposals, execution receipts, connection health and exception queues that improve records without hiding failure.
 
 **Primary jobs to be done**
 
-- “Let me define what RevenueOS may read, propose and write.”
+- “Let me define what Oryntela may read, propose and write.”
 - “Show the source, approver and outcome for every change.”
 - “Help me prove value and data quality without monitoring raw customer content.”
 
@@ -159,7 +159,7 @@ These personas describe roles and jobs rather than permission guarantees. The be
 
 - Service-role key exposure, bypassed row-level security, raw content in logs, overbroad support access, incomplete deletion and unrecorded impersonation.
 
-**Expected RevenueOS value**
+**Expected Oryntela value**
 
 - A clear control plane for access, connection scopes, retention, audit evidence and recoverable configuration.
 

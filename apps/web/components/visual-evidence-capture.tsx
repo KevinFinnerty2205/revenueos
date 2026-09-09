@@ -265,7 +265,7 @@ export function VisualEvidenceCapture({
         setReviewingId(processed.id);
         setDecisions(initialDecisions(processed.candidates));
         setMessage(
-          "Image analysed. Review every suggested item before it updates RevenueOS.",
+          "Image analysed. Review every suggested item before it updates Oryntela.",
         );
       } else {
         setMessage(
@@ -400,7 +400,7 @@ export function VisualEvidenceCapture({
     <section aria-labelledby="visual-evidence-title" className="form-card">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Browser visual capture
           </p>
           <h2 id="visual-evidence-title" className="form-legend mt-2">
@@ -412,7 +412,7 @@ export function VisualEvidenceCapture({
         </span>
       </div>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-        Take a photo or choose an image you are authorised to share. RevenueOS
+        Take a photo or choose an image you are authorised to share. Oryntela
         strips location metadata, keeps the original private, and requires your
         review before AI-suggested evidence updates intelligence.
       </p>
@@ -502,7 +502,7 @@ export function VisualEvidenceCapture({
                 }
               }}
               onClick={() => fileInputRef.current?.click()}
-              className="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+              className="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2"
             >
               <span className="font-bold text-slate-900">
                 Choose or drop a JPEG or PNG
@@ -598,7 +598,7 @@ export function VisualEvidenceCapture({
                 type="checkbox"
                 checked={consentConfirmed}
                 onChange={(event) => setConsentConfirmed(event.target.checked)}
-                className="mt-1 h-5 w-5 rounded border-slate-400 text-teal-700 focus:ring-teal-600"
+                className="mt-1 h-5 w-5 rounded border-slate-400 text-brand-secondary focus:ring-brand-focus"
               />
               I am authorised to upload this image and understand that it may be
               sent to the configured external visual-analysis service.
@@ -648,7 +648,7 @@ export function VisualEvidenceCapture({
       {message ? (
         <p
           role="status"
-          className="mt-5 rounded-xl bg-teal-50 p-4 text-sm text-teal-950"
+          className="mt-5 rounded-xl bg-brand-secondary/10 p-4 text-sm text-brand-primary"
         >
           {message}
         </p>
@@ -691,7 +691,7 @@ export function VisualEvidenceCapture({
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
                     {humanise(visual.visualType)}
                   </span>
-                  <span className="rounded-full bg-teal-50 px-2 py-1 text-xs font-bold text-teal-800">
+                  <span className="rounded-full bg-brand-secondary/10 px-2 py-1 text-xs font-bold text-brand-secondary">
                     {humanise(visual.processingStatus)}
                   </span>
                 </div>
@@ -727,7 +727,7 @@ export function VisualEvidenceCapture({
                         <p className="mt-1 text-sm text-slate-800">
                           {candidate.statement}
                         </p>
-                        <p className="mt-1 font-semibold text-teal-800">
+                        <p className="mt-1 font-semibold text-brand-secondary">
                           {candidate.reviewState === "accepted"
                             ? "Accepted · AI-interpreted, user-reviewed"
                             : candidate.reviewState === "rejected"

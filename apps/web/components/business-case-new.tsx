@@ -114,12 +114,12 @@ export function BusinessCaseNew() {
       <PageHeader
         eyebrow="Create · Business Cases"
         title="Create a Business Case"
-        description="Choose customer context and an approved Value Model. RevenueOS will ask for every required number before it calculates anything."
+        description="Choose customer context and an approved Value Model. Oryntela will ask for every required number before it calculates anything."
       />
       <nav aria-label="Breadcrumb" className="text-sm text-slate-600">
         <Link
           href="/create"
-          className="font-semibold text-teal-800 hover:underline"
+          className="font-semibold text-brand-secondary hover:underline"
         >
           Create
         </Link>{" "}
@@ -211,7 +211,7 @@ export function BusinessCaseNew() {
                   ))}
                 </select>
                 <span className="mt-2 block text-xs font-normal text-slate-500">
-                  One confirmed ISO currency. RevenueOS performs no FX
+                  One confirmed ISO currency. Oryntela performs no FX
                   conversion.
                 </span>
               </label>

@@ -53,7 +53,7 @@ export function SettingsExperience() {
         <PageHeader
           eyebrow="Workspace"
           title="Settings"
-          description="Manage your RevenueOS workspace experience."
+          description="Manage your Oryntela workspace experience."
         />
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
           <h2 className="font-semibold text-rose-950">
@@ -102,7 +102,7 @@ export function SettingsExperience() {
       />
 
       <section className="form-card" aria-labelledby="account-settings-title">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
           Your access
         </p>
         <h2 id="account-settings-title" className="form-legend mt-2">

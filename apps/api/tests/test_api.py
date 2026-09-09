@@ -132,6 +132,8 @@ def test_openapi_contains_current_domain_endpoints(client: TestClient) -> None:
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
+    assert response.json()["info"]["title"] == "Oryntela API"
+    assert response.json()["info"]["description"] == "Tenant-isolated Oryntela private beta API."
     paths = set(response.json()["paths"])
     assert paths == {
         "/health",

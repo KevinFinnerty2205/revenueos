@@ -80,7 +80,7 @@ inconsistency. The underlying truth model is strong.
 
 Apollo, ZoomInfo, Clay, LinkedIn Sales Navigator, Outreach, Salesloft, HubSpot and Gong
 each cover substantial parts of research, engagement or interaction intelligence.
-RevenueOS should not claim broader data or automation. Its distinctive product bet is
+Oryntela should not claim broader data or automation. Its distinctive product bet is
 the full trust path:
 
 `public/professional source → staged research → canonical relationship → reviewed
@@ -139,7 +139,7 @@ unmeasured.
 
 ### READY NOW
 
-- RevenueOS keeps public prospect research separate from customer Evidence.
+- Oryntela keeps public prospect research separate from customer Evidence.
 - Sellers can inspect the source and trust state behind a synthetic research brief.
 - Every outreach simulation is reviewable by recipient, sender, content and source.
 - Event attendance does not automatically become consent, intent or a canonical
@@ -147,12 +147,12 @@ unmeasured.
 
 ### READY WITH QUALIFIER
 
-- RevenueOS can find and research target Accounts and relevant professionals **when an
+- Oryntela can find and research target Accounts and relevant professionals **when an
   approved provider is enabled; current demonstrations use synthetic provider data**.
-- RevenueOS can create source-backed individual outreach and bounded Campaigns
+- Oryntela can create source-backed individual outreach and bounded Campaigns
   **while current execution is Mock Email and external sending requires a supported
   mailbox**.
-- RevenueOS can help sellers prepare for and follow up after Events **from an
+- Oryntela can help sellers prepare for and follow up after Events **from an
   authorised manual/CSV source, not a live event-platform integration**.
 
 ### FUTURE
@@ -161,7 +161,7 @@ unmeasured.
 - production Gmail/Microsoft, data-provider or event-platform claims;
 - automatic reply/delivery analytics;
 - verified buyer intent or guaranteed contact/reply accuracy; and
-- any claim that RevenueOS replaces established data or sales-engagement platforms on
+- any claim that Oryntela replaces established data or sales-engagement platforms on
   breadth.
 
 ## Product gaps to carry forward

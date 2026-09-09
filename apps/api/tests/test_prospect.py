@@ -158,7 +158,7 @@ def test_flag_and_entitlement_fail_closed_and_plan_is_support_managed(client: Te
         "enabled": True,
         "canManage": True,
         "executionMode": "demo",
-        "message": "RevenueOS Prospect is available for this organisation.",
+        "message": "Prospect is available for this organisation.",
     }
 
     disabled = client.patch("/api/v1/prospect/admin/entitlement", json={"enabled": False})

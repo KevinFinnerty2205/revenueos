@@ -2,9 +2,9 @@
 
 **Status:** Current WO-017 browser-first workflow.
 
-Phone calls are ordinary `phone_call` Interactions. RevenueOS does not create a
+Phone calls are ordinary `phone_call` Interactions. Oryntela does not create a
 second call aggregate and does not intercept a cellular or VoIP call. The user
-prepares in RevenueOS, makes the call in their existing phone system and captures
+prepares in Oryntela, makes the call in their existing phone system and captures
 the result afterwards.
 
 ## User journey

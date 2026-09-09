@@ -20,7 +20,7 @@ version, connection, capability and live/simulation mode. Concurrent or repeated
 confirmation returns the same execution. A field update first checks whether the
 desired value already exists and treats it as reconciled success.
 
-HubSpot meeting creation has no general idempotency-key header. RevenueOS inserts
+HubSpot meeting creation has no general idempotency-key header. Oryntela inserts
 only a hashed execution marker into internal meeting notes, searches for that
 marker before creation, and searches again after an uncertain response. One match
 is success; multiple matches are ambiguous and never cause another create.

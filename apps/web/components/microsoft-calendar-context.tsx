@@ -111,10 +111,10 @@ export function ProviderCalendarContext({
 
   return (
     <section
-      className="mb-7 rounded-2xl border border-teal-200 bg-teal-50/60 p-5"
+      className="mb-7 rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5"
       aria-labelledby="provider-calendar-title"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Work calendar
       </p>
       <h2 id="provider-calendar-title" className="mt-2 text-xl font-semibold">
@@ -124,9 +124,9 @@ export function ProviderCalendarContext({
         {events.map((event) => (
           <article
             key={eventKey(event)}
-            className="rounded-xl border border-teal-100 bg-white p-4"
+            className="rounded-xl border border-brand-secondary/15 bg-white p-4"
           >
-            <p className="text-xs font-bold uppercase tracking-wide text-teal-800">
+            <p className="text-xs font-bold uppercase tracking-wide text-brand-secondary">
               {new Date(event.startAt).toLocaleString("en-AU", {
                 dateStyle: "medium",
                 timeStyle: "short",
@@ -143,7 +143,7 @@ export function ProviderCalendarContext({
             {event.interactionId ? (
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <Link
-                  className="inline-flex text-sm font-bold text-teal-800 hover:underline"
+                  className="inline-flex text-sm font-bold text-brand-secondary hover:underline"
                   href={`/interactions/${event.interactionId}#preparation`}
                 >
                   Prepare →

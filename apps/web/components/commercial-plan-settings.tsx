@@ -111,13 +111,13 @@ export function CommercialPlanSettings() {
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Commercial access
           </p>
           <h2
             ref={titleRef}
             id="commercial-plan-title"
-            className="form-legend mt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-700"
+            className="form-legend mt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-secondary"
             tabIndex={-1}
           >
             Billing &amp; plan

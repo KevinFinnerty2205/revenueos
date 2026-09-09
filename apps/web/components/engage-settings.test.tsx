@@ -32,7 +32,7 @@ const policy = {
   approvedCta: "Would a short conversation next week be useful?",
   canManage: true,
   complianceNotice:
-    "RevenueOS provides configurable product controls, not legal advice.",
+    "Oryntela provides configurable product controls, not legal advice.",
 };
 
 afterEach(() => vi.restoreAllMocks());

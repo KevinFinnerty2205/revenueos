@@ -111,7 +111,7 @@ export function InteractionList() {
     <section aria-labelledby="interactions-title">
       <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
             Customer activity
           </p>
           <h1
@@ -239,7 +239,7 @@ export function InteractionList() {
               className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
             >
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide">
-                <span className="rounded-full bg-teal-50 px-3 py-1 text-teal-800">
+                <span className="rounded-full bg-brand-secondary/10 px-3 py-1 text-brand-secondary">
                   {humanise(interaction.interactionType)}
                 </span>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
@@ -268,7 +268,7 @@ export function InteractionList() {
               </div>
               <h2 className="mt-4 text-xl font-semibold text-slate-950">
                 <Link
-                  className="rounded focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  className="rounded focus:outline-none focus:ring-2 focus:ring-brand-focus"
                   href={`/interactions/${interaction.id}`}
                 >
                   {interaction.title}
@@ -304,7 +304,7 @@ export function InteractionList() {
               ) : null}
               {interaction.interactionType === "phone_call" ||
               interaction.captureMethods?.length ? (
-                <p className="mt-3 text-xs font-semibold text-teal-800">
+                <p className="mt-3 text-xs font-semibold text-brand-secondary">
                   Capture:{" "}
                   {interaction.captureMethods?.length
                     ? interaction.captureMethods.map(humanise).join(" · ")
@@ -319,7 +319,7 @@ export function InteractionList() {
               ) : null}
               {interaction.meetingId ? (
                 <Link
-                  className="mt-4 inline-block text-sm font-bold text-teal-800 underline-offset-4 hover:underline"
+                  className="mt-4 inline-block text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
                   href={`/meetings/${interaction.meetingId}`}
                 >
                   Open Meeting Intelligence
@@ -327,7 +327,7 @@ export function InteractionList() {
               ) : null}
               {interaction.briefState !== "unavailable" ? (
                 <Link
-                  className="mt-4 ml-4 inline-block text-sm font-bold text-teal-800 underline-offset-4 hover:underline"
+                  className="mt-4 ml-4 inline-block text-sm font-bold text-brand-secondary underline-offset-4 hover:underline"
                   href={`/interactions/${interaction.id}#preparation`}
                 >
                   {interaction.briefState === "completed"

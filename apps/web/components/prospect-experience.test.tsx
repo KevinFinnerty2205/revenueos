@@ -36,7 +36,7 @@ const availability = {
   enabled: true,
   canManage: true,
   executionMode: "demo",
-  message: "RevenueOS Prospect is available for this organisation.",
+  message: "Prospect is available for this organisation.",
 };
 
 const providerReadiness = {
@@ -65,7 +65,7 @@ const target = {
   websiteUrl: "https://northstar-facilities.example/",
   location: "Sydney, Australia",
   industry: "Facilities services",
-  providerAttribution: "RevenueOS synthetic research data",
+  providerAttribution: "Oryntela synthetic research data",
   promotedCompanyId: null,
   promotedAt: null,
   createdAt: "2026-08-25T01:00:00Z",
@@ -199,7 +199,7 @@ const person = {
   relevantFunction: "technology",
   whyMayMatter:
     "Her public remit suggests she may help evaluate operational technology change.",
-  providerAttribution: "RevenueOS synthetic research data",
+  providerAttribution: "Oryntela synthetic research data",
   identityState: "supported",
   employmentState: "current",
   researchStatus: "ready",
@@ -323,7 +323,7 @@ function personBrief(overrides: Record<string, object> = {}) {
   };
 }
 
-describe("RevenueOS Prospect experience", () => {
+describe("Prospect experience", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     navigation.push.mockReset();
@@ -338,7 +338,7 @@ describe("RevenueOS Prospect experience", () => {
         websiteUrl: "https://northstar-facilities.example/",
         location: "Sydney, Australia",
         industry: "Facilities services",
-        providerAttribution: "RevenueOS synthetic research data",
+        providerAttribution: "Oryntela synthetic research data",
       },
       {
         candidateId: "northstar-software",
@@ -347,7 +347,7 @@ describe("RevenueOS Prospect experience", () => {
         websiteUrl: "https://northstar-software.example/",
         location: "Melbourne, Australia",
         industry: "Business software",
-        providerAttribution: "RevenueOS synthetic research data",
+        providerAttribution: "Oryntela synthetic research data",
       },
     ];
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -464,7 +464,7 @@ describe("RevenueOS Prospect experience", () => {
     for (const label of [
       "Verified",
       "From data provider",
-      "RevenueOS inference",
+      "Oryntela inference",
       "Not established",
     ]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
@@ -776,7 +776,7 @@ describe("RevenueOS Prospect experience", () => {
         },
       ],
       message:
-        "RevenueOS found 1 person worth understanding. Buying roles remain hypotheses.",
+        "Oryntela found 1 person worth understanding. Buying roles remain hypotheses.",
     };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
       init?.method === "POST" ? jsonResponse(discovered) : jsonResponse(empty),

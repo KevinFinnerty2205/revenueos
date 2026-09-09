@@ -45,7 +45,7 @@ launch evidence.
 | Post-capture review     | Record what happened and finish                    | Main path is clear; advanced optional inputs become long when expanded                                                                  | **Pass; keep advanced fields collapsed**    |
 | Opportunity             | Understand deal state and choose next action       | Clear top focus, risks, gaps and reviewed action; detailed Evidence/history remain close but the total page is long                     | **Pass with progressive disclosure**        |
 | Methodology             | Understand and close qualification gaps            | Categorical trust states, three important gaps, suggested questions and source detail avoid score theatre                               | **Pass**                                    |
-| Search                  | Find a known RevenueOS object                      | Clear deterministic default, explicit organisation scope and no misleading AI promise                                                   | **Pass**                                    |
+| Search                  | Find a known Oryntela object                      | Clear deterministic default, explicit organisation scope and no misleading AI promise                                                   | **Pass**                                    |
 | Ask                     | Ask a bounded account/deal question                | Scope is visible; supported/unknown behaviour is trustworthy. Narrow taxonomy can produce safe but limited value                        | **Pass for beta; measure usefulness**       |
 | CRM review              | Understand and confirm an external change          | Exact current/new value, authority, confirmation and “approval is not execution” language create strong control                         | **Pass after target setup evidence**        |
 | Settings                | Administer role, retention and integrations        | Functional, but technical “server feature flags” and “unrecognised capability” language leaks implementation detail                     | **Refine before broader self-serve**        |
@@ -73,7 +73,7 @@ The existing noun contract needs one clean-up pass:
 | Active commercial motion   | Opportunity / deal         | Pipeline list heading currently says Opportunities; both are acceptable when context is clear |
 | Customer touchpoint        | Interaction                | Legacy Meeting wording should remain only where historically or technically necessary         |
 | Reviewed external change   | CRM update                 | Avoid “sync” where the action is a single confirmed write                                     |
-| Product guidance           | RevenueOS                  | Use “AI” only where it explains a real model boundary or limitation                           |
+| Product guidance           | Oryntela                  | Use “AI” only where it explains a real model boundary or limitation                           |
 
 Preferred action labels should describe the next outcome: **Prepare**, **Start
 interaction**, **Capture what happened**, **Review next actions**, **Preview CRM
@@ -102,7 +102,7 @@ The first viewport should continue to answer:
 - What is this deal?
 - What needs attention?
 - What should I do next?
-- Why does RevenueOS believe that?
+- Why does Oryntela believe that?
 
 Methodology detail, Revenue Brain history, source lists, prior reports, visual
 evidence, sync mappings and receipts should remain expandable. Progressive disclosure
@@ -174,7 +174,7 @@ should not display internal capability registry fallbacks to normal users.
 The offered Core journey should require a short orientation, not product training.
 Use onboarding and contextual copy to teach only:
 
-- RevenueOS never records implicitly;
+- Oryntela never records implicitly;
 - source/trust labels explain what is known;
 - review changes accepted customer context;
 - approving an Action does not execute it; and

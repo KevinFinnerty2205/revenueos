@@ -242,7 +242,7 @@ export function BillingSubscriptionSettings() {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Test billing operations
           </p>
           <h2
@@ -362,7 +362,7 @@ export function BillingSubscriptionSettings() {
             return (
               <label
                 key={key}
-                className="min-w-0 cursor-pointer rounded-xl border border-slate-200 p-4 has-[:checked]:border-teal-700 has-[:checked]:ring-2 has-[:checked]:ring-teal-100"
+                className="min-w-0 cursor-pointer rounded-xl border border-slate-200 p-4 has-[:checked]:border-brand-secondary has-[:checked]:ring-2 has-[:checked]:ring-brand-secondary/20"
               >
                 <span className="flex items-start gap-3">
                   <input
@@ -392,7 +392,7 @@ export function BillingSubscriptionSettings() {
       </fieldset>
 
       {selected && planSelectionAvailable ? (
-        <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4">
+        <div className="mt-4 rounded-xl border border-brand-secondary/25 bg-brand-secondary/10 p-4">
           <p className="font-semibold text-slate-950">
             Review before continuing
           </p>

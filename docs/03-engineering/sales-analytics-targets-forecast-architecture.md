@@ -12,7 +12,7 @@
 | Forecasting           | What range of outcomes is plausible? | Calibrated uncertainty and versioned assumptions   |
 | Coaching              | What evidence-backed step may help?  | Human-readable basis; no surveillance or rep score |
 
-RevenueOS Intelligence, including an evidence-based forecasting capability, belongs
+Oryntela Intelligence, including an evidence-based forecasting capability, belongs
 in Core. Advanced governance or unusually costly features may be tiered later, but
 essential personal and manager understanding must not become an artificial upsell.
 
@@ -120,7 +120,7 @@ events, corrections, ambiguous attribution, overrides and deterministic replay.
 ## Explicitly out of scope
 
 Generic BI, employee monitoring, arbitrary formula execution, contractual forecast
-guarantees and unsupported causal coaching are not RevenueOS scope. WO-037 adds no
+guarantees and unsupported causal coaching are not Oryntela scope. WO-037 adds no
 forecast model, team/manager hierarchy, target-triggered Action or AI output.
 
 ## WO-035 canonical lifecycle handoff

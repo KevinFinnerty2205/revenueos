@@ -114,7 +114,7 @@ export function CreditsSettings() {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Commercial controls
           </p>
           <h2 id="credits-title" className="form-legend mt-2">
@@ -245,7 +245,7 @@ function CreditMetric({
     <div
       className={`min-w-0 rounded-xl border p-4 ${
         prominent
-          ? "border-teal-200 bg-teal-50"
+          ? "border-brand-secondary/25 bg-brand-secondary/10"
           : "border-slate-200 bg-slate-50"
       }`}
     >

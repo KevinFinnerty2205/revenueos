@@ -453,7 +453,7 @@ export function PostInteractionCapture({
     <section aria-labelledby="post-interaction-title" className="form-card">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
             Post-interaction capture
           </p>
           <h2
@@ -468,9 +468,9 @@ export function PostInteractionCapture({
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             {interactionType === "phone_call"
-              ? "Type a short account below, or choose another authorised capture option when needed. RevenueOS did not record or monitor the call."
+              ? "Type a short account below, or choose another authorised capture option when needed. Oryntela did not record or monitor the call."
               : interactionType === "online_meeting"
-                ? "Type a short account below when no authorised recording or transcript is available. RevenueOS did not join, record or monitor the meeting."
+                ? "Type a short account below when no authorised recording or transcript is available. Oryntela did not join, record or monitor the meeting."
                 : `A short debrief for this ${humanise(interactionType).toLowerCase()} turns your own report into reviewable evidence. It does not record the customer interaction.`}
           </p>
         </div>
@@ -501,7 +501,7 @@ export function PostInteractionCapture({
       {message ? (
         <p
           role="status"
-          className="mt-5 rounded-xl bg-teal-50 p-4 text-sm text-teal-950"
+          className="mt-5 rounded-xl bg-brand-secondary/10 p-4 text-sm text-brand-primary"
         >
           {message}
         </p>
@@ -527,8 +527,8 @@ export function PostInteractionCapture({
 
       {session?.lifecycleStatus === "collecting" ? (
         <div className="mt-6">
-          <div className="rounded-2xl bg-slate-950 p-5 text-white">
-            <p className="text-xs font-bold uppercase tracking-[0.15em] text-teal-300">
+          <div className="rounded-2xl bg-brand-primary p-5 text-white">
+            <p className="text-xs font-bold uppercase tracking-[0.15em] text-brand-primary-foreground">
               Question{" "}
               {Math.min(session.turns.length + 1, session.maxQuestions + 1)}
             </p>
@@ -565,7 +565,7 @@ export function PostInteractionCapture({
               </label>
               <textarea
                 id="debrief-answer"
-                className="min-h-32 w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-950 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200"
+                className="min-h-32 w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-950 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-secondary/25"
                 maxLength={12_000}
                 value={answer}
                 onChange={(event) => setAnswer(event.target.value)}
@@ -607,12 +607,15 @@ export function PostInteractionCapture({
 
           {session.turns.length ? (
             <details className="mt-6 rounded-2xl border border-slate-200 p-4">
-              <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600">
+              <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-focus">
                 Saved answers ({session.turns.length})
               </summary>
               <ol className="mt-4 space-y-4">
                 {session.turns.map((turn) => (
-                  <li key={turn.id} className="border-l-2 border-teal-200 pl-4">
+                  <li
+                    key={turn.id}
+                    className="border-l-2 border-brand-secondary/25 pl-4"
+                  >
                     <p className="text-sm font-semibold text-slate-800">
                       {turn.question.question}
                     </p>
@@ -688,7 +691,7 @@ function StartCapture({
         <label className="mt-3 flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-6">
           <input
             type="checkbox"
-            className="mt-1 h-5 w-5 rounded border-slate-400 text-teal-700 focus:ring-teal-600"
+            className="mt-1 h-5 w-5 rounded border-slate-400 text-brand-secondary focus:ring-brand-focus"
             checked={safetyConfirmed}
             onChange={(event) => onSafetyChange(event.target.checked)}
           />
@@ -715,7 +718,7 @@ function StartCapture({
         </div>
       </div>
       <details className="rounded-2xl border border-slate-200 p-4">
-        <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600">
+        <summary className="cursor-pointer font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-focus">
           Other debrief options
         </summary>
         <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -725,7 +728,7 @@ function StartCapture({
         <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 text-sm leading-6 text-slate-700">
           <input
             type="checkbox"
-            className="mt-1 h-5 w-5 rounded border-slate-400 text-teal-700 focus:ring-teal-600"
+            className="mt-1 h-5 w-5 rounded border-slate-400 text-brand-secondary focus:ring-brand-focus"
             checked={voiceAcknowledged}
             onChange={(event) =>
               onVoiceAcknowledgementChange(event.target.checked)
@@ -733,7 +736,7 @@ function StartCapture({
           />
           <span>
             I understand Voice Journal records only my post-interaction report
-            and sends each bounded segment for transcription. RevenueOS does not
+            and sends each bounded segment for transcription. Oryntela does not
             retain the audio after transcription.
           </span>
         </label>
@@ -835,11 +838,11 @@ function VoiceControls({
   onCancel(): void;
 }) {
   return (
-    <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
+    <div className="rounded-2xl border border-brand-secondary/25 bg-brand-secondary/10 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-semibold text-teal-950">Voice answer</p>
-          <p className="mt-1 text-sm text-teal-900">
+          <p className="font-semibold text-brand-primary">Voice answer</p>
+          <p className="mt-1 text-sm text-brand-primary">
             Keep this page open. Background and screen-locked recording are not
             supported.
           </p>
@@ -847,7 +850,7 @@ function VoiceControls({
         {state !== "idle" ? (
           <span
             role="status"
-            className="rounded-full bg-white px-3 py-1 text-xs font-bold text-teal-900"
+            className="rounded-full bg-white px-3 py-1 text-xs font-bold text-brand-primary"
           >
             {state === "recording" ? "● Recording" : humanise(state)} ·{" "}
             {elapsedSeconds}s / 120s
@@ -855,7 +858,10 @@ function VoiceControls({
         ) : null}
       </div>
       {!available ? (
-        <p role="status" className="mt-4 text-sm font-semibold text-teal-950">
+        <p
+          role="status"
+          className="mt-4 text-sm font-semibold text-brand-primary"
+        >
           Voice capture is unavailable in this browser. Type your answer below.
         </p>
       ) : (
@@ -922,7 +928,7 @@ function EvidenceReview({
   const ready = decisionsReady(candidates, decisions);
   return (
     <div className="mt-6">
-      <div className="rounded-2xl bg-slate-950 p-5 text-white">
+      <div className="rounded-2xl bg-brand-primary p-5 text-white">
         <h3 className="text-xl font-semibold">
           Review before updating intelligence
         </h3>
@@ -980,7 +986,7 @@ function EvidenceReview({
               </label>
               <textarea
                 id={`candidate-${candidate.id}`}
-                className="mt-2 min-h-24 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:bg-slate-100"
+                className="mt-2 min-h-24 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-secondary/25 disabled:bg-slate-100"
                 maxLength={1_000}
                 disabled={current.decision === "reject"}
                 value={current.statement}

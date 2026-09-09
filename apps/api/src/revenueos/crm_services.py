@@ -112,7 +112,7 @@ class CRMService:
             message = "Historical external CRM data remains available to view and export. New sync is blocked."
         elif setting is None:
             state = "setup_required"
-            message = "Choose RevenueOS or an external CRM as the system of record."
+            message = "Choose Oryntela or an external CRM as the system of record."
         elif setting.mode == "external" and not connection_active:
             state = "setup_required"
             provider = "HubSpot" if setting.external_provider == "hubspot" else "Salesforce"

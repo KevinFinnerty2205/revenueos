@@ -110,7 +110,7 @@ describe("CoreSearch", () => {
           actionExecution: false,
           maxQuestionCharacters: 1000,
           maxSources: 12,
-          safeMessage: "Authorised RevenueOS evidence only.",
+          safeMessage: "Authorised Oryntela evidence only.",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
@@ -125,12 +125,12 @@ describe("CoreSearch", () => {
       />,
     );
 
-    expect(screen.getByRole("tab", { name: "Ask RevenueOS" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Ask Oryntela" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     expect(await screen.findByText("About: Acme")).toBeVisible();
-    expect(screen.getByRole("textbox", { name: "Ask RevenueOS" })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: "Ask Oryntela" })).toHaveValue(
       "What changed recently?",
     );
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
@@ -162,7 +162,7 @@ describe("CoreSearch", () => {
             actionExecution: false,
             maxQuestionCharacters: 1000,
             maxSources: 12,
-            safeMessage: "Authorised RevenueOS evidence only.",
+            safeMessage: "Authorised Oryntela evidence only.",
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -172,7 +172,7 @@ describe("CoreSearch", () => {
     const searchTab = screen.getByRole("tab", { name: "Search" });
     searchTab.focus();
     fireEvent.keyDown(searchTab, { key: "ArrowRight" });
-    const askTab = screen.getByRole("tab", { name: "Ask RevenueOS" });
+    const askTab = screen.getByRole("tab", { name: "Ask Oryntela" });
     await waitFor(() => expect(askTab).toHaveFocus());
     expect(askTab).toHaveAttribute("aria-selected", "true");
     expect(

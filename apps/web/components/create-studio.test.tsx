@@ -175,7 +175,7 @@ function presentation(
   };
 }
 
-describe("RevenueOS Create", () => {
+describe("Create", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("shows approved templates, presentations and the authority-gated PPTX upload", async () => {

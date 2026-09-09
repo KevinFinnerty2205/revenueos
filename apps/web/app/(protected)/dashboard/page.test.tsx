@@ -156,7 +156,7 @@ function dailyFixture(overrides: Partial<DailyResponse> = {}): DailyResponse {
   };
 }
 
-describe("RevenueOS Daily Home", () => {
+describe("Oryntela Daily Home", () => {
   beforeEach(() => {
     mockedApiRequest.mockReset();
   });
@@ -243,7 +243,7 @@ describe("RevenueOS Daily Home", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /let’s get your first deal into revenueos/i,
+        name: /let’s get your first deal into oryntela/i,
       }),
     ).toBeVisible();
     expect(
@@ -311,7 +311,7 @@ describe("RevenueOS Daily Home", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "RevenueOS couldn’t load your day.",
+        name: "Oryntela couldn’t load your day.",
       }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();

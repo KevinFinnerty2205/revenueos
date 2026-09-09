@@ -1131,7 +1131,7 @@ class EventService:
             self.tenant.organisation_id, "engage"
         )
         if access == "none":
-            raise PublicAPIError("events_not_in_plan", "RevenueOS Events requires Engage.", 403)
+            raise PublicAPIError("events_not_in_plan", "Events requires Engage.", 403)
         return access != "write"
 
     async def _require_write_access(self) -> None:

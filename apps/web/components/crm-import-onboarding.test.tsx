@@ -127,7 +127,7 @@ describe("CRMImportOnboarding", () => {
       await screen.findByRole("heading", { name: "Import preview" }),
     ).toBeVisible();
     expect(
-      screen.getByText(/RevenueOS has not changed CRM records/u),
+      screen.getByText(/Oryntela has not changed CRM records/u),
     ).toBeVisible();
     const previewCall = fetchMock.mock.calls.find(([input]) =>
       String(input).endsWith("/crm/imports/preview"),

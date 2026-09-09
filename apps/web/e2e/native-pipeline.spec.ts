@@ -55,7 +55,7 @@ const stages = [
 
 const pipeline = {
   id: "pipeline-1",
-  name: "RevenueOS Sales Pipeline",
+  name: "Oryntela Sales Pipeline",
   isDefault: true,
   active: true,
   archivedAt: null,

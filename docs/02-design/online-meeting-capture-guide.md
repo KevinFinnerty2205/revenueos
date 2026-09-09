@@ -3,7 +3,7 @@
 **Status:** WO-018 current implementation.
 
 Online meetings are first-class Interactions across Microsoft Teams, Zoom, Google
-Meet and `other`. RevenueOS prepares the seller before the meeting, remains passive
+Meet and `other`. Oryntela prepares the seller before the meeting, remains passive
 while the user attends in the normal meeting platform, then offers only the capture
 paths the server says are available.
 

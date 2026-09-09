@@ -125,7 +125,7 @@ The renderer replaces text only in supported mapped shapes, uses controlled text
 directly available, shape bounds and selected source relationships, resets safe core
 properties, then removes notes/comments/custom properties/thumbnail and unselected
 slide relationships. Unicode/XML-reserved characters are escaped by `python-pptx`.
-Customer-specific text remains actual editable OOXML text. “Locked” is a RevenueOS
+Customer-specific text remains actual editable OOXML text. “Locked” is a Oryntela
 generation rule, not DRM.
 
 The overflow checker is intentionally conservative: it estimates line capacity from

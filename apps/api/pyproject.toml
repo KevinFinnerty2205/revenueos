@@ -1,7 +1,7 @@
 [project]
 name = "revenueos-api"
 version = "0.4.0"
-description = "RevenueOS AI tenant-isolated private beta API"
+description = "Oryntela tenant-isolated private beta API"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.15.0,<2.0.0",

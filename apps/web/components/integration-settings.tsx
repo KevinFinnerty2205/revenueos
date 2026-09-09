@@ -334,7 +334,7 @@ export function IntegrationSettings() {
 
   return (
     <section className="form-card" aria-labelledby="integrations-title">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Reviewed execution boundary
       </p>
       <h2 id="integrations-title" className="mt-2 text-xl font-semibold">
@@ -376,7 +376,7 @@ export function IntegrationSettings() {
                       {definition.displayName}
                     </h3>
                     <p
-                      className={`mt-1 text-xs font-bold uppercase tracking-wide ${definition.simulationOnly ? "text-amber-800" : "text-teal-800"}`}
+                      className={`mt-1 text-xs font-bold uppercase tracking-wide ${definition.simulationOnly ? "text-amber-800" : "text-brand-secondary"}`}
                     >
                       {definition.simulationOnly
                         ? "Simulation — no external action"
@@ -525,7 +525,7 @@ export function IntegrationSettings() {
                 </div>
                 {mailbox && mailboxConsent === definition.connectorKey ? (
                   <div
-                    className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4"
+                    className="mt-4 rounded-xl border border-brand-secondary/25 bg-brand-secondary/10 p-4"
                     role="dialog"
                     aria-labelledby={`${definition.connectorKey}-permissions-title`}
                   >

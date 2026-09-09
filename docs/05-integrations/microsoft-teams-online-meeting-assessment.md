@@ -13,7 +13,7 @@ consent; this must be proven with a design-partner tenant rather than assumed.
 
 The assessment must also validate meeting-policy constraints, artefact ownership,
 change-notification coverage, subscription renewal and where recordings reside in
-Microsoft 365. RevenueOS would store only normalised IDs and imported evidence; it
+Microsoft 365. Oryntela would store only normalised IDs and imported evidence; it
 would not retain Graph payloads or claim that local deletion deletes the Microsoft
 original.
 

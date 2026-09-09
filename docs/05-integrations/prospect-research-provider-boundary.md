@@ -21,7 +21,7 @@ source metadata and observations; it cannot return arbitrary provider payloads,
 credentials, HTML, executable content or instructions.
 
 Provider-specific identifiers are stored only as bounded references. Core domain
-contracts expose RevenueOS candidates, sources, observations and trust states.
+contracts expose Oryntela candidates, sources, observations and trust states.
 Every result is revalidated for URL safety, source uniqueness, citation ownership
 and trust authority before it enters tenant persistence.
 

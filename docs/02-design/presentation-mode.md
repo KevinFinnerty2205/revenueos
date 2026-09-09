@@ -15,13 +15,13 @@ coaching, slide authoring and native mobile remain future scope.
 
 A presentation has an asymmetric evidence problem. Much of the speech and material
 comes from the seller. A generic transcript summariser can easily turn product
-claims repeated by the presenter into false buying signals or decisions. RevenueOS
+claims repeated by the presenter into false buying signals or decisions. Oryntela
 therefore models the deck, speaker role and audience response explicitly.
 
 ## Before
 
 The salesperson selects authorised presentation material or links an existing
-document evidence item. RevenueOS prepares:
+document evidence item. Oryntela prepares:
 
 - audience and stakeholder context;
 - interaction and opportunity objectives;
@@ -64,7 +64,7 @@ The debrief asks only questions not already answered by direct evidence:
 9. Which claims still need customer validation?
 
 Engagement observations are reported evidence unless supported by customer speech
-or a customer-authored source. RevenueOS must avoid converting eye contact,
+or a customer-authored source. Oryntela must avoid converting eye contact,
 attendance or generic politeness into inferred purchase intent.
 
 ## Evidence separation

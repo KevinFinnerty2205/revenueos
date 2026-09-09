@@ -280,7 +280,7 @@ async function routeSettings(page: Page) {
           state: "available",
           enabled: true,
           canManage: true,
-          message: "RevenueOS Prospect is available for this organisation.",
+          message: "Prospect is available for this organisation.",
         }),
       });
     },
@@ -406,7 +406,7 @@ test("Prospect live-provider readiness is clear and responsive", async ({
   await routeSettings(page);
   await page.goto("/settings");
 
-  const prospect = page.getByRole("region", { name: "RevenueOS Prospect" });
+  const prospect = page.getByRole("region", { name: "Prospect" });
   await expect(prospect).toBeVisible();
   await expect(prospect.getByText("Live research readiness")).toBeVisible();
   await expect(prospect.getByText("Not active")).toBeVisible();

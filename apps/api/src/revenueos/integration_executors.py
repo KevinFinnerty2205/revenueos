@@ -516,7 +516,7 @@ class MockCRMExecutor(_MockExecutor):
             object_type="crm_record_field",
             object_key=self.object_key(action, idempotency_key),
             state={"field": field, "current_value": new_value, "simulation": True},
-            safe_message="CRM simulation completed. The RevenueOS record and no real CRM were changed.",
+            safe_message="CRM simulation completed. The Oryntela record and no real CRM were changed.",
         )
 
     def object_key(self, action: ApprovedActionInput, idempotency_key: str) -> str:

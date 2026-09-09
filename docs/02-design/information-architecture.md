@@ -1,6 +1,6 @@
 # Information architecture
 
-**Design intent:** RevenueOS is a relationship intelligence and workflow product, not a replacement CRM. Navigation should foreground recent movement, evidence, memory, next actions and exceptions requiring attention. Dense record maintenance remains in the connected system of record.
+**Design intent:** Oryntela is a relationship intelligence and workflow product, not a replacement CRM. Navigation should foreground recent movement, evidence, memory, next actions and exceptions requiring attention. Dense record maintenance remains in the connected system of record.
 
 **Status legend:** **Current** exists now; **Pilot** is required for the first five companies; **Beta** is required for private beta; **Later** is deferred.
 
@@ -103,7 +103,7 @@ On small screens, use a compact menu and preserve direct access to Dashboard, Me
 - **Main information:** Stage/value from current records or CRM, recent relationship change, unresolved risk, next step, recency and sync state.
 - **Empty state:** Create an opportunity or connect an authoritative CRM.
 - **Loading state:** Summary placeholders retain filter layout.
-- **Error state:** Distinguish RevenueOS failure from a stale or unavailable CRM.
+- **Error state:** Distinguish Oryntela failure from a stale or unavailable CRM.
 - **Permissions:** Role and team visibility must be configured before beta; external field writes require approval.
 - **Mobile:** Exception cards rather than horizontal pipeline grids.
 - **Beta status:** Current CRUD; evidence-led exception experience in Beta.
@@ -114,7 +114,7 @@ On small screens, use a compact menu and preserve direct access to Dashboard, Me
 - **Primary actions:** Open evidence, prepare meeting, review risks/commitments, approve CRM proposal and manage tasks.
 - **Main information:** Authoritative fields, relationship timeline, stakeholders, meeting intelligence, open commitments, source-backed risks and sync history.
 - **Empty state:** Show authoritative record and ask for the next useful evidence source.
-- **Loading state:** CRM snapshot and RevenueOS context load independently with freshness labels.
+- **Loading state:** CRM snapshot and Oryntela context load independently with freshness labels.
 - **Error state:** Keep last-known data explicitly timestamped and disable unsafe write actions.
 - **Permissions:** Field and transcript access may differ; approvals require eligible role and current membership.
 - **Mobile:** Summary, next step and exceptions first; field diffs open in a focused approval view.
@@ -258,6 +258,6 @@ links and direct navigation. Non-entitled Core navigation is unchanged.
 This document remains the detailed current-through-beta screen inventory. WO-023
 proposes the longer-lived goal-based shell—Home, Find, Sell, Pipeline, Create and
 Insights, with Search and Settings as utilities—in
-[RevenueOS information architecture](revenueos-information-architecture.md). The
+[Oryntela information architecture](revenueos-information-architecture.md). The
 future design nests entity routes under user goals and preserves deep links. WO-026
 implements only the conditional Prospect/Find slice of that direction.

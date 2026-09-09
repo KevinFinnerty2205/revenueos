@@ -12,7 +12,7 @@ normal degraded state.
 A wake request can reduce accidental screen sleep during a foreground field
 conversation, but browser and operating-system policy remains authoritative.
 Battery state, permissions, visibility changes and platform support can release
-or reject the request at any time. RevenueOS therefore shows `Requested` or
+or reject the request at any time. Oryntela therefore shows `Requested` or
 `Not guaranteed`, never `Device will stay awake`.
 
 ## Consequences

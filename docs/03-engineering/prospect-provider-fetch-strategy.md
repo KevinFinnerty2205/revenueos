@@ -10,7 +10,7 @@ perform no network request and require no credentials or paid account.
 No real search, company-data, page-fetch or synthesis provider was selected. The
 available work-order evidence did not establish a suitable no-cost production path
 whose commercial terms, attribution, retention, regional/privacy posture and rate
-limits were approved for RevenueOS. No paid plan, credits or credentials were
+limits were approved for Oryntela. No paid plan, credits or credentials were
 created. Because no external API was selected, there was no provider-specific
 official documentation to rely on in this implementation.
 
@@ -21,7 +21,7 @@ without a real adapter is not a working integration.
 
 ## No public-page fetcher
 
-RevenueOS does not fetch arbitrary pages in WO-026. This is the smallest safe
+Oryntela does not fetch arbitrary pages in WO-026. This is the smallest safe
 choice: it avoids turning the product into a crawler, avoids executing untrusted
 HTML/JavaScript and eliminates cookies, authentication, downloads, MIME handling,
 page mirroring and arbitrary redirects from the runtime path. Unsupported MIME and

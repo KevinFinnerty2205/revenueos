@@ -31,7 +31,7 @@ fit for research, not purchase intent, buying readiness or predicted conversion.
 
 ## Relationship and whitespace context
 
-RevenueOS compares an exact normalised domain with existing tenant-owned Companies
+Oryntela compares an exact normalised domain with existing tenant-owned Companies
 and open Opportunities. Results clearly distinguish:
 
 - new prospect;

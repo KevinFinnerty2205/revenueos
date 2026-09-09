@@ -22,7 +22,7 @@ that do not buy the native CRM administration add-on and for external-CRM users.
 
 Configuration requires the `crm` module entitlement, the native CRM feature, the
 native Pipeline feature, native CRM mode and an organisation administrator. In
-external mode definitions are managed in HubSpot and RevenueOS native configuration is
+external mode definitions are managed in HubSpot and Oryntela native configuration is
 read-only. The current board remains useful but direct native movement is denied so the
 systems cannot silently diverge.
 

@@ -44,13 +44,13 @@ export function CreateModuleSettings() {
 
   return (
     <section className="form-card" aria-labelledby="create-module-title">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
         Add-on module
       </p>
       <div className="mt-2 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="create-module-title" className="form-legend">
-            RevenueOS Create
+            Create
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             Build reviewed PowerPoint presentations from approved company
@@ -67,9 +67,9 @@ export function CreateModuleSettings() {
               saving || availability.state === "temporarily_unavailable"
             }
             onClick={() => void update(!availability.enabled)}
-            className={`inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 ${
+            className={`inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 ${
               availability.enabled
-                ? "border-teal-700 bg-teal-700 text-white"
+                ? "border-brand-secondary bg-brand-primary text-white"
                 : "border-slate-300 bg-white text-slate-700"
             }`}
           >

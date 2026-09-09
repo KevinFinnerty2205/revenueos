@@ -13,7 +13,7 @@ document.
 
 The roadmap preserves one demonstrable outcome per sprint where practical. It takes the current Sprint 1–3 baseline to a narrow design-partner loop before broadening integrations. Sprint numbers express sequence, not committed dates; estimates require team capacity, provider access and design-partner availability.
 
-The implemented post-blueprint Core baseline now also includes WO-025 RevenueOS
+The implemented post-blueprint Core baseline now also includes WO-025 Oryntela
 Daily: the compatible `/dashboard` Home route uses one bounded personal read model
 for Interactions, Actions, deal attention, descriptive pipeline and existing Next
 Best Action. It does not bring later target, forecast or manager capabilities forward.
@@ -307,7 +307,7 @@ still required.
 ### Sprint 5 — Secure Manual Media Ingestion
 
 - **Objective:** Accept explicitly supplied media through a durable, consent-aware ingestion lifecycle and formalise consent/provenance for the existing plain-text path.
-- **User value:** A user can bring one customer conversation into RevenueOS without waiting for integrations.
+- **User value:** A user can bring one customer conversation into Oryntela without waiting for integrations.
 - **Major deliverables:** Private storage/quarantine, media flow, consent evidence, source validation, provenance for pasted text, durable database-backed job/worker entrypoint, idempotency, retry/cancel/delete and progress UI.
 - **Dependencies:** Sprint 3 meeting aggregate, Sprint 4 production identity, storage/security decisions.
 - **Out of scope:** Transcription/model calls, connected capture and meeting intelligence.
@@ -473,7 +473,7 @@ part of their future gates.
 ### Sprint 19 — First-five Design-partner Pilot
 
 - **Objective:** Operate the narrow Sales Brain loop with exactly five selected companies and validate value/trust assumptions.
-- **User value:** Five companies use RevenueOS on real authorised workflows with direct support and clear limits.
+- **User value:** Five companies use Oryntela on real authorised workflows with direct support and clear limits.
 - **Major deliverables:** Staged onboarding, per-company configuration review, weekly feedback/time study, incident/quality triage, adoption and correction analysis, go/no-go evidence.
 - **Dependencies:** Sprint 18 gates, signed customer/privacy agreements and a shared supported stack or controlled cohorts.
 - **Out of scope:** Unplanned integration breadth, public signup, autonomous action and bespoke product forks.
@@ -550,7 +550,7 @@ gated.
 - **Dependencies:** Confirmed commercial packaging and measured AI/storage/integration costs.
 - **Out of scope:** Complex usage billing, annual-contract automation, tax/accounting platform breadth and self-serve plan experimentation.
 - **Acceptance criteria:** Entitlement changes follow verified provider state; duplicate/out-of-order webhooks are safe; suspended payment never causes data loss.
-- **Security gates:** Signed webhooks, no card data in RevenueOS, tenant-scoped customer mapping and least-privilege billing administration.
+- **Security gates:** Signed webhooks, no card data in Oryntela, tenant-scoped customer mapping and least-privilege billing administration.
 - **Demonstration:** Change a test subscription and see capability availability update without altering retained customer data.
 
 ### Sprint 26 — Private Beta Hardening and Launch
@@ -756,7 +756,7 @@ NPV/IRR, probabilistic simulation or external execution.
 ## WO-034 current boundary
 
 WO-034 is now implemented as the opinionated native CRM foundation. Canonical
-Company/Contact/Opportunity records support explicit RevenueOS or external HubSpot
+Company/Contact/Opportunity records support explicit Oryntela or external HubSpot
 system-of-record mode, ownership, strong dedupe, archive/restore, bounded typed
 custom fields, authority cues, canonical activity and field history. Operational CSV
 and native reviewed-Action execution are deliberately deferred with organisation

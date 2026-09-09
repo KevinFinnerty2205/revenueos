@@ -115,7 +115,7 @@ async def download_export(request_id: UUID, service: Beta) -> FileResponse:
     return FileResponse(
         path,
         media_type="application/json",
-        filename=path.name,
+        filename=f"oryntela-export-{request_id}.json",
         headers={
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",

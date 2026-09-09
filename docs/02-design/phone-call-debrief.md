@@ -1,6 +1,6 @@
 # Phone-call debrief
 
-RevenueOS does not intercept, monitor or record a phone call. After the call is marked
+Oryntela does not intercept, monitor or record a phone call. After the call is marked
 completed, the salesperson can start AI Debrief or Voice Journal from the Interaction.
 
 For calls of three minutes or less the opener is **What changed?** with at most one

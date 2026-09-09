@@ -187,7 +187,7 @@ references as projection input. The methodology service does not create another
 brain, edit snapshots or treat its own projection as new customer Evidence. Definition,
 source or review changes produce a new immutable projection fingerprint/version.
 
-## Ask RevenueOS consumer
+## Ask Oryntela consumer
 
 WO-025B reads only the latest complete Revenue Brain snapshot bundle and current
 longitudinal insight for the already-authorised scope. It validates referenced final,

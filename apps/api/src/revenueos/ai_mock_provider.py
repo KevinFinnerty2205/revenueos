@@ -1996,7 +1996,7 @@ class DeterministicMockAIProvider:
     @staticmethod
     def _mock_stakeholder_organisation(content: str) -> str | None:
         if any(marker in content for marker in ("our account executive", "our vendor", "vendor representative")):
-            return "RevenueOS"
+            return "Oryntela"
         if any(marker in content for marker in ("customer", "their ", "cfo", "coo", "cto", "procurement")):
             return "Customer"
         return None

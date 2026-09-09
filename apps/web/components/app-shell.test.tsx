@@ -23,6 +23,10 @@ describe("application shell", () => {
       </AppShell>,
     );
 
+    expect(screen.getByRole("link", { name: "Oryntela Home" })).toHaveAttribute(
+      "href",
+      "/dashboard",
+    );
     const navigation = screen.getByRole("navigation", {
       name: "Main navigation",
     });

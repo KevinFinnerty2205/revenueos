@@ -58,7 +58,7 @@ establish customer intent, acceptance or approved budget. Joint and external
 sources remain reported/contextual. AI is always recorded as the interpretation
 origin, independently from who created the source.
 
-Contract and SOW extraction is operational evidence only. RevenueOS does not give
+Contract and SOW extraction is operational evidence only. Oryntela does not give
 legal advice or decide whether terms are binding.
 
 ## Operations

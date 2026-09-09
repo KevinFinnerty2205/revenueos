@@ -2,6 +2,7 @@
 
 import type { PublicDealRoomResolveResponse } from "@revenueos/shared";
 import { useEffect, useRef, useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { apiBlob, apiRequest } from "@/lib/api";
 
 const unavailableMessage = "This Deal Room is no longer available.";
@@ -117,30 +118,26 @@ export function PublicDealRoom() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <p
+      <main className="flex min-h-screen items-center justify-center bg-brand-background p-6">
+        <div
           role="status"
-          className="rounded-2xl bg-white px-6 py-5 text-sm font-semibold text-slate-700 shadow-sm"
+          className="flex items-center gap-4 rounded-2xl bg-white px-6 py-5 text-sm font-semibold text-slate-700 shadow-sm"
         >
-          Opening your Deal Room…
-        </p>
+          <BrandLogo className="size-8" decorative variant="symbol" />
+          <span>Opening your Deal Room…</span>
+        </div>
       </main>
     );
   }
 
   if (unavailable || !response) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-center">
+      <main className="flex min-h-screen items-center justify-center bg-brand-primary p-6 text-center">
         <section
           aria-labelledby="unavailable-title"
           className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl sm:p-12"
         >
-          <div
-            aria-hidden="true"
-            className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-teal-100 text-xl font-black text-teal-900"
-          >
-            R
-          </div>
+          <BrandLogo className="mx-auto size-12" variant="symbol" />
           <h1
             id="unavailable-title"
             className="mt-6 text-2xl font-semibold tracking-tight text-slate-950"
@@ -161,15 +158,15 @@ export function PublicDealRoom() {
   const hasPeople = room.stakeholders.length > 0;
 
   return (
-    <main className="deal-room-public min-h-screen bg-[#f4f7f5] text-slate-950">
+    <main className="deal-room-public min-h-screen bg-brand-background text-slate-950">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <span
               aria-hidden="true"
-              className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-teal-900 text-sm font-black text-white"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-700"
             >
-              R
+              {room.sellerCompanyName.slice(0, 1).toUpperCase()}
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-slate-950">
@@ -189,9 +186,9 @@ export function PublicDealRoom() {
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">
         <section
           aria-labelledby="deal-room-heading"
-          className="overflow-hidden rounded-[2rem] bg-teal-950 px-6 py-10 text-white shadow-xl sm:px-10 sm:py-14 lg:px-14"
+          className="overflow-hidden rounded-[2rem] bg-brand-primary px-6 py-10 text-white shadow-xl sm:px-10 sm:py-14 lg:px-14"
         >
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-300">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-primary-foreground">
             {room.customerCompanyName ?? "Customer collaboration"}
           </p>
           <h1
@@ -200,11 +197,11 @@ export function PublicDealRoom() {
           >
             {room.opportunityName}
           </h1>
-          <p className="mt-4 text-sm font-semibold text-teal-100">
+          <p className="mt-4 text-sm font-semibold text-brand-primary-foreground">
             Your deal with {room.sellerCompanyName}
           </p>
           {room.overview ? (
-            <p className="mt-7 max-w-3xl whitespace-pre-wrap text-base leading-8 text-teal-50 sm:text-lg">
+            <p className="mt-7 max-w-3xl whitespace-pre-wrap text-base leading-8 text-brand-primary-foreground sm:text-lg">
               {room.overview}
             </p>
           ) : null}
@@ -254,7 +251,7 @@ export function PublicDealRoom() {
               aria-labelledby="business-case-title"
               className="scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-9"
             >
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
                 Business case
               </p>
               <h2
@@ -282,7 +279,7 @@ export function PublicDealRoom() {
                           <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
                             {output.label}
                           </dt>
-                          <dd className="mt-1 text-xl font-semibold text-teal-950">
+                          <dd className="mt-1 text-xl font-semibold text-brand-primary">
                             {output.value}
                             {output.unit && !output.value.includes(output.unit)
                               ? ` ${output.unit}`
@@ -302,7 +299,7 @@ export function PublicDealRoom() {
               aria-labelledby="commercial-title"
               className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-9"
             >
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
                 Agreed commercial context
               </p>
               <h2 id="commercial-title" className="sr-only">
@@ -320,7 +317,7 @@ export function PublicDealRoom() {
               aria-labelledby="next-steps-title"
               className="scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-9"
             >
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
                 Shared plan
               </p>
               <h2
@@ -336,7 +333,7 @@ export function PublicDealRoom() {
                     className="rounded-2xl border border-slate-200 p-5"
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-black text-teal-950">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-secondary/15 text-xs font-black text-brand-primary">
                         {index + 1}
                       </span>
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
@@ -367,7 +364,7 @@ export function PublicDealRoom() {
               aria-labelledby="resources-title"
               className="scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-9"
             >
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
                 Reviewed resources
               </p>
               <h2
@@ -402,7 +399,7 @@ export function PublicDealRoom() {
                     </div>
                     {resource.kind === "external_link" && resource.url ? (
                       <a
-                        className="font-bold text-teal-800 underline decoration-2 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                        className="font-bold text-brand-secondary underline decoration-2 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-brand-focus"
                         href={resource.url}
                         target="_blank"
                         rel="noreferrer noopener"
@@ -416,7 +413,7 @@ export function PublicDealRoom() {
                     resource.downloadAvailable ? (
                       <button
                         type="button"
-                        className="font-bold text-teal-800 underline decoration-2 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-teal-600 disabled:opacity-60"
+                        className="font-bold text-brand-secondary underline decoration-2 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-brand-focus disabled:opacity-60"
                         disabled={downloading === resource.id}
                         onClick={() =>
                           void download(resource.id, resource.title)
@@ -439,7 +436,7 @@ export function PublicDealRoom() {
               aria-labelledby="people-title"
               className="scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-9"
             >
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-secondary">
                 People
               </p>
               <h2
@@ -453,7 +450,7 @@ export function PublicDealRoom() {
                   <li key={person.id} className="rounded-2xl bg-slate-50 p-5">
                     <p className="font-bold text-slate-950">{person.name}</p>
                     <p className="mt-1 text-sm text-slate-600">{person.role}</p>
-                    <p className="mt-3 text-xs font-bold uppercase tracking-wide text-teal-800">
+                    <p className="mt-3 text-xs font-bold uppercase tracking-wide text-brand-secondary">
                       {person.company} ·{" "}
                       {person.party === "seller" ? "Our team" : "Customer"}
                     </p>
@@ -489,6 +486,10 @@ export function PublicDealRoom() {
               ? ` · Access expires ${formatDate(response.expiresAt, true)}`
               : ""}
           </p>
+          <div className="mt-4 flex items-center gap-2">
+            <BrandLogo className="size-5" decorative variant="symbol" />
+            <span>Powered by Oryntela</span>
+          </div>
         </footer>
       </div>
     </main>

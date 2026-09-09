@@ -82,7 +82,7 @@ product design is not legal advice. Policy supports opt-out/unsubscribe, suppres
 do-not-contact, frequency caps, quiet hours, sender/domain reputation limits, valid
 sender identity, complaint/bounce stops, approved geography/channel and retention.
 
-RevenueOS must not:
+Oryntela must not:
 
 - treat a verified address as permission to contact;
 - treat public information or event attendance as blanket marketing consent;

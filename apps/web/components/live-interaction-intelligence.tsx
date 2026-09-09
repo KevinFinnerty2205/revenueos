@@ -397,11 +397,11 @@ export function LiveInteractionIntelligence({
           ) : null}
 
           {live.reconciliation ? (
-            <div className="rounded-2xl bg-teal-50 p-4">
-              <h3 className="font-semibold text-teal-950">
+            <div className="rounded-2xl bg-brand-secondary/10 p-4">
+              <h3 className="font-semibold text-brand-primary">
                 Live-to-final review
               </h3>
-              <p className="mt-2 text-sm text-teal-900">
+              <p className="mt-2 text-sm text-brand-primary">
                 {live.reconciliation.confirmed} confirmed ·{" "}
                 {live.reconciliation.revised} revised ·{" "}
                 {live.reconciliation.unsupported} unsupported ·{" "}

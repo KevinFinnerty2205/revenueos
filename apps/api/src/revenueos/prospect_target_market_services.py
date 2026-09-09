@@ -440,8 +440,8 @@ class ProspectTargetMarketService:
             "pending": "Finding accounts…",
             "running": "Finding accounts…",
             "completed": "Accounts ready",
-            "partial": "RevenueOS found some matching accounts, but the search was incomplete.",
-            "failed": "RevenueOS couldn’t complete this account search. Try again or edit the target market.",
+            "partial": "Oryntela found some matching accounts, but the search was incomplete.",
+            "failed": "Oryntela couldn’t complete this account search. Try again or edit the target market.",
         }
         return DiscoveryResponse(
             target_market=await self._market_response(market, definition=version),
@@ -764,7 +764,7 @@ class ProspectTargetMarketService:
                 self.settings.environment == "production"
                 and isinstance(self.provider, DeterministicMockDiscoveryProvider)
             ):
-                raise PublicAPIError("prospect_unavailable", "RevenueOS Prospect is temporarily unavailable.", 503)
+                raise PublicAPIError("prospect_unavailable", "Prospect is temporarily unavailable.", 503)
             await commercial.require_module_write(self.tenant.organisation_id, "prospect")
             return
         access = await commercial.module_access(self.tenant.organisation_id, "prospect")

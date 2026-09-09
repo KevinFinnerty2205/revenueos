@@ -20,8 +20,8 @@ export default async function AssistantPage({
     <div className="space-y-8">
       <PageHeader
         eyebrow="Workspace"
-        title="Search or ask RevenueOS"
-        description="Find a record quickly, or ask a grounded question about what RevenueOS already knows."
+        title="Search or ask Oryntela"
+        description="Find a record quickly, or ask a grounded question about what Oryntela already knows."
       />
       <CoreSearch
         initialMode={initialMode}
