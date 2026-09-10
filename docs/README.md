@@ -12,6 +12,10 @@ This is the canonical product and engineering documentation index. Documents dis
      - [Oryntela concept contact sheet](00-company/assets/oryntela-brand-concepts/oryntela-concept-contact-sheet.png) — historical M1–M3 and S1–S2 comparison
    - [Oryntela brand-surface inventory](00-company/oryntela-brand-surface-inventory.csv) — machine-useful WO-052 rebrand surface map
    - [WO-052 Oryntela customer-facing rebrand](07-sprints/wo-052-oryntela-customer-facing-rebrand.md) — implementation record and validation boundary
+   - [WO-053 Oryntela marketing website](07-sprints/wo-053-oryntela-marketing-website.md) — public commercial website, product truth and launch boundary
+   - [Oryntela marketing website guide](03-engineering/oryntela-marketing-website.md) — information architecture, SEO, content sources and activation rules
+   - [Oryntela marketing claim inventory](01-product/oryntela-marketing-claim-inventory.md) — feature, commercial, integration and trust evidence map
+   - [Oryntela marketing screenshot provenance](03-engineering/oryntela-marketing-screenshot-provenance.md) — synthetic real-product source and regeneration record
    - [Oryntela brand implementation](03-engineering/oryntela-brand-implementation.md) — production assets, tokens, typography and legacy-name boundary
    - [WO-052 completion inventory](00-company/oryntela-brand-surface-completion.csv) — customer-facing surface disposition
    - [ADR 0075: Customer-facing Oryntela with retained RevenueOS internals](08-decisions/0075-customer-facing-oryntela-retained-revenueos-internals.md)
@@ -183,6 +187,10 @@ This is the canonical product and engineering documentation index. Documents dis
 162. [WO-044: Reviewed Closed-Won Handover](07-sprints/wo-044-reviewed-closed-won-handover.md) — internal reviewed transition, pinned truth sources and immutable approval history
 163. [Closed-Won Handover architecture](03-engineering/closed-won-handover.md) — lifecycle, authority table, source pack, approval and post-sale boundary
 164. [ADR 0074: Reviewed Closed-Won Handover authority](08-decisions/0074-reviewed-closed-won-handover-authority.md)
+165. [WO-053: Oryntela Marketing Website](07-sprints/wo-053-oryntela-marketing-website.md) — production marketing routes, exact commercial truth, real synthetic product evidence and pre-launch boundaries
+166. [Oryntela marketing website guide](03-engineering/oryntela-marketing-website.md) — route/auth architecture, content authority, SEO and WO-054 activation checklist
+167. [Oryntela marketing claim inventory](01-product/oryntela-marketing-claim-inventory.md) — bounded evidence map for every major website claim
+168. [Oryntela marketing screenshot provenance](03-engineering/oryntela-marketing-screenshot-provenance.md) — real-product synthetic source, crops and regeneration
 
 ## First design-partner launch package
 
@@ -228,6 +236,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [Oryntela master product blueprint](01-product/oryntela-master-product-blueprint.md)
 - [Oryntela executive product map](01-product/oryntela-executive-product-map.md)
 - [Oryntela product principles](01-product/oryntela-product-principles.md)
+- [Oryntela marketing claim inventory](01-product/oryntela-marketing-claim-inventory.md)
 - [Oryntela Company Selling Profile concept](01-product/oryntela-company-selling-profile-concept.md)
 - [Oryntela future product opportunities](01-product/oryntela-future-product-opportunities.md)
 - [Oryntela do-not-build register](01-product/oryntela-do-not-build-register.md)
@@ -358,6 +367,8 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## 03 — Engineering
 
+- [Oryntela marketing website](03-engineering/oryntela-marketing-website.md)
+- [Oryntela marketing screenshot provenance](03-engineering/oryntela-marketing-screenshot-provenance.md)
 - [Oryntela variable-cost safety gate](03-engineering/oryntela-variable-cost-safety-gate.md)
 - [Oryntela future SMS boundary](03-engineering/oryntela-future-sms-boundary.md)
 - [Oryntela native mobile recording boundary](03-engineering/oryntela-native-mobile-recording-boundary.md)
@@ -646,6 +657,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## 07 — Sprint records
 
+- [WO-053: Oryntela Marketing Website](07-sprints/wo-053-oryntela-marketing-website.md)
 - [Sprint 1: foundation](07-sprints/sprint-01-foundation.md)
 - [Sprint 2: core business entities](07-sprints/sprint-02-core-business-entities.md)
 - [Sprint 3: Meeting Domain Foundation](07-sprints/sprint-03-meeting-domain.md)

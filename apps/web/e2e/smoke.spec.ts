@@ -34,16 +34,19 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("landing page explains the current product honestly", async ({ page }) => {
+test("marketing home explains the end-to-end product honestly", async ({
+  page,
+}) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: "The AI sales teammate that remembers every customer interaction and turns conversations into action.",
+      name: "One sales system from prospect to handover.",
     }),
   ).toBeVisible();
   await expect(
-    page.getByText(/recording is consent-gated and never starts implicitly/i),
+    page.getByRole("link", { name: "Request trial access" }).first(),
   ).toBeVisible();
+  await expect(page.getByText(/no automatic charge/i).first()).toBeVisible();
 });
 
 test("development user can open the protected dashboard shell", async ({

@@ -721,7 +721,7 @@ The authorised sequence after WO-050 remains:
 5. WO-044 — Reviewed Closed-Won Handover — **implemented; awaiting engineering review**
 6. WO-051 — Oryntela Brand Identity
 7. WO-052 — Customer-Facing Oryntela Rebrand
-8. WO-053 — Oryntela Marketing Website
+8. WO-053 — Oryntela Marketing Website — **implemented; awaiting engineering review**
 9. **WO-055 — Manual Paid Credit Grant**
 10. WO-054 — Production Deployment & Launch Operations
 11. WO-045 — End-to-End Pre-Launch Acceptance
