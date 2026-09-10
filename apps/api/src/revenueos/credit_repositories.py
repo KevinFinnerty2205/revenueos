@@ -17,6 +17,7 @@ from revenueos.models import (
     CreditPackVersion,
     CreditQuote,
     CreditReservationAllocation,
+    ManualPaidCreditGrant,
     OrganisationCreditBalance,
 )
 
@@ -108,6 +109,32 @@ class CreditRepository:
                 select(CreditLedgerEntry).where(
                     CreditLedgerEntry.organisation_id == organisation_id,
                     CreditLedgerEntry.id == entry_id,
+                )
+            ),
+        )
+
+    async def manual_paid_grant_by_key_hash(
+        self, organisation_id: UUID, idempotency_key_hash: str
+    ) -> ManualPaidCreditGrant | None:
+        return cast(
+            ManualPaidCreditGrant | None,
+            await self.session.scalar(
+                select(ManualPaidCreditGrant).where(
+                    ManualPaidCreditGrant.organisation_id == organisation_id,
+                    ManualPaidCreditGrant.idempotency_key_hash == idempotency_key_hash,
+                )
+            ),
+        )
+
+    async def manual_paid_grant_by_reference_fingerprint(
+        self, organisation_id: UUID, payment_reference_fingerprint: str
+    ) -> ManualPaidCreditGrant | None:
+        return cast(
+            ManualPaidCreditGrant | None,
+            await self.session.scalar(
+                select(ManualPaidCreditGrant).where(
+                    ManualPaidCreditGrant.organisation_id == organisation_id,
+                    ManualPaidCreditGrant.payment_reference_fingerprint == payment_reference_fingerprint,
                 )
             ),
         )

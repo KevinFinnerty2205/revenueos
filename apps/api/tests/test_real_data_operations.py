@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import base64
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,13 +17,19 @@ from revenueos.config import Settings
 from revenueos.main import create_app
 from revenueos.models import OperatorProvisioningEvent, OrganisationMembership
 from revenueos.operations import (
+    _manual_paid_confirmation,
+    _parse_credit_quantity,
+    _parse_exact_amount_minor_units,
+    _parser,
+    _run,
+    manual_paid_credit_grant_preview,
     provision_member,
     provision_organisation,
     queue_status,
     support_bundle,
     tenant_preflight,
 )
-from tests.conftest import TEST_DB_URL
+from tests.conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL
 
 
 def safe_real_data_settings(**changes: object) -> Settings:
@@ -254,3 +262,177 @@ def test_operator_provisioning_is_audited_idempotent_and_disables_jit_identity_c
         await engine.dispose()
 
     asyncio.run(scenario())
+
+
+def test_owner_manual_paid_credit_cli_previews_confirms_executes_and_retries() -> None:
+    async def scenario() -> None:
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url=TEST_DB_URL,
+            log_level="WARNING",
+        )
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        received_at = datetime.now(UTC) - timedelta(hours=1)
+        operator_reference = "owner-support-synthetic"
+        reason = "Grant the synthetic negotiated bulk purchase after cleared payment verification."
+        try:
+            preview = await manual_paid_credit_grant_preview(
+                factory,
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                credits=50_000,
+                amount_received_minor_units=1_234_567,
+                currency="AUD",
+                payment_method="BANK_TRANSFER",
+                payment_reference="INV-SYNTHETIC-CLI-055",
+                payment_received_at=received_at,
+                operator_reference=operator_reference,
+                reason=reason,
+            )
+            assert preview["status"] == "ready_for_confirmation"
+            assert preview["organisation"] == {
+                "id": str(PRIMARY_ORGANISATION_ID),
+                "name": "Example Revenue Team",
+                "commercialStatus": "active",
+                "plan": "complete",
+            }
+            assert preview["amountReceived"] == "AUD 12345.67"
+            assert preview["expectedBalanceVersion"] == 0
+            assert preview["clearedFundsRequired"] is True
+            assert preview["providerExecutionAuthorisedByGrant"] is False
+            assert preview["operatorReference"] == operator_reference
+            assert preview["reason"] == reason
+            confirmation = _manual_paid_confirmation(
+                PRIMARY_ORGANISATION_ID,
+                50_000,
+                1_234_567,
+                "AUD",
+                "BANK_TRANSFER",
+                "INV-SYNTHETIC-CLI-055",
+                received_at,
+                operator_reference,
+                reason,
+            )
+            assert preview["confirmationRequired"] == confirmation
+
+            command = [
+                "credits-manual-paid-grant",
+                "--organisation-id",
+                str(PRIMARY_ORGANISATION_ID),
+                "--credits",
+                "50000",
+                "--amount-received",
+                "12345.67",
+                "--currency",
+                "AUD",
+                "--payment-method",
+                "BANK_TRANSFER",
+                "--payment-reference",
+                "INV-SYNTHETIC-CLI-055",
+                "--payment-received-at",
+                received_at.isoformat(),
+                "--expected-balance-version",
+                "0",
+                "--idempotency-key",
+                "manual-paid-cli-synthetic-055",
+                "--operator-reference",
+                operator_reference,
+                "--reason",
+                reason,
+                "--cleared-funds-confirmed",
+                "--confirm",
+                confirmation,
+            ]
+            wrong_confirmation = _parser().parse_args([*command[:-1], "WRONG"])
+            wrong_code, wrong_result = await _run(wrong_confirmation, settings)
+            assert wrong_code == 2 and wrong_result == {"status": "blocked", "code": "confirmation_mismatch"}
+
+            changed_reason_command = list(command)
+            changed_reason_command[changed_reason_command.index("--reason") + 1] = (
+                "A different reason must require a fresh preview and confirmation."
+            )
+            changed_reason = _parser().parse_args(changed_reason_command)
+            changed_reason_code, changed_reason_result = await _run(changed_reason, settings)
+            assert changed_reason_code == 2
+            assert changed_reason_result == {"status": "blocked", "code": "confirmation_mismatch"}
+
+            duplicate_confirmation = _parser().parse_args([*command[:-2], "--cleared-funds-confirmed", *command[-2:]])
+            duplicate_code, duplicate_result = await _run(duplicate_confirmation, settings)
+            assert duplicate_code == 2
+            assert duplicate_result == {"status": "blocked", "code": "duplicate_argument"}
+
+            arguments = _parser().parse_args(command)
+            assert arguments.amount_received == 1_234_567
+            exit_code, result = await _run(arguments, settings)
+            assert exit_code == 0
+            assert result["status"] == "complete"
+            assert result["creditType"] == "purchased"
+            assert result["expiresAt"] is None
+            assert result["clearedFundsConfirmed"] is True
+            assert result["ledgerReconciled"] is True
+            assert result["alreadyApplied"] is False
+
+            retry_code, retry = await _run(arguments, settings)
+            assert retry_code == 0
+            assert retry["grantId"] == result["grantId"]
+            assert retry["creditLotId"] == result["creditLotId"]
+            assert retry["purchasedAvailable"] == 50_000
+            assert retry["alreadyApplied"] is True
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_manual_paid_credit_cli_parses_exact_bounds_and_rejects_duplicate_facts() -> None:
+    assert _parse_exact_amount_minor_units("0.01") == 1
+    assert _parse_exact_amount_minor_units("12345.67") == 1_234_567
+    assert _parse_exact_amount_minor_units("90000000000.00") == 9_000_000_000_000
+    assert _parse_credit_quantity("1") == 1
+    assert _parse_credit_quantity("9000000000000") == 9_000_000_000_000
+
+    for value in (
+        "0",
+        "-0.01",
+        "0.001",
+        "1e3",
+        "+1.00",
+        "90000000000.01",
+        "NaN",
+        "Infinity",
+        "1" * 1_000,
+    ):
+        with pytest.raises(argparse.ArgumentTypeError, match="Amount received"):
+            _parse_exact_amount_minor_units(value)
+    for value in ("0", "-1", "+1", "1.5", "1_000", "9000000000001", "1" * 1_000):
+        with pytest.raises(argparse.ArgumentTypeError, match="Credits"):
+            _parse_credit_quantity(value)
+
+    preview_arguments = [
+        "credits-manual-paid-preview",
+        "--organisation-id",
+        str(PRIMARY_ORGANISATION_ID),
+        "--credits",
+        "1",
+        "--credits",
+        "2",
+        "--amount-received",
+        "0.01",
+        "--currency",
+        "AUD",
+        "--payment-method",
+        "BANK_TRANSFER",
+        "--payment-reference",
+        "INV-SYNTHETIC-DUPLICATE-FLAG",
+        "--payment-received-at",
+        "2026-09-10T10:00:00+10:00",
+        "--operator-reference",
+        "owner-support-synthetic",
+        "--reason",
+        "Reject duplicate financial arguments.",
+    ]
+    with pytest.raises(SystemExit) as duplicate:
+        _parser().parse_args(preview_arguments)
+    assert duplicate.value.code == 2

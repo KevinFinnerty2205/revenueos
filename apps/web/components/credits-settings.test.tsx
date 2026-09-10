@@ -17,6 +17,18 @@ function projection(): CreditsProjection {
     },
     recentActivity: [
       {
+        id: "00000000-0000-4000-8000-000000000005",
+        eventType: "purchase",
+        creditType: "purchased",
+        availableChange: 100,
+        reservedChange: 0,
+        actionCode: null,
+        operationId: null,
+        reason:
+          "Bulk Credit purchase after authorised cleared-funds confirmation.",
+        createdAt: "2032-03-31T00:00:00Z",
+      },
+      {
         id: "00000000-0000-4000-8000-000000000001",
         eventType: "promotional_grant",
         creditType: "promotional",
@@ -84,6 +96,9 @@ describe("CreditsSettings", () => {
     expect(screen.getByText("20")).toBeVisible();
     expect(screen.getByText(/10 Credits are reserved/i)).toBeVisible();
     expect(screen.getByText("Promotional grant")).toBeVisible();
+    expect(screen.getByText("Purchased Credits")).toBeVisible();
+    expect(screen.queryByText(/manual_paid/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/payment reference/i)).not.toBeInTheDocument();
     expect(screen.getByText("+20 Credits")).toBeVisible();
     expect(screen.getByText("-10 Credits")).toBeVisible();
     expect(screen.getByText(/ordinary Oryntela software use/i)).toBeVisible();

@@ -5,10 +5,12 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import stat
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -26,11 +28,13 @@ from revenueos.commercial_services import (
     require_seat_available,
 )
 from revenueos.config import Settings, get_settings
+from revenueos.credit_services import LARGE_MANUAL_PAID_GRANT_CREDITS, MAX_CREDITS, CreditService
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.models import (
     ActionExecution,
     AIJob,
+    CommercialPlanVersion,
     CommercialStateEvent,
     CreatePresentationVersion,
     CreateTemplateVersion,
@@ -42,6 +46,7 @@ from revenueos.models import (
     Organisation,
     OrganisationBetaSettings,
     OrganisationCommercialState,
+    OrganisationCreditBalance,
     OrganisationCRMSetting,
     OrganisationMembership,
     OrganisationModuleEntitlement,
@@ -90,6 +95,265 @@ def _validate_operator_reference(value: str) -> str:
     if not resolved or len(resolved) > 200 or any(ord(character) < 32 for character in resolved):
         raise ValueError("Operator reference must contain 1 to 200 printable characters.")
     return resolved
+
+
+def _validate_manual_paid_reason(value: str) -> str:
+    resolved = value.strip()
+    if (
+        len(resolved) < 8
+        or len(resolved) > 500
+        or any(ord(character) < 32 for character in resolved)
+        or "<" in resolved
+        or ">" in resolved
+    ):
+        raise ValueError("Reason must contain 8 to 500 characters of plain printable text.")
+    return resolved
+
+
+def _validate_manual_paid_operator_reference(value: str) -> str:
+    resolved = _validate_operator_reference(value)
+    if "<" in resolved or ">" in resolved:
+        raise ValueError("Operator reference must be plain printable text.")
+    return resolved
+
+
+class _StoreOnce(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        marker = f"_provided_once_{self.dest}"
+        if getattr(namespace, marker, False):
+            raise argparse.ArgumentError(self, f"{option_string or self.dest} may be supplied only once")
+        setattr(namespace, self.dest, values)
+        setattr(namespace, marker, True)
+
+
+def _parse_exact_amount_minor_units(value: str) -> int:
+    candidate = value.strip()
+    if len(candidate) > 32 or re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", candidate) is None:
+        raise argparse.ArgumentTypeError("Amount received must be a plain exact decimal with up to two places.")
+    try:
+        amount = Decimal(candidate)
+    except InvalidOperation as exc:
+        raise argparse.ArgumentTypeError("Amount received must be an exact decimal value.") from exc
+    if not amount.is_finite() or amount <= 0:
+        raise argparse.ArgumentTypeError("Amount received must be positive with no more than two decimal places.")
+    minor_units = amount * 100
+    if minor_units != minor_units.to_integral_value() or minor_units > 9_000_000_000_000:
+        raise argparse.ArgumentTypeError("Amount received exceeds the supported exact AUD range.")
+    return int(minor_units)
+
+
+def _parse_credit_quantity(value: str) -> int:
+    candidate = value.strip()
+    if len(candidate) > 13 or not candidate.isascii() or not candidate.isdecimal():
+        raise argparse.ArgumentTypeError("Credits must be a plain integer.")
+    try:
+        credits = int(candidate)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Credits must be an integer.") from exc
+    if credits <= 0 or credits > MAX_CREDITS:
+        raise argparse.ArgumentTypeError("Credits must be positive and within the supported technical bound.")
+    return credits
+
+
+def _parse_aware_datetime(value: str) -> datetime:
+    candidate = value.strip()
+    try:
+        parsed = datetime.fromisoformat(candidate[:-1] + "+00:00" if candidate.endswith("Z") else candidate)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Use an ISO 8601 payment timestamp with a timezone.") from exc
+    if parsed.tzinfo is None:
+        raise argparse.ArgumentTypeError("The payment timestamp must include a timezone.")
+    return parsed
+
+
+def _format_minor_units(amount_minor_units: int) -> str:
+    return f"{Decimal(amount_minor_units) / Decimal(100):.2f}"
+
+
+def _manual_paid_confirmation(
+    organisation_id: uuid.UUID,
+    credits: int,
+    amount_received_minor_units: int,
+    currency: str,
+    payment_method: str,
+    payment_reference: str,
+    payment_received_at: datetime,
+    operator_reference: str,
+    reason: str,
+) -> str:
+    received_at = payment_received_at.astimezone(UTC).isoformat()
+    review_fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "organisationId": str(organisation_id),
+                "credits": credits,
+                "amountReceivedMinorUnits": amount_received_minor_units,
+                "currency": currency,
+                "paymentMethod": payment_method,
+                "paymentReference": payment_reference.strip(),
+                "paymentReceivedAt": received_at,
+                "operatorReference": operator_reference.strip(),
+                "reason": reason.strip(),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()[:16]
+    return (
+        f"GRANT {credits} PAID CREDITS TO {organisation_id} FOR "
+        f"{currency} {_format_minor_units(amount_received_minor_units)} VIA {payment_method} "
+        f"RECEIVED {received_at} REF {payment_reference.strip()} REVIEW {review_fingerprint}"
+    )
+
+
+async def manual_paid_credit_grant_preview(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    organisation_id: uuid.UUID,
+    credits: int,
+    amount_received_minor_units: int,
+    currency: str,
+    payment_method: str,
+    payment_reference: str,
+    payment_received_at: datetime,
+    operator_reference: str,
+    reason: str,
+) -> dict[str, object]:
+    reference = payment_reference.strip()
+    operator = _validate_manual_paid_operator_reference(operator_reference)
+    resolved_reason = _validate_manual_paid_reason(reason)
+    if (
+        not 1 <= len(reference) <= 120
+        or not reference[0].isalnum()
+        or not all(character.isascii() and (character.isalnum() or character in " ._:/#-") for character in reference)
+    ):
+        raise PublicAPIError(
+            "manual_paid_credit_reference_invalid",
+            "Use a bounded payment or invoice reference with ordinary printable characters.",
+            422,
+        )
+    if payment_received_at.astimezone(UTC) > datetime.now(UTC) + timedelta(minutes=5):
+        raise PublicAPIError(
+            "manual_paid_credit_received_at_invalid",
+            "The cleared-funds timestamp cannot be in the future.",
+            422,
+        )
+    async with session_factory() as session:
+        await set_tenant_database_context(session, organisation_id)
+        organisation = await session.scalar(select(Organisation).where(Organisation.id == organisation_id))
+        if organisation is None:
+            raise PublicAPIError(
+                "manual_paid_credit_organisation_invalid", "The target organisation is unavailable.", 404
+            )
+        commercial = await session.get(OrganisationCommercialState, organisation_id)
+        if commercial is None or commercial.status == "inactive":
+            raise PublicAPIError(
+                "manual_paid_credit_organisation_inactive",
+                "Paid Credits cannot be granted to an inactive organisation.",
+                409,
+            )
+        active_members = await session.scalar(
+            select(func.count())
+            .select_from(OrganisationMembership)
+            .join(User, User.id == OrganisationMembership.user_id)
+            .where(
+                OrganisationMembership.organisation_id == organisation_id,
+                OrganisationMembership.status == "active",
+                User.status == "active",
+            )
+        )
+        if not active_members:
+            raise PublicAPIError(
+                "manual_paid_credit_organisation_disabled",
+                "Paid Credits cannot be granted to an organisation without an active member.",
+                409,
+            )
+        plan = await session.get(CommercialPlanVersion, commercial.plan_version_id)
+        balance = await session.get(OrganisationCreditBalance, organisation_id)
+        purchased_available = balance.purchased_available if balance is not None else 0
+        promotional_available = balance.promotional_available if balance is not None else 0
+        reserved = balance.purchased_reserved + balance.promotional_reserved if balance is not None else 0
+        expected_version = balance.lock_version if balance is not None else 0
+        return {
+            "status": "ready_for_confirmation",
+            "operation": "grant_manual_paid_credits",
+            "organisation": {
+                "id": str(organisation.id),
+                "name": organisation.name,
+                "commercialStatus": commercial.status,
+                "plan": plan.code if plan is not None else "unavailable",
+            },
+            "creditsToGrant": credits,
+            "amountReceivedMinorUnits": amount_received_minor_units,
+            "amountReceived": f"{currency} {_format_minor_units(amount_received_minor_units)}",
+            "currency": currency,
+            "paymentMethod": payment_method,
+            "paymentReference": reference,
+            "paymentReceivedAt": payment_received_at.astimezone(UTC).isoformat(),
+            "operatorReference": operator,
+            "reason": resolved_reason,
+            "currentCreditBalance": {
+                "available": purchased_available + promotional_available,
+                "purchasedAvailable": purchased_available,
+                "promotionalAvailable": promotional_available,
+                "reserved": reserved,
+                "lockVersion": expected_version,
+            },
+            "expectedBalanceVersion": expected_version,
+            "largeGrantWarning": (
+                "This is a large manual paid Credit grant. Confirm the values carefully."
+                if credits >= LARGE_MANUAL_PAID_GRANT_CREDITS
+                else None
+            ),
+            "clearedFundsRequired": True,
+            "confirmationRequired": _manual_paid_confirmation(
+                organisation_id,
+                credits,
+                amount_received_minor_units,
+                currency,
+                payment_method,
+                reference,
+                payment_received_at,
+                operator,
+                resolved_reason,
+            ),
+            "providerExecutionAuthorisedByGrant": False,
+            "marginReviewStatus": "production_execution_blocked_pending_policy",
+        }
+
+
+def _add_manual_paid_purchase_arguments(parser: argparse.ArgumentParser, *, execute: bool) -> None:
+    parser.add_argument("--organisation-id", required=True, type=uuid.UUID, action=_StoreOnce)
+    parser.add_argument("--credits", required=True, type=_parse_credit_quantity, action=_StoreOnce)
+    parser.add_argument(
+        "--amount-received",
+        required=True,
+        type=_parse_exact_amount_minor_units,
+        action=_StoreOnce,
+    )
+    parser.add_argument("--currency", required=True, choices=("AUD",), action=_StoreOnce)
+    parser.add_argument(
+        "--payment-method",
+        required=True,
+        choices=("BANK_TRANSFER", "CARD_OUTSIDE_AUTOMATIC_FLOW", "OTHER_APPROVED"),
+        action=_StoreOnce,
+    )
+    parser.add_argument("--payment-reference", required=True, action=_StoreOnce)
+    parser.add_argument("--payment-received-at", required=True, type=_parse_aware_datetime, action=_StoreOnce)
+    parser.add_argument("--operator-reference", required=True, action=_StoreOnce)
+    parser.add_argument("--reason", required=True, action=_StoreOnce)
+    if execute:
+        parser.add_argument("--expected-balance-version", required=True, type=int, action=_StoreOnce)
+        parser.add_argument("--idempotency-key", required=True, action=_StoreOnce)
+        parser.add_argument("--cleared-funds-confirmed", action="count", default=0)
+        parser.add_argument("--large-grant-reviewed", action="count", default=0)
+        parser.add_argument("--confirm", required=True, action=_StoreOnce)
 
 
 async def inspect_runtime_database(engine: AsyncEngine) -> list[PreflightCheck]:
@@ -762,6 +1026,12 @@ def _parser() -> argparse.ArgumentParser:
     change_commercial.add_argument("--reason", required=True)
     change_commercial.add_argument("--confirm", required=True)
 
+    manual_paid_preview = subparsers.add_parser("credits-manual-paid-preview")
+    _add_manual_paid_purchase_arguments(manual_paid_preview, execute=False)
+
+    manual_paid_grant = subparsers.add_parser("credits-manual-paid-grant")
+    _add_manual_paid_purchase_arguments(manual_paid_grant, execute=True)
+
     tenant = subparsers.add_parser("tenant-preflight")
     tenant.add_argument("--organisation-id", required=True, type=uuid.UUID)
     queues = subparsers.add_parser("queue-status")
@@ -864,6 +1134,78 @@ async def _run(arguments: argparse.Namespace, settings: Settings) -> tuple[int, 
                     expected_lock_version=arguments.expected_lock_version,
                 )
                 return 0, {"status": "complete", "commercial": projection.model_dump(mode="json", by_alias=True)}
+        if arguments.command == "credits-manual-paid-preview":
+            preview = await manual_paid_credit_grant_preview(
+                session_factory,
+                organisation_id=arguments.organisation_id,
+                credits=arguments.credits,
+                amount_received_minor_units=arguments.amount_received,
+                currency=arguments.currency,
+                payment_method=arguments.payment_method,
+                payment_reference=arguments.payment_reference,
+                payment_received_at=arguments.payment_received_at,
+                operator_reference=arguments.operator_reference,
+                reason=arguments.reason,
+            )
+            return 0, preview
+        if arguments.command == "credits-manual-paid-grant":
+            if arguments.cleared_funds_confirmed > 1 or arguments.large_grant_reviewed > 1:
+                return 2, {"status": "blocked", "code": "duplicate_argument"}
+            operator_reference = _validate_manual_paid_operator_reference(arguments.operator_reference)
+            reason = _validate_manual_paid_reason(arguments.reason)
+            expected_confirmation = _manual_paid_confirmation(
+                arguments.organisation_id,
+                arguments.credits,
+                arguments.amount_received,
+                arguments.currency,
+                arguments.payment_method,
+                arguments.payment_reference,
+                arguments.payment_received_at,
+                operator_reference,
+                reason,
+            )
+            if arguments.confirm != expected_confirmation:
+                return 2, {"status": "blocked", "code": "confirmation_mismatch"}
+            async with session_factory() as session:
+                await set_tenant_database_context(session, arguments.organisation_id)
+                grant_result = await CreditService(session, settings).grant_manual_paid_purchase(
+                    arguments.organisation_id,
+                    credits=arguments.credits,
+                    amount_received_minor_units=arguments.amount_received,
+                    currency=arguments.currency,
+                    payment_method=arguments.payment_method,
+                    payment_reference=arguments.payment_reference,
+                    payment_received_at=arguments.payment_received_at,
+                    cleared_funds_confirmed=arguments.cleared_funds_confirmed == 1,
+                    idempotency_key=arguments.idempotency_key,
+                    expected_balance_version=arguments.expected_balance_version,
+                    operator_reference=operator_reference,
+                    reason=reason,
+                    large_grant_reviewed=arguments.large_grant_reviewed == 1,
+                )
+                reconciliation = await CreditService(session, settings).reconcile_balance(arguments.organisation_id)
+                return 0, {
+                    "status": "complete",
+                    "operation": "grant_manual_paid_credits",
+                    "grantId": str(grant_result.grant.id),
+                    "creditLotId": str(grant_result.lot.id),
+                    "organisationId": str(arguments.organisation_id),
+                    "creditsGranted": grant_result.grant.credits_granted,
+                    "amountReceivedMinorUnits": grant_result.grant.amount_received_minor_units,
+                    "currency": grant_result.grant.currency,
+                    "paymentMethod": grant_result.grant.payment_method,
+                    "paymentReference": grant_result.grant.payment_reference,
+                    "paymentReceivedAt": grant_result.grant.payment_received_at.isoformat(),
+                    "clearedFundsConfirmed": grant_result.grant.cleared_funds_confirmed,
+                    "creditType": grant_result.lot.credit_type,
+                    "expiresAt": grant_result.lot.expires_at,
+                    "availableBalance": grant_result.balance.available,
+                    "purchasedAvailable": grant_result.balance.purchased_available,
+                    "alreadyApplied": grant_result.already_applied,
+                    "ledgerReconciled": reconciliation.consistent,
+                    "providerExecutionAuthorisedByGrant": False,
+                    "marginReviewStatus": grant_result.grant.margin_review_status,
+                }
         if arguments.command == "tenant-preflight":
             tenant_result = await tenant_preflight(session_factory, arguments.organisation_id)
             return (0 if tenant_result["status"] == "ready" else 1), tenant_result

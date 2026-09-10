@@ -165,6 +165,17 @@ const creditsProjection = {
       reason: "Reserved before deterministic work.",
       createdAt: "2032-04-06T06:30:00Z",
     },
+    {
+      id: "00000000-0000-4000-9000-000000000503",
+      eventType: "promotional_grant",
+      creditType: "promotional",
+      availableChange: 200,
+      reservedChange: 0,
+      actionCode: null,
+      operationId: null,
+      reason: "Synthetic support promotion.",
+      createdAt: "2032-04-04T06:30:00Z",
+    },
   ],
   testPacks: [
     {
@@ -381,6 +392,8 @@ test("Credits settings are clear, bounded and responsive", async ({ page }) => {
     credits.getByText("TEST ONLY / NOT CUSTOMER PRICING"),
   ).toBeVisible();
   await expect(credits.getByText("100 Credits · $20.00")).toBeVisible();
+  await expect(credits.getByText("Purchased Credits")).toBeVisible();
+  await expect(credits.getByText("Promotional grant")).toBeVisible();
   await expect(
     credits.getByRole("button", { name: "Purchase unavailable" }),
   ).toBeDisabled();

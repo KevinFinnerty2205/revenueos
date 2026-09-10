@@ -17,7 +17,7 @@ revenueos-operations production-preflight
 ```
 
 The command exits non-zero unless typed configuration has already passed and it can
-prove: current Alembic head `0055_live_prospect_provider`; a runtime PostgreSQL role
+prove: current Alembic head `0061_manual_paid_credit_grant`; a runtime PostgreSQL role
 that is neither superuser nor `BYPASSRLS`; transaction-local tenant context reset;
 private object write/read/delete; owner-only durable export directory; real-data
 flag; legal approval reference; and support address. Output contains safe feature
@@ -71,6 +71,16 @@ the returned lock version, exact confirmation, bounded operator reference and re
 Organisation administrators have read-only commercial visibility and cannot use the
 legacy module switches. See the exact commands and recovery rules in
 [Commercial authority](commercial-authority.md).
+
+## Exceptional cleared-funds Credit purchase
+
+Normal customers continue to use card payment followed by verified automatic Credit
+reconciliation. For an exceptional large negotiated purchase only, an authorised
+deployment/support operator may use the WO-055 preview/execute CLI after independently
+verifying exact cleared funds. **Never grant paid Credits against an unpaid invoice.**
+There is no customer or tenant-administrator grant surface, and the operation does
+not issue an invoice, establish credit terms, activate a provider or permit negative
+Credits. Follow the exact [manual paid Credit grant runbook](manual-paid-credit-grant-runbook.md).
 
 ## Worker and support visibility
 

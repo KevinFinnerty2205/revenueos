@@ -117,6 +117,7 @@ from revenueos.models import (
     LiveBriefProgress,
     LiveInteractionSession,
     LiveProcessingWindow,
+    ManualPaidCreditGrant,
     Meeting,
     MeetingAuditEvent,
     MeetingParticipant,
@@ -1050,7 +1051,12 @@ async def _delete_organisation_records(
             .select_from(CreditLedgerEntry)
             .where(CreditLedgerEntry.organisation_id == organisation_id)
         )
-        if billing_record_count or credit_history_count:
+        manual_paid_grant_count = await session.scalar(
+            select(func.count())
+            .select_from(ManualPaidCreditGrant)
+            .where(ManualPaidCreditGrant.organisation_id == organisation_id)
+        )
+        if billing_record_count or credit_history_count or manual_paid_grant_count:
             raise RuntimeError(
                 "Billing or Credit transaction history requires an approved accounting-retention decision "
                 "before organisation deletion."

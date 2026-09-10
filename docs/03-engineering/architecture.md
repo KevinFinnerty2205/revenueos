@@ -606,6 +606,15 @@ accounting-retention treatment. Production prices, packs, margin floor, provider
 live Stripe and real sales do not exist. See
 [Credits and variable-cost controls](credits-variable-cost-controls.md).
 
+WO-055 migration `0061_manual_paid_credit_grant` adds a deliberately narrow internal
+support exception for a large negotiated Credit purchase after cleared funds are
+independently confirmed. A preview/execute CLI creates one immutable support record,
+non-expiring purchased lot, ordinary purchase ledger event and locked balance change
+atomically. It adds no customer/admin mutation route, invoice system, reusable pack,
+production price, provider activation or execution authority. See
+[Manual paid Credit grant operations](manual-paid-credit-grants.md) and
+[ADR 0076](../08-decisions/0076-internal-manual-paid-credit-grant.md).
+
 ## WO-026 Prospect Account Research extension
 
 WO-026 adds a separate tenant-owned Prospect Research Target, immutable Research

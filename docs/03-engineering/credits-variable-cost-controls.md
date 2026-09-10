@@ -1,7 +1,8 @@
 # Credits and variable-cost controls
 
-- **Status:** implemented infrastructure in TEST mode only
-- **Migration:** `0054_credits_variable_cost`
+- **Status:** implemented infrastructure in TEST mode only; WO-055 manual paid grant
+  implemented and engineering review passed
+- **Migrations:** `0054_credits_variable_cost`, `0061_manual_paid_credit_grant`
 - **Production Credit prices/packs/providers:** none
 - **Spend and data boundary:** AUD $0; synthetic data only
 
@@ -39,10 +40,12 @@ Tenant state consists of:
 - server-owned `CreditQuote` rows pinned to one immutable action-price version;
 - `CreditOperation` lifecycle rows plus lot-level reservation allocations;
 - append-only `CreditLedgerEntry` events; and
+- immutable `ManualPaidCreditGrant` support records for exceptional cleared-funds
+  purchases; and
 - a fail-closed `CreditOrganisationPolicy` for local enablement and exposure caps.
 
 Every tenant repository predicate includes `organisation_id`. Composite foreign keys
-prevent cross-tenant attachment, and all seven tenant tables use enabled and forced
+prevent cross-tenant attachment, and all eight tenant tables use enabled and forced
 PostgreSQL RLS with the trusted transaction-local tenant setting. The browser never
 supplies an organisation identifier.
 
@@ -70,12 +73,20 @@ totals and reports mismatch; it never silently rewrites history.
 
 ## Grant, purchase, expiry, refund and correction
 
-Purchased Credits can arise only from a successful WO-048 `credit_purchase`
+The primary purchase path is a successful WO-048 `credit_purchase`
 `BillingOperation` whose verified provider event and retrieved checkout both confirm
 paid status and match the server-owned TEST pack, AUD currency and exact amount. A
 success redirect, pending payment, unsigned event, mismatched amount, duplicate fact
 or arbitrary service call cannot grant value. The billing receipt, purchase lot,
 ledger event and balance change commit atomically.
+
+WO-055 adds one exceptional internal path for a large negotiated purchase after an
+authorised operator independently confirms exact cleared funds. Its preview/execute
+CLI creates an immutable payment record, non-expiring purchased lot, ordinary
+purchase ledger event and balance change atomically. It is not customer or tenant
+administrator self-service, does not create an invoice or pack, and never grants on
+unpaid or pending funds. See [Manual paid Credit grant operations](manual-paid-credit-grants.md)
+and the [owner runbook](manual-paid-credit-grant-runbook.md).
 
 Promotional grants are an internal support operation requiring an actor, reason,
 source, amount and stable idempotency key. A trial grant additionally requires an
@@ -88,6 +99,9 @@ A refund references an existing consumption entry and cannot exceed its net
 refundable quantity. A correction is a separate, explicitly authorised event with
 actor, reason and reference; it never edits old ledger rows and cannot drive a
 balance negative. These mutation paths are deliberately absent from the public API.
+Manual payment references and internal operator reasons are not exposed in the
+customer projection; both automatic and manual purchase activity is labelled
+**Purchased Credits**.
 
 ## Quote, reserve, execute and settle
 

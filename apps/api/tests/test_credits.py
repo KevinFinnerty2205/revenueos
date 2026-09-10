@@ -11,8 +11,10 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session
 
 from revenueos.auth import AuthenticatedUser, get_current_user
 from revenueos.beta_maintenance import _export_payload, delete_organisation
@@ -40,9 +42,11 @@ from revenueos.models import (
     CreditOperation,
     CreditPackVersion,
     CreditQuote,
+    ManualPaidCreditGrant,
     Organisation,
     OrganisationCommercialState,
     OrganisationCreditBalance,
+    OrganisationMembership,
 )
 from tests.conftest import (
     PRIMARY_ORGANISATION_ID,
@@ -119,6 +123,590 @@ async def grant_test_purchase(
         provider_event_id=key,
     )
     return lot.id
+
+
+def test_manual_paid_purchase_is_exact_auditable_idempotent_and_customer_safe() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        received_at = datetime.now(UTC) - timedelta(hours=2)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = CreditService(session, credit_settings())
+                first = await service.grant_manual_paid_purchase(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=50_000,
+                    amount_received_minor_units=1_234_567,
+                    currency="AUD",
+                    payment_method="BANK_TRANSFER",
+                    payment_reference="INV-SYNTHETIC-055-001",
+                    payment_received_at=received_at,
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-synthetic-001",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Grant the negotiated synthetic bulk Credit purchase after cleared payment verification.",
+                )
+                assert first.already_applied is False
+                assert first.lot.credit_type == "purchased"
+                assert first.lot.expires_at is None
+                assert first.lot.pack_version_id is None
+                assert first.lot.billing_operation_id is None
+                assert first.lot.original_revenue_micros == 12_345_670_000
+                assert first.balance.purchased_available == 50_000
+                assert first.grant.status == "completed"
+                assert first.grant.cleared_funds_confirmed is True
+                assert first.grant.margin_review_status == "production_execution_blocked_pending_policy"
+                assert first.grant.payment_reference_fingerprint != first.grant.payment_reference
+                assert "manual-paid-synthetic-001" not in first.grant.idempotency_key_hash
+
+                replay = await service.grant_manual_paid_purchase(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=50_000,
+                    amount_received_minor_units=1_234_567,
+                    currency="AUD",
+                    payment_method="BANK_TRANSFER",
+                    payment_reference="INV-SYNTHETIC-055-001",
+                    payment_received_at=received_at,
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-synthetic-001",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Grant the negotiated synthetic bulk Credit purchase after cleared payment verification.",
+                )
+                same_reference = await service.grant_manual_paid_purchase(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=50_000,
+                    amount_received_minor_units=1_234_567,
+                    currency="AUD",
+                    payment_method="BANK_TRANSFER",
+                    payment_reference="  inv-synthetic-055-001  ",
+                    payment_received_at=received_at,
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-synthetic-duplicate-reference",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Grant the negotiated synthetic bulk Credit purchase after cleared payment verification.",
+                )
+                assert replay.already_applied is True and replay.grant.id == first.grant.id
+                assert same_reference.already_applied is True and same_reference.grant.id == first.grant.id
+                assert same_reference.balance.purchased_available == 50_000
+
+                with pytest.raises(PublicAPIError) as changed_reference_payload:
+                    await service.grant_manual_paid_purchase(
+                        PRIMARY_ORGANISATION_ID,
+                        credits=50_001,
+                        amount_received_minor_units=1_234_567,
+                        currency="AUD",
+                        payment_method="BANK_TRANSFER",
+                        payment_reference="INV-SYNTHETIC-055-001",
+                        payment_received_at=received_at,
+                        cleared_funds_confirmed=True,
+                        idempotency_key="manual-paid-synthetic-conflicting-reference",
+                        expected_balance_version=1,
+                        operator_reference="owner-support-synthetic",
+                        reason="Grant the negotiated synthetic bulk Credit purchase after cleared payment verification.",
+                    )
+                assert changed_reference_payload.value.code == "manual_paid_credit_payment_reference_conflict"
+
+                with pytest.raises(PublicAPIError) as changed_key_payload:
+                    await service.grant_manual_paid_purchase(
+                        PRIMARY_ORGANISATION_ID,
+                        credits=50_000,
+                        amount_received_minor_units=1_234_567,
+                        currency="AUD",
+                        payment_method="BANK_TRANSFER",
+                        payment_reference="INV-SYNTHETIC-055-002",
+                        payment_received_at=received_at,
+                        cleared_funds_confirmed=True,
+                        idempotency_key="manual-paid-synthetic-001",
+                        expected_balance_version=1,
+                        operator_reference="owner-support-synthetic",
+                        reason="Grant the negotiated synthetic bulk Credit purchase after cleared payment verification.",
+                    )
+                assert changed_key_payload.value.code == "manual_paid_credit_idempotency_conflict"
+
+                grants = list(
+                    await session.scalars(
+                        select(ManualPaidCreditGrant).where(
+                            ManualPaidCreditGrant.organisation_id == PRIMARY_ORGANISATION_ID
+                        )
+                    )
+                )
+                ledger = list(
+                    await session.scalars(
+                        select(CreditLedgerEntry).where(
+                            CreditLedgerEntry.organisation_id == PRIMARY_ORGANISATION_ID,
+                            CreditLedgerEntry.event_type == "purchase",
+                        )
+                    )
+                )
+                assert len(grants) == len(ledger) == 1
+                assert ledger[0].lot_id == first.lot.id
+                assert ledger[0].actor_reference == "internal-manual-paid-credit-operation"
+                assert ledger[0].reason == "Bulk Credit purchase after authorised cleared-funds confirmation."
+                assert "INV-SYNTHETIC" not in ledger[0].reason
+                assert (await service.reconcile_balance(PRIMARY_ORGANISATION_ID)).consistent is True
+                projection = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert projection.balance.purchased_available == 50_000
+                assert projection.recent_activity[0].credit_type == "purchased"
+                assert projection.recent_activity[0].reason == (
+                    "Bulk Credit purchase after authorised cleared-funds confirmation."
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_manual_paid_purchase_requires_cleared_funds_review_and_fresh_safe_values() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        received_at = datetime.now(UTC) - timedelta(hours=1)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = CreditService(session, credit_settings())
+
+                async def attempt(**changes: object) -> None:
+                    values: dict[str, object] = {
+                        "credits": 500,
+                        "amount_received_minor_units": 12_500,
+                        "currency": "AUD",
+                        "payment_method": "BANK_TRANSFER",
+                        "payment_reference": "INV-SYNTHETIC-VALIDATION",
+                        "payment_received_at": received_at,
+                        "cleared_funds_confirmed": True,
+                        "idempotency_key": "manual-paid-validation-key",
+                        "expected_balance_version": 0,
+                        "operator_reference": "owner-support-synthetic",
+                        "reason": "Validate the synthetic cleared-payment boundary.",
+                    }
+                    values.update(changes)
+                    await service.grant_manual_paid_purchase(PRIMARY_ORGANISATION_ID, **values)  # type: ignore[arg-type]
+
+                invalid_cases = (
+                    ({"cleared_funds_confirmed": False}, "manual_paid_credit_cleared_funds_required"),
+                    ({"credits": 0}, "credit_amount_invalid"),
+                    ({"credits": -1}, "credit_amount_invalid"),
+                    ({"credits": MAX_CREDITS + 1}, "credit_amount_invalid"),
+                    ({"amount_received_minor_units": 0}, "manual_paid_credit_amount_invalid"),
+                    (
+                        {"amount_received_minor_units": 9_000_000_000_001},
+                        "manual_paid_credit_amount_invalid",
+                    ),
+                    ({"currency": "USD"}, "manual_paid_credit_currency_invalid"),
+                    ({"payment_method": "INVOICE_PENDING"}, "manual_paid_credit_payment_method_invalid"),
+                    ({"payment_reference": "<script>alert(1)</script>"}, "manual_paid_credit_reference_invalid"),
+                    (
+                        {"operator_reference": "<script>owner</script>"},
+                        "manual_paid_credit_audit_text_invalid",
+                    ),
+                    (
+                        {"reason": "<script>synthetic audit reason</script>"},
+                        "manual_paid_credit_audit_text_invalid",
+                    ),
+                    ({"idempotency_key": "short"}, "manual_paid_credit_idempotency_key_invalid"),
+                    ({"payment_received_at": datetime.now()}, "manual_paid_credit_received_at_invalid"),
+                    (
+                        {"payment_received_at": datetime.now(UTC) + timedelta(hours=1)},
+                        "manual_paid_credit_received_at_invalid",
+                    ),
+                    ({"credits": 1_000_000}, "manual_paid_credit_large_grant_review_required"),
+                )
+                for changes, code in invalid_cases:
+                    with pytest.raises(PublicAPIError) as invalid:
+                        await attempt(**changes)
+                    assert invalid.value.code == code
+
+                first = await attempt(payment_reference="INV-SYNTHETIC-STALE-1")
+                assert first is None
+                with pytest.raises(PublicAPIError) as stale:
+                    await attempt(
+                        payment_reference="INV-SYNTHETIC-STALE-2",
+                        idempotency_key="manual-paid-stale-second",
+                    )
+                assert stale.value.code == "manual_paid_credit_stale_balance"
+
+                large = await service.grant_manual_paid_purchase(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=1_000_000,
+                    amount_received_minor_units=50_000_000,
+                    currency="AUD",
+                    payment_method="OTHER_APPROVED",
+                    payment_reference="INV-SYNTHETIC-LARGE-REVIEWED",
+                    payment_received_at=received_at,
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-large-reviewed",
+                    expected_balance_version=2,
+                    operator_reference="owner-support-synthetic",
+                    reason="Grant a technically large synthetic purchase after additional review.",
+                    large_grant_reviewed=True,
+                )
+                assert large.lot.original_credits == 1_000_000
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_manual_paid_purchase_rolls_back_every_financial_row_when_commit_fails() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = CreditService(session, credit_settings())
+
+                def fail_manual_grant_commit(sync_session: Session) -> None:
+                    if any(isinstance(row, ManualPaidCreditGrant) for row in sync_session.new):
+                        raise SQLAlchemyError("Synthetic commit failure after WO-055 rows were staged.")
+
+                event.listen(session.sync_session, "before_commit", fail_manual_grant_commit)
+                try:
+                    with pytest.raises(PublicAPIError) as failed:
+                        await service.grant_manual_paid_purchase(
+                            PRIMARY_ORGANISATION_ID,
+                            credits=500,
+                            amount_received_minor_units=12_500,
+                            currency="AUD",
+                            payment_method="BANK_TRANSFER",
+                            payment_reference="INV-SYNTHETIC-ATOMIC-ROLLBACK",
+                            payment_received_at=datetime.now(UTC) - timedelta(minutes=10),
+                            cleared_funds_confirmed=True,
+                            idempotency_key="manual-paid-atomic-rollback",
+                            expected_balance_version=0,
+                            operator_reference="owner-support-synthetic",
+                            reason="Prove every staged financial row rolls back after commit failure.",
+                        )
+                    assert failed.value.code == "credit_state_conflict"
+                finally:
+                    event.remove(session.sync_session, "before_commit", fail_manual_grant_commit)
+
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(ManualPaidCreditGrant)
+                        .where(ManualPaidCreditGrant.organisation_id == PRIMARY_ORGANISATION_ID)
+                    )
+                    == 0
+                )
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(CreditLot)
+                        .where(
+                            CreditLot.organisation_id == PRIMARY_ORGANISATION_ID,
+                            CreditLot.credit_type == "purchased",
+                        )
+                    )
+                    == 0
+                )
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(CreditLedgerEntry)
+                        .where(
+                            CreditLedgerEntry.organisation_id == PRIMARY_ORGANISATION_ID,
+                            CreditLedgerEntry.event_type == "purchase",
+                        )
+                    )
+                    == 0
+                )
+                assert await session.get(OrganisationCreditBalance, PRIMARY_ORGANISATION_ID) is None
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_manual_paid_purchase_accepts_exact_technical_bounds_without_overflow() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = CreditService(session, credit_settings())
+                one_cent = await service.grant_manual_paid_purchase(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=1,
+                    amount_received_minor_units=1,
+                    currency="AUD",
+                    payment_method="BANK_TRANSFER",
+                    payment_reference="INV-SYNTHETIC-ONE-CENT",
+                    payment_received_at=datetime.now(UTC) - timedelta(minutes=10),
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-one-cent",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Exercise the exact one-cent payment boundary.",
+                )
+                assert one_cent.grant.amount_received_minor_units == 1
+                assert one_cent.lot.original_revenue_micros == 10_000
+                assert one_cent.balance.available == 1
+
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, SECONDARY_ORGANISATION_ID)
+                service = CreditService(session, credit_settings())
+                technical_bound = await service.grant_manual_paid_purchase(
+                    SECONDARY_ORGANISATION_ID,
+                    credits=MAX_CREDITS,
+                    amount_received_minor_units=9_000_000_000_000,
+                    currency="AUD",
+                    payment_method="BANK_TRANSFER",
+                    payment_reference="INV-SYNTHETIC-TECHNICAL-BOUND",
+                    payment_received_at=datetime.now(UTC) - timedelta(minutes=10),
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-technical-bound",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Exercise maximum exact payment and Credit arithmetic boundaries.",
+                    large_grant_reviewed=True,
+                )
+                assert technical_bound.grant.amount_received_minor_units == 9_000_000_000_000
+                assert technical_bound.lot.original_revenue_micros == 90_000_000_000_000_000
+                assert technical_bound.balance.available == MAX_CREDITS
+
+                with pytest.raises(PublicAPIError) as overflow:
+                    await service.grant_manual_paid_purchase(
+                        SECONDARY_ORGANISATION_ID,
+                        credits=1,
+                        amount_received_minor_units=1,
+                        currency="AUD",
+                        payment_method="BANK_TRANSFER",
+                        payment_reference="INV-SYNTHETIC-TECHNICAL-OVERFLOW",
+                        payment_received_at=datetime.now(UTC) - timedelta(minutes=9),
+                        cleared_funds_confirmed=True,
+                        idempotency_key="manual-paid-technical-overflow",
+                        expected_balance_version=2,
+                        operator_reference="owner-support-synthetic",
+                        reason="Reject aggregate Credit arithmetic overflow.",
+                    )
+                assert overflow.value.code == "manual_paid_credit_balance_limit"
+                assert (await service.reconcile_balance(SECONDARY_ORGANISATION_ID)).consistent is True
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_manual_paid_purchase_tenant_lifecycle_policy_fails_closed_without_reactivation() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        received_at = datetime.now(UTC) - timedelta(minutes=10)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                primary_service = CreditService(session, credit_settings())
+                primary = await primary_service.grant_manual_paid_purchase(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=100,
+                    amount_received_minor_units=2_000,
+                    currency="AUD",
+                    payment_method="BANK_TRANSFER",
+                    payment_reference="INV-SYNTHETIC-SHARED-REFERENCE",
+                    payment_received_at=received_at,
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-primary-shared-reference",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Prove payment references are tenant scoped.",
+                )
+                assert primary.balance.purchased_available == 100
+
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, SECONDARY_ORGANISATION_ID)
+                commercial = await session.get(OrganisationCommercialState, SECONDARY_ORGANISATION_ID)
+                assert commercial is not None
+                commercial.status = "suspended"
+                await session.commit()
+                await set_tenant_database_context(session, SECONDARY_ORGANISATION_ID)
+                secondary = await CreditService(session, credit_settings()).grant_manual_paid_purchase(
+                    SECONDARY_ORGANISATION_ID,
+                    credits=100,
+                    amount_received_minor_units=2_000,
+                    currency="AUD",
+                    payment_method="BANK_TRANSFER",
+                    payment_reference="INV-SYNTHETIC-SHARED-REFERENCE",
+                    payment_received_at=received_at,
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-secondary-shared-reference",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Prove payment references are tenant scoped without reactivating access.",
+                )
+                assert secondary.balance.purchased_available == 100
+                preserved = await session.get(OrganisationCommercialState, SECONDARY_ORGANISATION_ID)
+                assert preserved is not None and preserved.status == "suspended"
+
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, SECONDARY_ORGANISATION_ID)
+                commercial = await session.get(OrganisationCommercialState, SECONDARY_ORGANISATION_ID)
+                assert commercial is not None
+                commercial.status = "inactive"
+                await session.commit()
+                await set_tenant_database_context(session, SECONDARY_ORGANISATION_ID)
+                with pytest.raises(PublicAPIError) as inactive:
+                    await CreditService(session, credit_settings()).grant_manual_paid_purchase(
+                        SECONDARY_ORGANISATION_ID,
+                        credits=1,
+                        amount_received_minor_units=100,
+                        currency="AUD",
+                        payment_method="BANK_TRANSFER",
+                        payment_reference="INV-SYNTHETIC-INACTIVE",
+                        payment_received_at=received_at,
+                        cleared_funds_confirmed=True,
+                        idempotency_key="manual-paid-inactive-org",
+                        expected_balance_version=2,
+                        operator_reference="owner-support-synthetic",
+                        reason="Reject a synthetic inactive organisation.",
+                    )
+                assert inactive.value.code == "manual_paid_credit_organisation_inactive"
+
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                membership = await session.get(
+                    OrganisationMembership,
+                    (PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID),
+                )
+                assert membership is not None
+                membership.status = "disabled"
+                await session.commit()
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                with pytest.raises(PublicAPIError) as disabled:
+                    await CreditService(session, credit_settings()).grant_manual_paid_purchase(
+                        PRIMARY_ORGANISATION_ID,
+                        credits=1,
+                        amount_received_minor_units=100,
+                        currency="AUD",
+                        payment_method="BANK_TRANSFER",
+                        payment_reference="INV-SYNTHETIC-DISABLED",
+                        payment_received_at=received_at,
+                        cleared_funds_confirmed=True,
+                        idempotency_key="manual-paid-disabled-org",
+                        expected_balance_version=2,
+                        operator_reference="owner-support-synthetic",
+                        reason="Reject a synthetic organisation without an active member.",
+                    )
+                assert disabled.value.code == "manual_paid_credit_organisation_disabled"
+
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                missing_organisation_id = uuid.uuid4()
+                await set_tenant_database_context(session, missing_organisation_id)
+                with pytest.raises(PublicAPIError) as missing:
+                    await CreditService(session, credit_settings()).grant_manual_paid_purchase(
+                        missing_organisation_id,
+                        credits=1,
+                        amount_received_minor_units=100,
+                        currency="AUD",
+                        payment_method="BANK_TRANSFER",
+                        payment_reference="INV-SYNTHETIC-MISSING",
+                        payment_received_at=received_at,
+                        cleared_funds_confirmed=True,
+                        idempotency_key="manual-paid-missing-org",
+                        expected_balance_version=0,
+                        operator_reference="owner-support-synthetic",
+                        reason="Reject a synthetic missing organisation.",
+                    )
+                assert missing.value.code == "manual_paid_credit_organisation_invalid"
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_manual_paid_purchase_uses_existing_refund_correction_and_execution_controls() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = await prepared_service(session)
+                paid = await service.grant_manual_paid_purchase(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=20,
+                    amount_received_minor_units=4_000,
+                    currency="AUD",
+                    payment_method="CARD_OUTSIDE_AUTOMATIC_FLOW",
+                    payment_reference="PAY-SYNTHETIC-REFUND",
+                    payment_received_at=datetime.now(UTC) - timedelta(minutes=5),
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-refund-source",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Fund synthetic purchased-Credit refund and correction coverage.",
+                )
+                quote = await service.create_quote(
+                    PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, action_code=TEST_ACTION_CODE, quantity=2
+                )
+                reserved = await service.reserve(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    quote_id=quote.quote_id,
+                    idempotency_key="manual-paid-refund-reservation",
+                )
+                await service.settle(
+                    PRIMARY_ORGANISATION_ID,
+                    reserved.operation_id,
+                    successful_units=2,
+                    provider_cost_micros=700_000,
+                    provider_cost_currency="AUD",
+                    idempotency_key="manual-paid-refund-settlement",
+                )
+                consumption = await session.scalar(
+                    select(CreditLedgerEntry).where(
+                        CreditLedgerEntry.organisation_id == PRIMARY_ORGANISATION_ID,
+                        CreditLedgerEntry.operation_id == reserved.operation_id,
+                        CreditLedgerEntry.event_type == "consumption",
+                    )
+                )
+                assert consumption is not None and consumption.lot_id == paid.lot.id
+                refunded = await service.refund_consumption(
+                    PRIMARY_ORGANISATION_ID,
+                    consumption_entry_id=consumption.id,
+                    credits=5,
+                    idempotency_key="manual-paid-partial-refund",
+                    actor_reference="owner-support-synthetic",
+                    reason="Apply a synthetic partial service-value refund.",
+                )
+                assert refunded.credit_type == "purchased" and refunded.expires_at is None
+                corrected = await service.correct_balance(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=1,
+                    direction="decrease",
+                    credit_type="purchased",
+                    reference="manual-paid-synthetic-correction",
+                    idempotency_key="manual-paid-correction-key",
+                    actor_reference="owner-support-synthetic",
+                    reason="Correct one synthetic purchased Credit using the append-only path.",
+                )
+                assert corrected.purchased_available == 14
+                assert (await service.reconcile_balance(PRIMARY_ORGANISATION_ID)).consistent is True
+
+                production_service = CreditService(
+                    session,
+                    credit_settings().model_copy(
+                        update={
+                            "environment": "production",
+                            "feature_credits_enabled": False,
+                            "credits_margin_floor_basis_points": None,
+                            "credits_margin_policy_reference": None,
+                        }
+                    ),
+                )
+                with pytest.raises(PublicAPIError) as execution_blocked:
+                    await production_service.create_quote(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        action_code=TEST_ACTION_CODE,
+                        quantity=1,
+                    )
+                assert execution_blocked.value.code == "credit_execution_unavailable"
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_append_only_ledger_balance_consumption_order_settlement_refund_and_correction() -> None:
@@ -1621,6 +2209,21 @@ def test_credit_api_is_admin_safe_and_rejects_client_owned_economics() -> None:
             },
         )
         assert forged.status_code == 422
+        no_customer_manual_grant = client.post(
+            "/api/v1/credits/manual-paid-grants",
+            json={
+                "organisationId": str(PRIMARY_ORGANISATION_ID),
+                "credits": 50_000,
+                "amountReceivedMinorUnits": 1,
+                "currency": "AUD",
+                "paymentReference": "FORGED-CUSTOMER-GRANT",
+                "clearedFundsConfirmed": True,
+                "creditType": "purchased",
+                "balance": 50_000,
+                "actorReference": "forged-customer-actor",
+            },
+        )
+        assert no_customer_manual_grant.status_code == 404
 
     app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
         user_id=PRIMARY_USER_ID,
@@ -1636,6 +2239,11 @@ def test_credit_api_is_admin_safe_and_rejects_client_owned_economics() -> None:
     with TestClient(app) as client:
         denied = client.get("/api/v1/credits")
         assert denied.status_code == 403
+        no_member_manual_grant = client.post(
+            "/api/v1/credits/manual-paid-grants",
+            json={"credits": 50_000, "clearedFundsConfirmed": True},
+        )
+        assert no_member_manual_grant.status_code == 404
     app.dependency_overrides.clear()
 
 

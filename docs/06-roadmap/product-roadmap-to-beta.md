@@ -722,17 +722,18 @@ The authorised sequence after WO-050 remains:
 6. WO-051 — Oryntela Brand Identity
 7. WO-052 — Customer-Facing Oryntela Rebrand
 8. WO-053 — Oryntela Marketing Website — **complete; engineering review passed**
-9. **WO-055 — Manual Paid Credit Grant**
+9. **WO-055 — Manual Paid Credit Grant — complete; engineering review passed**
 10. WO-054 — Production Deployment & Launch Operations
 11. WO-045 — End-to-End Pre-Launch Acceptance
 
-WO-055 is a future, separately authorised pre-launch commercial-operations item. It
-may add an internal-only `MANUAL_PAID_GRANT` after Kevin/Oryntela independently
-confirms cleared funds for an exceptional negotiated Credit purchase. Invoice issue,
-unpaid/pending payment and customer self-service never grant Credits. Normal customers
-continue to use card payment followed by verified payment reconciliation. WO-055 is
-placed after the principal product/provider/integration phases and before production
-deployment/final acceptance; it is not part of WO-050 implementation.
+WO-055 is complete and has passed engineering review. It adds an internal-only
+preview/execute support operation after
+Kevin/Oryntela independently confirms exact cleared funds for an exceptional
+negotiated Credit purchase. Invoice issue, unpaid/pending payment and customer
+self-service never grant Credits. Normal customers continue to use card payment
+followed by verified payment reconciliation. Production prices/packs, deployment
+activation and final acceptance remain respectively outside WO-055, in WO-054 and
+WO-045.
 
 ## Related documents
 
