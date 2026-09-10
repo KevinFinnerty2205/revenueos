@@ -1,5 +1,10 @@
 # Target-environment cost model
 
+> **Historical cost model — superseded 10 September 2026.** Use the dated
+> [WO-054 production cost and Credit economics](../../04-commercial/wo-054-production-cost-and-credit-economics.md)
+> for the current DigitalOcean Sydney candidate. The estimates below authorise no
+> account, subscription or spend.
+
 - **Pricing checked:** 2 September 2026
 - **Currency:** provider prices are USD before GST/tax; indicative AUD uses a conservative planning conversion of **USD 1 = AUD 1.50**, not a quoted exchange rate
 - **Status:** estimate only; no card, purchase, account or plan is authorised

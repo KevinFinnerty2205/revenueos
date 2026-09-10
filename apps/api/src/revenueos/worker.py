@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+import time
 import uuid
+from collections.abc import Callable
 
 from revenueos.ai_worker_services import AIWorkerService
 from revenueos.campaign_worker import CampaignWorkerService
@@ -21,6 +23,56 @@ from revenueos.recording_worker import RecordingWorkerService
 logger = logging.getLogger("revenueos.ai_worker")
 
 
+class WorkerHealthServer:
+    """Private liveness listener for the managed worker component."""
+
+    def __init__(
+        self,
+        port: int,
+        max_staleness_seconds: float,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._port = port
+        self._max_staleness_seconds = max_staleness_seconds
+        self._clock = clock
+        self._last_tick = clock()
+        self._server: asyncio.Server | None = None
+
+    def tick(self) -> None:
+        self._last_tick = self._clock()
+
+    @property
+    def healthy(self) -> bool:
+        return self._clock() - self._last_tick <= self._max_staleness_seconds
+
+    async def start(self) -> None:
+        self._server = await asyncio.start_server(self._handle, "0.0.0.0", self._port)
+
+    async def close(self) -> None:
+        if self._server is None:
+            return
+        self._server.close()
+        await self._server.wait_closed()
+
+    async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            request_line = await asyncio.wait_for(reader.readline(), timeout=2.0)
+            status = "200 OK" if self.healthy and request_line.startswith(b"GET /health ") else "503 Unavailable"
+            body = b'{"status":"healthy"}' if status.startswith("200") else b'{"status":"unhealthy"}'
+            writer.write(
+                f"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n"
+                f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode()
+                + body
+            )
+            await writer.drain()
+        except (ConnectionError, TimeoutError):
+            pass
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+
 class AIWorker:
     def __init__(
         self,
@@ -35,6 +87,7 @@ class AIWorker:
         microsoft_service: MicrosoftSyncWorkerService | None = None,
         google_service: GoogleSyncWorkerService | None = None,
         crm_connector_service: CRMConnectorWorkerService | None = None,
+        health_tick: Callable[[], None] | None = None,
         worker_id: str | None = None,
     ) -> None:
         self._service = service
@@ -47,6 +100,7 @@ class AIWorker:
         self._microsoft_service = microsoft_service
         self._google_service = google_service
         self._crm_connector_service = crm_connector_service
+        self._health_tick = health_tick
         resolved_worker_id = (worker_id or f"worker-{uuid.uuid4().hex}").strip()
         if not resolved_worker_id or len(resolved_worker_id) > 200:
             raise ValueError("Worker identity must contain 1 to 200 characters.")
@@ -56,7 +110,11 @@ class AIWorker:
         logger.info("worker_started", extra={"worker_id": self.worker_id})
         try:
             while not stop.is_set():
+                if self._health_tick is not None:
+                    self._health_tick()
                 processed = await self.run_once()
+                if self._health_tick is not None:
+                    self._health_tick()
                 if processed:
                     continue
                 try:
@@ -132,6 +190,14 @@ async def run_worker(settings: Settings | None = None) -> None:
             pass
 
     prospect_service = ProspectWorkerService(session_factory, resolved_settings)
+    health_server = (
+        WorkerHealthServer(
+            resolved_settings.worker_health_port,
+            resolved_settings.worker_health_max_staleness_seconds,
+        )
+        if resolved_settings.worker_health_port is not None
+        else None
+    )
     worker = AIWorker(
         AIWorkerService(session_factory, resolved_settings),
         resolved_settings,
@@ -143,14 +209,21 @@ async def run_worker(settings: Settings | None = None) -> None:
         microsoft_service=MicrosoftSyncWorkerService(session_factory, resolved_settings),
         google_service=GoogleSyncWorkerService(session_factory, resolved_settings),
         crm_connector_service=CRMConnectorWorkerService(session_factory, resolved_settings),
+        health_tick=health_server.tick if health_server is not None else None,
     )
     try:
+        if health_server is not None:
+            await health_server.start()
         await worker.run(stop)
     finally:
         try:
-            await prospect_service.aclose()
+            if health_server is not None:
+                await health_server.close()
         finally:
-            await engine.dispose()
+            try:
+                await prospect_service.aclose()
+            finally:
+                await engine.dispose()
 
 
 def main() -> None:

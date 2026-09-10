@@ -33,6 +33,8 @@ jobs:
         run: pnpm test
       - name: Build web
         run: pnpm build:web
+      - name: Build web container definition
+        run: docker build --file infra/docker/web.Dockerfile --tag revenueos-web:ci .
       - name: Install Playwright Chromium
         run: pnpm --filter @revenueos/web exec playwright install --with-deps chromium
       - name: Run browser smoke tests
@@ -87,3 +89,5 @@ jobs:
         run: uv --directory apps/api run pytest
       - name: Build API package
         run: uv --directory apps/api build
+      - name: Build API container definition
+        run: docker build --file infra/docker/api.Dockerfile --tag revenueos-api:ci .

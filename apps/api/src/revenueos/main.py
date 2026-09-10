@@ -139,8 +139,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response.headers["Referrer-Policy"] = "no-referrer"
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
-            if app_settings.environment == "production":
-                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+            if app_settings.hsts_enabled:
+                response.headers["Strict-Transport-Security"] = "max-age=31536000"
             return response
         finally:
             duration_ms = round((time.perf_counter() - started) * 1000, 2)

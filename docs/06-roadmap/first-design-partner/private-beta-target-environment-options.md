@@ -1,5 +1,11 @@
 # Private-beta target-environment options
 
+> **Historical options — superseded 10 September 2026.** WO-054 selects
+> DigitalOcean Sydney as the current candidate and records the current cost and
+> operational evidence in the canonical
+> [WO-054 launch record](../../07-sprints/wo-054-production-launch-operations.md).
+> The AWS/Fly/Supabase options below remain research only and authorise no spend.
+
 - **Assessment date:** 2 September 2026 (Australia/Sydney)
 - **Status:** **RECOMMENDATION ONLY — NO ACCOUNT, PURCHASE OR DEPLOYMENT AUTHORISED**
 - **Scale:** first 1–5 supervised design partners; no high-availability or enterprise-residency claim

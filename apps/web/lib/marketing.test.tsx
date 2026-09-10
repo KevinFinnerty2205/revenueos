@@ -84,6 +84,11 @@ describe("marketing commercial truth", () => {
     expect(
       screen.getAllByText(/billed annually as an annual prepayment/i),
     ).toHaveLength(3);
+    expect(
+      screen.getByText(
+        /provider-backed research, external sending and CRM connections remain unavailable/i,
+      ),
+    ).toBeVisible();
     expect(screen.queryByText(/2 months free/i)).toBeNull();
     expect(screen.queryByRole("link", { name: /checkout/i })).toBeNull();
   });

@@ -1,11 +1,23 @@
 import type { Metadata } from "next";
+import { resolveDeploymentEnvironment } from "@/lib/deployment";
 
 const fallbackSiteOrigin = "https://oryntela.com.au";
 
 export function resolveSiteOrigin(
   configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL,
 ): string {
-  if (!configuredOrigin) return fallbackSiteOrigin;
+  const deploymentEnvironment = resolveDeploymentEnvironment();
+  if (!configuredOrigin) {
+    if (
+      deploymentEnvironment === "staging" ||
+      deploymentEnvironment === "production"
+    ) {
+      throw new Error(
+        "NEXT_PUBLIC_SITE_URL is required for staging and production.",
+      );
+    }
+    return fallbackSiteOrigin;
+  }
 
   try {
     const url = new URL(configuredOrigin);
@@ -13,10 +25,26 @@ export function resolveSiteOrigin(
       url.protocol === "http:" &&
       ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
     if (url.protocol !== "https:" && !localHttpOrigin) {
+      if (
+        deploymentEnvironment === "staging" ||
+        deploymentEnvironment === "production"
+      ) {
+        throw new Error(
+          "NEXT_PUBLIC_SITE_URL must use HTTPS outside local development.",
+        );
+      }
       return fallbackSiteOrigin;
     }
     return url.origin;
   } catch {
+    if (
+      deploymentEnvironment === "staging" ||
+      deploymentEnvironment === "production"
+    ) {
+      throw new Error(
+        "NEXT_PUBLIC_SITE_URL must be a valid public HTTPS origin.",
+      );
+    }
     return fallbackSiteOrigin;
   }
 }
@@ -75,8 +103,8 @@ export const pricingPlans = [
     description: "Core, with controlled prospecting and reviewed outreach.",
     includes: [
       "Everything in Core",
-      "Prospect target markets and account research",
-      "Engage outreach and campaign workflows",
+      "Prospect workflows; provider-backed research when activated",
+      "Engage workflows; external sending when activated",
       "Credits apply to eligible variable-cost research actions",
     ],
   },

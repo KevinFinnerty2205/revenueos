@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Environment = Literal["development", "test", "production"]
+Environment = Literal["development", "test", "staging", "production"]
 AuthMode = Literal["mock", "clerk"]
 AIProviderName = Literal["mock", "openai"]
 TranscriptionProviderName = Literal["mock", "openai"]
@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     mock_auth_enabled: bool = True
     identity_jit_provisioning_enabled: bool = True
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+    hsts_enabled: bool = False
     cors_origins: str = Field(
         default="http://localhost:3000",
         validation_alias=AliasChoices("API_CORS_ORIGINS", "CORS_ORIGINS"),
@@ -283,6 +284,8 @@ class Settings(BaseSettings):
     worker_base_retry_delay_seconds: int = Field(default=5, ge=1, le=3600)
     worker_max_retry_delay_seconds: int = Field(default=300, ge=1, le=86400)
     worker_default_max_attempts: int = Field(default=3, ge=1, le=20)
+    worker_health_port: int | None = Field(default=None, ge=1_024, le=65_535)
+    worker_health_max_staleness_seconds: float = Field(default=180.0, ge=30.0, le=3_600.0)
     hubspot_client_id: str | None = Field(default=None, min_length=8, max_length=255)
     hubspot_client_secret: SecretStr | None = None
     hubspot_oauth_redirect_uri: str | None = Field(default=None, max_length=2048)
@@ -475,6 +478,38 @@ class Settings(BaseSettings):
     def validate_security_configuration(self) -> "Settings":
         if self.auth_mode == "mock" and not self.mock_auth_enabled:
             raise ValueError("Mock authentication mode requires API_MOCK_AUTH_ENABLED=true.")
+        if self.environment == "staging":
+            if self.auth_mode != "clerk" or self.mock_auth_enabled:
+                raise ValueError("Staging requires Clerk mode with mock authentication disabled.")
+            if not self.clerk_configuration_complete:
+                raise ValueError("Staging requires complete Clerk verification configuration.")
+            if self.database_url is None or not self.database_url.startswith(("postgresql", "postgres")):
+                raise ValueError("Staging requires PostgreSQL persistence.")
+            if not self.cors_origin_list or any(
+                not self._is_public_https_origin(value) for value in self.cors_origin_list
+            ):
+                raise ValueError("Staging CORS origins must use explicit public HTTPS origins.")
+            if self.feature_mock_connectors_enabled:
+                raise ValueError("Mock connectors are prohibited in staging.")
+            if (
+                self.feature_engage_enabled
+                and self.outreach_suppression_hmac_key.get_secret_value()
+                == "local-development-outreach-suppression-key"
+            ):
+                raise ValueError("Staging Engage requires a deployment-managed suppression HMAC key.")
+            if self.log_level == "DEBUG":
+                raise ValueError("Staging log level must not be DEBUG.")
+            if self.identity_jit_provisioning_enabled:
+                raise ValueError("Staging identity must use deliberate operator provisioning.")
+            if (
+                not self.allowed_host_list
+                or "*" in self.allowed_host_list
+                or any(
+                    host in {"localhost", "127.0.0.1", "::1"} or host.endswith(".localhost")
+                    for host in self.allowed_host_list
+                )
+            ):
+                raise ValueError("Staging allowed hosts must be explicit.")
         if self.environment == "production":
             if self.auth_mode != "clerk" or self.mock_auth_enabled:
                 raise ValueError("Production requires Clerk mode with mock authentication disabled.")
@@ -600,6 +635,8 @@ class Settings(BaseSettings):
             raise ValueError("Worker heartbeat interval must be shorter than the lease duration.")
         if self.worker_base_retry_delay_seconds > self.worker_max_retry_delay_seconds:
             raise ValueError("Worker base retry delay cannot exceed the maximum retry delay.")
+        if self.hsts_enabled and self.environment != "production":
+            raise ValueError("HSTS may be enabled only in production after HTTPS is stable.")
         if self.private_beta_default_retention_days not in {30, 90, 180}:
             raise ValueError("Private beta default retention must be 30, 90 or 180 days.")
         if (

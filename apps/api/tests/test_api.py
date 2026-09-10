@@ -110,6 +110,27 @@ def test_production_rejects_mock_authentication() -> None:
         )
 
 
+def test_staging_is_explicit_and_rejects_mock_authentication() -> None:
+    with pytest.raises(ValidationError, match="Staging requires Clerk mode"):
+        Settings(environment="staging", auth_mode="mock", mock_auth_enabled=True)
+
+    settings = Settings(
+        environment="staging",
+        auth_mode="clerk",
+        mock_auth_enabled=False,
+        identity_jit_provisioning_enabled=False,
+        database_url="postgresql+asyncpg://staging.example.invalid/revenueos",
+        clerk_jwks_url="https://identity-staging.example.test/jwks",
+        clerk_issuer="https://identity-staging.example.test",
+        clerk_audience="revenueos-staging",
+        cors_origins="https://preview.example.test",
+        allowed_hosts="api-preview.example.test",
+        outreach_suppression_hmac_key="staging-synthetic-suppression-key",
+    )
+
+    assert settings.environment == "staging"
+
+
 def test_production_engage_requires_deployment_suppression_key() -> None:
     with pytest.raises(ValidationError, match="suppression HMAC key"):
         Settings(
@@ -122,6 +143,23 @@ def test_production_engage_requires_deployment_suppression_key() -> None:
             database_url="postgresql+asyncpg://example.invalid/revenueos",
             cors_origins="https://app.example.test",
         )
+
+
+def test_hsts_is_explicit_and_never_preloads_subdomains(client: TestClient) -> None:
+    assert "Strict-Transport-Security" not in client.get("/health").headers
+
+    with pytest.raises(ValidationError, match="HSTS may be enabled only in production"):
+        Settings(environment="test", hsts_enabled=True)
+
+    production_transport_settings = Settings(
+        environment="test",
+        auth_mode="mock",
+        mock_auth_enabled=True,
+        database_url=None,
+        log_level="WARNING",
+    ).model_copy(update={"environment": "production", "hsts_enabled": True})
+    response = TestClient(create_app(production_transport_settings)).get("/health")
+    assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
 
 
 def test_event_intelligence_rollout_defaults_off() -> None:

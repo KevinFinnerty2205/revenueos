@@ -66,6 +66,13 @@ def _database_url(value: str | None) -> URL:
     return url
 
 
+def _restore_target_database_url(argument: str | None) -> str:
+    value = argument or os.environ.get("API_RESTORE_TARGET_DATABASE_URL")
+    if value is None or not value.strip():
+        raise BackupError("Restore target PostgreSQL is not configured.")
+    return value.strip()
+
+
 def database_fingerprint(value: str | None) -> str:
     url = _database_url(value)
     assert url.host is not None
@@ -344,7 +351,7 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--source", required=True, type=Path)
     restore = subparsers.add_parser("restore")
     restore.add_argument("--source", required=True, type=Path)
-    restore.add_argument("--target-database-url", required=True)
+    restore.add_argument("--target-database-url")
     restore.add_argument("--target-storage-directory", required=True, type=Path)
     restore.add_argument("--confirm", required=True)
     return parser
@@ -363,7 +370,8 @@ async def _run(arguments: argparse.Namespace, settings: Settings) -> tuple[int, 
         manifest = await verify_backup(settings, arguments.source.resolve())
         return 0, {"status": "verified", "backupId": manifest.backupId, "objectCount": manifest.objectCount}
     manifest = _load_manifest(arguments.source.resolve())
-    target_database = _database_url(arguments.target_database_url).database
+    target_database_url = _restore_target_database_url(arguments.target_database_url)
+    target_database = _database_url(target_database_url).database
     if arguments.confirm != f"RESTORE {manifest.backupId} INTO {target_database}":
         return 2, {"status": "blocked", "code": "confirmation_mismatch"}
     target_storage_root = arguments.target_storage_directory.resolve()
@@ -377,7 +385,7 @@ async def _run(arguments: argparse.Namespace, settings: Settings) -> tuple[int, 
     restored = await restore_backup(
         settings,
         arguments.source.resolve(),
-        arguments.target_database_url,
+        target_database_url,
         LocalVisualStorage(str(target_storage_root)),
     )
     return 0, {"status": "complete", "backupId": restored.backupId, "objectCount": restored.objectCount}

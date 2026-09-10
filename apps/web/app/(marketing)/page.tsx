@@ -285,8 +285,9 @@ export default function HomePage() {
               </h2>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-brand-muted">
                 Core includes the Oryntela operating loop and Native CRM. Growth
-                adds Prospect and Engage. Complete adds Create and supported CRM
-                connectors when activated.
+                adds Prospect and Engage workflows, with external research and
+                sending only when activated. Complete adds Create and supported
+                CRM connectors when activated.
               </p>
             </div>
             <ArrowLink href="/pricing">See all plans</ArrowLink>

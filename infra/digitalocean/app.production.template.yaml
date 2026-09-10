@@ -1,0 +1,263 @@
+name: oryntela-production
+region: syd
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+  - rule: DEPLOYMENT_LIVE
+
+services:
+  - name: web
+    github:
+      repo: KevinFinnerty2205/revenueos
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: infra/docker/web.Dockerfile
+    source_dir: /
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb-fixed
+    http_port: 8080
+    health_check:
+      http_path: /health/ready
+      initial_delay_seconds: 20
+      period_seconds: 15
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+    liveness_health_check:
+      http_path: /
+      initial_delay_seconds: 30
+      period_seconds: 30
+      timeout_seconds: 5
+      failure_threshold: 5
+    build_command: ""
+    envs:
+      - key: ORYNTELA_ENVIRONMENT
+        scope: RUN_AND_BUILD_TIME
+        value: production
+      - key: NEXT_PUBLIC_SITE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: https://oryntela.com.au
+      - key: NEXT_PUBLIC_APP_URL
+        scope: RUN_AND_BUILD_TIME
+        value: https://oryntela.com.au
+      - key: NEXT_PUBLIC_API_BASE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: https://api.oryntela.com.au
+      - key: AUTH_MODE
+        scope: RUN_AND_BUILD_TIME
+        value: clerk
+      - key: MOCK_AUTH_ENABLED
+        scope: RUN_AND_BUILD_TIME
+        value: "false"
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: CLERK_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: NEXT_PUBLIC_CLERK_JWT_TEMPLATE
+        scope: RUN_AND_BUILD_TIME
+        value: oryntela-api
+      - key: ORYNTELA_HSTS_ENABLED
+        scope: RUN_AND_BUILD_TIME
+        value: "false"
+
+  - name: api
+    github:
+      repo: KevinFinnerty2205/revenueos
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: infra/docker/api.Dockerfile
+    source_dir: /
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb-fixed
+    http_port: 8080
+    health_check:
+      http_path: /health/ready
+      initial_delay_seconds: 20
+      period_seconds: 15
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+    liveness_health_check:
+      http_path: /health/live
+      initial_delay_seconds: 30
+      period_seconds: 30
+      timeout_seconds: 5
+      failure_threshold: 5
+    envs: &api_environment
+      - key: API_ENVIRONMENT
+        scope: RUN_TIME
+        value: production
+      - key: API_AUTH_MODE
+        scope: RUN_TIME
+        value: clerk
+      - key: API_MOCK_AUTH_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_IDENTITY_JIT_PROVISIONING_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_LOG_LEVEL
+        scope: RUN_TIME
+        value: INFO
+      - key: API_HSTS_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_CORS_ORIGINS
+        scope: RUN_TIME
+        value: https://oryntela.com.au
+      - key: API_ALLOWED_HOSTS
+        scope: RUN_TIME
+        value: api.oryntela.com.au
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_CLERK_JWKS_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_CLERK_ISSUER
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_CLERK_AUDIENCE
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_OUTREACH_SUPPRESSION_HMAC_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_VISUAL_STORAGE_BACKEND
+        scope: RUN_TIME
+        value: s3_compatible
+      - key: API_VISUAL_S3_ENDPOINT
+        scope: RUN_TIME
+        value: https://syd1.digitaloceanspaces.com
+      - key: API_VISUAL_S3_BUCKET
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_VISUAL_S3_REGION
+        scope: RUN_TIME
+        value: syd1
+      - key: API_VISUAL_S3_ACCESS_KEY_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_VISUAL_S3_SECRET_ACCESS_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_VISUAL_STORAGE_SIGNING_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_PRIVATE_BETA_REAL_DATA_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_DATA_EXPORT_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_ORGANISATION_DELETION_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_BILLING_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_CREDITS_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_BILLING_PROVIDER_NAME
+        scope: RUN_TIME
+        value: deterministic
+      - key: API_PROSPECT_RESEARCH_PROVIDER_NAME
+        scope: RUN_TIME
+        value: mock
+      - key: API_FEATURE_PROSPECT_EXTERNAL_PROVIDER_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_INTEGRATIONS_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_ACTION_EXECUTION_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_MOCK_CONNECTORS_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_HUBSPOT_CRM_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_SALESFORCE_CRM_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_MICROSOFT_365_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_MICROSOFT_PRODUCTION_ACTIVATION_APPROVED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_FEATURE_GOOGLE_WORKSPACE_ENABLED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_GOOGLE_WORKSPACE_PRODUCTION_ACTIVATION_APPROVED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_HUBSPOT_PRODUCTION_ACTIVATION_APPROVED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_SALESFORCE_PRODUCTION_ACTIVATION_APPROVED
+        scope: RUN_TIME
+        value: "false"
+      - key: API_WORKER_HEALTH_PORT
+        scope: RUN_TIME
+        value: "8081"
+      - key: API_WORKER_HEALTH_MAX_STALENESS_SECONDS
+        scope: RUN_TIME
+        value: "180"
+
+workers:
+  - name: worker
+    github:
+      repo: KevinFinnerty2205/revenueos
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: infra/docker/api.Dockerfile
+    source_dir: /
+    run_command: revenueos-ai-worker
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb-fixed
+    liveness_health_check:
+      http_path: /health
+      port: 8081
+      initial_delay_seconds: 30
+      period_seconds: 30
+      timeout_seconds: 5
+      failure_threshold: 5
+    envs: *api_environment
+
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    github:
+      repo: KevinFinnerty2205/revenueos
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: infra/docker/api.Dockerfile
+    source_dir: /
+    run_command: alembic upgrade head
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+
+ingress:
+  rules:
+    - component:
+        name: api
+      match:
+        authority:
+          exact: api.oryntela.com.au
+        path:
+          prefix: /
+    - component:
+        name: web
+      match:
+        path:
+          prefix: /

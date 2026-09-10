@@ -1,5 +1,12 @@
 # First supervised real-data design-partner launch gate
 
+> **Superseded 10 September 2026:** this historical WO-039C/WO-050 gate is no
+> longer the controlling operational record. Use the canonical
+> [WO-054 Production Deployment & Launch Operations record](../../07-sprints/wo-054-production-launch-operations.md),
+> which evaluates current migration head `0061_manual_paid_credit_grant` and the
+> DigitalOcean Sydney candidate. None of the historical target, cost or approval
+> assumptions below authorises spend, deployment or customer data.
+
 - **Gate date:** 2 September 2026; commercial consolidation reviewed 4 September 2026 (Australia/Sydney)
 - **Current documentation branch:** `docs/oryntela-product-commercial-consolidation`
 - **Reviewed repository baseline:** `daedbbc`
@@ -7,7 +14,7 @@
 - **Current launch decision:** **WAITING FOR TARGET ENVIRONMENT PROOF**
 - **Scope:** one named, supervised, Native CRM design partner; no Gmail, Apollo, live Prospect provider, live email or autonomous external execution
 
-This is the controlling launch record. It turns the repository-level **GO WITH RESTRICTIONS** decision into a reusable, partner-specific release gate. It does not approve a deployment, legal position, provider or customer-data use.
+This was the controlling launch record for its dated baseline. It turns the repository-level **GO WITH RESTRICTIONS** decision into a reusable, partner-specific release gate. It does not approve a deployment, legal position, provider or customer-data use.
 
 The [Oryntela commercial-product handoff](../oryntela-commercial-product-handoff.md)
 consolidates brand and commercial hypotheses without changing this gate. The

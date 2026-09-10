@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from revenueos.backup import BackupError, create_backup, restore_backup, verify_backup
+from revenueos.backup import (
+    BackupError,
+    _restore_target_database_url,
+    create_backup,
+    restore_backup,
+    verify_backup,
+)
 from revenueos.config import Settings
 from revenueos.visual_storage import LocalVisualStorage
 
@@ -104,3 +110,15 @@ def test_real_data_backup_rejects_temporary_destination(tmp_path: Path) -> None:
 
     with pytest.raises(BackupError, match="durable destination"):
         asyncio.run(create_backup(settings, tmp_path / "backups"))
+
+
+def test_restore_target_url_can_stay_out_of_command_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+    target = "postgresql+asyncpg://restore-user:synthetic-secret@restore.example.com/target"
+    monkeypatch.setenv("API_RESTORE_TARGET_DATABASE_URL", target)
+
+    assert _restore_target_database_url(None) == target
+    assert _restore_target_database_url(" postgresql://local/explicit ") == "postgresql://local/explicit"
+
+    monkeypatch.delenv("API_RESTORE_TARGET_DATABASE_URL")
+    with pytest.raises(BackupError, match="not configured"):
+        _restore_target_database_url(None)

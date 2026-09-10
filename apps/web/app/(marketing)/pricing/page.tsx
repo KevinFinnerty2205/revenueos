@@ -188,7 +188,9 @@ export default function PricingPage() {
             Some eligible variable-cost research actions use Credits. Production
             Credit packs and prices have not been activated, so no pack table is
             published here. Optional connector pricing is also not publicly
-            defined. Any applicable commercial terms will be clear before a
+            defined. Provider-backed research, external sending and CRM
+            connections remain unavailable until their production activation is
+            complete. Any applicable commercial terms will be clear before a
             customer is charged.
           </p>
         </div>
