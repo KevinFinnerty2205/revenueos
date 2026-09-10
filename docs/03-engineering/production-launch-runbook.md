@@ -2,7 +2,7 @@
 
 - Status: repository-ready; all paid/external/public actions blocked pending owner approval
 - Reviewed source baseline: `d8d50b216bd64726243b06b5ea4f5bd56c59ab54`; deploy only the immutable post-review merge SHA recorded in the launch evidence
-- Required migration head: `0061_manual_paid_credit_grant`
+- Required migration head: `0062_live_stripe_billing`
 - Owner/on-call: Kevin (owner-operated V1; use the controlled operational address, not personal details in public records)
 - Customer data: none; WO-045 must pass before onboarding
 
@@ -36,9 +36,9 @@ The complete production handoff template is `infra/environments/production.env.e
 - Initial fail-closed flags: billing, Credits, real data, export, deletion, external Prospect, integrations, action execution, mock connectors and all named connectors.
 - Real-data-only config: legal approval/support references, retention, durable tenant-scoped S3 export storage and external-AI approval. Production exports never use the container filesystem and are served only through the authenticated API while the 24-hour grant remains valid.
 - Backup-job-only secrets/config: source database URL and CA, source Spaces credentials, independent destination S3 credentials and a fresh AES-256-GCM key. These values are prohibited from the web, API, worker and migration components.
-- Provider-specific secrets: connector master key and each OAuth client secret; Apollo/provider cost/approval references; OpenAI key/model if separately approved; Stripe test fields only in non-production. Do not provision disabled-provider secrets pre-emptively.
+- Provider-specific secrets: connector master key and each OAuth client secret; Apollo/provider cost/approval references; OpenAI key/model if separately approved; and, only after the live Stripe activation gate, the mode-matched Stripe API/webhook secrets. Do not provision disabled-provider secrets pre-emptively.
 - Optional tuning: every bounded timeout, quota, upload size and batch setting in `apps/api/.env.example`; absence uses typed defaults. Review those defaults against the approved launch profile, but they are not secrets.
-- Test-only: mock auth, mock connectors, deterministic billing, Stripe `sk_test_`/test prices and mock AI/provider selections. Production validation blocks unsafe combinations and any Stripe secret.
+- Test-only: mock auth, mock connectors, deterministic billing, Stripe `sk_test_`/test Prices and mock AI/provider selections. Production rejects test billing and accepts Stripe configuration only as explicit `live` mode with every fail-closed prerequisite.
 
 No secret goes into Git, documentation, build arguments, `NEXT_PUBLIC_*`, fixtures, screenshots, support bundles or command arguments. Create values in the provider secret manager with owner/maintainer access restricted. Maintain a private inventory of owner, purpose, creation, last rotation and revocation path; store only safe references in change records.
 
@@ -101,38 +101,69 @@ the required MFA/passkey and operational-log posture. After the owner approves P
 
 ### Stripe live preparation record (inactive)
 
-The current Stripe adapter is deliberately test-only: `billing_mode` accepts only
-`test`, production rejects Stripe configuration/credentials, and the adapter rejects
-non-test Stripe objects. Live use therefore requires a separate authorised engineering
-change and review before any console setup or key injection. After that approval:
+WO-054B makes the adapter production-capable but does not activate it. The checked-in
+production template deliberately remains `API_FEATURE_BILLING_ENABLED=false`,
+`API_BILLING_PROVIDER_NAME=deterministic`, `API_BILLING_MODE=test`, GST unresolved and
+all live Stripe references empty. The following owner sequence must be performed in
+order under separate activation authority:
 
-1. The owner supplies the contracting entity, Australian business verification,
-   settlement bank account, support contact and final legal URLs. Set public business
-   name/branding to **Oryntela** and request statement descriptor **ORYNTELA**, subject
-   to Stripe's validation. Do not put bank or identity evidence in Git/tickets.
-2. Resolve GST first. Then create six AUD recurring Prices with consistent tax
-   behaviour: Core AUD 200 monthly / AUD 2,000 yearly; Growth AUD 350 / AUD 3,500;
-   Complete AUD 500 / AUD 5,000. Enterprise remains custom. Do not activate Stripe
-   Tax, coupons or a production Credit pack under this work order.
-3. Keep the 14-day Complete trial outside checkout: it is no-card,
-   operator-started and does not auto-convert. Do not configure a Stripe trial that
-   can generate an automatic charge.
-4. Configure the live customer portal only after cancellation, renewal, proration,
-   refund, plan-change and GST terms are approved. Initially permit invoice history,
-   billing details and payment-method updates; leave plan switching/promotion codes
-   off. Set Terms and Privacy links to the approved routes and return to
-   `https://oryntela.com.au/settings`. Stripe documents these as separate sandbox and
-   live configurations ([Stripe portal configuration](https://docs.stripe.com/customer-management/configure-portal)).
-5. Create the exact live webhook endpoint
-   `https://api.oryntela.com.au/api/v1/billing/webhooks/stripe` for
-   `checkout.session.completed`, `customer.subscription.updated`,
-   `customer.subscription.deleted` and relevant `invoice.*` lifecycle events. Store
-   its signing secret separately from the API key. Return URLs are the exact values in
-   section 8 below.
-6. Prove sandbox checkout, six price mappings, signed-event version, replay and stale
-   timestamp rejection, failed-payment and cancellation reconciliation, portal return,
-   plan change and kill-switch behaviour. Only a separately authorised bounded live
-   transaction may prove live settlement; none is permitted by WO-054.
+1. Owner/accounting resolves GST presentation and Stripe tax treatment, records the
+   durable policy reference, and approves the final Privacy Notice and Service Terms.
+2. Owner creates and verifies the Stripe business account, including contracting
+   entity, Australian business verification, settlement bank account and support
+   contact. Do not put identity or bank evidence in Git or tickets.
+3. Configure Oryntela branding, approved legal URLs and a Stripe-accepted statement
+   descriptor. Keep the existing 14-day Complete trial outside Stripe: no card, no
+   automatic conversion and no automatic charge.
+4. Create the exact live Products/Prices below. Enterprise stays a manual commercial
+   process; do not create a self-service Enterprise Price, production Credit pack,
+   coupon or unapproved Stripe Tax configuration.
+
+   | Environment reference | Amount/recurrence | Required Price metadata |
+   | --- | --- | --- |
+   | `API_STRIPE_PRICE_CORE_MONTHLY` | AUD 200 every month | `oryntela_plan_version_id=ee299a7d-3f12-5845-847e-3425f78ed6f2` |
+   | `API_STRIPE_PRICE_CORE_ANNUAL` | AUD 2,000 every year | `oryntela_plan_version_id=ee299a7d-3f12-5845-847e-3425f78ed6f2` |
+   | `API_STRIPE_PRICE_GROWTH_MONTHLY` | AUD 350 every month | `oryntela_plan_version_id=2d8aa6a4-30aa-52e8-8273-3859210a8406` |
+   | `API_STRIPE_PRICE_GROWTH_ANNUAL` | AUD 3,500 every year | `oryntela_plan_version_id=2d8aa6a4-30aa-52e8-8273-3859210a8406` |
+   | `API_STRIPE_PRICE_COMPLETE_MONTHLY` | AUD 500 every month | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
+   | `API_STRIPE_PRICE_COMPLETE_ANNUAL` | AUD 5,000 every year | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
+
+5. Put only references in configuration: the six Price IDs above, `sk_live_` secret
+   as `API_STRIPE_SECRET_KEY`, `API_BILLING_TAX_TREATMENT=inclusive|exclusive`, the
+   approved `API_BILLING_TAX_POLICY_REFERENCE`, exact HTTPS return URLs and
+   `API_STRIPE_API_VERSION=2026-02-25.clover`. Keep the feature flag false.
+6. Configure the live webhook at
+   `https://api.oryntela.com.au/api/v1/billing/webhooks/stripe`, pin it to
+   `2026-02-25.clover`, and subscribe only to `checkout.session.completed`,
+   `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
+   `invoice.payment_failed`, `invoice.finalized`, `invoice.voided` and
+   `invoice.marked_uncollectible`. Store its `whsec_` value only as
+   `API_STRIPE_WEBHOOK_SECRET`.
+7. Configure a separate live customer portal. Initially allow invoice history,
+   billing details and payment-method updates; keep plan switching and promotion codes
+   off; set approved legal links and `https://oryntela.com.au/settings` as the return
+   URL. Store its live `bpc_` ID as `API_STRIPE_PORTAL_CONFIGURATION_ID`.
+8. Set `API_BILLING_PROVIDER_NAME=stripe` and `API_BILLING_MODE=live`, still with the
+   feature flag false, then run `revenueos-operations production-preflight` from the
+   exact release. It performs read-only retrieval of every Price and portal
+   configuration and fails closed on ID, mode, activity, AUD amount, recurrence or
+   plan-version metadata mismatch.
+9. Only after separate written authority, run one synthetic/minimum live smoke using
+   an owner-controlled test identity: admin starts server-owned Core monthly checkout,
+   Stripe-hosted collection settles the minimum authorised real transaction, the
+   webhook establishes the paid item period/latest paid invoice, the success page
+   confirms only after reconciliation, portal loads, end-of-period cancellation and
+   reactivation reconcile, and duplicate/stale delivery causes no second effect.
+10. Confirm the database's mode-scoped account/subscription/invoice/receipt projection,
+    `paid_through`, commercial transition, support view and Stripe dashboard agree;
+    capture safe identifiers/results only and refund only under separately approved
+    policy.
+11. Only then enable `API_FEATURE_BILLING_ENABLED=true` for the paid-customer path and
+    monitor failed webhooks, reconciliation-required operations and payment failures.
+
+This sequence is a runbook, not permission. None of its external steps has been
+performed. Raw card data stays entirely in Stripe-hosted Checkout/portal surfaces;
+Oryntela does not claim PCI certification.
 
 ## 4. Database migration and deployment
 
@@ -142,7 +173,7 @@ Before every release:
 2. Confirm a recent recoverable database backup and last restore result. If a migration is not backwards-compatible with the last app release, stop worker claims and schedule downtime.
 3. Run `alembic current` and verify the source state. Never edit `alembic_version` manually.
 4. Run once using the migration credential: `alembic upgrade head`.
-5. Verify `alembic current` is `0061_manual_paid_credit_grant`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image.
+5. Verify `alembic current` is `0062_live_stripe_billing`; run `alembic check`; then run `revenueos-operations production-preflight` from the release image.
 6. Deploy the API and require `/health/live` = 200 and `/health/ready` = 200 before traffic. Start the exact same release's single worker and require its private liveness probe. Deploy web and require `/health/ready` = 200.
 7. Run the synthetic smoke matrix below. Inspect safe error rate/restarts and queue summaries before marking the release healthy.
 
@@ -205,7 +236,13 @@ Change server flags in the secret/config control plane, redeploy the matching AP
 - Stop sending/external mutation: `API_FEATURE_ACTION_EXECUTION_ENABLED=false`; for campaigns also `API_FEATURE_ENGAGE_CAMPAIGNS_ENABLED=false`; stop the worker if outcome contracts are in doubt.
 - Stop all connector surfaces: `API_FEATURE_INTEGRATIONS_ENABLED=false`; disable the named Microsoft/Google/HubSpot/Salesforce flag; revoke provider credentials when compromised.
 - Stop Prospect cost: `API_FEATURE_PROSPECT_EXTERNAL_PROVIDER_ENABLED=false`, then `API_FEATURE_CREDITS_ENABLED=false`; disable the provider key in its console.
-- Stop billing/checkout: `API_FEATURE_BILLING_ENABLED=false`. Continue verified reconciliation under an incident procedure; never discard a valid webhook because UI checkout is disabled.
+- Stop billing/checkout: `API_FEATURE_BILLING_ENABLED=false`. This prevents new
+  checkout, portal and subscription mutations without rewriting paid authority.
+  Continue accepting verified mode-matched webhooks and reconcile all pending/unknown
+  operations and invoices before rotating or revoking the Stripe key/webhook. If a
+  secret is compromised, disable checkout first, rotate the affected credential in
+  Stripe and the secret manager, then prove signature/read-only reconciliation before
+  restoring mutations. Never discard a valid webhook because UI checkout is disabled.
 - Stop customer-content AI: disable `API_FEATURE_OPENAI_PROVIDER_ENABLED` plus the affected content feature; do not substitute mock output in real-data mode.
 - Stop capture/binary writes: disable recording, online-meeting, document, visual and Create flags as appropriate; preserve reconciliation metadata.
 - Revoke public Deal Room: use the supported publication revocation; do not log the fragment token.
@@ -256,10 +293,10 @@ Use a dedicated synthetic Clerk organisation/admin/member and clearly synthetic 
 - Provider reconnect: disable the named flag if unsafe, inspect safe connection health, revoke/disconnect, rotate client secret/token as needed, reconnect through OAuth, then reconcile before writes.
 - Export: approve request/authority, create with `revenueos-beta-maintenance export`, authorise one-time download and purge. Production generation streams through an ephemeral temporary file to a tenant-scoped private S3 object, verifies size/SHA-256, and serves it only through authenticated membership/expiry checks. Keep the flag off until target preflight proves write/read/delete and cross-tenant denial.
 - Organisation deletion: optional export, disable members, stop queues, revoke connectors, run exact-confirmation deletion, verify database/object/grant/search/worker absence, then let backups age out. Feature remains off until the named-target proof passes.
-- Billing: compare Oryntela subscription/invoice event state with Stripe IDs and verified events; reconcile through supported service paths. Never paste card/customer/provider payloads into logs or tickets.
+- Billing: compare Oryntela subscription/invoice event state with Stripe IDs and verified events; reconcile through supported service paths. Live billing stays off until every GST, account, Price, webhook, portal, preflight and separately authorised smoke gate passes. Never paste card/customer/provider payloads into logs or tickets.
 
 ## 11. Rollback and release close
 
-Contain with the narrowest kill switch; pause worker if contract compatibility is uncertain. Redeploy the last validated web/API/worker SHA together only if it supports the current forward schema. Confirm liveness/readiness, worker probe, synthetic tenant, queue states and error rate. Restore the database only when a forward fix/application rollback cannot recover and the recovery owner approves the RPO impact. Restore objects and database to the same recovery point.
+Contain with the narrowest kill switch; pause worker if contract compatibility is uncertain. Redeploy the last validated web/API/worker SHA together only if it supports the current forward schema. For billing, retain migration `0062_live_stripe_billing` during application rollback so mode and paid-through authority are preserved. Its downgrade refuses to run while any live account, operation or event receipt exists; do not delete or relabel those records to force a downgrade. Confirm liveness/readiness, worker probe, synthetic tenant, queue states and error rate. Restore the database only when a forward fix/application rollback cannot recover and the recovery owner approves the RPO impact. Restore objects and database to the same recovery point.
 
 After a successful launch window, record SHA, migration head, health/smoke results, any provider actions, spend, incidents and deviations. Public announcement and customer onboarding are separate owner gates and are not part of WO-054.

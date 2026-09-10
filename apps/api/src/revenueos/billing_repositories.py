@@ -31,10 +31,15 @@ class BillingRepository:
             ),
         )
 
-    async def subscription(self, organisation_id: UUID, *, lock: bool = False) -> BillingSubscription | None:
+    async def subscription(
+        self, organisation_id: UUID, provider: str, mode: str, *, lock: bool = False
+    ) -> BillingSubscription | None:
         statement = (
             select(BillingSubscription)
+            .join(BillingAccount, BillingAccount.id == BillingSubscription.billing_account_id)
             .where(BillingSubscription.organisation_id == organisation_id)
+            .where(BillingAccount.organisation_id == organisation_id)
+            .where(BillingAccount.provider == provider, BillingAccount.provider_mode == mode)
             .order_by(BillingSubscription.created_at.desc(), BillingSubscription.id.desc())
             .limit(1)
         )
@@ -59,25 +64,31 @@ class BillingRepository:
             statement = statement.with_for_update()
         return cast(BillingSubscription | None, await self.session.scalar(statement))
 
-    async def invoices(self, organisation_id: UUID) -> list[BillingInvoiceProjection]:
+    async def invoices(self, organisation_id: UUID, provider: str, mode: str) -> list[BillingInvoiceProjection]:
         return list(
             (
                 await self.session.scalars(
                     select(BillingInvoiceProjection)
+                    .join(BillingSubscription, BillingSubscription.id == BillingInvoiceProjection.subscription_id)
+                    .join(BillingAccount, BillingAccount.id == BillingSubscription.billing_account_id)
                     .where(BillingInvoiceProjection.organisation_id == organisation_id)
+                    .where(BillingSubscription.organisation_id == organisation_id)
+                    .where(BillingAccount.organisation_id == organisation_id)
+                    .where(BillingAccount.provider == provider, BillingAccount.provider_mode == mode)
                     .order_by(BillingInvoiceProjection.invoice_date.desc(), BillingInvoiceProjection.id.desc())
                 )
             ).all()
         )
 
     async def invoice_by_provider_id(
-        self, organisation_id: UUID, provider_invoice_id: str
+        self, organisation_id: UUID, subscription_id: UUID, provider_invoice_id: str
     ) -> BillingInvoiceProjection | None:
         return cast(
             BillingInvoiceProjection | None,
             await self.session.scalar(
                 select(BillingInvoiceProjection).where(
                     BillingInvoiceProjection.organisation_id == organisation_id,
+                    BillingInvoiceProjection.subscription_id == subscription_id,
                     BillingInvoiceProjection.provider_invoice_id == provider_invoice_id,
                 )
             ),
@@ -86,6 +97,7 @@ class BillingRepository:
     async def operation(
         self,
         organisation_id: UUID,
+        mode: str,
         operation_type: str,
         idempotency_key: str,
         *,
@@ -93,6 +105,7 @@ class BillingRepository:
     ) -> BillingOperation | None:
         statement = select(BillingOperation).where(
             BillingOperation.organisation_id == organisation_id,
+            BillingOperation.provider_mode == mode,
             BillingOperation.operation_type == operation_type,
             BillingOperation.idempotency_key == idempotency_key,
         )

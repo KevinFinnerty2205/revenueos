@@ -87,6 +87,8 @@ export type BillingSubscriptionStatus =
   | "incomplete"
   | "unknown_reconciliation";
 
+export type BillingPaymentStatus = "pending" | "paid" | "failed";
+
 export interface BillingPlanOption {
   planCode: CommercialPlanCode;
   displayName: string;
@@ -101,7 +103,7 @@ export interface BillingPlanOption {
 export interface BillingProjection {
   configured: boolean;
   provider: "deterministic" | "stripe";
-  mode: "test";
+  mode: "test" | "live";
   legalEntityName: "Management Services Australia Pty. Ltd.";
   legalEntityAbn: "15 113 119 556";
   subscription: {
@@ -114,6 +116,9 @@ export interface BillingProjection {
     status: BillingSubscriptionStatus;
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;
+    paymentStatus: BillingPaymentStatus;
+    paidPeriodStart: string | null;
+    paidThrough: string | null;
     cancelAtPeriodEnd: boolean;
     pendingPlanCode: CommercialPlanCode | null;
     pendingBillingInterval: "monthly" | "annual" | null;

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from revenueos.billing_contracts import (
     BillingInvoiceResponse,
     BillingOperationRequest,
+    BillingPaymentStatus,
     BillingPlanOptionResponse,
     BillingProjectionResponse,
     BillingSubscriptionResponse,
@@ -38,7 +39,7 @@ from revenueos.billing_provider import (
 )
 from revenueos.billing_repositories import BillingRepository
 from revenueos.commercial_contracts import BillingInterval, PlanCode
-from revenueos.commercial_services import CommercialService, ensure_plan_catalogue
+from revenueos.commercial_services import PLAN_CATALOGUE, CommercialService, ensure_plan_catalogue
 from revenueos.config import Settings
 from revenueos.credit_services import CreditService
 from revenueos.database import set_tenant_database_context
@@ -71,6 +72,14 @@ def _fingerprint(value: dict[str, object]) -> str:
 
 
 _PLAN_RANK: dict[PlanCode, int] = {"core": 0, "growth": 1, "complete": 2, "enterprise": 3}
+_SUBSCRIPTION_EVENTS = {"customer.subscription.updated", "customer.subscription.deleted"}
+_INVOICE_EVENTS = {
+    "invoice.paid",
+    "invoice.payment_failed",
+    "invoice.finalized",
+    "invoice.voided",
+    "invoice.marked_uncollectible",
+}
 
 
 class BillingPriceMapper:
@@ -99,6 +108,29 @@ class BillingPriceMapper:
         return None
 
 
+def authoritative_provider_prices(settings: Settings) -> tuple[ProviderPriceReference, ...]:
+    """Build the six provider mappings from the immutable V1 catalogue."""
+
+    mapper = BillingPriceMapper(settings)
+    prices: list[ProviderPriceReference] = []
+    for plan in PLAN_CATALOGUE:
+        if plan.code == "enterprise":
+            continue
+        for interval in cast(tuple[BillingInterval, ...], ("monthly", "annual")):
+            amount = plan.monthly_price_amount if interval == "monthly" else plan.annual_price_amount
+            assert amount is not None
+            prices.append(
+                ProviderPriceReference(
+                    identifier=mapper.provider_identifier(plan.code, interval),
+                    plan_code=plan.code,
+                    billing_interval=interval,
+                    amount=amount,
+                    plan_version_id=plan.id,
+                )
+            )
+    return tuple(prices)
+
+
 class BillingService:
     def __init__(
         self,
@@ -118,12 +150,12 @@ class BillingService:
     async def projection(self, organisation_id: UUID) -> BillingProjectionResponse:
         await ensure_plan_catalogue(self.session)
         account = await self.repository.account(organisation_id, self.provider.name, self.provider.mode)
-        subscription = await self.repository.subscription(organisation_id)
-        invoices = await self.repository.invoices(organisation_id)
+        subscription = await self.repository.subscription(organisation_id, self.provider.name, self.provider.mode)
+        invoices = await self.repository.invoices(organisation_id, self.provider.name, self.provider.mode)
         return BillingProjectionResponse(
             configured=account is not None,
             provider=self.provider.name,
-            mode="test",
+            mode=self.provider.mode,
             subscription=await self._subscription_response(subscription) if subscription is not None else None,
             invoices=[self._invoice_response(invoice) for invoice in invoices],
             checkout_options=await self._checkout_options(),
@@ -132,7 +164,7 @@ class BillingService:
         )
 
     async def success_status(self, organisation_id: UUID) -> BillingSuccessResponse:
-        subscription = await self.repository.subscription(organisation_id)
+        subscription = await self.repository.subscription(organisation_id, self.provider.name, self.provider.mode)
         if subscription is None:
             return BillingSuccessResponse(
                 confirmed=False,
@@ -140,7 +172,12 @@ class BillingService:
                 message="Payment confirmation is pending. No entitlement change has been made.",
             )
         status = cast(BillingSubscriptionStatus, subscription.status)
-        confirmed = status in {"active", "cancel_at_period_end"}
+        confirmed = (
+            status in {"active", "cancel_at_period_end"}
+            and subscription.payment_status == "paid"
+            and subscription.paid_through is not None
+            and _aware(subscription.paid_through) > _aware(self._now())
+        )
         return BillingSuccessResponse(
             confirmed=confirmed,
             status=status,
@@ -170,7 +207,9 @@ class BillingService:
         fingerprint = _fingerprint(
             {"plan_code": request.plan_code, "billing_interval": request.billing_interval, "amount": str(amount)}
         )
-        existing = await self.repository.operation(organisation_id, "checkout", request.idempotency_key, lock=True)
+        existing = await self.repository.operation(
+            organisation_id, self.provider.mode, "checkout", request.idempotency_key, lock=True
+        )
         if existing is not None:
             self._require_same_fingerprint(existing, fingerprint)
             if existing.hosted_url is not None and existing.provider_object_id is not None:
@@ -196,6 +235,7 @@ class BillingService:
             select(BillingOperation)
             .where(
                 BillingOperation.organisation_id == organisation_id,
+                BillingOperation.provider_mode == self.provider.mode,
                 BillingOperation.operation_type == "checkout",
                 BillingOperation.status.in_(("pending", "unknown")),
                 BillingOperation.id != (existing.id if existing is not None else uuid.UUID(int=0)),
@@ -208,7 +248,7 @@ class BillingService:
                 "A previous checkout is still open or awaiting reconciliation. Retry that checkout or check status before starting another.",
                 409,
             )
-        current = await self.repository.subscription(organisation_id, lock=True)
+        current = await self.repository.subscription(organisation_id, self.provider.name, self.provider.mode, lock=True)
         if current is not None and current.status != "cancelled":
             raise PublicAPIError(
                 "billing_subscription_exists",
@@ -219,6 +259,7 @@ class BillingService:
             id=uuid.uuid4(),
             organisation_id=organisation_id,
             requested_by_user_id=user_id,
+            provider_mode=self.provider.mode,
             operation_type="checkout",
             idempotency_key=request.idempotency_key,
             request_fingerprint=fingerprint,
@@ -274,7 +315,9 @@ class BillingService:
         if account is None:
             raise PublicAPIError("billing_not_configured", "Billing is not configured for this organisation.", 409)
         fingerprint = _fingerprint({"billing_account_id": str(account.id)})
-        existing = await self.repository.operation(organisation_id, "portal", request.idempotency_key, lock=True)
+        existing = await self.repository.operation(
+            organisation_id, self.provider.mode, "portal", request.idempotency_key, lock=True
+        )
         if existing is not None:
             self._require_same_fingerprint(existing, fingerprint)
             if existing.hosted_url is not None:
@@ -329,7 +372,9 @@ class BillingService:
                 "Enterprise changes require the manual commercial process.",
                 409,
             )
-        subscription = await self.repository.subscription(organisation_id, lock=True)
+        subscription = await self.repository.subscription(
+            organisation_id, self.provider.name, self.provider.mode, lock=True
+        )
         if subscription is None:
             raise PublicAPIError("billing_subscription_not_found", "No subscription is available to change.", 404)
         plan = await self._plan(request.plan_code)
@@ -341,7 +386,9 @@ class BillingService:
                 "billing_interval": request.billing_interval,
             }
         )
-        existing = await self.repository.operation(organisation_id, "plan_change", request.idempotency_key, lock=True)
+        existing = await self.repository.operation(
+            organisation_id, self.provider.mode, "plan_change", request.idempotency_key, lock=True
+        )
         if existing is not None:
             self._require_same_fingerprint(existing, fingerprint)
             if existing.status == "succeeded":
@@ -352,7 +399,13 @@ class BillingService:
                     "That billing operation was rejected. Start a new request with a new retry key.",
                     409,
                 )
-        if subscription.status != "active" or subscription.cancel_at_period_end:
+        if (
+            subscription.status != "active"
+            or subscription.cancel_at_period_end
+            or subscription.payment_status != "paid"
+            or subscription.paid_through is None
+            or _aware(subscription.paid_through) <= _aware(self._now())
+        ):
             raise PublicAPIError(
                 "billing_plan_change_unavailable",
                 "Plan changes require an active paid subscription. Resolve payment attention or reverse any scheduled cancellation first.",
@@ -393,7 +446,7 @@ class BillingService:
                 if (
                     mapped == (request.plan_code, request.billing_interval)
                     and reconciled.subscription.status == "active"
-                    and (not is_higher_tier or reconciled.invoice is not None)
+                    and (not is_higher_tier or (reconciled.invoice is not None and reconciled.invoice.status == "paid"))
                 ):
                     await self._apply_plan_change_result(
                         organisation_id,
@@ -435,6 +488,7 @@ class BillingService:
                     mapped != (request.plan_code, request.billing_interval)
                     or result.subscription.status != "active"
                     or result.invoice is None
+                    or result.invoice.status != "paid"
                 ):
                     operation.status = "unknown"
                     operation.safe_error_code = "billing_upgrade_confirmation_pending"
@@ -472,7 +526,7 @@ class BillingService:
     async def process_webhook(
         self, payload: bytes, signature: str | None
     ) -> Literal["processed", "duplicate", "ignored_stale", "reconciliation_required"]:
-        self._require_enabled()
+        self._require_webhook_reconciliation_enabled()
         event = await self.provider.verify_webhook(payload, signature)
         await set_tenant_database_context(self.session, event.organisation_id)
         account = await self.repository.account(event.organisation_id, self.provider.name, self.provider.mode)
@@ -490,9 +544,9 @@ class BillingService:
         result: Literal["processed", "ignored_stale", "reconciliation_required"]
         if event.event_type == "checkout.session.completed":
             result = await self._process_checkout_event(account, event)
-        elif event.event_type.startswith("customer.subscription."):
+        elif event.event_type in _SUBSCRIPTION_EVENTS:
             result = await self._process_subscription_event(account, event)
-        elif event.event_type.startswith("invoice."):
+        elif event.event_type in _INVOICE_EVENTS:
             result = await self._process_invoice_event(account, event)
         else:
             result = "reconciliation_required"
@@ -533,6 +587,7 @@ class BillingService:
         operation = await self.session.scalar(
             select(BillingOperation).where(
                 BillingOperation.organisation_id == event.organisation_id,
+                BillingOperation.provider_mode == self.provider.mode,
                 BillingOperation.operation_type.in_(("checkout", "credit_purchase")),
                 BillingOperation.provider_object_id == checkout.identifier,
             )
@@ -574,8 +629,29 @@ class BillingService:
         if operation.plan_version_id != checkout_plan.id or operation.billing_interval != mapped[1]:
             return "reconciliation_required"
         verified = replace_event_subscription(event, checkout.subscription_identifier)
-        result = await self._process_subscription_event(account, verified)
-        if result == "processed":
+        invoice: ProviderInvoiceSnapshot | None = None
+        payment_status: BillingPaymentStatus = "pending"
+        if checkout_subscription.latest_invoice_identifier is not None:
+            invoice = await self.provider.retrieve_invoice(checkout_subscription.latest_invoice_identifier)
+            if (
+                invoice.customer_identifier != account.provider_customer_id
+                or invoice.subscription_identifier != checkout_subscription.identifier
+            ):
+                return "reconciliation_required"
+            payment_status = "paid" if invoice.status == "paid" else "pending"
+        result = await self._reconcile_subscription_snapshot(
+            account,
+            verified,
+            checkout_subscription,
+            payment_status=payment_status,
+            payment_confirmed=payment_status == "paid" and checkout.payment_status == "paid",
+        )
+        subscription = await self.repository.subscription_by_provider_id(
+            event.organisation_id, account.id, checkout_subscription.identifier
+        )
+        if invoice is not None and subscription is not None:
+            await self._upsert_invoice_async(event.organisation_id, subscription.id, invoice)
+        if result == "processed" and payment_status == "paid" and checkout.payment_status == "paid":
             operation.status = "succeeded"
             operation.safe_error_code = None
             operation.completed_at = _aware(self._now())
@@ -594,6 +670,9 @@ class BillingService:
         account: BillingAccount,
         event: VerifiedBillingEvent,
         snapshot: ProviderSubscriptionSnapshot,
+        *,
+        payment_status: BillingPaymentStatus | None = None,
+        payment_confirmed: bool = False,
     ) -> Literal["processed", "ignored_stale", "reconciliation_required"]:
         if snapshot.customer_identifier != account.provider_customer_id:
             return "reconciliation_required"
@@ -608,8 +687,27 @@ class BillingService:
             snapshot.identifier,
             lock=True,
         )
+        observed_at = max(event.created_at, snapshot.provider_updated_at)
+        if subscription is not None and observed_at < _aware(subscription.provider_updated_at):
+            return "ignored_stale"
         if subscription is not None and subscription.status == "cancelled" and snapshot.status != "cancelled":
             return "ignored_stale"
+        resolved_payment_status: BillingPaymentStatus
+        if payment_status is not None:
+            resolved_payment_status = payment_status
+        elif snapshot.status in {"past_due", "unpaid", "incomplete"}:
+            resolved_payment_status = "failed"
+        elif subscription is not None:
+            resolved_payment_status = cast(BillingPaymentStatus, subscription.payment_status)
+        else:
+            resolved_payment_status = "pending"
+        if payment_confirmed and (
+            resolved_payment_status != "paid"
+            or snapshot.current_period_start is None
+            or snapshot.current_period_end is None
+            or snapshot.current_period_end <= snapshot.current_period_start
+        ):
+            return "reconciliation_required"
         if subscription is None:
             subscription = BillingSubscription(
                 id=uuid.uuid4(),
@@ -623,9 +721,12 @@ class BillingService:
                 status=snapshot.status,
                 current_period_start=snapshot.current_period_start,
                 current_period_end=snapshot.current_period_end,
+                payment_status=resolved_payment_status,
+                paid_period_start=snapshot.current_period_start if payment_confirmed else None,
+                paid_through=snapshot.current_period_end if payment_confirmed else None,
                 cancel_at_period_end=snapshot.cancel_at_period_end,
                 ended_at=snapshot.ended_at,
-                provider_updated_at=max(event.created_at, snapshot.provider_updated_at),
+                provider_updated_at=observed_at,
                 last_provider_event_id=event.identifier,
                 lock_version=1,
             )
@@ -638,18 +739,27 @@ class BillingService:
             subscription.status = snapshot.status
             subscription.current_period_start = snapshot.current_period_start
             subscription.current_period_end = snapshot.current_period_end
+            subscription.payment_status = resolved_payment_status
+            if payment_confirmed:
+                subscription.paid_period_start = snapshot.current_period_start
+                subscription.paid_through = snapshot.current_period_end
             subscription.cancel_at_period_end = snapshot.cancel_at_period_end
             subscription.ended_at = snapshot.ended_at
-            subscription.provider_updated_at = max(
-                _aware(subscription.provider_updated_at), event.created_at, snapshot.provider_updated_at
-            )
+            subscription.provider_updated_at = observed_at
             subscription.last_provider_event_id = event.identifier
             subscription.lock_version += 1
         if subscription.pending_plan_version_id == plan.id and subscription.pending_billing_interval == interval:
             subscription.pending_plan_version_id = None
             subscription.pending_billing_interval = None
         account.last_reconciled_at = _aware(self._now())
-        await self._apply_commercial_fact(event.organisation_id, plan_code, interval, snapshot.status, event.identifier)
+        await self._apply_commercial_fact(
+            event.organisation_id,
+            plan_code,
+            interval,
+            snapshot.status,
+            event.identifier,
+            payment_confirmed=payment_confirmed,
+        )
         return "processed"
 
     async def _process_invoice_event(
@@ -661,7 +771,21 @@ class BillingService:
         if invoice.customer_identifier != account.provider_customer_id or not invoice.subscription_identifier:
             return "reconciliation_required"
         subscription_event = replace_event_subscription(event, invoice.subscription_identifier)
-        subscription_result = await self._process_subscription_event(account, subscription_event)
+        snapshot = await self.provider.retrieve_subscription(invoice.subscription_identifier)
+        is_current_invoice = snapshot.latest_invoice_identifier == invoice.identifier
+        current_invoice_paid = invoice.status == "paid" and is_current_invoice
+        payment_status: BillingPaymentStatus | None = (
+            "paid"
+            if current_invoice_paid
+            else ("failed" if event.event_type == "invoice.payment_failed" and is_current_invoice else None)
+        )
+        subscription_result = await self._reconcile_subscription_snapshot(
+            account,
+            subscription_event,
+            snapshot,
+            payment_status=payment_status,
+            payment_confirmed=current_invoice_paid,
+        )
         if subscription_result == "reconciliation_required":
             return subscription_result
         subscription = await self.repository.subscription_by_provider_id(
@@ -670,12 +794,30 @@ class BillingService:
         if subscription is None:
             return "reconciliation_required"
         await self._upsert_invoice_async(event.organisation_id, subscription.id, invoice)
+        checkout_operation = await self.session.scalar(
+            select(BillingOperation).where(
+                BillingOperation.organisation_id == event.organisation_id,
+                BillingOperation.provider_mode == self.provider.mode,
+                BillingOperation.operation_type == "checkout",
+                BillingOperation.status.in_(("pending", "unknown")),
+                BillingOperation.plan_version_id == subscription.plan_version_id,
+                BillingOperation.billing_interval == subscription.billing_interval,
+            )
+        )
+        if checkout_operation is not None and payment_status is not None:
+            checkout_operation.status = "succeeded" if current_invoice_paid else "failed"
+            checkout_operation.safe_error_code = None if current_invoice_paid else "billing_payment_failed"
+            checkout_operation.completed_at = _aware(self._now())
         return subscription_result
 
     async def _upsert_invoice_async(
         self, organisation_id: UUID, subscription_id: UUID, snapshot: ProviderInvoiceSnapshot
     ) -> None:
-        existing = await self.repository.invoice_by_provider_id(organisation_id, snapshot.identifier)
+        existing = await self.repository.invoice_by_provider_id(
+            organisation_id,
+            subscription_id,
+            snapshot.identifier,
+        )
         hosted_invoice_url = self._safe_optional_hosted_url(snapshot.hosted_invoice_url)
         receipt_url = self._safe_optional_hosted_url(snapshot.receipt_url)
         if existing is None:
@@ -715,6 +857,8 @@ class BillingService:
         interval: BillingInterval,
         billing_status: BillingSubscriptionStatus,
         event_identifier: str,
+        *,
+        payment_confirmed: bool,
     ) -> None:
         state = await self.session.scalar(
             select(OrganisationCommercialState)
@@ -731,6 +875,8 @@ class BillingService:
                 and state.source == "billing_provider"
             ):
                 return
+            if not payment_confirmed:
+                return
             expected_version = state.lock_version if state is not None else 0
             commercial = CommercialService(self.session, self.settings, now=self._now)
             await commercial.assign_plan(
@@ -738,7 +884,7 @@ class BillingService:
                 plan_code=plan_code,
                 billing_interval=interval,
                 actor_reference=f"billing:{self.provider.name}:{event_identifier}"[:200],
-                reason="Verified test-mode billing reconciliation activated the paid subscription.",
+                reason=f"Verified {self.provider.mode}-mode billing reconciliation activated the paid subscription.",
                 expected_lock_version=expected_version,
                 source="billing_provider",
                 commit=False,
@@ -755,7 +901,7 @@ class BillingService:
                 organisation_id,
                 status="inactive",
                 actor_reference=f"billing:{self.provider.name}:{event_identifier}"[:200],
-                reason="Verified test-mode billing reconciliation confirmed paid commercial authority ended.",
+                reason=f"Verified {self.provider.mode}-mode billing reconciliation confirmed paid commercial authority ended.",
                 expected_lock_version=state.lock_version,
                 source="billing_provider",
                 commit=False,
@@ -771,11 +917,15 @@ class BillingService:
         action: Literal["cancel", "reactivate"],
     ) -> HostedActionResponse:
         self._require_enabled()
-        subscription = await self.repository.subscription(organisation_id, lock=True)
+        subscription = await self.repository.subscription(
+            organisation_id, self.provider.name, self.provider.mode, lock=True
+        )
         if subscription is None:
             raise PublicAPIError("billing_subscription_not_found", "No subscription is available.", 404)
         fingerprint = _fingerprint({"subscription_id": str(subscription.id), "action": action})
-        existing = await self.repository.operation(organisation_id, action, request.idempotency_key, lock=True)
+        existing = await self.repository.operation(
+            organisation_id, self.provider.mode, action, request.idempotency_key, lock=True
+        )
         if existing is not None:
             self._require_same_fingerprint(existing, fingerprint)
             if existing.status == "succeeded":
@@ -885,7 +1035,19 @@ class BillingService:
             object_identifier=result.subscription.identifier,
             created_at=_aware(self._now()),
         )
-        outcome = await self._reconcile_subscription_snapshot(account, event, result.subscription)
+        if result.invoice is None or result.invoice.status != "paid":
+            raise PublicAPIError(
+                "billing_upgrade_confirmation_pending",
+                "The provider has not confirmed payment for the plan change.",
+                409,
+            )
+        outcome = await self._reconcile_subscription_snapshot(
+            account,
+            event,
+            result.subscription,
+            payment_status="paid",
+            payment_confirmed=True,
+        )
         if outcome != "processed":
             raise PublicAPIError(
                 "billing_plan_change_reconciliation_required",
@@ -1028,10 +1190,16 @@ class BillingService:
             status=status,
             current_period_start=subscription.current_period_start,
             current_period_end=subscription.current_period_end,
+            payment_status=cast(BillingPaymentStatus, subscription.payment_status),
+            paid_period_start=subscription.paid_period_start,
+            paid_through=subscription.paid_through,
             cancel_at_period_end=subscription.cancel_at_period_end,
             pending_plan_code=cast(PlanCode, pending_plan.code) if pending_plan is not None else None,
             pending_billing_interval=cast(BillingInterval | None, subscription.pending_billing_interval),
-            payment_needs_attention=status in {"past_due", "unpaid", "incomplete", "unknown_reconciliation"},
+            payment_needs_attention=(
+                subscription.payment_status != "paid"
+                or status in {"past_due", "unpaid", "incomplete", "unknown_reconciliation"}
+            ),
         )
 
     @staticmethod
@@ -1065,6 +1233,7 @@ class BillingService:
             plan_code=code,
             billing_interval=interval,
             amount=self._plan_amount(plan, interval),
+            plan_version_id=plan.id,
         )
 
     @staticmethod
@@ -1097,14 +1266,18 @@ class BillingService:
             return (
                 "Payment has not been confirmed. No new paid entitlement has been granted; existing data is preserved."
             )
+        if subscription.payment_status != "paid":
+            return (
+                "Payment has not been confirmed. No new paid entitlement has been granted; existing data is preserved."
+            )
         if subscription.status == "cancel_at_period_end":
             return "Cancellation is scheduled. Paid access continues until the current period ends."
         if subscription.status == "cancelled":
             return "The provider subscription has ended. Existing data has not been deleted."
-        return "The test-mode provider subscription has been verified and reconciled."
+        return "The provider subscription and current paid period have been verified and reconciled."
 
-    @staticmethod
     def _operation(
+        self,
         organisation_id: UUID,
         user_id: UUID,
         operation_type: str,
@@ -1119,6 +1292,7 @@ class BillingService:
             id=uuid.uuid4(),
             organisation_id=organisation_id,
             requested_by_user_id=user_id,
+            provider_mode=self.provider.mode,
             operation_type=operation_type,
             idempotency_key=idempotency_key,
             request_fingerprint=fingerprint,
@@ -1148,8 +1322,16 @@ class BillingService:
     def _require_enabled(self) -> None:
         if not self.settings.feature_billing_enabled:
             raise PublicAPIError(
-                "billing_test_mode_unavailable",
-                "Test-mode billing is not enabled in this environment.",
+                "billing_unavailable",
+                "Billing is not enabled in this environment.",
+                503,
+            )
+
+    def _require_webhook_reconciliation_enabled(self) -> None:
+        if not self.settings.feature_billing_enabled and self.provider.name != "stripe":
+            raise PublicAPIError(
+                "billing_unavailable",
+                "Billing is not enabled in this environment.",
                 503,
             )
 

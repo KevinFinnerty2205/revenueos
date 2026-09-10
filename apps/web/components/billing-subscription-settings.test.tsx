@@ -127,7 +127,7 @@ describe("BillingSubscriptionSettings", () => {
     expect(await screen.findByText(/Billing not configured/i)).toBeVisible();
     expect(screen.getByText(/trial remains no-card/i)).toBeVisible();
     expect(screen.getByText(/Management Services Australia/i)).toBeVisible();
-    expect(screen.getByText(/test mode only/i)).toBeVisible();
+    expect(screen.getByText(/test billing operations/i)).toBeVisible();
     expect(screen.queryByText(/Enterprise ·/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: /Core · annual/i }));
@@ -163,6 +163,9 @@ describe("BillingSubscriptionSettings", () => {
       status: "past_due",
       currentPeriodStart: "2032-04-01T00:00:00Z",
       currentPeriodEnd: "2033-04-01T00:00:00Z",
+      paymentStatus: "failed",
+      paidPeriodStart: "2031-04-01T00:00:00Z",
+      paidThrough: "2032-04-01T00:00:00Z",
       cancelAtPeriodEnd: true,
       pendingPlanCode: "complete",
       pendingBillingInterval: "annual",
@@ -226,6 +229,9 @@ describe("BillingSubscriptionSettings", () => {
       status: "active",
       currentPeriodStart: "2032-04-01T00:00:00Z",
       currentPeriodEnd: "2032-05-01T00:00:00Z",
+      paymentStatus: "paid",
+      paidPeriodStart: "2032-04-01T00:00:00Z",
+      paidThrough: "2032-05-01T00:00:00Z",
       cancelAtPeriodEnd: false,
       pendingPlanCode: null,
       pendingBillingInterval: null,
@@ -282,6 +288,9 @@ describe("BillingSubscriptionSettings", () => {
       status: "cancelled",
       currentPeriodStart: "2032-04-01T00:00:00Z",
       currentPeriodEnd: "2032-05-01T00:00:00Z",
+      paymentStatus: "paid",
+      paidPeriodStart: "2032-04-01T00:00:00Z",
+      paidThrough: "2032-05-01T00:00:00Z",
       cancelAtPeriodEnd: false,
       pendingPlanCode: null,
       pendingBillingInterval: null,

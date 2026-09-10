@@ -1,9 +1,9 @@
 # Billing and subscription operations
 
-- **Status:** Billing architecture / test mode implemented by WO-048
-- **Migration:** `0053_billing_subscriptions`
-- **Providers:** deterministic test provider and Stripe test-mode adapter
-- **Live billing:** not authorised or activated
+- **Status:** test and live Stripe engineering implemented; live activation remains blocked
+- **Migrations:** `0053_billing_subscriptions`, `0062_live_stripe_billing`
+- **Providers:** deterministic test provider and mode-separated Stripe adapter
+- **Live billing:** production-capable but not configured, authorised or activated
 - **Legal billing entity:** Management Services Australia Pty. Ltd., ABN 15 113 119 556
 
 ## Authority boundary
@@ -43,28 +43,45 @@ policy.
 The deterministic provider is the default for local tests and CI. It can model
 success, abandonment, duplicate/out-of-order events, failure, cancellation, renewal
 and unknown checkout or subscription-mutation results without network or
-credentials. The Stripe adapter
-uses Stripe's HTTPS API directly and is restricted to `sk_test_` credentials and
-configured test price identifiers. Production configuration rejects billing
-activation, Stripe selection, live keys and non-official Stripe API endpoints.
+credentials. The Stripe adapter uses Stripe's HTTPS API directly in explicit `test`
+or `live` mode. Production permits billing only with `stripe` plus `live`; local/CI
+deterministic billing remains `test` only. Secret-key prefixes, webhook event/object
+`livemode`, event API version and the official Stripe API origin must agree with the
+selected mode. Account, subscription, invoice, operation and receipt queries include
+provider mode, so a test object cannot satisfy live authority or block a live-mode
+checkout.
 
-Provider price identifiers live only in environment configuration. On first use the
-Stripe adapter retrieves each price and verifies active state, AUD currency, amount,
-recurrence interval and term against the WO-047 catalogue before opening checkout.
-No Stripe account was created or changed and no network smoke test was performed,
-because no owner-approved test account credentials were available.
+Provider price identifiers live only in environment configuration. Production
+preflight retrieves all six configured Prices and verifies exact identifier, active
+state, AUD currency, amount, recurrence interval/count and the immutable plan-version
+metadata before billing can be enabled. Checkout independently repeats verification
+for its server-selected Price. The browser never supplies a Price ID.
+
+| Plan version | Interval | Exact authority | Required Price metadata |
+| --- | --- | ---: | --- |
+| Core v1 `ee299a7d-3f12-5845-847e-3425f78ed6f2` | monthly | AUD 200 | `oryntela_plan_version_id=ee299a7d-3f12-5845-847e-3425f78ed6f2` |
+| Core v1 `ee299a7d-3f12-5845-847e-3425f78ed6f2` | annual | AUD 2,000 | same Core v1 UUID |
+| Growth v1 `2d8aa6a4-30aa-52e8-8273-3859210a8406` | monthly | AUD 350 | `oryntela_plan_version_id=2d8aa6a4-30aa-52e8-8273-3859210a8406` |
+| Growth v1 `2d8aa6a4-30aa-52e8-8273-3859210a8406` | annual | AUD 3,500 | same Growth v1 UUID |
+| Complete v1 `43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` | monthly | AUD 500 | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
+| Complete v1 `43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` | annual | AUD 5,000 | same Complete v1 UUID |
+
+No Stripe account, Product, Price, webhook, portal configuration, customer or charge
+was created by WO-054B, and no Stripe network smoke was performed.
 
 ## Tenant-owned model
 
 - `billing_accounts` owns the unique organisation-to-provider customer mapping.
 - `billing_subscriptions` stores the bounded status, plan-version reference,
-  interval, current paid period, scheduled cancellation or next-renewal change,
-  provider timestamps and reconciliation state.
+  interval, provider service period, independently confirmed paid period/paid-through
+  boundary, payment state, scheduled cancellation or next-renewal change, provider
+  timestamps and reconciliation state.
 - `billing_invoice_projections` stores invoice date, AUD amounts, optional
   provider-reported tax total, bounded status and validated provider-hosted links
   only. It does not label that total as GST or decide inclusive/exclusive treatment.
 - `billing_operations` gives checkout, portal, cancellation, reactivation, plan
-  change and future Credit-purchase preparation stable idempotency and safe audit.
+  change and future Credit-purchase preparation mode-scoped stable idempotency and
+  safe audit.
 - `billing_provider_event_receipts` stores immutable event identity/type, provider
   time and result without retaining the webhook body or related payment objects.
 
@@ -75,7 +92,7 @@ cannot map to two organisations. Billing history uses restrictive organisation
 foreign keys: offboarding refuses blind deletion until an approved statutory
 retention/disposal policy is supplied.
 
-Export schema v32 includes safe account, subscription, invoice, operation and event
+Export schema v38 includes safe account, subscription, invoice, operation and event
 projections. It deliberately omits provider customer/subscription/invoice/event
 identifiers, idempotency keys, hosted links, webhook bodies and payment credentials.
 
@@ -105,8 +122,9 @@ provider fact has been reconciled.
 
 The webhook route is intentionally outside user authentication and instead requires
 the selected provider's signature. The deterministic provider uses an HMAC signature;
-Stripe uses the timestamped `Stripe-Signature` HMAC with a bounded replay window.
-Invalid, oversized or wrong-provider requests fail before domain mutation.
+Stripe uses the mode-specific `API_STRIPE_WEBHOOK_SECRET` and timestamped
+`Stripe-Signature` HMAC with a bounded replay window. Invalid, stale, oversized,
+wrong-mode, wrong-version or wrong-provider requests fail before domain mutation.
 
 Reconciliation follows these rules:
 
@@ -114,18 +132,19 @@ Reconciliation follows these rules:
 2. resolve the server-owned customer mapping;
 3. for checkout completion, verify the stored checkout operation and retrieve the
    current checkout object;
-4. retrieve the current provider subscription/invoice instead of trusting event
-   metadata as entitlement authority;
+4. retrieve the current provider subscription and its current latest invoice instead
+   of trusting event metadata as entitlement authority;
 5. translate the provider price back to exactly one canonical plan/interval;
 6. apply billing and commercial changes with the immutable event receipt in one
    transaction.
 
 Duplicate event identifiers return the stored result and have no second commercial
-effect. Provider retrieval makes delayed updates converge on current state. A
-terminal cancellation is not overwritten by a stale active update. Ambiguous or
-unmapped events are recorded for reconciliation and cannot grant an entitlement.
-Logs contain safe event/result identifiers only, not webhook payloads or payment
-data.
+effect. Provider retrieval makes delayed updates converge on current state. A stale
+provider timestamp cannot overwrite newer state, and an old paid invoice cannot move
+the paid-through boundary when it is no longer the subscription's latest invoice.
+Ambiguous or unmapped events are recorded for reconciliation and cannot grant an
+entitlement. Logs contain safe event/result identifiers only, not webhook payloads or
+payment data.
 
 ## Subscription policy
 
@@ -133,7 +152,10 @@ The provider-neutral states are `pending`, `active`, `past_due`,
 `cancel_at_period_end`, `cancelled`, `unpaid`, `incomplete` and
 `unknown_reconciliation`.
 
-- Active verified subscription facts activate the matching WO-047 plan once.
+- Active/cancel-at-period-end status activates the matching WO-047 plan only when the
+  current latest invoice is verified paid and its Stripe-supplied item service period
+  establishes a future `paid_through`. Checkout completion or its success redirect
+  alone never grants access.
 - `past_due` is the bounded payment-recovery state. It marks payment as needing
   attention, preserves existing access and data, and offers the hosted resolution
   path while the provider runs its configured retry policy. Oryntela does not
@@ -183,29 +205,42 @@ There is still no public purchase endpoint, live provider product mapping, produ
 price/pack, live payment or real sale. All Credit semantics belong to
 [Credits and variable-cost controls](credits-variable-cost-controls.md).
 
-## Pre-live decisions and proof
+## Production configuration and blocked activation
 
-Live billing must remain disabled until a separately authorised work order completes
-all applicable items:
+The checked-in production template remains deliberately inactive. A live target must
+set `API_FEATURE_BILLING_ENABLED=true`, `API_BILLING_PROVIDER_NAME=stripe` and
+`API_BILLING_MODE=live`, safe success/cancel/portal-return URLs, an `sk_live_` value in
+`API_STRIPE_SECRET_KEY`, the endpoint's `whsec_` value in
+`API_STRIPE_WEBHOOK_SECRET`, an active live `bpc_` value in
+`API_STRIPE_PORTAL_CONFIGURATION_ID`, and the six `API_STRIPE_PRICE_*` mappings.
+`API_STRIPE_API_VERSION` remains exactly `2026-02-25.clover` and the API origin remains
+`https://api.stripe.com`.
 
-- owner/accounting approval of GST-inclusive versus +GST presentation, tax-invoice
-  wording and any Stripe Tax configuration;
-- production proof of the approved immediate-upgrade/provider-proration and
-  next-renewal downgrade policy, plus owner approval of exact provider retry/dunning
-  settings, refunds, discounts, public prices and customer terms;
-- approved billing-history statutory retention, export and disposal procedure;
-- Stripe account ownership, commercial terms, business verification, bank/payout
-  details, test/live product and price configuration, portal policy and production
-  webhook setup;
-- production secret management, key rotation, alerting, reconciliation/support
-  runbook and target-environment proof; and
-- authorised live-mode integration tests covering tax, invoice, payment failure,
-  cancellation, refunds and recovery without customer data.
+GST remains unresolved. `API_BILLING_TAX_TREATMENT` must stay `unresolved` and the
+billing flag must stay false until the owner/accounting decision supplies either
+`inclusive` or `exclusive` plus a durable `API_BILLING_TAX_POLICY_REFERENCE`. This
+engineering work does not choose tax wording or activate Stripe Tax.
 
-The Stripe REST contract is pinned to `2026-02-25.clover`; test webhook endpoints
-must emit that version. This avoids silently inheriting an account default and reads
-the current paid period from subscription items. WO-048 used deterministic fixtures
-only, no customer data, no live provider action, no real charge and AUD $0 spend.
+The exact live webhook URL is
+`https://api.oryntela.com.au/api/v1/billing/webhooks/stripe`. Subscribe only to
+`checkout.session.completed`, `customer.subscription.updated`,
+`customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`,
+`invoice.finalized`, `invoice.voided` and `invoice.marked_uncollectible`, pinned to the
+same API version. Portal configuration is a separate live object; start with invoice
+history, billing details and payment-method updates, keep plan switching and promotion
+codes off, and use the configured return URL. Both remain external owner actions.
+
+The adapter is direct REST over `httpx`; there is no Stripe SDK dependency to upgrade.
+The pinned REST contract was reverified against Stripe's current Clover changelog.
+Subscription periods come from `subscription.items.data[]`, invoice subscription
+identity comes from `invoice.parent.subscription_details.subscription`, and live/test
+authority comes from Stripe's `livemode` field.
+
+Live billing must remain disabled until GST, legal terms, retention, the Stripe
+account and live catalogue, portal policy, webhook, secret management, monitoring,
+external preflight and a separately authorised synthetic/minimum live smoke have all
+passed. No customer data, raw card data, provider action, charge or spend was used in
+WO-054B.
 
 ## Provider references
 

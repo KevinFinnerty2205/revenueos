@@ -3,7 +3,7 @@ import binascii
 import re
 import ssl
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, cast
 from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
@@ -74,7 +74,9 @@ class Settings(BaseSettings):
     apollo_read_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
     apollo_max_response_bytes: int = Field(default=1_000_000, ge=10_000, le=5_000_000)
     billing_provider_name: BillingProviderName = "deterministic"
-    billing_mode: Literal["test"] = "test"
+    billing_mode: Literal["test", "live"] = "test"
+    billing_tax_treatment: Literal["unresolved", "inclusive", "exclusive"] = "unresolved"
+    billing_tax_policy_reference: str | None = Field(default=None, min_length=3, max_length=200)
     billing_webhook_secret: SecretStr = Field(
         default=SecretStr("local-development-billing-webhook-key"),
         min_length=24,
@@ -83,6 +85,13 @@ class Settings(BaseSettings):
     billing_cancel_url: str = "http://localhost:3000/settings"
     billing_portal_return_url: str = "http://localhost:3000/settings"
     stripe_secret_key: SecretStr | None = None
+    stripe_webhook_secret: SecretStr | None = None
+    stripe_portal_configuration_id: str | None = Field(
+        default=None,
+        min_length=7,
+        max_length=255,
+        pattern=r"^bpc_[A-Za-z0-9]+$",
+    )
     stripe_api_base_url: str = "https://api.stripe.com"
     stripe_api_version: Literal["2026-02-25.clover"] = "2026-02-25.clover"
     stripe_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
@@ -466,12 +475,15 @@ class Settings(BaseSettings):
         "visual_s3_access_key_id",
         "visual_s3_secret_access_key",
         "stripe_secret_key",
+        "stripe_webhook_secret",
+        "stripe_portal_configuration_id",
         "stripe_price_core_monthly",
         "stripe_price_core_annual",
         "stripe_price_growth_monthly",
         "stripe_price_growth_annual",
         "stripe_price_complete_monthly",
         "stripe_price_complete_annual",
+        "billing_tax_policy_reference",
         "credits_margin_policy_reference",
         "prospect_provider_health_reference",
         "prospect_provider_cost_model_reference",
@@ -562,19 +574,22 @@ class Settings(BaseSettings):
                 )
             ):
                 raise ValueError("Production allowed hosts must be explicit.")
-            if self.feature_billing_enabled or self.billing_provider_name == "stripe":
-                raise ValueError("Live billing is not authorised; billing providers are test-mode only.")
+            if self.feature_billing_enabled and (self.billing_provider_name != "stripe" or self.billing_mode != "live"):
+                raise ValueError("Production billing requires the Stripe provider in explicit live mode.")
             if self.feature_credits_enabled:
                 raise ValueError("Production Credit execution is not authorised; production prices are absent.")
-            if self.stripe_secret_key is not None:
-                raise ValueError("Stripe credentials are prohibited in production until live billing is authorised.")
+        if self.billing_mode == "live" and (self.environment != "production" or self.billing_provider_name != "stripe"):
+            raise ValueError("Live billing mode is restricted to the Stripe provider in production.")
+        if self.environment == "production" and self.stripe_secret_key is not None and self.billing_mode != "live":
+            raise ValueError("Production Stripe credentials require explicit live billing mode.")
+        if self.billing_provider_name == "deterministic" and self.billing_mode != "test":
+            raise ValueError("The deterministic billing provider is test-mode only.")
         if self.stripe_secret_key is not None:
             stripe_key = self.stripe_secret_key.get_secret_value()
-            if stripe_key.startswith("sk_live_"):
-                raise ValueError("Live Stripe credentials are prohibited.")
-            if not stripe_key.startswith("sk_test_"):
-                raise ValueError("Stripe test mode requires an sk_test_ secret key.")
-        if self.feature_billing_enabled:
+            expected_prefix = "sk_live_" if self.billing_mode == "live" else "sk_test_"
+            if not stripe_key.startswith(expected_prefix):
+                raise ValueError(f"Stripe {self.billing_mode} mode requires an {expected_prefix} secret key.")
+        if self.feature_billing_enabled or self.billing_provider_name == "stripe":
             if not self._is_safe_billing_return_url(self.billing_success_url):
                 raise ValueError("Billing success URL must use HTTPS or an exact localhost HTTP origin.")
             if not self._is_safe_billing_return_url(self.billing_cancel_url):
@@ -583,12 +598,26 @@ class Settings(BaseSettings):
                 raise ValueError("Billing portal return URL must use HTTPS or an exact localhost HTTP origin.")
             if self.billing_provider_name == "stripe":
                 if self.stripe_secret_key is None:
-                    raise ValueError("Stripe test billing requires API_STRIPE_SECRET_KEY.")
+                    raise ValueError("Stripe billing requires API_STRIPE_SECRET_KEY.")
+                if self.stripe_webhook_secret is None or not self.stripe_webhook_secret.get_secret_value().startswith(
+                    "whsec_"
+                ):
+                    raise ValueError("Stripe billing requires API_STRIPE_WEBHOOK_SECRET with a whsec_ value.")
                 price_ids = self.stripe_price_identifiers
                 if any(value is None or not value.startswith("price_") for value in price_ids.values()):
-                    raise ValueError("Stripe test billing requires all six price_ identifiers.")
+                    raise ValueError("Stripe billing requires all six price_ identifiers.")
+                if len(set(cast(str, value) for value in price_ids.values())) != len(price_ids):
+                    raise ValueError("Stripe billing requires six distinct price_ identifiers.")
                 if self.stripe_api_base_url != "https://api.stripe.com":
                     raise ValueError("Stripe billing must use the official HTTPS API endpoint.")
+                if self.billing_mode == "live":
+                    if self.stripe_portal_configuration_id is None:
+                        raise ValueError("Live Stripe billing requires API_STRIPE_PORTAL_CONFIGURATION_ID.")
+                    if self.billing_tax_treatment == "unresolved" or self.billing_tax_policy_reference is None:
+                        raise ValueError(
+                            "Live Stripe checkout remains blocked until billing tax treatment and its owner-approved "
+                            "policy reference are configured."
+                        )
         if self.prospect_research_provider_name == "apollo":
             if self.apollo_api_base_url != "https://api.apollo.io":
                 raise ValueError("Apollo Prospect research must use the official HTTPS API endpoint.")

@@ -18,7 +18,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from revenueos.auth import AuthenticatedUser, get_current_user
 from revenueos.beta_maintenance import EXPORT_VERSION, _delete_organisation_records, _export_payload
-from revenueos.billing_contracts import BillingOperationRequest, CheckoutCreateRequest, PlanChangeRequest
+from revenueos.billing_contracts import (
+    BillingMode,
+    BillingOperationRequest,
+    BillingProviderName,
+    CheckoutCreateRequest,
+    PlanChangeRequest,
+)
 from revenueos.billing_provider import (
     DeterministicBillingProvider,
     ProviderCheckout,
@@ -26,9 +32,9 @@ from revenueos.billing_provider import (
     ProviderPlanChangeResult,
     ProviderPriceReference,
     ProviderSubscriptionSnapshot,
-    StripeTestBillingProvider,
+    StripeBillingProvider,
 )
-from revenueos.billing_services import BillingService
+from revenueos.billing_services import BillingService, authoritative_provider_prices
 from revenueos.commercial_contracts import BillingInterval, PlanCode
 from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
@@ -36,6 +42,7 @@ from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
 from revenueos.main import create_app
 from revenueos.models import (
+    BillingInvoiceProjection,
     BillingOperation,
     BillingProviderEventReceipt,
     BillingSubscription,
@@ -47,6 +54,9 @@ from revenueos.models import (
 from tests.conftest import PRIMARY_ORGANISATION_ID, PRIMARY_USER_ID, SECONDARY_ORGANISATION_ID, TEST_DB_URL
 
 WEBHOOK_SECRET = "test-billing-webhook-secret-0001"
+STRIPE_WEBHOOK_SECRET = "whsec_synthetic_test_webhook_secret_0001"
+CORE_PLAN_ID = UUID("ee299a7d-3f12-5845-847e-3425f78ed6f2")
+GROWTH_PLAN_ID = UUID("2d8aa6a4-30aa-52e8-8273-3859210a8406")
 
 
 class TimeoutOnceBillingProvider(DeterministicBillingProvider):
@@ -76,6 +86,13 @@ class TimeoutOnceBillingProvider(DeterministicBillingProvider):
                 503,
             )
         return result
+
+
+class LiveFixtureBillingProvider(DeterministicBillingProvider):
+    """Network-free fixture used only to prove durable mode partitioning."""
+
+    name: BillingProviderName = "stripe"
+    mode: BillingMode = "live"
 
 
 class TimeoutOncePlanUpgradeProvider(DeterministicBillingProvider):
@@ -172,6 +189,48 @@ def billing_settings() -> Settings:
         billing_provider_name="deterministic",
         billing_webhook_secret=WEBHOOK_SECRET,
     )
+
+
+def live_stripe_settings(**changes: object) -> Settings:
+    values: dict[str, object] = {
+        "environment": "production",
+        "auth_mode": "clerk",
+        "mock_auth_enabled": False,
+        "identity_jit_provisioning_enabled": False,
+        "clerk_jwks_url": "https://identity.example.test/jwks",
+        "clerk_issuer": "https://identity.example.test",
+        "clerk_audience": "revenueos-api",
+        "database_url": "postgresql+asyncpg://runtime.example.test/revenueos",
+        "release_sha": "a" * 40,
+        "database_tls_mode": "verify_full_system",
+        "cors_origins": "https://app.example.test",
+        "allowed_hosts": "api.example.test",
+        "feature_engage_enabled": False,
+        "feature_visual_evidence_enabled": False,
+        "feature_online_meeting_capture_enabled": False,
+        "feature_online_meeting_import_enabled": False,
+        "feature_document_evidence_enabled": False,
+        "feature_create_enabled": False,
+        "feature_billing_enabled": True,
+        "billing_provider_name": "stripe",
+        "billing_mode": "live",
+        "billing_tax_treatment": "inclusive",
+        "billing_tax_policy_reference": "synthetic-owner-decision-for-tests",
+        "billing_success_url": "https://app.example.test/billing/success",
+        "billing_cancel_url": "https://app.example.test/settings",
+        "billing_portal_return_url": "https://app.example.test/settings",
+        "stripe_secret_key": "sk_live_synthetic_never_sent_wo054b",
+        "stripe_webhook_secret": "whsec_synthetic_live_never_sent_wo054b",
+        "stripe_portal_configuration_id": "bpc_syntheticlive",
+        "stripe_price_core_monthly": "price_live_core_monthly",
+        "stripe_price_core_annual": "price_live_core_annual",
+        "stripe_price_growth_monthly": "price_live_growth_monthly",
+        "stripe_price_growth_annual": "price_live_growth_annual",
+        "stripe_price_complete_monthly": "price_live_complete_monthly",
+        "stripe_price_complete_annual": "price_live_complete_annual",
+    }
+    values.update(changes)
+    return Settings(**values)  # type: ignore[arg-type]
 
 
 def signed_event(
@@ -444,7 +503,7 @@ def test_verified_webhooks_trial_conversion_duplicates_failures_invoice_and_out_
                 assert failed_projection.subscription is not None
                 assert failed_projection.subscription.status == "past_due"
                 assert failed_projection.subscription.payment_needs_attention is True
-                assert len(failed_projection.invoices) == 1
+                assert len(failed_projection.invoices) == 2
                 commercial_state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
                 assert commercial_state is not None and commercial_state.status == "active"
 
@@ -468,19 +527,53 @@ def test_verified_webhooks_trial_conversion_duplicates_failures_invoice_and_out_
                 organisation = await session.get(Organisation, PRIMARY_ORGANISATION_ID)
                 assert organisation is not None and organisation.name == "Example Revenue Team"
 
-                provider.set_subscription_status(subscription_snapshot.identifier, "active")
+                recovered_snapshot = provider.set_subscription_status(subscription_snapshot.identifier, "active")
+                provider.add_invoice(
+                    ProviderInvoiceSnapshot(
+                        identifier="in_recovered_001",
+                        customer_identifier=provider_checkout.customer_identifier,
+                        subscription_identifier=subscription_snapshot.identifier,
+                        invoice_date=start + timedelta(days=23),
+                        amount_due=Decimal("2000.00"),
+                        amount_paid=Decimal("2000.00"),
+                        tax_amount=None,
+                        currency="AUD",
+                        status="paid",
+                        hosted_invoice_url="https://invoice.stripe.test/i/in_recovered_001",
+                        receipt_url=None,
+                        provider_updated_at=start + timedelta(days=23),
+                    )
+                )
                 recovered_payload, recovered_signature = signed_event(
                     event_id="evt_payment_recovered_001",
-                    event_type="customer.subscription.updated",
+                    event_type="invoice.paid",
                     organisation_id=PRIMARY_ORGANISATION_ID,
                     customer_id=provider_checkout.customer_identifier,
-                    subscription_id=subscription_snapshot.identifier,
-                    object_id=subscription_snapshot.identifier,
+                    subscription_id=recovered_snapshot.identifier,
+                    invoice_id="in_recovered_001",
+                    object_id="in_recovered_001",
                     created=start + timedelta(days=23),
                 )
                 assert await service.process_webhook(recovered_payload, recovered_signature) == "processed"
                 recovered_state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
                 assert recovered_state is not None and recovered_state.status == "active"
+
+                delayed_failure_payload, delayed_failure_signature = signed_event(
+                    event_id="evt_delayed_old_payment_failure_001",
+                    event_type="invoice.payment_failed",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=provider_checkout.customer_identifier,
+                    subscription_id=subscription_snapshot.identifier,
+                    invoice_id="in_failed_001",
+                    object_id="in_failed_001",
+                    created=start + timedelta(days=21),
+                )
+                assert await service.process_webhook(delayed_failure_payload, delayed_failure_signature) == "processed"
+                still_paid = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert still_paid.subscription is not None
+                assert still_paid.subscription.payment_status == "paid"
+                assert still_paid.subscription.paid_through is not None
+                assert still_paid.subscription.paid_through.replace(tzinfo=UTC) == start + timedelta(days=385)
 
                 provider.set_subscription_status(
                     subscription_snapshot.identifier,
@@ -508,7 +601,7 @@ def test_verified_webhooks_trial_conversion_duplicates_failures_invoice_and_out_
                     object_id=subscription_snapshot.identifier,
                     created=start + timedelta(days=30),
                 )
-                assert await service.process_webhook(stale_payload, stale_signature) == "processed"
+                assert await service.process_webhook(stale_payload, stale_signature) == "ignored_stale"
                 still_cancelled = await service.projection(PRIMARY_ORGANISATION_ID)
                 assert still_cancelled.subscription is not None
                 assert still_cancelled.subscription.status == "cancelled"
@@ -778,18 +871,35 @@ def test_cancel_reactivate_and_next_renewal_downgrade_are_idempotent() -> None:
                     ),
                 )
 
-                provider.renew_with_scheduled_plan(
+                renewal_snapshot = provider.renew_with_scheduled_plan(
                     snapshot.identifier,
                     period_start=start + timedelta(days=28),
                     period_end=start + timedelta(days=393),
                 )
+                provider.add_invoice(
+                    ProviderInvoiceSnapshot(
+                        identifier="in_renewal_growth_001",
+                        customer_identifier=snapshot.customer_identifier,
+                        subscription_identifier=snapshot.identifier,
+                        invoice_date=start + timedelta(days=28),
+                        amount_due=Decimal("3500.00"),
+                        amount_paid=Decimal("3500.00"),
+                        tax_amount=None,
+                        currency="AUD",
+                        status="paid",
+                        hosted_invoice_url="https://invoice.stripe.test/i/in_renewal_growth_001",
+                        receipt_url=None,
+                        provider_updated_at=start + timedelta(days=28),
+                    )
+                )
                 renewal_payload, renewal_signature = signed_event(
                     event_id="evt_renewal_growth_001",
-                    event_type="customer.subscription.updated",
+                    event_type="invoice.paid",
                     organisation_id=PRIMARY_ORGANISATION_ID,
                     customer_id=snapshot.customer_identifier,
-                    subscription_id=snapshot.identifier,
-                    object_id=snapshot.identifier,
+                    subscription_id=renewal_snapshot.identifier,
+                    invoice_id="in_renewal_growth_001",
+                    object_id="in_renewal_growth_001",
                     created=start + timedelta(days=28),
                 )
                 await service.process_webhook(renewal_payload, renewal_signature)
@@ -862,9 +972,9 @@ def test_higher_tier_upgrade_is_immediate_with_provider_invoice_and_no_client_pr
                 assert upgraded.subscription.plan_code == "growth"
                 assert upgraded.subscription.billing_interval == "monthly"
                 assert upgraded.subscription.pending_plan_code is None
-                assert len(upgraded.invoices) == 1
-                assert upgraded.invoices[0].amount_due == "137.25"
-                assert upgraded.invoices[0].amount_paid == "137.25"
+                assert len(upgraded.invoices) == 2
+                proration = next(invoice for invoice in upgraded.invoices if invoice.amount_due == "137.25")
+                assert proration.amount_paid == "137.25"
                 assert snapshot.identifier not in provider.pending_price_changes
                 commercial_state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
                 assert commercial_state is not None and commercial_state.status == "active"
@@ -949,7 +1059,8 @@ def test_upgrade_with_mismatched_provider_invoice_never_grants_entitlement() -> 
                 projection = await service.projection(PRIMARY_ORGANISATION_ID)
                 assert projection.subscription is not None
                 assert projection.subscription.plan_code == "core"
-                assert projection.invoices == []
+                assert len(projection.invoices) == 1
+                assert projection.invoices[0].amount_due == "200.00"
                 commercial_state = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
                 assert commercial_state is not None and commercial_state.status == "active"
                 commercial_plan = await session.get(CommercialPlanVersion, commercial_state.plan_version_id)
@@ -1167,11 +1278,35 @@ def test_billing_export_is_safe_and_offboarding_refuses_blind_history_deletion()
                         idempotency_key="safe-export-checkout-0001",
                     ),
                 )
+                operation = await session.get(BillingOperation, checkout.operation_id)
+                assert operation is not None and operation.provider_object_id is not None
+                provider_checkout = await provider.retrieve_checkout(operation.provider_object_id)
+                period_start = datetime.now(UTC)
+                snapshot = provider.complete_checkout(
+                    provider_checkout.identifier,
+                    period_start=period_start,
+                    period_end=period_start + timedelta(days=30),
+                )
+                payload, signature = signed_event(
+                    event_id="evt_safe_export_001",
+                    event_type="checkout.session.completed",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=snapshot.customer_identifier,
+                    subscription_id=snapshot.identifier,
+                    object_id=provider_checkout.identifier,
+                    created=period_start,
+                )
+                assert await service.process_webhook(payload, signature) == "processed"
                 exported = await _export_payload(session, PRIMARY_ORGANISATION_ID, settings)
-                assert exported["exportVersion"] == EXPORT_VERSION == 37
+                assert exported["exportVersion"] == EXPORT_VERSION == 38
                 billing = exported["billing"]
                 assert isinstance(billing, dict)
                 encoded = json.dumps(billing, default=str)
+                subscriptions = billing["subscriptions"]
+                assert isinstance(subscriptions, list)
+                assert subscriptions[0]["payment_status"] == "paid"
+                assert subscriptions[0]["paid_period_start"] is not None
+                assert subscriptions[0]["paid_through"] is not None
                 assert "provider_customer_id" not in encoded
                 assert "provider_object_id" not in encoded
                 assert "idempotency_key" not in encoded
@@ -1231,9 +1366,9 @@ def test_api_rejects_price_tampering_enterprise_and_non_admin_mutation() -> None
 
 
 def test_test_live_configuration_separation() -> None:
-    with pytest.raises(ValidationError, match="Live Stripe credentials"):
+    with pytest.raises(ValidationError, match="Stripe test mode"):
         Settings(stripe_secret_key="sk_live_not_authorised")
-    with pytest.raises(ValidationError, match="test-mode only"):
+    with pytest.raises(ValidationError, match="Stripe provider in explicit live mode"):
         Settings(
             environment="production",
             auth_mode="clerk",
@@ -1256,7 +1391,7 @@ def test_test_live_configuration_separation() -> None:
         )
     with pytest.raises(ValidationError, match="2026-02-25.clover"):
         Settings(stripe_api_version="2025-03-31.basil")
-    with pytest.raises(ValidationError, match="Stripe credentials are prohibited in production"):
+    with pytest.raises(ValidationError, match="explicit live billing mode"):
         Settings(
             environment="production",
             auth_mode="clerk",
@@ -1279,13 +1414,413 @@ def test_test_live_configuration_separation() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"stripe_secret_key": "sk_test_wrong_mode"}, "Stripe live mode"),
+        ({"stripe_webhook_secret": None}, "API_STRIPE_WEBHOOK_SECRET"),
+        ({"stripe_portal_configuration_id": None}, "API_STRIPE_PORTAL_CONFIGURATION_ID"),
+        ({"billing_tax_treatment": "unresolved"}, "tax treatment"),
+        ({"billing_tax_policy_reference": None}, "policy reference"),
+        ({"stripe_price_complete_annual": "price_live_core_annual"}, "distinct"),
+    ],
+)
+def test_live_stripe_configuration_fails_closed(change: dict[str, object], message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        live_stripe_settings(**change)
+
+
+def test_live_stripe_preflight_verifies_exact_catalogue_and_portal_without_mutation() -> None:
+    async def scenario() -> None:
+        settings = live_stripe_settings()
+        provider = StripeBillingProvider(settings)
+        prices = authoritative_provider_prices(settings)
+        references = {price.identifier: price for price in prices}
+        calls: list[tuple[str, str]] = []
+
+        async def request(
+            method: str,
+            path: str,
+            *,
+            form: list[tuple[str, str]] | None = None,
+            idempotency_key: str | None = None,
+        ) -> dict[str, object]:
+            del form, idempotency_key
+            calls.append((method, path))
+            if path.startswith("/v1/prices/"):
+                reference = references[path.rsplit("/", 1)[-1]]
+                return {
+                    "id": reference.identifier,
+                    "livemode": True,
+                    "active": True,
+                    "currency": "aud",
+                    "unit_amount": reference.amount_minor,
+                    "recurring": {
+                        "interval": "month" if reference.billing_interval == "monthly" else "year",
+                        "interval_count": 1,
+                    },
+                    "metadata": {"oryntela_plan_version_id": str(reference.plan_version_id)},
+                }
+            return {"id": "bpc_syntheticlive", "active": True, "livemode": True}
+
+        provider._request = request  # type: ignore[method-assign]
+        await provider.verify_configuration(prices)
+        assert len(calls) == 7
+        assert all(method == "GET" for method, _ in calls)
+
+        original = references["price_live_core_monthly"]
+        invalid_values = (
+            {"currency": "usd"},
+            {"unit_amount": original.amount_minor - 1},
+            {"recurring": {"interval": "year", "interval_count": 1}},
+            {"livemode": False},
+            {"metadata": {"oryntela_plan_version_id": str(GROWTH_PLAN_ID)}},
+        )
+
+        def invalid_request_for(changed: dict[str, object]) -> object:
+            async def invalid_request(
+                method: str,
+                path: str,
+                *,
+                form: list[tuple[str, str]] | None = None,
+                idempotency_key: str | None = None,
+            ) -> dict[str, object]:
+                del method, path, form, idempotency_key
+                value: dict[str, object] = {
+                    "id": original.identifier,
+                    "livemode": True,
+                    "active": True,
+                    "currency": "aud",
+                    "unit_amount": original.amount_minor,
+                    "recurring": {"interval": "month", "interval_count": 1},
+                    "metadata": {"oryntela_plan_version_id": str(original.plan_version_id)},
+                }
+                value.update(changed)
+                return value
+
+            return invalid_request
+
+        for changed in invalid_values:
+            provider._request = invalid_request_for(changed)  # type: ignore[method-assign,assignment]
+            with pytest.raises(PublicAPIError, match="outside the authorised live mode|temporarily unavailable"):
+                await provider._verify_price(original)
+
+        async def wrong_mode_portal(
+            method: str,
+            path: str,
+            *,
+            form: list[tuple[str, str]] | None = None,
+            idempotency_key: str | None = None,
+        ) -> dict[str, object]:
+            value = await request(method, path, form=form, idempotency_key=idempotency_key)
+            if path.startswith("/v1/billing_portal/configurations/"):
+                value["livemode"] = False
+            return value
+
+        provider._request = wrong_mode_portal  # type: ignore[method-assign]
+        with pytest.raises(PublicAPIError, match="outside the authorised live mode"):
+            await provider.verify_configuration(prices)
+
+    asyncio.run(scenario())
+
+
+def test_live_stripe_webhook_rejects_wrong_secret_version_and_test_objects() -> None:
+    settings = live_stripe_settings()
+    provider = StripeBillingProvider(settings)
+    timestamp = int(time.time())
+    event = {
+        "id": "evt_live_stripe_001",
+        "type": "customer.subscription.updated",
+        "api_version": "2026-02-25.clover",
+        "created": timestamp,
+        "livemode": True,
+        "data": {
+            "object": {
+                "id": "sub_live_001",
+                "customer": "cus_live_001",
+                "livemode": True,
+                "metadata": {"oryntela_organisation_id": str(PRIMARY_ORGANISATION_ID)},
+            }
+        },
+    }
+
+    def signed(value: dict[str, object], secret: str = "whsec_synthetic_live_never_sent_wo054b") -> tuple[bytes, str]:
+        payload = json.dumps(value, separators=(",", ":")).encode()
+        digest = hmac.new(secret.encode(), f"{timestamp}.".encode() + payload, hashlib.sha256).hexdigest()
+        return payload, f"t={timestamp},v1={digest}"
+
+    payload, signature = signed(event)
+    verified = asyncio.run(provider.verify_webhook(payload, signature))
+    assert verified.subscription_identifier == "sub_live_001"
+
+    _, wrong_signature = signed(event, "whsec_wrong_synthetic_secret")
+    with pytest.raises(PublicAPIError, match="signature"):
+        asyncio.run(provider.verify_webhook(payload, wrong_signature))
+
+    wrong_version = dict(event, api_version="2025-03-31.basil")
+    wrong_version_payload, wrong_version_signature = signed(wrong_version)
+    with pytest.raises(PublicAPIError, match="content is invalid"):
+        asyncio.run(provider.verify_webhook(wrong_version_payload, wrong_version_signature))
+
+    test_event = dict(event, livemode=False)
+    test_payload, test_signature = signed(test_event)
+    with pytest.raises(PublicAPIError, match="outside the authorised live mode"):
+        asyncio.run(provider.verify_webhook(test_payload, test_signature))
+
+
+def test_live_stripe_kill_switch_stops_mutations_but_keeps_verified_reconciliation_path() -> None:
+    async def scenario() -> None:
+        settings = live_stripe_settings(feature_billing_enabled=False)
+        provider = StripeBillingProvider(settings)
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                service = BillingService(session, settings, provider)
+                with pytest.raises(PublicAPIError, match="signature"):
+                    await service.process_webhook(b"{}", None)
+                with pytest.raises(PublicAPIError, match="not enabled"):
+                    await service.create_portal(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        BillingOperationRequest(idempotency_key="disabled-live-portal-0001"),
+                    )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_live_portal_uses_the_mode_specific_configuration_and_stable_key() -> None:
+    async def scenario() -> None:
+        provider = StripeBillingProvider(live_stripe_settings())
+        captured: list[tuple[list[tuple[str, str]], str | None]] = []
+
+        async def request(
+            method: str,
+            path: str,
+            *,
+            form: list[tuple[str, str]] | None = None,
+            idempotency_key: str | None = None,
+        ) -> dict[str, object]:
+            assert method == "POST"
+            assert path == "/v1/billing_portal/sessions"
+            captured.append((form or [], idempotency_key))
+            return {
+                "id": "bps_live_001",
+                "livemode": True,
+                "url": "https://billing.stripe.com/p/session/live_synthetic",
+            }
+
+        provider._request = request  # type: ignore[method-assign]
+        url = await provider.create_portal("cus_live_001", idempotency_key="portal-stable-live-0001")
+        assert url == "https://billing.stripe.com/p/session/live_synthetic"
+        assert ("configuration", "bpc_syntheticlive") in captured[0][0]
+        assert captured[0][1] == "portal-stable-live-0001"
+
+    asyncio.run(scenario())
+
+
+def test_completed_checkout_without_current_paid_invoice_grants_no_entitlement() -> None:
+    async def scenario() -> None:
+        settings = billing_settings()
+        provider = DeterministicBillingProvider(settings)
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        observed = datetime(2035, 1, 1, tzinfo=UTC)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = BillingService(session, settings, provider, now=lambda: observed)
+                checkout = await service.create_checkout(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    CheckoutCreateRequest(
+                        plan_code="core",
+                        billing_interval="monthly",
+                        idempotency_key="pending-payment-checkout-0001",
+                    ),
+                )
+                operation = await session.get(BillingOperation, checkout.operation_id)
+                assert operation is not None and operation.provider_object_id is not None
+                provider_checkout = await provider.retrieve_checkout(operation.provider_object_id)
+                assert provider_checkout.subscription_identifier is not None
+                provider.checkouts[provider_checkout.identifier] = replace(
+                    provider_checkout, status="complete", payment_status="unpaid"
+                )
+                current = provider.subscriptions[provider_checkout.subscription_identifier]
+                provider.subscriptions[current.identifier] = replace(
+                    current,
+                    status="active",
+                    current_period_start=observed,
+                    current_period_end=observed + timedelta(days=31),
+                    provider_updated_at=observed,
+                )
+                provider.add_invoice(
+                    ProviderInvoiceSnapshot(
+                        identifier="in_test_pending_checkout_001",
+                        customer_identifier=provider_checkout.customer_identifier,
+                        subscription_identifier=current.identifier,
+                        invoice_date=observed,
+                        amount_due=Decimal("200.00"),
+                        amount_paid=Decimal("0.00"),
+                        tax_amount=None,
+                        currency="AUD",
+                        status="open",
+                        hosted_invoice_url=None,
+                        receipt_url=None,
+                        provider_updated_at=observed,
+                    )
+                )
+                payload, signature = signed_event(
+                    event_id="evt_pending_checkout_001",
+                    event_type="checkout.session.completed",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=provider_checkout.customer_identifier,
+                    subscription_id=current.identifier,
+                    object_id=provider_checkout.identifier,
+                    created=observed,
+                )
+                assert await service.process_webhook(payload, signature) == "processed"
+                status = await service.success_status(PRIMARY_ORGANISATION_ID)
+                assert status.confirmed is False
+                projection = await service.projection(PRIMARY_ORGANISATION_ID)
+                assert projection.subscription is not None
+                assert projection.subscription.payment_status == "pending"
+                assert projection.subscription.paid_through is None
+                commercial = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
+                assert commercial is not None and commercial.source == "migration"
+                with pytest.raises(PublicAPIError, match="active paid subscription"):
+                    await service.change_plan(
+                        PRIMARY_ORGANISATION_ID,
+                        PRIMARY_USER_ID,
+                        PlanChangeRequest(
+                            plan_code="growth",
+                            billing_interval="monthly",
+                            idempotency_key="pending-payment-plan-change-0001",
+                        ),
+                    )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_durable_test_and_live_billing_authority_never_crosses_modes() -> None:
+    async def scenario() -> None:
+        settings = billing_settings()
+        test_provider = DeterministicBillingProvider(settings)
+        live_provider = LiveFixtureBillingProvider(settings)
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        observed = datetime(2035, 2, 1, tzinfo=UTC)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                test_service = BillingService(session, settings, test_provider, now=lambda: observed)
+                live_service = BillingService(session, settings, live_provider, now=lambda: observed)
+                test_checkout = await test_service.create_checkout(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    CheckoutCreateRequest(
+                        plan_code="core",
+                        billing_interval="monthly",
+                        idempotency_key="same-key-separate-mode-0001",
+                    ),
+                )
+                test_operation = await session.get(BillingOperation, test_checkout.operation_id)
+                assert test_operation is not None and test_operation.provider_object_id is not None
+                test_provider_checkout = await test_provider.retrieve_checkout(test_operation.provider_object_id)
+                test_snapshot = test_provider.complete_checkout(
+                    test_provider_checkout.identifier,
+                    period_start=observed,
+                    period_end=observed + timedelta(days=31),
+                )
+                test_payload, test_signature = signed_event(
+                    event_id="evt_same-id-separate-mode_001",
+                    event_type="checkout.session.completed",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=test_snapshot.customer_identifier,
+                    subscription_id=test_snapshot.identifier,
+                    object_id=test_provider_checkout.identifier,
+                    created=observed,
+                )
+                assert await test_service.process_webhook(test_payload, test_signature) == "processed"
+                live_checkout = await live_service.create_checkout(
+                    PRIMARY_ORGANISATION_ID,
+                    PRIMARY_USER_ID,
+                    CheckoutCreateRequest(
+                        plan_code="growth",
+                        billing_interval="annual",
+                        idempotency_key="same-key-separate-mode-0001",
+                    ),
+                )
+                operation = await session.get(BillingOperation, live_checkout.operation_id)
+                assert operation is not None and operation.provider_object_id is not None
+                provider_checkout = await live_provider.retrieve_checkout(operation.provider_object_id)
+                live_snapshot = live_provider.complete_checkout(
+                    provider_checkout.identifier,
+                    period_start=observed,
+                    period_end=observed + timedelta(days=365),
+                )
+                payload, signature = signed_event(
+                    event_id="evt_same-id-separate-mode_001",
+                    event_type="checkout.session.completed",
+                    organisation_id=PRIMARY_ORGANISATION_ID,
+                    customer_id=live_snapshot.customer_identifier,
+                    subscription_id=live_snapshot.identifier,
+                    object_id=provider_checkout.identifier,
+                    created=observed,
+                )
+                assert await live_service.process_webhook(payload, signature) == "processed"
+                test_projection = await test_service.projection(PRIMARY_ORGANISATION_ID)
+                assert test_projection.subscription is not None
+                assert test_projection.subscription.plan_code == "core"
+                assert len(test_projection.invoices) == 1
+                live_projection = await live_service.projection(PRIMARY_ORGANISATION_ID)
+                assert live_projection.mode == "live"
+                assert live_projection.subscription is not None
+                assert live_projection.subscription.plan_code == "growth"
+                assert len(live_projection.invoices) == 1
+                modes = list(
+                    await session.scalars(
+                        select(BillingOperation.provider_mode)
+                        .where(BillingOperation.organisation_id == PRIMARY_ORGANISATION_ID)
+                        .order_by(BillingOperation.provider_mode)
+                    )
+                )
+                assert modes == ["live", "test"]
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(BillingInvoiceProjection)
+                        .where(
+                            BillingInvoiceProjection.organisation_id == PRIMARY_ORGANISATION_ID,
+                        )
+                    )
+                    == 2
+                )
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(BillingProviderEventReceipt)
+                        .where(
+                            BillingProviderEventReceipt.organisation_id == PRIMARY_ORGANISATION_ID,
+                            BillingProviderEventReceipt.provider_event_id == "evt_same-id-separate-mode_001",
+                        )
+                    )
+                    == 2
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
 def test_stripe_test_adapter_pins_version_item_periods_and_signed_test_events() -> None:
     settings = Settings(
         environment="test",
         stripe_secret_key="sk_test_synthetic_never_sent_wo048",
-        billing_webhook_secret=WEBHOOK_SECRET,
+        stripe_webhook_secret=STRIPE_WEBHOOK_SECRET,
     )
-    provider = StripeTestBillingProvider(settings)
+    provider = StripeBillingProvider(settings)
     period_start = datetime(2034, 1, 1, tzinfo=UTC)
     period_end = datetime(2034, 2, 1, tzinfo=UTC)
     snapshot = provider._subscription(
@@ -1318,6 +1853,7 @@ def test_stripe_test_adapter_pins_version_item_periods_and_signed_test_events() 
         "type": "customer.subscription.updated",
         "api_version": "2026-02-25.clover",
         "created": timestamp,
+        "livemode": False,
         "data": {
             "object": {
                 "id": "sub_test_001",
@@ -1329,7 +1865,7 @@ def test_stripe_test_adapter_pins_version_item_periods_and_signed_test_events() 
     }
     payload = json.dumps(event, separators=(",", ":")).encode()
     signature = hmac.new(
-        WEBHOOK_SECRET.encode(),
+        STRIPE_WEBHOOK_SECRET.encode(),
         f"{timestamp}.".encode() + payload,
         hashlib.sha256,
     ).hexdigest()
@@ -1339,7 +1875,7 @@ def test_stripe_test_adapter_pins_version_item_periods_and_signed_test_events() 
 
     live_payload = payload.replace(b'"livemode":false', b'"livemode":true')
     live_signature = hmac.new(
-        WEBHOOK_SECRET.encode(),
+        STRIPE_WEBHOOK_SECRET.encode(),
         f"{timestamp}.".encode() + live_payload,
         hashlib.sha256,
     ).hexdigest()
@@ -1352,9 +1888,9 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
         settings = Settings(
             environment="test",
             stripe_secret_key="sk_test_synthetic_never_sent_wo048",
-            billing_webhook_secret=WEBHOOK_SECRET,
+            stripe_webhook_secret=STRIPE_WEBHOOK_SECRET,
         )
-        provider = StripeTestBillingProvider(settings)
+        provider = StripeBillingProvider(settings)
         calls: list[tuple[str, str, list[tuple[str, str]], str | None]] = []
         period_start = datetime(2034, 3, 1, tzinfo=UTC)
         period_end = datetime(2034, 4, 1, tzinfo=UTC)
@@ -1396,6 +1932,11 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
                     "currency": "aud",
                     "unit_amount": amount,
                     "recurring": {"interval": "month", "interval_count": 1},
+                    "metadata": {
+                        "oryntela_plan_version_id": str(
+                            GROWTH_PLAN_ID if path.endswith("growth_monthly") else CORE_PLAN_ID
+                        )
+                    },
                 }
             if method == "GET" and path == "/v1/subscriptions/sub_test_change_001":
                 return subscription_data("price_test_core_monthly")
@@ -1425,6 +1966,7 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
                 plan_code="growth",
                 billing_interval="monthly",
                 amount=Decimal("350.00"),
+                plan_version_id=GROWTH_PLAN_ID,
             ),
             idempotency_key="upgrade-provider-proration-0001",
         )
@@ -1448,6 +1990,7 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
                 plan_code="core",
                 billing_interval="monthly",
                 amount=Decimal("200.00"),
+                plan_version_id=CORE_PLAN_ID,
             ),
             idempotency_key="scheduled-provider-downgrade-0001",
         )

@@ -14,7 +14,7 @@ from uuid import UUID
 
 import httpx
 
-from revenueos.billing_contracts import BillingProviderName, BillingSubscriptionStatus, InvoiceStatus
+from revenueos.billing_contracts import BillingMode, BillingProviderName, BillingSubscriptionStatus, InvoiceStatus
 from revenueos.commercial_contracts import BillingInterval, PlanCode
 from revenueos.config import Settings
 from revenueos.errors import PublicAPIError
@@ -26,6 +26,7 @@ class ProviderPriceReference:
     plan_code: PlanCode
     billing_interval: BillingInterval
     amount: Decimal
+    plan_version_id: UUID
     currency: Literal["AUD"] = "AUD"
 
     @property
@@ -54,6 +55,7 @@ class ProviderSubscriptionSnapshot:
     cancel_at_period_end: bool
     ended_at: datetime | None
     provider_updated_at: datetime
+    latest_invoice_identifier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -96,7 +98,9 @@ class VerifiedBillingEvent:
 
 class BillingProvider(Protocol):
     name: BillingProviderName
-    mode: Literal["test"]
+    mode: BillingMode
+
+    async def verify_configuration(self, prices: tuple[ProviderPriceReference, ...]) -> None: ...
 
     async def ensure_customer(self, organisation_id: UUID, *, idempotency_key: str) -> str: ...
 
@@ -163,7 +167,7 @@ class DeterministicBillingProvider:
     """Stateful, network-free test provider used by local development and CI."""
 
     name: BillingProviderName = "deterministic"
-    mode: Literal["test"] = "test"
+    mode: BillingMode = "test"
     _namespace = UUID("45ab7f3c-c853-4cd9-a521-688239bd0174")
 
     def __init__(self, settings: Settings) -> None:
@@ -173,7 +177,11 @@ class DeterministicBillingProvider:
         self.invoices: dict[str, ProviderInvoiceSnapshot] = {}
         self.pending_price_changes: dict[str, str] = {}
         self.plan_change_results: dict[str, ProviderPlanChangeResult] = {}
+        self.subscription_prices: dict[str, ProviderPriceReference] = {}
         self.next_upgrade_invoice_amount: Decimal | None = None
+
+    async def verify_configuration(self, prices: tuple[ProviderPriceReference, ...]) -> None:
+        del prices
 
     async def ensure_customer(self, organisation_id: UUID, *, idempotency_key: str) -> str:
         del idempotency_key
@@ -212,6 +220,7 @@ class DeterministicBillingProvider:
             ended_at=None,
             provider_updated_at=now,
         )
+        self.subscription_prices[subscription_identifier] = price
         return checkout
 
     async def retrieve_checkout(self, identifier: str) -> ProviderCheckout:
@@ -278,10 +287,15 @@ class DeterministicBillingProvider:
                 "billing_plan_change_unavailable", "The plan cannot be changed in its current state.", 409
             )
         now = datetime.now(UTC)
-        updated = replace(current, price_identifier=price.identifier, provider_updated_at=now)
+        invoice_identifier = f"in_test_{uuid.uuid5(self._namespace, idempotency_key).hex}"
+        updated = replace(
+            current,
+            price_identifier=price.identifier,
+            provider_updated_at=now,
+            latest_invoice_identifier=invoice_identifier,
+        )
         self.subscriptions[identifier] = updated
         self.pending_price_changes.pop(identifier, None)
-        invoice_identifier = f"in_test_{uuid.uuid5(self._namespace, idempotency_key).hex}"
         provider_calculated_amount = (
             self.next_upgrade_invoice_amount if self.next_upgrade_invoice_amount is not None else price.amount
         )
@@ -392,20 +406,44 @@ class DeterministicBillingProvider:
     ) -> ProviderSubscriptionSnapshot:
         checkout = self.checkouts[checkout_identifier]
         assert checkout.subscription_identifier is not None
-        self.checkouts[checkout_identifier] = replace(checkout, status="complete")
+        self.checkouts[checkout_identifier] = replace(checkout, status="complete", payment_status="paid")
         current = self.subscriptions[checkout.subscription_identifier]
+        invoice_identifier = f"in_test_{uuid.uuid5(self._namespace, checkout_identifier).hex}"
         updated = replace(
             current,
             status="active",
             current_period_start=period_start,
             current_period_end=period_end,
             provider_updated_at=datetime.now(UTC),
+            latest_invoice_identifier=invoice_identifier,
         )
         self.subscriptions[current.identifier] = updated
+        price = self.subscription_prices[current.identifier]
+        self.invoices[invoice_identifier] = ProviderInvoiceSnapshot(
+            identifier=invoice_identifier,
+            customer_identifier=current.customer_identifier,
+            subscription_identifier=current.identifier,
+            invoice_date=period_start,
+            amount_due=price.amount,
+            amount_paid=price.amount,
+            tax_amount=None,
+            currency="AUD",
+            status="paid",
+            hosted_invoice_url=f"https://invoice.stripe.test/i/{invoice_identifier}",
+            receipt_url=None,
+            provider_updated_at=datetime.now(UTC),
+        )
         return updated
 
     def add_invoice(self, invoice: ProviderInvoiceSnapshot) -> None:
         self.invoices[invoice.identifier] = invoice
+        current = self.subscriptions.get(invoice.subscription_identifier)
+        if current is not None:
+            self.subscriptions[current.identifier] = replace(
+                current,
+                latest_invoice_identifier=invoice.identifier,
+                provider_updated_at=max(current.provider_updated_at, invoice.provider_updated_at),
+            )
 
     def set_subscription_status(
         self,
@@ -446,15 +484,43 @@ class DeterministicBillingProvider:
         return updated
 
 
-class StripeTestBillingProvider:
+class StripeBillingProvider:
     name: BillingProviderName = "stripe"
-    mode: Literal["test"] = "test"
 
     def __init__(self, settings: Settings) -> None:
         if settings.stripe_secret_key is None:
-            raise RuntimeError("Stripe test provider requires validated test credentials.")
+            raise RuntimeError("Stripe provider requires validated credentials.")
+        if settings.stripe_webhook_secret is None:
+            raise RuntimeError("Stripe provider requires a validated webhook secret.")
         self.settings = settings
+        self.mode: BillingMode = settings.billing_mode
         self._secret = settings.stripe_secret_key.get_secret_value()
+        self._webhook_secret = settings.stripe_webhook_secret.get_secret_value()
+
+    async def verify_configuration(self, prices: tuple[ProviderPriceReference, ...]) -> None:
+        if len(prices) != 6 or len({price.identifier for price in prices}) != 6:
+            raise PublicAPIError(
+                "billing_price_mapping_invalid",
+                "The billing catalogue mapping is incomplete.",
+                503,
+            )
+        for price in prices:
+            await self._verify_price(price)
+        configuration_identifier = self.settings.stripe_portal_configuration_id
+        if configuration_identifier is None:
+            raise PublicAPIError(
+                "billing_portal_configuration_missing",
+                "The hosted billing portal is not configured.",
+                503,
+            )
+        configuration = await self._request("GET", f"/v1/billing_portal/configurations/{configuration_identifier}")
+        self._require_mode(configuration)
+        if configuration.get("id") != configuration_identifier or configuration.get("active") is not True:
+            raise PublicAPIError(
+                "billing_portal_configuration_invalid",
+                "The hosted billing portal configuration could not be verified.",
+                503,
+            )
 
     async def _request(
         self,
@@ -502,20 +568,24 @@ class StripeTestBillingProvider:
             form=[("metadata[oryntela_organisation_id]", str(organisation_id))],
             idempotency_key=idempotency_key,
         )
-        _require_stripe_test_object(data)
+        self._require_mode(data)
         return _required_string(data, "id")
 
     async def _verify_price(self, price: ProviderPriceReference) -> None:
         data = await self._request("GET", f"/v1/prices/{price.identifier}")
-        _require_stripe_test_object(data)
+        self._require_mode(data)
         recurring = data.get("recurring")
         interval = recurring.get("interval") if isinstance(recurring, dict) else None
+        metadata = data.get("metadata")
+        plan_version_identifier = metadata.get("oryntela_plan_version_id") if isinstance(metadata, dict) else None
         if (
-            data.get("active") is not True
+            data.get("id") != price.identifier
+            or data.get("active") is not True
             or data.get("currency") != "aud"
             or data.get("unit_amount") != price.amount_minor
             or interval != ("month" if price.billing_interval == "monthly" else "year")
             or (recurring.get("interval_count") if isinstance(recurring, dict) else None) != 1
+            or plan_version_identifier != str(price.plan_version_id)
         ):
             raise PublicAPIError(
                 "billing_price_mapping_invalid",
@@ -547,10 +617,11 @@ class StripeTestBillingProvider:
                 ("metadata[oryntela_plan_code]", price.plan_code),
                 ("metadata[oryntela_billing_interval]", price.billing_interval),
                 ("subscription_data[metadata][oryntela_organisation_id]", str(organisation_id)),
+                ("subscription_data[metadata][oryntela_plan_version_id]", str(price.plan_version_id)),
             ],
             idempotency_key=idempotency_key,
         )
-        _require_stripe_test_object(data)
+        self._require_mode(data)
         subscription = data.get("subscription")
         return ProviderCheckout(
             identifier=_required_string(data, "id"),
@@ -567,7 +638,7 @@ class StripeTestBillingProvider:
 
     async def retrieve_checkout(self, identifier: str) -> ProviderCheckout:
         data = await self._request("GET", f"/v1/checkout/sessions/{identifier}")
-        _require_stripe_test_object(data)
+        self._require_mode(data)
         subscription = data.get("subscription")
         return ProviderCheckout(
             identifier=_required_string(data, "id"),
@@ -590,9 +661,8 @@ class StripeTestBillingProvider:
         data = await self._request("GET", f"/v1/invoices/{identifier}")
         return self._invoice(data, datetime.now(UTC))
 
-    @staticmethod
-    def _invoice(data: dict[str, object], observed_at: datetime) -> ProviderInvoiceSnapshot:
-        _require_stripe_test_object(data)
+    def _invoice(self, data: dict[str, object], observed_at: datetime) -> ProviderInvoiceSnapshot:
+        self._require_mode(data)
         if data.get("currency") != "aud":
             raise PublicAPIError(
                 "billing_invoice_currency_mismatch",
@@ -676,14 +746,15 @@ class StripeTestBillingProvider:
     ) -> ProviderPlanChangeResult:
         await self._verify_price(price)
         current_data = await self._retrieve_subscription_data(identifier)
-        _require_stripe_test_object(current_data)
+        self._require_mode(current_data)
         schedule_identifier = self._subscription_schedule_identifier(current_data)
         if schedule_identifier is not None:
-            await self._request(
+            released_schedule = await self._request(
                 "POST",
                 f"/v1/subscription_schedules/{schedule_identifier}/release",
                 idempotency_key=f"{idempotency_key}:release-schedule",
             )
+            self._require_mode(released_schedule)
         data = await self._request(
             "POST",
             f"/v1/subscriptions/{identifier}",
@@ -727,8 +798,9 @@ class StripeTestBillingProvider:
                 form=[("from_subscription", identifier)],
                 idempotency_key=f"{idempotency_key}:schedule",
             )
+            self._require_mode(schedule)
             schedule_identifier = _required_string(schedule, "id")
-        await self._request(
+        updated_schedule = await self._request(
             "POST",
             f"/v1/subscription_schedules/{schedule_identifier}",
             form=[
@@ -746,20 +818,22 @@ class StripeTestBillingProvider:
             ],
             idempotency_key=f"{idempotency_key}:phases",
         )
+        self._require_mode(updated_schedule)
         return current
 
     async def cancel_scheduled_plan_change(
         self, identifier: str, *, idempotency_key: str
     ) -> ProviderSubscriptionSnapshot:
         current_data = await self._retrieve_subscription_data(identifier)
-        _require_stripe_test_object(current_data)
+        self._require_mode(current_data)
         schedule_identifier = self._subscription_schedule_identifier(current_data)
         if schedule_identifier is not None:
-            await self._request(
+            released_schedule = await self._request(
                 "POST",
                 f"/v1/subscription_schedules/{schedule_identifier}/release",
                 idempotency_key=f"{idempotency_key}:release-schedule",
             )
+            self._require_mode(released_schedule)
             current_data = await self._retrieve_subscription_data(identifier)
         return self._subscription(current_data, datetime.now(UTC))
 
@@ -772,13 +846,16 @@ class StripeTestBillingProvider:
         return ProviderPlanChangeResult(subscription=snapshot, invoice=invoice)
 
     async def create_portal(self, customer_identifier: str, *, idempotency_key: str) -> str:
+        form = [("customer", customer_identifier), ("return_url", self.settings.billing_portal_return_url)]
+        if self.settings.stripe_portal_configuration_id is not None:
+            form.append(("configuration", self.settings.stripe_portal_configuration_id))
         data = await self._request(
             "POST",
             "/v1/billing_portal/sessions",
-            form=[("customer", customer_identifier), ("return_url", self.settings.billing_portal_return_url)],
+            form=form,
             idempotency_key=idempotency_key,
         )
-        _require_stripe_test_object(data)
+        self._require_mode(data)
         return _required_string(data, "url")
 
     async def verify_webhook(self, payload: bytes, signature: str | None) -> VerifiedBillingEvent:
@@ -795,7 +872,7 @@ class StripeTestBillingProvider:
             raise PublicAPIError("billing_webhook_signature_invalid", "Webhook signature is invalid.", 400) from exc
         if abs(int(time.time()) - timestamp) > self.settings.stripe_webhook_tolerance_seconds:
             raise PublicAPIError("billing_webhook_signature_invalid", "Webhook signature is invalid.", 400)
-        secret = self.settings.billing_webhook_secret.get_secret_value().encode("utf-8")
+        secret = self._webhook_secret.encode("utf-8")
         expected = hmac.new(secret, f"{timestamp}.".encode() + payload, hashlib.sha256).hexdigest()
         if not any(hmac.compare_digest(expected, candidate) for candidate in values.get("v1", [])):
             raise PublicAPIError("billing_webhook_signature_invalid", "Webhook signature is invalid.", 400)
@@ -803,15 +880,16 @@ class StripeTestBillingProvider:
             event = cast(dict[str, object], json.loads(payload))
             if event.get("api_version") != self.settings.stripe_api_version:
                 raise ValueError("unexpected Stripe API version")
+            self._require_mode(event)
             data = cast(dict[str, object], event["data"])
             obj = cast(dict[str, object], data["object"])
-            _require_stripe_test_object(obj)
+            self._require_mode(obj)
             customer_identifier = _required_string(obj, "customer")
             metadata = obj.get("metadata")
             organisation_text = metadata.get("oryntela_organisation_id") if isinstance(metadata, dict) else None
             if not isinstance(organisation_text, str):
                 customer = await self._request("GET", f"/v1/customers/{customer_identifier}")
-                _require_stripe_test_object(customer)
+                self._require_mode(customer)
                 customer_metadata = customer.get("metadata")
                 organisation_text = (
                     customer_metadata.get("oryntela_organisation_id") if isinstance(customer_metadata, dict) else None
@@ -864,9 +942,8 @@ class StripeTestBillingProvider:
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise PublicAPIError("billing_webhook_invalid", "Webhook content is invalid.", 400) from exc
 
-    @staticmethod
-    def _subscription(data: dict[str, object], observed_at: datetime) -> ProviderSubscriptionSnapshot:
-        _require_stripe_test_object(data)
+    def _subscription(self, data: dict[str, object], observed_at: datetime) -> ProviderSubscriptionSnapshot:
+        self._require_mode(data)
         items = data.get("items")
         item_data = items.get("data") if isinstance(items, dict) else None
         first = item_data[0] if isinstance(item_data, list) and item_data and isinstance(item_data[0], dict) else {}
@@ -884,6 +961,8 @@ class StripeTestBillingProvider:
         cancel_at_period_end = data.get("cancel_at_period_end") is True
         if cancel_at_period_end and status == "active":
             status = "cancel_at_period_end"
+        latest_invoice = data.get("latest_invoice")
+        latest_invoice_identifier = latest_invoice.get("id") if isinstance(latest_invoice, dict) else latest_invoice
         return ProviderSubscriptionSnapshot(
             identifier=_required_string(data, "id"),
             customer_identifier=_required_string(data, "customer"),
@@ -894,22 +973,25 @@ class StripeTestBillingProvider:
             cancel_at_period_end=cancel_at_period_end,
             ended_at=_aware_from_timestamp(data.get("ended_at")),
             provider_updated_at=observed_at,
+            latest_invoice_identifier=(
+                latest_invoice_identifier if isinstance(latest_invoice_identifier, str) else None
+            ),
         )
+
+    def _require_mode(self, value: dict[str, object]) -> None:
+        expected_live = self.mode == "live"
+        if value.get("livemode") is not expected_live:
+            raise PublicAPIError(
+                "billing_provider_mode_mismatch",
+                f"The billing provider returned an object outside the authorised {self.mode} mode.",
+                409,
+            )
 
 
 def build_billing_provider(settings: Settings) -> BillingProvider:
     if settings.billing_provider_name == "stripe":
-        return StripeTestBillingProvider(settings)
+        return StripeBillingProvider(settings)
     return DeterministicBillingProvider(settings)
-
-
-def _require_stripe_test_object(value: dict[str, object]) -> None:
-    if value.get("livemode") is not False:
-        raise PublicAPIError(
-            "billing_provider_mode_mismatch",
-            "The billing provider returned an object outside the authorised test mode.",
-            409,
-        )
 
 
 def _stripe_minor_amount(value: dict[str, object], key: str) -> Decimal:

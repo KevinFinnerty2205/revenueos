@@ -21,6 +21,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from revenueos.auth import identity_organisation_id, identity_user_id
+from revenueos.billing_provider import build_billing_provider
+from revenueos.billing_services import authoritative_provider_prices
 from revenueos.commercial_services import (
     PLAN_CATALOGUE,
     CommercialService,
@@ -493,6 +495,26 @@ async def production_preflight(settings: Settings) -> dict[str, object]:
     else:
         checks = await inspect_runtime_database(engine)
     checks.extend((await inspect_export_storage(settings), await inspect_object_storage(settings)))
+    if settings.billing_provider_name == "stripe" and settings.billing_mode == "live":
+        try:
+            provider = build_billing_provider(settings)
+            await provider.verify_configuration(authoritative_provider_prices(settings))
+        except (PublicAPIError, RuntimeError):
+            checks.append(
+                PreflightCheck(
+                    "live_stripe_billing",
+                    "fail",
+                    "Live Stripe price and portal configuration could not be verified.",
+                )
+            )
+        else:
+            checks.append(
+                PreflightCheck(
+                    "live_stripe_billing",
+                    "pass",
+                    "All six live prices and the live portal configuration match the approved billing contract.",
+                )
+            )
     checks.append(
         PreflightCheck(
             "real_data_release_approvals",

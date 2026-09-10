@@ -58,7 +58,7 @@ jq -e '.status == "complete"' restore.json
 The named target is supplied only through `API_BACKUP_RESTORE_TARGET_*` secret-manager variables. The command restores objects directly into an empty, private isolated validation bucket and the database into the separately named target. Public access must remain blocked; do not reuse the source bucket or expose credentials in command arguments.
 
 Deploy the same API/worker/web release to the isolated target. Apply only compatible
-migration `0061_manual_paid_credit_grant` with the restore migration role, then run
+migration `0062_live_stripe_billing` with the restore migration role, then run
 migration drift and production preflight with the restore runtime role.
 
 ### 4. Reconcile and authorise
