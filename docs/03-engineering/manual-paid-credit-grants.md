@@ -1,6 +1,6 @@
 # Manual paid Credit grant operations
 
-- **Status:** implemented internal support operation; awaiting engineering review
+- **Status:** implemented internal support operation; engineering review passed
 - **Migration:** `0061_manual_paid_credit_grant`
 - **Customer mutation surface:** none
 - **Production Credit prices/packs:** none
@@ -35,9 +35,11 @@ bypass or unrestricted tenant query.
 The preview command requires the target organisation and the complete non-sensitive
 transaction summary. It resolves the organisation server-side and returns its name,
 UUID, current plan/state, Credit balances, expected balance version, high-value
-warning where applicable and exact execute confirmation. The execute command requires
-the same facts plus operator/reason/idempotency, the previewed version, explicit
-cleared-funds confirmation and exact summary confirmation.
+warning where applicable, operator reference, reason and exact execute confirmation.
+The confirmation review fingerprint binds every displayed payment/audit fact. The
+execute command requires the same facts plus idempotency, the previewed version,
+explicit cleared-funds confirmation and exact summary confirmation; changing any
+bound value requires another preview.
 
 Client/operator input never chooses ledger type, Credit type, lot ID, expiry, balance,
 grant time, state, unit valuation, provider cost or actor stored in the customer-safe
@@ -56,15 +58,18 @@ ledger. The server always creates a purchased, non-expiring lot and purchase eve
 | margin | `production_execution_blocked_pending_policy` until an owner-approved production policy exists |
 
 The operation locks the organisation/commercial state and its Credit balance, checks
-the expected version, creates the completed record, purchased lot and ledger entry,
-increments the purchased balance and commits once. Any failure rolls back all of
-them. The table has composite tenant/lot foreign keys, organisation-scoped unique
+the expected version and aggregate held-Credit technical bound, creates the completed
+record, purchased lot and ledger entry, increments the purchased balance and commits
+once. Any failure rolls back all of them. The table has composite tenant/lot foreign
+keys, organisation-scoped unique
 payment and idempotency identities, positive/bounded checks, forced PostgreSQL RLS
 and update/delete rejection triggers.
 
 The reference and key are checked before and after the lock. Identical retries return
 the existing completed operation; different facts fail with a safe conflict. This
 covers duplicate entry, simultaneous operators and response loss after commit.
+Conflicting simultaneous facts produce one committed winner and one explicit
+identity conflict, never two grants.
 
 ## Customer-safe history and privacy
 

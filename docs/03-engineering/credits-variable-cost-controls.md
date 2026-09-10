@@ -1,7 +1,7 @@
 # Credits and variable-cost controls
 
 - **Status:** implemented infrastructure in TEST mode only; WO-055 manual paid grant
-  implemented and awaiting engineering review
+  implemented and engineering review passed
 - **Migrations:** `0054_credits_variable_cost`, `0061_manual_paid_credit_grant`
 - **Production Credit prices/packs/providers:** none
 - **Spend and data boundary:** AUD $0; synthetic data only

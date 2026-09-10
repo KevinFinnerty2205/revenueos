@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import stat
 import uuid
 from dataclasses import asdict, dataclass
@@ -96,9 +97,47 @@ def _validate_operator_reference(value: str) -> str:
     return resolved
 
 
+def _validate_manual_paid_reason(value: str) -> str:
+    resolved = value.strip()
+    if (
+        len(resolved) < 8
+        or len(resolved) > 500
+        or any(ord(character) < 32 for character in resolved)
+        or "<" in resolved
+        or ">" in resolved
+    ):
+        raise ValueError("Reason must contain 8 to 500 characters of plain printable text.")
+    return resolved
+
+
+def _validate_manual_paid_operator_reference(value: str) -> str:
+    resolved = _validate_operator_reference(value)
+    if "<" in resolved or ">" in resolved:
+        raise ValueError("Operator reference must be plain printable text.")
+    return resolved
+
+
+class _StoreOnce(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        marker = f"_provided_once_{self.dest}"
+        if getattr(namespace, marker, False):
+            raise argparse.ArgumentError(self, f"{option_string or self.dest} may be supplied only once")
+        setattr(namespace, self.dest, values)
+        setattr(namespace, marker, True)
+
+
 def _parse_exact_amount_minor_units(value: str) -> int:
+    candidate = value.strip()
+    if len(candidate) > 32 or re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", candidate) is None:
+        raise argparse.ArgumentTypeError("Amount received must be a plain exact decimal with up to two places.")
     try:
-        amount = Decimal(value)
+        amount = Decimal(candidate)
     except InvalidOperation as exc:
         raise argparse.ArgumentTypeError("Amount received must be an exact decimal value.") from exc
     if not amount.is_finite() or amount <= 0:
@@ -110,8 +149,11 @@ def _parse_exact_amount_minor_units(value: str) -> int:
 
 
 def _parse_credit_quantity(value: str) -> int:
+    candidate = value.strip()
+    if len(candidate) > 13 or not candidate.isascii() or not candidate.isdecimal():
+        raise argparse.ArgumentTypeError("Credits must be a plain integer.")
     try:
-        credits = int(value)
+        credits = int(candidate)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("Credits must be an integer.") from exc
     if credits <= 0 or credits > MAX_CREDITS:
@@ -139,11 +181,34 @@ def _manual_paid_confirmation(
     credits: int,
     amount_received_minor_units: int,
     currency: str,
+    payment_method: str,
     payment_reference: str,
+    payment_received_at: datetime,
+    operator_reference: str,
+    reason: str,
 ) -> str:
+    received_at = payment_received_at.astimezone(UTC).isoformat()
+    review_fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "organisationId": str(organisation_id),
+                "credits": credits,
+                "amountReceivedMinorUnits": amount_received_minor_units,
+                "currency": currency,
+                "paymentMethod": payment_method,
+                "paymentReference": payment_reference.strip(),
+                "paymentReceivedAt": received_at,
+                "operatorReference": operator_reference.strip(),
+                "reason": reason.strip(),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()[:16]
     return (
         f"GRANT {credits} PAID CREDITS TO {organisation_id} FOR "
-        f"{currency} {_format_minor_units(amount_received_minor_units)} REF {payment_reference.strip()}"
+        f"{currency} {_format_minor_units(amount_received_minor_units)} VIA {payment_method} "
+        f"RECEIVED {received_at} REF {payment_reference.strip()} REVIEW {review_fingerprint}"
     )
 
 
@@ -157,8 +222,12 @@ async def manual_paid_credit_grant_preview(
     payment_method: str,
     payment_reference: str,
     payment_received_at: datetime,
+    operator_reference: str,
+    reason: str,
 ) -> dict[str, object]:
     reference = payment_reference.strip()
+    operator = _validate_manual_paid_operator_reference(operator_reference)
+    resolved_reason = _validate_manual_paid_reason(reason)
     if (
         not 1 <= len(reference) <= 120
         or not reference[0].isalnum()
@@ -227,6 +296,8 @@ async def manual_paid_credit_grant_preview(
             "paymentMethod": payment_method,
             "paymentReference": reference,
             "paymentReceivedAt": payment_received_at.astimezone(UTC).isoformat(),
+            "operatorReference": operator,
+            "reason": resolved_reason,
             "currentCreditBalance": {
                 "available": purchased_available + promotional_available,
                 "purchasedAvailable": purchased_available,
@@ -246,7 +317,11 @@ async def manual_paid_credit_grant_preview(
                 credits,
                 amount_received_minor_units,
                 currency,
+                payment_method,
                 reference,
+                payment_received_at,
+                operator,
+                resolved_reason,
             ),
             "providerExecutionAuthorisedByGrant": False,
             "marginReviewStatus": "production_execution_blocked_pending_policy",
@@ -254,25 +329,31 @@ async def manual_paid_credit_grant_preview(
 
 
 def _add_manual_paid_purchase_arguments(parser: argparse.ArgumentParser, *, execute: bool) -> None:
-    parser.add_argument("--organisation-id", required=True, type=uuid.UUID)
-    parser.add_argument("--credits", required=True, type=_parse_credit_quantity)
-    parser.add_argument("--amount-received", required=True, type=_parse_exact_amount_minor_units)
-    parser.add_argument("--currency", required=True, choices=("AUD",))
+    parser.add_argument("--organisation-id", required=True, type=uuid.UUID, action=_StoreOnce)
+    parser.add_argument("--credits", required=True, type=_parse_credit_quantity, action=_StoreOnce)
+    parser.add_argument(
+        "--amount-received",
+        required=True,
+        type=_parse_exact_amount_minor_units,
+        action=_StoreOnce,
+    )
+    parser.add_argument("--currency", required=True, choices=("AUD",), action=_StoreOnce)
     parser.add_argument(
         "--payment-method",
         required=True,
         choices=("BANK_TRANSFER", "CARD_OUTSIDE_AUTOMATIC_FLOW", "OTHER_APPROVED"),
+        action=_StoreOnce,
     )
-    parser.add_argument("--payment-reference", required=True)
-    parser.add_argument("--payment-received-at", required=True, type=_parse_aware_datetime)
+    parser.add_argument("--payment-reference", required=True, action=_StoreOnce)
+    parser.add_argument("--payment-received-at", required=True, type=_parse_aware_datetime, action=_StoreOnce)
+    parser.add_argument("--operator-reference", required=True, action=_StoreOnce)
+    parser.add_argument("--reason", required=True, action=_StoreOnce)
     if execute:
-        parser.add_argument("--expected-balance-version", required=True, type=int)
-        parser.add_argument("--idempotency-key", required=True)
-        parser.add_argument("--operator-reference", required=True)
-        parser.add_argument("--reason", required=True)
-        parser.add_argument("--cleared-funds-confirmed", action="store_true")
-        parser.add_argument("--large-grant-reviewed", action="store_true")
-        parser.add_argument("--confirm", required=True)
+        parser.add_argument("--expected-balance-version", required=True, type=int, action=_StoreOnce)
+        parser.add_argument("--idempotency-key", required=True, action=_StoreOnce)
+        parser.add_argument("--cleared-funds-confirmed", action="count", default=0)
+        parser.add_argument("--large-grant-reviewed", action="count", default=0)
+        parser.add_argument("--confirm", required=True, action=_StoreOnce)
 
 
 async def inspect_runtime_database(engine: AsyncEngine) -> list[PreflightCheck]:
@@ -1063,15 +1144,25 @@ async def _run(arguments: argparse.Namespace, settings: Settings) -> tuple[int, 
                 payment_method=arguments.payment_method,
                 payment_reference=arguments.payment_reference,
                 payment_received_at=arguments.payment_received_at,
+                operator_reference=arguments.operator_reference,
+                reason=arguments.reason,
             )
             return 0, preview
         if arguments.command == "credits-manual-paid-grant":
+            if arguments.cleared_funds_confirmed > 1 or arguments.large_grant_reviewed > 1:
+                return 2, {"status": "blocked", "code": "duplicate_argument"}
+            operator_reference = _validate_manual_paid_operator_reference(arguments.operator_reference)
+            reason = _validate_manual_paid_reason(arguments.reason)
             expected_confirmation = _manual_paid_confirmation(
                 arguments.organisation_id,
                 arguments.credits,
                 arguments.amount_received,
                 arguments.currency,
+                arguments.payment_method,
                 arguments.payment_reference,
+                arguments.payment_received_at,
+                operator_reference,
+                reason,
             )
             if arguments.confirm != expected_confirmation:
                 return 2, {"status": "blocked", "code": "confirmation_mismatch"}
@@ -1085,12 +1176,12 @@ async def _run(arguments: argparse.Namespace, settings: Settings) -> tuple[int, 
                     payment_method=arguments.payment_method,
                     payment_reference=arguments.payment_reference,
                     payment_received_at=arguments.payment_received_at,
-                    cleared_funds_confirmed=arguments.cleared_funds_confirmed,
+                    cleared_funds_confirmed=arguments.cleared_funds_confirmed == 1,
                     idempotency_key=arguments.idempotency_key,
                     expected_balance_version=arguments.expected_balance_version,
-                    operator_reference=_validate_operator_reference(arguments.operator_reference),
-                    reason=arguments.reason,
-                    large_grant_reviewed=arguments.large_grant_reviewed,
+                    operator_reference=operator_reference,
+                    reason=reason,
+                    large_grant_reviewed=arguments.large_grant_reviewed == 1,
                 )
                 reconciliation = await CreditService(session, settings).reconcile_balance(arguments.organisation_id)
                 return 0, {

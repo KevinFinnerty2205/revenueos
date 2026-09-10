@@ -11,8 +11,10 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session
 
 from revenueos.auth import AuthenticatedUser, get_current_user
 from revenueos.beta_maintenance import _export_payload, delete_organisation
@@ -296,6 +298,14 @@ def test_manual_paid_purchase_requires_cleared_funds_review_and_fresh_safe_value
                     ({"currency": "USD"}, "manual_paid_credit_currency_invalid"),
                     ({"payment_method": "INVOICE_PENDING"}, "manual_paid_credit_payment_method_invalid"),
                     ({"payment_reference": "<script>alert(1)</script>"}, "manual_paid_credit_reference_invalid"),
+                    (
+                        {"operator_reference": "<script>owner</script>"},
+                        "manual_paid_credit_audit_text_invalid",
+                    ),
+                    (
+                        {"reason": "<script>synthetic audit reason</script>"},
+                        "manual_paid_credit_audit_text_invalid",
+                    ),
                     ({"idempotency_key": "short"}, "manual_paid_credit_idempotency_key_invalid"),
                     ({"payment_received_at": datetime.now()}, "manual_paid_credit_received_at_invalid"),
                     (
@@ -334,6 +344,147 @@ def test_manual_paid_purchase_requires_cleared_funds_review_and_fresh_safe_value
                     large_grant_reviewed=True,
                 )
                 assert large.lot.original_credits == 1_000_000
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_manual_paid_purchase_rolls_back_every_financial_row_when_commit_fails() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = CreditService(session, credit_settings())
+
+                def fail_manual_grant_commit(sync_session: Session) -> None:
+                    if any(isinstance(row, ManualPaidCreditGrant) for row in sync_session.new):
+                        raise SQLAlchemyError("Synthetic commit failure after WO-055 rows were staged.")
+
+                event.listen(session.sync_session, "before_commit", fail_manual_grant_commit)
+                try:
+                    with pytest.raises(PublicAPIError) as failed:
+                        await service.grant_manual_paid_purchase(
+                            PRIMARY_ORGANISATION_ID,
+                            credits=500,
+                            amount_received_minor_units=12_500,
+                            currency="AUD",
+                            payment_method="BANK_TRANSFER",
+                            payment_reference="INV-SYNTHETIC-ATOMIC-ROLLBACK",
+                            payment_received_at=datetime.now(UTC) - timedelta(minutes=10),
+                            cleared_funds_confirmed=True,
+                            idempotency_key="manual-paid-atomic-rollback",
+                            expected_balance_version=0,
+                            operator_reference="owner-support-synthetic",
+                            reason="Prove every staged financial row rolls back after commit failure.",
+                        )
+                    assert failed.value.code == "credit_state_conflict"
+                finally:
+                    event.remove(session.sync_session, "before_commit", fail_manual_grant_commit)
+
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(ManualPaidCreditGrant)
+                        .where(ManualPaidCreditGrant.organisation_id == PRIMARY_ORGANISATION_ID)
+                    )
+                    == 0
+                )
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(CreditLot)
+                        .where(
+                            CreditLot.organisation_id == PRIMARY_ORGANISATION_ID,
+                            CreditLot.credit_type == "purchased",
+                        )
+                    )
+                    == 0
+                )
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(CreditLedgerEntry)
+                        .where(
+                            CreditLedgerEntry.organisation_id == PRIMARY_ORGANISATION_ID,
+                            CreditLedgerEntry.event_type == "purchase",
+                        )
+                    )
+                    == 0
+                )
+                assert await session.get(OrganisationCreditBalance, PRIMARY_ORGANISATION_ID) is None
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_manual_paid_purchase_accepts_exact_technical_bounds_without_overflow() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, PRIMARY_ORGANISATION_ID)
+                service = CreditService(session, credit_settings())
+                one_cent = await service.grant_manual_paid_purchase(
+                    PRIMARY_ORGANISATION_ID,
+                    credits=1,
+                    amount_received_minor_units=1,
+                    currency="AUD",
+                    payment_method="BANK_TRANSFER",
+                    payment_reference="INV-SYNTHETIC-ONE-CENT",
+                    payment_received_at=datetime.now(UTC) - timedelta(minutes=10),
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-one-cent",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Exercise the exact one-cent payment boundary.",
+                )
+                assert one_cent.grant.amount_received_minor_units == 1
+                assert one_cent.lot.original_revenue_micros == 10_000
+                assert one_cent.balance.available == 1
+
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                await set_tenant_database_context(session, SECONDARY_ORGANISATION_ID)
+                service = CreditService(session, credit_settings())
+                technical_bound = await service.grant_manual_paid_purchase(
+                    SECONDARY_ORGANISATION_ID,
+                    credits=MAX_CREDITS,
+                    amount_received_minor_units=9_000_000_000_000,
+                    currency="AUD",
+                    payment_method="BANK_TRANSFER",
+                    payment_reference="INV-SYNTHETIC-TECHNICAL-BOUND",
+                    payment_received_at=datetime.now(UTC) - timedelta(minutes=10),
+                    cleared_funds_confirmed=True,
+                    idempotency_key="manual-paid-technical-bound",
+                    expected_balance_version=0,
+                    operator_reference="owner-support-synthetic",
+                    reason="Exercise maximum exact payment and Credit arithmetic boundaries.",
+                    large_grant_reviewed=True,
+                )
+                assert technical_bound.grant.amount_received_minor_units == 9_000_000_000_000
+                assert technical_bound.lot.original_revenue_micros == 90_000_000_000_000_000
+                assert technical_bound.balance.available == MAX_CREDITS
+
+                with pytest.raises(PublicAPIError) as overflow:
+                    await service.grant_manual_paid_purchase(
+                        SECONDARY_ORGANISATION_ID,
+                        credits=1,
+                        amount_received_minor_units=1,
+                        currency="AUD",
+                        payment_method="BANK_TRANSFER",
+                        payment_reference="INV-SYNTHETIC-TECHNICAL-OVERFLOW",
+                        payment_received_at=datetime.now(UTC) - timedelta(minutes=9),
+                        cleared_funds_confirmed=True,
+                        idempotency_key="manual-paid-technical-overflow",
+                        expected_balance_version=2,
+                        operator_reference="owner-support-synthetic",
+                        reason="Reject aggregate Credit arithmetic overflow.",
+                    )
+                assert overflow.value.code == "manual_paid_credit_balance_limit"
+                assert (await service.reconcile_balance(SECONDARY_ORGANISATION_ID)).consistent is True
         finally:
             await engine.dispose()
 

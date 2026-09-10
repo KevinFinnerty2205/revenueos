@@ -31,7 +31,9 @@ uv --directory apps/api run revenueos-operations credits-manual-paid-preview \
   --currency AUD \
   --payment-method BANK_TRANSFER \
   --payment-reference INV-EXAMPLE-055 \
-  --payment-received-at 2026-09-10T10:30:00+10:00
+  --payment-received-at 2026-09-10T10:30:00+10:00 \
+  --operator-reference OWNER_OR_APPROVED_SUPPORT_REFERENCE \
+  --reason "Negotiated bulk purchase; exact cleared funds independently verified."
 ```
 
 Stop unless the returned `status` is `ready_for_confirmation`. Check:
@@ -39,7 +41,8 @@ Stop unless the returned `status` is `ready_for_confirmation`. Check:
 - organisation name and UUID;
 - current plan and commercial state;
 - existing purchased, promotional and reserved balances;
-- exact Credits, amount, currency, method, reference and received time;
+- exact Credits, amount, currency, method, reference, received time, operator
+  reference and reason;
 - `expectedBalanceVersion` and `confirmationRequired`; and
 - any large-grant warning.
 
@@ -71,6 +74,10 @@ uv --directory apps/api run revenueos-operations credits-manual-paid-grant \
 
 For 1,000,000 Credits or more, recheck every displayed value and add
 `--large-grant-reviewed`. This is a safety warning, not a commercial ceiling.
+The copied confirmation includes a review fingerprint over the payment method,
+received time, operator reference and reason as well as the visible organisation,
+Credits, amount, currency and payment reference. Any change requires a new preview.
+Supply each flag once; duplicate financial or confirmation flags are rejected.
 
 ## Verify and reconcile
 

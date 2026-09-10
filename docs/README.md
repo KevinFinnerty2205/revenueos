@@ -191,7 +191,7 @@ This is the canonical product and engineering documentation index. Documents dis
 166. [Oryntela marketing website guide](03-engineering/oryntela-marketing-website.md) — route/auth architecture, content authority, SEO and WO-054 activation checklist
 167. [Oryntela marketing claim inventory](01-product/oryntela-marketing-claim-inventory.md) — bounded evidence map for every major website claim
 168. [Oryntela marketing screenshot provenance](03-engineering/oryntela-marketing-screenshot-provenance.md) — real-product synthetic source, crops and regeneration
-169. [WO-055: Manual Paid Credit Grant](07-sprints/wo-055-manual-paid-credit-grant.md) — internal cleared-funds bulk purchase operation; implemented and awaiting engineering review
+169. [WO-055: Manual Paid Credit Grant](07-sprints/wo-055-manual-paid-credit-grant.md) — internal cleared-funds bulk purchase operation; complete and engineering review passed
 170. [Manual paid Credit grant operations](03-engineering/manual-paid-credit-grants.md) — authority, atomicity, privacy, refund and margin boundary
 171. [Manual paid Credit grant owner runbook](03-engineering/manual-paid-credit-grant-runbook.md) — exact preview, confirmation, execution and retry procedure
 172. [ADR 0076: Internal immutable manual paid Credit grant](08-decisions/0076-internal-manual-paid-credit-grant.md)

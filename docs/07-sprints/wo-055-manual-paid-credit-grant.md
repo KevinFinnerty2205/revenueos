@@ -1,6 +1,6 @@
 # WO-055 — Manual Paid Credit Grant
 
-- **Status:** implemented; awaiting engineering review
+- **Status:** complete; engineering review passed
 - **Date:** 2026-09-10
 - **Baseline:** `29d6b5aabe5b5776a77e9177a1d74c2f79ded315`
 - **Branch:** `codex/wo-055-manual-paid-credit-grant`
@@ -36,8 +36,10 @@ it through the product.
 
 `credits-manual-paid-preview` resolves the exact server-side organisation and shows
 its name, stable UUID, plan, commercial state, current purchased/promotional/reserved
-balance, balance lock version, amount, Credit quantity, payment facts and the exact
-final confirmation phrase. `credits-manual-paid-grant` additionally requires:
+balance, balance lock version, amount, Credit quantity, payment facts, operator,
+reason and the exact final confirmation phrase. A review fingerprint in that phrase
+binds every displayed payment/audit fact, so any change requires another preview.
+`credits-manual-paid-grant` additionally requires:
 
 - a positive bounded integer Credit quantity;
 - an exact positive AUD amount parsed to integer minor units, never a float;
@@ -68,7 +70,9 @@ Reference normalisation is case-insensitive and whitespace-stable. An identical 
 returns the completed grant, including after response loss; a reused identity with
 changed organisation, Credits, amount, currency or any other audited fact fails.
 Organisation balance locking serialises simultaneous attempts so one payment creates
-exactly one logical grant.
+exactly one logical grant. Conflicting simultaneous values produce one committed
+winner and one explicit conflict. The locked aggregate held-Credit check prevents a
+grant from exceeding the service arithmetic boundary.
 
 The operation creates one non-expiring purchased `CreditLot`, one ordinary purchase
 `CreditLedgerEntry` and the balance projection change atomically. The lot records
@@ -112,6 +116,16 @@ ledger and balance reconciliation; refund/correction compatibility; automatic
 verified card-purchase regression; production execution fail-closed behaviour;
 database constraints/immutability; migration downgrade/re-upgrade/drift; and genuine
 PostgreSQL contention and forced-RLS isolation.
+
+## Engineering review
+
+The merge review closed four defects before acceptance: preview now displays the
+operator reason and its confirmation fingerprint binds every payment/audit fact;
+plain decimal/integer parsing and duplicate CLI facts fail closed; aggregate held
+Credits cannot exceed the service arithmetic boundary; and support audit text is
+restricted to bounded plain text. Regression coverage now injects an atomic commit
+failure, exercises exact technical bounds and proves that conflicting simultaneous
+PostgreSQL grants produce one reported winner and one explicit conflict.
 
 See [Manual paid Credit grant operations](../03-engineering/manual-paid-credit-grants.md),
 the [owner runbook](../03-engineering/manual-paid-credit-grant-runbook.md) and

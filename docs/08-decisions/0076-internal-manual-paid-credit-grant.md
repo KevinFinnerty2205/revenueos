@@ -1,6 +1,6 @@
 # ADR 0076 — Internal immutable manual paid Credit grant
 
-- **Status:** accepted and implemented by WO-055; awaiting engineering review
+- **Status:** accepted and implemented by WO-055; engineering review passed
 - **Date:** 2026-09-10
 
 ## Context

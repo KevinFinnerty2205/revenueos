@@ -396,6 +396,125 @@ def test_postgresql_credit_contention_idempotency_and_rls_are_concurrency_safe()
     asyncio.run(scenario())
 
 
+def test_postgresql_conflicting_manual_paid_grants_report_one_winner_and_one_conflict() -> None:
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith(("postgresql", "postgres")):
+        pytest.skip("A PostgreSQL DATABASE_URL is required for manual paid Credit contention tests.")
+
+    async def scenario() -> None:
+        engine = create_async_engine(database_url)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url=database_url,
+            feature_credits_enabled=True,
+        )
+        organisation_id, user_id = uuid.uuid4(), uuid.uuid4()
+        received_at = datetime.now(UTC)
+        try:
+            async with factory() as session:
+                session.add(
+                    Organisation(
+                        id=organisation_id,
+                        name="Conflicting manual paid grant organisation",
+                        slug=f"manual-paid-conflict-{organisation_id}",
+                    )
+                )
+                session.add(
+                    User(
+                        id=user_id,
+                        external_auth_id=f"manual-paid-conflict-{user_id}",
+                        email=f"manual-paid-conflict-{user_id}@example.test",
+                        display_name="Manual Paid Conflict User",
+                    )
+                )
+                await session.flush()
+                session.add(OrganisationMembership(organisation_id=organisation_id, user_id=user_id, role="admin"))
+                await session.commit()
+                await ensure_plan_catalogue(session)
+                complete_plan = next(item for item in PLAN_CATALOGUE if item.code == "complete")
+                session.add(
+                    OrganisationCommercialState(
+                        organisation_id=organisation_id,
+                        plan_version_id=complete_plan.id,
+                        status="active",
+                        billing_interval="monthly",
+                        add_on_modules_json=[],
+                        seat_limit_status="within_limit",
+                        effective_at=received_at,
+                        source="migration",
+                        actor_reference="manual-paid-conflict-test",
+                        reason="Create synthetic state for conflicting grant contention.",
+                    )
+                )
+                await session.commit()
+
+            async def grant(credits: int) -> tuple[uuid.UUID, int] | PublicAPIError:
+                async with factory() as session:
+                    await set_tenant_database_context(session, organisation_id)
+                    try:
+                        result = await CreditService(session, settings).grant_manual_paid_purchase(
+                            organisation_id,
+                            credits=credits,
+                            amount_received_minor_units=1_250_000,
+                            currency="AUD",
+                            payment_method="BANK_TRANSFER",
+                            payment_reference="INV-SYNTHETIC-CONFLICTING-CONCURRENT-055",
+                            payment_received_at=received_at,
+                            cleared_funds_confirmed=True,
+                            idempotency_key="manual-paid-conflicting-concurrent-055",
+                            expected_balance_version=0,
+                            operator_reference="manual-paid-conflict-test",
+                            reason="Submit different synthetic values against one payment identity.",
+                        )
+                        return result.grant.id, credits
+                    except PublicAPIError as exc:
+                        return exc
+
+            attempts = await asyncio.gather(grant(50_000), grant(50_001))
+            successes = [item for item in attempts if isinstance(item, tuple)]
+            failures = [item for item in attempts if isinstance(item, PublicAPIError)]
+            assert len(successes) == len(failures) == 1
+            assert failures[0].code in {
+                "manual_paid_credit_idempotency_conflict",
+                "manual_paid_credit_payment_reference_conflict",
+            }
+            winning_grant_id, winning_credits = successes[0]
+
+            async with factory() as session:
+                await set_tenant_database_context(session, organisation_id)
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(ManualPaidCreditGrant)
+                        .where(ManualPaidCreditGrant.organisation_id == organisation_id)
+                    )
+                    == 1
+                )
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(CreditLedgerEntry)
+                        .where(
+                            CreditLedgerEntry.organisation_id == organisation_id,
+                            CreditLedgerEntry.event_type == "purchase",
+                        )
+                    )
+                    == 1
+                )
+                grant_row = await session.get(ManualPaidCreditGrant, winning_grant_id)
+                balance = await session.get(OrganisationCreditBalance, organisation_id)
+                assert grant_row is not None and grant_row.credits_granted == winning_credits
+                assert balance is not None and balance.purchased_available == winning_credits
+                assert (await CreditService(session, settings).reconcile_balance(organisation_id)).consistent is True
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
 def test_postgresql_credit_rls_hides_every_tenant_owned_credit_row() -> None:
     database_url = os.getenv("DATABASE_URL", "")
     if not database_url.startswith(("postgresql", "postgres")):

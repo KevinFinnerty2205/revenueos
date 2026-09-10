@@ -723,6 +723,12 @@ class CreditService:
         """Append one exceptional paid purchase after authorised human payment confirmation."""
 
         actor, resolved_reason = _require_actor_reason(operator_reference, reason)
+        if "<" in actor or ">" in actor or "<" in resolved_reason or ">" in resolved_reason:
+            raise PublicAPIError(
+                "manual_paid_credit_audit_text_invalid",
+                "Manual paid Credit audit references must use plain text.",
+                422,
+            )
         self._validate_credits(credits)
         if amount_received_minor_units <= 0 or amount_received_minor_units > MAX_MANUAL_PAYMENT_MINOR_UNITS:
             raise PublicAPIError(
@@ -870,6 +876,18 @@ class CreditService:
             raise PublicAPIError(
                 "manual_paid_credit_stale_balance",
                 "The Credit balance changed after inspection. Review the current values before retrying.",
+                409,
+            )
+        held_credits = (
+            balance.purchased_available
+            + balance.purchased_reserved
+            + balance.promotional_available
+            + balance.promotional_reserved
+        )
+        if held_credits > MAX_CREDITS - credits:
+            raise PublicAPIError(
+                "manual_paid_credit_balance_limit",
+                "That grant would exceed the supported Credit balance limit.",
                 409,
             )
 
