@@ -17,9 +17,9 @@ revenueos-operations production-preflight
 ```
 
 The command exits non-zero unless typed configuration has already passed and it can
-prove: current Alembic head `0061_manual_paid_credit_grant`; a runtime PostgreSQL role
+prove: current Alembic head `0061_manual_paid_credit_grant`; immutable 40-hex release identity; a runtime PostgreSQL role
 that is neither superuser nor `BYPASSRLS`; transaction-local tenant context reset;
-private object write/read/delete; owner-only durable export directory; real-data
+private object write/read/delete; tenant-scoped durable S3 export write/read/delete; real-data
 flag; legal approval reference; and support address. Output contains safe feature
 states and generic results only.
 
@@ -99,35 +99,34 @@ Public liveness is process-only. Readiness reports generic database, migration, 
 
 Release sequence: approve change and encrypted checkpoint; stop new claims if needed; run `alembic upgrade head` once with the migration role; run drift check; start API; verify readiness/preflight; start matching workers; deploy web; run synthetic smoke. Prefer a forward fix/application rollback. A downgrade from `0050` deletes import/merge/provisioning metadata and removes `import_baseline` support; it requires explicit data-loss approval and a verified backup.
 
-Back up PostgreSQL plus the configured private object namespace with:
+For production, back up PostgreSQL plus the configured private object namespace to the independent destination with:
 
 ```text
-revenueos-backup create --destination <private-encrypted-backup-root>
-revenueos-backup verify --source <backup-directory>
+revenueos-backup create-remote
+revenueos-backup verify-remote --backup-id <backup-id>
 ```
 
-The tool uses `pg_dump --format=custom --no-owner --no-acl`, creates an object tar, records content-free SHA-256/count metadata, and streams each archive through AES-256-GCM. The 32-byte key comes from `API_PRIVATE_BETA_BACKUP_ENCRYPTION_KEY`; database credentials are passed through the child environment, never command arguments or manifest. The destination is owner-only. Secret-manager configuration is backed up by its owner, not copied into this archive.
+The tool uses `pg_dump --format=custom --no-owner --no-acl`, streams object payloads, records content-free SHA-256/count/release metadata, encrypts each payload with AES-256-GCM and authenticates the format-v2 manifest with a domain-separated HMAC-SHA256 key. The 32-byte key comes from `API_BACKUP_ENCRYPTION_KEY` and is exposed only to the dedicated job. Source/destination database and object credentials are passed through the job environment, never command arguments or manifest. Remote upload verifies size/SHA metadata, commits the manifest last, then downloads and cryptographically verifies the committed bundle before reporting success. Secret-manager configuration is backed up by its owner, not copied into this archive; maintain a separately controlled offline recovery copy of the encryption key.
 
 Restore only to named isolated targets:
 
 ```text
-revenueos-backup restore \
-  --source <backup-directory> \
-  --target-storage-directory <empty-isolated-private-directory> \
-  --confirm "RESTORE <backup-id> INTO <target-database-name>"
+revenueos-backup restore-remote \
+  --backup-id <backup-id> \
+  --confirm "RESTORE <backup-id> TO CONFIGURED NAMED TARGET"
 ```
 
-Inject the target only as `API_RESTORE_TARGET_DATABASE_URL` from the operator's
+Inject the target only as `API_BACKUP_RESTORE_TARGET_DATABASE_URL` from the operator's
 secret manager so credentials do not appear in process arguments or shell history.
 Source-database and source-storage fingerprints are blocked. Verification authenticates/decrypts archives, checks hashes/counts and rejects unsafe tar paths before restore. After restore: migrate to the intended release; run drift, runtime-role and RLS tests; reconcile object rows/checksums; verify app readiness and a synthetic tenant; then destroy the isolated targets. The application command supplements, not replaces, managed encrypted snapshots/PITR.
 
-Internal beta objectives, pending deployment-owner approval, are a successful encrypted backup at least daily, a 14-day maximum retained backup window, RPO 24 hours and RTO one business day. These are internal goals, not contractual SLAs. A target-environment measured restore drill is mandatory before each partner and quarterly thereafter.
+Internal beta objectives, pending deployment-owner approval, are a successful encrypted backup at least daily, a 14-day maximum retained backup window, RPO 24 hours and RTO four hours. These are internal goals, not contractual SLAs. A target-environment measured restore drill is mandatory before each partner and quarterly thereafter.
 
 ## Retention, export, deletion and offboarding
 
 Use the existing `revenueos-beta-maintenance` commands. Always run tenant-scoped retention dry-run before execute and repeat bounded batches until zero. Preview-only CRM import metadata expires with the maintenance lifecycle; raw CRM CSV never exists in storage. Create, recording, visual and document rows coordinate private-object deletion according to their existing domain rules.
 
-Organisation export contract v29 includes current customer-owned domains, content-free CRM import/merge/provision history and authorised Create object manifests. It excludes credentials, raw CSV, secrets, bearer grants, leases and provider payloads. Binaries remain in the separately authorised private-file retrieval workflow. Generate/download before deletion when requested; verify schema/tenant, permission, expiry and cross-tenant denial.
+Organisation export contract v29 includes current customer-owned domains, content-free CRM import/merge/provision history and authorised Create object manifests. It excludes credentials, raw CSV, secrets, bearer grants, leases and provider payloads. In production, export archives stream through an ephemeral temporary file to a tenant-scoped private S3 object; download remains an authenticated API operation and grants expire after 24 hours. Binaries remain in the separately authorised private-file retrieval workflow. Generate/download before deletion when requested; verify schema/tenant, permission, expiry and cross-tenant denial.
 
 Organisation offboarding is request → authority verification → optional export/file delivery → disable memberships → disconnect/revoke integrations → pause/cancel eligible work through supported lifecycle → exact-confirmation delete → verify rows, objects, grants, APIs/search/deep links and worker discovery → record metadata-only completion. Provider-revoke failure blocks a success claim and uses the existing retry/reconciliation state. Backups are inaccessible operational copies that expire under the approved window; deletion does not imply instantaneous removal from immutable snapshots.
 

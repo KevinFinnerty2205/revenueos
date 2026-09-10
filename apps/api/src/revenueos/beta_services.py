@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import shutil
+import tempfile
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +38,7 @@ from revenueos.contracts import OrganisationSummary, UserSummary
 from revenueos.database import set_tenant_database_context
 from revenueos.domain import ConnectorKey
 from revenueos.errors import PublicAPIError
+from revenueos.export_storage import parse_export_object_reference
 from revenueos.integration_repositories import IntegrationRepository
 from revenueos.models import (
     AIUsageCounter,
@@ -56,6 +60,12 @@ from revenueos.models import (
     User,
 )
 from revenueos.tenant import TenantContext
+from revenueos.visual_storage import (
+    S3CompatibleVisualStorage,
+    VisualObjectMissingError,
+    VisualStorageError,
+    create_visual_storage,
+)
 
 NOTICE_TEXT = (
     "You must have authority to add or process meeting and post-interaction debrief content.",
@@ -396,6 +406,54 @@ class BetaService:
         if root not in path.parents or path.name != f"revenueos-export-{record.id}.json":
             raise PublicAPIError("export_unavailable", "The export file is unavailable.", 404)
         return path
+
+    async def export_download_path(self, request_id: UUID) -> tuple[Path, Path | None]:
+        self.require_admin()
+        self.require_feature("dataExport")
+        record = await self.session.scalar(
+            select(BetaDataRequest).where(
+                BetaDataRequest.organisation_id == self.tenant.organisation_id,
+                BetaDataRequest.id == request_id,
+                BetaDataRequest.request_type == "export",
+            )
+        )
+        if record is None or record.status != "completed" or record.output_path is None:
+            raise PublicAPIError("export_not_ready", "The export is not ready for download.", 409)
+        if not self._is_future(record.expires_at):
+            raise PublicAPIError("export_expired", "The temporary export has expired.", 410)
+        try:
+            object_key = parse_export_object_reference(
+                record.output_path,
+                self.tenant.organisation_id,
+                record.id,
+            )
+        except ValueError as exc:
+            raise PublicAPIError("export_unavailable", "The export file is unavailable.", 404) from exc
+        if object_key is None:
+            path = await self.export_path(request_id)
+            return path, None
+        temporary_root = Path(tempfile.mkdtemp(prefix="revenueos-export-download-"))
+        destination = temporary_root / f"oryntela-export-{request_id}.json"
+        try:
+            storage = create_visual_storage(self.settings)
+            if not isinstance(storage, S3CompatibleVisualStorage):
+                raise VisualStorageError("Remote export reference requires S3-compatible storage.")
+            await storage.read_file(object_key, destination)
+            size, expected_digest = await storage.file_metadata(object_key)
+            actual_digest = hashlib.sha256()
+            with destination.open("rb") as stream:
+                while chunk := stream.read(1024 * 1024):
+                    actual_digest.update(chunk)
+            if (
+                size != destination.stat().st_size
+                or expected_digest is None
+                or actual_digest.hexdigest() != expected_digest
+            ):
+                raise VisualStorageError("Export download verification failed.")
+            return destination, temporary_root
+        except (OSError, VisualObjectMissingError, VisualStorageError) as exc:
+            shutil.rmtree(temporary_root, ignore_errors=True)
+            raise PublicAPIError("export_unavailable", "The export file is unavailable.", 404) from exc
 
     async def update_member_status(self, user_id: UUID, status: str) -> MemberResponse:
         self.require_admin()

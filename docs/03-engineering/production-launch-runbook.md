@@ -1,20 +1,20 @@
 # Oryntela production launch runbook
 
 - Status: repository-ready; all paid/external/public actions blocked pending owner approval
-- Baseline release: `d8d50b216bd64726243b06b5ea4f5bd56c59ab54`
+- Reviewed source baseline: `d8d50b216bd64726243b06b5ea4f5bd56c59ab54`; deploy only the immutable post-review merge SHA recorded in the launch evidence
 - Required migration head: `0061_manual_paid_credit_grant`
 - Owner/on-call: Kevin (owner-operated V1; use the controlled operational address, not personal details in public records)
 - Customer data: none; WO-045 must pass before onboarding
 
 ## 1. Architecture and release boundary
 
-The production candidate is the modular monolith described by [ADR 0077](../08-decisions/0077-australian-managed-modular-monolith-production-topology.md): standalone Next.js web, FastAPI API, one independently supervised worker, managed PostgreSQL 16, private S3-compatible storage and one controlled pre-deploy migration job. The worker contains the AI, recording/transcription, Prospect, Campaign, reviewed action, Create, Microsoft, Google and CRM sync loops. There is no separate laptop cron, message broker or cache.
+The production candidate is the modular monolith described by [ADR 0077](../08-decisions/0077-australian-managed-modular-monolith-production-topology.md): standalone Next.js web, FastAPI API, one independently supervised worker, managed PostgreSQL 16, private S3-compatible storage and one controlled pre-deploy migration job. The API image installs PostgreSQL client 16 explicitly so `pg_dump`/`pg_restore` match the selected server major. The worker contains the AI, recording/transcription, Prospect, Campaign, reviewed action, Create, Microsoft, Google and CRM sync loops. There is no separate laptop cron, message broker or cache.
 
 `infra/digitalocean/app.production.template.yaml` is preparation, not a live deployment. It keeps automatic deployment off, routes the API only on `api.oryntela.com.au`, makes API readiness the traffic gate and gives the worker a non-routable liveness check. App Platform supports liveness probes for workers and restarts a failed component ([DigitalOcean health checks](https://docs.digitalocean.com/products/app-platform/how-to/manage-health-checks/), verified 10 September 2026).
 
 Production publication is fail-closed at two points:
 
-- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth, non-production Clerk public key or committed Privacy/Terms status other than approved.
+- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth, non-production Clerk public key, a missing/non-40-hex `ORYNTELA_RELEASE_SHA`, or Privacy/Terms release records that are not approved and bound to a version, effective date and SHA-256 fingerprint.
 - `/health/ready` rejects a missing Clerk server secret without returning the missing value or reason. The API readiness rejects unavailable PostgreSQL, incompatible migration, invalid auth/provider/worker configuration and missing production config.
 
 This first deployment may contain synthetic data only. The target manifest intentionally disables real-data mode, cloud export, organisation deletion, live billing, Credits, external Prospect and every external connector.
@@ -31,10 +31,11 @@ This first deployment may contain synthetic data only. The target manifest inten
 The complete production handoff template is `infra/environments/production.env.example`. Classification:
 
 - Public/build: `ORYNTELA_ENVIRONMENT`, the three `NEXT_PUBLIC_*` origins, Clerk publishable key/template, `AUTH_MODE`, `MOCK_AUTH_ENABLED`, and the explicit HSTS switch. Public values are frozen into the web build.
-- Required runtime secrets: Clerk secret; API database URL; Clerk JWKS/issuer/audience values; outreach-suppression HMAC key; private bucket access keys; and object-signing secret.
+- Required runtime secrets: Clerk secret; API database URL and provider CA; Clerk JWKS/issuer/audience values; outreach-suppression HMAC key; private bucket access keys; and object-signing secret.
 - Required ordinary API config: environment/auth mode, JIT setting, safe log level, CORS, allowed hosts, storage endpoint/region and worker probe values.
 - Initial fail-closed flags: billing, Credits, real data, export, deletion, external Prospect, integrations, action execution, mock connectors and all named connectors.
-- Real-data-only secrets/config: legal approval/support references, AES-256 backup key, retention, durable export destination and external-AI approval. Export must remain disabled on App Platform until its local-path implementation is replaced or a durable supported target is chosen.
+- Real-data-only config: legal approval/support references, retention, durable tenant-scoped S3 export storage and external-AI approval. Production exports never use the container filesystem and are served only through the authenticated API while the 24-hour grant remains valid.
+- Backup-job-only secrets/config: source database URL and CA, source Spaces credentials, independent destination S3 credentials and a fresh AES-256-GCM key. These values are prohibited from the web, API, worker and migration components.
 - Provider-specific secrets: connector master key and each OAuth client secret; Apollo/provider cost/approval references; OpenAI key/model if separately approved; Stripe test fields only in non-production. Do not provision disabled-provider secrets pre-emptively.
 - Optional tuning: every bounded timeout, quota, upload size and batch setting in `apps/api/.env.example`; absence uses typed defaults. Review those defaults against the approved launch profile, but they are not secrets.
 - Test-only: mock auth, mock connectors, deterministic billing, Stripe `sk_test_`/test prices and mock AI/provider selections. Production validation blocks unsafe combinations and any Stripe secret.
@@ -51,14 +52,14 @@ python3 -c 'import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_
 python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
-Use the first only for `API_PRIVATE_BETA_BACKUP_ENCRYPTION_KEY`, the second for `API_CONNECTOR_CREDENTIAL_MASTER_KEY`, and separate outputs of the third for suppression and object-signing keys. Never reuse development values or one purpose's key for another.
+Use the first only for `API_BACKUP_ENCRYPTION_KEY`, the second for `API_CONNECTOR_CREDENTIAL_MASTER_KEY`, and separate outputs of the third for suppression and object-signing keys. Never reuse development values or one purpose's key for another. Store a separately controlled offline recovery copy of the backup key; loss of the only copy makes every encrypted backup unusable.
 
 ## 3. Owner-approved infrastructure creation
 
 Do none of this until the owner approves the current cost table and payment method.
 
-1. Create a DigitalOcean project/team with account MFA and minimum roles. Create App Platform, managed PostgreSQL 16 and private Spaces resources in Sydney.
-2. Create separate migration/admin and runtime database roles. Runtime must be `NOSUPERUSER NOBYPASSRLS`; grant only database connect, schema use, table DML, sequence use and required application functions. Restrict the cluster to the app plus controlled operator access; use TLS identity verification where supported.
+1. Create a DigitalOcean project/team with account MFA and minimum roles. Create App Platform, a two-node highly available managed PostgreSQL 16 cluster and private Spaces resources in Sydney. A single-node database is not approved for paid/customer-data production.
+2. Create separate migration/admin and runtime database roles. Runtime must be `NOSUPERUSER NOBYPASSRLS`; grant only database connect, schema use, table DML, sequence use and required application functions. Restrict the cluster to the app plus controlled operator access. Use `verify_full_custom_ca` with DigitalOcean's provider CA for runtime, migration and backup connections; `require` encryption without hostname/certificate verification is insufficient.
 3. Create bucket credentials scoped as narrowly as DigitalOcean supports. Block public access and CDN publication. Object keys/metadata must not contain customer names, emails or sensitive labels.
 4. Enter secret values from the template in the control plane. Keep web, API/worker, migration and backup credentials separated; the web must never receive database/provider keys.
 5. Configure platform alerts for deployment/domain failure, component restarts, CPU/memory, database health/storage/connection count and failed scheduled jobs. Route to Kevin's controlled operations destination.
@@ -69,8 +70,8 @@ Do none of this until the owner approves the current cost table and payment meth
 Clerk's current production guide requires a separate production instance and
 provider-issued DNS/certification steps
 ([Clerk production deployment](https://clerk.com/docs/guides/development/deployment/production)).
-After the owner accepts Hobby's missing MFA/retained-branding limits or separately
-approves Pro:
+Clerk Pro is required for paid/customer-data production because Hobby does not provide
+the required MFA/passkey and operational-log posture. After the owner approves Pro:
 
 1. In the existing owner-controlled Clerk application, choose **Create production
    instance**, name the application **Oryntela**, and set the root application domain
@@ -82,8 +83,7 @@ approves Pro:
    production JIT provisioning stays off.
 3. Configure the hosted identity appearance with Oryntela name, approved logo/colours,
    `https://oryntela.com.au`, `support@oryntela.com.au`, and the final Privacy/Terms
-   URLs. Accept that Hobby still displays Clerk branding; removing it is not an
-   AUD 0 capability.
+   URLs.
 4. Create the `oryntela-api` JWT template. Set its audience exactly equal to the
    chosen `API_CLERK_AUDIENCE`; preserve the active `org_id` and `org_role` claims
    and the optional `org_name`, `email` and `name` claims. Do not invent a tenant ID
@@ -150,15 +150,17 @@ If migration fails, keep the new API/worker out of traffic, preserve the databas
 
 ## 5. Backup, restore and objectives
 
-Production eventual policy:
+Production policy, pending owner-funded target creation and proof:
 
-- database: provider automatic daily encrypted backups/PITR with its seven-day retained window; named owner checks success daily;
-- application logical snapshot: `revenueos-backup create` and `verify` before a risky migration, stored only in an approved durable encrypted destination and deleted under the approved window;
-- private objects: automated encrypted copy to a separate approved bucket/provider at least daily; verify counts/checksums without object names; never treat the source Spaces bucket as its own backup;
-- secrets/config: provider-controlled recovery/escrow owned separately and never copied into application backup; and
-- drill: synthetic before launch, named production environment before customer data, quarterly during beta and after material hosting/schema changes.
+- database: DigitalOcean automatic encrypted backups/PITR plus the independent logical bundle; named owner checks managed-backup health daily;
+- application logical bundle: the scheduled App Platform job runs daily at 03:30 Australia/Sydney, streams `pg_dump` plus every source Spaces object through AES-256-GCM, authenticates the format-v2 manifest with a domain-separated HMAC-SHA256 key, uploads each encrypted payload to private AWS S3 Standard in Sydney, uploads the manifest last only after remote size/SHA-256 metadata verification, then downloads and cryptographically verifies the committed bundle before reporting success;
+- retention: configure AWS versioning and lifecycle so current and noncurrent versions plus delete markers expire within 14 days; S3 versioning without noncurrent-version lifecycle is not retention;
+- secrets/config: provider-controlled recovery/escrow owned separately and never copied into the bundle; maintain a separately controlled offline copy of the backup encryption key; and
+- drill: synthetic before launch, named cloud restore before customer data, quarterly during beta and after material hosting/schema changes.
 
-DigitalOcean's seven-day managed database retention does not equal the previously proposed 14-day logical archive. The owner must approve one coherent retention statement. Until the object-copy destination and retention are configured, backup status is **BLOCKED for customer data**.
+The repository now contains the scheduled remote backup/verify/restore implementation,
+but that is not evidence that an AWS bucket, lifecycle policy, alert route or successful
+cloud restore exists. Those remain **BLOCKED for customer data** until WO-054C/D.
 
 The logical-backup source principal is a dedicated, tightly controlled backup/migration
 principal able to read all tenant rows despite forced RLS. Never grant that authority
@@ -166,22 +168,20 @@ to the API/worker runtime role. The isolated restore target should be owned by t
 migration principal; reapply and verify least-privilege runtime grants before application
 smoke testing.
 
-Logical commands (both source and target database credentials injected through the
-secret manager/process environment, never as command arguments):
+Remote commands (all source/destination/target credentials injected through the
+dedicated job environment, never as command arguments):
 
 ```text
-revenueos-backup create --destination <owner-only-durable-directory>
-revenueos-backup verify --source <backup-directory>
-revenueos-backup restore --source <backup-directory> \
-  --target-storage-directory <empty-isolated-directory> \
-  --confirm "RESTORE <backup-id> INTO <target-database-name>"
+revenueos-backup create-remote
+revenueos-backup verify-remote --backup-id <backup-id>
+revenueos-backup restore-remote --backup-id <backup-id> \
+  --confirm "RESTORE <backup-id> TO CONFIGURED NAMED TARGET"
 ```
 
-The first two commands read `DATABASE_URL`; restore reads the source/verification
-configuration from `DATABASE_URL` and the isolated target from
-`API_RESTORE_TARGET_DATABASE_URL`. Set those through the protected job environment.
-The backwards-compatible `--target-database-url` option is for credential-free local
-URLs only because process arguments may be visible in shell history/process listings.
+Create reads the dedicated source database/Spaces variables and writes only to the
+independent destination. Restore reads the isolated target from the
+`API_BACKUP_RESTORE_TARGET_*` variables. The local `create`, `verify` and `restore`
+commands remain available for synthetic development drills only.
 
 After restore, verify counts/invariants, `alembic current`, `alembic check`, runtime-role/RLS/cross-tenant tests, object reconciliation and API readiness; then destroy test resources. Never restore production data to a developer laptop. V1 recommended RPO is 24 hours and RTO is four hours, internal targets only—not contractual SLAs.
 
@@ -190,8 +190,8 @@ After restore, verify counts/invariants, `alembic current`, `alembic check`, run
 At start and end of the owner-operated support window:
 
 1. Check web `/health/ready`, API `/health/live` and `/health/ready`, last deploy SHA, component restart alerts, worker probe, database status/backups and object-storage availability.
-2. For every approved organisation run `revenueos-operations tenant-preflight`, `queue-status` and, when needed, the metadata-only `support-bundle`. Alert on growing pending/retry counts, expired leases, `unknown_external_state`, `unknown_delivery_state`, provider `degraded/rate_limited/needs_reauth`, billing reconciliation required or repeated safe failure codes.
-3. Verify the previous scheduled retention/backup/object-copy jobs completed. Maintenance remains tenant-scoped: add one scheduled job per approved organisation only after provisioning, first running `retention --dry-run`; do not place customer UUIDs in this public template.
+2. For every approved organisation run `revenueos-operations tenant-preflight`, `queue-status` and, when needed, the metadata-only `support-bundle`. Alert on growing pending/retry counts, queue oldest age over five minutes twice, expired leases, `unknown_external_state`, `unknown_delivery_state`, provider `degraded/rate_limited/needs_reauth`, billing reconciliation required or repeated safe failure codes.
+3. Verify the previous scheduled retention and remote-backup jobs completed. Because App Platform does not supply a native scheduled-job-failure alert in this specification, configure an external freshness check for the manifest-last backup proof. Maintenance remains tenant-scoped: add one scheduled job per approved organisation only after provisioning, first running `retention --dry-run`; do not place customer UUIDs in this public template.
 4. Review API 5xx/error-rate and latency, failed billing webhook counts, provider dashboards only for activated providers, storage/DB capacity and security/auth anomalies. Logs retain 14 days initially unless the owner approves another operational period; never infer a statutory retention period.
 
 Platform probes and logs are the zero-additional-cost launch monitoring baseline. They detect stopped/stale processes, readiness, deploy/domain failure and resource pressure. They do not replace tenant queue checks or a privacy-reviewed error-reporting system. No third-party error-reporting account is created in WO-054; evaluate it from measured need and send no content, tokens, email bodies, Evidence, prompts, object keys, card data or Deal Room tokens.
@@ -254,7 +254,7 @@ Use a dedicated synthetic Clerk organisation/admin/member and clearly synthetic 
 - Commercial change: use `commercial-assign-plan`/`commercial-change-state`; never edit tables. Live billing stays off until an adapter and reconciliation smoke pass.
 - Manual paid Credits: follow `manual-paid-credit-grant-runbook.md`; cleared funds and a margin review are mandatory; the grant does not enable provider execution.
 - Provider reconnect: disable the named flag if unsafe, inspect safe connection health, revoke/disconnect, rotate client secret/token as needed, reconnect through OAuth, then reconcile before writes.
-- Export: approve request/authority, create with `revenueos-beta-maintenance export`, authorise one-time download and purge. On App Platform this remains disabled until durable cloud export storage is implemented/approved.
+- Export: approve request/authority, create with `revenueos-beta-maintenance export`, authorise one-time download and purge. Production generation streams through an ephemeral temporary file to a tenant-scoped private S3 object, verifies size/SHA-256, and serves it only through authenticated membership/expiry checks. Keep the flag off until target preflight proves write/read/delete and cross-tenant denial.
 - Organisation deletion: optional export, disable members, stop queues, revoke connectors, run exact-confirmation deletion, verify database/object/grant/search/worker absence, then let backups age out. Feature remains off until the named-target proof passes.
 - Billing: compare Oryntela subscription/invoice event state with Stripe IDs and verified events; reconcile through supported service paths. Never paste card/customer/provider payloads into logs or tickets.
 

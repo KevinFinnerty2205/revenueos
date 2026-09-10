@@ -1,7 +1,8 @@
 import base64
 import binascii
+import re
+import ssl
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -17,6 +18,7 @@ EvidenceExtractionProviderName = Literal["mock", "openai"]
 ProspectResearchProviderName = Literal["mock", "apollo"]
 VisualStorageBackend = Literal["local", "s3_compatible"]
 BillingProviderName = Literal["deterministic", "stripe"]
+DatabaseTLSMode = Literal["disable", "verify_full_system", "verify_full_custom_ca"]
 
 
 class Settings(BaseSettings):
@@ -35,6 +37,7 @@ class Settings(BaseSettings):
     mock_auth_enabled: bool = True
     identity_jit_provisioning_enabled: bool = True
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+    release_sha: str | None = None
     hsts_enabled: bool = False
     cors_origins: str = Field(
         default="http://localhost:3000",
@@ -45,6 +48,12 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("API_DATABASE_URL", "DATABASE_URL"),
     )
+    database_pool_size: int = Field(default=5, ge=1, le=20)
+    database_max_overflow: int = Field(default=2, ge=0, le=20)
+    database_pool_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    database_tls_mode: DatabaseTLSMode = "disable"
+    database_ca_certificate_base64: SecretStr | None = None
+    restore_target_database_ca_certificate_base64: SecretStr | None = None
     feature_billing_enabled: bool = False
     feature_credits_enabled: bool = False
     credits_quote_ttl_seconds: int = Field(default=600, ge=60, le=3_600)
@@ -440,6 +449,9 @@ class Settings(BaseSettings):
 
     @field_validator(
         "database_url",
+        "release_sha",
+        "database_ca_certificate_base64",
+        "restore_target_database_ca_certificate_base64",
         "clerk_jwks_url",
         "clerk_issuer",
         "clerk_audience",
@@ -485,6 +497,7 @@ class Settings(BaseSettings):
                 raise ValueError("Staging requires complete Clerk verification configuration.")
             if self.database_url is None or not self.database_url.startswith(("postgresql", "postgres")):
                 raise ValueError("Staging requires PostgreSQL persistence.")
+            self._validate_database_transport("Staging")
             if not self.cors_origin_list or any(
                 not self._is_public_https_origin(value) for value in self.cors_origin_list
             ):
@@ -517,6 +530,11 @@ class Settings(BaseSettings):
                 raise ValueError("Production requires complete Clerk verification configuration.")
             if self.database_url is None or not self.database_url.startswith(("postgresql", "postgres")):
                 raise ValueError("Production requires PostgreSQL persistence.")
+            if self.release_sha is None or re.fullmatch(r"[0-9a-f]{40}", self.release_sha) is None:
+                raise ValueError("Production requires the immutable 40-character Git release SHA.")
+            self._validate_database_transport("Production")
+            if self.database_pool_size + self.database_max_overflow > 7:
+                raise ValueError("Production database pooling is limited to seven connections per application process.")
             if "*" in self.cors_origin_list:
                 raise ValueError("Production CORS origins must be explicit.")
             if not self.cors_origin_list or any(
@@ -603,18 +621,9 @@ class Settings(BaseSettings):
                 raise ValueError("Real-data private beta mode is permitted only in production.")
             if self.private_beta_legal_approval_reference is None or self.private_beta_support_email is None:
                 raise ValueError("Real-data private beta mode requires legal approval and support references.")
-            if self.private_beta_backup_encryption_key is None:
-                raise ValueError("Real-data private beta mode requires a backup encryption key.")
-            try:
-                backup_key = base64.b64decode(self.private_beta_backup_encryption_key.get_secret_value(), validate=True)
-            except (binascii.Error, ValueError) as exc:
-                raise ValueError("Backup encryption key must be valid base64.") from exc
-            if len(backup_key) != 32:
-                raise ValueError("Backup encryption key must decode to exactly 32 bytes.")
             if self.feature_data_export_enabled:
-                export_path = Path(self.private_beta_export_directory).expanduser()
-                if not export_path.is_absolute() or export_path == Path("/tmp") or Path("/tmp") in export_path.parents:
-                    raise ValueError("Real-data exports require an explicit durable private directory outside /tmp.")
+                if self.visual_storage_backend != "s3_compatible":
+                    raise ValueError("Real-data exports require private S3-compatible object storage.")
             external_ai_selected = any(
                 provider == "openai"
                 for provider in (
@@ -838,6 +847,22 @@ class Settings(BaseSettings):
 
             EncryptedDatabaseCredentialStore.decode_master_key(self.connector_credential_master_key.get_secret_value())
         return self
+
+    def _validate_database_transport(self, environment_name: str) -> None:
+        if self.database_tls_mode == "disable":
+            raise ValueError(f"{environment_name} PostgreSQL requires certificate-verifying TLS.")
+        if self.database_tls_mode == "verify_full_custom_ca":
+            if self.database_ca_certificate_base64 is None:
+                raise ValueError(f"{environment_name} PostgreSQL custom-CA TLS requires a CA certificate.")
+            try:
+                certificate = base64.b64decode(
+                    self.database_ca_certificate_base64.get_secret_value(),
+                    validate=True,
+                ).decode("ascii")
+                context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+                context.load_verify_locations(cadata=certificate)
+            except (binascii.Error, UnicodeDecodeError, ValueError, ssl.SSLError) as exc:
+                raise ValueError("Database CA certificate must be a valid base64-encoded PEM certificate.") from exc
 
     @property
     def cors_origin_list(self) -> list[str]:

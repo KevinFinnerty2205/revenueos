@@ -1,17 +1,34 @@
 export type DeploymentEnvironment =
   "development" | "test" | "staging" | "production";
 
+type LegalDocumentRelease = {
+  status: "gap" | "draft" | "approved";
+  version: string | null;
+  effectiveDate: string | null;
+  sha256: string | null;
+};
+
 export type LegalContentStatus = {
-  privacy: "gap" | "draft" | "approved";
-  terms: "gap" | "draft" | "approved";
+  privacy: LegalDocumentRelease;
+  terms: LegalDocumentRelease;
 };
 
 // These values describe the copy committed to the public routes. Change either
 // value only in the same reviewed change that replaces the corresponding GAP
 // page with owner-approved publication copy.
 export const legalContentStatus: LegalContentStatus = {
-  privacy: "gap",
-  terms: "gap",
+  privacy: {
+    status: "gap",
+    version: null,
+    effectiveDate: null,
+    sha256: null,
+  },
+  terms: {
+    status: "gap",
+    version: null,
+    effectiveDate: null,
+    sha256: null,
+  },
 };
 
 type DeploymentVariables = Readonly<Record<string, string | undefined>>;
@@ -59,6 +76,15 @@ function requireValue(variables: DeploymentVariables, name: string): string {
   const value = variables[name]?.trim();
   if (!value) throw new Error(`${name} is required for this deployment.`);
   return value;
+}
+
+function isApprovedLegalRelease(release: LegalDocumentRelease): boolean {
+  return (
+    release.status === "approved" &&
+    Boolean(release.version?.trim()) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(release.effectiveDate ?? "") &&
+    /^sha256:[a-f0-9]{64}$/.test(release.sha256 ?? "")
+  );
 }
 
 export function assertDeploymentConfiguration(
@@ -111,11 +137,11 @@ export function assertDeploymentConfiguration(
       throw new Error("Production requires Clerk production-instance keys.");
     }
     if (
-      contentStatus.privacy !== "approved" ||
-      contentStatus.terms !== "approved"
+      !isApprovedLegalRelease(contentStatus.privacy) ||
+      !isApprovedLegalRelease(contentStatus.terms)
     ) {
       throw new Error(
-        "Production publication is blocked until Privacy and Terms copy is owner-approved and committed.",
+        "Production publication is blocked until Privacy and Terms copy is owner-approved, versioned, effective-dated, fingerprinted and committed.",
       );
     }
   }
@@ -141,6 +167,12 @@ export function assertWebRuntimeConfiguration(
   const secretKey = requireValue(variables, "CLERK_SECRET_KEY");
   if (environment === "production" && !secretKey.startsWith("sk_live_")) {
     throw new Error("Production requires a Clerk production-instance secret.");
+  }
+  if (
+    environment === "production" &&
+    !/^[a-f0-9]{40}$/.test(requireValue(variables, "ORYNTELA_RELEASE_SHA"))
+  ) {
+    throw new Error("Production requires the immutable Git release SHA.");
   }
 }
 

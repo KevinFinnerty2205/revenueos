@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 import xml.etree.ElementTree as ElementTree
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Protocol
@@ -37,7 +38,18 @@ class VisualStorage(Protocol):
 
     async def write(self, storage_key: str, content: bytes, mime_type: str) -> None: ...
 
+    async def write_file(
+        self,
+        storage_key: str,
+        source: Path,
+        mime_type: str,
+        *,
+        sha256: str,
+    ) -> None: ...
+
     async def read(self, storage_key: str) -> bytes: ...
+
+    async def read_file(self, storage_key: str, destination: Path) -> None: ...
 
     async def delete(self, storage_key: str) -> None: ...
 
@@ -132,6 +144,53 @@ class LocalVisualStorage:
         except FileNotFoundError as exc:
             raise VisualObjectMissingError from exc
 
+    async def write_file(
+        self,
+        storage_key: str,
+        source: Path,
+        mime_type: str,
+        *,
+        sha256: str,
+    ) -> None:
+        del mime_type
+        path = self._path(storage_key)
+        await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.uploading")
+
+        def persist() -> None:
+            digest = hashlib.sha256()
+            try:
+                descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                with source.open("rb") as incoming, os.fdopen(descriptor, "wb") as outgoing:
+                    while chunk := incoming.read(1024 * 1024):
+                        digest.update(chunk)
+                        outgoing.write(chunk)
+                if digest.hexdigest() != sha256:
+                    raise VisualStorageError("Source file digest did not match the supplied digest.")
+                temporary.replace(path)
+            finally:
+                temporary.unlink(missing_ok=True)
+
+        await asyncio.to_thread(persist)
+
+    async def read_file(self, storage_key: str, destination: Path) -> None:
+        path = self._path(storage_key)
+
+        def copy() -> None:
+            try:
+                descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                with path.open("rb") as incoming, os.fdopen(descriptor, "wb") as outgoing:
+                    while chunk := incoming.read(1024 * 1024):
+                        outgoing.write(chunk)
+            except FileNotFoundError as exc:
+                destination.unlink(missing_ok=True)
+                raise VisualObjectMissingError from exc
+            except OSError as exc:
+                destination.unlink(missing_ok=True)
+                raise VisualStorageError from exc
+
+        await asyncio.to_thread(copy)
+
     async def delete(self, storage_key: str) -> None:
         path = self._path(storage_key)
         await asyncio.to_thread(path.unlink, missing_ok=True)
@@ -199,6 +258,79 @@ class S3CompatibleVisualStorage:
             headers={"Content-Type": mime_type},
         )
         await self._send(request)
+
+    async def write_file(
+        self,
+        storage_key: str,
+        source: Path,
+        mime_type: str,
+        *,
+        sha256: str,
+    ) -> None:
+        expires = datetime.now(UTC) + timedelta(minutes=5)
+        headers = {
+            "content-type": mime_type,
+            "x-amz-meta-sha256": sha256,
+        }
+
+        def send() -> None:
+            request = urllib.request.Request(
+                self._presign("PUT", storage_key, expires, headers),
+                data=_FileChunks(source),
+                method="PUT",
+                headers={
+                    "Content-Type": mime_type,
+                    "Content-Length": str(source.stat().st_size),
+                    "X-Amz-Meta-Sha256": sha256,
+                },
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=120):  # noqa: S310 - configured private endpoint
+                    pass
+            except (OSError, urllib.error.HTTPError, urllib.error.URLError) as exc:
+                raise VisualStorageError from exc
+
+        await asyncio.to_thread(send)
+
+    async def read_file(self, storage_key: str, destination: Path) -> None:
+        expires = datetime.now(UTC) + timedelta(minutes=5)
+
+        def receive() -> None:
+            request = urllib.request.Request(self._presign("GET", storage_key, expires, {}), method="GET")
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310
+                    descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                    with os.fdopen(descriptor, "wb") as stream:
+                        while chunk := response.read(1024 * 1024):
+                            stream.write(chunk)
+            except urllib.error.HTTPError as exc:
+                destination.unlink(missing_ok=True)
+                if exc.code == 404:
+                    raise VisualObjectMissingError from exc
+                raise VisualStorageError from exc
+            except (OSError, urllib.error.URLError) as exc:
+                destination.unlink(missing_ok=True)
+                raise VisualStorageError from exc
+
+        await asyncio.to_thread(receive)
+
+    async def file_metadata(self, storage_key: str) -> tuple[int, str | None]:
+        expires = datetime.now(UTC) + timedelta(minutes=5)
+
+        def inspect() -> tuple[int, str | None]:
+            request = urllib.request.Request(self._presign("HEAD", storage_key, expires, {}), method="HEAD")
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
+                    length = int(response.headers.get("Content-Length", "-1"))
+                    return length, response.headers.get("X-Amz-Meta-Sha256")
+            except urllib.error.HTTPError as exc:
+                if exc.code == 404:
+                    raise VisualObjectMissingError from exc
+                raise VisualStorageError from exc
+            except (OSError, ValueError, urllib.error.URLError) as exc:
+                raise VisualStorageError from exc
+
+        return await asyncio.to_thread(inspect)
 
     async def read(self, storage_key: str) -> bytes:
         expires = datetime.now(UTC) + timedelta(minutes=5)
@@ -314,6 +446,16 @@ class S3CompatibleVisualStorage:
         region_key = hmac.new(date_key, self.region.encode(), hashlib.sha256).digest()
         service_key = hmac.new(region_key, b"s3", hashlib.sha256).digest()
         return hmac.new(service_key, b"aws4_request", hashlib.sha256).digest()
+
+
+class _FileChunks:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def __iter__(self) -> Iterator[bytes]:
+        with self.path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                yield chunk
 
 
 def create_visual_storage(settings: Settings) -> VisualStorage:

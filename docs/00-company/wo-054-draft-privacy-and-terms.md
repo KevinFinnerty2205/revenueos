@@ -60,7 +60,7 @@ Current controls include server-verified identity/organisation context, forced P
 
 ### 6. Retention, export and deletion
 
-The software supports an organisation retention choice of 30, 90 or 180 days; 90 days is the default configuration, not an approved universal legal policy. Different operational/commercial/audit categories can require separate treatment. Managed database backups are proposed for seven days. Object-backup retention is unresolved. Connector tokens are revoked/disconnected through the supported workflow. Organisation export and deletion are operator-supervised features and remain disabled in the initial cloud template because durable cloud export and complete named-target restore/deletion proof have not passed.
+The software supports an organisation retention choice of 30, 90 or 180 days; 90 days is the default configuration, not an approved universal legal policy. Different operational/commercial/audit categories can require separate treatment. Managed database backups/PITR and a separate daily encrypted database/object bundle are proposed; the latter requires an approved 14-day S3 version lifecycle. Connector tokens are revoked/disconnected through the supported workflow. Production organisation exports use tenant-scoped private object storage with authenticated 24-hour grants. Export and deletion remain operator-supervised and disabled until named-target storage, restore and deletion proof passes.
 
 The published notice must state exact active retention periods, backup ageing, export format, deletion exceptions, commercial/accounting record treatment and how a person or organisation makes a request. It must not promise instantaneous physical erasure from backups.
 

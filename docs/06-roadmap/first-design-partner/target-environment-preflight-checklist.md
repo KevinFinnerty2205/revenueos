@@ -19,16 +19,16 @@ export REVENUEOS_TARGET_DB_HOST='db.example.invalid'
 
 | # | Gate | Executable check | PASS condition |
 | --- | --- | --- | --- |
-| 1 | Deployment exists | `curl --proto '=https' --tlsv1.2 --fail --silent --show-error "$REVENUEOS_TARGET_WEB_ORIGIN" >/dev/null` and `curl --proto '=https' --tlsv1.2 --fail --silent --show-error "$REVENUEOS_TARGET_API_ORIGIN/health/live"` | Web responds successfully; API returns product-safe live status for the intended release |
+| 1 | Deployment/release exists | `curl --proto '=https' --tlsv1.2 --fail --silent --show-error "$REVENUEOS_TARGET_WEB_ORIGIN" >/dev/null` and `curl --proto '=https' --tlsv1.2 --fail --silent --show-error "$REVENUEOS_TARGET_API_ORIGIN/health/live"`; compare both component release variables to the reviewed merge commit | Web responds successfully; API returns product-safe live status; `ORYNTELA_RELEASE_SHA` and `API_RELEASE_SHA` are the same immutable 40-hex reviewed merge SHA |
 | 2 | HTTPS/public origin | `openssl s_client -connect "$REVENUEOS_TARGET_API_HOST:443" -servername "$REVENUEOS_TARGET_API_HOST" </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -dates` and repeat for the web host | Valid, unexpired certificate for each public host; no HTTP-only or localhost origin; HTTP redirects to HTTPS |
 | 3 | Clerk production configuration | Run `revenueos-operations production-preflight`; then inspect the Clerk instance dashboard | Preflight starts only with Clerk mode, mock auth off and complete issuer/audience/JWKS; dashboard identifies the intended production instance and invite policy |
 | 4 | Callback/origin configuration | Complete one synthetic sign-in and sign-out from the public origin; inspect Clerk allowed origins, redirect/callback URLs and web/API CORS values | Exact HTTPS origins only; no wildcard, localhost or unexpected callback; successful round trip |
 | 5 | Runtime PostgreSQL role | `psql "$REVENUEOS_TARGET_RUNTIME_DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "SELECT current_user, rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user;"` | `rolsuper=false` and `rolbypassrls=false` |
 | 6 | Separate migration role | Run the same query through `REVENUEOS_TARGET_MIGRATION_DATABASE_URL`, then `test "$(psql "$REVENUEOS_TARGET_RUNTIME_DATABASE_URL" -XAtc 'SELECT current_user')" != "$(psql "$REVENUEOS_TARGET_MIGRATION_DATABASE_URL" -XAtc 'SELECT current_user')"` | Roles differ; only the guarded migration job receives migration credentials; runtime cannot create/alter schema or roles |
-| 7 | Database TLS | `psql "$REVENUEOS_TARGET_RUNTIME_DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "SELECT ssl, version, cipher, bits FROM pg_stat_ssl WHERE pid=pg_backend_pid();"` | `ssl=true`; protocol/cipher comply with the hosting decision and current platform policy |
-| 8 | Private durable file storage | `revenueos-operations production-preflight` | `private_object_storage=pass`; bucket/container blocks public access, uses tenant-prefixed private keys and durable storage—not local ephemeral disk |
-| 9 | Storage backup | Inspect the storage provider backup/versioning schedule and run the named restore drill | Backup is enabled, access-restricted and retention-aligned; an object is actually restored and checksum-matched |
-| 10 | Encryption keys | `revenueos-operations production-preflight` plus secret-manager inventory review | A 32-byte decoded backup key and deployment-specific storage signing key exist; storage/database/backup encryption is enabled; named owners and rotate/revoke procedures exist |
+| 7 | Database TLS | Confirm `API_DATABASE_TLS_MODE=verify_full_custom_ca`; test the valid provider CA/hostname and separately prove a wrong hostname/untrusted CA fails; use `psql` only as supporting evidence | Runtime, migration and backup clients verify encryption, certificate chain and hostname; `ssl=true` alone is insufficient |
+| 8 | Private durable file/export storage | `revenueos-operations production-preflight` and authenticated synthetic export/download/purge/cross-tenant-denial smoke | `private_object_storage=pass` and `durable_export_storage=pass`; both use tenant-prefixed private keys in S3-compatible storage, never local ephemeral disk |
+| 9 | Independent backup | Run `revenueos-backup create-remote`, `verify-remote --backup-id <id>` and a named isolated `restore-remote`; inspect S3 versioning/lifecycle and alert delivery | Manifest appears last; remote size/SHA metadata pass; restored database/object counts/checksums match; current/noncurrent versions/delete markers expire within 14 days; failure/freshness alert is received |
+| 10 | Encryption keys | `revenueos-operations production-preflight` plus separate backup-job/secret-manager inventory review | Dedicated 32-byte backup key exists only on the scheduled/restore jobs; storage signing key exists only where required; named rotate/revoke owners and a separately controlled offline recovery copy are proven |
 | 11 | Debug disabled | Start/preflight under the deployed configuration and inspect structured logs | `API_LOG_LEVEL` is not `DEBUG`; no stack trace or debug toolbar; product errors expose safe code/message/request ID only |
 | 12 | Mock providers disabled | Compare preflight feature/provider output with the signed profile and run the disabled-path smoke tests | Mock auth/connectors are off; Prospect is off; no customer-content capability can surface deterministic mock output; enabled external AI paths use only the approved provider/model |
 | 13 | Demo/JIT provisioning disabled | Inspect the deployed secret/config record and attempt login with an unprovisioned synthetic Clerk organisation | `API_IDENTITY_JIT_PROVISIONING_ENABLED=false`; unprovisioned organisation/user fails closed; demo seed is not scheduled or exposed |
@@ -56,9 +56,9 @@ revenueos-operations production-preflight > preflight.json
 jq -e '.status == "ready"' preflight.json
 ```
 
-The command proves migration `0055_live_prospect_provider`, non-superuser/non-`BYPASSRLS`
-runtime role, transaction-local tenant reset, private object write/read/delete,
-owner-only durable export storage, real-data mode and configured approval/support
+The command proves migration `0061_manual_paid_credit_grant`, immutable release identity,
+non-superuser/non-`BYPASSRLS` runtime role, transaction-local tenant reset, private
+object write/read/delete, tenant-scoped durable export storage, real-data mode and configured approval/support
 references. It does not prove Clerk dashboard policy, managed backups, monitoring,
 legal approval or partner consent.
 

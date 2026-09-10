@@ -1,6 +1,6 @@
 # First-partner subprocessor/service register
 
-- **Architecture basis:** recommended `AWS-SYD-PRIVATE-BETA-V1`
+- **Architecture basis:** proposed `DIGITALOCEAN-SYD-V1` with independent `AWS-S3-SYD-BACKUP-V1`
 - **Status:** **OWNER/LEGAL AND PARTNER APPROVAL REQUIRED**
 - **Purpose:** operational inventory and disclosure input; **not legal certification**
 
@@ -13,7 +13,8 @@ known; they are not blanket residency guarantees.
 
 | Service                                                                              | Purpose                                                                                                     | Customer data involved                                                                                                                                                                           | Region/location where known                                                                                                                                                                 | Approval required                                                                                                                         | Current status                                                  |
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Amazon Web Services (Lightsail, S3, CloudWatch/Route 53/SNS or approved equivalents) | Run web/API/worker; managed PostgreSQL; private active files; encrypted backups; logs, health and alerts    | All tenant application records; deliberately supplied transcripts; derived artefacts; private Create files only if separately enabled; encrypted backups; content-minimised operational metadata | RevenueOS data-plane resources configured in AWS Asia Pacific (Sydney), `ap-southeast-2`; AWS control-plane, billing, support and service metadata may have other locations under AWS terms | Owner/legal approval of AWS terms/DPA, exact services, Sydney configuration, access model, subprocessor/cross-border disclosure and spend | **NOT APPROVED; NO ACCOUNT OR RESOURCE CREATED BY THIS WORK**   |
+| DigitalOcean (App Platform, managed PostgreSQL and Spaces) | Run web/API/worker/scheduled backup job; store tenant records and active private objects; platform logs, health and alerts | All tenant application records; deliberately supplied transcripts; derived artefacts; private files/exports; content-minimised operational metadata | Data-plane resources configured in Sydney; global edge, control-plane, billing, support and subprocessors prevent an exclusively Australian-processing claim | Owner/legal approval of terms/DPA/subprocessors, HA database, Sydney configuration, access model, disclosure and spend | **PROPOSED / NOT APPROVED; NO ACCOUNT OR RESOURCE CREATED BY THIS WORK** |
+| Amazon Web Services (S3 Standard only) | Independent encrypted logical database/object backup | AES-256-GCM payloads and content-free manifest metadata; encryption key is stored separately | Bucket configured in Asia Pacific (Sydney), `ap-southeast-2`; AWS control-plane, billing, support and service metadata may have other locations under AWS terms | Owner/legal approval of AWS terms/DPA, Sydney bucket, least-privilege job identity, 14-day version lifecycle, alert, key escrow and restore proof | **PROPOSED BACKUP ONLY / NOT APPROVED; NO ACCOUNT OR RESOURCE CREATED** |
 | Clerk                                                                                | Authentication, user/organisation identity, invitation, session verification and role/permission claims     | User name/email/identifier, organisation identity/membership, session/security metadata; no RevenueOS transcript/CRM body is intentionally sent                                                  | Clerk DPA permits processing where Clerk and its subprocessors maintain facilities; no Australian-residency claim was found                                                                 | Owner/legal approval of plan, DPA/subprocessors/cross-border handling; production instance/domain/session/MFA policy; partner disclosure  | **NOT APPROVED; PRODUCTION INSTANCE NOT PROVEN**                |
 | Zoho Mail                                                                            | Receive business, support, privacy and incident correspondence through one mailbox and the approved aliases | Contact identity, request/incident metadata and only the minimum content supplied by the sender                                                                                                  | Provider data location and cross-border position have not yet been approved for the private-beta legal schedule                                                                             | Legal/privacy and partner approval of provider terms, locations, retention, access and disclosure                                         | **SELECTED AND CONFIGURED; REAL PARTNER DATA NOT YET APPROVED** |
 
@@ -29,9 +30,9 @@ for real partner data. Ordinary tickets must remain content-minimised.
 | Fly.io   | App hosting only if the owner selects alternative `FLY-SUPABASE-SYD-V1`                                          | Customer requests/responses and content-minimised logs handled by web/API/worker                                          | App Machines pinned to `syd`; global edge/control-plane/support considerations remain                                                                                                                                | Alternative-architecture and legal/subprocessor approval plus spend                                                                                                   | **NOT SELECTED**                                 |
 | Supabase | PostgreSQL and private object storage only if the owner selects the alternative                                  | Tenant records, transcripts/artefacts, files and seven-day managed backups/logs                                           | Exact primary project region `ap-southeast-2` (Sydney); support/control-plane/subprocessor considerations remain                                                                                                     | Alternative-architecture and legal/subprocessor approval plus target RLS/S3/restore proof                                                                             | **NOT SELECTED**                                 |
 
-If AWS primary is selected, Fly.io and Supabase are removed from the approved launch
-schedule. If the alternative is selected, AWS remains only for the separate Sydney
-portable backup unless the owner approves a different already-evaluated backup.
+If the DigitalOcean target is approved, Fly.io and Supabase are removed from the
+approved launch schedule. AWS remains only for the separate Sydney encrypted backup
+unless the owner approves a different independently evaluated destination.
 
 ## Not yet used
 
@@ -50,7 +51,7 @@ RevenueOS may use it in a future roadmap.
 
 ## Approval procedure
 
-1. Owner selects the architecture, support provider and OpenAI decision.
+1. Owner approves or declines the DigitalOcean primary/AWS backup architecture, support provider and OpenAI decision.
 2. Remove non-selected conditional infrastructure providers.
 3. Record exact contracting entities, current DPA/terms/subprocessor-list URLs,
    service purpose, data categories, configured region and cross-border limitation.
@@ -59,7 +60,9 @@ RevenueOS may use it in a future roadmap.
 5. Reopen the gate on a material provider, purpose, data-category or location change.
 
 Reference sources:
-[AWS Lightsail](https://aws.amazon.com/lightsail/),
+[DigitalOcean App Platform](https://docs.digitalocean.com/products/app-platform/),
+[DigitalOcean managed PostgreSQL](https://docs.digitalocean.com/products/databases/postgresql/),
+[AWS S3](https://aws.amazon.com/s3/),
 [Clerk DPA](https://clerk.com/legal/dpa),
 [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data),
 [Fly.io regions](https://fly.io/docs/reference/regions/) and

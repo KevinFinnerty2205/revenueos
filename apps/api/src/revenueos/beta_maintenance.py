@@ -20,6 +20,7 @@ from sqlalchemy.sql import Select
 
 from revenueos.config import Settings, get_settings
 from revenueos.database import create_engine, create_session_factory, set_tenant_database_context
+from revenueos.export_storage import export_object_reference, export_storage_key, parse_export_object_reference
 from revenueos.live_intelligence_maintenance import delete_live_intelligence
 from revenueos.live_intelligence_services import expire_live_intelligence
 from revenueos.models import (
@@ -201,7 +202,7 @@ from revenueos.recording_maintenance import (
     purge_expired_recording_audio,
     reconcile_recording_storage,
 )
-from revenueos.visual_storage import VisualStorageError, create_visual_storage
+from revenueos.visual_storage import S3CompatibleVisualStorage, VisualStorageError, create_visual_storage
 
 EXPORT_VERSION = 37
 EXPORT_EXPIRY_HOURS = 24
@@ -918,30 +919,37 @@ async def generate_export(
     settings: Settings,
     organisation_id: UUID,
     request_id: UUID,
-) -> Path:
+) -> Path | str:
     await _mark_request_processing(session_factory, organisation_id, request_id, "export")
+    final_path: Path | None = None
+    temporary_path: Path | None = None
+    remote_key: str | None = None
+    storage = create_visual_storage(settings)
     try:
         async with session_factory() as session, session.begin():
             await set_tenant_database_context(session, organisation_id)
             payload = await _export_payload(session, organisation_id, settings)
-        root = Path(settings.private_beta_export_directory).resolve()
-        root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        final_path = root / f"revenueos-export-{request_id}.json"
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            prefix=f".{request_id}-",
-            suffix=".tmp",
-            dir=root,
-            delete=False,
-        ) as temporary:
-            json.dump(
-                payload, temporary, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=_json_default
-            )
-            temporary.write("\n")
-            temporary_path = Path(temporary.name)
-        os.chmod(temporary_path, 0o600)
-        os.replace(temporary_path, final_path)
+        if isinstance(storage, S3CompatibleVisualStorage):
+            with tempfile.TemporaryDirectory(prefix="revenueos-export-") as temporary_root:
+                temporary_path = Path(temporary_root) / f"revenueos-export-{request_id}.json"
+                _write_export_payload(payload, temporary_path)
+                remote_key = export_storage_key(organisation_id, request_id)
+                digest = _sha256_file(temporary_path)
+                await storage.write_file(remote_key, temporary_path, "application/json", sha256=digest)
+                remote_size, remote_digest = await storage.file_metadata(remote_key)
+                if remote_size != temporary_path.stat().st_size or remote_digest != digest:
+                    raise RuntimeError("Export object verification failed.")
+            output_reference = export_object_reference(organisation_id, request_id)
+            result: Path | str = output_reference
+        else:
+            root = Path(settings.private_beta_export_directory).resolve()
+            root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            final_path = root / f"revenueos-export-{request_id}.json"
+            temporary_path = root / f".{request_id}-{os.urandom(8).hex()}.tmp"
+            _write_export_payload(payload, temporary_path)
+            os.replace(temporary_path, final_path)
+            output_reference = str(final_path)
+            result = final_path
         async with session_factory() as session, session.begin():
             await set_tenant_database_context(session, organisation_id)
             record = await session.scalar(
@@ -953,7 +961,7 @@ async def generate_export(
             if record is None:
                 raise RuntimeError("Export request disappeared before completion.")
             record.status = "completed"
-            record.output_path = str(final_path)
+            record.output_path = output_reference
             record.completed_at = datetime.now(UTC)
             record.expires_at = datetime.now(UTC) + timedelta(hours=EXPORT_EXPIRY_HOURS)
             record.failure_code = None
@@ -966,10 +974,37 @@ async def generate_export(
                     metadata_json={"export_version": EXPORT_VERSION},
                 )
             )
-        return final_path
+        return result
     except Exception:
+        if remote_key is not None:
+            try:
+                await storage.delete(remote_key)
+            except VisualStorageError:
+                logger.warning(
+                    "failed_export_object_cleanup",
+                    extra={"organisation_id": str(organisation_id), "request_id": str(request_id)},
+                )
+        if final_path is not None:
+            final_path.unlink(missing_ok=True)
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
         await _mark_request_failed(session_factory, organisation_id, request_id, "export_generation_failed")
         raise
+
+
+def _write_export_payload(payload: dict[str, object], destination: Path) -> None:
+    descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        json.dump(payload, stream, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=_json_default)
+        stream.write("\n")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 async def purge_expired_exports(
@@ -981,6 +1016,7 @@ async def purge_expired_exports(
 ) -> int:
     bounded_batch_size = min(max(batch_size, 1), 1_000)
     root = Path(settings.private_beta_export_directory).resolve()
+    storage = create_visual_storage(settings)
     async with session_factory() as session, session.begin():
         await set_tenant_database_context(session, organisation_id)
         records = list(
@@ -1001,8 +1037,12 @@ async def purge_expired_exports(
             ).all()
         )
         for record in records:
-            path = _validated_export_path(root, record)
-            path.unlink(missing_ok=True)
+            object_key = parse_export_object_reference(record.output_path or "", organisation_id, record.id)
+            if object_key is not None:
+                await storage.delete(object_key)
+            else:
+                path = _validated_export_path(root, record)
+                path.unlink(missing_ok=True)
             record.output_path = None
         if records:
             session.add(
@@ -1100,8 +1140,15 @@ async def _delete_organisation_records(
             ).all()
         )
         export_root = Path(settings.private_beta_export_directory).resolve()
+        export_storage = create_visual_storage(settings)
         for export_record in export_records:
-            _validated_export_path(export_root, export_record).unlink(missing_ok=True)
+            object_key = parse_export_object_reference(
+                export_record.output_path or "", organisation_id, export_record.id
+            )
+            if object_key is not None:
+                await export_storage.delete(object_key)
+            else:
+                _validated_export_path(export_root, export_record).unlink(missing_ok=True)
         await delete_live_intelligence(
             session,
             organisation_id,

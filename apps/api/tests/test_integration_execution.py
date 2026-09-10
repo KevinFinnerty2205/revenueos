@@ -1038,6 +1038,8 @@ def test_mock_connectors_are_rejected_in_production_configuration() -> None:
             clerk_issuer="https://identity.example.test",
             clerk_audience="revenueos",
             database_url="postgresql+asyncpg://example.invalid/revenueos",
+            release_sha="a" * 40,
+            database_tls_mode="verify_full_system",
             cors_origins="https://app.example.test",
             feature_mock_connectors_enabled=True,
             visual_storage_backend="s3_compatible",

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -41,14 +40,21 @@ def safe_real_data_settings(**changes: object) -> Settings:
         "clerk_jwks_url": "https://identity.example.test/jwks.json",
         "clerk_issuer": "https://identity.example.test",
         "clerk_audience": "revenueos-api",
-        "database_url": "postgresql+asyncpg://runtime.example.test/revenueos?ssl=require",
+        "database_url": "postgresql+asyncpg://runtime.example.test/revenueos",
+        "release_sha": "a" * 40,
+        "database_tls_mode": "verify_full_system",
         "cors_origins": "https://app.example.test",
         "allowed_hosts": "api.example.test",
         "private_beta_real_data_enabled": True,
         "private_beta_legal_approval_reference": "approval-private-beta-001",
         "private_beta_support_email": "support@example.test",
-        "private_beta_backup_encryption_key": base64.b64encode(b"b" * 32).decode(),
         "private_beta_export_directory": "/var/lib/revenueos/private-exports",
+        "visual_storage_backend": "s3_compatible",
+        "visual_s3_endpoint": "https://storage.example.test",
+        "visual_s3_bucket": "private-real-data",
+        "visual_s3_region": "ap-southeast-2",
+        "visual_s3_access_key_id": "synthetic-access-key",
+        "visual_s3_secret_access_key": "synthetic-secret-key",
         "feature_revenue_brain_enabled": False,
         "feature_ai_companion_enabled": False,
         "feature_ai_debrief_enabled": False,
@@ -86,7 +92,7 @@ def test_real_data_configuration_has_one_known_safe_restricted_profile() -> None
         ({"identity_jit_provisioning_enabled": True}, "deliberate operator provisioning"),
         ({"cors_origins": "http://localhost:3000"}, "public HTTPS origins"),
         ({"allowed_hosts": "localhost"}, "allowed hosts must be explicit"),
-        ({"private_beta_export_directory": "/tmp/revenueos-exports"}, "outside /tmp"),
+        ({"visual_storage_backend": "local"}, "S3-compatible object storage"),
         ({"feature_revenue_brain_enabled": True}, "mock intelligence"),
         ({"log_level": "DEBUG"}, "must not be DEBUG"),
     ],

@@ -439,7 +439,27 @@ async def inspect_object_storage(settings: Settings) -> PreflightCheck:
     )
 
 
-def inspect_export_directory(settings: Settings) -> PreflightCheck:
+async def inspect_export_storage(settings: Settings) -> PreflightCheck:
+    if settings.visual_storage_backend == "s3_compatible":
+        storage = create_visual_storage(settings)
+        key = f"operations/preflight/exports/{uuid.uuid4()}.probe"
+        content = b"revenueos-export-preflight-v1"
+        try:
+            await storage.write(key, content, "application/octet-stream")
+            restored = await storage.read(key)
+            await storage.delete(key)
+            remaining = await storage.list_keys(key)
+        except (OSError, VisualStorageError):
+            return PreflightCheck("private_export_storage", "fail", "Private export object storage probe failed.")
+        passed = restored == content and not remaining
+        return PreflightCheck(
+            "private_export_storage",
+            "pass" if passed else "fail",
+            "Private export object storage write/read/delete probe passed."
+            if passed
+            else "Private export object storage integrity probe failed.",
+        )
+
     root = Path(settings.private_beta_export_directory).resolve()
     probe = root / f".revenueos-preflight-{uuid.uuid4().hex}"
     try:
@@ -472,7 +492,7 @@ async def production_preflight(settings: Settings) -> dict[str, object]:
         checks = [PreflightCheck("database_connectivity", "fail", "Database is not configured.")]
     else:
         checks = await inspect_runtime_database(engine)
-    checks.extend((inspect_export_directory(settings), await inspect_object_storage(settings)))
+    checks.extend((await inspect_export_storage(settings), await inspect_object_storage(settings)))
     checks.append(
         PreflightCheck(
             "real_data_release_approvals",

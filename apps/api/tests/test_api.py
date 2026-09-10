@@ -120,6 +120,7 @@ def test_staging_is_explicit_and_rejects_mock_authentication() -> None:
         mock_auth_enabled=False,
         identity_jit_provisioning_enabled=False,
         database_url="postgresql+asyncpg://staging.example.invalid/revenueos",
+        database_tls_mode="verify_full_system",
         clerk_jwks_url="https://identity-staging.example.test/jwks",
         clerk_issuer="https://identity-staging.example.test",
         clerk_audience="revenueos-staging",
@@ -141,7 +142,35 @@ def test_production_engage_requires_deployment_suppression_key() -> None:
             clerk_issuer="https://identity.example.test",
             clerk_audience="revenueos",
             database_url="postgresql+asyncpg://example.invalid/revenueos",
+            release_sha="a" * 40,
+            database_tls_mode="verify_full_system",
             cors_origins="https://app.example.test",
+        )
+
+
+def test_production_requires_verified_database_tls_and_bounded_pooling() -> None:
+    common = {
+        "environment": "production",
+        "auth_mode": "clerk",
+        "mock_auth_enabled": False,
+        "identity_jit_provisioning_enabled": False,
+        "clerk_jwks_url": "https://identity.example.test/jwks",
+        "clerk_issuer": "https://identity.example.test",
+        "clerk_audience": "revenueos",
+        "database_url": "postgresql+asyncpg://example.invalid/revenueos",
+        "release_sha": "a" * 40,
+        "cors_origins": "https://app.example.test",
+        "allowed_hosts": "api.example.test",
+        "outreach_suppression_hmac_key": "synthetic-production-suppression-key",
+    }
+    with pytest.raises(ValidationError, match="certificate-verifying TLS"):
+        Settings(**common)  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match="seven connections"):
+        Settings(  # type: ignore[arg-type]
+            **common,
+            database_tls_mode="verify_full_system",
+            database_pool_size=6,
+            database_max_overflow=2,
         )
 
 
