@@ -10,7 +10,7 @@ Create must be exercised even if the partner will not receive the Create entitle
 
 ## Preconditions
 
-- Owner-approved backup retention, RPO and RTO objectives are recorded. Repository starting objectives are daily backup, maximum 14-day backup retention, RPO 24 hours and RTO one business day; they are not contractual SLAs.
+- Owner-approved backup retention, RPO and RTO objectives are recorded. Repository starting objectives are daily backup, maximum 14-day backup retention, RPO 24 hours and RTO four hours; they are not contractual SLAs.
 - Source and restore database/storage are access-restricted and demonstrably different.
 - Backup encryption key is injected by the secret manager and not shared with ordinary runtime credentials.
 - The isolated restore target has no route to partner/customer data and will be destroyed after review.
@@ -36,11 +36,10 @@ Create must be exercised even if the partner will not receive the Create entitle
 Start the RPO clock at the last confirmed canonical/object write. Create the backup in an access-restricted encrypted destination:
 
 ```sh
-revenueos-backup create --destination "$REVENUEOS_TARGET_BACKUP_ROOT" > backup-create.json
-revenueos-backup verify --source "$REVENUEOS_TARGET_BACKUP_DIRECTORY" > backup-verify.json
+revenueos-backup create-remote > backup-create.json
+revenueos-backup verify-remote --backup-id <backup-id> > backup-verify.json
 jq -e '.status == "complete"' backup-create.json
 jq -e '.status == "verified"' backup-verify.json
-shasum -a 256 "$REVENUEOS_TARGET_BACKUP_DIRECTORY"/*
 ```
 
 Record backup ID, UTC time, database archive checksum, object archive checksum, manifest checksum and object count. Confirm the manifest contains no names, content, keys, URLs or credentials. Also record the managed database snapshot/PITR and object-backup identifiers; the portable tool supplements rather than replaces provider backups.
@@ -50,18 +49,16 @@ Record backup ID, UTC time, database archive checksum, object archive checksum, 
 Start the RTO timer immediately before restore. The portable command restores the database and authenticated object archive to an empty isolated directory:
 
 ```sh
-revenueos-backup restore \
-  --source "$REVENUEOS_TARGET_BACKUP_DIRECTORY" \
-  --target-database-url "$REVENUEOS_RESTORE_DATABASE_URL" \
-  --target-storage-directory "$REVENUEOS_RESTORE_STORAGE_DIRECTORY" \
-  --confirm "RESTORE <backup-id> INTO <restore-database-name>" > restore.json
+revenueos-backup restore-remote \
+  --backup-id <backup-id> \
+  --confirm "RESTORE <backup-id> TO CONFIGURED NAMED TARGET" > restore.json
 jq -e '.status == "complete"' restore.json
 ```
 
-For an S3-compatible production topology, copy the verified restored object tree into an empty, private isolated validation bucket using the selected provider's checksum-preserving CLI, then configure the isolated API/worker to that bucket. Record the exact provider command in the launch evidence. Public access must remain blocked; do not reuse the source bucket.
+The named target is supplied only through `API_BACKUP_RESTORE_TARGET_*` secret-manager variables. The command restores objects directly into an empty, private isolated validation bucket and the database into the separately named target. Public access must remain blocked; do not reuse the source bucket or expose credentials in command arguments.
 
 Deploy the same API/worker/web release to the isolated target. Apply only compatible
-migration `0055_live_prospect_provider` with the restore migration role, then run
+migration `0061_manual_paid_credit_grant` with the restore migration role, then run
 migration drift and production preflight with the restore runtime role.
 
 ### 4. Reconcile and authorise

@@ -1,13 +1,20 @@
 # First supervised real-data design-partner launch gate
 
+> **Superseded 10 September 2026:** this historical WO-039C/WO-050 gate is no
+> longer the controlling operational record. Use the canonical
+> [WO-054 Production Deployment & Launch Operations record](../../07-sprints/wo-054-production-launch-operations.md),
+> which evaluates current migration head `0061_manual_paid_credit_grant` and the
+> DigitalOcean Sydney candidate. None of the historical target, cost or approval
+> assumptions below authorises spend, deployment or customer data.
+
 - **Gate date:** 2 September 2026; commercial consolidation reviewed 4 September 2026 (Australia/Sydney)
 - **Current documentation branch:** `docs/oryntela-product-commercial-consolidation`
 - **Reviewed repository baseline:** `daedbbc`
-- **Repository candidate:** WO-039A through WO-049 are on `main`; WO-050 is the current review candidate with Alembic head `0055_live_prospect_provider` and production billing/Credits/provider execution disabled
+- **Repository candidate:** WO-039A through WO-055 are on `main` or the current WO-054 review branch, with Alembic head `0061_manual_paid_credit_grant` and production billing/Credits/provider execution disabled
 - **Current launch decision:** **WAITING FOR TARGET ENVIRONMENT PROOF**
 - **Scope:** one named, supervised, Native CRM design partner; no Gmail, Apollo, live Prospect provider, live email or autonomous external execution
 
-This is the controlling launch record. It turns the repository-level **GO WITH RESTRICTIONS** decision into a reusable, partner-specific release gate. It does not approve a deployment, legal position, provider or customer-data use.
+This was the controlling launch record for its dated baseline. It turns the repository-level **GO WITH RESTRICTIONS** decision into a reusable, partner-specific release gate. It does not approve a deployment, legal position, provider or customer-data use.
 
 The [Oryntela commercial-product handoff](../oryntela-commercial-product-handoff.md)
 consolidates brand and commercial hypotheses without changing this gate. The
@@ -46,13 +53,13 @@ Use only these evidence states: `PASS`, `FAIL`, `OWNER APPROVAL REQUIRED`, `PART
 | ----------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Requested branch started clean from `main`            | **PASS**                     | Git inspection at gate start; no branch was created or changed                                                                                                     |
 | WO-039A, WO-039B and WO-039C are on `main`            | **PASS**                     | Merge commits `558795c`, `5f0a61c` and `93c386e`                                                                                                                   |
-| One Alembic head: `0055_live_prospect_provider`       | **PASS**                     | Migration chain plus commercial, billing, Credits and Prospect provider metadata migration/RLS tests                                                                |
+| One Alembic head: `0061_manual_paid_credit_grant`     | **PASS**                     | Migration chain plus commercial, billing, Credits and Prospect provider metadata migration/RLS tests                                                                |
 | Production build and complete repository gate         | **PASS AT WO-039C BASELINE** | [WO-039C validation record](../../07-sprints/wo-039c-real-data-operations.md#frozen-validation-gate); this documentation branch must also pass its required checks |
 | Production preflight command                          | **PASS**                     | `revenueos-operations production-preflight` exists and fails closed                                                                                                |
 | Forced RLS and runtime-role requirements              | **PASS — REPOSITORY ONLY**   | All-table PostgreSQL proof and non-bypass preflight exist; target repetition is separate                                                                           |
-| Encrypted database/object backup and isolated restore | **PASS — REPOSITORY ONLY**   | AES-256-GCM backup/verify/restore tooling and synthetic local drill exist                                                                                          |
+| Encrypted database/object backup and isolated restore | **PASS — REPOSITORY ONLY**   | Scheduled independent-S3 path, AES-256-GCM payloads, authenticated format-v2 manifest, remote verify/restore tooling and current-format synthetic local drill exist |
 | Organisation/member provisioning and disablement      | **PASS — REPOSITORY ONLY**   | Idempotent operator commands and access-denial tests exist                                                                                                         |
-| Export, retention and organisation deletion           | **PASS — REPOSITORY ONLY**   | Export v29 and tenant-scoped maintenance/deletion paths exist                                                                                                      |
+| Export, retention and organisation deletion           | **PASS — REPOSITORY ONLY**   | Export v37, tenant-scoped private-S3 delivery and tenant-scoped maintenance/deletion paths exist                                                                    |
 | Native CRM import and Account/Contact merge           | **PASS — REPOSITORY ONLY**   | Bounded preview/confirm import and deliberate merge exist                                                                                                          |
 | Create private files and downloads                    | **PASS — REPOSITORY ONLY**   | Validated PPTX output and authenticated one-time download grants exist                                                                                             |
 | Feature kill switches and safe inventory              | **PASS — REPOSITORY ONLY**   | Server-authoritative flags are returned by `safe_feature_flags()`                                                                                                  |

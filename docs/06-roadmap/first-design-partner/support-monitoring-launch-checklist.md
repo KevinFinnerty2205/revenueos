@@ -22,7 +22,7 @@ Status: **WAITING FOR TARGET; OWNER APPROVAL REQUIRED**. Use current hosting/dat
 | Database | Provider availability, connections, storage, CPU, latency, backup/PITR state and TLS | Alert before provider limits; any integrity/RLS symptom pauses immediately |
 | Worker | Supervisor process health plus `queue-status` state counts/stale leases; stop a validation worker and observe alert/restart | No silent stopped worker; repeated stale leases or unknown states disable affected feature |
 | Object storage | Provider availability/capacity/access alerts plus preflight write/read/delete canary | Any public-access finding, missing/corrupt object or credential error disables binary capabilities |
-| Backup failure | Native backup-job failure and age alert; deliberately fail/withhold a validation backup | Alert before approved RPO; backup failure pauses real-data testing |
+| Backup failure/freshness | External check of the independent S3 manifest age plus scheduled-job exit evidence; deliberately fail/withhold a validation backup | Alert before the 24-hour RPO; App Platform spec has no native scheduled-job failure alert, so dashboard inspection alone is insufficient; backup failure pauses real-data testing |
 | Restore readiness | Named-target drill completion age | No launch without current pass; repeat quarterly and after material change |
 | Retention failure | Scheduled command exit/status and repeated eligible counts; force a safe validation failure | Non-zero/repeated backlog alerts privacy/operations owner; stop destructive run for that tenant |
 | Auth/revocation | Safe auth failure counts and Clerk health; session matrix result | Unexpected success after disablement or cross-org symptom pauses immediately |
@@ -53,6 +53,6 @@ Run a time-bounded content scan using unique synthetic canaries as defined in th
 
 ## External monitoring decision
 
-A paid external product is not yet shown to be necessary because no target platform has been selected and provider-native capabilities have not been assessed. If the selected target cannot supply the checks/alerts above, the operations owner must produce a separate comparison with exact missing coverage, monthly and usage-based cost, data categories/regions/subprocessors, access controls, retention, contract/DPA and exit plan. Owner approval is required before trial or activation.
+A separate paid error-reporting product is not yet shown to be necessary. The selected App Platform specification covers deployment/domain, component CPU/memory/restart and health signals, but it does not provide the required scheduled-backup freshness notification by itself. Before data entry, configure a content-free external check that reads only the latest manifest age/result and routes a tested alert. If that control or any other required signal adds a provider, cost or data flow, the operations owner must record the exact coverage, price, region/subprocessors, access, retention, contract/DPA and exit plan before activation.
 
 All support ownership and every synthetic alert route must pass before real data. A dashboard without a tested notification path is not evidence.

@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { isSearchIndexingAllowed } from "@/lib/deployment";
 import { siteOrigin } from "@/lib/marketing";
 
 const privatePaths = [
@@ -27,6 +28,11 @@ const privatePaths = [
 ] as const;
 
 export default function robots(): MetadataRoute.Robots {
+  if (!isSearchIndexingAllowed()) {
+    return {
+      rules: { userAgent: "*", disallow: "/" },
+    };
+  }
   return {
     rules: {
       userAgent: "*",

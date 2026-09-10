@@ -114,6 +114,7 @@ from revenueos.models import (
 from revenueos.routes.health import EXPECTED_MIGRATION_HEAD
 from revenueos.source_evidence_contracts import SourceCandidateLocation
 from revenueos.tenant import TenantContext
+from revenueos.visual_storage import S3CompatibleVisualStorage
 from tests.conftest import (
     PRIMARY_ORGANISATION_ID,
     PRIMARY_USER_ID,
@@ -1800,3 +1801,82 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
 
     asyncio.run(purge())
     assert not (tmp_path / f"revenueos-export-{request_id}.json").exists()
+
+
+def test_export_survives_ephemeral_api_filesystem_with_private_object_storage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeS3Storage(S3CompatibleVisualStorage):
+        def __init__(self) -> None:
+            self.objects: dict[str, tuple[bytes, str]] = {}
+
+        async def write_file(
+            self,
+            storage_key: str,
+            source: Path,
+            mime_type: str,
+            *,
+            sha256: str,
+        ) -> None:
+            assert mime_type == "application/json"
+            self.objects[storage_key] = (source.read_bytes(), sha256)
+
+        async def file_metadata(self, storage_key: str) -> tuple[int, str | None]:
+            content, digest = self.objects[storage_key]
+            return len(content), digest
+
+        async def read(self, storage_key: str) -> bytes:
+            return self.objects[storage_key][0]
+
+        async def read_file(self, storage_key: str, destination: Path) -> None:
+            destination.write_bytes(self.objects[storage_key][0])
+
+        async def delete(self, storage_key: str) -> None:
+            self.objects.pop(storage_key, None)
+
+    storage = FakeS3Storage()
+    monkeypatch.setattr("revenueos.beta_maintenance.create_visual_storage", lambda _settings: storage)
+    monkeypatch.setattr("revenueos.beta_services.create_visual_storage", lambda _settings: storage)
+    settings = beta_settings(
+        visual_storage_backend="s3_compatible",
+        visual_s3_endpoint="https://storage.example.test",
+        visual_s3_bucket="private-exports",
+        visual_s3_region="test-1",
+        visual_s3_access_key_id="synthetic-access-key",
+        visual_s3_secret_access_key="synthetic-secret-key",
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        requested = client.post("/api/v1/beta/admin/exports")
+        assert requested.status_code == 202
+        request_id = UUID(requested.json()["id"])
+
+    async def scenario() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        result = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
+        expected_key = f"{PRIMARY_ORGANISATION_ID}/exports/revenueos-export-{request_id}.json"
+        assert result == f"object-storage:{expected_key}"
+        assert list(storage.objects) == [expected_key]
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+    with TestClient(app) as client:
+        download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
+        assert download.status_code == 200
+        assert download.json()["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
+
+    async def purge() -> None:
+        engine = create_async_engine(TEST_DB_URL)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as session, session.begin():
+            record = await session.get(BetaDataRequest, request_id)
+            assert record is not None
+            record.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        assert await purge_expired_exports(factory, settings, PRIMARY_ORGANISATION_ID, batch_size=1) == 1
+        await engine.dispose()
+
+    asyncio.run(purge())
+    assert storage.objects == {}

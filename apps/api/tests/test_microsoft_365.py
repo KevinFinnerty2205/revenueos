@@ -429,6 +429,8 @@ def test_microsoft_production_activation_and_configuration_fail_closed() -> None
         "clerk_issuer": "https://identity.example.test",
         "clerk_audience": "revenueos-api",
         "database_url": "postgresql+asyncpg://runtime.example.test/revenueos?ssl=require",
+        "release_sha": "a" * 40,
+        "database_tls_mode": "verify_full_system",
         "cors_origins": "https://app.example.test",
         "allowed_hosts": "api.example.test",
         "outreach_suppression_hmac_key": "deployment-specific-suppression-key",

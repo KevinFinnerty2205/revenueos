@@ -36,7 +36,7 @@ from revenueos.domain import AIJobStatus, AIJobType
 from revenueos.errors import PublicAPIError
 from revenueos.models import AIArtifact, AIJob, Interaction, Meeting, MeetingAuditEvent, Transcript
 from revenueos.observability import JSONFormatter
-from revenueos.worker import AIWorker, run_worker
+from revenueos.worker import AIWorker, WorkerHealthServer, run_worker
 
 from .conftest import (
     PRIMARY_ORGANISATION_ID,
@@ -889,6 +889,17 @@ def test_worker_stops_gracefully_without_claiming_new_work() -> None:
         await worker.run(stop)
 
     _run(scenario)
+
+
+def test_worker_health_server_reports_tick_freshness_without_details() -> None:
+    now = 10.0
+    server = WorkerHealthServer(8_080, 30, clock=lambda: now)
+
+    assert server.healthy is True
+    now = 41.0
+    assert server.healthy is False
+    server.tick()
+    assert server.healthy is True
 
 
 def test_worker_logs_allow_only_metadata_fields() -> None:

@@ -37,7 +37,7 @@ Support-mail provider:
 3. TARGET ENVIRONMENT AND SPEND (OD-03)
 
 Target hosting option:
-[AWS-SYD-PRIVATE-BETA-V1 / FLY-SUPABASE-SYD-V1 / NOT APPROVED]
+[DIGITALOCEAN-SYD-V1 + AWS-S3-SYD-BACKUP-V1 / NOT APPROVED]
 
 Target application region:
 Target database and region:
@@ -47,7 +47,7 @@ Target backup storage and region:
 Maximum approved monthly platform spend, including hosting, database,
 storage, backup, monitoring, Clerk and expected tax: AUD $_____ per month
 
-Clerk plan: [PRO / HOBBY / NOT APPROVED]
+Clerk plan: [PRO / NOT APPROVED]
 Annual Clerk billing approved: [YES / NO / NOT APPLICABLE]
 
 Selected required/conditional subprocessor schedule approved:

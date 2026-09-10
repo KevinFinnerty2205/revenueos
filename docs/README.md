@@ -195,6 +195,12 @@ This is the canonical product and engineering documentation index. Documents dis
 170. [Manual paid Credit grant operations](03-engineering/manual-paid-credit-grants.md) — authority, atomicity, privacy, refund and margin boundary
 171. [Manual paid Credit grant owner runbook](03-engineering/manual-paid-credit-grant-runbook.md) — exact preview, confirmation, execution and retry procedure
 172. [ADR 0076: Internal immutable manual paid Credit grant](08-decisions/0076-internal-manual-paid-credit-grant.md)
+173. [WO-054: Production Deployment & Launch Operations](07-sprints/wo-054-production-launch-operations.md) — canonical launch checklist, synthetic restore proof and consolidated owner actions
+174. [Oryntela production launch runbook](03-engineering/production-launch-runbook.md) — deployment, monitoring, recovery, callbacks, smoke, kill-switch and support procedure
+175. [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
+176. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
+177. [WO-054 draft Privacy Notice and Terms inputs](00-company/wo-054-draft-privacy-and-terms.md) — factual draft only; owner/qualified review required
+178. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
 
 ## First design-partner launch package
 
@@ -380,6 +386,8 @@ This is the canonical product and engineering documentation index. Documents dis
 ### Current implementation
 
 - [Application architecture](03-engineering/architecture.md)
+- [Oryntela production launch runbook](03-engineering/production-launch-runbook.md)
+- [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
 - [Prospect and Engage foundation review](03-engineering/prospect-engage-foundation-review.md)
 - [Core experience readiness implementation](03-engineering/core-experience-readiness-implementation.md)
 - [AI database foundation](03-engineering/ai-database-foundation.md)
@@ -600,6 +608,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## 04 — Commercial
 
+- [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md)
 - [Implemented commercial authority](03-engineering/commercial-authority.md)
 - [Credits and variable-cost controls](03-engineering/credits-variable-cost-controls.md)
 - [Oryntela pricing hypothesis](04-commercial/oryntela-pricing-hypothesis.md)
@@ -661,6 +670,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 ## 07 — Sprint records
 
+- [WO-054: Production Deployment & Launch Operations](07-sprints/wo-054-production-launch-operations.md)
 - [WO-053: Oryntela Marketing Website](07-sprints/wo-053-oryntela-marketing-website.md)
 - [Sprint 1: foundation](07-sprints/sprint-01-foundation.md)
 - [Sprint 2: core business entities](07-sprints/sprint-02-core-business-entities.md)
@@ -803,6 +813,9 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0072: Provider-neutral production CRM connectors](08-decisions/0072-provider-neutral-production-crm-connectors.md)
 - [ADR 0073: Immutable Opportunity Deal Room projection](08-decisions/0073-immutable-opportunity-deal-room-projection.md)
 - [ADR 0074: Reviewed Closed-Won Handover authority](08-decisions/0074-reviewed-closed-won-handover-authority.md)
+- [ADR 0075: Customer-facing Oryntela with retained RevenueOS internals](08-decisions/0075-customer-facing-oryntela-retained-revenueos-internals.md)
+- [ADR 0076: Internal immutable manual paid Credit grant](08-decisions/0076-internal-manual-paid-credit-grant.md)
+- [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
 
 ## Current delivery boundary
 
@@ -956,7 +969,9 @@ bounded initial and incremental polling, explicit field/stage/owner authority,
 conflict queues, immutable receipts and per-record reviewed writeback with read-only
 unknown-outcome reconciliation. Native CRM remains fully usable without either
 provider. No provider account, app, key, spend, customer-data smoke test or production
-activation was performed; those controls remain parked for WO-054. Dynamics, arbitrary
+activation was performed; WO-054 prepares the production topology and operating
+pack but performs no provider activation, deployment or spend. Those controls remain
+blocked pending the canonical WO-054 owner and target-environment gates. Dynamics, arbitrary
 custom fields/objects, notes/files, broad activity sync, webhooks/CDC and autonomous
 writeback remain deferred.
 

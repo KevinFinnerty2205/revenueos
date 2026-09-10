@@ -1,8 +1,10 @@
+import shutil
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
 from revenueos.beta_contracts import (
     AdminOverviewResponse,
@@ -107,11 +109,7 @@ async def list_data_requests(service: Beta) -> list[DataRequestResponse]:
 
 @router.get("/admin/exports/{request_id}/download", response_class=FileResponse)
 async def download_export(request_id: UUID, service: Beta) -> FileResponse:
-    path = await service.export_path(request_id)
-    if not path.is_file():
-        from revenueos.errors import PublicAPIError
-
-        raise PublicAPIError("export_unavailable", "The export file is unavailable.", 404)
+    path, temporary_root = await service.export_download_path(request_id)
     return FileResponse(
         path,
         media_type="application/json",
@@ -120,6 +118,9 @@ async def download_export(request_id: UUID, service: Beta) -> FileResponse:
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
         },
+        background=BackgroundTask(shutil.rmtree, temporary_root, ignore_errors=True)
+        if temporary_root is not None
+        else None,
     )
 
 

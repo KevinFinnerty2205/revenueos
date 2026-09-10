@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import ssl
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -17,14 +19,41 @@ from revenueos.errors import PublicAPIError
 def create_engine(settings: Settings) -> AsyncEngine | None:
     if settings.database_url is None:
         return None
-    connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+    sqlite = settings.database_url.startswith("sqlite")
+    connect_args: dict[str, object]
+    if sqlite:
+        connect_args = {"check_same_thread": False}
+    elif settings.database_tls_mode == "disable":
+        connect_args = {}
+    else:
+        tls_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        if settings.database_tls_mode == "verify_full_custom_ca":
+            assert settings.database_ca_certificate_base64 is not None
+            certificate = base64.b64decode(
+                settings.database_ca_certificate_base64.get_secret_value(),
+                validate=True,
+            ).decode("ascii")
+            tls_context.load_verify_locations(cadata=certificate)
+        tls_context.check_hostname = True
+        tls_context.verify_mode = ssl.CERT_REQUIRED
+        connect_args = {"ssl": tls_context}
+    pool_arguments = (
+        {}
+        if sqlite
+        else {
+            "pool_size": settings.database_pool_size,
+            "max_overflow": settings.database_max_overflow,
+            "pool_timeout": settings.database_pool_timeout_seconds,
+        }
+    )
     engine = create_async_engine(
         settings.database_url,
         echo=False,
         pool_pre_ping=True,
         connect_args=connect_args,
+        **pool_arguments,
     )
-    if settings.database_url.startswith("sqlite"):
+    if sqlite:
         event.listen(engine.sync_engine, "connect", _enable_sqlite_foreign_keys)
     return engine
 

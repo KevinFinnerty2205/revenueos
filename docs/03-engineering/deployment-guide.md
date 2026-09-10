@@ -2,19 +2,21 @@
 
 ## Current status
 
-Oryntela has no selected production hosting platform and this repository does
-not deploy automatically. WO-009 defines one supported private-beta topology
-and operating boundary for the current web, API, worker and PostgreSQL
-components; it is not production-data approval.
+WO-054 proposes DigitalOcean Sydney as the smallest credible production target and
+adds an inert deployment specification, but no hosting resource exists and this
+repository does not deploy automatically. The canonical
+[production launch runbook](production-launch-runbook.md) owns current setup,
+operation and recovery decisions; it is not production-data approval.
 
 WO-039C adds a conditional supervised real-data path through current Alembic head
-`0055_live_prospect_provider`; it is not blanket approval. Before any named partner,
+`0061_manual_paid_credit_grant`; it is not blanket approval. Before any named partner,
 run the [real-data production preflight and lifecycle runbook](real-data-operations.md)
 and satisfy its Clerk, runtime-role/RLS, encrypted backup/restore, support, legal,
 provider and feature-profile gates. Unsupervised and commercial beta remain blocked.
-WO-048 billing and WO-049 Credits must remain disabled in production. Their Stripe
-and metered-provider adapters are test-mode only and do not authorise a provider
-account, live key, webhook, payment, production Credit pack or real sale.
+WO-048 billing and WO-049 Credits must remain disabled in production. WO-055 adds
+only an internal cleared-funds manual grant; the Stripe and metered-provider adapters
+remain test-mode only and do not authorise a provider account, live key, webhook,
+payment, production Credit pack or real sale.
 
 ## Process topology
 
