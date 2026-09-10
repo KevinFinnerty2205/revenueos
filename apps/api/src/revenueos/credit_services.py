@@ -4,6 +4,7 @@ import hashlib
 import json
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, Decimal
 from typing import Literal, cast
@@ -43,11 +44,17 @@ from revenueos.models import (
     CreditPackVersion,
     CreditQuote,
     CreditReservationAllocation,
+    ManualPaidCreditGrant,
+    Organisation,
     OrganisationCommercialState,
     OrganisationCreditBalance,
+    OrganisationMembership,
+    User,
 )
 
 MAX_CREDITS = 9_000_000_000_000
+MAX_MANUAL_PAYMENT_MINOR_UNITS = 9_000_000_000_000
+LARGE_MANUAL_PAID_GRANT_CREDITS = 1_000_000
 TEST_PACK_ID = UUID("00000000-0000-4000-9000-000000000049")
 TEST_PRICE_ID = UUID("00000000-0000-4000-9000-000000000149")
 TEST_PERSON_PRICE_ID = UUID("00000000-0000-4000-9000-000000000150")
@@ -87,6 +94,14 @@ def _require_actor_reason(actor_reference: str, reason: str) -> tuple[str, str]:
     ):
         raise PublicAPIError("credit_reason_invalid", "A meaningful adjustment reason is required.", 422)
     return actor, resolved_reason
+
+
+@dataclass(frozen=True)
+class ManualPaidCreditGrantResult:
+    grant: ManualPaidCreditGrant
+    lot: CreditLot
+    balance: CreditBalanceResponse
+    already_applied: bool
 
 
 class CreditService:
@@ -687,6 +702,237 @@ class CreditService:
         else:
             await self.session.flush()
         return lot
+
+    async def grant_manual_paid_purchase(
+        self,
+        organisation_id: UUID,
+        *,
+        credits: int,
+        amount_received_minor_units: int,
+        currency: str,
+        payment_method: Literal["BANK_TRANSFER", "CARD_OUTSIDE_AUTOMATIC_FLOW", "OTHER_APPROVED"],
+        payment_reference: str,
+        payment_received_at: datetime,
+        cleared_funds_confirmed: bool,
+        idempotency_key: str,
+        expected_balance_version: int,
+        operator_reference: str,
+        reason: str,
+        large_grant_reviewed: bool = False,
+    ) -> ManualPaidCreditGrantResult:
+        """Append one exceptional paid purchase after authorised human payment confirmation."""
+
+        actor, resolved_reason = _require_actor_reason(operator_reference, reason)
+        self._validate_credits(credits)
+        if amount_received_minor_units <= 0 or amount_received_minor_units > MAX_MANUAL_PAYMENT_MINOR_UNITS:
+            raise PublicAPIError(
+                "manual_paid_credit_amount_invalid",
+                "The amount received must be positive, exact and bounded.",
+                422,
+            )
+        if currency != "AUD":
+            raise PublicAPIError(
+                "manual_paid_credit_currency_invalid",
+                "Manual paid Credit grants currently require exact AUD payment facts.",
+                422,
+            )
+        if payment_method not in {"BANK_TRANSFER", "CARD_OUTSIDE_AUTOMATIC_FLOW", "OTHER_APPROVED"}:
+            raise PublicAPIError(
+                "manual_paid_credit_payment_method_invalid", "The payment method is not supported.", 422
+            )
+        reference = payment_reference.strip()
+        if (
+            not 1 <= len(reference) <= 120
+            or not reference[0].isalnum()
+            or not all(
+                character.isascii() and (character.isalnum() or character in " ._:/#-") for character in reference
+            )
+        ):
+            raise PublicAPIError(
+                "manual_paid_credit_reference_invalid",
+                "Use a bounded payment or invoice reference with ordinary printable characters.",
+                422,
+            )
+        if payment_received_at.tzinfo is None:
+            raise PublicAPIError(
+                "manual_paid_credit_received_at_invalid",
+                "The cleared-funds timestamp must include a timezone.",
+                422,
+            )
+        received_at = payment_received_at.astimezone(UTC)
+        if received_at > _aware(self._clock()).astimezone(UTC) + timedelta(minutes=5):
+            raise PublicAPIError(
+                "manual_paid_credit_received_at_invalid",
+                "The cleared-funds timestamp cannot be in the future.",
+                422,
+            )
+        if not cleared_funds_confirmed:
+            raise PublicAPIError(
+                "manual_paid_credit_cleared_funds_required",
+                "Confirm that cleared funds have been received before granting paid Credits.",
+                409,
+            )
+        if expected_balance_version < 0:
+            raise PublicAPIError(
+                "manual_paid_credit_balance_version_invalid", "A valid inspected balance version is required.", 422
+            )
+        if credits >= LARGE_MANUAL_PAID_GRANT_CREDITS and not large_grant_reviewed:
+            raise PublicAPIError(
+                "manual_paid_credit_large_grant_review_required",
+                "This is a large manual paid Credit grant. Confirm the values carefully.",
+                409,
+            )
+        supplied_key = idempotency_key.strip()
+        if len(supplied_key) < 8 or len(supplied_key) > 200 or any(ord(character) < 32 for character in supplied_key):
+            raise PublicAPIError(
+                "manual_paid_credit_idempotency_key_invalid",
+                "The idempotency key must contain 8 to 200 printable characters.",
+                422,
+            )
+        normalised_reference = " ".join(reference.casefold().split())
+        reference_fingerprint = hashlib.sha256(normalised_reference.encode("utf-8")).hexdigest()
+        key_hash = hashlib.sha256(supplied_key.encode("utf-8")).hexdigest()
+        fingerprint = _fingerprint(
+            {
+                "organisation_id": organisation_id,
+                "credits": credits,
+                "amount_received_minor_units": amount_received_minor_units,
+                "currency": currency,
+                "payment_method": payment_method,
+                "payment_reference": normalised_reference,
+                "payment_received_at": received_at.isoformat(),
+                "cleared_funds_confirmed": True,
+                "operator_reference": actor,
+                "reason": resolved_reason,
+            }
+        )
+
+        existing = await self._manual_paid_grant_replay(
+            organisation_id,
+            key_hash=key_hash,
+            reference_fingerprint=reference_fingerprint,
+            request_fingerprint=fingerprint,
+        )
+        if existing is not None:
+            return await self._manual_paid_result(organisation_id, existing, already_applied=True)
+
+        organisation = await self.session.scalar(
+            select(Organisation).where(Organisation.id == organisation_id).with_for_update()
+        )
+        if organisation is None:
+            raise PublicAPIError(
+                "manual_paid_credit_organisation_invalid",
+                "The target organisation is unavailable.",
+                404,
+            )
+        commercial = await self.session.scalar(
+            select(OrganisationCommercialState)
+            .where(OrganisationCommercialState.organisation_id == organisation_id)
+            .with_for_update()
+        )
+        if commercial is None or commercial.status == "inactive":
+            raise PublicAPIError(
+                "manual_paid_credit_organisation_inactive",
+                "Paid Credits cannot be granted to an inactive organisation.",
+                409,
+            )
+        active_member_count = await self.session.scalar(
+            select(func.count())
+            .select_from(OrganisationMembership)
+            .join(User, User.id == OrganisationMembership.user_id)
+            .where(
+                OrganisationMembership.organisation_id == organisation_id,
+                OrganisationMembership.status == "active",
+                User.status == "active",
+            )
+        )
+        if not active_member_count:
+            raise PublicAPIError(
+                "manual_paid_credit_organisation_disabled",
+                "Paid Credits cannot be granted to an organisation without an active member.",
+                409,
+            )
+
+        balance = await self.repository.balance(organisation_id, lock=True)
+        observed_balance_version = balance.lock_version if balance is not None else 0
+        if balance is None:
+            balance = await self._locked_balance(organisation_id)
+
+        existing = await self._manual_paid_grant_replay(
+            organisation_id,
+            key_hash=key_hash,
+            reference_fingerprint=reference_fingerprint,
+            request_fingerprint=fingerprint,
+        )
+        if existing is not None:
+            return await self._manual_paid_result(organisation_id, existing, already_applied=True)
+        if observed_balance_version != expected_balance_version:
+            raise PublicAPIError(
+                "manual_paid_credit_stale_balance",
+                "The Credit balance changed after inspection. Review the current values before retrying.",
+                409,
+            )
+
+        grant_id = uuid.uuid4()
+        lot = CreditLot(
+            id=uuid.uuid4(),
+            organisation_id=organisation_id,
+            credit_type="purchased",
+            source_reference=f"manual-paid:{grant_id}",
+            original_credits=credits,
+            available_credits=credits,
+            original_revenue_micros=amount_received_minor_units * 10_000,
+            remaining_revenue_micros=amount_received_minor_units * 10_000,
+            expires_at=None,
+            trial_grant=False,
+            grant_actor_reference=actor,
+            grant_reason=resolved_reason,
+        )
+        grant = ManualPaidCreditGrant(
+            id=grant_id,
+            organisation_id=organisation_id,
+            credit_lot_id=lot.id,
+            status="completed",
+            credits_granted=credits,
+            amount_received_minor_units=amount_received_minor_units,
+            currency=currency,
+            payment_method=payment_method,
+            payment_reference=reference,
+            payment_reference_fingerprint=reference_fingerprint,
+            payment_received_at=received_at,
+            cleared_funds_confirmed=True,
+            operator_reference=actor,
+            reason=resolved_reason,
+            idempotency_key_hash=key_hash,
+            request_fingerprint=fingerprint,
+            margin_review_status="production_execution_blocked_pending_policy",
+        )
+        self.session.add(lot)
+        await self.session.flush()
+        self.session.add(grant)
+        self.session.add(
+            self._ledger_entry(
+                organisation_id,
+                event_type="purchase",
+                credit_type="purchased",
+                lot=lot,
+                purchased_delta=credits,
+                idempotency_key=_event_key("manual-paid-purchase", key_hash, reference_fingerprint),
+                fingerprint=fingerprint,
+                actor="internal-manual-paid-credit-operation",
+                reason="Bulk Credit purchase after authorised cleared-funds confirmation.",
+                customer_revenue_micros=amount_received_minor_units * 10_000,
+            )
+        )
+        balance.purchased_available += credits
+        balance.lock_version += 1
+        await self._commit(organisation_id)
+        return ManualPaidCreditGrantResult(
+            grant=grant,
+            lot=lot,
+            balance=self._balance_response(balance),
+            already_applied=False,
+        )
 
     async def create_quote(
         self,
@@ -1605,6 +1851,59 @@ class CreditService:
         if operation is None:
             raise PublicAPIError("credit_operation_not_found", "That Credit operation is unavailable.", 404)
         return operation
+
+    async def _manual_paid_grant_replay(
+        self,
+        organisation_id: UUID,
+        *,
+        key_hash: str,
+        reference_fingerprint: str,
+        request_fingerprint: str,
+    ) -> ManualPaidCreditGrant | None:
+        by_key = await self.repository.manual_paid_grant_by_key_hash(organisation_id, key_hash)
+        by_reference = await self.repository.manual_paid_grant_by_reference_fingerprint(
+            organisation_id, reference_fingerprint
+        )
+        if by_key is not None:
+            self._require_fingerprint(
+                by_key.request_fingerprint,
+                request_fingerprint,
+                code="manual_paid_credit_idempotency_conflict",
+            )
+        if by_reference is not None:
+            self._require_fingerprint(
+                by_reference.request_fingerprint,
+                request_fingerprint,
+                code="manual_paid_credit_payment_reference_conflict",
+            )
+        if by_key is not None and by_reference is not None and by_key.id != by_reference.id:
+            raise PublicAPIError(
+                "manual_paid_credit_identity_conflict",
+                "The retry key and payment reference identify different completed grants.",
+                409,
+            )
+        return by_key or by_reference
+
+    async def _manual_paid_result(
+        self,
+        organisation_id: UUID,
+        grant: ManualPaidCreditGrant,
+        *,
+        already_applied: bool,
+    ) -> ManualPaidCreditGrantResult:
+        lot = await self.repository.lot(organisation_id, grant.credit_lot_id)
+        if lot is None:
+            raise PublicAPIError(
+                "manual_paid_credit_history_inconsistent",
+                "The completed paid Credit grant requires reconciliation.",
+                409,
+            )
+        return ManualPaidCreditGrantResult(
+            grant=grant,
+            lot=lot,
+            balance=self._balance_response(await self.repository.balance(organisation_id)),
+            already_applied=already_applied,
+        )
 
     @staticmethod
     def _consume_lot_revenue(lot: CreditLot, credits: int) -> int:

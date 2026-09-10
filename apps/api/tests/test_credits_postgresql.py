@@ -20,8 +20,10 @@ from revenueos.errors import PublicAPIError
 from revenueos.models import (
     BillingOperation,
     CreditLedgerEntry,
+    ManualPaidCreditGrant,
     Organisation,
     OrganisationCommercialState,
+    OrganisationCreditBalance,
     OrganisationMembership,
     OrganisationModuleEntitlement,
     User,
@@ -200,6 +202,45 @@ def test_postgresql_credit_contention_idempotency_and_rls_are_concurrency_safe()
 
             async with factory() as session:
                 await set_tenant_database_context(session, organisation_id)
+                balance = await session.get(OrganisationCreditBalance, organisation_id)
+                assert balance is not None
+                manual_expected_version = balance.lock_version
+            manual_payment_received_at = datetime.now(UTC)
+
+            async def manual_paid(credits: int = 50_000) -> uuid.UUID | PublicAPIError:
+                async with factory() as session:
+                    await set_tenant_database_context(session, organisation_id)
+                    try:
+                        result = await CreditService(session, settings).grant_manual_paid_purchase(
+                            organisation_id,
+                            credits=credits,
+                            amount_received_minor_units=1_250_000,
+                            currency="AUD",
+                            payment_method="BANK_TRANSFER",
+                            payment_reference="INV-SYNTHETIC-CONCURRENT-055",
+                            payment_received_at=manual_payment_received_at,
+                            cleared_funds_confirmed=True,
+                            idempotency_key="manual-paid-concurrent-055",
+                            expected_balance_version=manual_expected_version,
+                            operator_reference="credit-concurrency-test",
+                            reason="Grant one synthetic concurrent paid Credit purchase.",
+                        )
+                        return result.grant.id
+                    except PublicAPIError as exc:
+                        return exc
+
+            concurrent_manual_grants = await asyncio.gather(manual_paid(), manual_paid())
+            assert isinstance(concurrent_manual_grants[0], uuid.UUID)
+            assert concurrent_manual_grants[0] == concurrent_manual_grants[1]
+            conflicting_manual_grant = await manual_paid(50_001)
+            assert isinstance(conflicting_manual_grant, PublicAPIError)
+            assert conflicting_manual_grant.code in {
+                "manual_paid_credit_idempotency_conflict",
+                "manual_paid_credit_payment_reference_conflict",
+            }
+
+            async with factory() as session:
+                await set_tenant_database_context(session, organisation_id)
                 service = CreditService(session, settings)
                 quote = await service.create_quote(organisation_id, user_id, action_code=TEST_ACTION_CODE, quantity=1)
                 release_operation = await service.reserve(
@@ -239,7 +280,7 @@ def test_postgresql_credit_contention_idempotency_and_rls_are_concurrency_safe()
                     return result.available
 
             corrections = await asyncio.gather(correct(), correct())
-            assert corrections[0] == corrections[1] == 108
+            assert corrections[0] == corrections[1] == 50_108
 
             async with factory() as session:
                 await set_tenant_database_context(session, organisation_id)
@@ -320,7 +361,15 @@ def test_postgresql_credit_contention_idempotency_and_rls_are_concurrency_safe()
                             CreditLedgerEntry.event_type == event_type,
                         )
                     )
-                    assert count == 1
+                    assert count == (2 if event_type == "purchase" else 1)
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(ManualPaidCreditGrant)
+                        .where(ManualPaidCreditGrant.organisation_id == organisation_id)
+                    )
+                    == 1
+                )
                 rows = await session.execute(
                     text(
                         """SELECT relname, relforcerowsecurity FROM pg_class
@@ -335,11 +384,12 @@ def test_postgresql_credit_contention_idempotency_and_rls_are_concurrency_safe()
                             "credit_operations",
                             "credit_reservation_allocations",
                             "credit_ledger_entries",
+                            "manual_paid_credit_grants",
                         ]
                     },
                 )
                 rls = dict(rows.all())
-                assert len(rls) == 7 and all(rls.values())
+                assert len(rls) == 8 and all(rls.values())
         finally:
             await engine.dispose()
 
@@ -363,6 +413,7 @@ def test_postgresql_credit_rls_hides_every_tenant_owned_credit_row() -> None:
         "credit_operations",
         "credit_reservation_allocations",
         "credit_ledger_entries",
+        "manual_paid_credit_grants",
     )
 
     async def scenario() -> None:
@@ -401,19 +452,22 @@ def test_postgresql_credit_rls_hides_every_tenant_owned_credit_row() -> None:
                     {"id": action_price_id, "action_code": f"CREDIT_RLS_{action_price_id.hex}"},
                 )
                 for label, tenant in (("a", tenant_a), ("b", tenant_b)):
+                    tenant["lot_id"] = uuid.uuid4()
                     fixture = {
                         **tenant,
                         "organisation_name": f"Credit RLS {label.upper()}",
                         "slug": f"credit-rls-{label}-{tenant['organisation_id']}",
                         "external_auth_id": f"credit-rls-{label}-{tenant['user_id']}",
                         "email": f"credit-rls-{label}-{tenant['user_id']}@example.test",
-                        "lot_id": uuid.uuid4(),
+                        "lot_id": tenant["lot_id"],
                         "quote_id": uuid.uuid4(),
                         "operation_id": uuid.uuid4(),
                         "allocation_id": uuid.uuid4(),
                         "ledger_id": uuid.uuid4(),
+                        "manual_grant_id": uuid.uuid4(),
                         "action_price_id": action_price_id,
                         "source_reference": f"credit-rls-source-{label}-{tenant['organisation_id']}",
+                        "payment_reference": f"INV-CREDIT-RLS-{label}-{tenant['organisation_id']}",
                         "idempotency_key": f"credit-rls-reservation-{label}-{tenant['organisation_id']}",
                     }
                     fixture_statements = """
@@ -468,12 +522,29 @@ def test_postgresql_credit_rls_hides_every_tenant_owned_credit_row() -> None:
                                     -5, 5, :lot_id, :operation_id, 'CREDIT_RLS_FIXTURE', 1,
                                     :idempotency_key, :fingerprint, 'credit-rls-test',
                                     'Populate an immutable tenant-owned ledger row.');
+                            INSERT INTO manual_paid_credit_grants
+                                (id, organisation_id, credit_lot_id, status, credits_granted,
+                                 amount_received_minor_units, currency, payment_method,
+                                 payment_reference, payment_reference_fingerprint,
+                                 payment_received_at, cleared_funds_confirmed, operator_reference,
+                                 reason, idempotency_key_hash, request_fingerprint,
+                                 margin_review_status)
+                            VALUES (:manual_grant_id, :organisation_id, :lot_id, 'completed', 10,
+                                    2000, 'AUD', 'BANK_TRANSFER', :payment_reference,
+                                    :fingerprint, now(), true, 'credit-rls-test',
+                                    'Populate the tenant-owned manual paid grant table.',
+                                    :idempotency_hash, :fingerprint,
+                                    'production_execution_blocked_pending_policy');
                             """
                     for statement in fixture_statements.split(";"):
                         if statement.strip():
                             await connection.execute(
                                 text(statement),
-                                {**fixture, "fingerprint": label * 64},
+                                {
+                                    **fixture,
+                                    "fingerprint": label * 64,
+                                    "idempotency_hash": ("c" if label == "a" else "d") * 64,
+                                },
                             )
 
             async with engine.connect() as connection:
@@ -514,13 +585,47 @@ def test_postgresql_credit_rls_hides_every_tenant_owned_credit_row() -> None:
                         },
                     )
                 await savepoint.rollback()
+                savepoint = await connection.begin_nested()
+                with pytest.raises(DBAPIError):
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO manual_paid_credit_grants
+                                (id, organisation_id, credit_lot_id, status, credits_granted,
+                                 amount_received_minor_units, currency, payment_method,
+                                 payment_reference, payment_reference_fingerprint,
+                                 payment_received_at, cleared_funds_confirmed, operator_reference,
+                                 reason, idempotency_key_hash, request_fingerprint,
+                                 margin_review_status)
+                            VALUES (:id, :organisation_id, :lot_id, 'completed', 1, 100, 'AUD',
+                                    'BANK_TRANSFER', 'INV-CROSS-TENANT-DENIED', :fingerprint,
+                                    now(), true, 'credit-rls-test',
+                                    'Cross-tenant manual grant insertion must fail.', :key_hash,
+                                    :request_fingerprint,
+                                    'production_execution_blocked_pending_policy')
+                            """
+                        ),
+                        {
+                            "id": uuid.uuid4(),
+                            "organisation_id": tenant_b["organisation_id"],
+                            "lot_id": tenant_b["lot_id"],
+                            "fingerprint": "e" * 64,
+                            "key_hash": "f" * 64,
+                            "request_fingerprint": "9" * 64,
+                        },
+                    )
+                await savepoint.rollback()
                 await transaction.rollback()
         finally:
             async with engine.begin() as connection:
                 await connection.exec_driver_sql(
                     "ALTER TABLE credit_ledger_entries DISABLE TRIGGER credit_ledger_entries_immutable"
                 )
+                await connection.exec_driver_sql(
+                    "ALTER TABLE manual_paid_credit_grants DISABLE TRIGGER manual_paid_credit_grants_immutable"
+                )
                 for table_name in (
+                    "manual_paid_credit_grants",
                     "credit_ledger_entries",
                     "credit_reservation_allocations",
                     "credit_operations",
@@ -536,6 +641,9 @@ def test_postgresql_credit_rls_hides_every_tenant_owned_credit_row() -> None:
                             "organisation_b": tenant_b["organisation_id"],
                         },
                     )
+                await connection.exec_driver_sql(
+                    "ALTER TABLE manual_paid_credit_grants ENABLE TRIGGER manual_paid_credit_grants_immutable"
+                )
                 await connection.exec_driver_sql(
                     "ALTER TABLE credit_ledger_entries ENABLE TRIGGER credit_ledger_entries_immutable"
                 )

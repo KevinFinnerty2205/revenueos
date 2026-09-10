@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 
 const activityLabels: Record<CreditLedgerEventType, string> = {
-  purchase: "Purchase",
+  purchase: "Purchased Credits",
   promotional_grant: "Promotional grant",
   reservation: "Reserved",
   consumption: "Used",

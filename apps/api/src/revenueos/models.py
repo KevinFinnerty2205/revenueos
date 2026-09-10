@@ -897,6 +897,101 @@ class CreditLot(TimestampMixin, Base):
     grant_reason: Mapped[str] = mapped_column(String(500), nullable=False)
 
 
+class ManualPaidCreditGrant(Base):
+    __tablename__ = "manual_paid_credit_grants"
+    __table_args__ = (
+        CheckConstraint("status = 'completed'", name="ck_manual_paid_credit_grants_status"),
+        CheckConstraint(
+            "credits_granted > 0 AND credits_granted <= 9000000000000",
+            name="ck_manual_paid_credit_grants_credits",
+        ),
+        CheckConstraint(
+            "amount_received_minor_units > 0 AND amount_received_minor_units <= 9000000000000",
+            name="ck_manual_paid_credit_grants_amount",
+        ),
+        CheckConstraint("currency = 'AUD'", name="ck_manual_paid_credit_grants_currency"),
+        CheckConstraint(
+            "payment_method IN ('BANK_TRANSFER', 'CARD_OUTSIDE_AUTOMATIC_FLOW', 'OTHER_APPROVED')",
+            name="ck_manual_paid_credit_grants_payment_method",
+        ),
+        CheckConstraint(
+            "length(trim(payment_reference)) BETWEEN 1 AND 120",
+            name="ck_manual_paid_credit_grants_reference",
+        ),
+        CheckConstraint(
+            "length(payment_reference_fingerprint) = 64 "
+            "AND payment_reference_fingerprint = lower(payment_reference_fingerprint)",
+            name="ck_manual_paid_credit_grants_reference_fingerprint",
+        ),
+        CheckConstraint(
+            "length(idempotency_key_hash) = 64 AND idempotency_key_hash = lower(idempotency_key_hash)",
+            name="ck_manual_paid_credit_grants_idempotency_key",
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND request_fingerprint = lower(request_fingerprint)",
+            name="ck_manual_paid_credit_grants_request_fingerprint",
+        ),
+        CheckConstraint("cleared_funds_confirmed", name="ck_manual_paid_credit_grants_cleared_funds"),
+        CheckConstraint(
+            "length(trim(operator_reference)) BETWEEN 1 AND 200",
+            name="ck_manual_paid_credit_grants_operator",
+        ),
+        CheckConstraint(
+            "length(trim(reason)) BETWEEN 8 AND 500",
+            name="ck_manual_paid_credit_grants_reason",
+        ),
+        CheckConstraint(
+            "margin_review_status = 'production_execution_blocked_pending_policy'",
+            name="ck_manual_paid_credit_grants_margin_review",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "credit_lot_id"],
+            ["credit_lots.organisation_id", "credit_lots.id"],
+            name="fk_manual_paid_credit_grants_lot",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("organisation_id", "id", name="uq_manual_paid_credit_grants_org_id"),
+        UniqueConstraint(
+            "organisation_id",
+            "idempotency_key_hash",
+            name="uq_manual_paid_credit_grants_idempotency",
+        ),
+        UniqueConstraint(
+            "organisation_id",
+            "payment_reference_fingerprint",
+            name="uq_manual_paid_credit_grants_payment_reference",
+        ),
+        UniqueConstraint("organisation_id", "credit_lot_id", name="uq_manual_paid_credit_grants_lot"),
+        Index("ix_manual_paid_credit_grants_org_granted", "organisation_id", "granted_at", "id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
+    )
+    credit_lot_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="completed", server_default="completed")
+    credits_granted: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    amount_received_minor_units: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="AUD", server_default="AUD")
+    payment_method: Mapped[str] = mapped_column(String(32), nullable=False)
+    payment_reference: Mapped[str] = mapped_column(String(120), nullable=False)
+    payment_reference_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payment_received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cleared_funds_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    operator_reference: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    idempotency_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    margin_review_status: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="production_execution_blocked_pending_policy",
+        server_default="production_execution_blocked_pending_policy",
+    )
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class CreditQuote(Base):
     __tablename__ = "credit_quotes"
     __table_args__ = (

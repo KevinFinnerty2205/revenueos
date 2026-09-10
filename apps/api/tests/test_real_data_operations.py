@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,13 +16,17 @@ from revenueos.config import Settings
 from revenueos.main import create_app
 from revenueos.models import OperatorProvisioningEvent, OrganisationMembership
 from revenueos.operations import (
+    _manual_paid_confirmation,
+    _parser,
+    _run,
+    manual_paid_credit_grant_preview,
     provision_member,
     provision_organisation,
     queue_status,
     support_bundle,
     tenant_preflight,
 )
-from tests.conftest import TEST_DB_URL
+from tests.conftest import PRIMARY_ORGANISATION_ID, TEST_DB_URL
 
 
 def safe_real_data_settings(**changes: object) -> Settings:
@@ -252,5 +257,103 @@ def test_operator_provisioning_is_audited_idempotent_and_disables_jit_identity_c
             assert member_membership.role == "member" and member_membership.status == "active"
             assert {event.action for event in events} == {"organisation_provisioned", "member_provisioned"}
         await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_owner_manual_paid_credit_cli_previews_confirms_executes_and_retries() -> None:
+    async def scenario() -> None:
+        settings = Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url=TEST_DB_URL,
+            log_level="WARNING",
+        )
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        received_at = datetime.now(UTC) - timedelta(hours=1)
+        try:
+            preview = await manual_paid_credit_grant_preview(
+                factory,
+                organisation_id=PRIMARY_ORGANISATION_ID,
+                credits=50_000,
+                amount_received_minor_units=1_234_567,
+                currency="AUD",
+                payment_method="BANK_TRANSFER",
+                payment_reference="INV-SYNTHETIC-CLI-055",
+                payment_received_at=received_at,
+            )
+            assert preview["status"] == "ready_for_confirmation"
+            assert preview["organisation"] == {
+                "id": str(PRIMARY_ORGANISATION_ID),
+                "name": "Example Revenue Team",
+                "commercialStatus": "active",
+                "plan": "complete",
+            }
+            assert preview["amountReceived"] == "AUD 12345.67"
+            assert preview["expectedBalanceVersion"] == 0
+            assert preview["clearedFundsRequired"] is True
+            assert preview["providerExecutionAuthorisedByGrant"] is False
+            confirmation = _manual_paid_confirmation(
+                PRIMARY_ORGANISATION_ID,
+                50_000,
+                1_234_567,
+                "AUD",
+                "INV-SYNTHETIC-CLI-055",
+            )
+            assert preview["confirmationRequired"] == confirmation
+
+            command = [
+                "credits-manual-paid-grant",
+                "--organisation-id",
+                str(PRIMARY_ORGANISATION_ID),
+                "--credits",
+                "50000",
+                "--amount-received",
+                "12345.67",
+                "--currency",
+                "AUD",
+                "--payment-method",
+                "BANK_TRANSFER",
+                "--payment-reference",
+                "INV-SYNTHETIC-CLI-055",
+                "--payment-received-at",
+                received_at.isoformat(),
+                "--expected-balance-version",
+                "0",
+                "--idempotency-key",
+                "manual-paid-cli-synthetic-055",
+                "--operator-reference",
+                "owner-support-synthetic",
+                "--reason",
+                "Grant the synthetic negotiated bulk purchase after cleared payment verification.",
+                "--cleared-funds-confirmed",
+                "--confirm",
+                confirmation,
+            ]
+            wrong_confirmation = _parser().parse_args([*command[:-1], "WRONG"])
+            wrong_code, wrong_result = await _run(wrong_confirmation, settings)
+            assert wrong_code == 2 and wrong_result == {"status": "blocked", "code": "confirmation_mismatch"}
+
+            arguments = _parser().parse_args(command)
+            assert arguments.amount_received == 1_234_567
+            exit_code, result = await _run(arguments, settings)
+            assert exit_code == 0
+            assert result["status"] == "complete"
+            assert result["creditType"] == "purchased"
+            assert result["expiresAt"] is None
+            assert result["clearedFundsConfirmed"] is True
+            assert result["ledgerReconciled"] is True
+            assert result["alreadyApplied"] is False
+
+            retry_code, retry = await _run(arguments, settings)
+            assert retry_code == 0
+            assert retry["grantId"] == result["grantId"]
+            assert retry["creditLotId"] == result["creditLotId"]
+            assert retry["purchasedAvailable"] == 50_000
+            assert retry["alreadyApplied"] is True
+        finally:
+            await engine.dispose()
 
     asyncio.run(scenario())
