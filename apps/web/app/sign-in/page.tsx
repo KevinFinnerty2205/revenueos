@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SignIn } from "@clerk/nextjs";
 import { BrandLogo } from "@/components/brand-logo";
 import { getAuthState } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "Sign in",
+  robots: { index: false, follow: false },
+};
 
 export default function SignInPage() {
   const auth = getAuthState();

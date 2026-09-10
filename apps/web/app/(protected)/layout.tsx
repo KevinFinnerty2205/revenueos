@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { auth as clerkAuth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { ApiAuthBridge } from "@/components/api-auth-bridge";
@@ -5,6 +6,10 @@ import { AppShell } from "@/components/app-shell";
 import { getAuthState, isRouteAccessAllowed } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default async function ProtectedLayout({
   children,

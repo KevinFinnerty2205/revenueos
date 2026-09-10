@@ -13,12 +13,17 @@ export default function NotFound() {
           This page is not available
         </h1>
         <p className="mt-4 text-sm leading-7 text-slate-600">
-          The address may be incorrect, or the page may have moved. No work has
-          been changed.
+          The address may be incorrect, or the page may have moved. You can
+          return to Oryntela or contact us if you need a hand.
         </p>
-        <Link className="primary-button mt-8" href="/dashboard">
-          Return Home
-        </Link>
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <Link className="primary-button" href="/">
+            Return home
+          </Link>
+          <Link className="secondary-button" href="/contact">
+            Contact Oryntela
+          </Link>
+        </div>
       </section>
     </main>
   );

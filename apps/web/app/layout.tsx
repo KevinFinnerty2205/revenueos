@@ -1,16 +1,18 @@
 import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { ConditionalClerkProvider } from "@/components/conditional-clerk-provider";
+import { siteDescription, siteOrigin } from "@/lib/marketing";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteOrigin),
   applicationName: "Oryntela",
   title: {
     default: "Oryntela",
     template: "%s | Oryntela",
   },
-  description:
-    "The AI sales teammate that remembers every customer interaction and turns conversations into action.",
+  description: siteDescription,
+  alternates: { canonical: "/" },
   icons: {
     icon: [
       {
@@ -37,11 +39,16 @@ export const metadata: Metadata = {
     apple: "/brand/oryntela/oryntela-app-icon-512.png",
   },
   openGraph: {
-    title: "Oryntela",
-    description:
-      "The AI sales teammate that remembers every customer interaction and turns conversations into action.",
+    title: "Oryntela · End-to-end sales platform",
+    description: siteDescription,
     siteName: "Oryntela",
+    locale: "en_AU",
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Oryntela · End-to-end sales platform",
+    description: siteDescription,
   },
 };
 

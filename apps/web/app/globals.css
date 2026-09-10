@@ -80,6 +80,34 @@ input[type="number"] {
 }
 
 @layer components {
+  .marketing-section {
+    @apply py-20 sm:py-28;
+  }
+
+  .marketing-eyebrow {
+    @apply text-xs font-bold uppercase tracking-[0.2em] text-brand-secondary;
+  }
+
+  .marketing-page-title {
+    @apply text-4xl font-semibold leading-[1.02] tracking-[-0.045em] text-brand-primary sm:text-6xl;
+  }
+
+  .marketing-section-title {
+    @apply text-3xl font-semibold leading-[1.08] tracking-[-0.04em] text-brand-primary sm:text-5xl;
+  }
+
+  .marketing-primary-button {
+    @apply inline-flex min-h-12 items-center justify-center rounded-full bg-brand-primary px-6 text-sm font-bold text-white shadow-lg shadow-brand-primary/10 transition hover:bg-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2;
+  }
+
+  .marketing-secondary-button {
+    @apply inline-flex min-h-12 items-center justify-center rounded-full border border-brand-primary/20 bg-white px-6 text-sm font-bold text-brand-primary transition hover:border-brand-secondary/40 hover:bg-brand-secondary/5 focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2;
+  }
+
+  .marketing-product-frame {
+    @apply overflow-hidden rounded-[1.5rem] border border-brand-primary/10 bg-white shadow-2xl shadow-brand-primary/10;
+  }
+
   .primary-button {
     @apply inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-primary px-5 py-3 text-sm font-bold text-brand-primary-foreground shadow-sm transition hover:bg-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60;
   }

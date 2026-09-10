@@ -27,7 +27,37 @@ describe("ConditionalClerkProvider", () => {
     expect(screen.queryByTestId("clerk-provider")).toBeNull();
   });
 
-  it("retains the identity provider for the authenticated application", () => {
+  it.each([
+    "/",
+    "/platform",
+    "/pricing",
+    "/integrations",
+    "/security",
+    "/contact",
+    "/privacy",
+    "/terms",
+  ])(
+    "keeps marketing route %s independent of the identity provider",
+    (pathname) => {
+      mockedUsePathname.mockReturnValue(pathname);
+      render(
+        <ConditionalClerkProvider enabled>
+          <p>Public website</p>
+        </ConditionalClerkProvider>,
+      );
+
+      expect(screen.getByText("Public website")).toBeVisible();
+      expect(screen.queryByTestId("clerk-provider")).toBeNull();
+    },
+  );
+
+  it.each([
+    "/opportunities/opportunity-1",
+    "/settings/integrations/google",
+    "/create/presentations/presentation-1",
+    "/billing/success",
+  ])("retains the identity provider for authenticated path %s", (pathname) => {
+    mockedUsePathname.mockReturnValue(pathname);
     render(
       <ConditionalClerkProvider enabled>
         <p>Seller app</p>
@@ -35,5 +65,17 @@ describe("ConditionalClerkProvider", () => {
     );
 
     expect(screen.getByTestId("clerk-provider")).toBeVisible();
+  });
+
+  it("keeps the branded 404 independent of the identity provider", () => {
+    mockedUsePathname.mockReturnValue("/this-page-does-not-exist");
+    render(
+      <ConditionalClerkProvider enabled>
+        <p>Page not found</p>
+      </ConditionalClerkProvider>,
+    );
+
+    expect(screen.getByText("Page not found")).toBeVisible();
+    expect(screen.queryByTestId("clerk-provider")).toBeNull();
   });
 });

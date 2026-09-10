@@ -1,30 +1,24 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import LandingPage from "@/app/page";
+import HomePage from "@/app/(marketing)/page";
 
-describe("landing page", () => {
-  it("describes the reviewed private-beta workflow without claiming recording or connected actions", () => {
-    render(<LandingPage />);
+describe("marketing home page", () => {
+  it("presents the end-to-end product and an honest pre-launch trial CTA", () => {
+    render(<HomePage />);
 
-    expect(screen.getByRole("link", { name: "Oryntela Home" })).toHaveAttribute(
-      "href",
-      "/",
-    );
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: /the ai sales teammate that remembers every customer interaction/i,
+        name: /one sales system from prospect to handover/i,
       }),
     ).toBeVisible();
     expect(
-      screen.getByText(
-        /recording is consent-gated and never starts implicitly/i,
-      ),
-    ).toBeVisible();
-    expect(screen.getByText("Review required")).toBeVisible();
-    expect(screen.getByText(/private reviewed visual evidence/i)).toBeVisible();
+      screen.getAllByRole("link", { name: "Request trial access" })[0],
+    ).toHaveAttribute("href", "/contact#trial");
+    expect(screen.getByText(/14 days · Complete-level modules/i)).toBeVisible();
+    expect(screen.getAllByText(/no automatic charge/i)).toHaveLength(2);
     expect(
-      screen.getByRole("link", { name: "support@oryntela.com.au" }),
-    ).toHaveAttribute("href", "mailto:support@oryntela.com.au");
+      screen.getByText(/production connections remain activation-dependent/i),
+    ).toBeVisible();
   });
 });

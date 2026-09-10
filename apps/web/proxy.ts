@@ -4,14 +4,12 @@ import {
   type NextRequest,
   NextResponse,
 } from "next/server";
+import { isIdentityAwareWebPath } from "@/lib/public-routes";
 
 const handleClerkRequest = clerkMiddleware();
 
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
-  if (
-    request.nextUrl.pathname === "/deal-room" ||
-    request.nextUrl.pathname.startsWith("/deal-room/")
-  ) {
+  if (!isIdentityAwareWebPath(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
   const requestedMode =
