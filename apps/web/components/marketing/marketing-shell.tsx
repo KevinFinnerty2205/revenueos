@@ -1,17 +1,12 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand-logo";
-
-const navigation = [
-  { href: "/platform", label: "Platform" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/integrations", label: "Integrations" },
-  { href: "/security", label: "Security" },
-] as const;
+import { MarketingMobileMenu } from "@/components/marketing/marketing-mobile-menu";
+import { marketingNavigation } from "@/lib/marketing";
 
 const footerGroups = [
   {
     heading: "Explore",
-    links: [...navigation, { href: "/contact", label: "Contact" }],
+    links: [...marketingNavigation, { href: "/contact", label: "Contact" }],
   },
   {
     heading: "Legal",
@@ -52,7 +47,7 @@ export function MarketingShell({
 
           <nav aria-label="Primary navigation" className="hidden lg:block">
             <ul className="flex items-center gap-1">
-              {navigation.map((item) => (
+              {marketingNavigation.map((item) => (
                 <li key={item.href}>
                   <Link
                     className="inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold text-brand-muted transition hover:bg-white hover:text-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-focus"
@@ -78,59 +73,7 @@ export function MarketingShell({
             </Link>
           </div>
 
-          <details className="group relative lg:hidden">
-            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full border border-brand-primary/15 bg-white px-4 text-sm font-bold text-brand-primary shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-focus">
-              <span>Menu</span>
-              <span
-                aria-hidden="true"
-                className="text-lg leading-none transition group-open:rotate-45"
-              >
-                +
-              </span>
-            </summary>
-            <nav
-              aria-label="Mobile navigation"
-              className="absolute right-0 top-14 w-[min(20rem,calc(100vw-2.5rem))] rounded-3xl border border-brand-primary/10 bg-white p-3 shadow-2xl"
-            >
-              <ul className="grid gap-1">
-                {navigation.map((item) => (
-                  <li key={item.href}>
-                    <Link
-                      className="flex min-h-12 items-center rounded-2xl px-4 text-base font-semibold text-brand-primary hover:bg-brand-background focus:outline-none focus:ring-2 focus:ring-brand-focus"
-                      href={item.href}
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-                <li>
-                  <Link
-                    className="flex min-h-12 items-center rounded-2xl px-4 text-base font-semibold text-brand-primary hover:bg-brand-background focus:outline-none focus:ring-2 focus:ring-brand-focus"
-                    href="/contact"
-                  >
-                    Contact
-                  </Link>
-                </li>
-                <li className="mt-2 border-t border-brand-primary/10 pt-3">
-                  <Link
-                    className="marketing-primary-button flex w-full"
-                    href="/contact#trial"
-                  >
-                    Request trial access
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    className="flex min-h-11 items-center justify-center rounded-full px-4 text-sm font-bold text-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-focus"
-                    href="/sign-in"
-                    prefetch={false}
-                  >
-                    Sign in
-                  </Link>
-                </li>
-              </ul>
-            </nav>
-          </details>
+          <MarketingMobileMenu />
         </div>
       </header>
 

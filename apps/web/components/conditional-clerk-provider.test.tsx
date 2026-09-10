@@ -51,7 +51,13 @@ describe("ConditionalClerkProvider", () => {
     },
   );
 
-  it("retains the identity provider for the authenticated application", () => {
+  it.each([
+    "/opportunities/opportunity-1",
+    "/settings/integrations/google",
+    "/create/presentations/presentation-1",
+    "/billing/success",
+  ])("retains the identity provider for authenticated path %s", (pathname) => {
+    mockedUsePathname.mockReturnValue(pathname);
     render(
       <ConditionalClerkProvider enabled>
         <p>Seller app</p>

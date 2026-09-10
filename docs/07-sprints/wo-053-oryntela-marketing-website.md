@@ -1,6 +1,6 @@
 # WO-053 — Oryntela Marketing Website
 
-- **Status:** Implemented; awaiting engineering review
+- **Status:** Complete; engineering review passed
 - **Date:** 2026-09-10
 - **Baseline:** `018266754bc73aaf017a533f26ede60e005e2aad`
 - **Branch:** `codex/wo-053-oryntela-marketing-website`
@@ -16,11 +16,11 @@ for Australian B2B teams.
 
 The final hero was selected after comparing three concise territories:
 
-| Option                                            | Assessment                                                                                           |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Know what to do next                              | Strong, memorable Sales Brain promise, but too narrow for the full end-to-end platform               |
-| Run your whole sales process in one place         | Clear and broad, but less specific and less distinctive                                              |
-| **One sales system from prospect to handover**    | Selected: concrete endpoints, accurate product breadth, strong category fit and natural trial CTA    |
+| Option                                         | Assessment                                                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Know what to do next                           | Strong, memorable Sales Brain promise, but too narrow for the full end-to-end platform            |
+| Run your whole sales process in one place      | Clear and broad, but less specific and less distinctive                                           |
+| **One sales system from prospect to handover** | Selected: concrete endpoints, accurate product breadth, strong category fit and natural trial CTA |
 
 Supporting copy explicitly names Australian B2B teams and the real workflow:
 finding accounts, preparing reviewed outreach, running deals, forecasting and clean
@@ -72,8 +72,9 @@ avoids SOC 2, ISO 27001, penetration-test, residency or other unsupported claims
 The website uses only the owner-approved Oryntela identity, Geist Sans and the
 Midnight/off-white/copper/mineral palette. Copper remains an accent. Responsive
 product frames scale within the viewport at 390 px, and captions use an explicit
-high-contrast tone on Midnight sections. The mobile navigation uses native disclosure
-semantics, minimum 44 px targets, visible focus and the existing reduced-motion
+high-contrast tone on Midnight sections. The mobile navigation uses explicit
+disclosure semantics, minimum 44 px targets, visible focus, focus containment and
+return, Escape dismissal, background scroll locking and the existing reduced-motion
 override.
 
 Focused Playwright checks cover all routes, headings, metadata, 390 px overflow,
@@ -105,15 +106,17 @@ Implementation and repository-standard checks completed during development:
 
 - TypeScript strict typecheck: pass;
 - web formatting and ESLint: pass;
-- full web Vitest: 311 tests pass across 75 files;
+- full web Vitest: 343 tests pass across 76 files after engineering-review route,
+  canonical and mobile-navigation coverage;
 - focused marketing/route/commercial Vitest after final route hardening: 30 tests
   pass;
-- focused public website Playwright: 13 tests pass; and
+- focused marketing and Deal Room Playwright: 15 tests pass; and
 - full Playwright: 90 tests pass;
 - web production build: pass, with the eight public pages, robots, sitemap and
   OpenGraph image statically generated;
 - API Ruff format/lint, mypy, build and fresh-database migration drift: pass;
-- API pytest: 1,273 passed and 10 skipped;
+- API pytest against a freshly migrated PostgreSQL database: 1,283 passed with no
+  skips;
 - repository audit: no known vulnerabilities; and
 - all required production-build public routes returned 200, with the unknown route
   returning the branded 404 with status 404.

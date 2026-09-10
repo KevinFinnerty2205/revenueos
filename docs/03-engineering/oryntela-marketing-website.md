@@ -1,7 +1,7 @@
 # Oryntela marketing website
 
 - **Work order:** WO-053
-- **Status:** Implemented; awaiting engineering review
+- **Status:** Complete; engineering review passed
 - **Surface:** Public routes in the existing Next.js application
 - **Deployment:** Not performed
 - **Database/API:** Unchanged
@@ -30,15 +30,15 @@ secondary CTA is **Explore the platform**.
 | Route           | Purpose                                                                    | Search state                     |
 | --------------- | -------------------------------------------------------------------------- | -------------------------------- |
 | `/`             | Commercial narrative, connected process, product proof, plan/trial entry   | Index                            |
-| `/platform`     | Grouped Sell, Run, Manage and Close/Transition product story                | Index                            |
-| `/pricing`      | Canonical Core, Growth, Complete and Enterprise pricing and trial terms     | Index                            |
-| `/integrations` | Native CRM option and honest Microsoft/Google/HubSpot/Salesforce status     | Index                            |
+| `/platform`     | Grouped Sell, Run, Manage and Close/Transition product story               | Index                            |
+| `/pricing`      | Canonical Core, Growth, Complete and Enterprise pricing and trial terms    | Index                            |
+| `/integrations` | Native CRM option and honest Microsoft/Google/HubSpot/Salesforce status    | Index                            |
 | `/security`     | Implemented trust controls, explicit assurance limits and legal dependency | Index                            |
-| `/contact`      | Trial, demo and support mail routes plus concise company identity           | Index                            |
-| `/privacy`      | Honest shell recording the missing approved public Privacy Notice           | Noindex; absent from sitemap     |
-| `/terms`        | Honest shell recording the missing approved public Terms                    | Noindex; absent from sitemap     |
-| `/sign-in`      | Existing product authentication entry                                       | Noindex; disallowed in robots    |
-| `/deal-room`    | Existing bearer-link buyer route                                            | Noindex/noarchive; not marketing |
+| `/contact`      | Trial, demo and support mail routes plus concise company identity          | Index                            |
+| `/privacy`      | Honest shell recording the missing approved public Privacy Notice          | Noindex; absent from sitemap     |
+| `/terms`        | Honest shell recording the missing approved public Terms                   | Noindex; absent from sitemap     |
+| `/sign-in`      | Existing product authentication entry                                      | Noindex; disallowed in robots    |
+| `/deal-room`    | Existing bearer-link buyer route                                           | Noindex/noarchive; not marketing |
 
 The root 404 returns users to the website or Contact rather than assuming they are
 inside the product.
@@ -92,19 +92,22 @@ instructions are in
 [the screenshot record](oryntela-marketing-screenshot-provenance.md).
 
 Motion is limited to short hover/focus transitions and one mobile menu marker. The
-existing reduced-motion rule removes non-essential motion. There is no hero video,
-remote font, illustration package, third-party logo or third-party script.
+existing reduced-motion rule removes non-essential motion. The mobile menu uses an
+explicit disclosure button, moves focus into the open navigation, contains Tab focus,
+closes on Escape, returns focus to its trigger and prevents background scrolling while
+open. There is no hero video, remote font, illustration package, third-party logo or
+third-party script.
 
 ## Pricing and trial truth
 
 The website publishes the owner-authorised V1 values in AUD:
 
-| Plan       | Monthly       | Annual prepayment | Included users |
-| ---------- | ------------- | ----------------- | -------------- |
-| Core       | AUD $200      | AUD $2,000        | 5              |
-| Growth     | AUD $350      | AUD $3,500        | 10             |
-| Complete   | AUD $500      | AUD $5,000        | 15             |
-| Enterprise | Custom        | Custom            | Custom         |
+| Plan       | Monthly  | Annual prepayment | Included users |
+| ---------- | -------- | ----------------- | -------------- |
+| Core       | AUD $200 | AUD $2,000        | 5              |
+| Growth     | AUD $350 | AUD $3,500        | 10             |
+| Complete   | AUD $500 | AUD $5,000        | 15             |
+| Enterprise | Custom   | Custom            | Custom         |
 
 Annual pricing is called an annual prepayment. The site makes no “two months free”
 claim and publishes no Credit-pack or connector add-on price. The trial states 14
@@ -155,9 +158,11 @@ mechanics replace those shells.
 ## SEO and social metadata
 
 The canonical origin is read from `NEXT_PUBLIC_SITE_URL` when it is a valid HTTPS
-origin (localhost is accepted for local work), otherwise it safely falls back to
-`https://oryntela.com.au`. It never trusts forwarded request headers. WO-054 must
-confirm the final domain before deployment.
+origin. HTTP is accepted only for `localhost`, `127.0.0.1` or `[::1]` local work;
+other protocols and insecure non-local origins safely fall back to
+`https://oryntela.com.au`. It never trusts forwarded request headers. Preview builds
+must either omit the variable to retain the likely launch-domain canonical or set a
+deliberate HTTPS canonical; WO-054 must confirm the final domain before deployment.
 
 Every indexable page has a unique title, description, canonical URL, OpenGraph title,
 OpenGraph description and X/Twitter summary-card metadata. The site-wide OpenGraph
@@ -197,3 +202,18 @@ WO-054 may deploy only after it separately confirms:
 9. final production security, performance and accessibility evidence.
 
 WO-053 performs none of those activation steps.
+
+## Engineering review
+
+The 10 September 2026 engineering review found and fixed three bounded website defects:
+
+1. the initial native mobile disclosure did not implement the required Escape,
+   focus-containment, focus-return and background-scroll behaviour; and
+2. the canonical-origin guard accepted a non-HTTP scheme when the hostname was
+   `localhost`; and
+3. robots directives covered private-path descendants but not their exact root URLs.
+
+Regression coverage now enumerates every current protected route root against the
+Clerk boundary, samples nested and lookalike paths, verifies canonical protocol rules,
+and exercises the complete mobile-menu keyboard lifecycle. Privacy and Terms remain
+documented WO-054 launch blockers, not unresolved WO-053 engineering defects.

@@ -38,18 +38,25 @@ test("marketing navigation and product visuals fit a 390px viewport", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  const menu = page.locator("summary");
+  const menu = page.getByRole("button", { name: "Open menu" });
   await menu.focus();
   await page.keyboard.press("Enter");
   const navigation = page.getByRole("navigation", {
     name: "Mobile navigation",
   });
   await expect(navigation).toBeVisible();
-  await expect(
-    navigation.getByRole("link", { name: "Platform" }),
-  ).toBeVisible();
+  const firstLink = navigation.getByRole("link", { name: "Platform" });
+  const lastLink = navigation.getByRole("link", { name: "Sign in" });
+  await expect(firstLink).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(lastLink).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.locator(":focus")).toBeVisible();
+  await expect(firstLink).toBeFocused();
+  await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
+  await page.keyboard.press("Escape");
+  await expect(navigation).toBeHidden();
+  await expect(menu).toBeFocused();
+  await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
@@ -136,7 +143,9 @@ test("robots, sitemap, OpenGraph and the safe 404 are public", async ({
   const robotsResponse = await request.get("/robots.txt");
   expect(robotsResponse.ok()).toBe(true);
   const robotsText = await robotsResponse.text();
-  expect(robotsText).toContain("Disallow: /deal-room/");
+  expect(robotsText).toContain("Disallow: /deal-room");
+  expect(robotsText).toContain("Disallow: /dashboard");
+  expect(robotsText).toContain("Disallow: /sign-in");
   expect(robotsText).toContain("Sitemap: https://oryntela.com.au/sitemap.xml");
 
   const sitemapResponse = await request.get("/sitemap.xml");

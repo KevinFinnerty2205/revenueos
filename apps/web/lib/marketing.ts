@@ -2,13 +2,17 @@ import type { Metadata } from "next";
 
 const fallbackSiteOrigin = "https://oryntela.com.au";
 
-function resolveSiteOrigin(): string {
-  const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL;
+export function resolveSiteOrigin(
+  configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL,
+): string {
   if (!configuredOrigin) return fallbackSiteOrigin;
 
   try {
     const url = new URL(configuredOrigin);
-    if (url.protocol !== "https:" && url.hostname !== "localhost") {
+    const localHttpOrigin =
+      url.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (url.protocol !== "https:" && !localHttpOrigin) {
       return fallbackSiteOrigin;
     }
     return url.origin;
@@ -31,6 +35,13 @@ export const hero = {
   primaryCta: "Request trial access",
   secondaryCta: "Explore the platform",
 } as const;
+
+export const marketingNavigation = [
+  { href: "/platform", label: "Platform" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/integrations", label: "Integrations" },
+  { href: "/security", label: "Security" },
+] as const;
 
 export const trialOffer = {
   lengthDays: 14,

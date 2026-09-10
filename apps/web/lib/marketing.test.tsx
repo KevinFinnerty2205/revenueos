@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -9,9 +9,11 @@ import sitemap from "@/app/sitemap";
 import {
   integrations,
   pricingPlans,
+  resolveSiteOrigin,
   siteOrigin,
   trialOffer,
 } from "@/lib/marketing";
+import { isIdentityAwareWebPath } from "@/lib/public-routes";
 
 describe("marketing commercial truth", () => {
   it("matches the canonical server plan catalogue", () => {
@@ -88,6 +90,24 @@ describe("marketing commercial truth", () => {
 });
 
 describe("marketing claim and metadata boundaries", () => {
+  it("accepts HTTPS and local HTTP canonical origins but rejects unsafe schemes", () => {
+    expect(resolveSiteOrigin("https://preview.example.test/path?q=1")).toBe(
+      "https://preview.example.test",
+    );
+    expect(resolveSiteOrigin("http://localhost:3000/platform")).toBe(
+      "http://localhost:3000",
+    );
+    expect(resolveSiteOrigin("http://127.0.0.1:3000")).toBe(
+      "http://127.0.0.1:3000",
+    );
+    expect(resolveSiteOrigin("ftp://localhost/public")).toBe(
+      "https://oryntela.com.au",
+    );
+    expect(resolveSiteOrigin("http://preview.example.test")).toBe(
+      "https://oryntela.com.au",
+    );
+  });
+
   it("names only the four approved integration families and says activation is pending", () => {
     expect(integrations.map((integration) => integration.name)).toEqual([
       "Microsoft 365",
@@ -119,6 +139,24 @@ describe("marketing claim and metadata boundaries", () => {
     );
   });
 
+  it("keeps every current protected route root inside the identity boundary", () => {
+    const protectedRouteRoots = readdirSync(
+      join(process.cwd(), "app", "(protected)"),
+      { withFileTypes: true },
+    )
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `/${entry.name}`)
+      .sort();
+
+    expect(protectedRouteRoots).not.toHaveLength(0);
+    expect(
+      protectedRouteRoots.filter((path) => !isIdentityAwareWebPath(path)),
+    ).toEqual([]);
+    for (const path of protectedRouteRoots) {
+      expect(isIdentityAwareWebPath(`${path}/nested/private-route`)).toBe(true);
+    }
+  });
+
   it("keeps authenticated, Deal Room and incomplete legal routes out of search", () => {
     const rules = robots().rules;
     expect(Array.isArray(rules)).toBe(false);
@@ -126,9 +164,13 @@ describe("marketing claim and metadata boundaries", () => {
       throw new Error("Expected one global robots rule");
     const disallowed = Array.isArray(rules.disallow)
       ? rules.disallow
-      : [rules.disallow];
-    expect(disallowed).toContain("/deal-room/");
-    expect(disallowed).toContain("/dashboard/");
+      : rules.disallow
+        ? [rules.disallow]
+        : [];
+    expect(disallowed).toContain("/deal-room");
+    expect(disallowed).toContain("/dashboard");
+    expect(disallowed).toContain("/sign-in");
+    expect(disallowed.filter((path) => path.endsWith("/"))).toEqual([]);
     expect(disallowed).toContain("/privacy");
     expect(disallowed).toContain("/terms");
   });
