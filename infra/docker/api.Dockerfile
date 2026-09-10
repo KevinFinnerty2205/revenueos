@@ -7,7 +7,7 @@ ENV UV_LINK_MODE=copy
 ENV UV_PYTHON_DOWNLOADS=0
 COPY --from=uv /uv /uvx /bin/
 WORKDIR /app
-COPY apps/api/pyproject.toml apps/api/uv.lock apps/api/README.md ./
+COPY apps/api/pyproject.toml apps/api/uv.lock ./
 COPY apps/api/src src
 RUN uv sync --locked --no-dev --no-editable --no-cache
 
