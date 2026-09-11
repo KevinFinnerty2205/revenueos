@@ -1,7 +1,7 @@
 # Oryntela production launch runbook
 
 - Status: repository-ready; all paid/external/public actions blocked pending owner approval
-- Reviewed source baseline: `d8d50b216bd64726243b06b5ea4f5bd56c59ab54`; deploy only the immutable post-review merge SHA recorded in the launch evidence
+- Reviewed source baseline: `3fdf567e2f103abd312fee7e7297af996532c910`; deploy only the immutable post-review merge SHA recorded in the launch evidence
 - Required migration head: `0063_terms_acceptance`
 - Owner/on-call: Kevin (owner-operated V1; use the controlled operational address, not personal details in public records)
 - Customer data: none; WO-045 must pass before onboarding
