@@ -295,6 +295,25 @@ test("private beta onboarding, consent, feedback and admin controls stay product
   await expect(
     page.getByRole("button", { name: "Accept Terms for organisation" }),
   ).toBeDisabled();
+  if (process.env.CAPTURE_WO_054_SCREENSHOT === "1") {
+    await page.setViewportSize({ width: 390, height: 1200 });
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-054/terms-acceptance-mobile-390.png",
+      fullPage: false,
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.reload();
+    await expect(
+      page.getByRole("heading", {
+        name: "Accept the current Terms to continue",
+      }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: "../../docs/07-sprints/assets/wo-054/terms-acceptance-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+  }
   await termsCheckbox.focus();
   await termsCheckbox.press("Space");
   await page

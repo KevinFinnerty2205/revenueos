@@ -114,7 +114,7 @@ The isolated local gate completed on 11 September 2026:
 - root format, lint and TypeScript typecheck passed;
 - Vitest passed 357 tests across 79 files;
 - Playwright passed 90 tests, including the 390px, keyboard, focus, unchecked
-  control and exact-payload acceptance coverage;
+control and exact-payload acceptance coverage;
 - the Next.js production build passed;
 - Ruff format/check and mypy passed (286 source files);
 - pytest passed 1,313 tests with 13 environment-dependent skips;
@@ -129,6 +129,9 @@ The isolated local gate completed on 11 September 2026:
 
 All testing used synthetic local data. No production service, customer data, account
 activation or paid resource was used.
+
+Review captures: [desktop acceptance](../07-sprints/assets/wo-054/terms-acceptance-desktop.png)
+and [390px acceptance](../07-sprints/assets/wo-054/terms-acceptance-mobile-390.png).
 
 ## Pull-request sequence
 
