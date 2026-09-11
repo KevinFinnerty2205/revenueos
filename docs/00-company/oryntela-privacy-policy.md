@@ -1,12 +1,12 @@
 # Oryntela Privacy Policy
 
-> OWNER REVIEW DRAFT — not approved or effective. This document was prepared internally by the owner and has not been externally legally reviewed.
-
 Operator: Management Services Australia Pty. Ltd.
 
 ABN 15 113 119 556
 
 Effective date: [OWNER APPROVAL DATE]
+
+> OWNER REVIEW DRAFT — not approved or effective. This document was prepared internally by the owner and has not been externally legally reviewed.
 
 ## 1. About this Policy
 
