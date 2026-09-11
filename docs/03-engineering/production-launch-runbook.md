@@ -128,8 +128,9 @@ order under separate activation authority:
    | `API_STRIPE_PRICE_COMPLETE_MONTHLY` | AUD 500 every month | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
    | `API_STRIPE_PRICE_COMPLETE_ANNUAL` | AUD 5,000 every year | `oryntela_plan_version_id=43cb5fa7-1b0b-5ca7-b5a3-740bd3e063a0` |
 
-5. Put only references in configuration: the six Price IDs above, `sk_live_` secret
-   as `API_STRIPE_SECRET_KEY`, `API_BILLING_TAX_TREATMENT=inclusive|exclusive`, the
+5. Put only references in configuration: the exact verified `acct_` account ID as
+   `API_STRIPE_ACCOUNT_ID`, the six Price IDs above, `sk_live_` secret as
+   `API_STRIPE_SECRET_KEY`, `API_BILLING_TAX_TREATMENT=inclusive|exclusive`, the
    approved `API_BILLING_TAX_POLICY_REFERENCE`, exact HTTPS return URLs and
    `API_STRIPE_API_VERSION=2026-02-25.clover`. Keep the feature flag false.
 6. Configure the live webhook at
@@ -145,8 +146,9 @@ order under separate activation authority:
    URL. Store its live `bpc_` ID as `API_STRIPE_PORTAL_CONFIGURATION_ID`.
 8. Set `API_BILLING_PROVIDER_NAME=stripe` and `API_BILLING_MODE=live`, still with the
    feature flag false, then run `revenueos-operations production-preflight` from the
-   exact release. It performs read-only retrieval of every Price and portal
-   configuration and fails closed on ID, mode, activity, AUD amount, recurrence or
+   exact release. It performs read-only retrieval of the authenticated Account, every
+   Price and portal configuration and fails closed on account identity, charge/payout
+   readiness, portal action policy, ID, mode, activity, AUD amount, recurrence or
    plan-version metadata mismatch.
 9. Only after separate written authority, run one synthetic/minimum live smoke using
    an owner-controlled test identity: admin starts server-owned Core monthly checkout,

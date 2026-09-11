@@ -27,7 +27,8 @@ Admit explicit `test` and `live` provider modes, while restricting production-en
 billing to Stripe live mode and deterministic CI to test mode. Scope billing accounts,
 operations, subscriptions, invoices and immutable event receipts by selected provider
 and mode. A key prefix, object/event `livemode`, webhook signing secret and pinned API
-version must all agree; mismatches fail closed.
+version must all agree; mismatches fail closed. Live preflight also binds the exact
+Stripe Account ID and requires charge, payout and submitted-details readiness.
 
 The immutable Oryntela plan/version catalogue remains price authority. Six configured
 Stripe Price IDs map server-side to Core/Growth/Complete v1 monthly/annual terms. A
@@ -49,6 +50,9 @@ higher-tier changes require a paid provider-calculated invoice; lower-tier and
 interval changes apply at renewal; cancellation is end-of-period with pre-end
 reactivation and fresh checkout after ending. The live customer portal is a separately
 configured Stripe-hosted surface.
+Its preflight policy permits invoice history and payment-method updates while refusing
+provider-side subscription switching or cancellation that could bypass Oryntela's
+plan-change and end-of-period rules.
 
 Production configuration includes an unresolved/inclusive/exclusive tax switch plus a
 durable owner/accounting policy reference. Live mode refuses unresolved GST. This
@@ -71,7 +75,8 @@ decision does not choose inclusive/exclusive presentation or Stripe Tax.
 Migration `0062_live_stripe_billing` widens existing account/receipt mode checks, adds
 mode to operations, scopes invoice identity to its mode-owned subscription and adds
 payment/paid-period fields to the existing forced-RLS subscription table. It is the
-smallest schema change that makes payment authority and test/live identity durable.
+smallest schema change that makes payment authority and test/live identity durable,
+and enforces one non-cancelled subscription per mode-owned billing account.
 Downgrade refuses while live authority exists. Export
 v38 adds the safe payment fields but continues to omit provider identifiers, hosted
 links, webhook bodies, credentials and card data.

@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     billing_portal_return_url: str = "http://localhost:3000/settings"
     stripe_secret_key: SecretStr | None = None
     stripe_webhook_secret: SecretStr | None = None
+    stripe_account_id: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=255,
+        pattern=r"^acct_[A-Za-z0-9]+$",
+    )
     stripe_portal_configuration_id: str | None = Field(
         default=None,
         min_length=7,
@@ -476,6 +482,7 @@ class Settings(BaseSettings):
         "visual_s3_secret_access_key",
         "stripe_secret_key",
         "stripe_webhook_secret",
+        "stripe_account_id",
         "stripe_portal_configuration_id",
         "stripe_price_core_monthly",
         "stripe_price_core_annual",
@@ -596,6 +603,12 @@ class Settings(BaseSettings):
                 raise ValueError("Billing cancel URL must use HTTPS or an exact localhost HTTP origin.")
             if not self._is_safe_billing_return_url(self.billing_portal_return_url):
                 raise ValueError("Billing portal return URL must use HTTPS or an exact localhost HTTP origin.")
+            if self.environment == "production" and (
+                self.billing_success_url != "https://oryntela.com.au/billing/success"
+                or self.billing_cancel_url != "https://oryntela.com.au/settings"
+                or self.billing_portal_return_url != "https://oryntela.com.au/settings"
+            ):
+                raise ValueError("Production billing return URLs must use the exact approved oryntela.com.au paths.")
             if self.billing_provider_name == "stripe":
                 if self.stripe_secret_key is None:
                     raise ValueError("Stripe billing requires API_STRIPE_SECRET_KEY.")
@@ -611,6 +624,8 @@ class Settings(BaseSettings):
                 if self.stripe_api_base_url != "https://api.stripe.com":
                     raise ValueError("Stripe billing must use the official HTTPS API endpoint.")
                 if self.billing_mode == "live":
+                    if self.stripe_account_id is None:
+                        raise ValueError("Live Stripe billing requires API_STRIPE_ACCOUNT_ID.")
                     if self.stripe_portal_configuration_id is None:
                         raise ValueError("Live Stripe billing requires API_STRIPE_PORTAL_CONFIGURATION_ID.")
                     if self.billing_tax_treatment == "unresolved" or self.billing_tax_policy_reference is None:

@@ -66,7 +66,8 @@ Repository engineering now provides:
 - immutable plan-version-bound configuration for all six exact AUD Price mappings,
   checked by a separately invoked read-only production preflight for activity,
   livemode, amount, currency, recurrence and metadata;
-- separate live API, webhook and portal configuration references, exact Stripe API
+- exact live Account ID plus separate API, webhook and portal configuration
+  references, exact Stripe API
   version `2026-02-25.clover`, timestamp/signature/mode/version checks, immutable event
   receipts, replay idempotency and current-object reconciliation;
 - entitlement only from the current subscription plus its latest verified paid invoice,
@@ -77,8 +78,9 @@ Repository engineering now provides:
   end-of-period cancellation/reactivation, provider-confirmed paid upgrades and
   unknown-outcome reconciliation; and
 - migration `0062_live_stripe_billing`, which widens existing mode checks, scopes
-  operation idempotency and invoice identity by mode-owned subscriptions, and adds the
-  missing paid-period/payment fields under
+  operation idempotency and invoice identity by mode-owned subscriptions, enforces one
+  non-cancelled subscription per mode-owned account, and adds the missing
+  paid-period/payment fields under
   the existing forced-RLS tables. Export v38 includes those safe fields; no raw Stripe
   payload, credential or card data is stored.
 

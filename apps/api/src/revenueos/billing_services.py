@@ -36,6 +36,7 @@ from revenueos.billing_provider import (
     ProviderPriceReference,
     ProviderSubscriptionSnapshot,
     VerifiedBillingEvent,
+    VerifiedUnsupportedBillingEvent,
 )
 from revenueos.billing_repositories import BillingRepository
 from revenueos.commercial_contracts import BillingInterval, PlanCode
@@ -525,11 +526,15 @@ class BillingService:
 
     async def process_webhook(
         self, payload: bytes, signature: str | None
-    ) -> Literal["processed", "duplicate", "ignored_stale", "reconciliation_required"]:
+    ) -> Literal["processed", "duplicate", "ignored_stale", "ignored_unsupported"]:
         self._require_webhook_reconciliation_enabled()
         event = await self.provider.verify_webhook(payload, signature)
+        if isinstance(event, VerifiedUnsupportedBillingEvent):
+            return "ignored_unsupported"
         await set_tenant_database_context(self.session, event.organisation_id)
-        account = await self.repository.account(event.organisation_id, self.provider.name, self.provider.mode)
+        account = await self.repository.account(
+            event.organisation_id, self.provider.name, self.provider.mode, lock=True
+        )
         if account is None or account.provider_customer_id != event.customer_identifier:
             raise PublicAPIError(
                 "billing_webhook_mapping_unverified",
@@ -548,8 +553,16 @@ class BillingService:
             result = await self._process_subscription_event(account, event)
         elif event.event_type in _INVOICE_EVENTS:
             result = await self._process_invoice_event(account, event)
-        else:
-            result = "reconciliation_required"
+        else:  # pragma: no cover - provider verification admits only the supported set
+            raise RuntimeError("Verified provider event type is not supported.")
+        if result == "reconciliation_required":
+            await self.session.rollback()
+            await set_tenant_database_context(self.session, event.organisation_id)
+            raise PublicAPIError(
+                "billing_webhook_reconciliation_required",
+                "Billing status could not yet be reconciled. The provider should retry this event.",
+                503,
+            )
         self.session.add(
             BillingProviderEventReceipt(
                 id=uuid.uuid4(),
@@ -560,7 +573,7 @@ class BillingService:
                 event_type=event.event_type,
                 provider_created_at=event.created_at,
                 result=result,
-                safe_detail_code="unsupported_event" if result == "reconciliation_required" else None,
+                safe_detail_code=None,
             )
         )
         try:
@@ -709,6 +722,9 @@ class BillingService:
         ):
             return "reconciliation_required"
         if subscription is None:
+            current = await self.repository.subscription(event.organisation_id, self.provider.name, self.provider.mode)
+            if current is not None and current.status != "cancelled":
+                return "reconciliation_required"
             subscription = BillingSubscription(
                 id=uuid.uuid4(),
                 organisation_id=event.organisation_id,

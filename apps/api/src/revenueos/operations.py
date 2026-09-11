@@ -504,7 +504,7 @@ async def production_preflight(settings: Settings) -> dict[str, object]:
                 PreflightCheck(
                     "live_stripe_billing",
                     "fail",
-                    "Live Stripe price and portal configuration could not be verified.",
+                    "Live Stripe account, price and portal configuration could not be verified.",
                 )
             )
         else:
@@ -512,7 +512,8 @@ async def production_preflight(settings: Settings) -> dict[str, object]:
                 PreflightCheck(
                     "live_stripe_billing",
                     "pass",
-                    "All six live prices and the live portal configuration match the approved billing contract.",
+                    "The exact charge-ready account, all six live prices and the bounded live portal policy match "
+                    "the approved billing contract.",
                 )
             )
     checks.append(

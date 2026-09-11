@@ -42,7 +42,7 @@ export function BillingSuccess() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-          Test billing
+          Billing
         </p>
         <h1 className="mt-2 text-3xl font-bold text-slate-950">
           {status?.confirmed

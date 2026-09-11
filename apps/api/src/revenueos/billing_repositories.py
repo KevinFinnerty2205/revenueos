@@ -19,16 +19,19 @@ class BillingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def account(self, organisation_id: UUID, provider: str, mode: str) -> BillingAccount | None:
+    async def account(
+        self, organisation_id: UUID, provider: str, mode: str, *, lock: bool = False
+    ) -> BillingAccount | None:
+        statement = select(BillingAccount).where(
+            BillingAccount.organisation_id == organisation_id,
+            BillingAccount.provider == provider,
+            BillingAccount.provider_mode == mode,
+        )
+        if lock:
+            statement = statement.with_for_update()
         return cast(
             BillingAccount | None,
-            await self.session.scalar(
-                select(BillingAccount).where(
-                    BillingAccount.organisation_id == organisation_id,
-                    BillingAccount.provider == provider,
-                    BillingAccount.provider_mode == mode,
-                )
-            ),
+            await self.session.scalar(statement),
         )
 
     async def subscription(

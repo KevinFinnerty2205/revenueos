@@ -485,6 +485,13 @@ class BillingSubscription(TimestampMixin, Base):
         ),
         UniqueConstraint("organisation_id", "id", name="uq_billing_subscriptions_org_id"),
         UniqueConstraint("billing_account_id", "provider_subscription_id", name="uq_billing_subscriptions_provider_id"),
+        Index(
+            "uq_billing_subscriptions_account_current",
+            "billing_account_id",
+            unique=True,
+            postgresql_where=text("status != 'cancelled'"),
+            sqlite_where=text("status != 'cancelled'"),
+        ),
         Index("ix_billing_subscriptions_org_status", "organisation_id", "status", "updated_at"),
     )
 

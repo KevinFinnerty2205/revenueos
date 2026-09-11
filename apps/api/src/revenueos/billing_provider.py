@@ -96,6 +96,16 @@ class VerifiedBillingEvent:
     payment_status: Literal["paid", "unpaid", "no_payment_required"] | None = None
 
 
+@dataclass(frozen=True)
+class VerifiedUnsupportedBillingEvent:
+    identifier: str
+    event_type: str
+    created_at: datetime
+
+
+VerifiedProviderEvent = VerifiedBillingEvent | VerifiedUnsupportedBillingEvent
+
+
 class BillingProvider(Protocol):
     name: BillingProviderName
     mode: BillingMode
@@ -147,7 +157,7 @@ class BillingProvider(Protocol):
 
     async def create_portal(self, customer_identifier: str, *, idempotency_key: str) -> str: ...
 
-    async def verify_webhook(self, payload: bytes, signature: str | None) -> VerifiedBillingEvent: ...
+    async def verify_webhook(self, payload: bytes, signature: str | None) -> VerifiedProviderEvent: ...
 
 
 def _aware_from_timestamp(value: object) -> datetime | None:
@@ -352,7 +362,7 @@ class DeterministicBillingProvider:
         portal_id = uuid.uuid5(self._namespace, f"portal:{customer_identifier}:{idempotency_key}").hex
         return f"https://billing.stripe.test/session/{portal_id}"
 
-    async def verify_webhook(self, payload: bytes, signature: str | None) -> VerifiedBillingEvent:
+    async def verify_webhook(self, payload: bytes, signature: str | None) -> VerifiedProviderEvent:
         expected = hmac.new(
             self.settings.billing_webhook_secret.get_secret_value().encode("utf-8"),
             payload,
@@ -362,14 +372,34 @@ class DeterministicBillingProvider:
         if not supplied or not hmac.compare_digest(expected, supplied):
             raise PublicAPIError("billing_webhook_signature_invalid", "Webhook signature is invalid.", 400)
         try:
-            body = cast(dict[str, object], json.loads(payload))
-            organisation_id = UUID(_required_string(body, "organisation_id"))
+            decoded = json.loads(payload)
+            if not isinstance(decoded, dict):
+                raise ValueError("billing event must be an object")
+            body = cast(dict[str, object], decoded)
+            event_identifier = _required_string(body, "id")
+            event_type = _required_string(body, "type")
             created_at = _aware_from_timestamp(body.get("created"))
             if created_at is None:
                 raise ValueError("missing created")
+            if event_type not in {
+                "checkout.session.completed",
+                "customer.subscription.updated",
+                "customer.subscription.deleted",
+                "invoice.paid",
+                "invoice.payment_failed",
+                "invoice.finalized",
+                "invoice.voided",
+                "invoice.marked_uncollectible",
+            }:
+                return VerifiedUnsupportedBillingEvent(
+                    identifier=event_identifier,
+                    event_type=event_type,
+                    created_at=created_at,
+                )
+            organisation_id = UUID(_required_string(body, "organisation_id"))
             return VerifiedBillingEvent(
-                identifier=_required_string(body, "id"),
-                event_type=_required_string(body, "type"),
+                identifier=event_identifier,
+                event_type=event_type,
                 organisation_id=organisation_id,
                 customer_identifier=_required_string(body, "customer_id"),
                 subscription_identifier=cast(str | None, body.get("subscription_id")),
@@ -504,6 +534,25 @@ class StripeBillingProvider:
                 "The billing catalogue mapping is incomplete.",
                 503,
             )
+        account_identifier = self.settings.stripe_account_id
+        if account_identifier is None:
+            raise PublicAPIError(
+                "billing_account_configuration_missing",
+                "The live billing account is not configured.",
+                503,
+            )
+        account = await self._request("GET", "/v1/account")
+        if (
+            account.get("id") != account_identifier
+            or account.get("charges_enabled") is not True
+            or account.get("payouts_enabled") is not True
+            or account.get("details_submitted") is not True
+        ):
+            raise PublicAPIError(
+                "billing_account_configuration_invalid",
+                "The live billing account could not be verified as charge and settlement ready.",
+                503,
+            )
         for price in prices:
             await self._verify_price(price)
         configuration_identifier = self.settings.stripe_portal_configuration_id
@@ -519,6 +568,36 @@ class StripeBillingProvider:
             raise PublicAPIError(
                 "billing_portal_configuration_invalid",
                 "The hosted billing portal configuration could not be verified.",
+                503,
+            )
+        features = configuration.get("features")
+        invoice_history = features.get("invoice_history") if isinstance(features, dict) else None
+        payment_method_update = features.get("payment_method_update") if isinstance(features, dict) else None
+        customer_update = features.get("customer_update") if isinstance(features, dict) else None
+        subscription_update = features.get("subscription_update") if isinstance(features, dict) else None
+        subscription_cancel = features.get("subscription_cancel") if isinstance(features, dict) else None
+        allowed_customer_updates = customer_update.get("allowed_updates") if isinstance(customer_update, dict) else None
+        if (
+            not isinstance(invoice_history, dict)
+            or invoice_history.get("enabled") is not True
+            or not isinstance(payment_method_update, dict)
+            or payment_method_update.get("enabled") is not True
+            or not isinstance(customer_update, dict)
+            or customer_update.get("enabled") is not True
+            or not isinstance(allowed_customer_updates, list)
+            or not allowed_customer_updates
+            or not all(
+                isinstance(value, str) and value in {"address", "email", "name", "phone", "shipping", "tax_id"}
+                for value in allowed_customer_updates
+            )
+            or not isinstance(subscription_update, dict)
+            or subscription_update.get("enabled") is not False
+            or not isinstance(subscription_cancel, dict)
+            or subscription_cancel.get("enabled") is not False
+        ):
+            raise PublicAPIError(
+                "billing_portal_policy_invalid",
+                "The hosted billing portal policy could not be verified.",
                 503,
             )
 
@@ -553,7 +632,10 @@ class StripeBillingProvider:
                     content=urlencode(form or []),
                 )
             response.raise_for_status()
-            return cast(dict[str, object], response.json())
+            decoded = response.json()
+            if not isinstance(decoded, dict):
+                raise ValueError("Stripe response must be an object")
+            return cast(dict[str, object], decoded)
         except (httpx.HTTPError, ValueError) as exc:
             raise PublicAPIError(
                 "billing_provider_unavailable",
@@ -713,11 +795,25 @@ class StripeBillingProvider:
         return None
 
     @staticmethod
-    def _subscription_item_identifier(data: dict[str, object]) -> str:
+    def _subscription_item(data: dict[str, object]) -> dict[str, object]:
         items = data.get("items")
         item_data = items.get("data") if isinstance(items, dict) else None
-        first = item_data[0] if isinstance(item_data, list) and item_data and isinstance(item_data[0], dict) else {}
-        return _required_string(cast(dict[str, object], first), "id")
+        if (
+            not isinstance(item_data, list)
+            or len(item_data) != 1
+            or not isinstance(item_data[0], dict)
+            or item_data[0].get("quantity") != 1
+        ):
+            raise PublicAPIError(
+                "billing_subscription_contract_invalid",
+                "The provider subscription items could not be safely reconciled.",
+                409,
+            )
+        return cast(dict[str, object], item_data[0])
+
+    @classmethod
+    def _subscription_item_identifier(cls, data: dict[str, object]) -> str:
+        return _required_string(cls._subscription_item(data), "id")
 
     async def cancel_at_period_end(self, identifier: str, *, idempotency_key: str) -> ProviderSubscriptionSnapshot:
         data = await self._request(
@@ -747,6 +843,7 @@ class StripeBillingProvider:
         await self._verify_price(price)
         current_data = await self._retrieve_subscription_data(identifier)
         self._require_mode(current_data)
+        subscription_item_identifier = self._subscription_item_identifier(current_data)
         schedule_identifier = self._subscription_schedule_identifier(current_data)
         if schedule_identifier is not None:
             released_schedule = await self._request(
@@ -759,7 +856,7 @@ class StripeBillingProvider:
             "POST",
             f"/v1/subscriptions/{identifier}",
             form=[
-                ("items[0][id]", self._subscription_item_identifier(current_data)),
+                ("items[0][id]", subscription_item_identifier),
                 ("items[0][price]", price.identifier),
                 ("proration_behavior", "always_invoice"),
                 ("payment_behavior", "pending_if_incomplete"),
@@ -858,7 +955,7 @@ class StripeBillingProvider:
         self._require_mode(data)
         return _required_string(data, "url")
 
-    async def verify_webhook(self, payload: bytes, signature: str | None) -> VerifiedBillingEvent:
+    async def verify_webhook(self, payload: bytes, signature: str | None) -> VerifiedProviderEvent:
         if signature is None:
             raise PublicAPIError("billing_webhook_signature_invalid", "Webhook signature is invalid.", 400)
         values: dict[str, list[str]] = {}
@@ -877,12 +974,42 @@ class StripeBillingProvider:
         if not any(hmac.compare_digest(expected, candidate) for candidate in values.get("v1", [])):
             raise PublicAPIError("billing_webhook_signature_invalid", "Webhook signature is invalid.", 400)
         try:
-            event = cast(dict[str, object], json.loads(payload))
+            decoded = json.loads(payload)
+            if not isinstance(decoded, dict):
+                raise ValueError("Stripe event must be an object")
+            event = cast(dict[str, object], decoded)
             if event.get("api_version") != self.settings.stripe_api_version:
                 raise ValueError("unexpected Stripe API version")
             self._require_mode(event)
-            data = cast(dict[str, object], event["data"])
-            obj = cast(dict[str, object], data["object"])
+            if event.get("account") is not None:
+                raise ValueError("Connect-scoped Stripe events are not accepted")
+            event_identifier = _required_string(event, "id")
+            event_type = _required_string(event, "type")
+            created_at = _aware_from_timestamp(event.get("created")) or datetime.now(UTC)
+            supported_events = {
+                "checkout.session.completed",
+                "customer.subscription.updated",
+                "customer.subscription.deleted",
+                "invoice.paid",
+                "invoice.payment_failed",
+                "invoice.finalized",
+                "invoice.voided",
+                "invoice.marked_uncollectible",
+            }
+            if event_type not in supported_events:
+                return VerifiedUnsupportedBillingEvent(
+                    identifier=event_identifier,
+                    event_type=event_type,
+                    created_at=created_at,
+                )
+            raw_data = event.get("data")
+            if not isinstance(raw_data, dict):
+                raise ValueError("Stripe event data must be an object")
+            data = cast(dict[str, object], raw_data)
+            raw_object = data.get("object")
+            if not isinstance(raw_object, dict):
+                raise ValueError("Stripe event object must be an object")
+            obj = cast(dict[str, object], raw_object)
             self._require_mode(obj)
             customer_identifier = _required_string(obj, "customer")
             metadata = obj.get("metadata")
@@ -895,7 +1022,6 @@ class StripeBillingProvider:
                     customer_metadata.get("oryntela_organisation_id") if isinstance(customer_metadata, dict) else None
                 )
             organisation_id = UUID(cast(str, organisation_text))
-            event_type = _required_string(event, "type")
             subscription_identifier: str | None = None
             invoice_identifier: str | None = None
             if event_type.startswith("customer.subscription."):
@@ -914,14 +1040,14 @@ class StripeBillingProvider:
                 candidate = obj.get("subscription")
                 subscription_identifier = candidate if isinstance(candidate, str) else None
             return VerifiedBillingEvent(
-                identifier=_required_string(event, "id"),
+                identifier=event_identifier,
                 event_type=event_type,
                 organisation_id=organisation_id,
                 customer_identifier=customer_identifier,
                 subscription_identifier=subscription_identifier,
                 invoice_identifier=invoice_identifier,
                 object_identifier=_required_string(obj, "id"),
-                created_at=_aware_from_timestamp(event.get("created")) or datetime.now(UTC),
+                created_at=created_at,
                 amount_minor_units=(
                     cast(int, obj.get("amount_total"))
                     if isinstance(obj.get("amount_total"), int) and not isinstance(obj.get("amount_total"), bool)
@@ -944,10 +1070,8 @@ class StripeBillingProvider:
 
     def _subscription(self, data: dict[str, object], observed_at: datetime) -> ProviderSubscriptionSnapshot:
         self._require_mode(data)
-        items = data.get("items")
-        item_data = items.get("data") if isinstance(items, dict) else None
-        first = item_data[0] if isinstance(item_data, list) and item_data and isinstance(item_data[0], dict) else {}
-        price = first.get("price") if isinstance(first, dict) else None
+        first = self._subscription_item(data)
+        price = first.get("price")
         provider_status = cast(str, data.get("status", "unknown"))
         statuses: dict[str, BillingSubscriptionStatus] = {
             "active": "active",

@@ -777,6 +777,12 @@ def test_live_stripe_billing_migration_backfills_and_is_mode_isolated(
         assert operation == ("test",)
         subscription_columns = {row[1] for row in connection.execute("PRAGMA table_info(billing_subscriptions)")}
         assert {"payment_status", "paid_period_start", "paid_through"}.issubset(subscription_columns)
+        subscription_indexes = {row[1]: row for row in connection.execute("PRAGMA index_list(billing_subscriptions)")}
+        assert subscription_indexes["uq_billing_subscriptions_account_current"][2] == 1
+        current_subscription_index = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'uq_billing_subscriptions_account_current'"
+        ).fetchone()
+        assert current_subscription_index is not None and "status != 'cancelled'" in current_subscription_index[0]
         operation_indexes = {row[1]: row for row in connection.execute("PRAGMA index_list(billing_operations)")}
         assert operation_indexes["uq_billing_operations_org_unresolved_checkout"][2] == 1
         triggers = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'trigger'")}

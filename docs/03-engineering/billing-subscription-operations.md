@@ -75,7 +75,8 @@ was created by WO-054B, and no Stripe network smoke was performed.
 - `billing_subscriptions` stores the bounded status, plan-version reference,
   interval, provider service period, independently confirmed paid period/paid-through
   boundary, payment state, scheduled cancellation or next-renewal change, provider
-  timestamps and reconciliation state.
+  timestamps and reconciliation state. A partial unique index permits only one
+  non-cancelled subscription per mode-owned billing account.
 - `billing_invoice_projections` stores invoice date, AUD amounts, optional
   provider-reported tax total, bounded status and validated provider-hosted links
   only. It does not label that total as GST or decide inclusive/exclusive treatment.
@@ -142,9 +143,10 @@ Duplicate event identifiers return the stored result and have no second commerci
 effect. Provider retrieval makes delayed updates converge on current state. A stale
 provider timestamp cannot overwrite newer state, and an old paid invoice cannot move
 the paid-through boundary when it is no longer the subscription's latest invoice.
-Ambiguous or unmapped events are recorded for reconciliation and cannot grant an
-entitlement. Logs contain safe event/result identifiers only, not webhook payloads or
-payment data.
+Unsupported signed event types are acknowledged without tenant lookup or mutation.
+Ambiguous supported events return a retryable failure without writing an immutable
+receipt, so provider delivery can converge after a checkout/database overlap; they
+cannot grant an entitlement. Logs never contain webhook payloads or payment data.
 
 ## Subscription policy
 
@@ -154,8 +156,9 @@ The provider-neutral states are `pending`, `active`, `past_due`,
 
 - Active/cancel-at-period-end status activates the matching WO-047 plan only when the
   current latest invoice is verified paid and its Stripe-supplied item service period
-  establishes a future `paid_through`. Checkout completion or its success redirect
-  alone never grants access.
+  establishes a future `paid_through`. The current subscription must have exactly one
+  item with quantity one; multi-item or quantity changes fail reconciliation. Checkout
+  completion or its success redirect alone never grants access.
 - `past_due` is the bounded payment-recovery state. It marks payment as needing
   attention, preserves existing access and data, and offers the hosted resolution
   path while the provider runs its configured retry policy. Oryntela does not
@@ -211,7 +214,8 @@ The checked-in production template remains deliberately inactive. A live target 
 set `API_FEATURE_BILLING_ENABLED=true`, `API_BILLING_PROVIDER_NAME=stripe` and
 `API_BILLING_MODE=live`, safe success/cancel/portal-return URLs, an `sk_live_` value in
 `API_STRIPE_SECRET_KEY`, the endpoint's `whsec_` value in
-`API_STRIPE_WEBHOOK_SECRET`, an active live `bpc_` value in
+`API_STRIPE_WEBHOOK_SECRET`, the exact verified `acct_` value in
+`API_STRIPE_ACCOUNT_ID`, an active live `bpc_` value in
 `API_STRIPE_PORTAL_CONFIGURATION_ID`, and the six `API_STRIPE_PRICE_*` mappings.
 `API_STRIPE_API_VERSION` remains exactly `2026-02-25.clover` and the API origin remains
 `https://api.stripe.com`.

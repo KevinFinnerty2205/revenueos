@@ -8,6 +8,7 @@ import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -33,6 +34,7 @@ from revenueos.billing_provider import (
     ProviderPriceReference,
     ProviderSubscriptionSnapshot,
     StripeBillingProvider,
+    VerifiedUnsupportedBillingEvent,
 )
 from revenueos.billing_services import BillingService, authoritative_provider_prices
 from revenueos.commercial_contracts import BillingInterval, PlanCode
@@ -216,11 +218,12 @@ def live_stripe_settings(**changes: object) -> Settings:
         "billing_mode": "live",
         "billing_tax_treatment": "inclusive",
         "billing_tax_policy_reference": "synthetic-owner-decision-for-tests",
-        "billing_success_url": "https://app.example.test/billing/success",
-        "billing_cancel_url": "https://app.example.test/settings",
-        "billing_portal_return_url": "https://app.example.test/settings",
+        "billing_success_url": "https://oryntela.com.au/billing/success",
+        "billing_cancel_url": "https://oryntela.com.au/settings",
+        "billing_portal_return_url": "https://oryntela.com.au/settings",
         "stripe_secret_key": "sk_live_synthetic_never_sent_wo054b",
         "stripe_webhook_secret": "whsec_synthetic_live_never_sent_wo054b",
+        "stripe_account_id": "acct_syntheticlive",
         "stripe_portal_configuration_id": "bpc_syntheticlive",
         "stripe_price_core_monthly": "price_live_core_monthly",
         "stripe_price_core_annual": "price_live_core_annual",
@@ -1229,10 +1232,22 @@ def test_webhook_signature_mapping_and_cross_tenant_queries_fail_closed() -> Non
                     snapshot,
                     price_identifier="price_test_core_monthly_aud",
                 )
-                assert await service.process_webhook(payload, signature) == "reconciliation_required"
+                with pytest.raises(PublicAPIError) as reconciliation:
+                    await service.process_webhook(payload, signature)
+                assert reconciliation.value.code == "billing_webhook_reconciliation_required"
+                assert reconciliation.value.status_code == 503
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(BillingProviderEventReceipt)
+                        .where(BillingProviderEventReceipt.provider_event_id == "evt_security_001")
+                    )
+                    == 0
+                )
                 unchanged = await session.get(OrganisationCommercialState, PRIMARY_ORGANISATION_ID)
                 assert unchanged is not None and unchanged.source == "migration"
                 provider.subscriptions[snapshot.identifier] = snapshot
+                assert await service.process_webhook(payload, signature) == "processed"
                 forged_payload, forged_signature = signed_event(
                     event_id="evt_security_002",
                     event_type="customer.subscription.updated",
@@ -1365,6 +1380,18 @@ def test_api_rejects_price_tampering_enterprise_and_non_admin_mutation() -> None
         assert denied.status_code == 403
 
 
+def test_webhook_route_rejects_oversized_body_before_verification() -> None:
+    app = create_app(billing_settings())
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/billing/webhooks/deterministic",
+            content=b"x" * 1_000_001,
+            headers={"X-Oryntela-Test-Signature": "sha256=not-evaluated"},
+        )
+    assert response.status_code == 413
+    assert response.json()["code"] == "billing_webhook_too_large"
+
+
 def test_test_live_configuration_separation() -> None:
     with pytest.raises(ValidationError, match="Stripe test mode"):
         Settings(stripe_secret_key="sk_live_not_authorised")
@@ -1419,10 +1446,12 @@ def test_test_live_configuration_separation() -> None:
     [
         ({"stripe_secret_key": "sk_test_wrong_mode"}, "Stripe live mode"),
         ({"stripe_webhook_secret": None}, "API_STRIPE_WEBHOOK_SECRET"),
+        ({"stripe_account_id": None}, "API_STRIPE_ACCOUNT_ID"),
         ({"stripe_portal_configuration_id": None}, "API_STRIPE_PORTAL_CONFIGURATION_ID"),
         ({"billing_tax_treatment": "unresolved"}, "tax treatment"),
         ({"billing_tax_policy_reference": None}, "policy reference"),
         ({"stripe_price_complete_annual": "price_live_core_annual"}, "distinct"),
+        ({"billing_success_url": "https://foreign.example/billing/success"}, "oryntela.com.au"),
     ],
 )
 def test_live_stripe_configuration_fails_closed(change: dict[str, object], message: str) -> None:
@@ -1447,6 +1476,13 @@ def test_live_stripe_preflight_verifies_exact_catalogue_and_portal_without_mutat
         ) -> dict[str, object]:
             del form, idempotency_key
             calls.append((method, path))
+            if path == "/v1/account":
+                return {
+                    "id": "acct_syntheticlive",
+                    "charges_enabled": True,
+                    "payouts_enabled": True,
+                    "details_submitted": True,
+                }
             if path.startswith("/v1/prices/"):
                 reference = references[path.rsplit("/", 1)[-1]]
                 return {
@@ -1461,11 +1497,22 @@ def test_live_stripe_preflight_verifies_exact_catalogue_and_portal_without_mutat
                     },
                     "metadata": {"oryntela_plan_version_id": str(reference.plan_version_id)},
                 }
-            return {"id": "bpc_syntheticlive", "active": True, "livemode": True}
+            return {
+                "id": "bpc_syntheticlive",
+                "active": True,
+                "livemode": True,
+                "features": {
+                    "invoice_history": {"enabled": True},
+                    "payment_method_update": {"enabled": True},
+                    "customer_update": {"enabled": True, "allowed_updates": ["address", "name"]},
+                    "subscription_update": {"enabled": False},
+                    "subscription_cancel": {"enabled": False},
+                },
+            }
 
         provider._request = request  # type: ignore[method-assign]
         await provider.verify_configuration(prices)
-        assert len(calls) == 7
+        assert len(calls) == 8
         assert all(method == "GET" for method, _ in calls)
 
         original = references["price_live_core_monthly"]
@@ -1521,6 +1568,40 @@ def test_live_stripe_preflight_verifies_exact_catalogue_and_portal_without_mutat
         with pytest.raises(PublicAPIError, match="outside the authorised live mode"):
             await provider.verify_configuration(prices)
 
+        async def wrong_account(
+            method: str,
+            path: str,
+            *,
+            form: list[tuple[str, str]] | None = None,
+            idempotency_key: str | None = None,
+        ) -> dict[str, object]:
+            value = await request(method, path, form=form, idempotency_key=idempotency_key)
+            if path == "/v1/account":
+                value["charges_enabled"] = False
+            return value
+
+        provider._request = wrong_account  # type: ignore[method-assign]
+        with pytest.raises(PublicAPIError, match="charge and settlement ready"):
+            await provider.verify_configuration(prices)
+
+        async def unsafe_portal_policy(
+            method: str,
+            path: str,
+            *,
+            form: list[tuple[str, str]] | None = None,
+            idempotency_key: str | None = None,
+        ) -> dict[str, object]:
+            value = await request(method, path, form=form, idempotency_key=idempotency_key)
+            if path.startswith("/v1/billing_portal/configurations/"):
+                features = value["features"]
+                assert isinstance(features, dict)
+                features["subscription_update"] = {"enabled": True}
+            return value
+
+        provider._request = unsafe_portal_policy  # type: ignore[method-assign]
+        with pytest.raises(PublicAPIError, match="portal policy"):
+            await provider.verify_configuration(prices)
+
     asyncio.run(scenario())
 
 
@@ -1566,6 +1647,61 @@ def test_live_stripe_webhook_rejects_wrong_secret_version_and_test_objects() -> 
     test_payload, test_signature = signed(test_event)
     with pytest.raises(PublicAPIError, match="outside the authorised live mode"):
         asyncio.run(provider.verify_webhook(test_payload, test_signature))
+
+    connect_event = dict(event, account="acct_connected_synthetic")
+    connect_payload, connect_signature = signed(connect_event)
+    with pytest.raises(PublicAPIError, match="content is invalid"):
+        asyncio.run(provider.verify_webhook(connect_payload, connect_signature))
+
+    list_payload = json.dumps([event], separators=(",", ":")).encode()
+    list_digest = hmac.new(
+        b"whsec_synthetic_live_never_sent_wo054b",
+        f"{timestamp}.".encode() + list_payload,
+        hashlib.sha256,
+    ).hexdigest()
+    with pytest.raises(PublicAPIError, match="content is invalid"):
+        asyncio.run(provider.verify_webhook(list_payload, f"t={timestamp},v1={list_digest}"))
+
+    for malformed in (dict(event, data=[]), dict(event, data={"object": []})):
+        malformed_payload, malformed_signature = signed(malformed)
+        with pytest.raises(PublicAPIError, match="content is invalid"):
+            asyncio.run(provider.verify_webhook(malformed_payload, malformed_signature))
+
+
+def test_live_stripe_unknown_event_is_safely_ignored_without_tenant_mapping_or_mutation() -> None:
+    async def scenario() -> None:
+        settings = live_stripe_settings()
+        provider = StripeBillingProvider(settings)
+        timestamp = int(time.time())
+        payload = json.dumps(
+            {
+                "id": "evt_live_unsupported_001",
+                "type": "customer.created",
+                "api_version": "2026-02-25.clover",
+                "created": timestamp,
+                "livemode": True,
+            },
+            separators=(",", ":"),
+        ).encode()
+        digest = hmac.new(
+            b"whsec_synthetic_live_never_sent_wo054b",
+            f"{timestamp}.".encode() + payload,
+            hashlib.sha256,
+        ).hexdigest()
+        signature = f"t={timestamp},v1={digest}"
+        verified = await provider.verify_webhook(payload, signature)
+        assert isinstance(verified, VerifiedUnsupportedBillingEvent)
+
+        engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                service = BillingService(session, settings, provider)
+                assert await service.process_webhook(payload, signature) == "ignored_unsupported"
+                assert await session.scalar(select(func.count()).select_from(BillingProviderEventReceipt)) == 0
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_live_stripe_kill_switch_stops_mutations_but_keeps_verified_reconciliation_path() -> None:
@@ -1835,6 +1971,7 @@ def test_stripe_test_adapter_pins_version_item_periods_and_signed_test_events() 
             "items": {
                 "data": [
                     {
+                        "quantity": 1,
                         "price": {"id": "price_test_001"},
                         "current_period_start": int(period_start.timestamp()),
                         "current_period_end": int(period_end.timestamp()),
@@ -1846,6 +1983,26 @@ def test_stripe_test_adapter_pins_version_item_periods_and_signed_test_events() 
     )
     assert snapshot.current_period_start == period_start
     assert snapshot.current_period_end == period_end
+    invalid_items = (
+        [{"quantity": 2, "price": {"id": "price_test_001"}}],
+        [
+            {"quantity": 1, "price": {"id": "price_test_001"}},
+            {"quantity": 1, "price": {"id": "price_test_001"}},
+        ],
+    )
+    for item_data in invalid_items:
+        with pytest.raises(PublicAPIError, match="subscription items"):
+            provider._subscription(
+                {
+                    "id": "sub_test_invalid_items",
+                    "customer": "cus_test_001",
+                    "livemode": False,
+                    "status": "active",
+                    "cancel_at_period_end": False,
+                    "items": {"data": item_data},
+                },
+                datetime.now(UTC),
+            )
 
     timestamp = int(time.time())
     event = {
@@ -1907,6 +2064,7 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
                     "data": [
                         {
                             "id": "si_test_001",
+                            "quantity": 1,
                             "price": {"id": price_identifier},
                             "current_period_start": int(period_start.timestamp()),
                             "current_period_end": int(period_end.timestamp()),
@@ -2000,5 +2158,47 @@ def test_stripe_test_adapter_uses_provider_proration_and_reuses_subscription_sch
         )
         assert ("phases[1][items][0][price]", "price_test_core_monthly") in phase_call[2]
         assert ("phases[1][proration_behavior]", "none") in phase_call[2]
+
+        async def ambiguous_subscription_request(
+            method: str,
+            path: str,
+            *,
+            form: list[tuple[str, str]] | None = None,
+            idempotency_key: str | None = None,
+        ) -> dict[str, object]:
+            calls.append((method, path, form or [], idempotency_key))
+            if path.startswith("/v1/prices/"):
+                return {
+                    "id": "price_test_growth_monthly",
+                    "livemode": False,
+                    "active": True,
+                    "currency": "aud",
+                    "unit_amount": 35000,
+                    "recurring": {"interval": "month", "interval_count": 1},
+                    "metadata": {"oryntela_plan_version_id": str(GROWTH_PLAN_ID)},
+                }
+            if method == "GET" and path == "/v1/subscriptions/sub_test_change_001":
+                ambiguous = subscription_data("price_test_core_monthly")
+                items = cast(dict[str, object], ambiguous["items"])
+                item_data = cast(list[dict[str, object]], items["data"])
+                item_data.append(dict(item_data[0], id="si_test_002"))
+                return ambiguous
+            raise AssertionError("No provider mutation should occur for an ambiguous subscription.")
+
+        calls.clear()
+        provider._request = ambiguous_subscription_request  # type: ignore[method-assign]
+        with pytest.raises(PublicAPIError, match="subscription items"):
+            await provider.apply_plan_upgrade(
+                "sub_test_change_001",
+                price=ProviderPriceReference(
+                    identifier="price_test_growth_monthly",
+                    plan_code="growth",
+                    billing_interval="monthly",
+                    amount=Decimal("350.00"),
+                    plan_version_id=GROWTH_PLAN_ID,
+                ),
+                idempotency_key="ambiguous-provider-upgrade-0001",
+            )
+        assert calls and all(method == "GET" for method, _path, _form, _key in calls)
 
     asyncio.run(scenario())

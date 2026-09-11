@@ -2092,7 +2092,10 @@ def test_verified_billing_payment_is_the_only_purchase_grant_authority() -> None
                     amount_minor=2_000,
                     payment_status="unpaid",
                 )
-                assert await billing.process_webhook(pending_payload, pending_signature) == "reconciliation_required"
+                with pytest.raises(PublicAPIError) as reconciliation:
+                    await billing.process_webhook(pending_payload, pending_signature)
+                assert reconciliation.value.code == "billing_webhook_reconciliation_required"
+                assert reconciliation.value.status_code == 503
                 assert (await credits.projection(PRIMARY_ORGANISATION_ID)).balance.available == 0
                 mismatches = (
                     ("evt_credit_bad_amount", PRIMARY_ORGANISATION_ID, 1_999, "AUD", TEST_PACK_ID),

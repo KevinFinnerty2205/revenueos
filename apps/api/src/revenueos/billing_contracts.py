@@ -112,7 +112,7 @@ class HostedActionResponse(APIModel):
 
 
 class BillingWebhookResponse(APIModel):
-    outcome: Literal["processed", "duplicate", "ignored_stale", "reconciliation_required"]
+    outcome: Literal["processed", "duplicate", "ignored_stale", "ignored_unsupported"]
 
 
 class BillingSuccessResponse(APIModel):

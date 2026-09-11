@@ -57,6 +57,14 @@ def upgrade() -> None:
             "(paid_period_start IS NULL AND paid_through IS NULL) OR "
             "(paid_period_start IS NOT NULL AND paid_through IS NOT NULL AND paid_through > paid_period_start)",
         )
+    op.create_index(
+        "uq_billing_subscriptions_account_current",
+        "billing_subscriptions",
+        ["billing_account_id"],
+        unique=True,
+        postgresql_where=sa.text("status != 'cancelled'"),
+        sqlite_where=sa.text("status != 'cancelled'"),
+    )
 
     with op.batch_alter_table("billing_invoice_projections") as batch:
         batch.drop_constraint("uq_billing_invoices_provider_id", type_="unique")
@@ -135,6 +143,7 @@ def downgrade() -> None:
             ["organisation_id", "provider_invoice_id"],
         )
 
+    op.drop_index("uq_billing_subscriptions_account_current", table_name="billing_subscriptions")
     with op.batch_alter_table("billing_subscriptions") as batch:
         batch.drop_constraint("ck_billing_subscriptions_paid_period", type_="check")
         batch.drop_constraint("ck_billing_subscriptions_payment_status", type_="check")

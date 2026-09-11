@@ -18,6 +18,7 @@ from revenueos.errors import PublicAPIError
 from revenueos.tenant import TenantContext, get_tenant_context
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
+MAX_WEBHOOK_BYTES = 1_000_000
 Service = Annotated[BillingService, Depends(get_billing_service)]
 WebhookService = Annotated[BillingService, Depends(get_webhook_billing_service)]
 Tenant = Annotated[TenantContext, Depends(get_tenant_context)]
@@ -26,6 +27,25 @@ Tenant = Annotated[TenantContext, Depends(get_tenant_context)]
 def _require_admin(tenant: TenantContext) -> None:
     if not tenant.can_manage():
         raise PublicAPIError("forbidden", "Administrator access is required.", 403)
+
+
+async def _read_bounded_webhook_body(request: Request) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except ValueError as exc:
+            raise PublicAPIError("billing_webhook_invalid", "Webhook content is invalid.", 400) from exc
+        if declared_length < 0:
+            raise PublicAPIError("billing_webhook_invalid", "Webhook content is invalid.", 400)
+        if declared_length > MAX_WEBHOOK_BYTES:
+            raise PublicAPIError("billing_webhook_too_large", "Webhook content is too large.", 413)
+    payload = bytearray()
+    async for chunk in request.stream():
+        payload.extend(chunk)
+        if len(payload) > MAX_WEBHOOK_BYTES:
+            raise PublicAPIError("billing_webhook_too_large", "Webhook content is too large.", 413)
+    return bytes(payload)
 
 
 @router.get("", response_model=BillingProjectionResponse)
@@ -86,9 +106,7 @@ async def provider_webhook(
 ) -> BillingWebhookResponse:
     if provider_name != service.provider.name:
         raise PublicAPIError("billing_provider_mismatch", "The billing provider is not enabled.", 404)
-    payload = await request.body()
-    if len(payload) > 1_000_000:
-        raise PublicAPIError("billing_webhook_too_large", "Webhook content is too large.", 413)
+    payload = await _read_bounded_webhook_body(request)
     signature = stripe_signature if provider_name == "stripe" else deterministic_signature
     outcome = await service.process_webhook(payload, signature)
     return BillingWebhookResponse(outcome=outcome)
