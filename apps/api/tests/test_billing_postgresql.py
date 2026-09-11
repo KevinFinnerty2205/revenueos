@@ -21,6 +21,7 @@ from revenueos.commercial_services import PLAN_CATALOGUE, ensure_plan_catalogue
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.legal_releases import CURRENT_PRIVACY_NOTICE, CURRENT_TERMS_RELEASE
 from revenueos.models import (
     BillingAccount,
     BillingInvoiceProjection,
@@ -31,6 +32,7 @@ from revenueos.models import (
     OrganisationCommercialState,
     OrganisationMembership,
     OrganisationModuleEntitlement,
+    TermsAcceptance,
     User,
 )
 
@@ -112,6 +114,22 @@ def test_postgresql_billing_idempotency_overlap_and_lifecycle_races_converge() -
                         organisation_id=tenant_id,
                         user_id=tenant_user_id,
                         role="admin",
+                    )
+                )
+                session.add(
+                    TermsAcceptance(
+                        organisation_id=tenant_id,
+                        accepted_by_user_id=tenant_user_id,
+                        release_status=CURRENT_TERMS_RELEASE.status,
+                        terms_version=CURRENT_TERMS_RELEASE.version,
+                        terms_sha256=CURRENT_TERMS_RELEASE.sha256,
+                        terms_effective_date=CURRENT_TERMS_RELEASE.effective_date,
+                        accepted_at=datetime.now(UTC),
+                        acceptance_source="subscription_checkout",
+                        privacy_notice_version=CURRENT_PRIVACY_NOTICE.version,
+                        privacy_notice_sha256=CURRENT_PRIVACY_NOTICE.sha256,
+                        privacy_notice_effective_date=CURRENT_PRIVACY_NOTICE.effective_date,
+                        privacy_notice_presented_at=datetime.now(UTC),
                     )
                 )
                 await session.commit()
