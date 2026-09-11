@@ -48,10 +48,11 @@ and privacy review.
 - **Application retention:** the organisation's explicit RevenueOS retention setting
   and the existing domain-specific maintenance jobs. Run tenant-scoped dry-run first,
   then bounded execution and object reconciliation.
-- **Backup retention:** encrypted portable PostgreSQL and private-object backup
-  artefacts plus approved Lightsail manual snapshots. Automatic Lightsail
-  point-in-time backups retain seven days; the portable daily backup supplies the
-  approved 14-day window. The backup key remains separate.
+- **Backup retention:** DigitalOcean managed PostgreSQL backup/PITR plus the proposed
+  encrypted portable PostgreSQL/private-object bundle in independent AWS S3 Sydney.
+  The recommended 14-day lifecycle must expire current and noncurrent versions plus
+  delete markers. The backup key remains separately controlled. Neither target nor
+  the 14-day retention decision exists yet.
 - **Operational logs:** web/API/worker/platform access and error logs, health metrics
   and alert evidence. Logs must never contain credentials, authorisation headers,
   transcripts, prompts, customer documents, CSV rows, provider bodies or full

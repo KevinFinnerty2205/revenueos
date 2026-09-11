@@ -200,8 +200,10 @@ This is the canonical product and engineering documentation index. Documents dis
 175. [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
 176. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
 177. [WO-054 draft Privacy Notice and Terms inputs](00-company/wo-054-draft-privacy-and-terms.md) — factual draft only; owner/qualified review required
-178. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
-179. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
+178. [WO-054 Privacy and Terms professional-review package](00-company/wo-054-privacy-terms-professional-review-package.md) — bounded factual adviser handoff, exact unresolved questions and unsent fixed-fee quote request
+179. [Oryntela Privacy and Terms adviser shortlist](00-company/oryntela-privacy-terms-adviser-shortlist.md) — ranked three-adviser research, fee/qualification evidence and single unsent quote email
+180. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
+181. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
 
 ## First design-partner launch package
 

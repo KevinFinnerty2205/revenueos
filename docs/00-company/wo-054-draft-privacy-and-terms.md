@@ -4,6 +4,12 @@
 >
 > This is a factual drafting aid based on the repository as at 10 September 2026. It is not legal advice, a representation of legal compliance or an instruction to enable real customer data. The public routes intentionally remain GAP pages and the production build intentionally fails until reviewed copy is committed.
 
+Owner decision recorded 11 September 2026: the six fixed subscription prices are
+GST-inclusive customer totals. Qualified review remains required, the public routes
+remain GAP pages and production billing must remain disabled until approved legal copy
+and a durable tax-policy reference exist. See the
+[professional-review package](wo-054-privacy-terms-professional-review-package.md).
+
 ## Confirmed publisher facts
 
 - Product/business name: Oryntela.
@@ -79,7 +85,7 @@ The repository does not implement a marketing analytics or advertising tracker. 
 ### Known service and commercial facts
 
 - Oryntela is a B2B sales-work platform and complements external systems of record; it is not represented as a CRM replacement in every deployment, legal adviser, financial adviser or autonomous authority.
-- The current plan catalogue is Core AUD 200/month or AUD 2,000/year; Growth AUD 350/month or AUD 3,500/year; Complete AUD 500/month or AUD 5,000/year; Enterprise custom. Included users are 5, 10 and 15 respectively. These prices have no approved GST presentation yet and must not be published as inclusive or exclusive until decided.
+- The current plan catalogue is Core AUD 200/month or AUD 2,000/year; Growth AUD 350/month or AUD 3,500/year; Complete AUD 500/month or AUD 5,000/year; Enterprise custom. Included users are 5, 10 and 15 respectively. The owner selected the six fixed amounts as GST-inclusive customer totals on 11 September 2026. Enterprise quotes must state their GST treatment. Qualified review must make the site, Stripe catalogue, invoices and Terms consistent without increasing the approved fixed customer totals.
 - The proposed trial is 14 days of Complete access, no card, no charge and no automatic conversion. Trial start is an operator action; self-service trial enrolment is not live.
 - Provider availability is conditional. Microsoft, Google, HubSpot, Salesforce, Prospect, live Stripe and production Credits are not active. The site must not promise them as immediately connected/live.
 - External mutations and outreach are designed to require review/approval and use bounded queues; users remain responsible for authority, accuracy, recipient rights, sending rules and their connected accounts.
@@ -104,7 +110,9 @@ The repository does not implement a marketing analytics or advertising tracker. 
 
 1. Confirm the legal contracting/APP entity, principal address and authorised legal contact.
 2. Obtain qualified review of Privacy Notice, Terms, DPA/order form and electronic-marketing/enrichment position.
-3. Decide GST registration/treatment and whether every public price is GST-inclusive or GST-exclusive; have the website, Stripe catalogue, invoices and Terms agree.
+3. Apply the owner-selected GST-inclusive treatment consistently to the website,
+   Stripe catalogue, tax invoices and Terms after qualified review; the fixed customer
+   totals must not increase.
 4. Approve the actual V1 feature/provider list and each subprocessor/cross-border disclosure; remove inactive providers from public claims.
 5. Approve category-specific retention, database and object-backup retention, export/deletion treatment and any accounting-record exception.
 6. Approve customer authority/consent evidence for transcripts, recordings, imported contacts, email/calendar/CRM connections and outreach.

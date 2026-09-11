@@ -220,10 +220,11 @@ set `API_FEATURE_BILLING_ENABLED=true`, `API_BILLING_PROVIDER_NAME=stripe` and
 `API_STRIPE_API_VERSION` remains exactly `2026-02-25.clover` and the API origin remains
 `https://api.stripe.com`.
 
-GST remains unresolved. `API_BILLING_TAX_TREATMENT` must stay `unresolved` and the
-billing flag must stay false until the owner/accounting decision supplies either
-`inclusive` or `exclusive` plus a durable `API_BILLING_TAX_POLICY_REFERENCE`. This
-engineering work does not choose tax wording or activate Stripe Tax.
+The owner selected GST-inclusive fixed customer totals on 11 September 2026. The
+checked-in `API_BILLING_TAX_TREATMENT` must nevertheless stay `unresolved` and the
+billing flag must stay false until qualified Privacy/Terms review is complete and the
+inclusive decision has a durable `API_BILLING_TAX_POLICY_REFERENCE`. This engineering
+work does not activate Stripe Tax or alter the six approved customer totals.
 
 The exact live webhook URL is
 `https://api.oryntela.com.au/api/v1/billing/webhooks/stripe`. Subscribe only to
