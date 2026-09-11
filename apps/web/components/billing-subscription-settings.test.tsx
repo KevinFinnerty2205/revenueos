@@ -170,6 +170,7 @@ describe("BillingSubscriptionSettings", () => {
     expect(
       await screen.findByText(/Current Terms accepted for this organisation/i),
     ).toBeVisible();
+    expect(await screen.findByText("Choose a paid plan")).toBeVisible();
     expect(screen.getByText(/trial remains no-card/i)).toBeVisible();
     expect(screen.getByText(/Management Services Australia/i)).toBeVisible();
     expect(screen.getByText(/test billing operations/i)).toBeVisible();
@@ -381,7 +382,7 @@ describe("BillingSubscriptionSettings", () => {
     expect(
       await screen.findByText(/Current Terms accepted for this organisation/i),
     ).toBeVisible();
-    expect(screen.getByText("Choose a paid plan")).toBeVisible();
+    expect(await screen.findByText("Choose a paid plan")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Cancel at period end" }),
     ).not.toBeInTheDocument();
