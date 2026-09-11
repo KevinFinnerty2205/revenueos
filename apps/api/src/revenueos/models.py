@@ -324,7 +324,12 @@ class TermsAcceptance(Base):
             name="ck_terms_acceptances_terms_version",
         ),
         CheckConstraint(
-            "length(terms_sha256) = 64 AND terms_sha256 = lower(terms_sha256)",
+            "length(terms_sha256) = 64 AND terms_sha256 = lower(terms_sha256) AND "
+            "replace(replace(replace(replace(replace(replace(replace(replace("
+            "replace(replace(replace(replace(replace(replace(replace(replace("
+            "terms_sha256, '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), "
+            "'5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), "
+            "'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '') = ''",
             name="ck_terms_acceptances_terms_hash",
         ),
         CheckConstraint(
@@ -336,7 +341,12 @@ class TermsAcceptance(Base):
             name="ck_terms_acceptances_privacy_version",
         ),
         CheckConstraint(
-            "length(privacy_notice_sha256) = 64 AND privacy_notice_sha256 = lower(privacy_notice_sha256)",
+            "length(privacy_notice_sha256) = 64 AND privacy_notice_sha256 = lower(privacy_notice_sha256) AND "
+            "replace(replace(replace(replace(replace(replace(replace(replace("
+            "replace(replace(replace(replace(replace(replace(replace(replace("
+            "privacy_notice_sha256, '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), "
+            "'5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), "
+            "'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '') = ''",
             name="ck_terms_acceptances_privacy_hash",
         ),
         ForeignKeyConstraint(
@@ -349,8 +359,7 @@ class TermsAcceptance(Base):
         UniqueConstraint(
             "organisation_id",
             "terms_version",
-            "terms_sha256",
-            name="uq_terms_acceptances_org_release",
+            name="uq_terms_acceptances_org_terms_version",
         ),
         Index("ix_terms_acceptances_org_time", "organisation_id", "accepted_at", "id"),
     )
@@ -646,6 +655,12 @@ class BillingOperation(TimestampMixin, Base):
             name="fk_billing_operations_requester",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["organisation_id", "terms_acceptance_id"],
+            ["terms_acceptances.organisation_id", "terms_acceptances.id"],
+            name="fk_billing_operations_terms_acceptance",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "organisation_id",
             "provider_mode",
@@ -675,6 +690,7 @@ class BillingOperation(TimestampMixin, Base):
     idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
+    terms_acceptance_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("commercial_plan_versions.id", ondelete="RESTRICT")
     )

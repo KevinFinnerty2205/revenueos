@@ -26,6 +26,24 @@ depends_on: str | Sequence[str] | None = None
 TABLE_NAME = "terms_acceptances"
 
 
+def _lower_hex_64(column_name: str) -> str:
+    remainder = column_name
+    for character in "0123456789abcdef":
+        remainder = f"replace({remainder}, '{character}', '')"
+    return f"length({column_name}) = 64 AND {column_name} = lower({column_name}) AND {remainder} = ''"
+
+
+def _create_unresolved_checkout_index() -> None:
+    op.create_index(
+        "uq_billing_operations_org_unresolved_checkout",
+        "billing_operations",
+        ["organisation_id", "provider_mode"],
+        unique=True,
+        postgresql_where=sa.text("operation_type = 'checkout' AND status IN ('pending', 'unknown')"),
+        sqlite_where=sa.text("operation_type = 'checkout' AND status IN ('pending', 'unknown')"),
+    )
+
+
 def _columns(table_name: str) -> set[str]:
     return {column["name"] for column in inspect(op.get_bind()).get_columns(table_name)}
 
@@ -530,7 +548,7 @@ def upgrade() -> None:
             name="ck_terms_acceptances_terms_version",
         ),
         sa.CheckConstraint(
-            "length(terms_sha256) = 64 AND terms_sha256 = lower(terms_sha256)",
+            _lower_hex_64("terms_sha256"),
             name="ck_terms_acceptances_terms_hash",
         ),
         sa.CheckConstraint(
@@ -542,7 +560,7 @@ def upgrade() -> None:
             name="ck_terms_acceptances_privacy_version",
         ),
         sa.CheckConstraint(
-            "length(privacy_notice_sha256) = 64 AND privacy_notice_sha256 = lower(privacy_notice_sha256)",
+            _lower_hex_64("privacy_notice_sha256"),
             name="ck_terms_acceptances_privacy_hash",
         ),
         sa.ForeignKeyConstraint(["organisation_id"], ["organisations.id"], ondelete="CASCADE"),
@@ -557,8 +575,7 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "organisation_id",
             "terms_version",
-            "terms_sha256",
-            name="uq_terms_acceptances_org_release",
+            name="uq_terms_acceptances_org_terms_version",
         ),
     )
     op.create_index(
@@ -566,10 +583,26 @@ def upgrade() -> None:
         TABLE_NAME,
         ["organisation_id", "accepted_at", "id"],
     )
+    op.drop_index("uq_billing_operations_org_unresolved_checkout", table_name="billing_operations")
+    with op.batch_alter_table("billing_operations") as batch:
+        batch.add_column(sa.Column("terms_acceptance_id", uuid_type))
+        batch.create_foreign_key(
+            "fk_billing_operations_terms_acceptance",
+            TABLE_NAME,
+            ["organisation_id", "terms_acceptance_id"],
+            ["organisation_id", "id"],
+            ondelete="RESTRICT",
+        )
+    _create_unresolved_checkout_index()
     _create_security()
 
 
 def downgrade() -> None:
+    op.drop_index("uq_billing_operations_org_unresolved_checkout", table_name="billing_operations")
+    with op.batch_alter_table("billing_operations") as batch:
+        batch.drop_constraint("fk_billing_operations_terms_acceptance", type_="foreignkey")
+        batch.drop_column("terms_acceptance_id")
+    _create_unresolved_checkout_index()
     _drop_security()
     op.drop_index("ix_terms_acceptances_org_time", table_name=TABLE_NAME)
     op.drop_table(TABLE_NAME)

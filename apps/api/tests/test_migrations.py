@@ -428,6 +428,10 @@ def test_terms_acceptance_migration_is_tenant_consistent_immutable_and_reversibl
     acceptance_id = str(uuid.uuid4())
     with connect(database_path) as connection:
         connection.execute("PRAGMA foreign_keys=ON")
+        billing_columns = {row[1] for row in connection.execute("PRAGMA table_info(billing_operations)")}
+        assert "terms_acceptance_id" in billing_columns
+        billing_foreign_tables = {row[2] for row in connection.execute("PRAGMA foreign_key_list(billing_operations)")}
+        assert "terms_acceptances" in billing_foreign_tables
         for organisation_id, user_id, suffix in (
             (organisation_a, user_a, "a"),
             (organisation_b, user_b, "b"),
@@ -481,6 +485,82 @@ def test_terms_acceptance_migration_is_tenant_consistent_immutable_and_reversibl
                 ),
             )
         connection.rollback()
+        malformed_releases = (
+            ("", "c" * 64, "privacy-v1", "b" * 64, "draft", None, None),
+            ("blank-hash-v1", "", "privacy-v1", "b" * 64, "draft", None, None),
+            ("invalid-privacy-hash-v1", "c" * 64, "privacy-v1", "z" * 64, "draft", None, None),
+            ("approved-without-dates-v1", "c" * 64, "privacy-v1", "b" * 64, "approved", None, None),
+        )
+        for (
+            terms_version,
+            terms_hash,
+            privacy_version,
+            privacy_hash,
+            status,
+            terms_date,
+            privacy_date,
+        ) in malformed_releases:
+            with pytest.raises(IntegrityError):
+                connection.execute(
+                    "INSERT INTO terms_acceptances "
+                    "(id, organisation_id, accepted_by_user_id, release_status, terms_version, terms_sha256, "
+                    "terms_effective_date, accepted_at, acceptance_source, privacy_notice_version, "
+                    "privacy_notice_sha256, privacy_notice_effective_date, privacy_notice_presented_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'trial_onboarding', ?, ?, ?, ?)",
+                    (
+                        str(uuid.uuid4()),
+                        organisation_a,
+                        user_a,
+                        status,
+                        terms_version,
+                        terms_hash,
+                        terms_date,
+                        "2026-09-10T00:00:03+00:00",
+                        privacy_version,
+                        privacy_hash,
+                        privacy_date,
+                        "2026-09-10T00:00:03+00:00",
+                    ),
+                )
+            connection.rollback()
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                "INSERT INTO terms_acceptances "
+                "(id, organisation_id, accepted_by_user_id, release_status, terms_version, terms_sha256, "
+                "accepted_at, acceptance_source, privacy_notice_version, privacy_notice_sha256, "
+                "privacy_notice_presented_at) "
+                "VALUES (?, ?, ?, 'draft', 'owner-review-draft-v1', ?, ?, 'trial_onboarding', "
+                "'owner-review-draft-v1', ?, ?)",
+                (
+                    str(uuid.uuid4()),
+                    organisation_a,
+                    user_a,
+                    "c" * 64,
+                    "2026-09-10T00:00:02+00:00",
+                    "b" * 64,
+                    "2026-09-10T00:00:02+00:00",
+                ),
+            )
+        connection.rollback()
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                "INSERT INTO terms_acceptances "
+                "(id, organisation_id, accepted_by_user_id, release_status, terms_version, terms_sha256, "
+                "accepted_at, acceptance_source, privacy_notice_version, privacy_notice_sha256, "
+                "privacy_notice_presented_at) "
+                "VALUES (?, ?, ?, 'draft', 'invalid-hash-v1', ?, ?, 'trial_onboarding', "
+                "'owner-review-draft-v1', ?, ?)",
+                (
+                    str(uuid.uuid4()),
+                    organisation_a,
+                    user_a,
+                    "z" * 64,
+                    "2026-09-10T00:00:02+00:00",
+                    "b" * 64,
+                    "2026-09-10T00:00:02+00:00",
+                ),
+            )
+        connection.rollback()
         with pytest.raises(IntegrityError):
             connection.execute(
                 "INSERT INTO terms_acceptances "
@@ -502,6 +582,15 @@ def test_terms_acceptance_migration_is_tenant_consistent_immutable_and_reversibl
         connection.rollback()
         with pytest.raises(IntegrityError):
             connection.execute(
+                "INSERT INTO billing_operations "
+                "(id, organisation_id, requested_by_user_id, operation_type, idempotency_key, "
+                "request_fingerprint, status, terms_acceptance_id) "
+                "VALUES (?, ?, ?, 'checkout', 'cross-tenant-terms-authority', ?, 'failed', ?)",
+                (str(uuid.uuid4()), organisation_b, user_b, "d" * 64, acceptance_id),
+            )
+        connection.rollback()
+        with pytest.raises(IntegrityError):
+            connection.execute(
                 "UPDATE terms_acceptances SET acceptance_source = 'subscription_checkout' WHERE id = ?",
                 (acceptance_id,),
             )
@@ -514,6 +603,9 @@ def test_terms_acceptance_migration_is_tenant_consistent_immutable_and_reversibl
     with connect(database_path) as connection:
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert "terms_acceptances" not in tables
+        assert "terms_acceptance_id" not in {
+            row[1] for row in connection.execute("PRAGMA table_info(billing_operations)")
+        }
     command.upgrade(configuration, "head")
 
 

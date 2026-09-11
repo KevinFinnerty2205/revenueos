@@ -25,6 +25,7 @@ export function TermsAcceptance({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justAccepted, setJustAccepted] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const confirmationRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export function TermsAcceptance({
         }
       });
     return () => controller.abort();
-  }, []);
+  }, [loadAttempt]);
 
   useEffect(() => {
     onAcceptanceChange?.(status?.accepted === true);
@@ -84,12 +85,19 @@ export function TermsAcceptance({
 
   if (error && !status) {
     return (
-      <p
-        role="alert"
-        className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-900"
-      >
-        {error}
-      </p>
+      <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
+        <p role="alert">{error}</p>
+        <button
+          type="button"
+          className="secondary-button mt-3"
+          onClick={() => {
+            setError(null);
+            setLoadAttempt((attempt) => attempt + 1);
+          }}
+        >
+          Retry loading Terms
+        </button>
+      </div>
     );
   }
 
@@ -144,14 +152,14 @@ export function TermsAcceptance({
         Read the{" "}
         <Link
           className="font-semibold text-brand-secondary underline"
-          href={status.terms.href}
+          href="/terms"
         >
           Oryntela Terms &amp; Conditions
         </Link>{" "}
         and review the{" "}
         <Link
           className="font-semibold text-brand-secondary underline"
-          href={status.privacyNotice.href}
+          href="/privacy"
         >
           Privacy Policy
         </Link>{" "}

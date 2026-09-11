@@ -6,8 +6,8 @@
 - **Production state:** not activated; no customer data and no spend in this work
 
 This document is the engineering handoff for durable Terms acceptance and the final
-provider/retention reconciliation. It does not turn a recommendation into an owner
-decision and does not approve PR #88.
+provider/retention reconciliation. The owner decisions recorded below do not approve
+PR #88, publish either legal document or authorise production activity.
 
 ## Terms acceptance implementation
 
@@ -88,9 +88,9 @@ security provider is activated before launch, stop finalisation, add its exact f
 to the table and update the Privacy Policy. Disabled code/adapters do not receive data
 and must not be represented as doing so.
 
-## Retention owner decision
+## Retention and provider owner decisions
 
-Recommendation for the early-stage supervised B2B product:
+The owner approved the following positions on 11 September 2026:
 
 - **Application retention: 90 days** for the existing retention-eligible content
   setting. Keep the implemented domain-specific expiry/deletion rules and active
@@ -102,29 +102,35 @@ Recommendation for the early-stage supervised B2B product:
   including current/noncurrent object versions and delete markers. Keep the separate
   key, daily freshness alert, 24-hour RPO/four-hour internal RTO objective and named
   restore proof.
+- **Provider-list principle:** before Privacy Policy publication, reconcile the
+  policy against only the providers actually enabled for production. Disabled
+  providers remain conditional and must not be represented as actively receiving
+  customer information.
 
-Neither value is applied or approved by this document. The owner must select both,
-then the target configuration and final Privacy wording must be checked against the
-selection.
+These are recorded approvals, not proof that a target configuration implements them.
+The operational-log window remains a separate unresolved owner choice. Target backup
+configuration, actual provider enablement and final Privacy wording must still be
+checked against the approvals before publication or production activation.
 
 ## Validation evidence
 
 The isolated local gate completed on 11 September 2026:
 
 - root format, lint and TypeScript typecheck passed;
-- Vitest passed 357 tests across 79 files;
+- Vitest passed 358 tests across 79 files;
 - Playwright passed 90 tests, including the 390px, keyboard, focus, unchecked
 control and exact-payload acceptance coverage;
 - the Next.js production build passed;
 - Ruff format/check and mypy passed (286 source files);
-- pytest passed 1,313 tests with 13 environment-dependent skips;
+- pytest passed 1,317 tests with 13 environment-dependent skips;
 - Alembic upgraded the working PostgreSQL database to `0063_terms_acceptance`,
   reported no drift and the API distribution build passed;
 - a disposable empty PostgreSQL database upgraded through all 63 revisions, reported
   no drift, and showed 174 tables with enabled and forced RLS;
-- the dedicated PostgreSQL cross-tenant RLS and concurrent duplicate-acceptance tests
-  passed;
-- the 1,748-file repository secret/prohibited-path audit, pnpm vulnerability audit,
+- the dedicated PostgreSQL tests passed for cross-tenant RLS, immutable evidence,
+  concurrent acceptance by two administrators, the acceptance/trial race and exact
+  acceptance binding on Checkout;
+- the 1,749-file repository secret/prohibited-path audit, pnpm vulnerability audit,
   locked production Python dependency audit and `git diff --check` passed.
 
 All testing used synthetic local data. No production service, customer data, account
@@ -140,8 +146,8 @@ PR #88 remains open and draft. The acceptance PR is independently based on curre
 
 1. review and merge the acceptance productionisation PR while its draft/test identity
    and production preflight failure remain in place;
-2. obtain the three remaining owner decisions (application retention, backup
-   rotation, final provider list) and capture actual production account facts;
+2. capture actual production account facts, reconcile the enabled provider list and
+   resolve the still-unapproved operational-log window;
 3. rebase/update PR #88 on the resulting `main`, lock final content, version,
    effective date and canonical hashes in one reviewed change; and
 4. only after explicit final publication approval, merge PR #88 and run the named

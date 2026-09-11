@@ -65,9 +65,6 @@ async def current_terms_acceptance(session: AsyncSession, organisation_id: UUID)
             TermsAcceptance.terms_version == CURRENT_TERMS_RELEASE.version,
             TermsAcceptance.terms_sha256 == CURRENT_TERMS_RELEASE.sha256,
             TermsAcceptance.terms_effective_date == CURRENT_TERMS_RELEASE.effective_date,
-            TermsAcceptance.privacy_notice_version == CURRENT_PRIVACY_NOTICE.version,
-            TermsAcceptance.privacy_notice_sha256 == CURRENT_PRIVACY_NOTICE.sha256,
-            TermsAcceptance.privacy_notice_effective_date == CURRENT_PRIVACY_NOTICE.effective_date,
         )
     )
     return record

@@ -95,16 +95,20 @@ later owner sequence, smoke boundary and kill/rollback procedure are in the
 
 The owner approved the Terms drafting positions subject to final publication gates.
 Migration `0063_terms_acceptance` now adds the minimum organisation-owned acceptance
-event, with forced PostgreSQL RLS, an active-admin membership foreign key, exact
-server-owned release identity and database-enforced immutability. Repeated and
-concurrent submissions for the same organisation/release converge on one event.
+event, with forced PostgreSQL RLS, a tenant-consistent membership foreign key,
+current database-backed active-user/admin checks, exact server-owned release identity
+and database-enforced immutability. Repeated and concurrent submissions for the same
+organisation/release converge on one event.
 
 An initially unchecked, labelled control links Terms as the agreement and Privacy as
 notice. Only the authenticated organisation administrator can submit it. Trial start,
 first paid plan assignment and hosted Checkout enforce the same current-release gate
-server-side before mutation; support has no acceptance override. Export v39 includes
-only the relevant evidence and approved organisation deletion removes it through the
-existing maintenance authority.
+server-side before mutation; support has no acceptance override. Checkout operations
+are bound to the exact acceptance in their request identity and recheck it immediately
+before a provider side effect. A Privacy Notice-only update preserves the unchanged
+Terms acceptance and its original presentation evidence. Export v39 includes only the
+relevant evidence and approved organisation deletion removes it through the existing
+maintenance authority.
 
 Development/tests use the exact PR #88 owner-review draft identity. Staging and
 production acceptance, plus production preflight, remain blocked until an
@@ -135,7 +139,7 @@ A repository `PASS` is not proof that a cloud environment or external provider e
 | Queue/provider/billing monitoring design | PASS | Content-free platform probes, component alerts, termination controls, daily tenant queue/preflight checks and external scheduled-backup freshness requirement |
 | Production monitoring/alert destination | OWNER ACTION | Configure target alerts to Kevin's controlled operational route after hosting exists |
 | PostgreSQL migration head/drift | PASS | Current head is `0063_terms_acceptance`; WO-054's earlier synthetic restored target passed at its then-current `0061` head |
-| Forced RLS in restored database | PASS | 173 tables reported `ENABLE` and `FORCE RLS`; temporary `NOSUPERUSER NOBYPASSRLS` role saw 28 in-tenant core rows and zero cross-tenant rows |
+| Forced RLS in restored database | PASS | The current 174 tenant tables report `ENABLE` and `FORCE RLS`; the earlier restore drill's temporary `NOSUPERUSER NOBYPASSRLS` role saw 28 in-tenant core rows and zero cross-tenant rows |
 | Encrypted local synthetic backup/restore | PASS | Evidence below; database plus three private objects restored and verified |
 | Automated production database backups | OWNER ACTION | Managed backup/PITR begins only after the paid HA cluster is created and its dashboard evidence is captured |
 | Independent logical/object backup implementation | PASS | Dedicated daily job streams AES-256-GCM database/object payloads to independent S3, verifies remote metadata and publishes manifest last |

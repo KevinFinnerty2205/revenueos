@@ -229,19 +229,33 @@ def test_postgresql_terms_acceptance_serialises_duplicate_submissions() -> None:
             )
             organisation_id = uuid.UUID(provisioned.organisation_id)
             user_id = uuid.UUID(provisioned.user_id)
+            second_admin = await provision_member(
+                factory,
+                organisation_id=organisation_id,
+                external_user_id=f"user_terms_concurrency_second_{suffix}",
+                email=f"terms-concurrency-second-{suffix}@example.com",
+                display_name="Second synthetic Terms administrator",
+                role="admin",
+                idempotency_key=f"terms-concurrency-second-admin-{suffix}",
+                operator_reference="terms-concurrency-test",
+            )
+            second_user_id = uuid.UUID(second_admin.user_id)
 
-            async def accept(source: AcceptanceSource) -> TermsAcceptanceStatusResponse:
+            async def accept(
+                accepting_user_id: uuid.UUID,
+                source: AcceptanceSource,
+            ) -> TermsAcceptanceStatusResponse:
                 async with factory() as session:
                     await set_tenant_database_context(session, organisation_id)
                     return await LegalService(
                         session,
-                        TenantContext(organisation_id, user_id, "admin"),
+                        TenantContext(organisation_id, accepting_user_id, "admin"),
                         settings,
                     ).accept_current(source)
 
             results = await asyncio.gather(
-                accept("trial_onboarding"),
-                accept("subscription_checkout"),
+                accept(user_id, "trial_onboarding"),
+                accept(second_user_id, "subscription_checkout"),
             )
             assert results[0].evidence is not None
             assert results[1].evidence is not None
@@ -256,6 +270,38 @@ def test_postgresql_terms_acceptance_serialises_duplicate_submissions() -> None:
                     )
                     == 1
                 )
+
+            async with factory() as session:
+                await set_tenant_database_context(session, organisation_id)
+                await session.execute(text("SELECT set_config('app.beta_maintenance', 'approved', true)"))
+                await session.execute(
+                    text("DELETE FROM terms_acceptances WHERE organisation_id = :organisation_id"),
+                    {"organisation_id": organisation_id},
+                )
+                await session.commit()
+
+            async def start_trial() -> object:
+                async with factory() as session:
+                    await set_tenant_database_context(session, organisation_id)
+                    try:
+                        return await CommercialService(session, settings).start_trial(
+                            organisation_id,
+                            actor_reference="terms-concurrency-support",
+                            reason="Synthetic simultaneous customer acceptance and trial request.",
+                            expected_lock_version=1,
+                        )
+                    except PublicAPIError as exc:
+                        return exc
+
+            acceptance_result, trial_result = await asyncio.gather(
+                accept(user_id, "trial_onboarding"),
+                start_trial(),
+            )
+            assert acceptance_result.accepted is True
+            if isinstance(trial_result, PublicAPIError):
+                assert trial_result.code == "terms_acceptance_required"
+            else:
+                assert trial_result.status == "trial_active"
         finally:
             if organisation_id is not None:
                 await _delete_organisation_records(factory, settings, organisation_id)

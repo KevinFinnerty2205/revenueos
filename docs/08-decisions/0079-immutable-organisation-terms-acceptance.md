@@ -33,8 +33,16 @@ includes the content-minimised acceptance evidence.
 Trial start, initial plan assignment and paid Checkout all require a matching current
 event server-side before any commercial or provider mutation. Existing active paid
 subscriptions can change plan without a new acceptance unless a future approved
-Terms release deliberately requires it. Repeated or concurrent acceptance of the same
+Terms release deliberately requires it. A Privacy Notice change does not invalidate
+an unchanged Terms acceptance; each event retains the exact notice that was presented
+when that Terms release was accepted. Repeated or concurrent acceptance of the same
 release serialises on the organisation row and converges on one event.
+
+Checkout operations retain a tenant-consistent foreign key to the exact acceptance
+used for their request fingerprint. Checkout rechecks that authority immediately
+before provider account or session creation, so a changed required Terms release
+fails without a provider side effect and an old idempotency key cannot return a
+Checkout created under different Terms.
 
 During development and tests, the release registry identifies the exact owner-review
 draft on PR #88 at commit `49761341636f310ade1c42bf25a4699bdbf758c3`.

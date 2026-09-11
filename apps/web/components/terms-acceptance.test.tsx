@@ -136,4 +136,51 @@ describe("TermsAcceptance", () => {
       screen.queryByRole("button", { name: /Accept Terms/i }),
     ).not.toBeInTheDocument();
   });
+
+  it("offers an accessible retry and never follows legal links supplied by an API response", async () => {
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error("Terms status is temporarily unavailable."),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ...pendingStatus,
+            terms: {
+              ...pendingStatus.terms,
+              href: "https://unsafe.example/terms",
+            },
+            privacyNotice: {
+              ...pendingStatus.privacyNotice,
+              href: "javascript:alert('unsafe')",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetch);
+
+    render(<TermsAcceptance source="trial_onboarding" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /could not reach the service/i,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry loading Terms" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Accept the current Terms to continue",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Oryntela Terms & Conditions" }),
+    ).toHaveAttribute("href", "/terms");
+    expect(
+      screen.getByRole("link", { name: "Privacy Policy" }),
+    ).toHaveAttribute("href", "/privacy");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
 });

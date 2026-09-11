@@ -116,6 +116,12 @@ def test_postgresql_billing_idempotency_overlap_and_lifecycle_races_converge() -
                         role="admin",
                     )
                 )
+                await session.commit()
+
+        async def add_acceptance(tenant_id: uuid.UUID, tenant_user_id: uuid.UUID) -> None:
+            async with factory() as session:
+                await set_tenant_database_context(session, tenant_id)
+                accepted_at = datetime.now(UTC)
                 session.add(
                     TermsAcceptance(
                         organisation_id=tenant_id,
@@ -124,19 +130,35 @@ def test_postgresql_billing_idempotency_overlap_and_lifecycle_races_converge() -
                         terms_version=CURRENT_TERMS_RELEASE.version,
                         terms_sha256=CURRENT_TERMS_RELEASE.sha256,
                         terms_effective_date=CURRENT_TERMS_RELEASE.effective_date,
-                        accepted_at=datetime.now(UTC),
+                        accepted_at=accepted_at,
                         acceptance_source="subscription_checkout",
                         privacy_notice_version=CURRENT_PRIVACY_NOTICE.version,
                         privacy_notice_sha256=CURRENT_PRIVACY_NOTICE.sha256,
                         privacy_notice_effective_date=CURRENT_PRIVACY_NOTICE.effective_date,
-                        privacy_notice_presented_at=datetime.now(UTC),
+                        privacy_notice_presented_at=accepted_at,
                     )
                 )
                 await session.commit()
 
         try:
             await add_tenant(organisation_id, user_id, "primary")
+            async with factory() as session:
+                await set_tenant_database_context(session, organisation_id)
+                with pytest.raises(PublicAPIError) as no_acceptance:
+                    await BillingService(session, settings, provider).create_checkout(
+                        organisation_id,
+                        user_id,
+                        CheckoutCreateRequest(
+                            plan_code="core",
+                            billing_interval="monthly",
+                            idempotency_key="postgres-terms-required-checkout-0001",
+                        ),
+                    )
+                assert no_acceptance.value.code == "terms_acceptance_required"
+                assert provider.checkouts == {}
+            await add_acceptance(organisation_id, user_id)
             await add_tenant(overlap_organisation_id, overlap_user_id, "overlap")
+            await add_acceptance(overlap_organisation_id, overlap_user_id)
 
             async def checkout_attempt() -> object:
                 async with factory() as session:
@@ -176,6 +198,7 @@ def test_postgresql_billing_idempotency_overlap_and_lifecycle_races_converge() -
                     select(BillingAccount).where(BillingAccount.organisation_id == organisation_id)
                 )
                 assert operation is not None and operation.provider_object_id is not None
+                assert operation.terms_acceptance_id is not None
                 assert account is not None
                 assert (
                     await session.scalar(

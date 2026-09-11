@@ -316,6 +316,7 @@ def test_exact_checkout_catalogue_idempotency_and_server_authority() -> None:
                 )
                 stored_operation = await session.get(BillingOperation, first.operation_id)
                 assert stored_operation is not None and stored_operation.status == "pending"
+                assert stored_operation.terms_acceptance_id is not None
                 with pytest.raises(PublicAPIError, match="previous checkout"):
                     await service.create_checkout(
                         PRIMARY_ORGANISATION_ID,
@@ -1322,6 +1323,7 @@ def test_billing_export_is_safe_and_offboarding_refuses_blind_history_deletion()
                 billing = exported["billing"]
                 assert isinstance(billing, dict)
                 encoded = json.dumps(billing, default=str)
+                assert billing["operations"][0]["terms_acceptance_id"] == acceptances[0]["id"]
                 subscriptions = billing["subscriptions"]
                 assert isinstance(subscriptions, list)
                 assert subscriptions[0]["payment_status"] == "paid"

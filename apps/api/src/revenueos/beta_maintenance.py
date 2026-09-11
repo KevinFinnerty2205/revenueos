@@ -4137,6 +4137,7 @@ async def _export_payload(
                         "requested_by_user_id",
                         "operation_type",
                         "status",
+                        "terms_acceptance_id",
                         "plan_version_id",
                         "billing_interval",
                         "amount",
