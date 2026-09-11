@@ -1,7 +1,7 @@
 # Oryntela production launch runbook
 
 - Status: repository-ready; all paid/external/public actions blocked pending owner approval
-- Reviewed source baseline: `d8d50b216bd64726243b06b5ea4f5bd56c59ab54`; deploy only the immutable post-review merge SHA recorded in the launch evidence
+- Reviewed source baseline: `3fdf567e2f103abd312fee7e7297af996532c910`; deploy only the immutable post-review merge SHA recorded in the launch evidence
 - Required migration head: `0063_terms_acceptance`
 - Owner/on-call: Kevin (owner-operated V1; use the controlled operational address, not personal details in public records)
 - Customer data: none; WO-045 must pass before onboarding
@@ -14,8 +14,8 @@ The production candidate is the modular monolith described by [ADR 0077](../08-d
 
 Production publication is fail-closed at two points:
 
-- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth, non-production Clerk public key, a missing/non-40-hex `ORYNTELA_RELEASE_SHA`, or Privacy/Terms release records that are not approved and bound to a version, effective date and SHA-256 fingerprint.
-- `/health/ready` rejects a missing Clerk server secret without returning the missing value or reason. The API readiness rejects unavailable PostgreSQL, incompatible migration, invalid auth/provider/worker configuration and missing production config. `production-preflight` also fails until the owner-approved Terms version and effective date are locked for acceptance.
+- Next build rejects an unsafe/crossed canonical URL, non-HTTPS origin, mock auth, non-production Clerk public key, or Privacy/Terms release records that are not approved and bound to a version, effective date and SHA-256 fingerprint.
+- `/health/ready` rejects a missing Clerk server secret or missing/non-40-hex `ORYNTELA_RELEASE_SHA` without returning the missing value or reason. The API readiness rejects unavailable PostgreSQL, incompatible migration, invalid auth/provider/worker configuration and missing production config. `production-preflight` also fails until the owner-approved Terms version and effective date are locked for acceptance.
 
 This first deployment may contain synthetic data only. The target manifest intentionally disables real-data mode, cloud export, organisation deletion, live billing, Credits, external Prospect and every external connector.
 
@@ -187,7 +187,12 @@ Production policy, pending owner-funded target creation and proof:
 
 - database: DigitalOcean automatic encrypted backups/PITR plus the independent logical bundle; named owner checks managed-backup health daily;
 - application logical bundle: the scheduled App Platform job runs daily at 03:30 Australia/Sydney, streams `pg_dump` plus every source Spaces object through AES-256-GCM, authenticates the format-v2 manifest with a domain-separated HMAC-SHA256 key, uploads each encrypted payload to private AWS S3 Standard in Sydney, uploads the manifest last only after remote size/SHA-256 metadata verification, then downloads and cryptographically verifies the committed bundle before reporting success;
-- retention: configure AWS versioning and lifecycle so current and noncurrent versions plus delete markers expire within 14 days; S3 versioning without noncurrent-version lifecycle is not retention;
+- retention: enable AWS versioning and apply
+  `infra/aws/independent-backup-lifecycle.json`; current backup keys expire after
+  14 days, any noncurrent versions expire one day after becoming noncurrent,
+  incomplete multipart uploads expire after one day, and a separate rule removes
+  expired delete markers. S3 evaluates lifecycle asynchronously, so 14 days is a
+  rotation threshold rather than a deletion-to-the-second guarantee;
 - secrets/config: provider-controlled recovery/escrow owned separately and never copied into the bundle; maintain a separately controlled offline copy of the backup encryption key; and
 - drill: synthetic before launch, named cloud restore before customer data, quarterly during beta and after material hosting/schema changes.
 
@@ -210,6 +215,25 @@ revenueos-backup verify-remote --backup-id <backup-id>
 revenueos-backup restore-remote --backup-id <backup-id> \
   --confirm "RESTORE <backup-id> TO CONFIGURED NAMED TARGET"
 ```
+
+Before the first backup, the owner applies and reads back the checked-in lifecycle
+policy from a private authenticated AWS session. Replace only the bucket placeholder;
+the policy itself contains no account identifier or secret:
+
+```text
+aws s3api put-bucket-versioning --bucket <independent-backup-bucket> \
+  --versioning-configuration Status=Enabled
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket <independent-backup-bucket> \
+  --lifecycle-configuration file://infra/aws/independent-backup-lifecycle.json
+aws s3api get-bucket-versioning --bucket <independent-backup-bucket>
+aws s3api get-bucket-lifecycle-configuration \
+  --bucket <independent-backup-bucket>
+```
+
+Require the read-back to match the reviewed policy. This does not prove expiry until
+an aged synthetic object, its noncurrent version and its expired delete marker have
+each disappeared; record that later observation as owner-controlled recovery evidence.
 
 Create reads the dedicated source database/Spaces variables and writes only to the
 independent destination. Restore reads the isolated target from the

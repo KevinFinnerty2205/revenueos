@@ -53,6 +53,27 @@ def test_ready_reports_limited_mode_without_persistence() -> None:
     }
 
 
+def test_provider_internal_health_probe_host_does_not_weaken_application_hosts() -> None:
+    app = create_app(
+        Settings(
+            environment="test",
+            auth_mode="mock",
+            mock_auth_enabled=True,
+            database_url=None,
+            allowed_hosts="api.oryntela.com.au",
+            log_level="WARNING",
+        ),
+    )
+    client = TestClient(app)
+    probe_headers = {"Host": "10.0.0.7:8080"}
+
+    assert client.get("/health/live", headers=probe_headers).status_code == 200
+    assert client.get("/health/ready", headers=probe_headers).status_code == 503
+    rejected = client.get("/api/v1/me", headers=probe_headers)
+    assert rejected.status_code == 400
+    assert rejected.text == "Invalid host header"
+
+
 def test_me_uses_trusted_development_auth_context(client: TestClient) -> None:
     response = client.get(
         "/api/v1/me?organisationId=00000000-0000-4000-8000-000000000099",

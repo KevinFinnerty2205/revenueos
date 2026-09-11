@@ -1,0 +1,30 @@
+{
+  "Rules": [
+    {
+      "ID": "ExpireCurrentRevenueOSBackupsAfter14Days",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "revenueos-private-beta/v1/"
+      },
+      "Expiration": {
+        "Days": 14
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 1
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    },
+    {
+      "ID": "RemoveExpiredRevenueOSBackupDeleteMarkers",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "revenueos-private-beta/v1/"
+      },
+      "Expiration": {
+        "ExpiredObjectDeleteMarker": true
+      }
+    }
+  ]
+}

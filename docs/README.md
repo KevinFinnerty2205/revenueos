@@ -197,13 +197,14 @@ This is the canonical product and engineering documentation index. Documents dis
 172. [ADR 0076: Internal immutable manual paid Credit grant](08-decisions/0076-internal-manual-paid-credit-grant.md)
 173. [WO-054: Production Deployment & Launch Operations](07-sprints/wo-054-production-launch-operations.md) — canonical launch checklist, synthetic restore proof and consolidated owner actions
 174. [Oryntela production launch runbook](03-engineering/production-launch-runbook.md) — deployment, monitoring, recovery, callbacks, smoke, kill-switch and support procedure
-175. [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
-176. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
-177. [WO-054 draft Privacy Notice and Terms inputs](00-company/wo-054-draft-privacy-and-terms.md) — factual draft only; owner/qualified review required
-178. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
-179. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
-180. [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md) — durable Terms acceptance, provider reconciliation and retention owner decision
-181. [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
+175. [WO-054 production activation boundary ledger](03-engineering/wo-054-production-activation-ledger.md) — dated cost, account-session, secret, provider and owner-boundary evidence for resumption
+176. [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
+177. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
+178. [WO-054 draft Privacy Notice and Terms inputs](00-company/wo-054-draft-privacy-and-terms.md) — factual draft only; owner/qualified review required
+179. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
+180. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
+181. [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md) — durable Terms acceptance, provider reconciliation and retention owner decision
+182. [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
 
 ## First design-partner launch package
 

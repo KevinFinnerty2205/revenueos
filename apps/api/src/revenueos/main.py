@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from revenueos.commercial_dependencies import require_commercial_workspace_access
 from revenueos.config import Settings, get_settings
@@ -62,6 +63,21 @@ from revenueos.routes import (
 
 logger = logging.getLogger("revenueos.http")
 REQUEST_ID_ALLOWED_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.:")
+HEALTH_PROBE_PATHS = frozenset({"/health", "/health/live", "/health/ready", "/ready"})
+
+
+class HealthProbeTrustedHostMiddleware:
+    """Keep application hosts strict while accepting provider-internal probes."""
+
+    def __init__(self, app: ASGIApp, allowed_hosts: list[str]) -> None:
+        self._app = app
+        self._trusted_hosts = TrustedHostMiddleware(app, allowed_hosts=allowed_hosts)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path") in HEALTH_PROBE_PATHS:
+            await self._app(scope, receive, send)
+            return
+        await self._trusted_hosts(scope, receive, send)
 
 
 def safe_request_id(candidate: str | None) -> str:
@@ -111,7 +127,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
     )
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=app_settings.allowed_host_list)
+    # App Platform performs HTTP probes directly against the component and does
+    # not provide a configurable Host header. Health responses contain no
+    # host-derived content; every non-health route remains host-allow-listed.
+    app.add_middleware(HealthProbeTrustedHostMiddleware, allowed_hosts=app_settings.allowed_host_list)
 
     app.add_exception_handler(PublicAPIError, public_api_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
