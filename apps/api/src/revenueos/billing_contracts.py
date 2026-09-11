@@ -8,6 +8,8 @@ from revenueos.commercial_contracts import BillingInterval, PlanCode
 from revenueos.contracts import APIModel
 
 BillingProviderName = Literal["deterministic", "stripe"]
+BillingMode = Literal["test", "live"]
+BillingPaymentStatus = Literal["pending", "paid", "failed"]
 BillingSubscriptionStatus = Literal[
     "pending",
     "active",
@@ -42,6 +44,9 @@ class BillingSubscriptionResponse(APIModel):
     status: BillingSubscriptionStatus
     current_period_start: datetime | None
     current_period_end: datetime | None
+    payment_status: BillingPaymentStatus
+    paid_period_start: datetime | None
+    paid_through: datetime | None
     cancel_at_period_end: bool
     pending_plan_code: PlanCode | None
     pending_billing_interval: BillingInterval | None
@@ -63,7 +68,7 @@ class BillingInvoiceResponse(APIModel):
 class BillingProjectionResponse(APIModel):
     configured: bool
     provider: BillingProviderName
-    mode: Literal["test"]
+    mode: BillingMode
     legal_entity_name: Literal["Management Services Australia Pty. Ltd."] = "Management Services Australia Pty. Ltd."
     legal_entity_abn: Literal["15 113 119 556"] = "15 113 119 556"
     subscription: BillingSubscriptionResponse | None
@@ -107,7 +112,7 @@ class HostedActionResponse(APIModel):
 
 
 class BillingWebhookResponse(APIModel):
-    outcome: Literal["processed", "duplicate", "ignored_stale", "reconciliation_required"]
+    outcome: Literal["processed", "duplicate", "ignored_stale", "ignored_unsupported"]
 
 
 class BillingSuccessResponse(APIModel):

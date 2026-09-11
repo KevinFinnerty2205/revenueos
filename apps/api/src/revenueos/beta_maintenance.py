@@ -204,7 +204,7 @@ from revenueos.recording_maintenance import (
 )
 from revenueos.visual_storage import S3CompatibleVisualStorage, VisualStorageError, create_visual_storage
 
-EXPORT_VERSION = 37
+EXPORT_VERSION = 38
 EXPORT_EXPIRY_HOURS = 24
 logger = logging.getLogger("revenueos.beta_maintenance")
 
@@ -4067,8 +4067,11 @@ async def _export_payload(
                         "amount",
                         "currency",
                         "status",
+                        "payment_status",
                         "current_period_start",
                         "current_period_end",
+                        "paid_period_start",
+                        "paid_through",
                         "cancel_at_period_end",
                         "ended_at",
                         "created_at",

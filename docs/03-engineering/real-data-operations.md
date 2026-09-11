@@ -17,7 +17,7 @@ revenueos-operations production-preflight
 ```
 
 The command exits non-zero unless typed configuration has already passed and it can
-prove: current Alembic head `0061_manual_paid_credit_grant`; immutable 40-hex release identity; a runtime PostgreSQL role
+prove: current Alembic head `0062_live_stripe_billing`; immutable 40-hex release identity; a runtime PostgreSQL role
 that is neither superuser nor `BYPASSRLS`; transaction-local tenant context reset;
 private object write/read/delete; tenant-scoped durable S3 export write/read/delete; real-data
 flag; legal approval reference; and support address. Output contains safe feature

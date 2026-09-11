@@ -243,7 +243,9 @@ export function BillingSubscriptionSettings() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-secondary">
-            Test billing operations
+            {billing.mode === "test"
+              ? "Test billing operations"
+              : "Billing operations"}
           </p>
           <h2
             ref={titleRef}
@@ -254,7 +256,7 @@ export function BillingSubscriptionSettings() {
           </h2>
         </div>
         <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-950">
-          {billing.provider} · {billing.mode} mode only
+          {billing.provider} · {billing.mode} mode
         </span>
       </div>
 
@@ -282,6 +284,11 @@ export function BillingSubscriptionSettings() {
               {subscription.cancelAtPeriodEnd
                 ? `Access continues until ${formatDate(subscription.currentPeriodEnd)}.`
                 : `Next renewal: ${formatDate(subscription.currentPeriodEnd)}.`}
+            </p>
+          ) : null}
+          {subscription.paidThrough ? (
+            <p className="mt-2 text-sm text-slate-700">
+              Paid through: {formatDate(subscription.paidThrough)}.
             </p>
           ) : null}
           {subscription.paymentNeedsAttention ? (

@@ -425,7 +425,11 @@ class BillingAccount(TimestampMixin, Base):
     __tablename__ = "billing_accounts"
     __table_args__ = (
         CheckConstraint("provider IN ('deterministic', 'stripe')", name="ck_billing_accounts_provider"),
-        CheckConstraint("provider_mode = 'test'", name="ck_billing_accounts_mode"),
+        CheckConstraint("provider_mode IN ('test', 'live')", name="ck_billing_accounts_mode"),
+        CheckConstraint(
+            "provider = 'stripe' OR provider_mode = 'test'",
+            name="ck_billing_accounts_provider_mode",
+        ),
         CheckConstraint("status IN ('active', 'manually_managed')", name="ck_billing_accounts_status"),
         UniqueConstraint("organisation_id", "provider", "provider_mode", name="uq_billing_accounts_org_provider"),
         UniqueConstraint("provider", "provider_mode", "provider_customer_id", name="uq_billing_accounts_customer"),
@@ -458,6 +462,15 @@ class BillingSubscription(TimestampMixin, Base):
         ),
         CheckConstraint("currency = 'AUD'", name="ck_billing_subscriptions_currency"),
         CheckConstraint("amount >= 0", name="ck_billing_subscriptions_amount"),
+        CheckConstraint(
+            "payment_status IN ('pending', 'paid', 'failed')",
+            name="ck_billing_subscriptions_payment_status",
+        ),
+        CheckConstraint(
+            "(paid_period_start IS NULL AND paid_through IS NULL) OR "
+            "(paid_period_start IS NOT NULL AND paid_through IS NOT NULL AND paid_through > paid_period_start)",
+            name="ck_billing_subscriptions_paid_period",
+        ),
         CheckConstraint("lock_version > 0", name="ck_billing_subscriptions_lock"),
         CheckConstraint(
             "(pending_plan_version_id IS NULL AND pending_billing_interval IS NULL) OR "
@@ -472,6 +485,13 @@ class BillingSubscription(TimestampMixin, Base):
         ),
         UniqueConstraint("organisation_id", "id", name="uq_billing_subscriptions_org_id"),
         UniqueConstraint("billing_account_id", "provider_subscription_id", name="uq_billing_subscriptions_provider_id"),
+        Index(
+            "uq_billing_subscriptions_account_current",
+            "billing_account_id",
+            unique=True,
+            postgresql_where=text("status != 'cancelled'"),
+            sqlite_where=text("status != 'cancelled'"),
+        ),
         Index("ix_billing_subscriptions_org_status", "organisation_id", "status", "updated_at"),
     )
 
@@ -492,6 +512,9 @@ class BillingSubscription(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     current_period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", server_default="pending")
+    paid_period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paid_through: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     provider_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -518,7 +541,7 @@ class BillingInvoiceProjection(TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("organisation_id", "id", name="uq_billing_invoices_org_id"),
-        UniqueConstraint("organisation_id", "provider_invoice_id", name="uq_billing_invoices_provider_id"),
+        UniqueConstraint("subscription_id", "provider_invoice_id", name="uq_billing_invoices_provider_id"),
         Index("ix_billing_invoices_org_date", "organisation_id", "invoice_date", "id"),
     )
 
@@ -544,6 +567,7 @@ class BillingOperation(TimestampMixin, Base):
             "operation_type IN ('checkout', 'portal', 'cancel', 'reactivate', 'plan_change', 'credit_purchase')",
             name="ck_billing_operations_type",
         ),
+        CheckConstraint("provider_mode IN ('test', 'live')", name="ck_billing_operations_mode"),
         CheckConstraint("status IN ('pending', 'succeeded', 'failed', 'unknown')", name="ck_billing_operations_status"),
         CheckConstraint(
             "billing_interval IS NULL OR billing_interval IN ('monthly', 'annual')",
@@ -558,11 +582,18 @@ class BillingOperation(TimestampMixin, Base):
             name="fk_billing_operations_requester",
             ondelete="RESTRICT",
         ),
-        UniqueConstraint("organisation_id", "operation_type", "idempotency_key", name="uq_billing_operations_key"),
+        UniqueConstraint(
+            "organisation_id",
+            "provider_mode",
+            "operation_type",
+            "idempotency_key",
+            name="uq_billing_operations_key",
+        ),
         UniqueConstraint("organisation_id", "id", name="uq_billing_operations_org_id"),
         Index(
             "uq_billing_operations_org_unresolved_checkout",
             "organisation_id",
+            "provider_mode",
             unique=True,
             postgresql_where=text("operation_type = 'checkout' AND status IN ('pending', 'unknown')"),
             sqlite_where=text("operation_type = 'checkout' AND status IN ('pending', 'unknown')"),
@@ -575,6 +606,7 @@ class BillingOperation(TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("organisations.id", ondelete="RESTRICT"), nullable=False
     )
     requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    provider_mode: Mapped[str] = mapped_column(String(12), nullable=False, default="test", server_default="test")
     operation_type: Mapped[str] = mapped_column(String(24), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -598,7 +630,11 @@ class BillingProviderEventReceipt(Base):
     __tablename__ = "billing_provider_event_receipts"
     __table_args__ = (
         CheckConstraint("provider IN ('deterministic', 'stripe')", name="ck_billing_receipts_provider"),
-        CheckConstraint("provider_mode = 'test'", name="ck_billing_receipts_mode"),
+        CheckConstraint("provider_mode IN ('test', 'live')", name="ck_billing_receipts_mode"),
+        CheckConstraint(
+            "provider = 'stripe' OR provider_mode = 'test'",
+            name="ck_billing_receipts_provider_mode",
+        ),
         CheckConstraint(
             "result IN ('processed', 'ignored_stale', 'reconciliation_required')",
             name="ck_billing_receipts_result",

@@ -351,9 +351,7 @@ test("test billing checkout preparation is keyboard reachable and responsive", a
 
   const billing = page.getByRole("region", { name: "Subscription & invoices" });
   await expect(billing).toBeVisible();
-  await expect(
-    billing.getByText(/deterministic · test mode only/i),
-  ).toBeVisible();
+  await expect(billing.getByText(/deterministic · test mode/i)).toBeVisible();
   await expect(billing.getByText(/Billing not configured/i)).toBeVisible();
   const annual = billing.getByRole("radio", { name: /Core · annual/i });
   await annual.focus();

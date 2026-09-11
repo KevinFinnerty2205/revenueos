@@ -9,14 +9,15 @@ repository does not deploy automatically. The canonical
 operation and recovery decisions; it is not production-data approval.
 
 WO-039C adds a conditional supervised real-data path through current Alembic head
-`0061_manual_paid_credit_grant`; it is not blanket approval. Before any named partner,
+`0062_live_stripe_billing`; it is not blanket approval. Before any named partner,
 run the [real-data production preflight and lifecycle runbook](real-data-operations.md)
 and satisfy its Clerk, runtime-role/RLS, encrypted backup/restore, support, legal,
 provider and feature-profile gates. Unsupervised and commercial beta remain blocked.
-WO-048 billing and WO-049 Credits must remain disabled in production. WO-055 adds
-only an internal cleared-funds manual grant; the Stripe and metered-provider adapters
-remain test-mode only and do not authorise a provider account, live key, webhook,
-payment, production Credit pack or real sale.
+WO-048/WO-054B billing and WO-049 Credits remain disabled in the checked-in production
+template. WO-055 adds only an internal cleared-funds manual Credit grant. The Stripe
+adapter is engineering-capable in explicit live mode, but this does not authorise a
+provider account, live key, webhook, payment, production Credit pack or real sale;
+GST, external configuration, read-only preflight and live smoke remain blocked.
 
 ## Process topology
 

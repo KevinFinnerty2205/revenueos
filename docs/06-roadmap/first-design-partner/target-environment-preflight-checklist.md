@@ -56,7 +56,7 @@ revenueos-operations production-preflight > preflight.json
 jq -e '.status == "ready"' preflight.json
 ```
 
-The command proves migration `0061_manual_paid_credit_grant`, immutable release identity,
+The command proves migration `0062_live_stripe_billing`, immutable release identity,
 non-superuser/non-`BYPASSRLS` runtime role, transaction-local tenant reset, private
 object write/read/delete, tenant-scoped durable export storage, real-data mode and configured approval/support
 references. It does not prove Clerk dashboard policy, managed backups, monitoring,

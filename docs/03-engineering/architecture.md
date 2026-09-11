@@ -567,7 +567,7 @@ datastore, vector index, provider call or schema migration. The web exposes it t
 the existing Search route and contextual workspace links. See
 [ADR 0036](../08-decisions/0036-ephemeral-deterministic-ask-revenueos.md).
 
-## WO-047 commercial authority, WO-048 test billing and WO-049 Credits
+## WO-047 commercial authority, WO-048/WO-054B billing and WO-049 Credits
 
 Migration `0052_commercial_plans_trial` adds immutable global plan versions,
 tenant-owned commercial state and immutable tenant commercial events inside the
@@ -584,13 +584,17 @@ triggers protect catalogue/history immutability.
 WO-048 migration `0053_billing_subscriptions` adds tenant-owned billing accounts,
 subscriptions, safe invoice projections, idempotent operations and immutable
 provider-event receipts. A provider-neutral service consumes the WO-047 catalogue;
-the deterministic provider is the CI path and an unactivated Stripe test adapter is
-the first external implementation. Verified current-provider reconciliation feeds
-facts into `CommercialService`, while the commercial domain remains entitlement
-authority. It stays in the existing API/web/PostgreSQL modular monolith with no new
-service, broker or datastore. Export v33 includes safe billing and Credit projections;
-offboarding fails closed on unresolved accounting retention. There is no live billing
-or public signup. See [Commercial authority](commercial-authority.md),
+the deterministic provider is the CI path and a mode-separated, unactivated Stripe
+adapter is the first external implementation. WO-054B migration
+`0062_live_stripe_billing` adds explicit live mode, mode-scoped operation idempotency
+and payment/paid-period authority to the existing forced-RLS tables. Verified current
+subscription plus latest paid-invoice reconciliation feeds facts into
+`CommercialService`, while the commercial domain remains entitlement authority. It
+stays in the existing API/web/PostgreSQL modular monolith with no new service, broker
+or datastore. Export v38 includes safe billing and Credit projections; offboarding
+fails closed on unresolved accounting retention. Live Stripe engineering exists, but
+GST, account configuration, external preflight and activation remain blocked; there
+is no public signup. See [Commercial authority](commercial-authority.md),
 [Billing operations](billing-subscription-operations.md) and
 [ADR 0069](../08-decisions/0069-versioned-commercial-authority.md).
 

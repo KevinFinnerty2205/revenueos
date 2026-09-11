@@ -201,6 +201,7 @@ This is the canonical product and engineering documentation index. Documents dis
 176. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
 177. [WO-054 draft Privacy Notice and Terms inputs](00-company/wo-054-draft-privacy-and-terms.md) — factual draft only; owner/qualified review required
 178. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
+179. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
 
 ## First design-partner launch package
 
@@ -816,6 +817,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0075: Customer-facing Oryntela with retained RevenueOS internals](08-decisions/0075-customer-facing-oryntela-retained-revenueos-internals.md)
 - [ADR 0076: Internal immutable manual paid Credit grant](08-decisions/0076-internal-manual-paid-credit-grant.md)
 - [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
+- [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
 
 ## Current delivery boundary
 

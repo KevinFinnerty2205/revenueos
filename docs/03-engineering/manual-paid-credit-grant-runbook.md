@@ -16,8 +16,9 @@ card and receive Credits only after automatic verified-payment reconciliation.
    screenshot, email or accounts-payable confirmation is insufficient.
 4. Record only a safe invoice/payment/accounting reference. Do not copy bank details,
    card data, documents or screenshots into this operation.
-5. Use the protected deployment/support environment at migration head
-   `0061_manual_paid_credit_grant`. Do not give its credentials to a customer admin.
+5. Use the protected deployment/support environment at current migration head
+   `0062_live_stripe_billing` (which includes the WO-055 `0061` grant schema). Do not
+   give its credentials to a customer admin.
 
 ## Preview and review
 
