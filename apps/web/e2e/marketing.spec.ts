@@ -7,8 +7,8 @@ const publicPages = [
   ["/integrations", "Keep the systems your team already relies on."],
   ["/security", "Trust comes from product behaviour, not a badge."],
   ["/contact", "Start with the conversation your team needs."],
-  ["/privacy", "Privacy Notice not yet published."],
-  ["/terms", "Service Terms not yet published."],
+  ["/privacy", "Oryntela Privacy Policy"],
+  ["/terms", "Oryntela Terms & Conditions"],
 ] as const;
 
 for (const [path, heading] of publicPages) {
@@ -89,6 +89,10 @@ test("pricing and trial facts are exact and launch-safe", async ({ page }) => {
   await expect(page.getByText("AUD $3,500/year")).toBeVisible();
   await expect(page.getByText("AUD $500")).toBeVisible();
   await expect(page.getByText("AUD $5,000/year")).toBeVisible();
+  await expect(page.getByText("Monthly price includes GST")).toHaveCount(3);
+  await expect(
+    page.getByText("Including GST · billed annually as an annual prepayment"),
+  ).toHaveCount(3);
   await expect(
     page.getByText("14 days with Complete-level modules."),
   ).toBeVisible();
@@ -96,6 +100,82 @@ test("pricing and trial facts are exact and launch-safe", async ({ page }) => {
   await expect(page.getByText("Not active yet", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /checkout/i })).toHaveCount(0);
 });
+
+for (const legalPage of [
+  {
+    path: "/terms",
+    title: "Oryntela Terms & Conditions",
+    expectedSection: "20. Liability",
+  },
+  {
+    path: "/privacy",
+    title: "Oryntela Privacy Policy",
+    expectedSection: "9. Retention, export and deletion",
+  },
+] as const) {
+  test(`${legalPage.path} renders the owner-review draft accessibly at desktop and 390px`, async ({
+    page,
+  }) => {
+    for (const viewport of [
+      { width: 1_440, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto(legalPage.path);
+
+      await expect(
+        page.getByRole("heading", { level: 1, name: legalPage.title }),
+      ).toBeVisible();
+      await expect(page.getByLabel("Document status")).toHaveText(
+        "OWNER REVIEW DRAFT",
+      );
+      await expect(
+        page.getByRole("heading", {
+          level: 2,
+          name: legalPage.expectedSection,
+        }),
+      ).toBeAttached();
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+        "content",
+        /noindex, nofollow/iu,
+      );
+
+      const pageFacts = await page.locator("main").innerText();
+      expect(pageFacts).toContain("Effective date: [OWNER APPROVAL DATE]");
+      expect(pageFacts.match(/\[[^\]]+\]/gu)).toEqual([
+        "[OWNER APPROVAL DATE]",
+      ]);
+      expect(pageFacts).not.toMatch(/RevenueOS/iu);
+      expect(pageFacts).not.toMatch(/lawyer approved|legally reviewed/iu);
+
+      const headingLevels = await page
+        .locator("main h1, main h2, main h3")
+        .evaluateAll((headings) =>
+          headings.map((heading) => Number(heading.tagName.slice(1))),
+        );
+      expect(headingLevels[0]).toBe(1);
+      for (let index = 1; index < headingLevels.length; index += 1) {
+        expect(
+          (headingLevels[index] ?? 0) - (headingLevels[index - 1] ?? 0),
+        ).toBeLessThanOrEqual(1);
+      }
+
+      const firstSectionLink = page
+        .getByRole("navigation", { name: `${legalPage.title} sections` })
+        .getByRole("link")
+        .first();
+      await firstSectionLink.focus();
+      await expect(firstSectionLink).toBeFocused();
+      await page.keyboard.press("Enter");
+      expect(new URL(page.url()).hash).not.toBe("");
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+    }
+  });
+}
 
 test("integrations are explicitly not production-active", async ({ page }) => {
   await page.goto("/integrations");

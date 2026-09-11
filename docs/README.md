@@ -199,9 +199,12 @@ This is the canonical product and engineering documentation index. Documents dis
 174. [Oryntela production launch runbook](03-engineering/production-launch-runbook.md) — deployment, monitoring, recovery, callbacks, smoke, kill-switch and support procedure
 175. [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
 176. [WO-054 production cost and Credit economics](04-commercial/wo-054-production-cost-and-credit-economics.md) — dated provider costs and non-active owner proposal
-177. [WO-054 draft Privacy Notice and Terms inputs](00-company/wo-054-draft-privacy-and-terms.md) — factual draft only; owner/qualified review required
-178. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
-179. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
+177. [WO-054 Privacy and Terms factual drafting inputs](00-company/wo-054-draft-privacy-and-terms.md) — historical factual source; external engagement deferred by owner
+178. [Oryntela Terms & Conditions](00-company/oryntela-terms-and-conditions.md) — complete owner-review draft; not approved or effective
+179. [Oryntela Privacy Policy](00-company/oryntela-privacy-policy.md) — complete owner-review draft; not approved or effective
+180. [Oryntela owner legal document review checklist](00-company/oryntela-owner-legal-document-review-checklist.md) — ten grouped decisions and production acceptance gap
+181. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
+182. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
 
 ## First design-partner launch package
 

@@ -91,4 +91,6 @@ uplift claim appears on the website.
   routing-tested.
 - No registered-trade-mark symbol, legal-clearance claim or founder biography is
   published.
-- Privacy and Terms are **GAP**, visibly identified as not yet approved and noindex.
+- Privacy and Terms are complete **OWNER REVIEW DRAFTS**, visibly identified as
+  not approved or effective and noindex. Production remains blocked until the owner
+  approves them and records the effective date, versions and fingerprints.

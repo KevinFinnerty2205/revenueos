@@ -34,6 +34,8 @@ ENV ORYNTELA_HSTS_ENABLED=$ORYNTELA_HSTS_ENABLED
 
 COPY apps/web apps/web
 COPY packages/shared packages/shared
+COPY docs/00-company/oryntela-privacy-policy.md docs/00-company/oryntela-privacy-policy.md
+COPY docs/00-company/oryntela-terms-and-conditions.md docs/00-company/oryntela-terms-and-conditions.md
 RUN pnpm build:web
 
 FROM node:22-alpine AS runtime

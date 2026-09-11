@@ -1,8 +1,19 @@
-# WO-054 draft Privacy Notice and Terms inputs
+# WO-054 Privacy and Terms factual drafting inputs
 
-> **DRAFT — OWNER/QUALIFIED REVIEW REQUIRED. NOT APPROVED FOR PUBLICATION.**
+> **HISTORICAL FACTUAL INPUT — superseded by owner-review documents.**
 >
-> This is a factual drafting aid based on the repository as at 10 September 2026. It is not legal advice, a representation of legal compliance or an instruction to enable real customer data. The public routes intentionally remain GAP pages and the production build intentionally fails until reviewed copy is committed.
+> This factual aid records the repository position as at 10 September 2026. The
+> owner decided on 11 September 2026 to prepare the launch documents internally
+> and deferred external legal engagement. It is not authority to publish, enable
+> real customer data or activate production.
+
+The current owner-review documents are the
+[Oryntela Terms & Conditions](oryntela-terms-and-conditions.md),
+[Oryntela Privacy Policy](oryntela-privacy-policy.md) and
+[owner legal document review checklist](oryntela-owner-legal-document-review-checklist.md).
+The `/terms` and `/privacy` routes show those drafts with noindex metadata. The
+production gate remains closed until owner approval, an effective date, versions
+and content fingerprints are recorded.
 
 ## Confirmed publisher facts
 
@@ -13,7 +24,9 @@
 - General contact: `hello@oryntela.com.au`.
 - Initial market: Australia; canonical proposed domain: `https://oryntela.com.au`.
 
-The owner must confirm the registered/principal address and whether the entity is the contracting entity and APP entity before publication.
+The owner has confirmed Management Services Australia Pty. Ltd. as the contracting
+operator and publisher. No separate postal address has been added to the current
+drafts; the approved support and general email contacts are used.
 
 ## Factual Privacy Notice draft
 
@@ -33,7 +46,7 @@ No customer data exists at the date of this draft. Production connectors, live b
 
 Subject to the customer's authority and the enabled profile, information may be supplied directly by an authorised user, imported through a reviewed CSV workflow, created from normal product use, obtained through an explicitly connected customer system, or obtained from a separately approved professional-data provider. Oryntela uses it to provide the selected sales workflow, maintain tenant isolation and access control, generate explicitly requested outputs, execute user-reviewed actions when enabled, reconcile provider outcomes, provide support, secure the service, meet deletion/export requests and administer the commercial relationship.
 
-CSV contact data does not establish permission to send marketing. Engage retains suppression and review controls. This draft does not decide the legal basis for electronic marketing, enrichment or every collection source; owner/qualified review must do so before those capabilities activate.
+CSV contact data does not establish permission to send marketing. Engage retains suppression and review controls. Customers remain responsible for applicable authority, consent and electronic-marketing requirements; disabled providers remain blocked until their separate activation gates pass.
 
 ### 4. Disclosures and processors
 
@@ -66,50 +79,46 @@ The published notice must state exact active retention periods, backup ageing, e
 
 ### 7. Access, correction, complaints and contact
 
-Users can correct ordinary application records through supported product/admin workflows. A published notice should direct privacy access/correction, deletion/export and complaints to `support@oryntela.com.au`, explain the identity/authority verification process, and state the escalation and regulator pathway approved by qualified review. No response deadline or legal entitlement is invented here.
+Users can correct ordinary application records through supported product/admin workflows. The owner-review Privacy Policy directs privacy access/correction, deletion/export and complaints to `support@oryntela.com.au`, explains reasonable identity/authority verification and gives the OAIC escalation route without inventing a fixed response deadline.
 
 ### 8. Cookies and website analytics
 
 The repository does not implement a marketing analytics or advertising tracker. Clerk may use storage/cookies needed for authentication when enabled. The owner must inventory the deployed site's actual cookies, CDN logs and any future analytics before publication.
 
-## Factual Terms drafting skeleton
+## Historical Terms drafting skeleton
 
-> **DRAFT — OWNER/QUALIFIED REVIEW REQUIRED.** The headings below separate known product facts from clauses that must not be invented by engineering.
+> The complete owner-review Terms now supersede this skeleton.
 
 ### Known service and commercial facts
 
 - Oryntela is a B2B sales-work platform and complements external systems of record; it is not represented as a CRM replacement in every deployment, legal adviser, financial adviser or autonomous authority.
-- The current plan catalogue is Core AUD 200/month or AUD 2,000/year; Growth AUD 350/month or AUD 3,500/year; Complete AUD 500/month or AUD 5,000/year; Enterprise custom. Included users are 5, 10 and 15 respectively. These prices have no approved GST presentation yet and must not be published as inclusive or exclusive until decided.
+- The current plan catalogue is Core AUD 200/month or AUD 2,000/year; Growth AUD 350/month or AUD 3,500/year; Complete AUD 500/month or AUD 5,000/year; Enterprise custom. Included users are 5, 10 and 15 respectively. The owner confirmed that the six standard amounts include GST; Enterprise GST treatment is stated in its specific Order.
 - The proposed trial is 14 days of Complete access, no card, no charge and no automatic conversion. Trial start is an operator action; self-service trial enrolment is not live.
 - Provider availability is conditional. Microsoft, Google, HubSpot, Salesforce, Prospect, live Stripe and production Credits are not active. The site must not promise them as immediately connected/live.
 - External mutations and outreach are designed to require review/approval and use bounded queues; users remain responsible for authority, accuracy, recipient rights, sending rules and their connected accounts.
 - Users must not upload credentials, card data, unlawful content, special-category data or content they lack authority to use. Oryntela does not authorise unsolicited bulk marketing.
 
-### Clauses requiring explicit qualified drafting and owner approval
+### Topics carried into the owner-review Terms and checklist
 
 1. Contracting entity, eligibility, authorised business users, acceptance mechanism and authority to bind an organisation.
 2. Order form/plan precedence, billing timing, annual prepayment, GST/invoices, renewal, cancellation, downgrade, suspension, refunds, failed payment and price-change treatment.
-3. Credit pack prices, action prices, expiry/refund treatment, provider no-match/error treatment and the manual cleared-funds exception.
-4. Customer data ownership/licence instructions, confidentiality, privacy roles, DPA, subprocessors, international transfers, security commitments, retention/export/deletion and backup treatment.
+3. Credit status, expiry/refund treatment, provider-error boundaries and the manual cleared-funds exception; no unapproved pack or action price is invented.
+4. Customer data ownership/licence instructions, confidentiality, provider disclosures, international processing, security commitments, retention/export/deletion and backup treatment. A separate DPA is not created by this task.
 5. Oryntela intellectual property, customer feedback, permitted use, account security, prohibited scraping/abuse and acceptable-use enforcement.
 6. Third-party provider terms, customer connector licences, provider availability, changes and responsibility allocation.
 7. AI/output review, accuracy limitations, decisions users must not delegate, and the absence of legal/financial/professional advice.
 8. Service levels/support, maintenance, beta/trial limitations and changes to the service.
-9. Warranties, disclaimers, liability caps/exclusions, indemnities and insurance. No language is proposed here.
+9. Warranties, disclaimers, liability caps/exclusions and the narrow indemnity. No insurance promise is made.
 10. Termination, data retrieval/offboarding, survival and record retention.
-11. Dispute process, governing law/jurisdiction, notices, assignment, subcontracting, force majeure, severability, waiver and entire agreement. No jurisdiction is assumed here.
+11. Good-faith dispute process, New South Wales governing law/jurisdiction, notices, assignment, subcontracting, force majeure, severability, waiver and entire agreement.
 12. Version, effective date and how material changes are notified/accepted.
 
-## Minimum owner answers before publication
+## Current owner actions before publication
 
-1. Confirm the legal contracting/APP entity, principal address and authorised legal contact.
-2. Obtain qualified review of Privacy Notice, Terms, DPA/order form and electronic-marketing/enrichment position.
-3. Decide GST registration/treatment and whether every public price is GST-inclusive or GST-exclusive; have the website, Stripe catalogue, invoices and Terms agree.
-4. Approve the actual V1 feature/provider list and each subprocessor/cross-border disclosure; remove inactive providers from public claims.
-5. Approve category-specific retention, database and object-backup retention, export/deletion treatment and any accounting-record exception.
-6. Approve customer authority/consent evidence for transcripts, recordings, imported contacts, email/calendar/CRM connections and outreach.
-7. Approve the trial, subscription renewal/cancellation/refund and Credit-pack/action policies.
-8. Approve complaint, incident and suspected-breach escalation, including when qualified legal advice is obtained.
-9. Supply approved version/effective dates and publication/change-notice process.
+1. Review the ten grouped positions in the owner checklist, including the exact liability, indemnity, refund and unused-Credit treatment.
+2. Confirm the exact enabled launch providers, likely overseas countries and production retention/backup settings.
+3. Approve or change the complete Terms and Privacy Policy.
+4. Supply the effective date; record versions and SHA-256 fingerprints in the existing release gate.
+5. Implement durable Terms acceptance and separate Privacy acknowledgement evidence before trial or paid production activation.
 
-Until all answers are resolved and approved copy replaces the GAP pages, the public legal launch gate is **BLOCKED**.
+Until those actions are complete, the public legal launch gate is **BLOCKED**. External legal review is deferred by owner and is not an active selected prerequisite.

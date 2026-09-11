@@ -13,18 +13,18 @@ export type LegalContentStatus = {
   terms: LegalDocumentRelease;
 };
 
-// These values describe the copy committed to the public routes. Change either
-// value only in the same reviewed change that replaces the corresponding GAP
-// page with owner-approved publication copy.
+// These values describe the copy committed to the public routes. Draft copy may
+// be previewed, but production remains blocked until the owner supplies the
+// effective date and a reviewed change records approved versions/fingerprints.
 export const legalContentStatus: LegalContentStatus = {
   privacy: {
-    status: "gap",
+    status: "draft",
     version: null,
     effectiveDate: null,
     sha256: null,
   },
   terms: {
-    status: "gap",
+    status: "draft",
     version: null,
     effectiveDate: null,
     sha256: null,
