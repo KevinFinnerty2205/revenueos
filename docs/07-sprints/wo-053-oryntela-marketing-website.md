@@ -46,7 +46,7 @@ handover. The primary CTA is **Request trial access** and the secondary CTA is
 - deterministic pricing/trial/integration/metadata/route tests and 390 px checks; and
 - website architecture, claim inventory and screenshot-provenance documentation.
 
-## Legal result
+## Legal result at WO-053 completion
 
 - **Privacy: GAP.** No owner-approved public Privacy Notice exists.
 - **Terms: GAP.** No owner-approved public Terms exist.
@@ -55,6 +55,10 @@ handover. The primary CTA is **Request trial access** and the secondary CTA is
 
 Privacy and Terms have honest noindex shells. They are not represented as approved
 legal documents and remain a launch blocker for WO-054.
+
+The later 11 September 2026 WO-054 owner-drafting change replaced those shells with
+complete noindex owner-review drafts. They remain unapproved and ineffective, so the
+production legal gate and launch blocker remain in force.
 
 ## Security, privacy and product truth
 

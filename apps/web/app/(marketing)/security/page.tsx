@@ -111,8 +111,8 @@ export default function SecurityPage() {
             <p className="mt-5 text-sm leading-7 text-brand-muted">
               Organisation-scoped export and reviewed deletion workflows cover
               current product data. Production retention, backup expiry and
-              provider-processing terms must still be approved and published
-              before customer data is accepted.
+              provider-processing terms must still be owner-approved and
+              published before customer data is accepted.
             </p>
           </article>
           <article className="rounded-[1.75rem] border border-brand-primary/10 bg-white p-7 sm:p-9">
@@ -134,8 +134,9 @@ export default function SecurityPage() {
         </div>
         <p className="mx-auto mt-8 max-w-7xl text-xs leading-6 text-brand-muted">
           Looking for legal notices? The current repository does not yet contain
-          owner-approved public Privacy or Terms content. See the honest status
-          on the{" "}
+          owner-approved public Privacy or Terms content. Owner-review drafts
+          are available at the links below, while production remains blocked.
+          See the honest status on the{" "}
           <Link className="font-bold underline" href="/privacy">
             Privacy
           </Link>{" "}

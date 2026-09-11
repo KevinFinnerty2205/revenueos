@@ -93,10 +93,19 @@ export default function PricingPage() {
                           complete ? "text-slate-300" : "text-brand-muted"
                         }`}
                       >
-                        Billed annually as an annual prepayment
+                        Including GST · billed annually as an annual prepayment
                       </p>
                     </>
                   )}
+                  {plan.monthlyAmount !== null ? (
+                    <p
+                      className={`mt-2 text-xs leading-5 ${
+                        complete ? "text-slate-300" : "text-brand-muted"
+                      }`}
+                    >
+                      Monthly price includes GST
+                    </p>
+                  ) : null}
                   <p
                     className={`mt-4 text-sm font-semibold ${
                       complete ? "text-white" : "text-brand-primary"

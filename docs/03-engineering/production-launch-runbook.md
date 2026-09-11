@@ -103,12 +103,13 @@ the required MFA/passkey and operational-log posture. After the owner approves P
 
 WO-054B makes the adapter production-capable but does not activate it. The checked-in
 production template deliberately remains `API_FEATURE_BILLING_ENABLED=false`,
-`API_BILLING_PROVIDER_NAME=deterministic`, `API_BILLING_MODE=test`, GST unresolved and
-all live Stripe references empty. The following owner sequence must be performed in
-order under separate activation authority:
+`API_BILLING_PROVIDER_NAME=deterministic`, `API_BILLING_MODE=test`, tax treatment
+unset and all live Stripe references empty. The owner confirmed GST-inclusive fixed
+customer totals on 11 September 2026. The following owner sequence must still be
+performed in order under separate activation authority:
 
-1. Owner/accounting resolves GST presentation and Stripe tax treatment, records the
-   durable policy reference, and approves the final Privacy Notice and Service Terms.
+1. Owner approves the GST-inclusive wording in the Privacy Policy and Terms, confirms
+   any required invoice/tax configuration, and records the durable policy reference.
 2. Owner creates and verifies the Stripe business account, including contracting
    entity, Australian business verification, settlement bank account and support
    contact. Do not put identity or bank evidence in Git or tickets.

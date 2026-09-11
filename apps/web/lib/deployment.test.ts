@@ -34,7 +34,7 @@ const approvedLegalContent = {
 } as const;
 
 describe("deployment configuration", () => {
-  it("fails a production build while committed legal copy is a gap", () => {
+  it("fails a production build while committed legal copy is a draft", () => {
     expect(() => assertDeploymentConfiguration(productionVariables)).toThrow(
       /Privacy and Terms/,
     );
