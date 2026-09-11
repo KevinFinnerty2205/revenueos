@@ -73,6 +73,15 @@ jobs:
           python-version: "3.12"
       - name: Scan committed secrets and prohibited scope
         run: python scripts/ci_audit.py
+      - name: Validate DigitalOcean production app schema
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/digitalocean/doctl/releases/download/v1.168.0/doctl-1.168.0-linux-amd64.tar.gz \
+            --output /tmp/doctl.tar.gz
+          echo "ad817330e1a12fd60729f105d8c39af31ca845f221a60886a1b2215f74d9b35d  /tmp/doctl.tar.gz" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file /tmp/doctl.tar.gz --directory /tmp doctl
+          /tmp/doctl apps spec validate --schema-only infra/digitalocean/app.production.template.yaml >/dev/null
       - name: Install API dependencies
         run: uv sync --directory apps/api --locked
       - name: Lint API
