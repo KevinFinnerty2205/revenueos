@@ -55,6 +55,7 @@ from revenueos.demo_data import (
     seed_demo_data,
 )
 from revenueos.errors import PublicAPIError
+from revenueos.legal_releases import CURRENT_PRIVACY_NOTICE, CURRENT_TERMS_RELEASE
 from revenueos.main import create_app
 from revenueos.models import (
     ActionProposal,
@@ -105,6 +106,7 @@ from revenueos.models import (
     SalesTarget,
     SalesTargetRevision,
     SourceCandidateEvidence,
+    TermsAcceptance,
     Transcript,
     TranscriptVersion,
     User,
@@ -235,7 +237,7 @@ def test_health_aliases_are_safe_and_migration_head_is_current(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.json()["dependencies"]["migration"]["status"] == "ready"
-    assert EXPECTED_MIGRATION_HEAD == "0062_live_stripe_billing"
+    assert EXPECTED_MIGRATION_HEAD == "0063_terms_acceptance"
     assert "postgres" not in ready.text.lower()
     assert "secret" not in ready.text.lower()
 
@@ -1065,6 +1067,22 @@ def test_organisation_deletion_is_atomic_tenant_scoped_and_preserves_shared_user
                     status="active",
                 )
             )
+            session.add(
+                TermsAcceptance(
+                    organisation_id=target_organisation_id,
+                    accepted_by_user_id=PRIMARY_USER_ID,
+                    release_status=CURRENT_TERMS_RELEASE.status,
+                    terms_version=CURRENT_TERMS_RELEASE.version,
+                    terms_sha256=CURRENT_TERMS_RELEASE.sha256,
+                    terms_effective_date=CURRENT_TERMS_RELEASE.effective_date,
+                    accepted_at=datetime.now(UTC),
+                    acceptance_source="administrative_onboarding",
+                    privacy_notice_version=CURRENT_PRIVACY_NOTICE.version,
+                    privacy_notice_sha256=CURRENT_PRIVACY_NOTICE.sha256,
+                    privacy_notice_effective_date=CURRENT_PRIVACY_NOTICE.effective_date,
+                    privacy_notice_presented_at=datetime.now(UTC),
+                )
+            )
             await session.flush()
             await CommercialService(session, settings).assign_plan(
                 target_organisation_id,
@@ -1615,7 +1633,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
             )
         path = await generate_export(factory, settings, PRIMARY_ORGANISATION_ID, request_id)
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["exportVersion"] == 38
+        assert payload["exportVersion"] == 39
         assert payload["organisation"]["id"] == str(PRIMARY_ORGANISATION_ID)
         assert payload["interactions"][0]["id"] == interaction.json()["id"]
         exported_marker = next(item for item in payload["interactionMarkers"] if item["id"] == str(marker_id))
@@ -1748,7 +1766,7 @@ def test_export_is_deterministic_tenant_scoped_and_excludes_internal_fields(tmp_
     with TestClient(app) as client:
         download = client.get(f"/api/v1/beta/admin/exports/{request_id}/download")
         assert download.status_code == 200
-        assert download.json()["exportVersion"] == 38
+        assert download.json()["exportVersion"] == 39
         assert download.headers["Cache-Control"] == "private, no-store"
         assert download.headers["X-Content-Type-Options"] == "nosniff"
         assert download.headers["Content-Disposition"] == (f'attachment; filename="oryntela-export-{request_id}.json"')

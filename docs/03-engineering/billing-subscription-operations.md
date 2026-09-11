@@ -1,7 +1,7 @@
 # Billing and subscription operations
 
 - **Status:** test and live Stripe engineering implemented; live activation remains blocked
-- **Migrations:** `0053_billing_subscriptions`, `0062_live_stripe_billing`
+- **Migrations:** `0053_billing_subscriptions`, `0062_live_stripe_billing`, `0063_terms_acceptance`
 - **Providers:** deterministic test provider and mode-separated Stripe adapter
 - **Live billing:** production-capable but not configured, authorised or activated
 - **Legal billing entity:** Management Services Australia Pty. Ltd., ABN 15 113 119 556

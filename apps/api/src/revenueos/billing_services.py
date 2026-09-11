@@ -45,6 +45,7 @@ from revenueos.config import Settings
 from revenueos.credit_services import CreditService
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.legal_services import require_current_terms_acceptance
 from revenueos.models import (
     BillingAccount,
     BillingInvoiceProjection,
@@ -196,6 +197,7 @@ class BillingService:
         request: CheckoutCreateRequest,
     ) -> CheckoutCreateResponse:
         self._require_enabled()
+        terms_acceptance = await require_current_terms_acceptance(self.session, self.settings, organisation_id)
         if request.plan_code == "enterprise":
             raise PublicAPIError(
                 "enterprise_checkout_unavailable",
@@ -206,7 +208,12 @@ class BillingService:
         plan = await self._plan(request.plan_code)
         amount = self._plan_amount(plan, request.billing_interval)
         fingerprint = _fingerprint(
-            {"plan_code": request.plan_code, "billing_interval": request.billing_interval, "amount": str(amount)}
+            {
+                "plan_code": request.plan_code,
+                "billing_interval": request.billing_interval,
+                "amount": str(amount),
+                "terms_acceptance_id": str(terms_acceptance.id),
+            }
         )
         existing = await self.repository.operation(
             organisation_id, self.provider.mode, "checkout", request.idempotency_key, lock=True
@@ -265,6 +272,7 @@ class BillingService:
             idempotency_key=request.idempotency_key,
             request_fingerprint=fingerprint,
             status="pending",
+            terms_acceptance_id=terms_acceptance.id,
             plan_version_id=plan.id,
             billing_interval=request.billing_interval,
             amount=amount,
@@ -283,6 +291,17 @@ class BillingService:
                     409,
                 ) from exc
         try:
+            current_terms_acceptance = await require_current_terms_acceptance(
+                self.session,
+                self.settings,
+                organisation_id,
+            )
+            if current_terms_acceptance.id != terms_acceptance.id:
+                raise PublicAPIError(
+                    "billing_checkout_terms_changed",
+                    "The required Terms changed while Checkout was being prepared. Review and accept them before retrying.",
+                    409,
+                )
             account = await self._ensure_account(organisation_id)
             checkout = await self.provider.create_checkout(
                 organisation_id=organisation_id,

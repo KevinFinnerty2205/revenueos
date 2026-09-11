@@ -202,6 +202,8 @@ This is the canonical product and engineering documentation index. Documents dis
 177. [WO-054 draft Privacy Notice and Terms inputs](00-company/wo-054-draft-privacy-and-terms.md) — factual draft only; owner/qualified review required
 178. [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
 179. [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
+180. [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md) — durable Terms acceptance, provider reconciliation and retention owner decision
+181. [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
 
 ## First design-partner launch package
 
@@ -388,6 +390,7 @@ This is the canonical product and engineering documentation index. Documents dis
 
 - [Application architecture](03-engineering/architecture.md)
 - [Oryntela production launch runbook](03-engineering/production-launch-runbook.md)
+- [Oryntela legal production gate](03-engineering/oryntela-legal-production-gate.md)
 - [Production incident and secret-rotation runbook](03-engineering/production-incident-and-secret-rotation.md)
 - [Prospect and Engage foundation review](03-engineering/prospect-engage-foundation-review.md)
 - [Core experience readiness implementation](03-engineering/core-experience-readiness-implementation.md)
@@ -818,6 +821,7 @@ This is the canonical product and engineering documentation index. Documents dis
 - [ADR 0076: Internal immutable manual paid Credit grant](08-decisions/0076-internal-manual-paid-credit-grant.md)
 - [ADR 0077: Australian managed modular-monolith production topology](08-decisions/0077-australian-managed-modular-monolith-production-topology.md)
 - [ADR 0078: Mode-isolated live Stripe paid-subscription authority](08-decisions/0078-live-stripe-paid-subscription-authority.md)
+- [ADR 0079: Immutable organisation Terms acceptance](08-decisions/0079-immutable-organisation-terms-acceptance.md)
 
 ## Current delivery boundary
 

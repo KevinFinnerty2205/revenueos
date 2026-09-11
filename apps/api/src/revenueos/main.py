@@ -44,6 +44,7 @@ from revenueos.routes import (
     health,
     integrations,
     interactions,
+    legal,
     manager,
     me,
     meetings,
@@ -165,6 +166,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(deal_rooms.public_router)
     app.include_router(me.router)
     app.include_router(beta.router)
+    app.include_router(legal.router)
     app.include_router(billing.router)
     app.include_router(commercial.router)
     app.include_router(credits.router)

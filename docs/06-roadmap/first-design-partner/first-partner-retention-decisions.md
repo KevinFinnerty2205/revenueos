@@ -1,6 +1,6 @@
 # First-partner retention decisions
 
-- **Status:** **ONE CONSOLIDATED OWNER DECISION REQUIRED**
+- **Status:** **PARTLY APPROVED 11 SEPTEMBER 2026 — OPERATIONAL LOG WINDOW REQUIRED**
 - **Recommended profile:** application 90 days; encrypted backups 14 days;
   content-minimised operational logs 14 days
 
@@ -22,22 +22,22 @@ launch-environment windows that remain owner-controlled.
 | Billing and Credit transaction history | Exportable, append-only/restrictively retained; organisation deletion fails closed | **Pre-live accounting/legal treatment still requires owner approval; do not infer a period from ordinary content retention** |
 | RPO/RTO starting objectives | RPO 24 hours and RTO four hours, measured in target proof; not contractual SLAs | Keep |
 
-The 90-day setting is not a promise that every record is automatically hard-deleted
+The approved 90-day setting is not a promise that every record is automatically hard-deleted
 at day 90. The domain-specific retention command applies to eligible completed or
 cancelled resources, while active canonical records remain until archive,
 offboarding/deletion or another documented lifecycle applies. The partner-facing
 notice must say this accurately.
 
-## The owner decision
+## Owner decision status
 
-Approve all three values together unless a documented legal/partner need requires a
-shorter period:
+The owner approved application retention and backup rotation on 11 September 2026.
+The operational-log window remains unapproved:
 
-| Setting | Options | Recommendation | Why |
+| Setting | Options | Decision | Why |
 | --- | --- | --- | --- |
-| Private-beta application retention | `30`, `90`, `180` days or `MANUAL` | **90 days** | Existing product default; enough supervised learning/review time without indefinite retention |
-| Encrypted backup retention | Up to repository starting maximum of 14 days | **14 days** | Covers two weekly cycles while remaining short; pairs with daily backup, RPO 24h and quarterly/pre-partner restore drills |
-| Operational log retention | Owner-selected | **14 days** | Enough for a supervised incident investigation and weekly review while limiting metadata exposure/cost |
+| Private-beta application retention | `30`, `90`, `180` days or `MANUAL` | **APPROVED — 90 days** | Existing product default; enough supervised learning/review time without indefinite retention |
+| Encrypted backup retention | Up to repository starting maximum of 14 days | **APPROVED — 14 days** | Covers two weekly cycles while remaining short; pairs with daily backup, RPO 24h and quarterly/pre-partner restore drills |
+| Operational log retention | Owner-selected | **OWNER INPUT REQUIRED; recommendation remains 14 days** | Enough for a supervised incident investigation and weekly review while limiting metadata exposure/cost |
 
 Manual retention is not recommended: it increases the chance that old customer data
 is forgotten. A longer log or backup period requires a specific purpose, updated cost
@@ -69,5 +69,6 @@ lifecycle rules, schedule daily tenant retention and backup checks, and use synt
 data to prove expiry, export, deletion, backup age and restore. It must stop if a
 provider cannot implement the approved periods. No existing customer data is used.
 
-Record the three values in the [owner approval block](owner-approval-block.md). Until
-then their status is **OWNER INPUT REQUIRED**.
+Record the remaining operational-log choice in the
+[owner approval block](owner-approval-block.md). Until then OD-05 remains only partly
+resolved. These approvals do not authorise infrastructure changes or production use.

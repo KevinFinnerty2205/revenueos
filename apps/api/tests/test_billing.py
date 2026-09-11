@@ -42,6 +42,7 @@ from revenueos.commercial_services import CommercialService
 from revenueos.config import Settings
 from revenueos.database import set_tenant_database_context
 from revenueos.errors import PublicAPIError
+from revenueos.legal_releases import CURRENT_TERMS_RELEASE
 from revenueos.main import create_app
 from revenueos.models import (
     BillingInvoiceProjection,
@@ -315,6 +316,7 @@ def test_exact_checkout_catalogue_idempotency_and_server_authority() -> None:
                 )
                 stored_operation = await session.get(BillingOperation, first.operation_id)
                 assert stored_operation is not None and stored_operation.status == "pending"
+                assert stored_operation.terms_acceptance_id is not None
                 with pytest.raises(PublicAPIError, match="previous checkout"):
                     await service.create_checkout(
                         PRIMARY_ORGANISATION_ID,
@@ -1313,10 +1315,15 @@ def test_billing_export_is_safe_and_offboarding_refuses_blind_history_deletion()
                 )
                 assert await service.process_webhook(payload, signature) == "processed"
                 exported = await _export_payload(session, PRIMARY_ORGANISATION_ID, settings)
-                assert exported["exportVersion"] == EXPORT_VERSION == 38
+                assert exported["exportVersion"] == EXPORT_VERSION == 39
+                acceptances = exported["termsAcceptances"]
+                assert isinstance(acceptances, list)
+                assert acceptances[0]["accepted_by_user_id"] == PRIMARY_USER_ID
+                assert acceptances[0]["terms_sha256"] == CURRENT_TERMS_RELEASE.sha256
                 billing = exported["billing"]
                 assert isinstance(billing, dict)
                 encoded = json.dumps(billing, default=str)
+                assert billing["operations"][0]["terms_acceptance_id"] == acceptances[0]["id"]
                 subscriptions = billing["subscriptions"]
                 assert isinstance(subscriptions, list)
                 assert subscriptions[0]["payment_status"] == "paid"

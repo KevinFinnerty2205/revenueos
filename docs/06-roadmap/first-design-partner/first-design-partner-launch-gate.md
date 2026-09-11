@@ -3,14 +3,14 @@
 > **Superseded 10 September 2026:** this historical WO-039C/WO-050 gate is no
 > longer the controlling operational record. Use the canonical
 > [WO-054 Production Deployment & Launch Operations record](../../07-sprints/wo-054-production-launch-operations.md),
-> which evaluates current migration head `0062_live_stripe_billing` and the
+> which evaluates current migration head `0063_terms_acceptance` and the
 > DigitalOcean Sydney candidate. None of the historical target, cost or approval
 > assumptions below authorises spend, deployment or customer data.
 
 - **Gate date:** 2 September 2026; commercial consolidation reviewed 4 September 2026 (Australia/Sydney)
 - **Current documentation branch:** `docs/oryntela-product-commercial-consolidation`
 - **Reviewed repository baseline:** `daedbbc`
-- **Repository candidate:** WO-039A through WO-055 plus WO-054B remediation are on `main` or the current WO-054 review branch, with Alembic head `0062_live_stripe_billing` and production billing/Credits/provider execution disabled
+- **Repository candidate:** WO-039A through WO-055 plus WO-054 productionisation are on `main` or the current WO-054 review branch, with Alembic head `0063_terms_acceptance` and production billing/Credits/provider execution disabled
 - **Current launch decision:** **WAITING FOR TARGET ENVIRONMENT PROOF**
 - **Scope:** one named, supervised, Native CRM design partner; no Gmail, Apollo, live Prospect provider, live email or autonomous external execution
 
@@ -53,7 +53,7 @@ Use only these evidence states: `PASS`, `FAIL`, `OWNER APPROVAL REQUIRED`, `PART
 | ----------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Requested branch started clean from `main`            | **PASS**                     | Git inspection at gate start; no branch was created or changed                                                                                                     |
 | WO-039A, WO-039B and WO-039C are on `main`            | **PASS**                     | Merge commits `558795c`, `5f0a61c` and `93c386e`                                                                                                                   |
-| One Alembic head: `0062_live_stripe_billing`         | **PASS**                     | Migration chain plus commercial, billing, Credits and Prospect provider metadata migration/RLS tests                                                                |
+| One Alembic head: `0063_terms_acceptance`            | **PASS**                     | Migration chain plus commercial, billing, Terms acceptance, Credits and provider metadata migration/RLS tests                                                        |
 | Production build and complete repository gate         | **PASS AT WO-039C BASELINE** | [WO-039C validation record](../../07-sprints/wo-039c-real-data-operations.md#frozen-validation-gate); this documentation branch must also pass its required checks |
 | Production preflight command                          | **PASS**                     | `revenueos-operations production-preflight` exists and fails closed                                                                                                |
 | Forced RLS and runtime-role requirements              | **PASS — REPOSITORY ONLY**   | All-table PostgreSQL proof and non-bypass preflight exist; target repetition is separate                                                                           |
